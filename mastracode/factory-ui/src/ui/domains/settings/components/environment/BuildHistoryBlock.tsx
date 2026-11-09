@@ -3,12 +3,15 @@ import { useState } from 'react';
 
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsEmptyRow, SettingsNoticeRow } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsEmptyRow,
+  SettingsNoticeRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
 
 import type { FactoryEnvironmentBuild } from '../../../workspaces/services/environment';
 import { BUILD_STATUS, formatBuildTime } from './BuildStatusBlock';
@@ -35,14 +38,7 @@ export function BuildHistoryBlock({
   if (!builds) {
     return (
       <SettingsContainer>
-        <SkeletonRows label="Loading build history" rows={3} className="divide-border gap-0 divide-y">
-          <div aria-hidden className="flex items-center gap-3 py-3.25 first:pt-0 last:pb-0">
-            <Skeleton className="size-3.5 shrink-0 motion-reduce:before:animate-none" />
-            <Skeleton className="h-5 w-16 rounded-full motion-reduce:before:animate-none" />
-            <Skeleton className="h-3 w-20 motion-reduce:before:animate-none" />
-            <Skeleton className="ml-auto h-3 w-28 max-w-full motion-reduce:before:animate-none" />
-          </div>
-        </SkeletonRows>
+        <SettingsSkeleton label="Loading build history" rows={3} />
       </SettingsContainer>
     );
   }

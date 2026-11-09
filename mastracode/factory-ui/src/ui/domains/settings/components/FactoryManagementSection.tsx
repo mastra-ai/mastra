@@ -5,9 +5,13 @@ import { Trash2 } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
-import { SettingsContainer, SettingsNoticeRow, SettingsRow } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsNoticeRow,
+  SettingsRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { EnvironmentSection } from './EnvironmentSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -23,7 +27,15 @@ export function FactoryManagementSection() {
   if (factoryQuery.isError && !factory) {
     return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;
   }
-  if (!factory) return <SkeletonRows label="Loading Factory settings" rows={2} />;
+  if (!factory) {
+    return (
+      <SettingsSubsection scope="factory" title="Environment">
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading Factory settings" rows={3} />
+        </SettingsContainer>
+      </SettingsSubsection>
+    );
+  }
 
   return (
     <>

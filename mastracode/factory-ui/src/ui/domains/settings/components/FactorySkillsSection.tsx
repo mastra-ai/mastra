@@ -13,7 +13,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
-import { SettingsContainer, SettingsEmptyRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsEmptyRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { FactorySkillEditorDialog } from './FactorySkillEditorDialog';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -132,12 +132,27 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
   );
 }
 
-function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills: FactorySkillInfo[] }) {
+function SkillCards({
+  displayed,
+  skills,
+  loading = false,
+}: {
+  displayed: DisplayedSkill[];
+  skills: FactorySkillInfo[];
+  loading?: boolean;
+}) {
   const cards = displayed.flatMap(({ name, title }) => {
     const skill = skills.find(s => s.name === name);
     return skill ? [<SkillCard key={name} title={title} skill={skill} />] : [];
   });
-  // While skills load, or when none match, show no card rather than an empty one.
+  if (loading && cards.length === 0) {
+    return (
+      <SettingsContainer>
+        <SettingsSkeleton label="Loading skills" rows={displayed.length} />
+      </SettingsContainer>
+    );
+  }
+  // When none match, show no card rather than an empty one.
   if (cards.length === 0) return null;
   return <SettingsContainer>{cards}</SettingsContainer>;
 }
@@ -237,15 +252,17 @@ function BoardGroup({
   board,
   skills,
   skillsLoaded,
+  skillsLoading,
 }: {
   board: InstalledBoardInfo;
   skills: FactorySkillInfo[];
   skillsLoaded: boolean;
+  skillsLoading: boolean;
 }) {
   return (
     <SettingsSubsection scope="factory" title={`${board.title} board`} description={SKILLS_DESCRIPTION}>
       {isBuiltInBoard(board.id) ? (
-        <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} />
+        <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} loading={skillsLoading} />
       ) : (
         <SettingsContainer>
           <CustomBoardPhases board={board} skills={skills} skillsLoaded={skillsLoaded} />
@@ -284,13 +301,8 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
 
   return (
     <SkillEditingContext.Provider value={{ factoryId, canEdit }}>
-      {(skillsQuery.isPending || skillsQuery.error || catalog.error) && (
+      {(skillsQuery.error || catalog.error) && (
         <div className="flex flex-col gap-1 ps-2.5">
-          {skillsQuery.isPending && (
-            <Txt tone="muted" as="p" variant="caption" role="status">
-              Loading skills…
-            </Txt>
-          )}
           {skillsQuery.error && (
             <Txt as="p" variant="caption" className="text-destructive-foreground">
               {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
@@ -305,7 +317,11 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
       )}
       {boards === undefined ? (
         <SettingsSubsection scope="factory" title="Factory skills" description={SKILLS_DESCRIPTION}>
-          <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
+          <SkillCards
+            displayed={DISPLAYED_SKILLS}
+            skills={skills}
+            loading={skillsQuery.isPending || catalog.isPending}
+          />
         </SettingsSubsection>
       ) : boards.length === 0 ? (
         <>
@@ -319,7 +335,13 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
       ) : (
         <>
           {boards.map(board => (
-            <BoardGroup key={board.id} board={board} skills={skills} skillsLoaded={skillsQuery.isSuccess} />
+            <BoardGroup
+              key={board.id}
+              board={board}
+              skills={skills}
+              skillsLoaded={skillsQuery.isSuccess}
+              skillsLoading={skillsQuery.isPending}
+            />
           ))}
           <OtherAppSkills skills={skills} boards={boards} />
         </>

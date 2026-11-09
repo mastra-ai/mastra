@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { RotateCcw } from 'lucide-react';
 import { Fragment } from 'react';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
@@ -9,7 +9,6 @@ import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
@@ -28,6 +27,15 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
   return 'available';
 }
 
+// Untitled: until every status loads, the sources can't be sorted into connected, unavailable or available.
+function IntakeSkeleton() {
+  return (
+    <SettingsContainer>
+      <SettingsSkeleton label="Loading intake sources" variant="item" rows={4} />
+    </SettingsContainer>
+  );
+}
+
 export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   useIntakeBindingsQuery();
@@ -38,7 +46,7 @@ export function IntakeSection() {
   const incidentio = useIncidentioStatusQuery();
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
 
-  if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={4} />;
+  if (configQuery.isPending) return <IntakeSkeleton />;
   if (!configQuery.data) {
     return (
       <SettingsContainer>
@@ -59,7 +67,7 @@ export function IntakeSection() {
     incidentio.isPending ||
     incidentioConnections.isPending
   ) {
-    return <SkeletonRows label="Loading intake sources" rows={4} />;
+    return <IntakeSkeleton />;
   }
 
   const props = { config: configQuery.data };

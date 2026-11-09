@@ -1,14 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogOut } from 'lucide-react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -37,22 +36,6 @@ function AccountValue({ children }: { children: string }) {
   );
 }
 
-function AccountSettingsSkeleton() {
-  return (
-    <SettingsContainer>
-      <SettingsRow label="Name">
-        <Skeleton className="h-4 w-28" />
-      </SettingsRow>
-      <SettingsRow label="Email">
-        <Skeleton className="h-4 w-40" />
-      </SettingsRow>
-      <SettingsRow label="Authentication">
-        <Skeleton className="h-4 w-24" />
-      </SettingsRow>
-    </SettingsContainer>
-  );
-}
-
 export function AccountSettingsSection() {
   const auth = useFactoryAuth();
   const { baseUrl } = useApiConfig();
@@ -60,7 +43,9 @@ export function AccountSettingsSection() {
   if (auth.isPending) {
     return (
       <SettingsSubsection scope="personal" title="Profile">
-        <AccountSettingsSkeleton />
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading your account" rows={3} />
+        </SettingsContainer>
       </SettingsSubsection>
     );
   }

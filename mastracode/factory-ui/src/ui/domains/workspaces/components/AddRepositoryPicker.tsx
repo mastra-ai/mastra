@@ -12,7 +12,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
-import { SettingsItem } from '@mastra/playground-ui/new/settings';
+import { SettingsItem, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { Plus, RefreshCw, RotateCcw, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
@@ -21,7 +21,6 @@ import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import { IntegrationItemIcon } from '../../settings/components/IntegrationItem';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import { isGitLabRepository } from '../services/github';
 
@@ -130,7 +129,7 @@ export function AddRepositoryPicker({
           />
         )}
         {loadingResults ? (
-          <SkeletonRows label="Loading available repositories" rows={3} />
+          <SettingsSkeleton label="Loading available repositories" variant="item" rows={3} />
         ) : canSearch ? (
           <div className="divide-border flex flex-col divide-y *:py-3">
             {available.map(repo => (

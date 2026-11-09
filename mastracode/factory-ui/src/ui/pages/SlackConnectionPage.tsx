@@ -1,4 +1,3 @@
-import { SettingsRowsSkeleton } from '../ui/SettingsRowsSkeleton';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
@@ -19,7 +18,13 @@ import {
 } from '../../hooks/useChannelAccounts';
 import { useFactoriesQuery } from '../../hooks/useFactories';
 import { IdentityWithTooltip } from '../domains/settings/components/IdentityWithTooltip';
-import { SettingsContainer, SettingsItem, SettingsItemIcon, SettingsRow } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsItem,
+  SettingsItemIcon,
+  SettingsRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
 
 import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
@@ -117,7 +122,7 @@ export function SlackConnectionSettings() {
       {accountsQuery.isPending ? (
         <SettingsSubsection scope="personal" title="Connection">
           <SettingsContainer>
-            <SettingsRowsSkeleton label="Loading Slack connection" rows={1} />
+            <SettingsSkeleton variant="item" label="Loading Slack connection" rows={1} />
           </SettingsContainer>
         </SettingsSubsection>
       ) : accountsQuery.error ? (

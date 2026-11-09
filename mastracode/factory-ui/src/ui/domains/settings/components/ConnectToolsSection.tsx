@@ -8,12 +8,12 @@ import {
   SettingsItemIcon,
   SettingsListHeader,
   SettingsRow,
+  SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
 import { ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { isConnectToolsOffError, MASTRA_PLATFORM_URL } from '../../factory/services/platformConnect';
 import type { ConnectToolConnection } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -33,7 +33,7 @@ export function ConnectToolsSection() {
     >
       {query.isPending ? (
         <SettingsContainer>
-          <SettingsRowsSkeleton label="Loading Mastra Connect tools" />
+          <SettingsSkeleton variant="item" label="Loading Mastra Connect tools" />
         </SettingsContainer>
       ) : unavailable ? (
         <SettingsContainer>

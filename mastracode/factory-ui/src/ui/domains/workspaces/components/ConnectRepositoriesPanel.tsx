@@ -6,6 +6,7 @@ import {
   SettingsEmptyRow,
   SettingsListHeader,
   SettingsNoticeRow,
+  SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
 import { Plus, RotateCcw } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -13,7 +14,6 @@ import { useRef, useState } from 'react';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useFactoryEnvironmentQuery } from '../../../../hooks/useFactoryEnvironment';
 import { useSidePanelDrawer } from '../../../lib/hooks/useSidePanelDrawer';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { RepositoriesBlock } from '../../settings/components/environment/RepositoriesBlock';
 import type { RepositoryProviders } from '../../settings/components/environment/RepositoriesBlock';
 import { useEnvironmentSave } from '../../settings/components/environment/useEnvironmentSave';
@@ -62,7 +62,9 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
             {repositoryCount === 1 ? '1 repository' : `${repositoryCount} repositories`}
           </SettingsListHeader>
         )}
-        {environmentQuery.isPending && <SkeletonRows label="Loading repository configuration" rows={2} />}
+        {environmentQuery.isPending && (
+          <SettingsSkeleton label="Loading repository configuration" variant="item" rows={2} />
+        )}
         {environmentQuery.isError && (
           <SettingsNoticeRow>
             <Notice

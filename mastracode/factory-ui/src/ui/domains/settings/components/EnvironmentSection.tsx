@@ -1,7 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import {
   useEnvironmentBuildQuery,
@@ -28,7 +27,15 @@ export function EnvironmentSection({ factoryId }: { factoryId: string }) {
       </Notice>
     );
   }
-  if (!environmentQuery.data) return <Skeleton className="h-24 w-full" />;
+  if (!environmentQuery.data) {
+    return (
+      <SettingsSubsection scope="factory" title="Environment">
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading environment" rows={3} />
+        </SettingsContainer>
+      </SettingsSubsection>
+    );
+  }
 
   return <EnvironmentBlocks key={factoryId} factoryId={factoryId} environment={environmentQuery.data} />;
 }

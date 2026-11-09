@@ -14,7 +14,7 @@ import {
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsListHeader, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsListHeader, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { Fragment, useId, useRef, useState } from 'react';
@@ -212,7 +212,10 @@ export function SourcePicker(props: SourcePickerProps) {
             })}
           </ul>
         )}
-        {!open && (saving || error || loading) && (
+        {loading && (
+          <SettingsSkeleton label={`Loading ${label}`} variant="item" rows={1} className="border-border border-t" />
+        )}
+        {!open && (saving || error) && (
           <div className="flex flex-col gap-2">
             {saving && <SavingStatus label={label} />}
             {error && (
@@ -226,11 +229,6 @@ export function SourcePicker(props: SourcePickerProps) {
                   </Button>
                 )}
               </div>
-            )}
-            {loading && (
-              <Txt as="p" variant="caption" tone="muted" role="status">
-                Loading {label}…
-              </Txt>
             )}
           </div>
         )}
@@ -294,7 +292,7 @@ function SourcePickerDrawer({
             )}
           </SettingsRow>
         ) : loading ? (
-          <SettingsRow label={`Loading ${label}…`} />
+          <SettingsSkeleton label={`Loading ${label}`} variant="item" rows={3} />
         ) : (
           <>
             {added.length > 0 && (

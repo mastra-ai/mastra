@@ -2,7 +2,7 @@ import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsFieldsetRow, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Plus, Trash2 } from 'lucide-react';
@@ -14,7 +14,6 @@ import {
   useIntakeLabelRoutesQuery,
   useSaveIntakeLabelRouteMutation,
 } from '../../../../hooks/useIntakeConfig';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 const NO_BOARD = '__no_board__';
 
@@ -73,11 +72,7 @@ export function GithubLabelRouting({
   }
 
   if (routesQuery.isPending || catalog.isPending) {
-    return (
-      <SettingsRow label={label} description={scope}>
-        <SkeletonRows label={`Loading ${name} routing`} rows={1} />
-      </SettingsRow>
-    );
+    return <SettingsSkeleton label={`Loading ${name} routing`} rows={1} />;
   }
 
   if (boards.length === 0 && catalog.isSuccess && routes.length === 0) {

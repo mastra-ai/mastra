@@ -3,11 +3,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 import { IntegrationItem } from './IntegrationItem';
 import { RetryRow } from './common/ConnectionStateRows';
@@ -39,7 +38,7 @@ export function ConnectedAccountsSection() {
   };
 
   if (accountsQuery.isPending) {
-    return <SettingsRowsSkeleton label="Loading connected accounts" rows={1} />;
+    return <SettingsSkeleton variant="item" label="Loading connected accounts" rows={1} />;
   }
 
   if (accountsQuery.error) {

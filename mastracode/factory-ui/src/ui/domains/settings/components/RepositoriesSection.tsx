@@ -4,8 +4,7 @@ import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { settingsSectionPath } from '../settingsSections';
 import { GithubPatBlock } from './GithubPatBlock';
@@ -22,7 +21,7 @@ export function RepositoriesSection() {
     return (
       <SettingsSubsection scope="factory" title="Added to this Factory">
         <SettingsContainer>
-          <SettingsRowsSkeleton label="Loading repositories" />
+          <SettingsSkeleton variant="item" label="Loading repositories" />
         </SettingsContainer>
       </SettingsSubsection>
     );

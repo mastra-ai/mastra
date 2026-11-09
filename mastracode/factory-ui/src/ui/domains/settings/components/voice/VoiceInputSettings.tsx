@@ -1,10 +1,9 @@
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 
 import { useVoiceSettings } from '../../../../../hooks/use-voice-settings';
-import { SettingsRowsSkeleton } from '../../../../ui/SettingsRowsSkeleton';
 import { VOICE_INPUT_ANCHOR } from '../../settingsSections';
 import { SpeechToTextKeys, SpeechToTextKeysSkeleton } from './SpeechToTextKeys';
 import { VoiceInputLayout } from './VoiceInputLayout';
@@ -13,7 +12,7 @@ import { VoiceModelSettings } from './VoiceModelSettings';
 function SectionSkeleton() {
   return (
     <SettingsContainer>
-      <SettingsRowsSkeleton label="Loading voice input" rows={2} />
+      <SettingsSkeleton label="Loading voice input" rows={2} />
     </SettingsContainer>
   );
 }
