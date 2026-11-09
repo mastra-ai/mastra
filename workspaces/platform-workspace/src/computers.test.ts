@@ -159,8 +159,6 @@ async function call(computers: PlatformComputers, tool: string, input: any, cont
   if (lifecycle) return (lifecycle as any).execute(input, context);
 
   const requestContext = context.requestContext ?? new RequestContext();
-  if (context.agent?.resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, context.agent.resourceId);
-  if (context.agent?.threadId) requestContext.set(MASTRA_THREAD_ID_KEY, context.agent.threadId);
   const workspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
   const tools = await createWorkspaceTools(workspace);
   const mappings: Record<string, { id: string; input: unknown }> = {
