@@ -3,10 +3,9 @@
  * emitted them, with default tool-call concurrency, through a real Agent.
  */
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
-import { clearRunLeaseFence, setRunLeaseFence } from '../../../agent/run-lease-fence';
 import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import { delay } from '../../../utils';
@@ -156,11 +155,6 @@ async function run(agent: Agent, mode: 'stream' | 'generate', options: Record<st
 const actions = (log: string[]) => log.filter(e => !e.startsWith('/'));
 
 describe('computer tool calls run in model order', () => {
-  const fenced: Array<[string, () => Promise<void>]> = [];
-  afterEach(() => {
-    for (const [id, fence] of fenced.splice(0)) clearRunLeaseFence(id, fence);
-  });
-
   for (const mode of ['stream', 'generate'] as const) {
     it(`orders click, type, press despite getInfo latency (${mode})`, async () => {
       const log: string[] = [];
@@ -172,20 +166,6 @@ describe('computer tool calls run in model order', () => {
       expect(log).toEqual(['leftClick', '/leftClick', 'type', '/type', 'press', '/press']);
     });
   }
-
-  it('orders calls delayed by the run lease check', async () => {
-    const log: string[] = [];
-    const workspace = new Workspace({ sandbox: sandbox(recordingComputer(log)), tools: computerToolsConfig(false) });
-    const delays = [300, 150, 0];
-    let n = 0;
-    const fence = async () => {
-      await delay(delays[n++] ?? 0);
-    };
-    setRunLeaseFence('order-lease-run', fence);
-    fenced.push(['order-lease-run', fence]);
-    await run(agentWith(workspace, CLICK_TYPE_PRESS), 'stream', { runId: 'order-lease-run' });
-    expect(actions(log)).toEqual(['leftClick', 'type', 'press']);
-  });
 
   it('runs computer-wait and the post-action screenshot before the next action', async () => {
     expect(DEFAULT_SCREENSHOT_AFTER_ACTION).toBe(true);

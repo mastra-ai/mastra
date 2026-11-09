@@ -1674,8 +1674,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
 /**
  * Run ordered tool calls (computer tools) one at a time in emitted order. `map-tool-calls`
- * chains a gate per ordered call; each call waits for its predecessor before doing anything
- * (lease check, validation, execution) and releases on every exit path. Calls without a gate
+ * chains a gate per ordered call; each call waits for its predecessor before doing any
+ * pre-execution work and releases on every exit path. Calls without a gate
  * run unchanged. A resumed call runs ungated (its step's chain is stale) but still releases.
  */
 function withOrderedToolGate<S extends { execute: (executionContext: any) => Promise<any> }>(
