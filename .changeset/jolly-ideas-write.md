@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Thread titles are now written in the language of the user's messages.
+Default thread-title generation now asks the model to write titles in the language of the user's messages.
