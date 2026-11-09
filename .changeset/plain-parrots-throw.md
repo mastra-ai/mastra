@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fixed memory reconciliation discarding a server-computed toModelOutput mapping for client-executed tools (no server execute). When memory recalled the stored pending call, the reconciled result lost the cached projection and the next model prompt received the raw tool result instead of the mapped content. The server-computed mapping now survives reconciliation while other client-supplied part metadata remains dropped. Mapping markers arriving on client input are no longer trusted: they are stripped and the mapping is recomputed server-side from the raw result, so a client cannot forge prompt content via mastra.modelOutput. Fixes #25744
+Client-executed tools with `toModelOutput` now send the mapped output to the model after memory recall, instead of the raw tool result. Fixes #25744.
+
+The server now discards `mastra.modelOutput` values a client sends on tool results and computes the mapping itself, so a client can no longer substitute its own mapped output for the server's.
