@@ -1324,9 +1324,10 @@ export class AgentThreadStreamRuntime {
         this.#stopLeaseRenewal(resolved, runId);
         return;
       }
-      // A partially resumed run is still parked on its sibling suspensions while its resumed segment executes.
+      // A partially resumed run is still parked on its sibling suspensions while its resumed segment executes; its
+      // lifecycle, not its suspension bookkeeping or the output it reuses across the suspension, says it is running.
       const preparedRun =
-        this.#isParkedRun(state, runId) && !this.#isActivelyRunning(record)
+        this.#isParkedRun(state, runId) && record.lifecycle !== 'running'
           ? undefined
           : state.preparedRunsById.get(runId);
       if (!state.leaseRenewalTimers.has(runId) || record.registeredElsewhere || record.lateRetakeHandoff) {
@@ -1356,7 +1357,10 @@ export class AgentThreadStreamRuntime {
           ),
         preparedRun
           ? this.#withinGrace(
-              Promise.allSettled([record.output._waitUntilFinished(), record.broadcastFinished]).then(() => true),
+              Promise.allSettled([
+                (record.currentSegmentOutput ?? record.output)._waitUntilFinished(),
+                record.broadcastFinished,
+              ]).then(() => true),
               abortGraceMs,
               false,
             )

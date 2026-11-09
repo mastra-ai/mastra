@@ -10,9 +10,11 @@
  *
  * - case 5: a run parked on an approval.
  * - case 5b: a run still streaming. Shutdown aborts it and gives it a moment
- *   to stop, so its tools aren't still running once the other replica can
- *   take the thread, then ends the run for everyone else.
+ *   to wind down, then ends the run for everyone else.
  * - a pubsub without leases: the run still ends for everyone else.
+ * - a partial resume: one of two suspended tool calls is resumed, so the run
+ *   is still parked on the other while its resumed segment runs. Shutdown stops that
+ *   segment too.
  *
  * Either way, the replica stops renewing the lease once it has shut down.
  */
@@ -281,6 +283,73 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     follower.unsubscribe();
     await observer.mastra.shutdown({ drainTimeout: 200 });
   }, 20_000);
+
+  // Only non-durable runs resume in the process that holds their thread run; durable resumes go through recovery.
+  it.skipIf(isDurableEngineVariant(engine))(
+    'stops the resumed segment of a run still parked on a sibling suspension and frees its thread',
+    async () => {
+      const threadId = `shutdown-partial-resume-${engine}`;
+      const key = [RESOURCE, threadId].join('\u0000');
+      llm.on(
+        { userMessage: 'two suspensions' },
+        {
+          toolCalls: [
+            { id: 'call_loop', name: 'loop', arguments: {} },
+            { id: 'call_sibling', name: 'loop', arguments: {} },
+          ],
+        },
+      );
+      const shared = new SharedLeases();
+      const events = new EventEmitter();
+      events.setMaxListeners(0);
+      const memory = new MockMemory();
+      const loop = { ticks: 0, aborted: false };
+      const loopTool = createTool({
+        id: 'loop',
+        description: 'Ask, then tick until aborted',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return await context?.agent?.suspend({ question: 'go?' });
+          for (let i = 0; i < 250 && !context?.abortSignal?.aborted; i++) {
+            loop.ticks++;
+            await new Promise(resolve => setTimeout(resolve, 20));
+          }
+          loop.aborted = !!context?.abortSignal?.aborted;
+          return 'looped';
+        },
+      });
+      const running = replica(shared, events, memory, { loop: loopTool });
+      const observer = replica(shared, events, memory, {});
+      const follower = await follow(observer.agent, threadId);
+
+      const output = await startStream(running.agent, 'two suspensions', threadId, {});
+      await vi.waitFor(() => expect(follower.types.filter(type => type === 'tool-call-suspended')).toHaveLength(2), {
+        timeout: 5_000,
+      });
+
+      const resumed = await running.agent.resumeStream(
+        { answer: 'go' },
+        { runId: output.runId, toolCallId: 'call_loop', memory: { thread: threadId, resource: RESOURCE } },
+      );
+      void resumed.consumeStream().catch(() => undefined);
+      await vi.waitFor(() => expect(loop.ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+      await running.mastra.shutdown({ drainTimeout: 200 });
+      expect(loop.aborted).toBe(true);
+      const ticksAtShutdown = loop.ticks;
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(loop.ticks).toBe(ticksAtShutdown);
+      expect(shared.owner(key)).toBeUndefined();
+      running.pubsub.dead = true;
+
+      await new Promise(resolve => setTimeout(resolve, 900));
+      expect(follower.errors.filter(error => error.includes(LEASE_LOST))).toEqual([]);
+
+      follower.unsubscribe();
+      await observer.mastra.shutdown({ drainTimeout: 200 });
+    },
+    20_000,
+  );
 
   it('announces a run parked on an approval as suspended and frees its thread (5)', async () => {
     const threadId = `shutdown-parked-${engine}`;

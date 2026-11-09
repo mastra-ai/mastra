@@ -1476,6 +1476,55 @@ export const mastra = new Mastra({
     );
 
     it(
+      'hands back an in-flight agent thread run before the generated server exits on SIGTERM (#27364)',
+      async () => {
+        // The run's tool only returns once the run is aborted. Nothing but
+        // `mastra.shutdown()` handing the thread run back aborts it, and that
+        // handback runs after the drain window, so the generated server's core
+        // shutdown bound must leave room for it.
+        const handbackPort = await getPort();
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        const handbackController = new AbortController();
+        const server = execaNode('index.mjs', {
+          cwd: outputDir,
+          cancelSignal: handbackController.signal,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: handbackPort.toString(),
+          },
+        });
+        activeProcesses.push({ controller: handbackController, proc: server });
+
+        let output = '';
+        server.stdout?.on('data', (chunk: Buffer) => {
+          output += chunk.toString();
+        });
+        server.stderr?.on('data', (chunk: Buffer) => {
+          output += chunk.toString();
+        });
+
+        try {
+          await waitForServer(handbackPort);
+
+          const response = await fetch(`http://localhost:${handbackPort}/shutdown-thread-run`, { method: 'POST' });
+          expect(response.ok).toBe(true);
+          expect(output).toContain('shutdown-thread-run:tool-started');
+          expect(output).not.toContain('shutdown-thread-run:aborted');
+
+          server.kill('SIGTERM');
+
+          await expect(server).resolves.toMatchObject({ exitCode: 0 });
+          expect(output).toContain('shutdown-thread-run:aborted');
+          expect(output).not.toContain('Mastra shutdown timed out');
+        } finally {
+          server.kill('SIGKILL');
+          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        }
+      },
+      timeout,
+    );
+
+    it(
       'reports the model tokens the generated server used when it exits on SIGTERM',
       async () => {
         // Everything except PostHog delivery is the real generated server:
