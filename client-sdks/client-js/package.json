@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./gen-ui": {
+      "import": {
+        "types": "./dist/gen-ui/index.d.ts",
+        "default": "./dist/gen-ui/index.js"
+      },
+      "require": {
+        "types": "./dist/gen-ui/index.d.ts",
+        "default": "./dist/gen-ui/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "repository": {
@@ -51,13 +61,20 @@
     "json-schema": "^0.4.0"
   },
   "peerDependencies": {
+    "@json-render/core": "^0.22.0",
     "zod": "^3.25.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@json-render/core": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@json-render/core": "^0.22.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",

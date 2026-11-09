@@ -2,13 +2,10 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraQueryOptions } from '../shared/query-options';
+import { listMcpServerTools, toMcpAppToolMap } from './mcp-app-tools';
+import type { McpAppToolInfo } from './mcp-app-tools';
 
-export interface McpAppToolInfo {
-  serverId: string;
-  toolId: string;
-  toolName: string;
-  resourceUri: string;
-}
+export type { McpAppToolInfo } from './mcp-app-tools';
 
 /**
  * Builds a map of tool names → MCP App info for tools across all registered
@@ -26,40 +23,7 @@ export function useMcpAppTools<TData = Record<string, McpAppToolInfo>>({
 
   return useQuery({
     queryKey: ['mcp-app-tools'],
-    queryFn: async () => {
-      const map: Record<string, McpAppToolInfo> = {};
-
-      const { servers } = await client.getMcpServers();
-      if (!servers?.length) return map;
-
-      const results = await Promise.allSettled(
-        servers.map(async server => {
-          const { tools } = await client.getMcpServerTools(server.id);
-          return { serverId: server.id, tools };
-        }),
-      );
-
-      for (const result of results) {
-        if (result.status !== 'fulfilled') continue;
-        const { serverId, tools } = result.value;
-        for (const tool of tools) {
-          const meta = tool._meta as { ui?: { resourceUri?: string } } | undefined;
-          const resourceUri = meta?.ui?.resourceUri;
-          if (resourceUri) {
-            const toolId = tool.name;
-            const info: McpAppToolInfo = { serverId, toolId, toolName: tool.name, resourceUri };
-            map[toolId] = info;
-            if (tool.name !== toolId) {
-              map[tool.name] = info;
-            }
-            // Also map the namespaced name used by MCPClient.listTools()
-            map[`${serverId}_${tool.name}`] = info;
-          }
-        }
-      }
-
-      return map;
-    },
+    queryFn: async () => toMcpAppToolMap(await listMcpServerTools(client)),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     ...queryOptions,
