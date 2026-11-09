@@ -84,7 +84,7 @@ export function useConnectMastraGateway() {
   return useMutation({
     mutationFn: ({ scope }: { scope?: 'user' | 'org' }) =>
       client.post<SaveProviderKeyResponse>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/connect`, {
-        ...(scope !== undefined ? { scope } : {}),
+        scope,
       }),
     onSuccess: () => invalidateCredentialDependentQueries(queryClient),
   });

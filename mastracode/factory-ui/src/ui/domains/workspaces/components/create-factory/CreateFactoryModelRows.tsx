@@ -47,7 +47,7 @@ export function CreateFactoryModelRows({
       model =>
         model.id.toLowerCase().includes(normalizedQuery) || model.modelName.toLowerCase().includes(normalizedQuery),
     )
-    .sort(
+    .toSorted(
       (a, b) =>
         // The provider's preferred model leads, so a catalog as large as the gateway's opens on it.
         Number(b.id === preferredModelId) - Number(a.id === preferredModelId) ||

@@ -225,16 +225,17 @@ describe('MastraCodeGateway', () => {
       const model = gateway.resolveLanguageModel({
         providerId: 'anthropic',
         modelId: 'claude-opus-5.5',
-        apiKey: gateway.resolveAuth({
-          gatewayId: 'mastracode',
-          providerId: 'anthropic',
-          modelId: 'claude-opus-5.5',
-          routerId: 'mastracode/anthropic/claude-opus-5.5',
-        })!.apiKey!,
+        apiKey:
+          gateway.resolveAuth({
+            gatewayId: 'mastracode',
+            providerId: 'anthropic',
+            modelId: 'claude-opus-5.5',
+            routerId: 'mastracode/anthropic/claude-opus-5.5',
+          })?.apiKey ?? '',
       });
-      await (model as any)
-        .doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })
-        .catch(() => undefined);
+      await Promise.resolve(
+        model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }),
+      ).catch(() => undefined);
 
       expect(requests.length).toBeGreaterThan(0);
       expect(requests.every(request => new URL(request.url).host !== 'custom.example.com')).toBe(true);
@@ -263,9 +264,9 @@ describe('MastraCodeGateway', () => {
       modelId: 'kimi-k2.6',
       apiKey: 'org-gateway-key',
     });
-    await (model as any)
-      .doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })
-      .catch(() => undefined);
+    await Promise.resolve(
+      model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }),
+    ).catch(() => undefined);
     vi.unstubAllGlobals();
 
     expect(hosts).toEqual(['gateway.example.com']);

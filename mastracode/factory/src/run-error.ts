@@ -128,7 +128,8 @@ function isMastraGatewayError(error: RunErrorIdentity): boolean {
 /** Whether the request, or a provider error it wraps, went to the gateway's host. */
 function calledMastraGateway(error: unknown, depth = 0): boolean {
   if (depth > 4 || typeof error !== 'object' || error === null) return false;
-  const { url, cause } = error as { url?: unknown; cause?: unknown };
+  const url = 'url' in error ? error.url : undefined;
+  const cause = 'cause' in error ? error.cause : undefined;
   return (typeof url === 'string' && MASTRA_GATEWAY_HOST.test(hostOf(url))) || calledMastraGateway(cause, depth + 1);
 }
 

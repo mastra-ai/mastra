@@ -107,17 +107,6 @@ export function AddProviderDrawer({
     connectGatewayMutation.mutate({ scope: requestScope }, { onSuccess: onClose });
   };
 
-  const providerRow = (provider: ProviderInfo) => (
-    <AddProviderRow
-      key={provider.provider}
-      provider={provider}
-      credentialScope={credentialScope}
-      startingProvider={startingProvider}
-      onSignIn={() => (isGateway(provider) ? connectGateway() : signIn(provider))}
-      onAddKey={() => onAddKey(provider)}
-    />
-  );
-
   const closeUnlessStarting = (nextOpen: boolean) => {
     if (!nextOpen && startingProvider === undefined) onClose();
   };
@@ -150,7 +139,16 @@ export function AddProviderDrawer({
               <Txt as="p" variant="caption" tone="muted">
                 Recommended
               </Txt>
-              <ul className={PROVIDER_LIST_CLASS}>{providerRow(gateway)}</ul>
+              <ul className={PROVIDER_LIST_CLASS}>
+                <AddProviderRow
+                  provider={gateway}
+                  credentialScope={credentialScope}
+                  startingProvider={startingProvider}
+                  onSignIn={signIn}
+                  onConnectGateway={connectGateway}
+                  onAddKey={onAddKey}
+                />
+              </ul>
             </>
           )}
           <Txt as="p" variant="caption" tone="muted">
@@ -161,7 +159,19 @@ export function AddProviderDrawer({
               {emptyMessage(search)}
             </Txt>
           ) : (
-            <ul className={PROVIDER_LIST_CLASS}>{shown.map(providerRow)}</ul>
+            <ul className={PROVIDER_LIST_CLASS}>
+              {shown.map(provider => (
+                <AddProviderRow
+                  key={provider.provider}
+                  provider={provider}
+                  credentialScope={credentialScope}
+                  startingProvider={startingProvider}
+                  onSignIn={signIn}
+                  onConnectGateway={connectGateway}
+                  onAddKey={onAddKey}
+                />
+              ))}
+            </ul>
           )}
           {!query && keyOnlyCount > 0 && (
             <Txt as="p" variant="caption" tone="muted">
@@ -184,13 +194,15 @@ function AddProviderRow({
   credentialScope,
   startingProvider,
   onSignIn,
+  onConnectGateway,
   onAddKey,
 }: {
   provider: ProviderInfo;
   credentialScope: CredentialScope;
   startingProvider: string | undefined;
-  onSignIn: () => void;
-  onAddKey: () => void;
+  onSignIn: (provider: ProviderInfo) => void;
+  onConnectGateway: () => void;
+  onAddKey: (provider: ProviderInfo) => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
   const label =
@@ -199,7 +211,12 @@ function AddProviderRow({
   return (
     <ProviderOptionRow provider={provider.provider} label={label}>
       {takesApiKey(provider) && (
-        <Button size="sm" aria-label={`Add API key for ${displayName}`} disabled={starting} onClick={onAddKey}>
+        <Button
+          size="sm"
+          aria-label={`Add API key for ${displayName}`}
+          disabled={starting}
+          onClick={() => onAddKey(provider)}
+        >
           API key
         </Button>
       )}
@@ -209,7 +226,7 @@ function AddProviderRow({
           variant="primary"
           aria-label={`Connect ${displayName}`}
           disabled={starting}
-          onClick={onSignIn}
+          onClick={onConnectGateway}
         >
           {startingProvider === provider.provider ? 'Connecting…' : 'Connect'}
         </Button>
@@ -220,7 +237,7 @@ function AddProviderRow({
           variant="primary"
           aria-label={`Sign in to ${displayName}`}
           disabled={starting}
-          onClick={onSignIn}
+          onClick={() => onSignIn(provider)}
         >
           {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
         </Button>
