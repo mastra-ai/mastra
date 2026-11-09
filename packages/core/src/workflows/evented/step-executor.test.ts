@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { AGENT_STREAM_TOPIC } from '../../agent/durable/constants';
 import {
@@ -675,6 +675,7 @@ describe('StepExecutor', () => {
       const cache = new InMemoryServerCache();
       const target = new Mastra({ pubsub: new RemoteTransport(), cache });
       const warn = vi.spyOn(noopLogger, 'warn');
+      onTestFinished(() => warn.mockRestore());
       const context = await captureStepPubsub(target, executor => executor.__setLogger(noopLogger));
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
       const topic = AGENT_STREAM_TOPIC('run-elsewhere');
@@ -694,7 +695,6 @@ describe('StepExecutor', () => {
       expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
       const warnings = warn.mock.calls.filter(([message]) => String(message).includes('RedisServerCache'));
       expect(warnings).toHaveLength(1);
-      warn.mockRestore();
     });
 
     it('does not cache run-local step events even when the cache is atomic', async () => {
