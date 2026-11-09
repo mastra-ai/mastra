@@ -99,7 +99,7 @@ export function SessionNavRow({
       to={url}
       state={from ? { from } : undefined}
       aria-current={active ? 'page' : undefined}
-      aria-label={name}
+      aria-label={label ? `${label}: ${name}` : name}
       aria-disabled={disabled || loading || undefined}
       tabIndex={disabled || loading ? -1 : undefined}
       onClick={event => {
