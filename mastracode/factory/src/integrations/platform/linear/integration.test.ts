@@ -475,6 +475,26 @@ describe('PlatformLinearIntegration', () => {
     await expect(integration.getFreshAccessToken(loadedConnection)).resolves.not.toBe(config.accessToken);
   });
 
+  it('reports the workspace link slug only when exactly one workspace is connected', async () => {
+    const single = createIntegration(vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] })));
+    await expect(single.checkConnection('org-1')).resolves.toMatchObject({
+      connected: true,
+      canComment: true,
+      workspaceUrlKey: 'acme',
+    });
+
+    const second = { ...workspace, linearWorkspaceId: 'workspace-2', linearWorkspaceName: 'Beta', urlKey: 'beta' };
+    const multi = createIntegration(vi.fn<typeof fetch>(async () => json({ workspaces: [workspace, second] })));
+    await expect(multi.checkConnection('org-1')).resolves.toMatchObject({
+      connected: true,
+      canComment: true,
+      workspaceUrlKey: null,
+    });
+
+    const none = createIntegration(vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [] })));
+    await expect(none.checkConnection('org-1')).resolves.toMatchObject({ connected: false, canComment: false });
+  });
+
   it('resolves dispatch context with the platform-managed token when a workspace is connected', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
     const integration = createIntegration(fetchImpl);
@@ -1273,6 +1293,25 @@ describe('PlatformLinearIntegration', () => {
     );
     expect(integration.diagnostics()).toEqual({ mode: 'platform', endpointHost: 'platform.example.com' });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
+  });
+
+  it('gives agents no single link pattern when several workspaces are connected', async () => {
+    const seed = await createPlatformStorageForTests();
+    const second = { ...workspace, linearWorkspaceId: 'workspace-2', linearWorkspaceName: 'Beta', urlKey: 'beta' };
+    const integration = createIntegration(vi.fn<typeof fetch>(async () => json({ workspaces: [workspace, second] })));
+    integration.initialize?.({
+      storage: seed.integrations.forIntegration('linear'),
+      projects: seed.projects,
+      auth: fakeAuth(),
+    });
+    const projectRecord = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Acme app' } });
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { resourceId: projectRecord.id, getState: () => ({}) });
+
+    const tools = (await integration.agentTools({ requestContext })) as Record<string, { description?: string }>;
+
+    expect(tools.linear_get_issue?.description).not.toContain('linear.app/');
+    expect(tools.linear_get_issue?.description).toContain('use the `url` this tool returns');
   });
 
   it('attaches Linear rules to fetched Platform issues', async () => {

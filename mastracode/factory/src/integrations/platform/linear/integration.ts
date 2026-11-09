@@ -383,11 +383,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   async checkConnection(orgId: string): Promise<LinearConnectionCheck> {
-    const connection = await this.loadConnection(orgId);
+    const workspaces = await this.#listWorkspaces();
+    const connected = workspaces.length > 0;
     return {
-      connected: connection !== null,
-      canComment: connection !== null && this.canPostComments(connection),
-      workspaceUrlKey: connection?.workspaceUrlKey ?? null,
+      connected,
+      // The platform-managed connection is always granted `comments:create`.
+      canComment: connected,
+      // One slug can't describe links across several workspaces.
+      workspaceUrlKey: workspaces.length === 1 ? (workspaces[0]?.urlKey ?? null) : null,
       checkedAt: Date.now(),
     };
   }
