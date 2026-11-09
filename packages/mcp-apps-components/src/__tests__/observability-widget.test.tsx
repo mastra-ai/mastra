@@ -9,7 +9,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, expectTypeOf, it } from 'vitest';
 import { ObservabilityWidget } from '../apps/observability-widget/observability-widget';
 import type { ObservabilityReadAction } from '../apps/observability-widget/tool';
-import { OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY, observabilityWidgetHost } from '../host';
+import {
+  OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY,
+  OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY,
+  observabilityWidgetHost,
+} from '../host';
 import type { McpAppRef, ObservabilityWidgetPin, ObservabilityWidgetView } from '../host';
 import type { ObservabilityDashboardInput } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
@@ -395,7 +399,7 @@ it("reads over the host page's custom date range, as the Metrics page passes it"
   expect(timestampOf(mcp.calls[1])).toEqual({ start: earlier.toISOString(), end: to.toISOString() });
 });
 
-it('reads a custom range without an end up to now, and one that ends before it starts as the last 24h', async () => {
+it('reads a custom range without an end up to now, and fails on one that ends before it starts', async () => {
   const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 5 } } } });
   const from = new Date(Date.now() - 2 * DAY);
 
@@ -418,8 +422,27 @@ it('reads a custom range without an end up to now, and one that ends before it s
       customRange: { from: new Date('2026-10-04T00:00:00.000Z'), to: new Date('2026-10-01T00:00:00.000Z') },
     }).hostContext!(APP)!,
   );
-  await waitFor(() => expect(mcp.calls).toHaveLength(2));
-  expect(windowOf(mcp.calls[1])).toBe(DAY);
+  // Drawing the last 24h instead would disagree with the range the host page shows.
+  expect(await screen.findByText('The host page sent a custom date range that ends before it starts.')).toBeTruthy();
+  expect(mcp.calls).toHaveLength(1);
+});
+
+it("fails on host filters it can't read rather than drawing the dashboard's own", async () => {
+  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 5 } } } });
+
+  await openWidget(
+    mcp,
+    {
+      dashboard: {
+        ...dashboardOf(agentRunsKpi),
+        defaults: { filters: [{ fieldId: 'environment', value: 'production' }] },
+      },
+    },
+    { [OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY]: { filters: [{ value: 'staging' }] } },
+  );
+
+  expect(await screen.findByText(/The host page's filters are invalid/)).toBeTruthy();
+  expect(mcp.calls).toHaveLength(0);
 });
 
 it("pins a widget with the host page's custom date range", async () => {

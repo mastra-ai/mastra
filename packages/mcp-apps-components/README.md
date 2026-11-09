@@ -85,6 +85,9 @@ import { z } from 'zod';
 
 const uri = 'ui://mastra/observability-widget';
 const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! });
+// Yours to write: checks the caller can access `projectId`, throws if not, and returns a client
+// whose reads stay in that project.
+declare function projectClient(projectId: string, context: unknown): Promise<MastraClient>;
 
 export const observabilityServer = new MCPServer({
   id: 'observability',
@@ -112,14 +115,17 @@ export const observabilityServer = new MCPServer({
       }),
       outputSchema: z.object({ data: z.unknown() }),
       mcp: { _meta: { ui: { resourceUri: uri, visibility: ['app'] } } },
-      execute: async ({ action, args }) => {
-        const read = client[action].bind(client) as (args: unknown) => Promise<unknown>;
+      execute: async ({ action, args, projectId }, context) => {
+        const reader = projectId ? await projectClient(projectId, context) : client;
+        const read = reader[action].bind(reader) as (args: unknown) => Promise<unknown>;
         return { data: await read(args) };
       },
     }),
   },
 });
 ```
+
+`projectId` comes from the app's iframe, so the server can't trust it: check that the caller can access that project before reading. A read that throws shows its widget as failed.
 
 The input names each widget, read and column type by a key instead of a `kind`, `source` or `type` field, so a validation error points at the part that's wrong. Each number holds the read it comes from, so nothing points at a query by id:
 
@@ -187,7 +193,7 @@ const host = useMemo(
 <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
 ```
 
-`projectId` is sent with every `queryObservability` call, so your server can scope the reads to that project. It also sets the widgets' scope, as on the Metrics page: with a `projectId`, they show at project scope; without one, at org scope. Widgets, views and columns tagged for the other scope are hidden. The host's `datePreset` and `filters` replace the tool result's and the dashboard's defaults. The Metrics page's `datePreset`, `customRange` and `filterTokens` can be passed as they are. With `datePreset: 'custom'`, the widgets read over `customRange`, like the Metrics page: without `from`, the window starts 24 hours before now, and without `to`, it ends now. A range that ends before it starts is ignored. When any value changes, the app reads again; a preset window then ends at that moment. Each value is optional: leave one out to fall back to the dashboard's.
+`projectId` is sent with every `queryObservability` call, so your server can scope the reads to that project. It also sets the widgets' scope, as on the Metrics page: with a `projectId`, they show at project scope; without one, at org scope. Widgets, views and columns tagged for the other scope are hidden. The host's `datePreset` and `filters` replace the tool result's and the dashboard's defaults. The Metrics page's `datePreset`, `customRange` and `filterTokens` can be passed as they are. With `datePreset: 'custom'`, the widgets read over `customRange`, like the Metrics page: without `from`, the window starts 24 hours before now, and without `to`, it ends now. A value the app can't read (filters that fail the dashboard schema, an unknown preset, a range that ends before it starts) shows an error instead of the dashboard, so the widgets never draw data the host page didn't ask for. When any value changes, the app reads again; a preset window then ends at that moment. Each value is optional: leave one out to fall back to the dashboard's.
 
 To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `observabilityWidgetPins` is the same helper with only pins.
 

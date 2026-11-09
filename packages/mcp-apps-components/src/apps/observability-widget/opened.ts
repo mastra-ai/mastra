@@ -53,29 +53,53 @@ const isoDate = (value: unknown): string | undefined => {
   return Number.isNaN(time) ? undefined : new Date(time).toISOString();
 };
 
-function readRange(value: unknown): ObservabilityWidgetDateRange | undefined {
-  if (!isRecord(value)) return undefined;
+/** The host's view, or what's wrong with it. */
+export type HostView = { status: 'ok'; view: ObservabilityWidgetView } | { status: 'error'; message: string };
+
+const hostError = (message: string): HostView => ({ status: 'error', message });
+
+function readRange(value: unknown): ObservabilityWidgetDateRange | string {
+  if (value === undefined) return {};
+  if (!isRecord(value)) return "The host page sent a custom date range that isn't one.";
   const from = isoDate(value.from);
   const to = isoDate(value.to);
-  if (from && to && from > to) return undefined;
+  if ((value.from !== undefined && !from) || (value.to !== undefined && !to)) {
+    return 'The host page sent a custom date range with an invalid date.';
+  }
+  if (from && to && from > to) return 'The host page sent a custom date range that ends before it starts.';
   return { ...(from ? { from } : {}), ...(to ? { to } : {}) };
 }
 
 /**
- * The host's `OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY` value. It comes over the wire, so each field is
- * checked on its own and a bad one is left out rather than failing the dashboard.
+ * The host's `OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY` value. It comes over the wire, so a field that
+ * is set but invalid fails the dashboard: drawing over anything else would show data the host page
+ * didn't ask for.
  */
-export function readView(value: unknown): ObservabilityWidgetView {
-  if (!isRecord(value)) return {};
+export function readView(value: unknown): HostView {
+  if (value === undefined) return { status: 'ok', view: {} };
+  if (!isRecord(value)) return hostError("The host page sent a view that isn't one.");
+  const { datePreset, projectId } = value;
+  if (datePreset !== undefined && !isPreset(datePreset) && datePreset !== 'custom') {
+    return hostError(`The host page sent an unknown date preset: ${JSON.stringify(datePreset)}.`);
+  }
+  if (projectId !== undefined && (typeof projectId !== 'string' || !projectId)) {
+    return hostError("The host page sent a project that isn't an id.");
+  }
   const filters =
     value.filters === undefined ? undefined : dashboardDefaultsSchema.safeParse({ filters: value.filters });
-  const datePreset = isPreset(value.datePreset) || value.datePreset === 'custom' ? value.datePreset : undefined;
+  if (filters && !filters.success) {
+    return hostError(`The host page's filters are invalid: ${z.prettifyError(filters.error)}`);
+  }
   const customRange = datePreset === 'custom' ? readRange(value.customRange) : undefined;
+  if (typeof customRange === 'string') return hostError(customRange);
   return {
-    ...(datePreset ? { datePreset } : {}),
-    ...(customRange ? { customRange } : {}),
-    ...(filters?.success && filters.data.filters ? { filters: filters.data.filters } : {}),
-    ...(typeof value.projectId === 'string' && value.projectId ? { projectId: value.projectId } : {}),
+    status: 'ok',
+    view: {
+      ...(datePreset ? { datePreset } : {}),
+      ...(customRange ? { customRange } : {}),
+      ...(filters?.data.filters ? { filters: filters.data.filters } : {}),
+      ...(projectId ? { projectId } : {}),
+    },
   };
 }
 
@@ -129,7 +153,13 @@ export function environment(
  * is one the widget shows, else `24h`. The host's `filters`, else the dashboard's top-level
  * `defaults.filters` chips, filter every widget.
  */
-export function readOpened(structuredContent: unknown, now: number, view: ObservabilityWidgetView = {}): Opened {
+export function readOpened(
+  structuredContent: unknown,
+  now: number,
+  host: HostView = { status: 'ok', view: {} },
+): Opened {
+  if (host.status === 'error') return host;
+  const { view } = host;
   const opened = openedSchema.safeParse(structuredContent);
   if (!opened.success || opened.data.dashboard === undefined) {
     return { status: 'error', message: 'The tool returned no dashboard to show.' };

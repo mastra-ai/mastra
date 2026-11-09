@@ -20,4 +20,4 @@ const host = observabilityWidgetHost({
 <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
 ```
 
-Accept `projectId` in your `queryObservability` tool's input schema to use it.
+Accept `projectId` in your `queryObservability` tool's input schema and scope the reads with it. It comes from the app's iframe, so check that the caller can access that project before reading.

@@ -20,9 +20,8 @@ import { InfoIcon, OctagonAlertIcon } from 'lucide-react';
 import { Component, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { readOpened, readView } from './opened';
-import type { Opened } from './opened';
+import type { HostView, Opened } from './opened';
 import { OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY } from './tool';
-import type { ObservabilityWidgetView } from './tool';
 import { usePin } from './use-pin';
 import { useToolResults } from './use-tool-results';
 
@@ -170,7 +169,7 @@ function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
  */
 export function ObservabilityWidget() {
   // A preset window ends when the dashboard opens, and again each time the host's view changes.
-  const [shown, setShown] = useState<{ content: unknown; view: ObservabilityWidgetView; now: number }>();
+  const [shown, setShown] = useState<{ content: unknown; view: HostView; now: number }>();
   // A failed read is shown with a retry button; the server's tool decides whether to retry itself.
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }),
