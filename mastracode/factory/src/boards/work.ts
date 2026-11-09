@@ -2,6 +2,14 @@ import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 
 /**
+ * A change request tracked on its own card never attaches to this one, so PR review refuses the card and
+ * the builder leaves it in Building: the goal counts that hand-off as done rather than looping on it.
+ */
+export const OWN_CARD_HAND_OFF =
+  'Also done, with the card left in Building, when the change request was opened but is tracked on its own card ' +
+  "and the builder's latest message posts its link and says a person should confirm it is reviewed there.";
+
+/**
  * The goal Building pursues. The goal judge sees only this text and the latest messages, so it
  * spells out when the build is done and when it waits for a person.
  */
@@ -10,11 +18,10 @@ export const BUILD_OBJECTIVE =
   "the work branch; the plan's verification gates (the tests, typecheck and lint it names, else the narrowest " +
   'relevant ones) were run on the final head and passed; the branch is pushed; and the card was moved on with ' +
   "factory_transition_work_item out of Building (to Review or PR review as the builder's hand-off says, or back to " +
-  'Planning if the plan proved wrong), or, when that move was refused because the change request is tracked on its ' +
-  "own card, the branch was pushed to that change request and the card stays in Building; the builder's latest " +
-  'message names the move (or the change request and that it is tracked on its own card) and the pushed head. ' +
-  'Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot answer from the ' +
-  'repository.';
+  "Planning if the plan proved wrong); the builder's latest message names the move and the pushed head. " +
+  OWN_CARD_HAND_OFF +
+  ' Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot ' +
+  'answer from the repository.';
 
 export type WorkBoardPhase =
   | 'intake'
