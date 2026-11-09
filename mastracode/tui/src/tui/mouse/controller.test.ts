@@ -31,13 +31,15 @@ function createHarness({
   dialogMouseEnabled = true,
   inputMouseModeEnabled = false,
   answerCursorQueries = true,
+  cols = COLS,
 }: {
   rowOffset?: number;
+  cols?: number;
   dialogMouseEnabled?: boolean;
   inputMouseModeEnabled?: boolean;
   answerCursorQueries?: boolean;
 } = {}) {
-  const screen = new xterm.Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true });
+  const screen = new xterm.Terminal({ cols, rows: ROWS, allowProposedApi: true });
   let onInput: ((data: string) => void) | undefined;
   let output = Promise.resolve();
   const written: string[] = [];
@@ -58,7 +60,7 @@ function createHarness({
         });
       }
     },
-    columns: COLS,
+    columns: cols,
     rows: ROWS,
     kittyProtocolActive: false,
     moveBy() {},
@@ -700,6 +702,45 @@ describe('input box mouse mode', () => {
     await h.release(marker.row, marker.col + 2);
     h.send('X');
     expect(h.editor.getText()).toMatch(/^X\[paste #1 [^\]]+\]$/);
+  });
+
+  it('a click on a wrapped row ending in an emoji never splits the emoji', async () => {
+    harness = createHarness({ inputMouseModeEnabled: true, cols: 30 });
+    const h = harness;
+    for (let n = 10; n < 30; n++) {
+      h.editor.setText(`${'a'.repeat(n)}😀tail`);
+      await h.render();
+      const emoji = h.find('😀');
+      // Wait for the width where the emoji is the last thing on its row.
+      if (
+        !h
+          .lineAt(emoji.row + 1)
+          .trim()
+          .startsWith('tail')
+      )
+        continue;
+      h.send(RIGHT);
+      await h.render();
+      await h.click(emoji.row, emoji.col + 1);
+      await h.release(emoji.row, emoji.col + 1);
+      h.send('X');
+      expect(h.editor.getText()).toBe(`${'a'.repeat(n)}X😀tail`);
+      return;
+    }
+    throw new Error('never found a row ending in the emoji');
+  });
+
+  it('a click on a paste marker split across rows lands outside it', async () => {
+    // Narrow enough that the marker is wider than the box and wraps mid-marker.
+    harness = createHarness({ inputMouseModeEnabled: true, cols: 20 });
+    const h = harness;
+    h.send(`\x1b[200~${Array.from({ length: 20 }, (_, i) => `pasted ${i}`).join('\n')}\x1b[201~`);
+    await h.render();
+    const tail = h.find('lines]');
+    await h.click(tail.row, tail.col + 1);
+    await h.release(tail.row, tail.col + 1);
+    h.send('X');
+    expect(h.editor.getText()).toMatch(/^X\[paste #1 \+20 lines\]$/);
   });
 
   it('maps clicks in a scrolled input box', async () => {

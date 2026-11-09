@@ -83,6 +83,14 @@ describe('pi-tui internals used by mouse support', () => {
     const segments = [...internals.segment(line, 'grapheme')].map(s => s.segment);
     expect(segments).toEqual([line]);
     expect(internals.expandPasteMarkers(line)).toBe(pasted);
+    // Segments carry their offset in the line, which mouse positions snap to.
+    expect([...internals.segment(`ab${line}😀c`, 'grapheme')].map(s => s.index)).toEqual([
+      0,
+      1,
+      2,
+      2 + line.length,
+      4 + line.length,
+    ]);
   });
 
   it('editor setCursorCol moves the cursor and pushUndoSnapshot makes a direct edit undoable', () => {

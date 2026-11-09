@@ -482,6 +482,15 @@ export class CustomEditor extends Editor {
     if (wrapsOnward && col >= endCol && visual.length > 0) col = endCol - 1;
     // Positions after a hidden prompt marker are one further right in the real text.
     if (visual.logicalLine === 0 && layout.hiddenMarkerIndex >= 0 && col >= layout.hiddenMarkerIndex) col += 1;
+    // A narrow box can split a paste marker across rows, and the clamp above can land inside an
+    // emoji, so snap into whole segments of the full line the way pi-tui does for ↑/↓.
+    for (const { segment, index } of editorInternals(this).segment(line, 'grapheme')) {
+      if (index >= col) break;
+      if (col < index + segment.length) {
+        col = index;
+        break;
+      }
+    }
     return { line: visual.logicalLine, col };
   }
 

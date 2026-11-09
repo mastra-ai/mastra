@@ -75,7 +75,7 @@ interface EditorInternals {
   onChange?: (text: string) => void;
   buildVisualLineMap(width: number): EditorVisualLine[];
   /** Grapheme segmentation that keeps paste markers as one segment. */
-  segment(text: string, mode: 'grapheme' | 'word'): Iterable<{ segment: string }>;
+  segment(text: string, mode: 'grapheme' | 'word'): Iterable<{ segment: string; index: number }>;
   setCursorCol(col: number): void;
   pushUndoSnapshot(): void;
   expandPasteMarkers(text: string): string;
