@@ -747,6 +747,51 @@ describe('UpstashTransport', () => {
       clearInterval(defaultTransport.flushIntervalId);
     });
 
+    it('should return only the newest maxListLength entries when the stored list is longer than the window', async () => {
+      const smallTransport = new UpstashTransport({ ...defaultOptions, maxListLength: 2 });
+      // Newest first, as LPUSH stores them. Five entries: the trim never ran.
+      const stored = [5, 4, 3, 2, 1].map(time => JSON.stringify({ msg: `m${time}`, level: LogLevel.INFO, time }));
+      // Answer LRANGE with Redis semantics: inclusive end, -1 means the last element.
+      fetchMock.mockImplementation((_url: string, init: { body: string }) => {
+        const [[, , start, end]] = JSON.parse(init.body);
+        const stop = end < 0 ? stored.length + end : end;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([{ result: stored.slice(start, stop + 1) }]) });
+      });
+
+      const result = await smallTransport.listLogs({ logLevel: LogLevel.INFO });
+
+      expect(result.logs).toEqual([
+        { msg: 'm5', level: LogLevel.INFO, time: 5 },
+        { msg: 'm4', level: LogLevel.INFO, time: 4 },
+      ]);
+      expect(result.total).toBe(2);
+      clearInterval(smallTransport.flushIntervalId);
+    });
+
+    it('should use the 10000 default window when maxListLength is 0', async () => {
+      const zeroTransport = new UpstashTransport({ ...defaultOptions, maxListLength: 0 });
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve([{ result: [] }]) }),
+      );
+
+      await zeroTransport.listLogs({ returnPaginationResults: false });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, 9999]]);
+      clearInterval(zeroTransport.flushIntervalId);
+    });
+
+    it('should read the full list when maxListLength is negative', async () => {
+      const unboundedTransport = new UpstashTransport({ ...defaultOptions, maxListLength: -1 });
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve([{ result: [] }]) }),
+      );
+
+      await unboundedTransport.listLogs({ returnPaginationResults: false });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
+      clearInterval(unboundedTransport.flushIntervalId);
+    });
+
     it('should return the same filtered results as a full read for small lists', async () => {
       const logs = [
         JSON.stringify({ msg: 'a', level: LogLevel.ERROR, runId: 'x', time: 1 }),
