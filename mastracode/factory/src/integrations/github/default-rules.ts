@@ -309,10 +309,19 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;
   // A closed or merged pull request has no branch left to push fixes to.
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
-  // `approved` needs no work, and `commented` (a review body with no verdict)
-  // is how a reviewer leaves notes without blocking — only a verdict that asks
-  // for changes should pull the author back in.
-  if (context.review.state.toLowerCase() !== 'changes_requested') return;
+  // `approved` needs no work, and `commented` is how a reviewer leaves notes
+  // without blocking — only a verdict that asks for changes should pull the
+  // author back in. GitHub will not let Factory's app request changes on a pull
+  // request it authored, so there Factory's own `commented` review carries the
+  // verdict on its first line instead; that one counts too.
+  const state = context.review.state.toLowerCase();
+  const factoryVerdict =
+    state === 'commented' &&
+    context.actor.type === 'github' &&
+    context.actor.factoryAuthored &&
+    context.pullRequest.factoryAuthored &&
+    requestsChangesVerdict(context.review.body);
+  if (state !== 'changes_requested' && !factoryVerdict) return;
   // The authoring thread is already subscribed to this PR (`gh pr create`
   // subscribes automatically), so it can read the individual line comments
   // from its own notification inbox — the message only has to wake it and
