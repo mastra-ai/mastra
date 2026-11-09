@@ -14,6 +14,8 @@ import {
   TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_RUNS,
   TABLE_WORKFLOW_RUN_ENTRIES,
+  TABLE_WORKFLOW_LEAVES,
+  LeafAdoptionConflictError,
   TABLE_SCHEMAS,
   RUN_FENCING_TABLE_SCHEMAS,
   WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS,
@@ -36,6 +38,10 @@ import type {
   StatePatchOp,
   StateRef,
   StateVersion,
+  AdoptWorkflowLeafArgs,
+  AdoptWorkflowLeafResult,
+  WorkflowLeafAdoptionReceipt,
+  WorkflowLeafRecordKind,
   StorageListWorkflowRunsInput,
   StoredWorkflowRun,
   StoredWorkflowRunHeader,
@@ -294,7 +300,12 @@ export class WorkflowsPG extends WorkflowsStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT, TABLE_WORKFLOW_RUNS, TABLE_WORKFLOW_RUN_ENTRIES] as const;
+  static readonly MANAGED_TABLES = [
+    TABLE_WORKFLOW_SNAPSHOT,
+    TABLE_WORKFLOW_RUNS,
+    TABLE_WORKFLOW_RUN_ENTRIES,
+    TABLE_WORKFLOW_LEAVES,
+  ] as const;
 
   /**
    * Workflow run snapshots accumulate as runs execute. Anchored on the
@@ -607,6 +618,9 @@ export class WorkflowsPG extends WorkflowsStorage {
          ), entries AS (
            DELETE FROM ${this.#entriesTable()} e USING doomed d
            WHERE e.workflow_name = d.workflow_name AND e.run_id = d.run_id
+         ), leaves AS (
+           DELETE FROM ${this.#leavesTable()} l USING doomed d
+           WHERE l.workflow_name = d.workflow_name AND l.run_id = d.run_id
          )
          DELETE FROM ${this.#runsTable()} r USING doomed d
          WHERE r.workflow_name = d.workflow_name AND r.run_id = d.run_id`,
@@ -639,6 +653,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES });
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_RUNS as TABLE_NAMES });
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_RUN_ENTRIES as TABLE_NAMES });
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_LEAVES as TABLE_NAMES });
   }
 
   supportsRunJournal(): boolean {
@@ -651,6 +666,10 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   #entriesTable(): string {
     return getTableName({ indexName: TABLE_WORKFLOW_RUN_ENTRIES, schemaName: getSchemaName(this.#schema) });
+  }
+
+  #leavesTable(): string {
+    return getTableName({ indexName: TABLE_WORKFLOW_LEAVES, schemaName: getSchemaName(this.#schema) });
   }
 
   /**
@@ -1229,6 +1248,128 @@ export class WorkflowsPG extends WorkflowsStorage {
     return row;
   }
 
+  /** @experimental */
+  supportsLeafAdoption(): boolean {
+    return true;
+  }
+
+  /** @experimental */
+  async putWorkflowLeafRecord<T>({
+    workflowName,
+    runId,
+    kind,
+    key,
+    payload,
+  }: {
+    workflowName: string;
+    runId: string;
+    kind: Exclude<WorkflowLeafRecordKind, 'adoption'>;
+    key: string;
+    payload: T;
+  }): Promise<{ payload: T; created: boolean }> {
+    try {
+      // The no-op update makes a conflicting insert return the stored row.
+      const row = await this.#db.client.one<{ payload: T; created: boolean }>(
+        `INSERT INTO ${this.#leavesTable()} AS l (workflow_name, run_id, kind, key, payload, "createdAt")
+         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+         ON CONFLICT (workflow_name, run_id, kind, key) DO UPDATE SET kind = l.kind
+         RETURNING payload, (xmax = 0) AS created`,
+        [workflowName, runId, kind, key, toPgJson(payload)],
+      );
+      return row.created ? { payload, created: true } : row;
+    } catch (error) {
+      throw this.#runError('PUT_WORKFLOW_LEAF_RECORD', workflowName, runId, error);
+    }
+  }
+
+  /** @experimental */
+  async loadWorkflowLeafRecord<T>({
+    workflowName,
+    runId,
+    kind,
+    key,
+  }: {
+    workflowName: string;
+    runId: string;
+    kind: WorkflowLeafRecordKind;
+    key: string;
+  }): Promise<T | null> {
+    try {
+      const row = await this.#db.client.oneOrNone<{ payload: T }>(
+        `SELECT payload FROM ${this.#leavesTable()} WHERE workflow_name = $1 AND run_id = $2 AND kind = $3 AND key = $4`,
+        [workflowName, runId, kind, key],
+      );
+      return row?.payload ?? null;
+    } catch (error) {
+      throw this.#runError('LOAD_WORKFLOW_LEAF_RECORD', workflowName, runId, error);
+    }
+  }
+
+  /**
+   * One transaction that locks the run's header row first, so writes to one run serialize: the
+   * stored receipt (if any) decides; else the status is checked, `lastSeq` bumped by the entry count
+   * without touching the header, the entries numbered up to it, and the receipt inserted.
+   * @experimental
+   */
+  async adoptWorkflowLeaf({
+    workflowName,
+    runId,
+    occurrenceKey,
+    candidateId,
+    steps,
+    statePatch,
+    expectedStatus,
+    fence,
+  }: AdoptWorkflowLeafArgs): Promise<AdoptWorkflowLeafResult | null> {
+    const resolvedFence = resolveRunFence(this, fence, runId);
+    const entries = journalEntries(steps ?? {}, { statePatch: statePatch?.length ? statePatch : undefined }, false);
+    try {
+      return await this.#db.client.tx(async t => {
+        if (resolvedFence) await assertRunFence(t, this.#runOwnersTable(), resolvedFence, 'adoptWorkflowLeaf');
+        const run = await t.oneOrNone<{ status: WorkflowRunStatus }>(
+          `SELECT status FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+        const existing = await t.oneOrNone<{ payload: WorkflowLeafAdoptionReceipt }>(
+          `SELECT payload FROM ${this.#leavesTable()}
+           WHERE workflow_name = $1 AND run_id = $2 AND kind = 'adoption' AND key = $3`,
+          [workflowName, runId, occurrenceKey],
+        );
+        if (existing) {
+          if (existing.payload.candidateId !== candidateId) {
+            throw new LeafAdoptionConflictError(occurrenceKey, existing.payload.candidateId, candidateId);
+          }
+          return { receipt: existing.payload, adopted: false };
+        }
+        if (!run) throw new Error(`Storage v2 run ${workflowName}/${runId} is not stored`);
+        if (expectedStatus !== undefined && !matchesExpectedWorkflowStatus(run.status, expectedStatus)) return null;
+        const { lastSeq } = await t.one<{ lastSeq: number }>(
+          `UPDATE ${this.#runsTable()} SET "lastSeq" = "lastSeq" + $3, "updatedAt" = NOW(), "updatedAtZ" = NOW()
+           WHERE workflow_name = $1 AND run_id = $2 RETURNING "lastSeq"`,
+          [workflowName, runId, entries.length],
+        );
+        if (entries.length) {
+          await t.none(
+            `INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+             SELECT $1, $2, $3::int - $4::int + e.ord, ${ENTRY_VALUES}
+             FROM ${entryRows('$5')}`,
+            [workflowName, runId, lastSeq, entries.length, toPgJson(entries)],
+          );
+        }
+        const receipt: WorkflowLeafAdoptionReceipt = { v: 1, occurrenceKey, candidateId, seq: Number(lastSeq) };
+        await t.none(
+          `INSERT INTO ${this.#leavesTable()} (workflow_name, run_id, kind, key, payload, "createdAt")
+           VALUES ($1, $2, 'adoption', $3, $4::jsonb, NOW())`,
+          [workflowName, runId, occurrenceKey, toPgJson(receipt)],
+        );
+        return { receipt, adopted: true };
+      });
+    } catch (error) {
+      if (isRunFenceConflictError(error) || error instanceof LeafAdoptionConflictError) throw error;
+      throw this.#runError('ADOPT_WORKFLOW_LEAF', workflowName, runId, error);
+    }
+  }
+
   // Ownership reads and writes always go to the primary client: a replica's
   // stale view of a lease would let a claim or a fenced write act on old data.
 
@@ -1792,6 +1933,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         for (const table of [
           this.#runsTable(),
           this.#entriesTable(),
+          this.#leavesTable(),
           ...(storageVersion === 2
             ? []
             : [getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })]),

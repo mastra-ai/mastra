@@ -22,6 +22,10 @@ import type {
   StateVersion,
   WorkflowRunEntry,
   WorkflowRunHeader,
+  AdoptWorkflowLeafArgs,
+  AdoptWorkflowLeafResult,
+  WorkflowLeafAdoptionReceipt,
+  WorkflowLeafRecordKind,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -36,12 +40,14 @@ import {
   stateBaseOf,
   STEP_RESULT_SUMMARY_FIELDS,
   summarizeStepResult,
+  TABLE_WORKFLOW_LEAVES,
   TABLE_WORKFLOW_RUN_ENTRIES,
   TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_RUNS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   matchesExpectedWorkflowStatus,
+  LeafAdoptionConflictError,
   WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS,
   WorkflowsStorage,
 } from '@mastra/core/storage';
@@ -417,6 +423,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     await this.#db.deleteData({ tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES });
     await this.#db.deleteData({ tableName: TABLE_WORKFLOW_RUNS as TABLE_NAMES });
     await this.#db.deleteData({ tableName: TABLE_WORKFLOW_RUN_ENTRIES as TABLE_NAMES });
+    await this.#db.deleteData({ tableName: TABLE_WORKFLOW_LEAVES as TABLE_NAMES });
   }
 
   supportsRunFencing(): boolean {
@@ -941,6 +948,154 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     return { seq: Number(row.lastSeq) };
   }
 
+  /** @experimental */
+  supportsLeafAdoption(): boolean {
+    return true;
+  }
+
+  /** @experimental */
+  async putWorkflowLeafRecord<T>({
+    workflowName,
+    runId,
+    kind,
+    key,
+    payload,
+  }: {
+    workflowName: string;
+    runId: string;
+    kind: Exclude<WorkflowLeafRecordKind, 'adoption'>;
+    key: string;
+    payload: T;
+  }): Promise<{ payload: T; created: boolean }> {
+    try {
+      const inserted = await this.executeWithRetry(
+        () =>
+          withClientWriteLock(this.#client, () =>
+            this.#client.execute({
+              sql: `INSERT INTO ${TABLE_WORKFLOW_LEAVES} (workflow_name, run_id, kind, key, payload, createdAt)
+                VALUES (?, ?, ?, ?, jsonb(?), ?) ON CONFLICT DO NOTHING`,
+              args: [workflowName, runId, kind, key, safeStringify(payload), new Date().toISOString()],
+            }),
+          ),
+        'putWorkflowLeafRecord',
+      );
+      if (inserted.rowsAffected) return { payload, created: true };
+      const stored = await this.#readLeafRecord<T>(this.#client, workflowName, runId, kind, key);
+      if (stored === null) throw new Error(`Leaf record ${kind}/${key} vanished after a conflicting insert`);
+      return { payload: stored, created: false };
+    } catch (error) {
+      throw this.#runError('PUT_WORKFLOW_LEAF_RECORD', workflowName, runId, error);
+    }
+  }
+
+  /** @experimental */
+  async loadWorkflowLeafRecord<T>({
+    workflowName,
+    runId,
+    kind,
+    key,
+  }: {
+    workflowName: string;
+    runId: string;
+    kind: WorkflowLeafRecordKind;
+    key: string;
+  }): Promise<T | null> {
+    try {
+      return await this.#readLeafRecord<T>(this.#client, workflowName, runId, kind, key);
+    } catch (error) {
+      throw this.#runError('LOAD_WORKFLOW_LEAF_RECORD', workflowName, runId, error);
+    }
+  }
+
+  async #readLeafRecord<T>(
+    q: { execute: Client['execute'] },
+    workflowName: string,
+    runId: string,
+    kind: WorkflowLeafRecordKind,
+    key: string,
+  ): Promise<T | null> {
+    const { rows } = await q.execute({
+      sql: `SELECT json(payload) AS payload FROM ${TABLE_WORKFLOW_LEAVES}
+        WHERE workflow_name = ? AND run_id = ? AND kind = ? AND key = ?`,
+      args: [workflowName, runId, kind, key],
+    });
+    return rows[0] ? (JSON.parse(rows[0].payload as string) as T) : null;
+  }
+
+  /**
+   * One write transaction: the stored receipt (if any) decides first; else the run's status is
+   * checked, its `lastSeq` bumped by the entry count without touching the header, the entries
+   * numbered up to it, and the receipt inserted.
+   * @experimental
+   */
+  async adoptWorkflowLeaf({
+    workflowName,
+    runId,
+    occurrenceKey,
+    candidateId,
+    steps,
+    statePatch,
+    expectedStatus,
+    fence,
+  }: AdoptWorkflowLeafArgs): Promise<AdoptWorkflowLeafResult | null> {
+    const check = this.#runFenceCheck(fence, runId, 'adoptWorkflowLeaf');
+    const entries = journalEntries(steps ?? {}, { statePatch: statePatch?.length ? statePatch : undefined }, false);
+    try {
+      return await this.executeWithRetry(
+        () =>
+          inWriteTransaction(this.#client, async tx => {
+            if (check) await assertRunFence(tx, check);
+            const existing = await this.#readLeafRecord<WorkflowLeafAdoptionReceipt>(
+              tx,
+              workflowName,
+              runId,
+              'adoption',
+              occurrenceKey,
+            );
+            if (existing) {
+              if (existing.candidateId !== candidateId) {
+                throw new LeafAdoptionConflictError(occurrenceKey, existing.candidateId, candidateId);
+              }
+              return { receipt: existing, adopted: false };
+            }
+            const { rows } = await tx.execute({
+              sql: `SELECT status FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
+              args: [workflowName, runId],
+            });
+            if (!rows[0]) throw new Error(`Storage v2 run ${workflowName}/${runId} is not stored`);
+            if (
+              expectedStatus !== undefined &&
+              !matchesExpectedWorkflowStatus(rows[0].status as WorkflowRunStatus, expectedStatus)
+            ) {
+              return null;
+            }
+            const bumped = await tx.execute({
+              sql: `UPDATE ${TABLE_WORKFLOW_RUNS} SET lastSeq = lastSeq + ?, updatedAt = ?
+                WHERE workflow_name = ? AND run_id = ? RETURNING lastSeq`,
+              args: [entries.length, new Date().toISOString(), workflowName, runId],
+            });
+            if (entries.length) await tx.execute(insertEntries({ workflowName, runId } as RunWrite, entries));
+            const receipt: WorkflowLeafAdoptionReceipt = {
+              v: 1,
+              occurrenceKey,
+              candidateId,
+              seq: Number(bumped.rows[0]!.lastSeq),
+            };
+            await tx.execute({
+              sql: `INSERT INTO ${TABLE_WORKFLOW_LEAVES} (workflow_name, run_id, kind, key, payload, createdAt)
+                VALUES (?, ?, 'adoption', ?, jsonb(?), ?)`,
+              args: [workflowName, runId, occurrenceKey, safeStringify(receipt), new Date().toISOString()],
+            });
+            return { receipt, adopted: true };
+          }),
+        'adoptWorkflowLeaf',
+      );
+    } catch (error) {
+      if (isRunFenceConflictError(error) || error instanceof LeafAdoptionConflictError) throw error;
+      throw this.#runError('ADOPT_WORKFLOW_LEAF', workflowName, runId, error);
+    }
+  }
+
   async #readRunOwner(q: { execute: Client['execute'] }, runId: string): Promise<RunOwnershipRecord | null> {
     const result = await q.execute({
       sql: `SELECT ${RUN_OWNER_COLUMNS} FROM ${TABLE_WORKFLOW_RUN_OWNERS} WHERE runId = ?`,
@@ -1098,10 +1253,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           for (const run of shared.rows) {
             await this.#detachStateChildren(tx, run.workflow_name as string, run.run_id as string);
           }
-          await tx.execute({
-            sql: `DELETE FROM ${TABLE_WORKFLOW_RUN_ENTRIES} WHERE (workflow_name, run_id) IN (${doomed})`,
-            args: [cutoff, limit],
-          });
+          for (const table of [TABLE_WORKFLOW_RUN_ENTRIES, TABLE_WORKFLOW_LEAVES]) {
+            await tx.execute({
+              sql: `DELETE FROM ${table} WHERE (workflow_name, run_id) IN (${doomed})`,
+              args: [cutoff, limit],
+            });
+          }
           const runs = await tx.execute({
             sql: `DELETE FROM ${TABLE_WORKFLOW_RUNS} WHERE (workflow_name, run_id) IN (${doomed})`,
             args: [cutoff, limit],
@@ -1516,6 +1673,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           for (const table of [
             TABLE_WORKFLOW_RUNS,
             TABLE_WORKFLOW_RUN_ENTRIES,
+            TABLE_WORKFLOW_LEAVES,
             ...(storageVersion === 2 ? [] : [TABLE_WORKFLOW_SNAPSHOT]),
           ]) {
             await tx.execute({

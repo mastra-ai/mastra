@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { RunFenceScope, WorkflowsStorage, WorkflowRun, WorkflowRunHeader } from '@mastra/core/storage';
 import {
   getSnapshotMemoryInfo,
+  isLeafAdoptionConflictError,
   isRunFenceConflictError,
   setRunFenceContext,
   summarizeStepResult,
@@ -1403,6 +1404,193 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         await rejected(checkpoint(fresh, makeSnapshot(fresh), { fence: staleFresh }));
         await rejected(append(fresh, makeSnapshot(fresh), [], false, { fence: staleFresh }));
         expect(await load(fresh)).toBeNull();
+      });
+
+      it('rejects a stale fence on a leaf adoption, and writes nothing', async ctx => {
+        if (!store.supportsLeafAdoption()) return ctx.skip();
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { value: { n: 1 } }));
+        const claim = await store.claimRunOwnership({ runId: id, ownerId: 'a', leaseMs: 60_000 });
+        await store.claimRunOwnership({ runId: id, ownerId: 'b', leaseMs: 60_000, force: true });
+        const fence = { runId: id, ownerId: 'a', generation: claim.record!.generation };
+        await expect(
+          store.adoptWorkflowLeaf({
+            workflowName,
+            runId: id,
+            occurrenceKey: 'o1',
+            candidateId: 'c1',
+            steps: { a: ok(1) },
+            statePatch: [{ op: 'set', path: ['n'], value: 2 }],
+            fence,
+          }),
+        ).rejects.toSatisfy(isRunFenceConflictError);
+        expect((await load(id))!.value).toEqual({ n: 1 });
+        expect(await store.loadWorkflowLeafRecord({ workflowName, runId: id, kind: 'adoption', key: 'o1' })).toBeNull();
+      });
+    });
+
+    describe('leaf adoption', () => {
+      beforeEach(ctx => {
+        if (!store.supportsLeafAdoption()) ctx.skip();
+      });
+
+      const adopt = (id: string, occurrenceKey: string, candidateId: string, extra: Record<string, any> = {}) =>
+        store.adoptWorkflowLeaf({ workflowName, runId: id, occurrenceKey, candidateId, ...extra });
+
+      it('stores a leaf record once, returning the first one stored to later writers', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id));
+        const first = await store.putWorkflowLeafRecord({
+          workflowName,
+          runId: id,
+          kind: 'final',
+          key: 'leaf-1',
+          payload: { candidateId: 'c1' },
+        });
+        expect(first).toEqual({ payload: { candidateId: 'c1' }, created: true });
+        const second = await store.putWorkflowLeafRecord({
+          workflowName,
+          runId: id,
+          kind: 'final',
+          key: 'leaf-1',
+          payload: { candidateId: 'c2' },
+        });
+        expect(second).toEqual({ payload: { candidateId: 'c1' }, created: false });
+        expect(await store.loadWorkflowLeafRecord({ workflowName, runId: id, kind: 'final', key: 'leaf-1' })).toEqual({
+          candidateId: 'c1',
+        });
+        // Kinds are separate namespaces.
+        expect(
+          await store.loadWorkflowLeafRecord({ workflowName, runId: id, kind: 'candidate', key: 'leaf-1' }),
+        ).toBeNull();
+      });
+
+      it('keeps one record when many writers race to store it', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id));
+        const results = await Promise.all(
+          Array.from({ length: 8 }, (_, i) =>
+            store.putWorkflowLeafRecord({ workflowName, runId: id, kind: 'final', key: 'k', payload: { i } }),
+          ),
+        );
+        expect(results.filter(r => r.created)).toHaveLength(1);
+        const winner = results.find(r => r.created)!.payload;
+        for (const r of results) expect(r.payload).toEqual(winner);
+      });
+
+      it('appends the steps and the state patch on top of the current state, and stores a receipt', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { context: { input: ok('in') }, value: { a: 1, b: 1 } }));
+        // A sibling changes `b` after the leaf's base.
+        await append(id, makeSnapshot(id, { context: { input: ok('in') } }), [], false, {
+          statePatch: [{ op: 'set', path: ['b'], value: 2 }],
+        });
+        const result = await adopt(id, 'o1', 'c1', {
+          steps: { step1: ok('out') },
+          statePatch: [{ op: 'set', path: ['a'], value: 5 }],
+          expectedStatus: 'running',
+        });
+        expect(result!.adopted).toBe(true);
+        const stored = await loadRun(id);
+        expect(result!.receipt).toEqual({ v: 1, occurrenceKey: 'o1', candidateId: 'c1', seq: stored!.lastSeq });
+        expect(stored!.state).toEqual({ a: 5, b: 2 });
+        expect(stored!.steps.step1).toEqual(ok('out'));
+        expect((await load(id))!.value).toEqual({ a: 5, b: 2 });
+        expect(await store.loadWorkflowRunState({ workflowName, runId: id, seq: result!.receipt.seq })).toEqual({
+          a: 5,
+          b: 2,
+        });
+        expect(await store.loadWorkflowLeafRecord({ workflowName, runId: id, kind: 'adoption', key: 'o1' })).toEqual(
+          result!.receipt,
+        );
+      });
+
+      it('returns the stored receipt when an adoption is repeated, writing nothing', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { value: { n: 0 } }));
+        const patch = [{ op: 'set', path: ['n'], value: 1 }];
+        const first = await adopt(id, 'o1', 'c1', { steps: { s: ok(1) }, statePatch: patch });
+        const lastSeq = (await loadRun(id))!.lastSeq;
+        const again = await adopt(id, 'o1', 'c1', { steps: { s: ok(1) }, statePatch: patch });
+        expect(again).toEqual({ receipt: first!.receipt, adopted: false });
+        expect((await loadRun(id))!.lastSeq).toBe(lastSeq);
+      });
+
+      it('rejects adopting another candidate for an adopted occurrence', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { value: { n: 0 } }));
+        await adopt(id, 'o1', 'c1', { statePatch: [{ op: 'set', path: ['n'], value: 1 }] });
+        await expect(adopt(id, 'o1', 'c2', { statePatch: [{ op: 'set', path: ['n'], value: 2 }] })).rejects.toSatisfy(
+          isLeafAdoptionConflictError,
+        );
+        expect((await load(id))!.value).toEqual({ n: 1 });
+      });
+
+      it('adopts exactly one candidate when adopters race for an occurrence', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { value: { n: 0 } }));
+        const outcomes = await Promise.allSettled(
+          Array.from({ length: 6 }, (_, i) =>
+            adopt(id, 'o1', `c${i % 2}`, { statePatch: [{ op: 'set', path: ['n'], value: i % 2 }] }),
+          ),
+        );
+        const fulfilled = outcomes.flatMap(o => (o.status === 'fulfilled' ? [o.value!] : []));
+        expect(fulfilled.filter(r => r.adopted)).toHaveLength(1);
+        const winner = fulfilled.find(r => r.adopted)!.receipt;
+        for (const r of fulfilled) expect(r.receipt).toEqual(winner);
+        for (const o of outcomes) {
+          if (o.status === 'rejected') expect(isLeafAdoptionConflictError(o.reason)).toBe(true);
+        }
+        expect((await load(id))!.value).toEqual({ n: Number(winner.candidateId.slice(1)) });
+      });
+
+      it('keeps every sibling adoption when adopters of different occurrences race', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { value: { shared: { keep: true } } }));
+        const results = await Promise.all(
+          Array.from({ length: 6 }, (_, i) =>
+            adopt(id, `o${i}`, `c${i}`, {
+              steps: { [`s${i}`]: ok(i) },
+              statePatch: [{ op: 'set', path: ['shared', `k${i}`], value: i }],
+            }),
+          ),
+        );
+        expect(new Set(results.map(r => r!.receipt.seq)).size).toBe(6);
+        const stored = await loadRun(id);
+        expect(stored!.state).toEqual({ shared: { keep: true, k0: 0, k1: 1, k2: 2, k3: 3, k4: 4, k5: 5 } });
+        for (let i = 0; i < 6; i++) expect(stored!.steps[`s${i}`]).toEqual(ok(i));
+      });
+
+      it('writes nothing when the status does not match expectedStatus', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { status: 'canceled', value: { n: 0 } }));
+        expect(
+          await adopt(id, 'o1', 'c1', {
+            statePatch: [{ op: 'set', path: ['n'], value: 1 }],
+            expectedStatus: 'running',
+          }),
+        ).toBeNull();
+        expect((await load(id))!.value).toEqual({ n: 0 });
+        expect(await store.loadWorkflowLeafRecord({ workflowName, runId: id, kind: 'adoption', key: 'o1' })).toBeNull();
+      });
+
+      it('rejects adopting into a run that is not stored', async () => {
+        await expect(adopt(runId(), 'o1', 'c1')).rejects.toThrow();
+      });
+
+      it('keeps receipts across a checkpoint, and deletes leaf records with the run', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { value: { n: 0 } }));
+        await store.putWorkflowLeafRecord({ workflowName, runId: id, kind: 'candidate', key: 'c1', payload: { x: 1 } });
+        const adopted = await adopt(id, 'o1', 'c1', { statePatch: [{ op: 'set', path: ['n'], value: 1 }] });
+        await checkpoint(id, makeSnapshot(id, { value: { n: 1 } }));
+        expect(await adopt(id, 'o1', 'c1')).toEqual({ receipt: adopted!.receipt, adopted: false });
+
+        await store.deleteWorkflowRunById({ workflowName, runId: id });
+        expect(
+          await store.loadWorkflowLeafRecord({ workflowName, runId: id, kind: 'candidate', key: 'c1' }),
+        ).toBeNull();
+        expect(await store.loadWorkflowLeafRecord({ workflowName, runId: id, kind: 'adoption', key: 'o1' })).toBeNull();
       });
     });
   });

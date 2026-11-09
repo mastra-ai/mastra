@@ -1145,6 +1145,7 @@ export const RUN_FENCING_TABLE_SCHEMAS = {
 
 export const TABLE_WORKFLOW_RUNS = 'mastra_workflow_runs';
 export const TABLE_WORKFLOW_RUN_ENTRIES = 'mastra_workflow_run_entries';
+export const TABLE_WORKFLOW_LEAVES = 'mastra_workflow_leaves';
 
 /**
  * Storage v2 run headers: the run's `WorkflowRunHeader` (its `WorkflowRunState` without
@@ -1188,6 +1189,20 @@ export const WORKFLOW_RUN_ENTRIES_SCHEMA: Record<string, StorageColumn> = {
 };
 
 /**
+ * Storage v2 leaf records (see `WorkflowLeafRecordKind`): insert-only, one per run, kind and key.
+ * Deleted with their run.
+ * @experimental
+ */
+export const WORKFLOW_LEAVES_SCHEMA: Record<string, StorageColumn> = {
+  workflow_name: { type: 'text', nullable: false },
+  run_id: { type: 'text', nullable: false },
+  kind: { type: 'text', nullable: false },
+  key: { type: 'text', nullable: false },
+  payload: { type: 'jsonb', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+/**
  * Table configs for the storage v2 run tables (`storageVersion: 2`).
  * Exported separately because only adapters that support run journals create them,
  * so they are not part of TABLE_NAMES.
@@ -1198,5 +1213,9 @@ export const WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS = {
   [TABLE_WORKFLOW_RUN_ENTRIES]: {
     columns: WORKFLOW_RUN_ENTRIES_SCHEMA,
     compositePrimaryKey: ['workflow_name', 'run_id', 'seq'],
+  },
+  [TABLE_WORKFLOW_LEAVES]: {
+    columns: WORKFLOW_LEAVES_SCHEMA,
+    compositePrimaryKey: ['workflow_name', 'run_id', 'kind', 'key'],
   },
 } satisfies Record<string, StorageTableConfig>;

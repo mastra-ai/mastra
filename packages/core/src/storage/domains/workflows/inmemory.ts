@@ -36,6 +36,13 @@ import type {
   WorkflowRunEntry,
   WorkflowRunHeader,
 } from './journal';
+import { LeafAdoptionConflictError } from './leaves';
+import type {
+  AdoptWorkflowLeafArgs,
+  AdoptWorkflowLeafResult,
+  WorkflowLeafAdoptionReceipt,
+  WorkflowLeafRecordKind,
+} from './leaves';
 import { getSnapshotMemoryInfo } from './snapshot-memory-info';
 import type { StatePatchOp } from './state-patch';
 
@@ -219,6 +226,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     this.db.workflows.clear();
     this.db.workflowRunHeaders.clear();
     this.db.workflowRunEntries.clear();
+    this.db.workflowLeafRecords.clear();
     this.db.runOwners.clear();
   }
 
@@ -672,6 +680,91 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return { seq };
   }
 
+  supportsLeafAdoption(): boolean {
+    return true;
+  }
+
+  private leafRecords(workflowName: string, runId: string): Map<string, unknown> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    let records = this.db.workflowLeafRecords.get(key);
+    if (!records) {
+      records = new Map();
+      this.db.workflowLeafRecords.set(key, records);
+    }
+    return records;
+  }
+
+  async putWorkflowLeafRecord<T>({
+    workflowName,
+    runId,
+    kind,
+    key,
+    payload,
+  }: {
+    workflowName: string;
+    runId: string;
+    kind: Exclude<WorkflowLeafRecordKind, 'adoption'>;
+    key: string;
+    payload: T;
+  }): Promise<{ payload: T; created: boolean }> {
+    const records = this.leafRecords(workflowName, runId);
+    const recordKey = `${kind}:${key}`;
+    if (records.has(recordKey)) return { payload: cloneRunData(records.get(recordKey) as T), created: false };
+    records.set(recordKey, cloneRunData(payload));
+    return { payload, created: true };
+  }
+
+  async loadWorkflowLeafRecord<T>({
+    workflowName,
+    runId,
+    kind,
+    key,
+  }: {
+    workflowName: string;
+    runId: string;
+    kind: WorkflowLeafRecordKind;
+    key: string;
+  }): Promise<T | null> {
+    const record = this.db.workflowLeafRecords.get(this.getWorkflowKey(workflowName, runId))?.get(`${kind}:${key}`);
+    return record === undefined ? null : cloneRunData(record as T);
+  }
+
+  async adoptWorkflowLeaf({
+    workflowName,
+    runId,
+    occurrenceKey,
+    candidateId,
+    steps = {},
+    statePatch,
+    expectedStatus,
+    fence,
+  }: AdoptWorkflowLeafArgs): Promise<AdoptWorkflowLeafResult | null> {
+    this.assertFence(fence, runId, 'adoptWorkflowLeaf');
+    const records = this.leafRecords(workflowName, runId);
+    const recordKey = `adoption:${occurrenceKey}`;
+    const stored = records.get(recordKey) as WorkflowLeafAdoptionReceipt | undefined;
+    if (stored) {
+      if (stored.candidateId !== candidateId) {
+        throw new LeafAdoptionConflictError(occurrenceKey, stored.candidateId, candidateId);
+      }
+      return { receipt: cloneRunData(stored), adopted: false };
+    }
+    const record = this.db.workflowRunHeaders.get(this.getWorkflowKey(workflowName, runId));
+    if (!record) throw new Error(`Storage v2 run ${workflowName}/${runId} is not stored`);
+    if (!matchesExpectedWorkflowStatus(record.header.status, expectedStatus)) return null;
+    const { lastSeq } = this.writeRunEntries({
+      workflowName,
+      runId,
+      header: record.header,
+      steps,
+      statePatch: statePatch?.length ? statePatch : undefined,
+      append: true,
+    })!;
+    const receipt: WorkflowLeafAdoptionReceipt = { v: 1, occurrenceKey, candidateId, seq: lastSeq };
+    records.set(recordKey, receipt);
+    return { receipt: cloneRunData(receipt), adopted: true };
+  }
+
   /**
    * Writes the header and one entry per step and step patch, then the state, state base or state
    * patch. A checkpoint first drops the old step entries and starts the state over (`{}` when it
@@ -996,5 +1089,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     this.detachStateChildren(workflowName, runId);
     this.db.workflowRunHeaders.delete(key);
     this.db.workflowRunEntries.delete(key);
+    this.db.workflowLeafRecords.delete(key);
   }
 }

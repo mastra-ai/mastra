@@ -69,6 +69,8 @@ export class InMemoryDB {
   >();
   /** Storage v2 run entries in `seq` order, keyed like `workflowRunHeaders`. */
   readonly workflowRunEntries = new Map<string, WorkflowRunEntry[]>();
+  /** Storage v2 leaf records, keyed like `workflowRunHeaders`, then by `${kind}:${key}`. */
+  readonly workflowLeafRecords = new Map<string, Map<string, unknown>>();
   /** Workflows-domain run ownership, keyed by runId. */
   readonly runOwners = new Map<string, { generation: number; ownerId: string; leaseExpiresAt: Date | null }>();
   /** Memory-domain run fences, keyed by runId. */
@@ -143,6 +145,7 @@ export class InMemoryDB {
     this.workflows.clear();
     this.workflowRunHeaders.clear();
     this.workflowRunEntries.clear();
+    this.workflowLeafRecords.clear();
     this.runOwners.clear();
     this.runFences.clear();
     this.workflowDefinitions.clear();

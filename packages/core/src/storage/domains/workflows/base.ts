@@ -13,6 +13,7 @@ import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageList
 import type { WorkflowStepStartGuard, WorkflowStepCompletionGuard } from '../../workflow-step-guard';
 import { StorageDomain } from '../base';
 import type { StateRef, StateVersion, StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
+import type { AdoptWorkflowLeafArgs, AdoptWorkflowLeafResult, WorkflowLeafRecordKind } from './leaves';
 import type { StatePatchOp } from './state-patch';
 
 function runJournalNotSupportedError(adapter: string): MastraError {
@@ -266,6 +267,60 @@ export abstract class WorkflowsStorage extends StorageDomain {
       | { state: Record<string, any> }
     ),
   ): Promise<{ seq: number }> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Whether this store supports leaf records and `adoptWorkflowLeaf`, which durable engines use to
+   * run a step in its own function and adopt its outcome into the parent storage v2 run atomically.
+   * @experimental
+   */
+  supportsLeafAdoption(): boolean {
+    return false;
+  }
+
+  /**
+   * Store a leaf record unless one with the same kind and key is stored for the run. Returns the
+   * stored record: `payload` when this call wrote it, else the earlier one. Leaf records are deleted
+   * with their run.
+   * @experimental
+   */
+  async putWorkflowLeafRecord<T>(_args: {
+    workflowName: string;
+    runId: string;
+    kind: Exclude<WorkflowLeafRecordKind, 'adoption'>;
+    key: string;
+    payload: T;
+  }): Promise<{ payload: T; created: boolean }> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * A stored leaf record, or null.
+   * @experimental
+   */
+  async loadWorkflowLeafRecord<T>(_args: {
+    workflowName: string;
+    runId: string;
+    kind: WorkflowLeafRecordKind;
+    key: string;
+  }): Promise<T | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Adopt a leaf candidate into a stored storage v2 run, atomically: appends `steps` and applies
+   * `statePatch` on top of the run's current state (so siblings' state changes made since the leaf's
+   * base survive, and the leaf's win on the paths it changed), and stores the adoption receipt for
+   * `occurrenceKey`. Doesn't change the run's header.
+   *
+   * Idempotent per occurrence: when the occurrence is already adopted with `candidateId`, writes
+   * nothing and returns the stored receipt; with another candidate, throws
+   * `LeafAdoptionConflictError`. Writes nothing and returns null when the run's status doesn't match
+   * `expectedStatus`. Throws when the run isn't stored, or `fence` is stale.
+   * @experimental
+   */
+  async adoptWorkflowLeaf(_args: AdoptWorkflowLeafArgs): Promise<AdoptWorkflowLeafResult | null> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 
