@@ -120,6 +120,58 @@ describe('stateful RFB watch filter', () => {
     holder = 'human';
     await expect(filter.filterClient(key)).resolves.toEqual([key]);
   });
+
+  it('forces the shared flag for watch clients', async () => {
+    const filter = new RfbWatchFilter(async () => false);
+    filter.observeServer(Buffer.from('RFB 003.008\n'));
+    await filter.filterClient(Buffer.from('RFB 003.008\n'));
+    filter.observeServer(Buffer.from([1, 1]));
+    await filter.filterClient(Buffer.from([1]));
+    filter.observeServer(Buffer.alloc(4));
+
+    await expect(filter.filterClient(Buffer.from([0]))).resolves.toEqual([Buffer.from([1])]);
+  });
+
+  it('handles VNC authentication split across every handshake boundary', async () => {
+    const filter = new RfbWatchFilter(async () => false);
+    const feedServer = (data: Buffer) => {
+      for (const byte of data) filter.observeServer(Buffer.from([byte]));
+    };
+    const feedClient = async (data: Buffer) => {
+      const output: Buffer[] = [];
+      for (const byte of data) output.push(...(await filter.filterClient(Buffer.from([byte]))));
+      return output;
+    };
+
+    feedServer(Buffer.from('RFB 003.008\n'));
+    expect(Buffer.concat(await feedClient(Buffer.from('RFB 003.008\n'))).toString()).toBe('RFB 003.008\n');
+    feedServer(Buffer.from([2, 1, 2]));
+    expect(await feedClient(Buffer.from([2]))).toEqual([Buffer.from([2])]);
+    feedServer(Buffer.alloc(16, 7));
+    expect(await feedClient(Buffer.alloc(16, 8))).toEqual([Buffer.alloc(16, 8)]);
+    feedServer(Buffer.alloc(4));
+    expect(await feedClient(Buffer.from([0]))).toEqual([Buffer.from([1])]);
+    feedServer(Buffer.alloc(24));
+    await expect(filter.filterClient(Buffer.from([150, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).resolves.toHaveLength(1);
+  });
+
+  it('flushes client handshake bytes buffered while waiting for the server', async () => {
+    const filter = new RfbWatchFilter(async () => false);
+    filter.observeServer(Buffer.from('RFB 003.008\n'));
+    await expect(filter.filterClient(Buffer.concat([Buffer.from('RFB 003.008\n'), Buffer.from([1])]))).resolves.toEqual([
+      Buffer.from('RFB 003.008\n'),
+    ]);
+
+    filter.observeServer(Buffer.from([1, 1]));
+    await expect(filter.filterClient(Buffer.alloc(0))).resolves.toEqual([Buffer.from([1])]);
+  });
+
+  it('forwards continuous updates and client fence in watch mode', async () => {
+    const filter = await ready();
+    const continuous = Buffer.from([150, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const fence = Buffer.from([248, 0, 0, 0, 0, 0, 0, 0, 0]);
+    await expect(filter.filterClient(Buffer.concat([continuous, fence]))).resolves.toEqual([continuous, fence]);
+  });
 });
 
 describe('websocket proxy', () => {
@@ -211,6 +263,30 @@ describe('websocket proxy', () => {
     control.ws!.send(pointer);
     await waitFor(() => upstream.upstreamMessages.length === 1);
     expect([...upstream.upstreamMessages[0]!]).toEqual([...pointer]);
+    control.ws!.close();
+  });
+
+  it('forwards concurrent relay input in arrival order', async () => {
+    const resolvers: ((value: { holder: 'human' }) => void)[] = [];
+    const { origin } = await start({
+      getControl: () => new Promise(resolve => resolvers.push(resolve)),
+    });
+    const control = await openSocket((await mintSocketUrl(origin, 'c1', { mode: 'control' })).url, { origin });
+    await completeHandshake(control.ws!);
+    const keyDown = Buffer.from([4, 1, 0, 0, 0, 0, 0, 1]);
+    const keyUp = Buffer.from([4, 0, 0, 0, 0, 0, 0, 1]);
+
+    control.ws!.send(keyDown);
+    control.ws!.send(keyUp);
+    await waitFor(() => resolvers.length === 1);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(upstream.upstreamMessages).toEqual([]);
+    resolvers[0]!({ holder: 'human' });
+    await waitFor(() => resolvers.length === 2);
+    expect(upstream.upstreamMessages).toEqual([keyDown]);
+    resolvers[1]!({ holder: 'human' });
+    await waitFor(() => upstream.upstreamMessages.length === 2);
+    expect(upstream.upstreamMessages).toEqual([keyDown, keyUp]);
     control.ws!.close();
   });
 

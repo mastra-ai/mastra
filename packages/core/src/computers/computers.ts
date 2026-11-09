@@ -66,6 +66,7 @@ export interface ComputerProvider {
     sandbox: ComputerSandbox,
     options: { origin: string; mode: 'watch' | 'control' },
   ): Promise<string | null>;
+  discardEmbed?(sandbox: ComputerSandbox): void;
   port?(sandbox: ComputerSandbox, port: number): Promise<{ url: string; headers: Record<string, string> } | null>;
 }
 
@@ -155,6 +156,7 @@ export class Computers implements MastraComputers {
   readonly #attachments = new Map<string, string>();
   readonly #handsRecovery = new Map<string, Promise<void>>();
   readonly #lifecycle = new Map<string, Promise<unknown>>();
+  readonly #releaseRequests = new Map<string, number>();
   /** Last agent seen per thread, so a user take can notify it. */
   readonly #agents = new Map<string, AgentRef>();
   readonly #controlSubscribers = new Map<string, SubscriberRegistration>();
@@ -615,17 +617,37 @@ export class Computers implements MastraComputers {
   }
 
   #release(context: Context) {
-    return this.#serial(context, async scope => {
+    const requestedScope = this.#scope(context);
+    if (!requestedScope) return Promise.resolve(MISSING_IDENTITY);
+    this.#releaseRequests.set(requestedScope.key, (this.#releaseRequests.get(requestedScope.key) ?? 0) + 1);
+    const release = this.#serial(context, async scope => {
       const id = this.#attachments.get(scope.key);
       const entry = id ? this.#computers.get(id) : undefined;
-      if (entry?.control.holder === 'human') return HUMAN_HAS_CONTROL;
-      this.#attachments.delete(scope.key);
-      await this.#deleteAttachment(scope);
-      if (!entry) return NOT_ATTACHED;
-      if (entry.sandbox) this.#provider.release?.(entry.sandbox);
-      this.#handsExtension?.release?.(entry.id, scope.threadId);
-      await this.#emit(context, entry, scope.threadId, 'released');
-      return { computer: this.#describe(entry, 'released') };
+      if (!entry) {
+        this.#attachments.delete(scope.key);
+        await this.#deleteAttachment(scope);
+        return NOT_ATTACHED;
+      }
+      const run = entry.queue.then(async () => {
+        if (this.#attachments.get(scope.key) !== entry.id) return NOT_ATTACHED;
+        if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
+        this.#attachments.delete(scope.key);
+        await this.#deleteAttachment(scope);
+        if (entry.sandbox) this.#provider.release?.(entry.sandbox);
+        this.#handsExtension?.release?.(entry.id, scope.threadId);
+        await this.#emit(context, entry, scope.threadId, 'released');
+        return { computer: this.#describe(entry, 'released') };
+      });
+      entry.queue = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    });
+    return release.finally(() => {
+      const remaining = (this.#releaseRequests.get(requestedScope.key) ?? 1) - 1;
+      if (remaining > 0) this.#releaseRequests.set(requestedScope.key, remaining);
+      else this.#releaseRequests.delete(requestedScope.key);
     });
   }
 
@@ -960,13 +982,33 @@ export class Computers implements MastraComputers {
   ): Promise<string | null> {
     if (!this.#provider.embed) return null;
     const entry = await this.#attached(computerId, scope);
+    const key = JSON.stringify([scope.resourceId, scope.threadId]);
     const run = entry.queue.then(async () => {
-      const mode = options.mode === 'control' && entry.control.holder === 'human' ? 'control' : 'watch';
+      if (entry.destroyed || this.#attachments.get(key) !== entry.id) return null;
+      const revision = entry.control.revision;
+      const holder = entry.control.holder;
+      const mode = options.mode === 'control' && holder === 'human' ? 'control' : 'watch';
       const url = await this.#provider.embed!(entry.sandbox!, { origin: options.origin, mode });
       if (!url) return null;
-      entry.control.enforcedRevision = Math.min(entry.control.enforcedRevision, entry.control.revision - 1);
-      await this.#enforceWithinDeadline(entry, scope);
-      await this.#persistAttachment({ ...scope, key: JSON.stringify([scope.resourceId, scope.threadId]) }, entry);
+      if (
+        entry.destroyed ||
+        this.#releaseRequests.has(key) ||
+        this.#attachments.get(key) !== entry.id ||
+        entry.control.revision !== revision ||
+        entry.control.holder !== holder
+      ) {
+        this.#provider.discardEmbed?.(entry.sandbox!);
+        return null;
+      }
+      const previousEnforcedRevision = entry.control.enforcedRevision;
+      entry.control.enforcedRevision = Math.min(entry.control.enforcedRevision, Math.max(0, revision - 1));
+      const enforced = await this.#enforceWithinDeadline(entry, scope);
+      if (!enforced || entry.destroyed || this.#attachments.get(key) !== entry.id || entry.control.revision !== revision) {
+        entry.control.enforcedRevision = previousEnforcedRevision;
+        this.#provider.discardEmbed?.(entry.sandbox!);
+        return null;
+      }
+      await this.#persistAttachment({ ...scope, key }, entry);
       return url;
     });
     entry.queue = run.then(
@@ -1015,24 +1057,32 @@ export class Computers implements MastraComputers {
     const note = input.note?.trim() || undefined;
     if (note && note.length > NOTE_MAX) throw new Error('note too long');
     const holder = input.action === 'take' ? 'human' : 'agent';
-    if (entry.control.holder === holder) {
-      return { holder, revision: entry.control.revision, notified: false, reason: 'no-change' };
-    }
     const key = JSON.stringify([scope.resourceId, scope.threadId]);
-    const target =
-      holder === 'human'
-        ? { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(key) }
-        : entry.control.target;
-    entry.control = {
-      holder,
-      ...(holder === 'human' ? { reason: note ?? 'user took control', target } : {}),
-      revision: entry.control.revision + 1,
-      enforcedRevision: entry.control.enforcedRevision,
-    };
-    const enforced = await this.#enforceWithinDeadline(entry, scope);
-    await this.#persistAttachment({ ...scope, key }, entry);
-    if (!enforced) return { holder, revision: entry.control.revision, notified: false, reason: 'not-delivered' };
-    return { holder, revision: entry.control.revision, ...(await this.#notify(entry, holder, target, note)) };
+    const run: Promise<MastraComputerControlResult> = entry.queue.then(async () => {
+      if (entry.destroyed || this.#attachments.get(key) !== entry.id) throw new Error('computer not attached');
+      if (entry.control.holder === holder) {
+        return { holder, revision: entry.control.revision, notified: false, reason: 'no-change' } as const;
+      }
+      const target =
+        holder === 'human'
+          ? { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(key) }
+          : entry.control.target;
+      entry.control = {
+        holder,
+        ...(holder === 'human' ? { reason: note ?? 'user took control', target } : {}),
+        revision: entry.control.revision + 1,
+        enforcedRevision: entry.control.enforcedRevision,
+      };
+      const enforced = await this.#enforceWithinDeadline(entry, scope);
+      await this.#persistAttachment({ ...scope, key }, entry);
+      if (!enforced) return { holder, revision: entry.control.revision, notified: false, reason: 'not-delivered' } as const;
+      return { holder, revision: entry.control.revision, ...(await this.#notify(entry, holder, target, note)) };
+    });
+    entry.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   /** Tells the agent on the lease's thread that control changed hands. Never throws. */

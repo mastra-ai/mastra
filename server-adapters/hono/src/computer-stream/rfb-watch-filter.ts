@@ -87,7 +87,8 @@ export class RfbWatchFilter {
         this.#stage = 'server-result';
       } else if (this.#stage === 'client-init') {
         if (this.#clientBuffer.length < 1) break;
-        output.push(this.#takeClient(1));
+        this.#takeClient(1);
+        output.push(Buffer.from([1]));
         this.#stage = 'server-init';
       } else if (this.#stage === 'normal') {
         const length = this.#normalMessageLength();

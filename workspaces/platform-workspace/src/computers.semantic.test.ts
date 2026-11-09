@@ -436,10 +436,11 @@ describe('semantic tools over the daemon socket', () => {
     const click = call(computers, 'computer_click', { x: 1, y: 1 });
     const queued = call(computers, 'mastra_workspace_computer_semantic_read', { id: 'el-1' });
     await clickEntered;
-    await computers.control(id, { resourceId: R, threadId: T }, { action: 'take' });
+    const taking = computers.control(id, { resourceId: R, threadId: T }, { action: 'take' });
     release();
     await click;
     expect(await queued).toEqual({ text: 'v' });
+    await taking;
     expect(await call(computers, 'mastra_workspace_computer_semantic_find', { application: 'kate', role: 'text' })).toBe(HUMAN_HAS_CONTROL);
     expect(daemon.requests.map(request => request.method)).toEqual(['readElementContent']);
   });

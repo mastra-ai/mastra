@@ -624,6 +624,29 @@ describe('persistence across processes', () => {
     expect((await call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).computer.id).toBe(id);
     expect(backend.createCalls).toHaveLength(1);
   });
+
+  it('does not resurrect a durable attachment when release races embed minting', async () => {
+    const computers = persistentMake();
+    const scope = { resourceId: 'r1', threadId: 't1' };
+    const { computer } = await call(
+      computers,
+      'mastra_workspace_computer_create',
+      { persist: true },
+      ctx('r1', 't1'),
+    );
+    const mint = gate();
+    backend.embedGate = mint;
+
+    const embedding = computers.embed(computer.id, scope, { origin: 'https://app.slack.com', mode: 'watch' });
+    await mint.entered;
+    const releasing = call(computers, 'mastra_workspace_computer_release', {}, ctx('r1', 't1'));
+    mint.open();
+
+    await expect(embedding).resolves.toBeNull();
+    await expect(releasing).resolves.toMatchObject({ computer: { status: 'released' } });
+    await expect(storage.stores.threadState!.getState({ threadId: 't1', type: 'mastra-computer:r1' })).resolves.toBeUndefined();
+    expect(await call(persistentMake(), 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+  });
 });
 
 describe('viewer', () => {
@@ -675,7 +698,7 @@ describe('viewer', () => {
     expect(backend.embedModeCalls).toEqual(['view', 'view', 'control', 'view']);
   });
 
-  it('reprojects the latest holder when control changes during embed minting', async () => {
+  it('orders holder changes after embed minting and leaves the latest projection last', async () => {
     const computers = make();
     const scope = { resourceId: 'r1', threadId: 't1' };
     const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
@@ -684,14 +707,33 @@ describe('viewer', () => {
 
     const embedding = computers.embed(computer.id, scope, { origin: 'https://app.slack.com', mode: 'control' });
     await mint.entered;
-    const taking = computers.control(computer.id, scope, { action: 'take' });
+    let tookControl = false;
+    const taking = computers.control(computer.id, scope, { action: 'take' }).then(result => {
+      tookControl = true;
+      return result;
+    });
+    await Promise.resolve();
+    expect(tookControl).toBe(false);
     mint.open();
 
     await expect(embedding).resolves.toBe('https://embed.test/sbx-1/1');
     await expect(taking).resolves.toMatchObject({ holder: 'human' });
     expect(backend.embedCalls).toEqual([{ origin: 'https://app.slack.com', mode: 'watch' }]);
-    expect(backend.embedModeCalls.at(-1)).toBe('control');
+    expect(backend.embedModeCalls).toEqual(['view', 'control']);
     await expect(computers.controlState(computer.id, scope)).resolves.toMatchObject({ holder: 'human', enforced: true });
+  });
+
+  it('fails embed closed and unregisters it when post-mint projection fails', async () => {
+    const computers = make();
+    const scope = { resourceId: 'r1', threadId: 't1' };
+    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    backend.failEmbedMode = true;
+
+    await expect(computers.embed(computer.id, scope, { origin: 'https://app.slack.com', mode: 'watch' })).resolves.toBeNull();
+    const callsAfterFailure = backend.embedModeCalls.length;
+    backend.failEmbedMode = false;
+    await computers.control(computer.id, scope, { action: 'take' });
+    expect(backend.embedModeCalls).toHaveLength(callsAfterFailure);
   });
 
   it('removes destroyed sandboxes from embed mode enforcement', async () => {

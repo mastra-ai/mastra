@@ -250,15 +250,15 @@ describe('control handoff through a real agent', () => {
     await click.entered;
     const id = await computerIdOf(computers);
     const taken = computers.control(id, scope, { action: 'take' });
-    // The human's take answers while the agent's click is still in flight.
-    await expect(taken).resolves.toEqual({ holder: 'human', revision: 1, notified: true });
+    // The take is ordered behind the in-flight click, then blocks later tool calls.
     click.open();
+    await expect(taken).resolves.toEqual({ holder: 'human', revision: 1, notified: true });
     await expect(sent[0]!.result.accepted).resolves.toMatchObject({ action: 'deliver' });
     await consumed;
 
     const delivered = prompts.findIndex(p => p.includes('The user took control of the computer'));
     expect(delivered).toBeGreaterThan(1);
-    expect(driver.actions).toEqual(['click']);
+    expect(driver.actions).toEqual(['click', 'screenshot']);
     const results = (await out.toolResults) as any[];
     const typed = results.find(r => (r.payload?.toolName ?? r.toolName) === WORKSPACE_TOOLS.COMPUTER.TYPE);
     expect(typed).toBeUndefined();

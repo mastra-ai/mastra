@@ -279,6 +279,36 @@ export async function setupComputerStream(
           return false;
         }
       });
+      let clientChain = Promise.resolve();
+
+      const forwardClient = async (
+        payload: Buffer,
+        ws: { close: (code?: number, reason?: string) => void },
+      ): Promise<void> => {
+        const messages = await rfbFilter.filterClient(payload);
+        const upstream = live.upstream;
+        for (const message of messages) {
+          const frame = message.buffer.slice(message.byteOffset, message.byteOffset + message.byteLength) as ArrayBuffer;
+          if (upstream?.readyState === WebSocketClient.OPEN) {
+            upstream.send(frame);
+            continue;
+          }
+          pendingBytes += frame.byteLength;
+          if (pendingBytes > MAX_PENDING_CLIENT_BYTES) {
+            ws.close(1009, 'Message too big');
+            return;
+          }
+          pending.push(frame);
+        }
+      };
+      const enqueueClient = (payload: Buffer, ws: { close: (code?: number, reason?: string) => void }) => {
+        clientChain = clientChain.then(() => forwardClient(payload, ws)).catch(error => {
+          ws.close(
+            error instanceof RfbTooLargeError ? 1009 : error instanceof RfbProtocolError ? 1002 : 1011,
+            'invalid RFB input',
+          );
+        });
+      };
 
       const upstreamProtocols = c.req.header('sec-websocket-protocol') ? ['binary'] : [];
       const openUpstream = (ws: { send: (data: ArrayBuffer | string) => void; close: (code?: number) => void }) => {
@@ -303,6 +333,7 @@ export async function setupComputerStream(
           try {
             rfbFilter.observeServer(Buffer.from(data));
             ws.send(data);
+            enqueueClient(Buffer.alloc(0), ws);
           } catch (error) {
             upstream.terminate();
             ws.close(error instanceof RfbProtocolError ? 1002 : 1011);
@@ -342,34 +373,14 @@ export async function setupComputerStream(
           startRevalidation(session);
           openUpstream(ws);
         },
-        async onMessage(event, ws) {
+        onMessage(event, ws) {
           const data = event.data as ArrayBuffer | string;
           if (typeof data === 'string') {
             ws.close(1003, 'binary frames only');
             return;
           }
           sessions.touch(session.id, session.computerId);
-          let messages: Buffer[];
-          try {
-            messages = await rfbFilter.filterClient(Buffer.from(data));
-          } catch (error) {
-            ws.close(error instanceof RfbTooLargeError ? 1009 : error instanceof RfbProtocolError ? 1002 : 1011, 'invalid RFB input');
-            return;
-          }
-          const upstream = live.upstream;
-          for (const message of messages) {
-            const frame = message.buffer.slice(message.byteOffset, message.byteOffset + message.byteLength) as ArrayBuffer;
-            if (upstream?.readyState === WebSocketClient.OPEN) {
-              upstream.send(frame);
-              continue;
-            }
-            pendingBytes += frame.byteLength;
-            if (pendingBytes > MAX_PENDING_CLIENT_BYTES) {
-              ws.close(1009, 'Message too big');
-              return;
-            }
-            pending.push(frame);
-          }
+          enqueueClient(Buffer.from(data), ws);
         },
         onClose() {
           clientClosed = true;

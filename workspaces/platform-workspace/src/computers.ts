@@ -166,6 +166,10 @@ function platformProvider(
         throw error;
       }
     },
+    discardEmbed(sandbox) {
+      const sandboxId = sandbox.sandboxId;
+      if (sandboxId) embedded.delete(sandboxId);
+    },
   };
 }
 
