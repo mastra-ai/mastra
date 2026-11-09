@@ -231,6 +231,7 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
     projectRepositoryId: 'pr-1',
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org',
     branch: 'main',
     title: null,
     baseBranch: 'main',
@@ -721,10 +722,32 @@ describe('live session file tree', () => {
     expect(ensureUser).toHaveBeenCalledTimes(5);
   });
 
-  it("refuses another user's session before touching its sandbox", async () => {
+  it("refuses another user's private session before touching its sandbox", async () => {
     const { executeCommand } = await seedHostCheckouts();
-    const { deps } = makeSessionFs();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'private' }) });
     deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it("serves another org member's org-visible session", async () => {
+    await seedHostCheckouts();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'org' }) });
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+    const rendered = await requestSessionRoute('/web/workspace/rendered/list', deps);
+    const id = makeSession().sessionId;
+
+    expect((await tree(`?workspacePath=${id}&path=src`)).status).toBe(200);
+    expect((await rendered(`?workspacePath=${id}&root=.artifacts`)).status).toBe(200);
+  });
+
+  it('refuses an org-visible session to a caller from another org', async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'org' }) });
+    deps.auth.tenant = () => ({ orgId: 'org-2', userId: 'user-1' });
     const tree = await requestSessionRoute('/web/workspace/tree', deps);
 
     expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);

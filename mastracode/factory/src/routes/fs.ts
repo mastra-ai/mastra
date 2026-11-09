@@ -468,9 +468,9 @@ export interface SessionFsDeps {
 
 /**
  * Resolve a `workspacePath` query param as a Factory session id. Returns the
- * session when one exists and the caller owns it, `null` when no session
- * matches (the caller should fall back to local-path handling), and throws
- * when a session exists but belongs to another tenant.
+ * session when one exists and the caller can see it (same org, and the owner
+ * when the session is private), `null` when no session matches (the caller
+ * should fall back to local-path handling), and throws otherwise.
  */
 async function resolveAuthorizedSession(
   c: Context,
@@ -483,7 +483,11 @@ async function resolveAuthorizedSession(
   if (deps.auth.enabled()) {
     await deps.auth.ensureUser(c);
     const tenant = deps.auth.tenant(c);
-    if (!tenant || tenant.orgId !== session.orgId || tenant.userId !== session.userId) {
+    if (
+      !tenant ||
+      tenant.orgId !== session.orgId ||
+      (session.visibility === 'private' && tenant.userId !== session.userId)
+    ) {
       throw new Error('Session is not available to the current user');
     }
   }
