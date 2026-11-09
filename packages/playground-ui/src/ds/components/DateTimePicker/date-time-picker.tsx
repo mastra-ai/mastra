@@ -8,7 +8,7 @@ import { DatePicker } from './date-picker';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Input, TimeInput } from '@/ds/components/Input';
+import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { fieldTriggerStyle } from '@/ds/primitives/form-element';
@@ -244,7 +244,8 @@ export const DateTimePickerContent = ({
         {...props}
       />
 
-      <TimeInput
+      <Input
+        type="time"
         size="sm"
         aria-label="Time"
         value={timeStrValue}
