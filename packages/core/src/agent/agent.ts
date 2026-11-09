@@ -12488,3 +12488,5 @@ export class Agent<
     return this.#requireDurableExecution('prepare');
   }
 }
+
+// CI benchmark (core-before), disposable, do not merge
