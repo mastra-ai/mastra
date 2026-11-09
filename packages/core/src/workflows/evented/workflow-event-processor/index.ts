@@ -4164,6 +4164,9 @@ export class WorkflowEventProcessor extends EventProcessor {
             metadata: {
               ...(prevResult as any).metadata,
               startedBy: stepResults[stepId]?.metadata?.startedBy,
+              // The nested run's metadata belongs to its own last step; keep the parent's loop
+              // count so a loop over a suspending nested workflow keeps counting after resume.
+              iterationCount: stepResults[stepId]?.metadata?.iterationCount,
               nestedRunId,
             },
           }),
