@@ -858,6 +858,30 @@ describe('intake routes moving existing cards on pull request events', () => {
     expect(merged.card!.stageHistory.at(-1)).toMatchObject({ stage: 'canceled', by: `intake-route:${mergedRoute.id}` });
   });
 
+  it("still finishes a merged card with the rule's own move when the admin disables the merge route", async () => {
+    const harness = await setup({ withDefaultRoute: true });
+    const mergedRoute = (await harness.boards.listIntakeRoutes(harness.scope)).find(route =>
+      route.on.includes('pull_request.merged'),
+    )!;
+    await harness.boards.updateIntakeRoute(
+      harness.scope,
+      mergedRoute.id,
+      { enabled: false },
+      { expectedRevision: mergedRoute.revision, actor: 'admin' },
+    );
+    const card = await pullRequestCard(harness);
+
+    const merged = await harness.deliverDecision(card.id, {
+      type: 'transition',
+      idempotencyKey: 'merge:pull-request-merged',
+      board: 'work',
+      stage: 'done',
+      event: { type: 'pull_request.merged' },
+    });
+    expect(merged.card).toMatchObject({ stages: ['done'] });
+    expect(merged.card!.stageHistory.at(-1)!.by).not.toMatch(/^intake-route:/);
+  });
+
   it('moves a finished card on a merge or a close never, and re-reviews it on a push', async () => {
     const harness = await setup({ withDefaultRoute: true });
     const card = await pullRequestCard(harness);

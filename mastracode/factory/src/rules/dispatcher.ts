@@ -2273,7 +2273,10 @@ export class FactoryDecisionDispatcher {
         : [];
       if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
       const route = resolveEventRoute(routes, event, cardRuleFacts(item), board, hasPullRequest(item));
-      if (!route) return undefined;
+      // A pull request event the rules already decided keeps that decision when no enabled route
+      // takes the card: disabling or narrowing a route must not strand a merged card in review.
+      if (!route)
+        return fallback && isPullRequestEvent(event.type) ? { item, board, fallback: true as const } : undefined;
       // A route that agrees with the rule's own pull request move keeps it whole: its message, and
       // the re-entry that restarts a review in the phase the card already sits in.
       if (fallback && isPullRequestEvent(event.type) && route.phase === fallback.stage) {
