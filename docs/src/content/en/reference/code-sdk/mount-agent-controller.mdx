@@ -138,7 +138,7 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     name: 'storage',
     type: 'StorageConfig | MastraCompositeStore',
     description:
-      'Custom storage config instead of the auto-detected default, or a pre-built store instance. An injected instance has no connection test or LibSQL fallback. In both cases the SDK wraps the store: scorer results are discarded unless `disableScoreStorage` is `false`, and observability goes to a separate local DuckDB store when available, otherwise it is disabled.',
+      'Custom storage config instead of the auto-detected default, or a pre-built store instance. An injected instance has no connection test or LibSQL fallback. In both cases the SDK wraps the store: scorer results are discarded unless `disableScoreStorage` is `false`, and local observability goes to a separate DuckDB store only when local tracing is enabled and that store opens; otherwise local observability is disabled. Cloud export runs independently when cloud credentials are configured.',
     isOptional: true,
   },
   {
@@ -152,7 +152,7 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     name: 'vector',
     type: 'MastraVector',
     description:
-      'Pre-built vector store for recall search. Skips creating the default vector store. When `storage` is a pre-built instance, no default vector store is created, so pass `vector` to keep semantic recall search; without it, recall still browses history but cannot search semantically.',
+      'Pre-built vector store for recall search. Skips creating the default vector store. When `storage` is a pre-built instance, no default vector store is created, so pass `vector` to keep semantic recall search; without it, recall still browses history but can't search semantically.',
     isOptional: true,
   },
   {
