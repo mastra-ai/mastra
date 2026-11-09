@@ -1,4 +1,8 @@
+import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
+import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
+import { embedMany as embedManyV6 } from '@internal/ai-v6';
+import { embedMany as embedManyV7 } from '@internal/ai-v7';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -7,9 +11,9 @@ import { coreFeatures } from '@mastra/core/features';
 import type { Mastra } from '@mastra/core/mastra';
 import {
   MastraMemory,
+  MESSAGE_EMBEDDING_CHARS_PER_TOKEN,
   buildMessageEmbeddingRows,
   chunkMessageText,
-  embedTexts,
   loadMessageHistory,
   normalizeMessageHistoryConfig,
   getMemoryTokenBoundary,
@@ -61,6 +65,7 @@ import type { VectorFilter } from '@mastra/core/vector';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
+import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
@@ -410,9 +415,6 @@ function hasWorkingMemoryExtractor(
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
 
-// Average characters per token based on OpenAI's tokenization
-const CHARS_PER_TOKEN = 4;
-
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
@@ -423,6 +425,12 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
 // deleting anyway; the liveness checks in the observation strategies' `persist`
 // still keep a late cycle from writing to a thread that no longer exists.
 const OM_DELETE_DRAIN_TIMEOUT_MS = 10_000;
+
+// Max number of distinct contents whose embeddings are kept in the in-process
+// cache. Bounds memory so a long-running Memory instance can't accumulate every
+// message/query it has ever embedded (each entry holds chunk text + vectors).
+// Matches the default used by the core SemanticRecall embedding cache.
+const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
 
 /**
  * Gives Mastra agents conversation history, with optional working memory,
@@ -591,6 +599,11 @@ export class Memory extends MastraMemory {
     });
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     this.threadConfig = mergedConfig;
+
+    // Fail at construction rather than on the first save.
+    if (typeof mergedConfig.semanticRecall === 'object') {
+      resolveMaxChunkChars({ maxChunkChars: mergedConfig.semanticRecall.maxChunkChars });
+    }
 
     // Validate retrieval vector config at construction time
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
@@ -810,7 +823,7 @@ export class Memory extends MastraMemory {
             } as never)),
           );
         } else {
-          const result = await this.embedMessageContent(vectorSearchString!, config);
+          const result = await this.embedMessageContent(vectorSearchString!);
           usage = result.usage;
           const { embeddings, dimension } = result;
           const { indexName } = await this.createEmbeddingIndex(dimension, config);
@@ -1446,58 +1459,121 @@ ${workingMemory}`;
     }
   }
 
-  /**
-   * Splits text into chunks of at most `tokenSize` English tokens, measured as characters.
-   * Kept for subclasses; message embedding goes through the shared builder in core.
-   */
+  /** Splits text into chunks of at most `tokenSize` English tokens, measured as characters. */
   protected chunkText(text: string, tokenSize = 4096) {
-    return chunkMessageText(text, tokenSize * CHARS_PER_TOKEN);
+    return chunkMessageText(text, tokenSize * MESSAGE_EMBEDDING_CHARS_PER_TOKEN);
   }
 
   private hasher = xxhash();
 
-  /**
-   * Character ceiling per embedded chunk for this config: `semanticRecall.maxChunkChars`, else the
-   * embedder's declared input window, else the default.
-   */
-  private resolveMaxChunkChars(config?: MemoryConfigInternal): number {
-    const merged = this.getMergedThreadConfig(config);
-    const semanticRecall = typeof merged.semanticRecall === 'object' ? merged.semanticRecall : undefined;
-    return resolveMaxChunkChars({ maxChunkChars: semanticRecall?.maxChunkChars, embedder: this.embedder });
+  // Embedding is computationally expensive, so cache content -> embeddings/chunks.
+  // Bounded by an LRU so a long-running instance can't retain every embedded
+  // message/query (and its vectors + chunk text) for the life of the process.
+  private embeddingCache = new LRUCache<
+    bigint,
+    {
+      chunks: string[];
+      embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+      usage?: { tokens: number };
+      dimension: number | undefined;
+    }
+  >({ max: DEFAULT_EMBEDDING_CACHE_MAX_SIZE });
+  private firstEmbed: Promise<any> | undefined;
+  protected async embedMessageContent(content: string) {
+    // Key by the content hash (not the content itself) to keep keys small. Use the
+    // 64-bit hash: h32 is only 32 bits, so distinct contents collide after ~tens of
+    // thousands of entries, which would return another message's cached embeddings.
+    const key = (await this.hasher).h64(content);
+    const cached = this.embeddingCache.get(key);
+    if (cached) {
+      this.logger.debug('Embedding cache hit', { contentHash: key.toString(), chunks: cached.chunks.length });
+      return cached;
+    }
+    const chunks = this.chunkText(content);
+    const { embeddings, usage } = await this.embedValues(chunks);
+
+    const result = {
+      embeddings,
+      chunks,
+      usage,
+      dimension: embeddings[0]?.length,
+    };
+    this.embeddingCache.set(key, result);
+    return result;
   }
 
-  /**
-   * Chunks and embeds text that is not a message row (recall queries and observations). Message
-   * rows are built by `buildMessageEmbeddingRows`, which shares this embedding cache.
-   */
-  protected async embedMessageContent(content: string, config?: MemoryConfigInternal) {
+  /** Sends texts to the embedder through the AI SDK version that matches its spec. */
+  private async embedValues(values: string[]) {
     if (typeof this.embedder === `undefined`) {
       throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
     }
-    const chunks = chunkMessageText(content, this.resolveMaxChunkChars(config));
-    const { embeddings, usage, dimension } = await embedTexts(this.embedder, chunks, this.embedderOptions);
-    return { embeddings, chunks, usage, dimension };
+    // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
+    const isFastEmbed = this.embedder.provider === `fastembed`;
+    if (isFastEmbed && this.firstEmbed instanceof Promise) {
+      // so wait for the first one
+      await this.firstEmbed;
+    }
+
+    const options = { values, maxRetries: 3 };
+    // Options share a public union; select the SDK-specific options alongside the model version.
+    const model = this.embedder;
+    let promise;
+    switch (model.specificationVersion) {
+      case 'v4':
+        promise = embedManyV7({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
+      case 'v3':
+        promise = embedManyV6({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
+      case 'v2':
+        promise = embedManyV5({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
+      default:
+        promise = embedMany({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
+    }
+
+    if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
+    const { embeddings, usage } = await promise;
+    return { embeddings, usage };
   }
 
   /**
    * Metadata of each thread, spread onto that thread's vector rows so `semanticRecall.filter`
    * can match thread attributes.
    */
-  private async loadThreadMetadata(
-    memoryStore: MemoryStorage,
-    threadIds: Iterable<string | undefined>,
-  ): Promise<Map<string, Record<string, unknown>>> {
+  private async loadThreadMetadata(threadIds: string[]): Promise<Map<string, Record<string, unknown>>> {
+    const memoryStore = await this.getMemoryStore();
     const metadataByThread = new Map<string, Record<string, unknown>>();
     await Promise.all(
-      [...new Set(threadIds)].map(async threadId => {
-        if (!threadId) return;
+      threadIds.map(async threadId => {
         try {
           const thread = await memoryStore.getThreadById({ threadId });
-          if (thread?.metadata) metadataByThread.set(threadId, thread.metadata);
+          if (!thread?.metadata) return;
+          // Cloned threads keep their clone bookkeeping in metadata as a nested object holding a
+          // Date, which stores with flat metadata (Pinecone) reject. It is not a filter target.
+          const { clone: _clone, ...metadata } = thread.metadata;
+          metadataByThread.set(threadId, metadata);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           throw new Error(
-            `Could not fetch metadata for thread ${threadId} while saving semantic recall embeddings: ${message}`,
+            `Could not fetch metadata for thread ${threadId} while writing semantic recall embeddings: ${message}`,
           );
         }
       }),
@@ -1523,17 +1599,21 @@ ${workingMemory}`;
       throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
     }
 
-    const memoryStore = await this.getMemoryStore();
+    const merged = this.getMergedThreadConfig(config);
+    const semanticRecall = typeof merged.semanticRecall === 'object' ? merged.semanticRecall : undefined;
     return buildMessageEmbeddingRows({
       items,
-      embedder: this.isSelfEmbedding ? undefined : this.embedder,
-      embedderOptions: this.embedderOptions,
-      maxChunkChars: this.resolveMaxChunkChars(config),
-      threadMetadata: await this.loadThreadMetadata(
-        memoryStore,
-        items.map(({ message }) => message.threadId),
-      ),
+      // No content cache here: within a run the embedded-messages record already stops a second
+      // embedding of the same message, and across runs a message is saved once.
+      embed: this.isSelfEmbedding ? undefined : chunks => this.embedValues(chunks),
+      maxChunkChars: resolveMaxChunkChars({ maxChunkChars: semanticRecall?.maxChunkChars, embedder: this.embedder }),
+      loadThreadMetadata: threadIds => this.loadThreadMetadata(threadIds),
       embeddedMessages,
+      // The run's record is kept per index; only agent runs pass one, and by then the dimension
+      // probe behind the index name already ran when the processors were created.
+      indexName: embeddedMessages
+        ? this.getEmbeddingIndexName(this.isSelfEmbedding ? undefined : await this.getEmbeddingDimension())
+        : undefined,
     });
   }
 
@@ -2553,7 +2633,7 @@ Notes:
     let embeddings: number[][] = [];
     let dimension: number | undefined;
     if (this.isSelfEmbedding) {
-      chunks = chunkMessageText(text, this.resolveMaxChunkChars());
+      chunks = this.chunkText(text);
       if (chunks.length === 0) {
         return;
       }
@@ -3310,15 +3390,15 @@ Notes:
     if (migratesVectors) {
       try {
         const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+        // Embed before deleting, so a failed embedding call leaves the old rows searchable.
+        const rows = await this.buildMessageVectorRows({ items: messages.map(message => ({ message })), config });
         const messageIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
         await Promise.all(
           messageIndexes.map(async indexName => {
             await this.vector!.deleteVectors({ indexName, filter: { thread_id: threadId } });
           }),
         );
-        if (messages.length > 0) {
-          await this.embedClonedMessages(messages, config);
-        }
+        await this.writeMessageVectorRows({ rows, config });
       } catch (error) {
         // The storage transfer already committed, but if vector migration fails the thread's
         // messages can become unrecallable under resource-scoped semantic recall while the
@@ -3556,8 +3636,8 @@ Notes:
   }
 
   /**
-   * Embed cloned messages for semantic recall.
-   * This is similar to the embedding logic in saveMessages but operates on already-saved messages.
+   * Embed cloned messages for semantic recall. Cloned messages have new ids, so they get rows of
+   * their own next to the source thread's rows.
    */
   private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfigInternal): Promise<void> {
     // A self-embedding store needs no embedder: it receives the text and embeds it itself.
