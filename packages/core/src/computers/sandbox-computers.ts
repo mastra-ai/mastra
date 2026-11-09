@@ -36,7 +36,7 @@ export class SandboxComputers implements MastraComputers {
   readonly #workspace: Workspace;
   readonly #key: Buffer;
   readonly #viewer?: SandboxComputersOptions['viewer'];
-  readonly #attachments = new Map<string, { id: string; sandbox: WorkspaceSandbox }>();
+  readonly #attachments = new Map<string, string>();
   #tools?: Record<string, ToolAction<any, any, any, any>>;
 
   constructor(options: SandboxComputersOptions) {
@@ -106,10 +106,10 @@ export class SandboxComputers implements MastraComputers {
           const scope = this.#scope(context);
           if (!scope) return MISSING_IDENTITY;
           const sandbox = await this.#resolve(scope.requestContext);
-          if (!sandbox) return { computers: [], attachedId: this.#attachments.get(scope.key)?.id };
+          if (!sandbox) return { computers: [], attachedId: this.#attachments.get(scope.key) };
           return {
             computers: [{ id: this.#mint(sandbox.id, scope.resourceId), name: sandbox.name, status: 'available', persistent: false }],
-            attachedId: this.#attachments.get(scope.key)?.id,
+            attachedId: this.#attachments.get(scope.key),
           };
         },
       }),
@@ -124,7 +124,7 @@ export class SandboxComputers implements MastraComputers {
           if (!sandboxId) return NOT_FOUND;
           const sandbox = await this.#resolve(scope.requestContext);
           if (!sandbox || sandbox.id !== sandboxId) return NOT_FOUND;
-          this.#attachments.set(scope.key, { id, sandbox });
+          this.#attachments.set(scope.key, id);
           await this.#emit(context, id, scope.threadId, 'attached');
           return { computer: { id, name: sandbox.name, status: 'attached', persistent: false } };
         },
@@ -136,11 +136,14 @@ export class SandboxComputers implements MastraComputers {
         execute: async (_input, context: Context) => {
           const scope = this.#scope(context);
           if (!scope) return MISSING_IDENTITY;
-          const attached = this.#attachments.get(scope.key);
-          if (!attached) return NOT_ATTACHED;
+          const attachedId = this.#attachments.get(scope.key);
+          if (!attachedId) return NOT_ATTACHED;
+          const sandboxId = this.#verify(attachedId, scope.resourceId);
+          const sandbox = await this.#resolve(scope.requestContext);
+          if (!sandboxId || !sandbox || sandbox.id !== sandboxId) return NOT_ATTACHED;
           this.#attachments.delete(scope.key);
-          await this.#emit(context, attached.id, scope.threadId, 'released');
-          return { computer: { id: attached.id, name: attached.sandbox.name, status: 'released', persistent: false } };
+          await this.#emit(context, attachedId, scope.threadId, 'released');
+          return { computer: { id: attachedId, name: sandbox.name, status: 'released', persistent: false } };
         },
       }),
     };
@@ -149,10 +152,13 @@ export class SandboxComputers implements MastraComputers {
   }
 
   async viewer(computerId: string, scope: MastraComputerScope): Promise<MastraComputerViewer | null> {
-    const attached = this.#attachments.get(JSON.stringify([scope.resourceId, scope.threadId]));
-    if (!attached || attached.id !== computerId || !this.#verify(computerId, scope.resourceId)) throw new Error(NOT_ATTACHED);
-    if (this.#viewer) return this.#viewer(attached.sandbox, scope);
-    const url = await attached.sandbox.computer?.streamUrl?.();
+    const attachedId = this.#attachments.get(JSON.stringify([scope.resourceId, scope.threadId]));
+    const sandboxId = this.#verify(computerId, scope.resourceId);
+    if (!attachedId || attachedId !== computerId || !sandboxId) throw new Error(NOT_ATTACHED);
+    const sandbox = await this.#resolve(new RequestContext());
+    if (!sandbox || sandbox.id !== sandboxId) throw new Error(NOT_ATTACHED);
+    if (this.#viewer) return this.#viewer(sandbox, scope);
+    const url = await sandbox.computer?.streamUrl?.();
     return url ? { url, headers: {} } : null;
   }
 }

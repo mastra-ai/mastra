@@ -68,6 +68,21 @@ describe('SandboxComputers', () => {
     expect(resolver).toHaveBeenCalledTimes(2);
   });
 
+  it('refuses a viewer when the borrowed sandbox changes after attachment', async () => {
+    let current = sandbox('one', 'https://viewer.test/one');
+    const workspace = new Workspace({ sandbox: async () => current, computerTools: 'resolve' });
+    const computers = new SandboxComputers({ workspace, secret: 'secret' });
+    const listed = await (computers.tools().mastra_workspace_computer_list as any).execute({}, context);
+    const id = listed.computers[0].id;
+    await (computers.tools().mastra_workspace_computer_attach as any).execute({ id }, context);
+
+    current = sandbox('two', 'https://viewer.test/two');
+
+    await expect(computers.viewer(id, { resourceId: 'resource', threadId: 'thread' })).rejects.toThrow(
+      'no computer attached',
+    );
+  });
+
   it('binds signed ids to the resource', async () => {
     const computers = new SandboxComputers({ workspace: new Workspace({ sandbox: sandbox() }), secret: 'secret' });
     const listed = await (computers.tools().mastra_workspace_computer_list as any).execute({}, context);
