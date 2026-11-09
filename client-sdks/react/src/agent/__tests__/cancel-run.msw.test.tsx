@@ -317,3 +317,84 @@ describe.each([undefined, 'thread-1'])('useChat Stop with thread %s (COR-1489)',
     },
   );
 });
+
+describe('useChat Stop over thread signals', () => {
+  function serveThread({ sendMessageStatus }: { sendMessageStatus?: number } = {}) {
+    let subscription: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const requests: string[] = [];
+    const hold = Promise.withResolvers<void>();
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agents/agent-1/threads/subscribe`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              start(stream) {
+                subscription = stream;
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+      http.post(`${TEST_BASE_URL}/api/agents/agent-1/send-message`, async () => {
+        requests.push('send-message');
+        if (sendMessageStatus) return new HttpResponse(null, { status: sendMessageStatus });
+        await hold.promise;
+        return HttpResponse.json({ runId: 'run-1', signal: { id: 'signal-1' } });
+      }),
+      http.post(`${TEST_BASE_URL}/api/agents/agent-1/signals`, async () => {
+        requests.push('signals');
+        await hold.promise;
+        return HttpResponse.json({ accepted: true });
+      }),
+      http.post(`${TEST_BASE_URL}/api/agents/agent-1/threads/abort`, () => HttpResponse.json({ aborted: true })),
+    );
+    return {
+      subscribed: () => subscription !== undefined,
+      requests,
+      release: () => {
+        hold.resolve();
+        try {
+          subscription?.close();
+        } catch {
+          /* Stop already closed the subscription. */
+        }
+      },
+    };
+  }
+
+  const pendingMessages = (messages: { content: { metadata?: Record<string, unknown> } }[]) =>
+    messages.filter(message => message.content.metadata?.status === 'pending');
+
+  it.each([
+    { route: 'send-message', sendMessageStatus: undefined },
+    { route: 'signals', sendMessageStatus: 404 },
+  ])(
+    'resolves the send and drops the unconfirmed message when Stop cuts off $route',
+    async ({ route, sendMessageStatus }) => {
+      const thread = serveThread({ sendMessageStatus });
+      const { result, unmount } = renderHookWithProviders(() =>
+        useChat({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
+      );
+      let sending: Promise<void> | undefined;
+      try {
+        await waitFor(() => expect(thread.subscribed()).toBe(true));
+        act(() => {
+          sending = result.current.sendMessage({ message: 'Write a long answer', threadId: 'thread-1' });
+        });
+        await waitFor(() => expect(thread.requests.at(-1)).toBe(route));
+        expect(pendingMessages(result.current.messages)).toHaveLength(1);
+        await act(async () => {
+          await result.current.cancelRun();
+        });
+        await expect(sending).resolves.toBeUndefined();
+        expect(result.current.isRunning).toBe(false);
+        expect(pendingMessages(result.current.messages)).toEqual([]);
+      } finally {
+        thread.release();
+        await sending?.catch(() => {});
+        unmount();
+      }
+    },
+  );
+});
