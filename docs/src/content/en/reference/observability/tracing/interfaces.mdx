@@ -1397,7 +1397,7 @@ interface ObservabilityInstanceConfig {
   /** Custom exporters */
   exporters?: ObservabilityExporter[]
   /** Keep built-in storage exporters on Platform (defaults to false) */
-  allowRemoteStorageExportOnPlatform?: boolean
+  retainStorageExporterOnPlatform?: boolean
 
   /** Custom span output processors */
   spanOutputProcessors?: SpanOutputProcessor[]

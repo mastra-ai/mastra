@@ -6,7 +6,7 @@ export function skipLocalStorageOnPlatform(storage: ObservabilityStorage, logger
   if (!process.env.MASTRA_DEPLOYMENT_ID || storage.persistenceLocation !== 'local') return false;
 
   logger.warn(
-    'Storage exporter disabled on Mastra Platform: local observability storage is not supported, even with allowRemoteStorageExportOnPlatform: true. Use a remote observability storage provider.',
+    'Storage exporter disabled on Mastra Platform: local observability storage is not supported, even with retainStorageExporterOnPlatform: true. Use a remote observability storage provider.',
   );
   return true;
 }

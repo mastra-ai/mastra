@@ -117,7 +117,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     const exporters = config.exporters ?? [];
     const effectiveExporters =
-      isMastraPlatformDeployment() && config.allowRemoteStorageExportOnPlatform !== true
+      isMastraPlatformDeployment() && config.retainStorageExporterOnPlatform !== true
         ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
         : exporters;
 
@@ -127,7 +127,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       name: config.name,
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
       exporters: effectiveExporters,
-      allowRemoteStorageExportOnPlatform: config.allowRemoteStorageExportOnPlatform ?? false,
+      retainStorageExporterOnPlatform: config.retainStorageExporterOnPlatform ?? false,
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
@@ -469,7 +469,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   private warnStorageExporterSkipped(exporter: ObservabilityExporter): void {
     this.logger.warn(
-      'Storage exporter skipped on Mastra Platform. Set allowRemoteStorageExportOnPlatform: true on this observability config to allow remote storage export.',
+      'Storage exporter skipped on Mastra Platform. Set retainStorageExporterOnPlatform: true on this observability config to allow remote storage export.',
       {
         exporterName: exporter.name,
         serviceName: this.config.serviceName,
@@ -485,7 +485,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   registerExporter(exporter: ObservabilityExporter): void {
     if (
       isMastraPlatformDeployment() &&
-      this.config.allowRemoteStorageExportOnPlatform !== true &&
+      this.config.retainStorageExporterOnPlatform !== true &&
       isMastraBuiltInStorageExporter(exporter)
     ) {
       this.warnStorageExporterSkipped(exporter);
