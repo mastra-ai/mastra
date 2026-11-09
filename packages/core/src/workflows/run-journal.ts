@@ -566,46 +566,31 @@ export class RunJournal {
 
   /** Swap the stubs among `stepIds` back for their stored results, with one read. */
   async hydrate(stepResults: StepResults, stepIds: readonly string[] = Object.keys(stepResults)): Promise<void> {
-    const store = this.store;
-    const stubbed = new Map<string, unknown>();
-    for (const stepId of stepIds) {
-      if (isStepResultStub(stepResults[stepId])) stubbed.set(stepId, stepResults[stepId]);
-    }
-    if (!store || !stubbed.size) return;
-
-    const loaded = await store.loadWorkflowRunSteps({
-      workflowName: this.workflowName,
-      runId: this.runId,
-      stepIds: [...stubbed.keys()],
-    });
-    for (const [stepId, stub] of stubbed) {
-      // A result that changed while the read was in flight (e.g. a parallel branch hydrated it)
-      // is at least as new as the one read.
-      if (stepResults[stepId] !== stub) continue;
-      const result = loaded?.[stepId];
-      if (!result) {
-        throw new MastraError({
-          id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.SYSTEM,
-          text: `The stored result of step "${stepId}" in run ${this.runId} is missing. The run was deleted or overwritten while it ran.`,
-        });
-      }
-      stepResults[stepId] = result;
-      // The loaded result is what's stored, so the next write doesn't resend it.
-      this.#written.set(stepId, result);
-    }
+    const hydrated = await hydrateStepResults(this, stepResults, stepIds);
+    // The loaded results are what's stored, so the next write doesn't resend them.
+    for (const [stepId, result] of hydrated) this.#written.set(stepId, result);
   }
 
   /** `getStepResultAsync` for step code: reads an evicted step from storage first. */
-  async getStepResultAsync(stepResults: StepResults, step: unknown): Promise<any> {
-    const stepId = stepRefId(step);
-    if (stepId !== undefined && isStepResultStub(stepResults[stepId])) {
-      // The result stays in memory until the entry ends, so later reads in the entry are free.
-      await this.hydrate(stepResults, [stepId]);
-    }
-    return getStepResult(stepResults, step);
+  getStepResultAsync(stepResults: StepResults, step: unknown): Promise<any> {
+    return getHydratedStepResult(stepResults, step, stepIds => this.hydrate(stepResults, stepIds));
   }
+}
+
+/**
+ * `getStepResult` over step results that may hold stubs: a stubbed step is read back with
+ * `hydrate` first. The result stays in `stepResults`, so later reads of it are free.
+ *
+ * @internal
+ */
+export async function getHydratedStepResult(
+  stepResults: StepResults,
+  step: unknown,
+  hydrate: (stepIds: string[]) => Promise<unknown>,
+): Promise<any> {
+  const stepId = stepRefId(step);
+  if (stepId !== undefined && isStepResultStub(stepResults[stepId])) await hydrate([stepId]);
+  return getStepResult(stepResults, step);
 }
 
 /**
@@ -626,6 +611,19 @@ export function buildStepResultAccessors(
       getStepResultAsync: getStepResultAsync.bind(null, stepResults),
     };
   }
+  return storageV2StepResultAccessors(step => journal.getStepResultAsync(stepResults, step));
+}
+
+/**
+ * The accessor pair for step code in a storage v2 run: sync `getStepResult` throws, as the run's
+ * step results won't always be in memory, and points to `getStepResultAsync`.
+ *
+ * @internal
+ */
+export function storageV2StepResultAccessors(getStepResultAsync: (step: unknown) => Promise<any>): {
+  getStepResult: (step: any) => never;
+  getStepResultAsync: (step: any) => Promise<any>;
+} {
   return {
     getStepResult: (step: unknown): never => {
       const stepId = stepRefId(step) ?? String(step);
@@ -636,8 +634,50 @@ export function buildStepResultAccessors(
         text: `getStepResult("${stepId}") isn't available in workflows with storageVersion: 2. Use \`await getStepResultAsync("${stepId}")\` instead.`,
       });
     },
-    getStepResultAsync: (step: unknown) => journal.getStepResultAsync(stepResults, step),
+    getStepResultAsync,
   };
+}
+
+/**
+ * Swaps the stubs among `stepIds` back for the run's stored results, with one read.
+ *
+ * @returns The stored results put in, by step id.
+ * @internal
+ */
+export async function hydrateStepResults(
+  run: { store: WorkflowsStorage | undefined; workflowName: string; runId: string },
+  stepResults: StepResults,
+  stepIds: readonly string[] = Object.keys(stepResults),
+): Promise<Map<string, StepResult<any, any, any, any>>> {
+  const hydrated = new Map<string, StepResult<any, any, any, any>>();
+  const stubbed = new Map<string, unknown>();
+  for (const stepId of stepIds) {
+    if (isStepResultStub(stepResults[stepId])) stubbed.set(stepId, stepResults[stepId]);
+  }
+  if (!run.store || !stubbed.size) return hydrated;
+
+  const loaded = await run.store.loadWorkflowRunSteps({
+    workflowName: run.workflowName,
+    runId: run.runId,
+    stepIds: [...stubbed.keys()],
+  });
+  for (const [stepId, stub] of stubbed) {
+    // A result that changed while the read was in flight (e.g. a parallel branch hydrated it)
+    // is at least as new as the one read.
+    if (stepResults[stepId] !== stub) continue;
+    const result = loaded?.[stepId];
+    if (!result) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.SYSTEM,
+        text: `The stored result of step "${stepId}" in run ${run.runId} is missing. The run was deleted or overwritten while it ran.`,
+      });
+    }
+    stepResults[stepId] = result;
+    hydrated.set(stepId, result);
+  }
+  return hydrated;
 }
 
 /**

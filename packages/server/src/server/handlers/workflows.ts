@@ -1568,6 +1568,7 @@ const stepExecutionBodySchema = z.object({
   format: z.enum(['legacy', 'vnext']).optional(),
   perStep: z.boolean().optional(),
   validateInputs: z.boolean().optional(),
+  storageVersion: z.union([z.literal(1), z.literal(2)]).optional(),
 });
 
 type StepExecutionBody = z.infer<typeof stepExecutionBodySchema>;
@@ -1651,6 +1652,7 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
         format: body.format,
         perStep: body.perStep,
         validateInputs: body.validateInputs,
+        storageVersion: body.storageVersion,
       });
 
       return result;

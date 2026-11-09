@@ -3197,6 +3197,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           format: streamFormat,
           perStep,
           validateInputs: workflow.options.validateInputs,
+          storageVersion: currentStorageVersion(),
           abortSignal: abortController.signal,
         });
       } else {

@@ -1008,6 +1008,7 @@ export const API_ROUTE_METADATA = {
       "state",
       "stepId",
       "stepResults",
+      "storageVersion",
       "validateInputs"
     ],
     "hasQuery": false,

@@ -8249,6 +8249,7 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
   format?: ('legacy' | 'vnext') | undefined;
   perStep?: boolean | undefined;
   validateInputs?: boolean | undefined;
+  storageVersion?: (1 | 2) | undefined;
 };
 
 export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response = PostAgentsAgentIdGenerate_Response;

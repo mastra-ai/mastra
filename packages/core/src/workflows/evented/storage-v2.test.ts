@@ -533,3 +533,110 @@ describe('evented step messages on storage v2', () => {
     expect(joins).toBe(1);
   });
 });
+
+describe('evented step code on storage v2', () => {
+  it('makes sync getStepResult throw inside v2 steps', async () => {
+    const workflow = createWorkflow({
+      id: 'sync-read',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion: 2 },
+    })
+      .then(createStep({ id: 'a', inputSchema: looseObject, outputSchema: looseObject, execute: async () => ({}) }))
+      .then(
+        createStep({
+          id: 'b',
+          inputSchema: looseObject,
+          outputSchema: looseObject,
+          execute: async ({ getStepResult }) => getStepResult('a'),
+        }),
+      )
+      .commit();
+
+    const { result } = await runWorkflow(workflow);
+    expect(result.status).toBe('failed');
+    expect(result.error.message).toMatch(/Use `await getStepResultAsync\("a"\)` instead/);
+  });
+
+  it('makes reading state throw inside v2 steps and conditions, but not spreading their params', async () => {
+    let conditionError: unknown;
+    const workflow = createWorkflow({
+      id: 'state-read',
+      inputSchema: looseObject,
+      outputSchema: z.any(),
+      stateSchema: looseObject,
+      options: { storageVersion: 2 },
+    })
+      .then(
+        createStep({
+          id: 'spreads',
+          inputSchema: looseObject,
+          outputSchema: z.any(),
+          execute: async params => ({ spreadHasState: 'state' in { ...params } }),
+        }),
+      )
+      .branch([
+        [
+          async (params: { state: unknown }) => {
+            try {
+              return !!params.state;
+            } catch (error) {
+              conditionError = error;
+              return false;
+            }
+          },
+          createStep({ id: 'never', inputSchema: z.any(), outputSchema: z.any(), execute: async () => ({}) }),
+        ],
+        [
+          async () => true,
+          createStep({
+            id: 'reads',
+            inputSchema: z.any(),
+            outputSchema: z.any(),
+            execute: async params => params.state,
+          }),
+        ],
+      ])
+      .commit();
+
+    const { result } = await runWorkflow(workflow);
+    expect(result.steps.spreads).toMatchObject({ status: 'success', output: { spreadHasState: false } });
+    expect((conditionError as Error).message).toMatch(/Use `await getState\(\)` instead/);
+    expect(result.status).toBe('failed');
+    expect(result.error.message).toMatch(/Use `await getState\(\)` instead/);
+  });
+
+  it('keeps sync getStepResult and state in v1 steps', async () => {
+    const workflow = createWorkflow({
+      id: 'sync-read-v1',
+      inputSchema: looseObject,
+      outputSchema: z.any(),
+      stateSchema: looseObject,
+      options: { storageVersion: 1 },
+    })
+      .then(
+        createStep({
+          id: 'a',
+          inputSchema: looseObject,
+          outputSchema: looseObject,
+          execute: async ({ setState }) => {
+            await setState({ a: 1 });
+            return { a: true };
+          },
+        }),
+      )
+      .then(
+        createStep({
+          id: 'b',
+          inputSchema: looseObject,
+          outputSchema: z.any(),
+          execute: async ({ getStepResult, state }) => ({ a: getStepResult('a'), state }),
+        }),
+      )
+      .commit();
+
+    const { result } = await runWorkflow(workflow);
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ a: { a: true }, state: { a: 1 } });
+  });
+});
