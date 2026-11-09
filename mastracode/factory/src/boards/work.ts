@@ -10,8 +10,10 @@ export const BUILD_OBJECTIVE =
   "the work branch; the plan's verification gates (the tests, typecheck and lint it names, else the narrowest " +
   'relevant ones) were run on the final head and passed; the branch is pushed; and the card was moved on with ' +
   "factory_transition_work_item out of Building (to Review or PR review as the builder's hand-off says, or back to " +
-  "Planning if the plan proved wrong); the builder's latest message names the move and the pushed head. Continue " +
-  'while any of that is missing. Waiting only when the agent asked a person a question it cannot answer from the ' +
+  'Planning if the plan proved wrong), or, when that move was refused because the change request is tracked on its ' +
+  "own card, the branch was pushed to that change request and the card stays in Building; the builder's latest " +
+  'message names the move (or the change request and that it is tracked on its own card) and the pushed head. ' +
+  'Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot answer from the ' +
   'repository.';
 
 export type WorkBoardPhase =
