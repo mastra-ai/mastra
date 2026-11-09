@@ -26,10 +26,11 @@ export class JsonBodyMiddleware implements NestMiddleware {
       strict: false,
       // Only parse JSON content types
       type: ['application/json', 'application/*+json'],
-      // Keep the exact bytes read so route-level maxBodySize can reject padded
-      // chunked bodies that shrink after JSON.parse / JSON.stringify.
+      // Record how many bytes were read so route-level maxBodySize can reject padded
+      // chunked bodies that shrink after JSON.parse / JSON.stringify. Store only the
+      // count: keeping the buffer would hold the whole body for the life of the request.
       verify: (req, _res, buf) => {
-        (req as Request & { rawBody?: Buffer }).rawBody = buf;
+        (req as Request & { mastraRawBodySize?: number }).mastraRawBodySize = buf.length;
       },
     });
   }

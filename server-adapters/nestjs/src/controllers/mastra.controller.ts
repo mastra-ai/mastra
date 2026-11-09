@@ -184,14 +184,14 @@ export class MastraController {
     }
 
     // JsonBodyMiddleware only applies the global limit, so enforce the route's own
-    // (usually smaller) limit here. Prefer the raw bytes captured during parsing so
+    // (usually smaller) limit here. Prefer the raw byte count recorded during parsing so
     // chunked whitespace padding cannot shrink past the check after JSON.stringify.
     if (route.maxBodySize !== undefined) {
-      const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+      const rawBodySize = (req as Request & { mastraRawBodySize?: number }).mastraRawBodySize;
       const contentLength = parseInt(req.headers['content-length'] ?? '', 10);
       const size =
-        rawBody !== undefined
-          ? rawBody.byteLength
+        rawBodySize !== undefined
+          ? rawBodySize
           : Number.isNaN(contentLength)
             ? req.body === undefined
               ? 0
