@@ -1257,7 +1257,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       !restart &&
       !timeTravel &&
       !resumeSteps?.length;
-    if (shouldPersist || requiresGuardedSnapshot) {
+    // Time travel rewrites the run's history, so its reset step results are stored even when running
+    // snapshots are declined. Otherwise the old results stay stored and replayed steps merge into them.
+    if (shouldPersist || requiresGuardedSnapshot || timeTravel) {
       const runningSnapshot: WorkflowRunState = {
         activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         parentWorkflow: parentWorkflow

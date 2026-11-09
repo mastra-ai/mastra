@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
+import type { WorkflowOptions } from '../types';
 import { createStep, createWorkflow } from '.';
 
 // Issue #26390: a failed .foreach() iteration must fail the run on the evented engine.
@@ -82,7 +83,11 @@ describe('evented foreach with a failing iteration', () => {
 describe('evented foreach with several failing iterations', () => {
   const item = z.object({ n: z.number() });
 
-  async function setup(id: string, execute: (n: number, runFailed: Promise<void>) => Promise<{ n: number }>) {
+  async function setup(
+    id: string,
+    execute: (n: number, runFailed: Promise<void>) => Promise<{ n: number }>,
+    options?: WorkflowOptions<1 | 2>,
+  ) {
     let markRunFailed!: () => void;
     const runFailed = new Promise<void>(resolve => (markRunFailed = resolve));
     const pubsub = new EventEmitterPubSub();
@@ -115,7 +120,7 @@ describe('evented foreach with several failing iterations', () => {
       retries: 0,
       execute: ({ inputData }) => execute(inputData.n, runFailed),
     });
-    const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.array(item) })
+    const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.array(item), options })
       .then(list)
       .foreach(boom, { concurrency: 2 })
       .commit();
@@ -215,5 +220,38 @@ describe('evented foreach with several failing iterations', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+
+  // Declining running snapshots used to leave the failed foreach record in storage during the
+  // replay: replaying the foreach kept the old error, and replaying from an earlier step hung.
+  describe.each([1, 2] as const)('time-travel replay with running snapshots declined (storage v%s)', storageVersion => {
+    it.each(['boom', 'list'])('succeeds when replaying from %s', async step => {
+      let replaying = false;
+      const { mastra, run, allIterationsRecorded } = await setup(
+        `foreach-time-travel-succeeds-v${storageVersion}-${step}`,
+        async (n, runFailed) => {
+          if (replaying) return { n };
+          if (n === 1) throw new Error('first failure');
+          await runFailed;
+          throw new Error('second failure');
+        },
+        { storageVersion, shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' },
+      );
+      try {
+        expect(((await run.start({ inputData: {} })) as any).status).toBe('failed');
+        await allIterationsRecorded(['failed', 'failed']);
+
+        replaying = true;
+        const replay: any = await Promise.race([
+          run.timeTravel(step === 'list' ? { step, inputData: {} } : { step }),
+          new Promise(resolve => setTimeout(() => resolve('HANG'), 3000)),
+        ]);
+        expect(replay).not.toBe('HANG');
+        expect(replay.status).toBe('success');
+        expect(replay.result).toEqual([{ n: 1 }, { n: 2 }]);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 });
