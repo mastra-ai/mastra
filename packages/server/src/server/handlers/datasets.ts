@@ -136,10 +136,23 @@ export const ITEMS_FROM_THREAD_ROUTE = createRoute({
   requiresAuth: true,
   handler: async params => {
     assertDatasetsAvailable();
-    const dataset = await params.mastra.datasets.get({ id: params.datasetId });
-    const { items, turnCount } = await replaySource(params);
-    const added = items.length ? await dataset.addItems({ items }) : [];
-    return { itemIds: added.map(item => item.id), turnCount };
+    try {
+      const dataset = await params.mastra.datasets.get({ id: params.datasetId });
+      const { items, turnCount } = await replaySource(params);
+      const added = items.length ? await dataset.addItems({ items }) : [];
+      return { itemIds: added.map(item => item.id), turnCount };
+    } catch (error) {
+      if (isSchemaValidationError(error)) {
+        throw new HTTPException(400, {
+          message: error.message,
+          cause: { field: error.field, errors: error.errors },
+        });
+      }
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error creating replay items from thread');
+    }
   },
 });
 

@@ -66,6 +66,9 @@ describe('when replaying a production conversation through the HTTP API', () => 
       });
       expect(forbidden.status).toBe(403);
       expect((await dataset.listItems({ perPage: 100 })).items).toHaveLength(10);
+      // Dataset errors map to HTTP statuses like the other item-writing routes.
+      const missing = await request('/datasets/does-not-exist/items/from-thread', source);
+      expect(missing.status).toBe(404);
     } finally {
       await mastra.observability.shutdown();
     }
