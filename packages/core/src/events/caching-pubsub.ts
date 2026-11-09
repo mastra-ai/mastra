@@ -222,6 +222,10 @@ export class CachingPubSub extends PubSub {
    * inner transport. Readers exclude them when waiting for the log to reach
    * them: those frames are replayed to late subscribers, but the live
    * subscription will never deliver them.
+   *
+   * Only the publishing process knows these indices. A reader in another
+   * process sharing the cache still waits out its pending-frame deadline for
+   * a frame a remote publisher could not send.
    */
   getUndeliveredIndices(topic: string): ReadonlySet<number> {
     return this.undeliveredIndices.get(topic) ?? EMPTY_INDICES;
