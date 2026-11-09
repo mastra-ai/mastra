@@ -5,7 +5,7 @@ import { z } from 'zod';
 import {
   boardForWorkItem,
   isPullRequestCard,
-  PULL_REQUEST_REVIEW_PHASE,
+  pullRequestReviewPhase,
   reviewedChangeRequest,
   reviewsPullRequest,
   workItemPhaseSemantics,
@@ -217,7 +217,7 @@ function createReviewVerdictTool(
         }
         if (
           !reviewsPullRequest({ board, item: { source, workItem: item.workItem } }) ||
-          item.stages[0] !== PULL_REQUEST_REVIEW_PHASE
+          item.stages[0] !== pullRequestReviewPhase(board)
         ) {
           throw new Error(`Only a card in PR review records a verdict; this one is in ${item.stages.join(', ')}.`);
         }

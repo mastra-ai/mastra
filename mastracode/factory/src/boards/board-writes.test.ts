@@ -235,7 +235,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
     expect(refusals.map(error => error.body)).toEqual(
       Array(6).fill({
         error: 'reserved_board',
-        message: 'Board "review" is reserved: the retired Review board\'s cards now live on Work.',
+        message: 'Board "review" is reserved for the retired Review board.',
       }),
     );
     expect(await storage.get(scope, 'review')).toBeNull();

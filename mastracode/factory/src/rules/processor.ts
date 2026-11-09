@@ -461,7 +461,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       (runtime
         ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
-      (board === 'work' && stage === 'intake'
+      ((board === 'work' || board === 'review') && stage === 'intake'
         ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
         : '') +
       exitText +

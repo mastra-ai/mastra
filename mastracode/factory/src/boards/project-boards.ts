@@ -10,11 +10,12 @@ import type {
 import { LEGACY_REVIEW_BOARD } from '../storage/domains/work-items/legacy-review.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
+import { reviewBoard } from './review.js';
 import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from './stored-board.js';
 
 const DEFAULT_RECHECK_MS = 1000;
-/** A row under the retired Review board's key can't be served: its cards read as Work. */
-const RESERVED_REVIEW_ROW = `Stored board "${LEGACY_REVIEW_BOARD}" isn't served: the key is reserved for the retired Review board, whose cards now live on Work.`;
+/** A row under the retired Review board's key is never served: the key is the Review board's alone. */
+const RESERVED_REVIEW_ROW = `Stored board "${LEGACY_REVIEW_BOARD}" isn't served: the key is reserved for the retired Review board.`;
 const PRELOAD_CONCURRENCY = 8;
 const SNAPSHOT_ATTEMPTS = 3;
 
@@ -23,7 +24,7 @@ export type BoardSourceKind = 'builtin' | 'app' | 'stored';
 
 export interface StoredBoardDetails {
   source: BoardSourceKind;
-  /** Stored boards, the built-in Work board and app boards can all be edited. */
+  /** Stored boards, the built-in Work board and app boards can all be edited; the retired Review board can't. */
   editable: boolean;
   problems: string[];
 }
@@ -70,6 +71,7 @@ function isBoardSource(boards: BoardRegistry | ProjectBoardSource): boards is Pr
 interface CacheEntry {
   boards: ProjectBoards;
   version: string | null;
+  reviewInUse: boolean;
   checkedAt: number;
 }
 
@@ -80,6 +82,11 @@ export interface ProjectBoardCacheOptions {
   /** Lists every project, to warm them at boot. */
   projects?: { listAll(): Promise<readonly { orgId: string; id: string }[]> };
   codeSkills?: readonly InlineSkill[];
+  /**
+   * Whether the project still uses the retired Review board (an open card is stored on it). Such
+   * a project is served Review alongside its boards; without this, no project is.
+   */
+  reviewBoardInUse?: (scope: StoredBoardScope) => Promise<boolean>;
   recheckMs?: number;
   now?: () => number;
   warn?: (message: string) => void;
@@ -92,7 +99,9 @@ function scopeKey(scope: StoredBoardScope): string {
 /**
  * The per-project board cache. A project's boards are its rows: the Work and app boards Factory
  * stored in it, in code order, then the others. A Work or app board's row runs with the code
- * behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}). The first load of each project in a process stores the
+ * behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}). A project
+ * that still uses the retired Review board is served it from code, never stored, until its last
+ * open card there finishes. The first load of each project in a process stores the
  * boards Factory hasn't stored in it yet, each once ({@link StoredBoardsStorage.seedBoards}); a
  * release never rewrites them. Loads recheck the project's board version at most every
  * `recheckMs` and recompile when it changed, so stored edits on other replicas arrive within that
@@ -114,10 +123,12 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #seeded = new Set<string>();
   readonly #codeSkills: readonly InlineSkill[];
   readonly #seeds: ReadonlyMap<string, StoredBoardInput>;
+  readonly #reviewBoardInUse: ProjectBoardCacheOptions['reviewBoardInUse'];
 
   constructor(options: ProjectBoardCacheOptions) {
     this.codeRegistry = options.codeRegistry;
     this.#storage = options.storage;
+    this.#reviewBoardInUse = options.reviewBoardInUse;
     this.#projects = options.projects;
     this.#codeSkills = options.codeSkills ?? [];
     this.#recheckMs = options.recheckMs ?? DEFAULT_RECHECK_MS;
@@ -222,14 +233,15 @@ export class ProjectBoardCache implements ProjectBoardSource {
     await this.#seed(scope, key);
     const current = this.#entries.get(key);
     const version = await this.#storage.readVersion(scope);
-    if (current && current.version === version) {
+    const reviewInUse = (await this.#reviewBoardInUse?.(scope)) ?? false;
+    if (current && current.version === version && current.reviewInUse === reviewInUse) {
       if ((this.#generations.get(key) ?? 0) === generation) current.checkedAt = this.#now();
       return current.boards;
     }
     const snapshot = await this.#consistentSnapshot(scope);
-    const boards = this.#compile(scope, snapshot.boards);
+    const boards = this.#compile(scope, snapshot.boards, reviewInUse);
     if ((this.#generations.get(key) ?? 0) === generation) {
-      this.#entries.set(key, { boards, version: snapshot.version, checkedAt: this.#now() });
+      this.#entries.set(key, { boards, version: snapshot.version, reviewInUse, checkedAt: this.#now() });
     }
     return boards;
   }
@@ -261,7 +273,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
     }
   }
 
-  #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[]): ProjectBoards {
+  #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[], reviewInUse: boolean): ProjectBoards {
     const byKey = new Map(rows.map(row => [row.key, row]));
     const details = new Map(this.#codeDetails);
     const problems: string[] = [];
@@ -302,10 +314,19 @@ export class ProjectBoardCache implements ProjectBoardSource {
       });
       boards.push(merged.board);
     }
+    // Served from code and never stored, so nobody edits a board on its way out.
+    if (reviewInUse) {
+      boards.push(reviewBoard);
+      details.set(reviewBoard.id, { source: 'builtin', editable: false, problems: [] });
+    }
     for (const row of rows) {
       if (this.codeRegistry.has(row.key)) continue;
       if (row.key === LEGACY_REVIEW_BOARD) {
-        report(row, [RESERVED_REVIEW_ROW]);
+        report(row, [
+          reviewInUse
+            ? `Stored board "${row.key}" is hidden by the code board with the same key.`
+            : RESERVED_REVIEW_ROW,
+        ]);
         continue;
       }
       let board: InstalledBoard;

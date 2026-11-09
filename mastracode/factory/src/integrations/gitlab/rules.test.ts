@@ -2,6 +2,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 import { boundChangeRequestNumber, createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { reviewBoard } from '../../boards/review.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGitLabRuleContext } from '../../rules/types.js';
@@ -728,7 +729,9 @@ describe('GitLabRules', () => {
     ])(
       'starts the re-review of a pushed commit on that commit, not the one the last verdict covered, with updated_at %s (#27590)',
       async (_form, updatedAt, commitTimestamp) => {
-      const { seeded, project, service } = await setup();
+      // The card is stored on the retired Review board, which its project is still served.
+      const boards = createBoardRegistry({ boards: [reviewBoard] });
+      const { seeded, project, service } = await setup({ boards });
       const card = (
         await seeded.workItems.upsert({
           orgId: 'org-1',
@@ -755,10 +758,10 @@ describe('GitLabRules', () => {
         transitionService: new FactoryTransitionService({
           storage: seeded.workItems,
           configVersion: 'gitlab-test-v1',
-          boards: createBoardRegistry(),
+          boards,
         }),
         storage: seeded.workItems,
-        boards: createBoardRegistry(),
+        boards,
         isAutoRunEnabled: async () => true,
         ownerId: 'worker-1',
       });
@@ -1043,16 +1046,18 @@ describe('merge request cards on the Work board', () => {
   ).toString('base64url')}`;
 
   async function harness(options: Parameters<typeof setup>[0] = {}) {
-    const base = await setup(options);
+    // A project with a card stored on the retired Review board is still served that board.
+    const boards = createBoardRegistry({ boards: [reviewBoard] });
+    const base = await setup({ boards, ...options });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: base.seeded.workItems,
         configVersion: 'gitlab-test-v1',
-        boards: createBoardRegistry(),
+        boards,
       }),
       storage: base.seeded.workItems,
-      boards: createBoardRegistry(),
+      boards,
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1138,8 +1143,8 @@ describe('merge request cards on the Work board', () => {
       await dispatch();
 
       expect(await seeded.workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
-      // A card stored on the retired Review board reads as Work.
-      expect(await get(card.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      // An open card keeps its project on the retired Review board, and stays there.
+      expect(await get(card.id)).toMatchObject({ board, stages: ['intake'] });
       const upserts = (await decisions()).filter(entry => entry.decision.type === 'upsertLinkedWorkItem');
       expect(upserts.map(entry => entry.status)).toEqual(['succeeded']);
     },
@@ -1155,12 +1160,12 @@ describe('merge request cards on the Work board', () => {
     await service.ingest(mergeRequestEvent('d-push', 'update'));
     await dispatch();
 
-    // Either way the card reads as Work's PR review.
-    expect(await get(card.id)).toMatchObject({ board: 'work', stages: ['pr-review'] });
+    // The card is re-reviewed where it sits.
+    expect(await get(card.id)).toMatchObject({ board, stages: [reviewPhase(board)] });
     const recorded = await decisions();
     expect(recorded.find(entry => entry.decision.type === 'transition')?.decision).toMatchObject({
-      board: 'work',
-      stage: 'pr-review',
+      board,
+      stage: reviewPhase(board),
       reenter: true,
     });
     expect(recorded.find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({

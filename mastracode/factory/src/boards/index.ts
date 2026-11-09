@@ -27,6 +27,7 @@ export {
   newestOpenPullRequestNumber,
   newestOwnedOpenPullRequestNumber,
   PULL_REQUEST_REVIEW_PHASE,
+  pullRequestReviewPhase,
   pullRequestSourceNumber,
   pullRequestSources,
   resolveBoardClosure,

@@ -2,6 +2,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { reviewBoard } from '../../boards/review.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
@@ -5394,13 +5395,15 @@ describe('pull request cards on the Work board', () => {
   async function workBoardHarness(permission: string | undefined, { withRoutes = false } = {}) {
     const harness = await setup(permission);
     const configVersion = 'factory-config-v1';
+    // A project with a card stored on the retired Review board is still served that board.
+    const boards = createBoardRegistry({ boards: [reviewBoard] });
     const service = new GithubRules({
       github: harness.github,
       sourceControl: harness.sourceControl,
       integrationStorage: harness.integrationStorage,
       projects: harness.projects,
       storage: harness.workItems,
-      boards: createBoardRegistry(),
+      boards,
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -5408,10 +5411,10 @@ describe('pull request cards on the Work board', () => {
       transitionService: new FactoryTransitionService({
         storage: harness.workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards,
       }),
       storage: harness.workItems,
-      boards: createBoardRegistry(),
+      boards,
       ...(withRoutes ? { intakeRoutes: harness.boards } : {}),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
@@ -5458,9 +5461,6 @@ describe('pull request cards on the Work board', () => {
     return { workId: work.item.id };
   }
 
-  /** A card stored on the retired Review board reads as Work, its Reviewing phase as PR review. */
-  const readStage = (board: 'work' | 'review', stage: string) => (board === 'review' && stage === 'review' ? 'pr-review' : stage);
-
   async function lonePullRequestCard(
     harness: Awaited<ReturnType<typeof workBoardHarness>>,
     board: 'work' | 'review',
@@ -5489,14 +5489,15 @@ describe('pull request cards on the Work board', () => {
     ).item;
   }
 
+  // An open card keeps its project on Review; once the project's last Review card is done, it reads as Work.
   it.each([
-    ['work', 'intake'],
-    ['review', 'intake'],
-    ['review', 'review'],
-    ['review', 'done'],
+    ['work', 'intake', { board: 'work', stage: 'intake' }],
+    ['review', 'intake', { board: 'review', stage: 'intake' }],
+    ['review', 'review', { board: 'review', stage: 'review' }],
+    ['review', 'done', { board: 'work', stage: 'done' }],
   ] as const)(
     'refiles a pull request opened again onto the %s card it already has in %s, leaving it there',
-    async (board, stage) => {
+    async (board, stage, expected) => {
       const harness = await workBoardHarness('write');
       const card = await lonePullRequestCard(harness, board, stage);
 
@@ -5506,7 +5507,7 @@ describe('pull request cards on the Work board', () => {
 
       const cards = await harness.cards();
       expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: card.id, board: 'work', stages: [readStage(board, stage)] });
+      expect(cards[0]).toMatchObject({ id: card.id, board: expected.board, stages: [expected.stage] });
       const upserts = (await harness.decisions()).filter(entry => entry.decision.type === 'upsertLinkedWorkItem');
       expect(upserts.map(entry => entry.status)).toEqual(['succeeded']);
     },
@@ -5651,13 +5652,13 @@ describe('pull request cards on the Work board', () => {
     await harness.dispatch();
 
     expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
-      board: 'work',
-      stages: ['pr-review'],
+      board,
+      stages: [reviewPhase(board)],
     });
     const decisions = await harness.decisions();
     expect(decisions.find(entry => entry.decision.type === 'transition')?.decision).toMatchObject({
-      board: 'work',
-      stage: 'pr-review',
+      board,
+      stage: reviewPhase(board),
       reenter: true,
     });
     expect(decisions.find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
@@ -5676,7 +5677,7 @@ describe('pull request cards on the Work board', () => {
 
     expect(await harness.decisions()).toEqual([]);
     expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
-      board: 'work',
+      board,
       stages: ['intake'],
     });
   });

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
+import { reviewBoard } from '../boards/review.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { publishReviewStatus } from '../integrations/github/review-status.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
@@ -6701,7 +6702,7 @@ describe('custom-board deferred targets', () => {
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
   });
 
-  it('places a pull request card stored on the retired Review board in Work’s PR review', async () => {
+  it('places a pull request card its project keeps on the retired Review board where it sits', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item } = await storage.upsert({
       orgId: 'org-1',
@@ -6726,10 +6727,11 @@ describe('custom-board deferred targets', () => {
       skipRules: true,
     });
 
-    await dispatcherFor(storage, createLifecycleTestRegistry({})).runOnce();
+    const boards = new Map([...createLifecycleTestRegistry({}), [reviewBoard.id, reviewBoard]]);
+    await dispatcherFor(storage, boards).runOnce();
 
-    // A legacy Review card reads as Work, so placement lands it in PR review there.
-    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'work', stages: ['pr-review'] });
+    // The open card keeps its project on Review, so Work's PR review places it in Review's Reviewing.
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'review', stages: ['review'] });
     expect(await decisionByKey(storage, 'legacy-placement')).toMatchObject({ status: 'succeeded' });
   });
 

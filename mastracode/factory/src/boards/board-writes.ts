@@ -85,12 +85,15 @@ async function stored<T>(write: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Cards stored on the retired Review board read as Work, so a board under its key would lose them. */
+/**
+ * The retired Review board's key is never written: a project still using it is served it from
+ * code, and a board under its key elsewhere would take over the cards stored there.
+ */
 function refuseReservedBoard(key: string): void {
   if (key !== LEGACY_REVIEW_BOARD) return;
   throw new BoardWriteError(409, {
     error: 'reserved_board',
-    message: `Board "${key}" is reserved: the retired Review board's cards now live on Work.`,
+    message: `Board "${key}" is reserved for the retired Review board.`,
   });
 }
 

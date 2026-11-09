@@ -11,7 +11,7 @@ import {
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
-  PULL_REQUEST_REVIEW_PHASE,
+  pullRequestReviewPhase,
   reviewsPullRequest,
   workItemPhaseSemantics,
 } from '../boards/index.js';
@@ -620,7 +620,7 @@ function reviewsFactoryAuthoredCode(
   if (item.metadata?.factoryAuthored !== true) return false;
   if (decision.type === 'transition') {
     return (
-      decision.stage === PULL_REQUEST_REVIEW_PHASE &&
+      decision.stage === pullRequestReviewPhase(decision.board) &&
       reviewsPullRequest({
         board: decision.board,
         item: { source: workItemSource(item.externalSource), workItem: item.workItem },
@@ -1717,7 +1717,19 @@ export class FactoryDecisionDispatcher {
           reuseMode: 'preserve',
         });
     const itemBoard = boardForWorkItem(result.item);
-    const board = decision.board;
+    // New pull request cards are filed on Work, but one a project keeps on the retired Review
+    // board stays there: filing its pull request again acts on it where it sits.
+    const board =
+      itemBoard === 'review' &&
+      decision.board === 'work' &&
+      isPullRequestCard({ source: workItemSource(result.item.externalSource) })
+        ? itemBoard
+        : decision.board;
+    // Work's PR review is the Review board's Reviewing.
+    const placeStage =
+      board !== decision.board && decision.stage === pullRequestReviewPhase(decision.board)
+        ? pullRequestReviewPhase(board)
+        : decision.stage;
     if (!skipRules && itemBoard !== board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${board}".`);
     }
@@ -1775,7 +1787,7 @@ export class FactoryDecisionDispatcher {
           userId: 'factory-rule-dispatcher',
           item,
           targetBoard: board,
-          targetStage: decision.stage,
+          targetStage: placeStage,
         });
         if (outcome !== 'skipped') break;
         const fresh = await this.#storage.get({ orgId: record.orgId, id: item.id });

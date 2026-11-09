@@ -82,7 +82,9 @@ export function BoardContent({
   definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
-  const builtin = kind === 'work';
+  // A project that still has open cards on the retired Review board keeps it, laid out as before.
+  const review = kind === 'review';
+  const builtin = kind === 'work' || review;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
   const auth = useFactoryAuth();
   const currentUserId = auth.data?.user?.userId;
@@ -242,7 +244,9 @@ export function BoardContent({
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
-    const canCreate = !items.isPending && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
+    // Nothing new lands on the retired Review board: its cards come from pull requests.
+    const canCreate =
+      !review && !items.isPending && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
     const canConnectSource = isInitialPhase && !hasIntakeSource;
     const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =

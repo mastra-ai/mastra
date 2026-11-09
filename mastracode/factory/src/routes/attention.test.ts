@@ -805,14 +805,14 @@ describe('activity attention items', () => {
 });
 
 describe('attention links open the board the card is on', () => {
-  async function seedCard(input: Pick<Card, 'board' | 'externalSource'>): Promise<Card> {
+  async function seedCard(input: Pick<Card, 'board' | 'externalSource'> & { stages?: string[] }): Promise<Card> {
     const { item } = await seed.workItems.upsert({
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId: PROJECT_ID,
       input: {
         title: 'Ship it',
-        stages: ['intake'],
+        stages: input.stages ?? ['intake'],
         sessions: {},
         metadata: {},
         ...(input.board ? { board: input.board } : {}),
@@ -857,9 +857,18 @@ describe('attention links open the board the card is on', () => {
     expect(await targetBoards(item)).toEqual(everyKind('release'));
   });
 
-  it('links a pull request stored on the retired Review board to Work', async () => {
+  it('links an open pull request card to the retired Review board while its project still uses it', async () => {
     const item = await seedCard({
       board: 'review',
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:12' },
+    });
+    expect(await targetBoards(item)).toEqual(everyKind('review'));
+  });
+
+  it('links a finished pull request card stored on the retired Review board to Work', async () => {
+    const item = await seedCard({
+      board: 'review',
+      stages: ['done'],
       externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:12' },
     });
     expect(await targetBoards(item)).toEqual(everyKind('work'));

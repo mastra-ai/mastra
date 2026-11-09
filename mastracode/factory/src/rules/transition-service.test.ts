@@ -7,6 +7,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { compileBoardDefinition } from '../boards/define-board.js';
 import type { BoardDefinition } from '../boards/define-board.js';
 import { createBoardRegistry, defineBoard, workBoard, workItemPhaseSemantics } from '../boards/index.js';
+import { reviewBoard } from '../boards/review.js';
 import { createTestBoard } from '../boards/test-utils.js';
 import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -2867,10 +2868,14 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       expect((await storage.get({ orgId: org, id: item.id }))?.stages).toEqual(['intake']);
     });
 
-    it('keeps Done on a card stored on the retired Review board to its own flow: the review prompts keep it for the merge', async () => {
+    it('leaves Done on a Review board a project still uses to its own flow: the review prompts keep it for the merge', async () => {
       org = `org-${randomUUID()}`;
       const storage = await workItemsOn(backend);
-      const service = new FactoryTransitionService({ configVersion: 'review-rules', storage });
+      const service = new FactoryTransitionService({
+        configVersion: 'review-rules',
+        storage,
+        boards: createBoardRegistry({ boards: [reviewBoard] }),
+      });
       const reviewCard = (key: string, stage = 'review') =>
         createItem(storage, {
           orgId: org,
