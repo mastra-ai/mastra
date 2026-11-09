@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
+import type { Event } from '@mastra/core/events';
+import { describe, expect, it, vi } from 'vitest';
 
+import { ConvexServerCache } from '../cache';
+import type { ConvexCacheClient } from '../cache';
+import type { CacheRequest } from '../cache/types';
 import { handleCacheOperation, mastraCache } from './cache';
 
 type Row = Record<string, any> & { _id: string };
@@ -78,6 +83,40 @@ function createCtx(options: { failListItemInsert?: boolean } = {}) {
   };
 
   return { db, tables };
+}
+
+/**
+ * Routes ConvexServerCache requests to the real handler. Like a Convex
+ * mutation, a request that throws leaves no writes behind. `loseResponse`
+ * models a request that committed but whose response never reached the client.
+ */
+function createTransactionalClient(ctx: ReturnType<typeof createCtx>) {
+  const faults = { loseResponse: false };
+
+  const callCacheRaw = async <T>(request: CacheRequest): Promise<{ result: T; hasMore?: boolean }> => {
+    const snapshot = new Map([...ctx.tables].map(([table, docs]) => [table, docs.map(doc => ({ ...doc }))]));
+    let response;
+    try {
+      response = await handleCacheOperation(ctx as any, request);
+    } catch (error) {
+      ctx.tables.clear();
+      for (const [table, docs] of snapshot) ctx.tables.set(table, docs);
+      throw error;
+    }
+    if (!response.ok) throw new Error(response.error);
+    if (faults.loseResponse) {
+      faults.loseResponse = false;
+      throw new Error('Convex cache request timed out after 30000 ms.');
+    }
+    return { result: response.result as T, hasMore: response.hasMore };
+  };
+
+  const client = {
+    callCacheRaw,
+    callCache: async <T>(request: CacheRequest) => (await callCacheRaw<T>(request)).result,
+  } as unknown as ConvexCacheClient;
+
+  return { client, faults };
 }
 
 async function clearUntilSettled(ctx: ReturnType<typeof createCtx>, keyPrefix: string) {
@@ -500,5 +539,148 @@ describe('mastraCache server handler', () => {
         expiresAt: null,
       }),
     ).resolves.toEqual({ ok: true, result: 1 });
+  });
+  it('allocates indices and appends indexed entries in one operation', async () => {
+    const ctx = createCtx();
+    const expiresAt = Date.now() + 100_000;
+    const push = (value: Record<string, unknown>) =>
+      handleCacheOperation(ctx as any, {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:log',
+        counterKey: 'mastra:cache:log:counter',
+        keyPrefix: 'mastra:cache:',
+        value,
+        expiresAt,
+      });
+
+    await expect(push({ id: 'a' })).resolves.toEqual({ ok: true, result: 0 });
+    await expect(push({ id: 'b', index: 99 })).resolves.toEqual({ ok: true, result: 1 });
+
+    await expect(
+      handleCacheOperation(ctx as any, { op: 'listFromTo', key: 'mastra:cache:log', from: 0, to: -1 }),
+    ).resolves.toEqual({
+      ok: true,
+      result: [
+        { id: 'a', index: 0 },
+        { id: 'b', index: 1 },
+      ],
+    });
+    // The list and its counter expire together.
+    expect(ctx.tables.get('mastra_cache')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'mastra:cache:log', kind: 'list', counter: 2, expiresAt }),
+        expect.objectContaining({ key: 'mastra:cache:log:counter', kind: 'counter', counter: 2, expiresAt }),
+      ]),
+    );
+  });
+
+  it('restarts indexed lists after expiry and rejects type conflicts', async () => {
+    const ctx = createCtx();
+    const push = (expiresAt: number | null) =>
+      handleCacheOperation(ctx as any, {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:log',
+        counterKey: 'mastra:cache:log:counter',
+        keyPrefix: 'mastra:cache:',
+        value: { id: 'x' },
+        expiresAt,
+      });
+
+    await push(Date.now() - 1);
+    await expect(push(null)).resolves.toEqual({ ok: true, result: 0 });
+    await expect(
+      handleCacheOperation(ctx as any, { op: 'listFromTo', key: 'mastra:cache:log', from: 0, to: -1 }),
+    ).resolves.toEqual({ ok: true, result: [{ id: 'x', index: 0 }] });
+
+    await handleCacheOperation(ctx as any, {
+      op: 'set',
+      key: 'mastra:cache:other',
+      keyPrefix: 'mastra:cache:',
+      value: 'scalar',
+      expiresAt: null,
+    });
+    await expect(
+      handleCacheOperation(ctx as any, {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:other',
+        counterKey: 'mastra:cache:log:counter',
+        keyPrefix: 'mastra:cache:',
+        value: {},
+        expiresAt: null,
+      }),
+    ).resolves.toEqual({ ok: false, error: 'mastra:cache:other exists but is not an array' });
+    await expect(
+      handleCacheOperation(ctx as any, {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:log',
+        counterKey: 'mastra:cache:other',
+        keyPrefix: 'mastra:cache:',
+        value: {},
+        expiresAt: null,
+      }),
+    ).resolves.toEqual({ ok: false, error: 'mastra:cache:other exists but is not a number' });
+  });
+});
+
+describe('CachingPubSub replay over ConvexServerCache', () => {
+  const topic = 'workflow.events.v2.run-1';
+
+  async function setup() {
+    const options = { failListItemInsert: false };
+    const ctx = createCtx(options);
+    const { client, faults } = createTransactionalClient(ctx);
+    const pubsub = new CachingPubSub(new EventEmitterPubSub(), new ConvexServerCache({ client }));
+    const publish = (n: number) => pubsub.publish(topic, { type: 'frame', data: { n }, runId: 'run-1' });
+    const replay = async (offset: number) => {
+      const received: Event[] = [];
+      await pubsub.subscribeFromOffset(topic, offset, event => {
+        received.push(event);
+      });
+      await vi.waitFor(() => expect(received.length).toBeGreaterThan(0));
+      return received.map(event => ({ index: event.index, n: (event.data as { n: number }).n }));
+    };
+    return { options, faults, publish, replay };
+  }
+
+  it('resumes from an offset without skipping frames after a publish fails to cache', async () => {
+    const { options, publish, replay } = await setup();
+
+    await publish(0);
+    await publish(1);
+    options.failListItemInsert = true;
+    await publish(2); // caching fails and rolls back; delivered live only
+    options.failListItemInsert = false;
+    await publish(3);
+    await publish(4);
+    await publish(5);
+
+    // Frame 2 never reached the log, so the next frame took index 2 and every
+    // index still matches its list position.
+    await expect(replay(3)).resolves.toEqual([
+      { index: 3, n: 4 },
+      { index: 4, n: 5 },
+    ]);
+    await expect(replay(0)).resolves.toEqual([
+      { index: 0, n: 0 },
+      { index: 1, n: 1 },
+      { index: 2, n: 3 },
+      { index: 3, n: 4 },
+      { index: 4, n: 5 },
+    ]);
+  });
+
+  it('keeps a frame whose cache write committed but whose response was lost', async () => {
+    const { faults, publish, replay } = await setup();
+
+    await publish(0);
+    await publish(1);
+    faults.loseResponse = true;
+    await publish(2);
+    await publish(3);
+
+    await expect(replay(2)).resolves.toEqual([
+      { index: 2, n: 2 },
+      { index: 3, n: 3 },
+    ]);
   });
 });

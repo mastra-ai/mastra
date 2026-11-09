@@ -228,6 +228,59 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
       return { ok: true };
     }
 
+    case 'listPushIndexed': {
+      // Allocating the index and appending happen in this one mutation, which
+      // Convex runs as a single transaction: a failure rolls back both, so the
+      // counter can never get ahead of the list and shift later frames to the
+      // wrong position.
+      let existingList = await findCacheDoc(ctx, request.key);
+      if (existingList && (isExpired(existingList, now) || existingList.kind === 'deleted')) {
+        const cleanup = await deleteCacheKey(ctx, request.key);
+        if (cleanup.hasMore) {
+          return { ok: true, hasMore: true };
+        }
+        existingList = null;
+      }
+      let existingCounter = await findCacheDoc(ctx, request.counterKey);
+      if (existingCounter && (isExpired(existingCounter, now) || existingCounter.kind === 'deleted')) {
+        const cleanup = await deleteCacheKey(ctx, request.counterKey);
+        if (cleanup.hasMore) {
+          return { ok: true, hasMore: true };
+        }
+        existingCounter = null;
+      }
+      if (existingList && existingList.kind !== 'list') {
+        return { ok: false, error: `${request.key} exists but is not an array` };
+      }
+      if (existingCounter && existingCounter.kind !== 'counter') {
+        return { ok: false, error: `${request.counterKey} exists but is not a number` };
+      }
+
+      const index = existingCounter?.counter ?? 0;
+      const position = existingList?.counter ?? 0;
+      // The list and its counter share one deadline so they expire together.
+      await writeCacheDoc(ctx, request.counterKey, existingCounter, {
+        kind: 'counter',
+        keyPrefix: request.keyPrefix,
+        counter: index + 1,
+        expiresAt: request.expiresAt,
+      });
+      await writeCacheDoc(ctx, request.key, existingList, {
+        kind: 'list',
+        keyPrefix: request.keyPrefix,
+        counter: position + 1,
+        expiresAt: request.expiresAt,
+      });
+      await ctx.db.insert(CACHE_LIST_TABLE, {
+        key: request.key,
+        keyPrefix: request.keyPrefix,
+        index: position,
+        value: encodeValue({ ...request.value, index }),
+      });
+
+      return { ok: true, result: index };
+    }
+
     case 'listFromTo': {
       const { doc, hasMore } = await getLiveCacheDoc(ctx, request.key, now);
       if (hasMore) return { ok: true, result: [], hasMore: true };
