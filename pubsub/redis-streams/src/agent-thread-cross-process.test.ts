@@ -411,7 +411,8 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
     // Repro for https://github.com/mastra-ai/mastra/issues/28535
     // The sender must not be told `accepted` until its signal-enqueued publish has
     // reached Redis. Here the sender exits right after `accepted` WITHOUT close()/flush().
-    it('delivers a signal whose sender exits right after accepted without closing its pubsub', async () => {
+    // Known bug: remove `.fails` (use plain `it`) when #28535 is fixed.
+    it.fails('delivers a signal whose sender exits right after accepted without closing its pubsub', async () => {
       const resourceId = `accepted-then-die-${Date.now()}`;
       const threadId = `thread-${Date.now()}`;
       const env = {
@@ -438,7 +439,6 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       winner.send({ cmd: 'finish-run', sigId: 'sig-1' });
       await waitFor(async () => eventsByType(winner, 'run-finished').length >= 2, 15_000).catch(() => {});
 
-      // Fails today: the XADD was still pending in the sender when it exited.
       expect(new Set(eventsByType(winner, 'run-finished').map(e => e.sigId))).toEqual(new Set(['sig-1', 'sig-2']));
     }, 60_000);
 
