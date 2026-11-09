@@ -66,7 +66,6 @@ describe('auth helpers', () => {
     });
   });
 
-
   describe('findMatchingCustomRoute security', () => {
     it('does not treat dots in a static path as regex wildcards', () => {
       const routes = [
