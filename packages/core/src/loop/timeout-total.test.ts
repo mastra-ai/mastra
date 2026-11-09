@@ -204,4 +204,51 @@ describe('modelSettings.timeout.totalMs', () => {
     expect(chunks.some(chunk => chunk.type === 'error')).toBe(true);
     expect(events).toEqual(withCheck ? ['write-check', 'output-pass'] : []);
   });
+
+  // The deadline error reaches the caller once the save wait elapses, so a retry can save its answer
+  // while a slow write check is still pending. The cut-off reply must keep the time of the deadline.
+  it('stamps the cut-off reply with the deadline time, not the end of a slow write check', async () => {
+    const streamsThenHangs: ModelManagerModelConfig = {
+      id: 'partial',
+      maxRetries: 0,
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Partial answer.' });
+            },
+          }),
+        }),
+      }),
+    };
+    let deadlineAt = 0;
+    const replies: { text: string; createdAt: Date }[] = [];
+    const probe: Processor = {
+      id: 'probe',
+      processOutputResult: async ({ messages }) => {
+        for (const message of messages.filter(message => message.role === 'assistant')) {
+          const text = (message.content.parts ?? [])
+            .flatMap(part => (part.type === 'text' ? [part.text] : []))
+            .join('');
+          replies.push({ text, createdAt: new Date(message.createdAt) });
+        }
+        return messages;
+      },
+    };
+
+    await runLoop({
+      models: [streamsThenHangs],
+      totalMs: 100,
+      outputProcessors: [probe],
+      beforeDeadlineSave: async () => {
+        deadlineAt = Date.now();
+        vi.setSystemTime(deadlineAt + 60_000);
+      },
+    });
+
+    const reply = replies.find(reply => reply.text.includes('Partial answer.'));
+    expect(reply).toBeDefined();
+    expect(reply!.createdAt.getTime()).toBeLessThan(deadlineAt + 60_000);
+  });
 });

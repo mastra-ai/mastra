@@ -2135,6 +2135,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 beforeDeadlineSave
               ) {
                 let streamOpen = true;
+                // Taken before the write check: a slow check must not stamp the cut-off reply with a
+                // time after a retry the deadline error already let the caller start.
+                // Like a cancel, the text the unfinished step already streamed is part of the turn.
+                const turn = self.messageList.cloneWithCompletedSteps(self.#bufferedByStep.text);
                 const deadlinePass = (async () => {
                   try {
                     await beforeDeadlineSave();
@@ -2144,8 +2148,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     });
                     return;
                   }
-                  // Like a cancel, the text the unfinished step already streamed is part of the turn.
-                  const turn = self.messageList.cloneWithCompletedSteps(self.#bufferedByStep.text);
                   try {
                     await self.processorRunner!.runOutputProcessors(
                       turn,
