@@ -903,6 +903,14 @@ describe('InngestAgent parity surface', () => {
     await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
   }
 
+  // Durable delivery stamps each chunk with its pubsub log index so late
+  // subscribers can order frames. The parity checks below assert the chunk
+  // sequence itself, so drop the index before comparing.
+  function withoutLogIndex<T extends { index?: number }>(chunk: T) {
+    const { index: _index, ...rest } = chunk;
+    return rest;
+  }
+
   it.each([
     { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
     { closeOnSuspend: true, registrationOptions: undefined },
@@ -1734,9 +1742,10 @@ describe('InngestAgent parity surface', () => {
       const received = [];
       for await (const chunk of result.fullStream) received.push(chunk);
 
-      expect(received).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
-      expect(received).not.toContainEqual(originalToolCall);
-      expect(received).not.toContainEqual(originalSuspension);
+      expect(received.map(withoutLogIndex)).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
+      const receivedWithoutIndex = received.map(withoutLogIndex);
+      expect(receivedWithoutIndex).not.toContainEqual(originalToolCall);
+      expect(receivedWithoutIndex).not.toContainEqual(originalSuspension);
     } finally {
       result.cleanup();
       globalRunRegistry.delete(runId);
@@ -1820,7 +1829,7 @@ describe('InngestAgent parity surface', () => {
 
       expect(result.finishReason).toBe('stop');
       expect(result.text).toBe('Done.');
-      expect(result.toolResults).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
+      expect(result.toolResults.map(withoutLogIndex)).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
       expect(result.toolCalls).toEqual([]);
     } finally {
       globalRunRegistry.delete(runId);
