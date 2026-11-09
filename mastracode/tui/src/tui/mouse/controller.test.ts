@@ -193,6 +193,22 @@ describe('MouseController on the real pi-tui renderer', () => {
     expect(selected).toEqual(['item-2']);
   });
 
+  it('drops a click whose dialog was replaced while it waited for the cursor reply', async () => {
+    // e.g. Esc closes a dialog before the reply arrives: the click must not land on what's revealed.
+    harness = createHarness({ answerCursorQueries: false });
+    const first = modalWithList(harness.ui, 3);
+    await harness.render();
+    const target = harness.find('item-1');
+    await harness.click(target.row, target.col);
+
+    first.handle.hide();
+    const second = modalWithList(harness.ui, 3);
+    await harness.render();
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(first.selected).toEqual([]);
+    expect(second.selected).toEqual([]);
+  });
+
   it('swallows a cursor position reply that arrives after the query timed out', async () => {
     harness = createHarness({ answerCursorQueries: false });
     const { box } = modalWithList(harness.ui, 3);

@@ -58,7 +58,13 @@ export class MouseController {
   private tracking = false;
   /** Pointer event waiting for the cursor position reply that maps it to a frame row (one query at a time). */
   private pendingPointer:
-    | { event: TerminalMouseEvent; action: MouseAction; timer: ReturnType<typeof setTimeout> }
+    | {
+        event: TerminalMouseEvent;
+        action: MouseAction;
+        timer: ReturnType<typeof setTimeout>;
+        /** The dialog on top when the event arrived; the event is dropped if another replaces it. */
+        overlay: Component | undefined;
+      }
     | undefined;
   private lastHoverCell: string | undefined;
   /** Whether the user opted in to mouse support for dialogs and slash suggestions in /settings. */
@@ -180,6 +186,10 @@ export class MouseController {
     return this.dialogMouseEnabled && this.editor.isShowingAutocomplete();
   }
 
+  private topOverlayComponent(): Component | undefined {
+    return tuiInternals(this.ui).getTopmostVisibleOverlay()?.component;
+  }
+
   /** True when pointer events belong to the input box rather than a dialog or suggestion list. */
   private inputOwnsPointer(): boolean {
     return this.inputMouseMode && tuiInternals(this.ui).getTopmostVisibleOverlay() === undefined;
@@ -232,7 +242,7 @@ export class MouseController {
         const pending = this.pendingPointer;
         if (pending) {
           this.clearPendingPointer();
-          this.resolvePointer(pending.event, pending.action, position.row);
+          this.resolvePointer(pending, position.row);
         }
         return { consume: true };
       }
@@ -299,7 +309,9 @@ export class MouseController {
     const pending = this.pendingPointer;
     if (pending) {
       // One cursor query at a time: a newer hover replaces the queued one, a click wins over hover.
-      if (action !== 'hover' || pending.action === 'hover') this.pendingPointer = { ...pending, event, action };
+      if (action !== 'hover' || pending.action === 'hover') {
+        this.pendingPointer = { ...pending, event, action, overlay: this.topOverlayComponent() };
+      }
       return;
     }
     const timer = setTimeout(() => {
@@ -308,14 +320,27 @@ export class MouseController {
       // Otherwise a terminal that never answers leaves us eating keys shaped like replies (Shift+F3).
       if (++this.unansweredCursorQueries >= MAX_UNANSWERED_CURSOR_QUERIES) this.outstandingCursorQueries = 0;
       // Without a reply, modals fall back to assuming the frame is bottom-aligned with the screen.
-      if (timedOut) this.resolvePointer(timedOut.event, timedOut.action, undefined);
+      if (timedOut) this.resolvePointer(timedOut, undefined);
     }, CURSOR_POSITION_TIMEOUT_MS);
-    this.pendingPointer = { event, action, timer };
+    this.pendingPointer = { event, action, timer, overlay: this.topOverlayComponent() };
     this.outstandingCursorQueries++;
     this.ui.terminal.write(REQUEST_CURSOR_POSITION);
   }
 
-  private resolvePointer(event: TerminalMouseEvent, action: MouseAction, cursorRow: number | undefined): void {
+  private resolvePointer(
+    {
+      event,
+      action,
+      overlay: origin,
+    }: { event: TerminalMouseEvent; action: MouseAction; overlay: Component | undefined },
+    cursorRow: number | undefined,
+  ): void {
+    // Keys aren't held up by the cursor query, so a dialog can close or open while it's in flight
+    // (e.g. Esc); applying the event then would hit whatever is now on screen at that spot.
+    if (this.topOverlayComponent() !== origin) {
+      if (action === 'inputPress') this.endInputDrag();
+      return;
+    }
     if (action === 'inputPress') {
       this.resolveInputPress(event, cursorRow);
       return;
