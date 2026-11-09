@@ -100,7 +100,7 @@ interface ObservabilityInstanceConfig {
     name: 'retainStorageExporterOnPlatform',
     type: 'boolean',
     description:
-      'Defaults to `false`. Set to `true` to keep configured `MastraStorageExporter` and deprecated `DefaultExporter` instances when `MASTRA_DEPLOYMENT_ID` is set. Applies only to this observability config, including exporters registered later. Even when `true`, domains reporting local persistence (local libSQL, embedded replicas, and DuckDB) remain disabled: no observability events are written there. The exporter warns during initialization. Updated adapters are required to report persistence location. Does not add exporters or configure storage. See [storage export on Platform](/docs/observability/integrations/exporters/mastra-storage#export-to-storage-and-platform).',
+      'Defaults to `false`. Retains configured `MastraStorageExporter` instances on Platform, including later registration. Known local storage remains blocked, and deprecated `DefaultExporter` remains disabled. See [storage export on Platform](/docs/observability/integrations/exporters/mastra-storage#export-to-storage-and-platform) for configuration, adapter requirements, and restrictions.',
     required: false,
   },
   {

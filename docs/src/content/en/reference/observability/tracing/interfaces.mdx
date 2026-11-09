@@ -1396,8 +1396,6 @@ interface ObservabilityInstanceConfig {
 
   /** Custom exporters */
   exporters?: ObservabilityExporter[]
-  /** Keep built-in storage exporters on Platform (defaults to false) */
-  retainStorageExporterOnPlatform?: boolean
 
   /** Custom span output processors */
   spanOutputProcessors?: SpanOutputProcessor[]
@@ -1409,6 +1407,8 @@ interface ObservabilityInstanceConfig {
   requestContextKeys?: string[]
 }
 ```
+
+The `@mastra/observability` implementation also supports `retainStorageExporterOnPlatform`. See the [configuration reference](/reference/observability/tracing/configuration#observabilityinstanceconfig) for this implementation-specific option.
 
 ### `ObservabilityRegistryConfig`
 

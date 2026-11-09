@@ -85,7 +85,7 @@ export const mastra = new Mastra({
 
 ## Export to storage and Platform
 
-On Mastra Platform, a nonempty `MASTRA_DEPLOYMENT_ID` disables `MastraStorageExporter` and the deprecated `DefaultExporter` by default. Other exporters remain enabled.
+On Mastra Platform, a nonempty `MASTRA_DEPLOYMENT_ID` disables `MastraStorageExporter` and the deprecated `DefaultExporter` by default. Other exporters remain enabled. The opt-in below applies only to `MastraStorageExporter`. Deprecated `DefaultExporter` stays disabled on Platform even with the flag set to `true`. Migrate to `MastraStorageExporter` to use this option.
 
 :::warning Local storage remains blocked even with the opt-in
 
