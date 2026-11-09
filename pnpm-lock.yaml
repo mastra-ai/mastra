@@ -5490,6 +5490,9 @@ importers:
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0

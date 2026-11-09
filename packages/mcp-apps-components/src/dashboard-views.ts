@@ -1,8 +1,13 @@
+import { DASHBOARD_SCOPES, DASHBOARD_WIDGET_KINDS } from '@mastra/core/storage/dashboards';
 import type { DashboardBuiltInWidgetKind, DashboardWidget, DashboardWidgetView } from '@mastra/core/storage/dashboards';
 import { kpisIssues, kpisOptionsSchema } from '@mastra/playground-ui/domains/dashboards/kinds/kpis/options';
 import { scoresIssues, scoresOptionsSchema } from '@mastra/playground-ui/domains/dashboards/kinds/scores/options';
 import { viewValue } from '@mastra/playground-ui/domains/dashboards/lib/chrome';
-import { tableIssues, tableOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/table';
+import {
+  tableColumnOptionsSchema,
+  tableIssues,
+  tableOptionsSchema,
+} from '@mastra/playground-ui/domains/dashboards/lib/table';
 import { timeseriesIssues, timeseriesOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
 import type { z } from 'zod/v4';
 
@@ -71,4 +76,53 @@ export function viewIssues(widget: DashboardWidget, check: KindCheck, scope: Das
     shown++;
   }
   return issues;
+}
+
+const isBuiltInKind = (kind: string): kind is keyof typeof KIND_CHECKS => Object.hasOwn(KIND_CHECKS, kind);
+
+export const zodIssues = (error: z.ZodError, prefix: PropertyKey[]): WidgetIssue[] =>
+  error.issues.map(issue => ({ path: [...prefix, ...issue.path], message: issue.message }));
+
+/**
+ * What the renderer would reject in a widget core accepts, paths relative to the widget. Every
+ * view's options and columns are parsed first; the kind's own checks then run at each scope the
+ * widget shows at, as the renderer runs them there.
+ */
+export function widgetIssues(widget: DashboardWidget): WidgetIssue[] {
+  if (!isBuiltInKind(widget.kind)) {
+    return [
+      {
+        path: ['kind'],
+        message: `Unknown widget kind '${widget.kind}'; expected one of ${DASHBOARD_WIDGET_KINDS.join(', ')}`,
+      },
+    ];
+  }
+  const check = KIND_CHECKS[widget.kind];
+
+  const parsed: WidgetIssue[] = [];
+  for (const [i, view] of widget.views.entries()) {
+    const options = check.optionsSchema.safeParse(view.options ?? {});
+    if (!options.success) parsed.push(...zodIssues(options.error, ['views', i, 'options']));
+    if (!view.columns) continue;
+    if (widget.kind !== 'table') {
+      parsed.push({ path: ['views', i, 'columns'], message: 'Only table widgets have columns' });
+      continue;
+    }
+    for (const [m, column] of view.columns.entries()) {
+      const columnOptions = tableColumnOptionsSchema.safeParse(column.options ?? {});
+      if (!columnOptions.success) {
+        parsed.push(...zodIssues(columnOptions.error, ['views', i, 'columns', m, 'options']));
+      }
+    }
+  }
+  if (parsed.length) return parsed;
+
+  const issues = new Map<string, WidgetIssue>();
+  for (const scope of DASHBOARD_SCOPES) {
+    if (!inScope(widget, scope)) continue;
+    for (const issue of viewIssues(widget, check, scope)) {
+      issues.set(`${JSON.stringify(issue.path)} ${issue.message}`, issue);
+    }
+  }
+  return [...issues.values()];
 }
