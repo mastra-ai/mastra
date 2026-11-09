@@ -47,6 +47,8 @@ import {
 } from './provider-credentials.js';
 import { loose, Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
+import { readRunningPackages } from './running-packages.js';
+import type { RunningPackage } from './running-packages.js';
 import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
 
 /**
@@ -744,6 +746,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
   /** `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server). */
   features?: { knowledge: boolean; mcp?: boolean };
+  /** Reads the Mastra packages this server runs; defaults to the build manifest. */
+  readPackages?: () => Promise<RunningPackage[]>;
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -774,6 +778,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
 /**
  * The web config routes as Mastra `apiRoutes`:
  *   - `GET    /web/config/features`               — list server-enabled product features
+ *   - `GET    /web/config/versions`               — list the Mastra packages and Node version this server runs
  *   - `GET    /web/config/providers`              — list providers + key source
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
@@ -937,6 +942,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         requiresAuth: false,
         handler: async c =>
           c.json({ knowledge: options.features?.knowledge ?? false, mcp: options.features?.mcp ?? false }),
+      }),
+
+      registerApiRoute('/web/config/versions', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          await auth.ensureUser(loose(c));
+          if (!auth.tenant(loose(c)) && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
+          const packages = await (options.readPackages ?? readRunningPackages)();
+          return c.json({ packages, nodeVersion: process.version });
+        },
       }),
 
       registerApiRoute('/web/config/providers', {
