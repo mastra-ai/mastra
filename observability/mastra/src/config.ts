@@ -81,7 +81,7 @@ export interface ObservabilityInstanceConfig {
    * Storage domains reporting local persistence remain disabled on Platform,
    * with a warning during exporter initialization, even when this is true.
    */
-  allowStorageOnPlatform?: boolean;
+  allowRemoteStorageExportOnPlatform?: boolean;
   /** Observability bridge (e.g., OpenTelemetry bridge for context extraction) */
   bridge?: ObservabilityBridge;
   /** Custom span output processors */
@@ -242,7 +242,7 @@ const observabilityInstanceConfigFields = {
   serviceName: z.string().min(1, 'Service name is required'),
   sampling: samplingStrategySchema.optional(),
   exporters: z.array(z.any()).optional(),
-  allowStorageOnPlatform: z.boolean().optional(),
+  allowRemoteStorageExportOnPlatform: z.boolean().optional(),
   bridge: z.any().optional(),
   spanOutputProcessors: z.array(z.any()).optional(),
   includeInternalSpans: z.boolean().optional(),

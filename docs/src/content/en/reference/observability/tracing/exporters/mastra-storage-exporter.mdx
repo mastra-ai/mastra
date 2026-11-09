@@ -19,7 +19,7 @@ Persists traces to Mastra's configured storage with automatic batching and retry
 
 :::warning Platform storage restrictions
 
-When `MASTRA_DEPLOYMENT_ID` is set, this exporter is disabled by default. Set `allowStorageOnPlatform: true` on the **observability config**, not the exporter constructor, to allow remote storage export. Local libSQL, embedded replicas, and DuckDB remain blocked when the adapter reports local persistence, even with the opt-in. No observability events are written to that local database, whether or not the initialization warning is visible in your logs.
+When `MASTRA_DEPLOYMENT_ID` is set, this exporter is disabled by default. Set `allowRemoteStorageExportOnPlatform: true` on the **observability config**, not the exporter constructor, to allow remote storage export. Local libSQL, embedded replicas, and DuckDB remain blocked when the adapter reports local persistence, even with the opt-in. No observability events are written to that local database, whether or not the initialization warning is visible in your logs.
 
 See [storage export on Platform](/docs/observability/integrations/exporters/mastra-storage#export-to-storage-and-platform) for the supported-provider table, adapter upgrade requirements, and a configuration example.
 

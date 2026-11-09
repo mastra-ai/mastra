@@ -89,11 +89,11 @@ On Mastra Platform, a nonempty `MASTRA_DEPLOYMENT_ID` disables `MastraStorageExp
 
 :::warning Local storage remains blocked even with the opt-in
 
-`allowStorageOnPlatform: true` **doesn't** enable local libSQL or DuckDB observability writes on Platform. When the observability domain reports local persistence, the built-in storage exporter stays disabled: it won't persist traces, logs, metrics, scores, or feedback to that database. Other exporters continue to receive events.
+`allowRemoteStorageExportOnPlatform: true` **doesn't** enable local libSQL or DuckDB observability writes on Platform. When the observability domain reports local persistence, the built-in storage exporter stays disabled: it won't persist traces, logs, metrics, scores, or feedback to that database. Other exporters continue to receive events.
 
 :::
 
-With updated adapters and `allowStorageOnPlatform: true`, the behavior on Platform is:
+With updated adapters and `allowRemoteStorageExportOnPlatform: true`, the behavior on Platform is:
 
 | Observability database | Storage export on Platform |
 | - | - |
@@ -103,7 +103,7 @@ With updated adapters and `allowStorageOnPlatform: true`, the behavior on Platfo
 | libSQL embedded replica with a remote sync URL | Blocked: it still writes locally |
 | DuckDB, including in-memory databases | Blocked |
 
-To keep writing to your own remote database alongside Platform observability, set [`allowStorageOnPlatform`](/reference/observability/tracing/configuration#observabilityinstanceconfig) to `true` on the observability config:
+To keep writing to your own remote database alongside Platform observability, set [`allowRemoteStorageExportOnPlatform`](/reference/observability/tracing/configuration#observabilityinstanceconfig) to `true` on the observability config:
 
 ```typescript
 import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability'
@@ -112,7 +112,7 @@ const observability = new Observability({
   configs: {
     production: {
       serviceName: 'my-service',
-      allowStorageOnPlatform: true,
+      allowRemoteStorageExportOnPlatform: true,
       exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
     },
   },

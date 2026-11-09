@@ -151,7 +151,7 @@ describe('Platform storage exporter supersession', () => {
     expect(instance.getObservabilityBus().getExporters()).toEqual([customExporter]);
     expect(warnSpy).toHaveBeenCalledOnce();
     expect(warnSpy).toHaveBeenCalledWith(
-      'Storage exporter skipped on Mastra Platform. Set allowStorageOnPlatform: true on this observability config to allow remote storage export.',
+      'Storage exporter skipped on Mastra Platform. Set allowRemoteStorageExportOnPlatform: true on this observability config to allow remote storage export.',
       {
         exporterName: 'mastra-storage-exporter',
         serviceName: 'test-service',
@@ -203,8 +203,8 @@ describe('Platform storage exporter supersession', () => {
 
 describe('Opt-in storage export on Platform', () => {
   it.each([undefined, false, true])(
-    'exports to a second destination and persists customer traces only with allowStorageOnPlatform=%s',
-    async allowStorageOnPlatform => {
+    'exports to a second destination and persists customer traces only with allowRemoteStorageExportOnPlatform=%s',
+    async allowRemoteStorageExportOnPlatform => {
       vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
       const mirror = new TestExporter();
       const storage = new InMemoryStore();
@@ -212,7 +212,7 @@ describe('Opt-in storage export on Platform', () => {
         configs: {
           default: {
             serviceName: 'customer-app',
-            allowStorageOnPlatform,
+            allowRemoteStorageExportOnPlatform,
             exporters: [new MastraStorageExporter(), mirror],
           },
         },
@@ -232,7 +232,7 @@ describe('Opt-in storage export on Platform', () => {
         expect(mirror.getLogsByTraceId(span.traceId)).toEqual([expect.objectContaining({ message: 'customer log' })]);
         const logs = await store.listLogs({ filters: { traceId: span.traceId } });
         const result = await store.getSpan({ traceId: span.traceId, spanId: span.id });
-        if (allowStorageOnPlatform) {
+        if (allowRemoteStorageExportOnPlatform) {
           expect(logs.logs).toEqual([expect.objectContaining({ message: 'customer log' })]);
           expect(result?.span).toMatchObject({ name: 'customer operation', output: 'completed' });
         } else {
@@ -253,7 +253,7 @@ describe('Opt-in storage export on Platform', () => {
     const enabled = new DefaultObservabilityInstance({
       name: 'enabled',
       serviceName: 'customer-app',
-      allowStorageOnPlatform: true,
+      allowRemoteStorageExportOnPlatform: true,
     });
     const disabled = createInstance([], 'disabled');
     const exporter = new Exporter();
@@ -298,7 +298,7 @@ describe.each([
       configs: {
         default: {
           serviceName: 'customer-app',
-          allowStorageOnPlatform: true,
+          allowRemoteStorageExportOnPlatform: true,
           exporters: [exporter, mirror],
         },
       },
