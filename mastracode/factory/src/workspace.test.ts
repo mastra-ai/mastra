@@ -580,6 +580,14 @@ describe('bundled Factory skill assets', () => {
     const build = await read('factory-build');
     expect(build).toContain('only with `ask_user`');
     expect(build).toContain('do not open a pull or merge request. Move the card to its `self-review` phase');
+    // The phase's own moves pick the hand-off: without a move to pull request review, no change request is opened.
+    expect(build).toContain(
+      '- **The `pull request review` phase is not in `Next phases`, but a `self-review` phase is:** take the self-review path whatever the setting says',
+    );
+    // With no review move at all, the builder asks a person, which parks the run as Waiting.
+    expect(build).toContain(
+      '- **Neither review phase is in `Next phases`:** open no change request and move nothing. Ask the person with `ask_user`',
+    );
     expect(build).toContain('Then move the card to its `pull request review` phase');
     expect(build).toContain('`Board phases by part:` line names each phase');
     expect(build).not.toMatch(/stage: "(review|pr-review|planning)"/);
@@ -596,8 +604,10 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain('belongs to someone else: never push to it');
     // A manual card's change request is not under Sources: look it up by branch first.
     expect(build).toContain('look for a change request already open from your branch');
-    // A board without a self-review phase opens the change request whatever the setting says.
-    expect(build).toContain('**Self-review off, or no `self-review` phase on the board:** open the change request');
+    // A change request is opened only where the phase may then move the card to pull request review.
+    expect(build).toContain(
+      '- **The `pull request review` phase is in `Next phases`, and the path above does not apply:** open the change request',
+    );
     // The review phase takes the card only once the change request is attached: self-review retries.
     const selfReview = await read('factory-self-review');
     expect(selfReview).toContain('wait briefly (`sleep 20`)');
