@@ -353,22 +353,34 @@ export class MessageMerger {
     const baseKeyOf = (part: MessagePart) => CacheKeyGenerator.fromDBParts([part]);
     const dataPartId = (part: MessagePart) =>
       part.type.startsWith('data-') && 'id' in part && typeof part.id === 'string' ? part.id : undefined;
-    const idlessDataKeys = (parts: MessagePart[]) =>
-      new Set(parts.filter(part => part.type.startsWith('data-') && !dataPartId(part)).map(baseKeyOf));
-    const latestIdlessDataKeys = idlessDataKeys(latestMessage.content.parts);
-    const incomingIdlessDataKeys = idlessDataKeys(incomingMessage.content.parts);
     // Data part ids only distinguish parts when both sides carry ids. A stored part without an id
-    // (legacy rows, regular-agent persistence) still matches an incoming copy that has one.
-    const keyParts = (parts: MessagePart[], otherIdlessDataKeys: Set<string>) => {
-      for (const part of parts) {
+    // (legacy rows, regular-agent persistence) still matches one incoming copy that has an id the
+    // other side lacks; every other id keeps its own key. The id-less part matches the last such
+    // copy, so suppressing it doesn't shift where the earlier ones are inserted.
+    const keyParts = (parts: MessagePart[], otherParts: MessagePart[]) => {
+      const otherIds = new Set<string>();
+      const otherIdless = new Map<string, number>();
+      for (const part of otherParts) {
+        if (!part.type.startsWith('data-')) continue;
+        const id = dataPartId(part);
+        if (id) otherIds.add(id);
+        else otherIdless.set(baseKeyOf(part), (otherIdless.get(baseKeyOf(part)) ?? 0) + 1);
+      }
+      for (const part of [...parts].reverse()) {
         if (keys.has(part)) continue;
         const baseKey = baseKeyOf(part);
         const id = dataPartId(part);
-        keys.set(part, id && !otherIdlessDataKeys.has(baseKey) ? `${baseKey}|id:${JSON.stringify(id)}` : baseKey);
+        const unmatched = otherIdless.get(baseKey) ?? 0;
+        if (id && !otherIds.has(id) && unmatched > 0) {
+          otherIdless.set(baseKey, unmatched - 1);
+          keys.set(part, baseKey);
+        } else {
+          keys.set(part, id ? `${baseKey}|id:${JSON.stringify(id)}` : baseKey);
+        }
       }
     };
-    keyParts(latestMessage.content.parts, incomingIdlessDataKeys);
-    keyParts(incomingMessage.content.parts, latestIdlessDataKeys);
+    keyParts(latestMessage.content.parts, incomingMessage.content.parts);
+    keyParts(incomingMessage.content.parts, latestMessage.content.parts);
     const keyOf = (part: MessagePart) => {
       let key = keys.get(part);
       if (key === undefined) {

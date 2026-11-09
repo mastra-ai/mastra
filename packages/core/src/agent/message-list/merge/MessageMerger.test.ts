@@ -118,6 +118,17 @@ describe('MessageMerger insertion positions', () => {
     expectParts(merge([tool('c1', true), withId], [tool('c1', true), stored]), [tool('c1', true), withId]);
   });
 
+  it('matches a stored data part without an ID to at most one incoming ID with the same payload', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const q1: Part = { ...stored, id: 'q1' };
+    const q2: Part = { ...stored, id: 'q2' };
+
+    // q1 matches its stored copy by ID, so only q2 is left to match the id-less part.
+    expectParts(merge([tool('c1', true), stored, q1], [tool('c1', true), q1, q2]), [tool('c1', true), stored, q1]);
+    expectParts(merge([tool('c1', true), stored], [tool('c1', true), q1, q2]), [tool('c1', true), q1, stored]);
+    expectParts(merge([stored, tool('c1', true)], [tool('c1', true), q1, q2]), [stored, tool('c1', true), q1]);
+  });
+
   it('does not duplicate parts on repeated updates', () => {
     const incoming = [tool('c1', true), text('A'), text('B')];
     const list = merge([step, tool('c1')], incoming);
