@@ -11,18 +11,27 @@ import { cn } from '@/lib/utils';
 export interface ThinkingLevelBarsProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];
   value: T | undefined;
+  /** Pulses the empty bars while the level loads. */
+  loading?: boolean;
 }
 
-export function ThinkingLevelBars<T extends string>({ options, value }: ThinkingLevelBarsProps<T>) {
+export function ThinkingLevelBars<T extends string>({ options, value, loading }: ThinkingLevelBarsProps<T>) {
   const thinkingOptions = options.filter(option => option.emphasis !== 'muted');
   const filled = thinkingOptions.findIndex(option => option.value === value) + 1;
   const barCount = Math.max(thinkingOptions.length, 1);
   return (
-    <span aria-hidden className="flex h-3 items-end gap-0.5">
+    // Five 3px bars wide whatever the model offers, so loading its levels or switching models never moves the trigger.
+    <span
+      aria-hidden
+      className={cn(
+        'flex h-3 w-[23px] shrink-0 items-end gap-0.5',
+        loading && 'motion-safe:animate-pulse motion-reduce:animate-none',
+      )}
+    >
       {Array.from({ length: barCount }, (_, index) => (
         <span
           key={index}
-          className={cn('w-[3px] rounded-xs', index < filled ? 'bg-current' : 'bg-current/25')}
+          className={cn('flex-1 rounded-xs', index < filled ? 'bg-current' : 'bg-current/25')}
           style={{ height: `${40 + (60 * index) / Math.max(barCount - 1, 1)}%` }}
         />
       ))}

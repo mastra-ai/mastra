@@ -141,7 +141,7 @@ describe('a user session draft on the real thread route', () => {
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
     await user.click(await screen.findByRole('button', { name: 'Use default' }));
-    expect(await screen.findByText('Follows the Built-in default.')).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Thinking: Medium (Built-in default)' })).toBeInTheDocument();
     await user.type(message, 'use the default');
     await user.keyboard('{Enter}');
 

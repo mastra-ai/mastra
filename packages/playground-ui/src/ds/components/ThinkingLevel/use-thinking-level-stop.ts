@@ -12,7 +12,7 @@ export interface ThinkingLevelOption<T extends string = string> {
 }
 
 export const invisibleRangeInputClassName = cn(
-  'cursor-pointer appearance-none bg-transparent',
+  'cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed',
   focusRing,
   '[&::-webkit-slider-runnable-track]:h-full [&::-webkit-slider-runnable-track]:bg-transparent',
   '[&::-webkit-slider-thumb]:h-full [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none',
@@ -27,16 +27,19 @@ export function useThinkingLevelStop<T extends string>({
   onChange,
 }: {
   options: readonly ThinkingLevelOption<T>[];
-  value: T;
+  value: T | undefined;
   onChange: (value: T) => void | Promise<unknown>;
 }) {
   const [draggedStop, setDraggedStop] = useState<number>();
   const [heldRelease, setHeldRelease] = useState<{ stop: number }>();
 
-  const settledStop = Math.max(
-    options.findIndex(option => option.value === value),
-    0,
-  );
+  const settledStop =
+    value === undefined
+      ? -1
+      : Math.max(
+          options.findIndex(option => option.value === value),
+          0,
+        );
   const pendingStop = draggedStop ?? heldRelease?.stop;
   const shownStop = pendingStop ?? settledStop;
 
@@ -68,7 +71,7 @@ export function useThinkingLevelStop<T extends string>({
       min: 0,
       max: Math.max(options.length - 1, 0),
       step: 1,
-      value: shownStop,
+      value: Math.max(shownStop, 0),
       onChange: (event: ChangeEvent<HTMLInputElement>) => setDraggedStop(Number(event.target.value)),
       onPointerUp: commitOnRelease,
       onPointerCancel: commitOnRelease,

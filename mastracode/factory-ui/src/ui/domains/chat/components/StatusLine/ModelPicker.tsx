@@ -228,7 +228,7 @@ export function ModelPicker() {
     return (
       <>
         <ModelCredential />
-        <ModelThinkingGroup modelId={activeModelId} switchingModel={false} lockedReason={modelLockedReason}>
+        <ModelThinkingGroup modelId={activeModelId} lockedReason={modelLockedReason}>
           <LockedModelButton modelId={activeModelId} reason={modelLockedReason} />
         </ModelThinkingGroup>
       </>
@@ -291,14 +291,14 @@ export function ModelPicker() {
       modelSwitch={modelSwitch}
       triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
       triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
-      settings={activeModelId ? <SessionThinkingSettings modelId={activeModelId} switchingModel={busy} /> : undefined}
+      settings={<SessionThinkingSettings modelId={activeModelId} switchingModel={busy} />}
     >
       <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
       <Metadata singleLine className="max-w-48 max-sm:max-w-28">
         <Metadata.Item>{label}</Metadata.Item>
         {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
       </Metadata>
-      {activeModelId ? <SessionThinkingBars modelId={activeModelId} switchingModel={busy} /> : undefined}
+      <SessionThinkingBars modelId={activeModelId} switchingModel={busy} />
     </ModelMenu>
   );
 }

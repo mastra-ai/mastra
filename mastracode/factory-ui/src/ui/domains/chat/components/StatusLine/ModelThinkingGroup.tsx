@@ -1,22 +1,19 @@
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import type { ReactNode } from 'react';
 
-import { SessionThinkingControl } from './SessionThinkingControl';
+import { LockedThinkingButton } from './LockedThinkingButton';
 
 interface ModelThinkingGroupProps {
   children: ReactNode;
-  modelId?: string;
-  switchingModel: boolean;
-  lockedReason?: string;
+  modelId: string;
+  lockedReason: string;
 }
 
-export function ModelThinkingGroup({ children, modelId, switchingModel, lockedReason }: ModelThinkingGroupProps) {
+export function ModelThinkingGroup({ children, modelId, lockedReason }: ModelThinkingGroupProps) {
   return (
     <ButtonsGroup size="sm" aria-label="Model and thinking">
       {children}
-      {modelId ? (
-        <SessionThinkingControl modelId={modelId} switchingModel={switchingModel} lockedReason={lockedReason} />
-      ) : null}
+      <LockedThinkingButton modelId={modelId} reason={lockedReason} />
     </ButtonsGroup>
   );
 }

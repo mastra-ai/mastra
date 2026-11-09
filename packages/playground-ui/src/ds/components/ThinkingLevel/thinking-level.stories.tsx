@@ -122,6 +122,48 @@ export const Ramp: Story = {
   render: () => <ControlledRamp />,
 };
 
+function RampWithDefault() {
+  const inherited: Level = 'medium';
+  const [override, setOverride] = useState<Level | undefined>('high');
+  return (
+    <div className="w-72">
+      <ThinkingLevelRamp
+        options={ALL_LEVELS}
+        value={override ?? inherited}
+        label="Thinking"
+        onChange={setOverride}
+        reset={override ? { label: 'Use default', onClick: () => setOverride(undefined) } : undefined}
+      />
+    </div>
+  );
+}
+
+export const RampSetAboveADefault: Story = {
+  render: () => <RampWithDefault />,
+};
+
+export const RampLoading: Story = {
+  render: () => (
+    <div className="w-72">
+      <ThinkingLevelRamp options={ALL_LEVELS} value={undefined} label="Thinking" loading onChange={() => {}} />
+    </div>
+  ),
+};
+
+export const RampUnavailable: Story = {
+  render: () => (
+    <div className="w-72">
+      <ThinkingLevelRamp
+        options={ALL_LEVELS}
+        value={undefined}
+        label="Thinking"
+        unavailableReason="The thinking level couldn't be loaded."
+        onChange={() => {}}
+      />
+    </div>
+  ),
+};
+
 function GroupedWithModel({ model, options, initial, unavailableReason }: GroupedWithModelProps) {
   const [value, setValue] = useState(initial);
   return (

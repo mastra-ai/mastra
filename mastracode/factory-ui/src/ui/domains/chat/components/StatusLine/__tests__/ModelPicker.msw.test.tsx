@@ -311,8 +311,8 @@ describe('ModelPicker', () => {
       },
     });
 
-    await openThinking(user, 'Thinking: High (Personal default)');
-    expect(screen.getByText('Follows the Personal default.')).toBeInTheDocument();
+    expect(await openThinking(user, 'Thinking: High (Personal default)')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Use default' })).not.toBeInTheDocument();
   });
 
   it("starts a chat on personal defaults at medium, never the Factory's level, when its owner set no personal level", async () => {
@@ -502,7 +502,6 @@ describe('ModelPicker', () => {
     const { client, stateUpdates } = renderPicker({ inFactory: true });
 
     await openThinking(user, 'Thinking: Medium (Factory default)');
-    expect(screen.getByText('Follows the Factory default.')).toBeInTheDocument();
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     expect(screen.queryByText('Max')).not.toBeInTheDocument();
     fireEvent.change(ramp, { target: { value: '3' } });
@@ -511,7 +510,7 @@ describe('ModelPicker', () => {
 
     expect(stateUpdates).toEqual([{ thinkingLevel: 'high' }]);
     expect(await screen.findByRole('group', { name: 'Thinking: High (this session)' })).toBeInTheDocument();
-    expect(screen.getByText('Set for this session.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use default' })).toBeInTheDocument();
   });
 
   it('given a session level, when Use default is chosen, then the session follows the Factory default', async () => {
@@ -527,14 +526,15 @@ describe('ModelPicker', () => {
     expect(screen.queryByRole('button', { name: 'Use default' })).not.toBeInTheDocument();
   });
 
-  it('says the thinking level failed to load instead of loading forever', async () => {
+  it('keeps the thinking section in place, disabled, when its level fails to load', async () => {
     const user = userEvent.setup();
     renderPicker({ thinkingDefaultsFail: true, inFactory: true });
 
     const thinking = await openThinking(user, "Thinking: unavailable. The thinking level couldn't be loaded.", {
       timeout: 10_000,
     });
-    expect(within(thinking).queryByRole('slider')).not.toBeInTheDocument();
+    expect(within(thinking).getByRole('slider', { name: 'Thinking' })).toBeDisabled();
+    expect(within(thinking).getByText("The thinking level couldn't be loaded.")).toBeVisible();
   });
 
   it("keeps the session's own level usable when the defaults fail to load", async () => {
@@ -545,7 +545,7 @@ describe('ModelPicker', () => {
     expect(within(thinking).getByRole('slider', { name: 'Thinking' })).toBeEnabled();
   });
 
-  it('holds the thinking control disabled, not the Factory default, until the session level loads', async () => {
+  it('holds the thinking section disabled, not on the Factory default, until the session level loads', async () => {
     let loadSettings = () => {};
     const settingsLoaded = new Promise<void>(resolve => {
       loadSettings = resolve;
@@ -553,8 +553,8 @@ describe('ModelPicker', () => {
     const user = userEvent.setup();
     renderPicker({ thinkingLevel: 'high', settingsLoaded });
 
-    const pending = await openThinking(user, "Thinking: unavailable. The thinking level isn't loaded yet.");
-    expect(within(pending).queryByRole('slider')).not.toBeInTheDocument();
+    const pending = await openThinking(user, 'Thinking: loading');
+    expect(within(pending).getByRole('slider', { name: 'Thinking' })).toBeDisabled();
     expect(screen.queryByRole('group', { name: 'Thinking: Medium (Factory default)' })).not.toBeInTheDocument();
 
     loadSettings();
