@@ -7,7 +7,7 @@ description: "Browse OpenCode model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode
 
-Access 134 OpenCode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 136 OpenCode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode documentation](https://opencode.ai/v2/docs/console/models/).
 
@@ -874,6 +874,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "opencode/longcat-2.5-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "opencode/mimo-v2.6-flash-free",
     "imageInput": true,
     "audioInput": true,
@@ -932,6 +944,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.68,
     "outputCost": 2.09
+  },
+  {
+    "model": "opencode/muse-ember-1.0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 270000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
   },
   {
     "model": "opencode/muse-spark-1.2",
