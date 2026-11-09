@@ -139,8 +139,9 @@ export const ITEMS_FROM_THREAD_ROUTE = createRoute({
     try {
       const dataset = await params.mastra.datasets.get({ id: params.datasetId });
       // Replay items are agent inputs; a workflow experiment would pass them through as workflow input.
+      // Datasets without a target stay eligible: their experiments choose the target at run time.
       const { targetType } = await dataset.getDetails();
-      if (targetType !== 'agent') {
+      if (targetType && targetType !== 'agent') {
         throw new HTTPException(400, {
           message: `Replay items can only be added to agent datasets; this dataset targets ${targetType}.`,
         });
