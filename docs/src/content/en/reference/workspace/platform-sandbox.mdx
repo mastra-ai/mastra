@@ -36,7 +36,6 @@ Configure the platform credentials. The access token, project ID, and environmen
     MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_ENVIRONMENT_ID=your-environment-id
-    SANDBOX_PROVIDER=railway
     ```
   </TabItem>
 
@@ -368,7 +367,7 @@ A long-running process's output stream reconnects periodically, and the process 
   {
     name: 'sandboxProvider',
     type: "'railway' | 'e2b'",
-    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then railway.',
+    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then e2b.',
     isOptional: true,
   },
   {
