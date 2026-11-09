@@ -11,9 +11,7 @@ function sandbox(id = 'sandbox-1'): ComputerSandbox {
     sandboxId: id,
     async start() {},
     destroy: vi.fn(async () => {}),
-    async captureCheckpoint() {
-      return { status: 'captured' };
-    },
+    captureCheckpoint: vi.fn(async () => ({ status: 'captured' as const })),
     async executeCommand() {
       return { exitCode: 0, stdout: '', stderr: '' };
     },
@@ -148,6 +146,23 @@ describe('Computers', () => {
     expect(revisions).toEqual([1, 2]);
 
     disposeSecond();
+  });
+
+  it('snapshots a persistent attachment after process restart without an explicit attach', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: first });
+    await (first.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+
+    const reattached: ComputerSandbox[] = [];
+    const second = new Computers({ provider: provider(reattached), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: second });
+    await expect((second.tools().mastra_workspace_computer_snapshot as any).execute({}, context)).resolves.toEqual({
+      status: 'captured',
+    });
+    expect(reattached).toHaveLength(1);
+    expect(reattached[0]!.captureCheckpoint).toHaveBeenCalledOnce();
   });
 
   it('serializes snapshots behind mutations and rechecks control before capture', async () => {

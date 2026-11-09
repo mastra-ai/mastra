@@ -390,8 +390,6 @@ export class Computers implements MastraComputers {
     return run;
   }
 
-  /** Marks agent input in flight, so watch events it causes (during and just after) are not reported as news. */
-
   /** A hand action, plus a screenshot in the same slot when `screenshotAfterAction` is on and the agent still holds control. */
   #act(context: Context, fn: (computer: SandboxComputer) => Promise<string>) {
     return this.#hands(context, async (_s, computer, entry) => {
@@ -490,7 +488,7 @@ export class Computers implements MastraComputers {
           queue: Promise.resolve(),
           destroyed: false,
           control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
-      extensionState: new Map(),
+          extensionState: new Map(),
         };
       } catch {
         await sandbox.destroy().catch(() => {});
@@ -764,13 +762,13 @@ export class Computers implements MastraComputers {
         execute: async (_input, context) => {
           const scope = this.#scope(context);
           if (!scope) return MISSING_IDENTITY;
-          const id = this.#attachments.get(scope.key);
-          const entry = id ? this.#computers.get(id) : undefined;
-          if (!entry?.sandbox || entry.ownerResourceId !== scope.resourceId) return NOT_ATTACHED;
+          const entry = await this.#attachedEntry(scope);
+          const sandbox = entry?.sandbox ?? (await entry?.ready);
+          if (!entry || !sandbox || entry.ownerResourceId !== scope.resourceId) return NOT_ATTACHED;
           const run = entry.queue.then(async () => {
             if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
             if (entry.control.enforcedRevision < entry.control.revision) return CONTROL_NOT_ENFORCED;
-            const result = await entry.sandbox!.captureCheckpoint();
+            const result = await sandbox.captureCheckpoint();
             return result.status === 'skipped' ? { status: result.status, reason: result.reason } : { status: result.status };
           });
           entry.queue = run.then(
