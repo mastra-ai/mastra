@@ -33,8 +33,6 @@ const STARTED_BY_THE_PAGE = [
   /^GET \/web\/config\/models\b/,
   // The board's issue and pull request lists: keyed by its repositories and intake settings.
   /^GET \/web\/github\/projects\/[^/]+\/(issues|prs)\b/,
-  // GitHub label routes: read for GitHub repositories outside Review.
-  /^GET \/web\/intake\/label-routes\b/,
   // The board's recent activity: keyed by the people on its cards.
   /^GET \/web\/factory\/projects\/[^/]+\/audit\b/,
 ];

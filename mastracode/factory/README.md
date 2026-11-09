@@ -176,7 +176,7 @@ const { inserted, updated, unchanged } = await factory.upsertBoard(bugs, { proje
 
 **Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project.
 
-**Integrations.** Integration event rules and reconcilers read only the code boards, which edits can't break: the initial phase and every phase with code behaviour are kept. Integration messages use the code names of phases. Intake bindings and label routes can target only code boards. A project's [intake routes](#intake-routes) can also send new cards to its stored boards. Every card move goes through the transition service, which checks it against the project's boards.
+**Integrations.** Integration event rules and reconcilers read only the code boards, which edits can't break: the initial phase and every phase with code behaviour are kept. Integration messages use the code names of phases. A project's [intake routes](#intake-routes) decide where new cards land, on its code or stored boards. Every card move goes through the transition service, which checks it against the project's boards.
 
 **Routes.** All need project membership; changes need an organization admin when auth is enabled, and are recorded in the audit log as `factory.board.created`, `updated`, `deleted` and `reset`.
 
@@ -234,7 +234,7 @@ Admins can make the same edits in the Factory UI under **Settings → Work board
 
 `includeDefaultBoards` decides whether projects get the built-in Work board.
 
-Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no policies or rules, can move off code: write its definition under a new key into projects with `factory.upsertBoard()`, move its cards, then stop passing the code board. Keep passing a board while integrations file cards onto it, intake bindings or label routes target it, or it needs code behaviors.
+Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no policies or rules, can move off code: write its definition under a new key into projects with `factory.upsertBoard()`, move its cards, then stop passing the code board. Keep passing a board while it needs code behaviors.
 
 Removing `defineBoard()` still needs code behaviour that stored boards can reference by name, and integrations that read each project's boards. That work is tracked in [mastra-ai/mastra#28920](https://github.com/mastra-ai/mastra/issues/28920).
 
@@ -784,19 +784,19 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 - Settings › Skills groups built-in skills under Work. For each custom board it shows the skill each phase runs (`runner.skill`) and the roles of phases that run no skill; those phases' kickoff instructions live in the board definition. Your app's other skills appear under App skills.
 - Not yet board-aware: the Overview funnel and stage-hold metrics (Work-only), search scopes (Work sessions), and the automation toggles that are specific to Work triage and review. Custom-board cards still count toward in-flight totals and appear in activity and audit logs.
 
-### Route intake to custom boards
+### Choose which sources feed a project
 
-Intake bindings are explicit. A Linear project, Jira project, or GitHub repository is only offered as a candidate feed once it is bound to a board; nothing is materialized just by opening a board.
+Intake bindings are explicit. A Linear project, Jira project, GitLab project, incident.io source or GitHub repository is only offered as a candidate feed once it is bound to a Factory project; nothing is materialized just by opening a board. A binding decides only which project a source feeds. Where its cards land is up to the project's [intake routes](#intake-routes): a new card is filed in the default board's first phase, and the first route that matches it places it.
 
-- **Linear:** each project binding selects one installed board. Changing the board moves that source's existing cards to the new board's initial phase, skipping terminal cards and cards with an active session.
-- **Jira:** each connected-site project binding selects one installed board. One Jira project can feed several Factory projects: each binding takes either all issues or only issues carrying its labels (Settings › Intake › Jira routing, or `labels` on `PUT /web/intake/bindings`). Each label belongs to one binding per Jira project, and only one binding per project can take all issues. Label bindings win over the all-issues binding; an issue carrying labels of two label bindings goes to the binding created first. The split happens in the JQL each Factory sends, so every issue is filed in exactly one Factory. Labels only decide placement when an issue is first filed: relabelling an issue, or editing a binding's labels, does not move existing cards. Remove one Factory's binding with `DELETE /web/intake/bindings?integrationId=jira&sourceId=…&factoryProjectId=…`. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
-- **GitHub:** Settings › Intake › GitHub routing maps a label to a board per Factory project (`GET`/`PUT /web/intake/label-routes`). Labels match case-insensitively; unrouted issues go to Work. Saving a route relocates matching cards the same way, and `issues.labeled` / `issues.unlabeled` webhooks move a card between its routed board and Work while refreshing its label metadata. Routes apply to every repository linked to the project; label input is free text (no repository label autocomplete yet).
+- **Linear:** each project binding feeds one Factory project.
+- **Jira:** One Jira project can feed several Factory projects: each binding takes either all issues or only issues carrying its labels (Settings › Intake › Jira routing, or `labels` on `PUT /web/intake/bindings`). Each label belongs to one binding per Jira project, and only one binding per project can take all issues. Label bindings win over the all-issues binding; an issue carrying labels of two label bindings goes to the binding created first. The split happens in the JQL each Factory sends, so every issue is filed in exactly one Factory. Labels only decide placement when an issue is first filed: relabelling an issue, or editing a binding's labels, does not move existing cards. Remove one Factory's binding with `DELETE /web/intake/bindings?integrationId=jira&sourceId=…&factoryProjectId=…`. The create-Factory flow can select a Jira project and binds it to the new Factory. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
+- **GitHub:** every repository linked to the project feeds it. To send labelled issues to another board, add an intake route with an `item.labels` condition. A label change on an issue updates its card's labels and never moves the card.
 
-A project's [intake routes](#intake-routes) are checked before these bindings and label routes. The bindings and label routes apply only to cards no intake route places.
+Label routes (`GET`/`PUT /web/intake/label-routes`) and a binding's `board` were removed: intake routes replaced both. The label-route endpoints answer `410` with `label_routes_removed`, and a `board` an older client still sends on `PUT /web/intake/bindings` is ignored. Their stored rows stay, unread.
 
 ### Intake routes
 
-Each project has an ordered list of intake routes, managed through the API (there is no UI yet). A route names the board events it handles in `on`. A route on `work_item.created`, the default, decides where a new card lands: the first enabled route whose `when` matches the card names its board and phase. A route on `work_item.closed` or `work_item.reopened` decides where an existing card moves when its source closes or reopens (see [Status events](#status-events-move-existing-cards)).
+Each project has an ordered list of intake routes: the only thing that decides where a new card lands. Admins manage them in Settings › Work Intake › Intake routes or through the API, and anyone in the project can read them. A route names the board events it handles in `on`. A route on `work_item.created`, the default, decides where a new card lands: the first enabled route whose `when` matches the card names its board and phase. A route on `work_item.closed` or `work_item.reopened` decides where an existing card moves when its source closes or reopens (see [Status events](#status-events-move-existing-cards)).
 
 **The default routes.** Every project starts with eleven routes: three for new cards, one of which files a pull request on its issue's card; three that move cards when their issue closes or reopens; and five that move cards when a pull request's status changes. The first, `Pull requests that close a waiting issue join its card`:
 
@@ -831,7 +831,7 @@ It adds a trusted author's pull request to the card of the issue it closes while
 }
 ```
 
-It files GitHub and GitLab issues and pull requests from authors outside the write-access circle in Work › Intake, ahead of any label route or binding. Intake is a resting phase, so nothing starts there on its own. Any session, a person's or an agent's, can move the card on, and that move starts the next phase's run. Pushes to a pull request resting in Intake don't re-review it, and comments and edits on an issue never re-run Triage (see GitHub event rules). Trusted authors' cards, and Linear, Jira and incident.io cards (which carry no trust stamp), land where they did before. The third, `Pull requests go to Review`, sends every other pull request and merge request (`source.kind equals pull_request`) to Work › Review, where the reviewer runs once a person or the project's auto-run lets it start. Because it comes after the outside-authors route, an outside author's pull request still waits in Intake. A pull request Factory opened for one of its own cards is filed by that card's rule, which no route re-places: it is attached to the authoring card, which goes out for review. Pull requests opened before attaching existed keep their own card.
+It files GitHub and GitLab issues and pull requests from authors outside the write-access circle in Work › Intake, ahead of the routes after it. Intake is a resting phase, so nothing starts there on its own. Any session, a person's or an agent's, can move the card on, and that move starts the next phase's run. Pushes to a pull request resting in Intake don't re-review it, and comments and edits on an issue never re-run Triage (see GitHub event rules). Trusted authors' cards, and Linear, Jira and incident.io cards (which carry no trust stamp), land where they did before. The third, `Pull requests go to Review`, sends every other pull request and merge request (`source.kind equals pull_request`) to Work › Review, where the reviewer runs once a person or the project's auto-run lets it start. Because it comes after the outside-authors route, an outside author's pull request still waits in Intake. A pull request Factory opened for one of its own cards is filed by that card's rule, which no route re-places: it is attached to the authoring card, which goes out for review. Pull requests opened before attaching existed keep their own card.
 
 The other three move Work cards when their issue's status changes:
 
@@ -855,6 +855,8 @@ They replace the close handlers each integration used to apply on its own, so a 
 
 The default routes are stored routes like any other: list them, edit them, disable them, reorder them or delete them through the API. Factory adds each one once, the first time the project's routes are read or written, appending it after the project's existing routes, and doesn't add it back after an admin deletes it. The closing-issue route is the exception: it goes first, since its condition only matches trusted authors' pull requests that close an issue. Deleting a default is permanent: recreate it by hand to get it back. A project set up before the pull request, closing-issue or close and reopen routes existed gets them this way too.
 
+**Everything else.** The last default route, `Everything else goes to Work › Intake`, has no condition and sends every new card the routes before it don't take to Work › Intake. Point it at another board to make that board the project's default landing, or use **Send new cards to** in Settings, which also copies the close, reopen and pull request routes onto that board: a status event only moves a card through routes on the card's own board. A route added through the API goes just ahead of this route, so it can match; once an admin disables or edits it so it no longer takes every new card, new routes go at the end again. A project with no route left that places a card files it in the default board's first phase.
+
 **Trust only decides where a card arrives.** Once a card is moved out of Intake, later input on it runs like on any card: a maintainer's push re-reviews an outside author's pull request. A phase that should only auto-start for trusted authors says so in its `autoStartWhen` (`author.trusted equals true`). Runs on untrusted cards still use their own isolated memory.
 
 **Route shape.**
@@ -870,11 +872,10 @@ The default routes are stored routes like any other: list them, edit them, disab
 
 Routes are evaluated in `position` order (0 first). Rules can test these card facts: `item.labels`, `item.title`, `item.author`, `source.kind` (`issue`, `pull_request`, …), `source.integration` (`github`, `gitlab`, `linear`, `jira`, `incidentio`, …) and `author.trusted`. For pull requests, routes can also test `pullRequest.closesIssue` (`true` when the body closes an issue that has a usable card), `closedIssue.phase` and `closedIssue.hasPullRequest` (that card's phase and whether it already carries a pull request). These three are route-only: phase rules can't use them. A route that lets a pull request join a card already in its review phase doesn't start a second review: the review in progress keeps its pull request, and the new one is reviewed on its next push by a trusted author, or on a review request once the current pass has a verdict. That's why the default route requires `closedIssue.hasPullRequest` to be `false`. `author.trusted` is `true` when the card carries an `authorTrusted: true` or `factoryAuthored: true` stamp. GitHub and GitLab stamp `authorTrusted` from the author's repository permission, and a stamp that is missing counts as untrusted.
 
-**Placement.** When an integration files a new card, or a card is created without naming a board (the `factory_create_work_item` tool, or `POST /web/factory/projects/:id/work-items` without `board`), the first enabled route that matches the card and whose board can take it decides where the card lands. On the built-in boards, a pull request lands on Work only in Intake or Review and Review takes only cards with a pull request; a route a card can't take is skipped and the next one is tried. If the route's phase no longer exists, or can no longer be reached from the first phase, the card lands in the first phase. A card routed to a later phase enters the first phase and then moves on through the transition service as a system move, recorded in the card's history. The route makes this move, not a person, so it gives no consent to start work; a run the phase asks for still needs a person or the project's auto-run. A board whose transition policy refuses system moves refuses the route, and the card is not filed. If no route places a card, the integration's binding, label route or default decides.
+**Placement.** When an integration files a new card, or a card is created without naming a board (the `factory_create_work_item` tool, or `POST /web/factory/projects/:id/work-items` without `board`), the first enabled route that matches the card and whose board can take it decides where the card lands. On the built-in boards, a pull request lands on Work only in Intake or Review and Review takes only cards with a pull request; a route a card can't take is skipped and the next one is tried. If the route's phase no longer exists, or can no longer be reached from the first phase, the card lands in the first phase. A card routed to a later phase enters the first phase and then moves on through the transition service as a system move, recorded in the card's history. The route makes this move, not a person, so it gives no consent to start work; a run the phase asks for still needs a person or the project's auto-run. A board whose transition policy refuses system moves refuses the route, and the card is not filed. The board and phase an integration's rule names don't count: every integration files a new card in the default board's first phase, and the routes take it from there. If no route places it, it stays there.
 
-A card a route placed records the route's id in its `intakeRouteId` metadata and stays on that board afterwards: a GitHub label change, a reconcile that replays a known issue, a label route change, and rebinding the card's source all leave it there (its labels still update). An edited route moves no existing card. If filing a card stopped partway (it entered the board's first phase but the move to the route's phase failed), the retry keeps the card on that board: it moves to the phase the route names now, or stays in the first phase when the route was deleted, disabled or pointed at another board. Cards no route placed keep following label routes and bindings as before. An explicit placement wins over routes, for example:
+A card a route placed records the route's id in its `intakeRouteId` metadata and stays on that board afterwards: a GitHub label change, a reconcile that replays a known issue, and rebinding the card's source all leave it there (its labels still update). An edited route moves no existing card. If filing a card stopped partway (it entered the board's first phase but the move to the route's phase failed), the retry keeps the card on that board: it moves to the phase the route names now, or stays in the first phase when the route was deleted, disabled or pointed at another board. An explicit placement wins over routes, for example:
 
-- a maintainer's review request that files a pull request directly in Review;
 - a custom rule with `skipRules`;
 - a child card a board's own rule files;
 - a board named when the card is created. The board's **New card** button always names its board, so routes never place cards made there.
@@ -963,7 +964,7 @@ curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'cont
   "allowWorkingPhase": true
 }'
 
-# Let outside authors' issues go where label routes send them, instead of Intake.
+# Let outside authors' issues go where the other routes send them, instead of Intake.
 curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$DEFAULT_ROUTE" -H 'content-type: application/json' -d '{
   "enabled": false,
   "expectedRevision": 1
@@ -996,27 +997,25 @@ When Platform credentials are present, `MastraFactory` installs a `PlatformGithu
 ```typescript
 import { MastraFactory } from '@mastra/factory';
 
-// Your own label → board mapping (Settings › Intake › GitHub label routes remain
-// the stored, per-project alternative when labels alone are enough).
-const boardForLabels = (labels: string[]) => (labels.includes('design') ? 'design' : 'work');
-
 new MastraFactory({
   storage,
   platform: {
     github: {
       rules: {
-        // Route a new issue to the board its existing labels select, instead of
-        // defaulting to Work.
-        issueOpened: context => ({
-          type: 'upsertLinkedWorkItem',
-          idempotencyKey: `${context.ingress.id}:issue-intake`,
-          board: boardForLabels(context.issue?.labels ?? []),
-          source: 'github-issue',
-          sourceKey: `github-issue:${context.issue!.number}`,
-          title: context.issue!.title,
-          url: context.issue!.url,
-          stage: 'intake',
-        }),
+        // File only issues labelled `factory`; leave the rest on GitHub.
+        issueOpened: context =>
+          context.issue?.labels.includes('factory')
+            ? {
+                type: 'upsertLinkedWorkItem',
+                idempotencyKey: `${context.ingress.id}:issue-intake`,
+                board: context.intake!.board,
+                source: 'github-issue',
+                sourceKey: `github-issue:${context.issue.number}`,
+                title: context.issue.title,
+                url: context.issue.url,
+                stage: context.intake!.initialPhase,
+              }
+            : { type: 'reject', code: 'not_for_factory', reason: 'Only issues labelled factory are filed.' },
       },
       // Optional. Overrides the sibling `githubAppSlug` for recognizing Factory's own writes.
       slug: 'factory-app',
@@ -1024,6 +1023,8 @@ new MastraFactory({
   },
 });
 ```
+
+A rule decides whether and what to file, not where: the project's [intake routes](#intake-routes) place every new card, whatever board and stage the decision names, so send labelled issues to another board with a route on `item.labels`. Only `skipRules: true` (see below) files a card exactly where the decision says.
 
 `platform.github` applies only to the integration the factory installs itself. An explicit `github` entry in `integrations` takes precedence and makes the key a no-op; the factory warns rather than ignoring it silently, and warns the same way when no Platform credentials and no explicit GitHub integration are present. `GithubRuleOverrides` (the `rules` option type) is exported from `@mastra/factory`.
 

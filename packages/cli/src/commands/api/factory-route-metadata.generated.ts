@@ -687,7 +687,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "intakeRouteCreate",
     "method": "POST",
     "path": "/web/factory/projects/:id/intake-routes",
-    "description": "Add an intake route at the end of a Factory project",
+    "description": "Add an intake route to a Factory project, after its routes and ahead of the default catch-all route",
     "pathParams": [
       "id"
     ],
@@ -2727,10 +2727,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "problems"
             ]
           }
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
-        "intakeRoutes"
+        "intakeRoutes",
+        "canEdit"
       ],
       "$defs": {
         "__schema0": {
@@ -7916,10 +7920,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "problems"
             ]
           }
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
-        "intakeRoutes"
+        "intakeRoutes",
+        "canEdit"
       ],
       "$defs": {
         "__schema0": {
