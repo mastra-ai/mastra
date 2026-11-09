@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { workBoardInfo as work } from '../../../../e2e/ui/board-catalog';
 import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
@@ -85,7 +86,7 @@ function failedRun(workItemId: string, lastError: string): FactoryDecisionSummar
 
 function build(cards: WorkItem[], effects: FactoryDecisionSummary[] = []) {
   const effectByItem = new Map(effects.map(effect => [effect.workItemId ?? '', effect]));
-  return starterPrompts({ cards, effectByItem, now: NOW });
+  return starterPrompts({ board: work, cards, effectByItem, now: NOW });
 }
 
 function promptFor(kind: StarterKind, cards: WorkItem[], effects: FactoryDecisionSummary[] = []) {

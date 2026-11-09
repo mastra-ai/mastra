@@ -39,12 +39,12 @@ export function useCreateFactoryFromDraft({
   const saveLinearSelection = useSaveIntakeSelectionMutation('linear');
   const saveJiraSelection = useSaveIntakeSelectionMutation('jira');
 
-  // Issues belong on Work. An app that replaced the built-in boards leaves the
-  // source routed but boardless, so intake settings prompt for a board instead
-  // of guessing one.
+  // Issues belong on the default board. An app that replaced the built-in boards
+  // leaves the source routed but boardless, so intake settings prompt for a board
+  // instead of guessing one.
   const resolveIntakeBoard = async (factoryProjectId: string) => {
     const { boards } = await queryClient.query(boardCatalogQueryOptions(client, factoryProjectId));
-    return boards.some(board => board.id === 'work') ? 'work' : null;
+    return boards.find(board => board.default)?.id ?? null;
   };
 
   const feedProject = async (input: {

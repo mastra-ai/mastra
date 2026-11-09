@@ -41,7 +41,7 @@ export function GithubLabelRouting({
   const [draftBoard, setDraftBoard] = useState<string | null>(null);
 
   const routes = (routesQuery.data ?? []).filter(route => route.integrationId === 'github');
-  const boards = (catalog.data ?? []).filter(board => board.id !== 'work');
+  const boards = (catalog.data ?? []).filter(board => !board.default);
 
   const scope = showScope ? `Applies to issues from ${repositories.join(', ')}` : undefined;
   const label = (
