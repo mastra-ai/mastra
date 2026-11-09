@@ -73,13 +73,14 @@ export interface ObservabilityInstanceConfig {
   /** Custom exporters */
   exporters?: ObservabilityExporter[];
   /**
-   * Keep configured built-in storage exporters on Mastra Platform deployments.
+   * Keep configured MastraStorageExporter instances on Mastra Platform deployments.
    * Defaults to false: when MASTRA_DEPLOYMENT_ID is set, MastraStorageExporter
    * and the deprecated DefaultExporter are skipped. Set to true to persist to
    * your own storage alongside Platform observability. Applies to this instance,
    * including exporters registered later; does not add an exporter automatically.
    * Storage domains reporting local persistence remain disabled on Platform,
    * with a warning during exporter initialization, even when this is true.
+   * The deprecated DefaultExporter remains disabled on Platform.
    */
   retainStorageExporterOnPlatform?: boolean;
   /** Observability bridge (e.g., OpenTelemetry bridge for context extraction) */

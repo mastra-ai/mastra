@@ -45,7 +45,7 @@ import { resolveModelId } from '../model-id';
 import { BaseSpan, NoOpSpan } from '../spans';
 import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
-import { isMastraBuiltInStorageExporter, isMastraPlatformDeployment } from './platform-policy';
+import { isMastraDeprecatedStorageExporter, shouldSkipStorageExporterOnPlatform } from './platform-policy';
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
   if (!metadata || typeof metadata !== 'object') {
@@ -116,10 +116,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
     const exporters = config.exporters ?? [];
-    const effectiveExporters =
-      isMastraPlatformDeployment() && config.retainStorageExporterOnPlatform !== true
-        ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
-        : exporters;
+    const effectiveExporters = exporters.filter(
+      exporter => !shouldSkipStorageExporterOnPlatform(exporter, config.retainStorageExporterOnPlatform),
+    );
 
     // Apply defaults for optional fields
     this.config = {
@@ -469,7 +468,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   private warnStorageExporterSkipped(exporter: ObservabilityExporter): void {
     this.logger.warn(
-      'Storage exporter skipped on Mastra Platform. Set retainStorageExporterOnPlatform: true on this observability config to allow remote storage export.',
+      isMastraDeprecatedStorageExporter(exporter)
+        ? 'Deprecated DefaultExporter skipped on Mastra Platform. Use MastraStorageExporter with retainStorageExporterOnPlatform: true for remote storage export.'
+        : 'Storage exporter skipped on Mastra Platform. Set retainStorageExporterOnPlatform: true on this observability config to allow remote storage export.',
       {
         exporterName: exporter.name,
         serviceName: this.config.serviceName,
@@ -483,11 +484,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Adds to both the bus (for event routing) and the config (for getExporters).
    */
   registerExporter(exporter: ObservabilityExporter): void {
-    if (
-      isMastraPlatformDeployment() &&
-      this.config.retainStorageExporterOnPlatform !== true &&
-      isMastraBuiltInStorageExporter(exporter)
-    ) {
+    if (shouldSkipStorageExporterOnPlatform(exporter, this.config.retainStorageExporterOnPlatform)) {
       this.warnStorageExporterSkipped(exporter);
       return;
     }
