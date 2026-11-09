@@ -108,6 +108,8 @@ export function useGenUIChat<C extends Catalog = Catalog>({
 
   useEffect(() => controller.retain(), [controller]);
 
+  // Read the specs before the messages render, so a view never draws a frame behind its message.
+  controller.readSpecs(chat.messages);
   // The controller is an external store fed by the chat's messages.
   useEffect(() => {
     controller.sync(chat.messages, { threadId, running: chat.isRunning });

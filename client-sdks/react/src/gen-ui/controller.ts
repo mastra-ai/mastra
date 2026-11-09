@@ -87,6 +87,11 @@ export interface GenUIController {
    * threads drops the previous thread's approvals and pending responses.
    */
   sync(messages: ReadonlyArray<MastraDBMessage>, chat?: GenUIChatSyncState): void;
+  /**
+   * Read the specs in `messages` without notifying anyone, so it is safe during render: views rendered in the
+   * same pass draw them right away. A streamed message hands every part over anew, so all of its views re-render.
+   */
+  readSpecs(messages: ReadonlyArray<MastraDBMessage>): void;
   isRunning(): boolean;
   /** Fires when the chat starts or stops running. */
   subscribe(listener: () => void): () => void;
@@ -313,6 +318,9 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
         running = next;
         listeners.forEach(listener => listener());
       }
+    },
+    readSpecs(messages) {
+      resolver.update(messages);
     },
     isRunning: () => running,
     subscribe(listener) {

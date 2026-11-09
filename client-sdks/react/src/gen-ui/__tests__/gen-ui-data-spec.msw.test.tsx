@@ -6,6 +6,7 @@ import { schema } from '@json-render/react/schema';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http } from 'msw';
+import { useLayoutEffect } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { server } from '../../test/msw-server';
@@ -50,10 +51,13 @@ function GenUIChat({
   initialMessages,
   actions,
   renderers,
+  onCommit,
 }: {
   initialMessages?: MastraDBMessage[];
   actions?: GenUIActionHandlers<typeof catalog>;
   renderers?: MessageRenderers;
+  /** Runs after every commit, once the DOM shows the messages it rendered. */
+  onCommit?: (messages: MastraDBMessage[]) => void;
 }) {
   const chat = useGenUIChat({
     agentId: 'agent-1',
@@ -65,6 +69,7 @@ function GenUIChat({
     renderers,
   });
   current = chat;
+  useLayoutEffect(() => onCommit?.(chat.messages));
   return (
     <div>
       {chat.messages.map(message => (
@@ -166,6 +171,35 @@ describe('native json-render data parts', () => {
     expect(within(view()).getAllByRole('checkbox')).toHaveLength(1);
     expect(within(view()).getAllByRole('button', { name: 'Book it' })).toHaveLength(1);
     expect(document.querySelector('[data-genui-fallback]')).toBeNull();
+  });
+
+  it('draws a spec in the same commit as the message part that starts it', async () => {
+    const stream = controllableStream();
+    server.use(http.post(STREAM_URL, () => stream.response()));
+    // Every commit where a message holds spec parts but the screen shows no spec for it.
+    const blank: string[] = [];
+    const onCommit = (messages: MastraDBMessage[]) => {
+      for (const message of messages) {
+        const hasSpec = message.content.parts.some(part => part.type === SPEC_DATA_PART_TYPE);
+        if (hasSpec && !screen.queryByRole('region', { name: 'Trip' })) blank.push(message.id);
+      }
+    };
+    renderWithProviders(<GenUIChat onCommit={onCommit} />);
+    await send('plan my trip');
+
+    act(() => stream.push(chunk('start', { messageId: 'a1' }), ...tripPatches.slice(0, 3).map(patchChunk)));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Trip' })).toBeTruthy());
+    // Later parts leave the first one, where the view is drawn, unchanged; the view still follows them.
+    for (const patch of tripPatches.slice(3)) act(() => stream.push(patchChunk(patch)));
+    await waitFor(() => expect(within(view()).getByRole('button', { name: 'Book it' })).toBeTruthy());
+    expect(view().getAttribute('aria-busy')).toBe('true');
+    act(() => {
+      stream.push(finish('stop'));
+      stream.close();
+    });
+    await waitFor(() => expect(view().getAttribute('data-genui-status')).toBe('ready'));
+
+    expect(blank).toEqual([]);
   });
 
   it('binds state and runs actions from a native spec', async () => {
