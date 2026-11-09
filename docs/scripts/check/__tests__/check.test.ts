@@ -1,0 +1,327 @@
+import fs from 'fs/promises'
+import os from 'os'
+import path from 'path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { checkFrontmatter } from '../checks/frontmatter'
+import { checkBareUrls, checkCodeBlockLanguage, checkLinks, checkSingleH1 } from '../checks/mdx'
+import { checkRedirectList } from '../checks/redirects'
+import { valeFindings } from '../checks/vale'
+import { parseContentFile } from '../content'
+import { formatHuman, parseArgs } from '../index'
+import { parseMdx } from '../mdx'
+import { buildRouteIndex, routeForFile } from '../routes'
+import { isKnownRuleId, matchesRuleFilter, RULE_FAMILIES, RULES, slugifyRuleName } from '../rules'
+import { runChecks } from '../runner'
+
+const ROOT = '/repo'
+const VALID_FRONTMATTER = `---
+title: 'Agents overview'
+description: 'Learn how agents use models, tools, and memory to complete open-ended tasks.'
+packages:
+  - '@mastra/core'
+---`
+
+function page(relativePath: string, body: string, frontmatter = VALID_FRONTMATTER) {
+  return parseContentFile(ROOT, `src/content/en/${relativePath}`, `${frontmatter}\n\n${body}\n`)
+}
+
+async function tree(file: ReturnType<typeof page>) {
+  return (await parseMdx(file)).tree
+}
+
+describe('rule registry', () => {
+  it('uses unique, namespaced, kebab-case IDs', () => {
+    const ids = RULES.map(rule => rule.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const id of ids) expect(id).toMatch(/^mastra\/[a-z0-9]+(-[a-z0-9]+)*$/)
+  })
+
+  it('recognizes tool-derived rule families', () => {
+    expect(isKnownRuleId('mastra/remark-heading-increment')).toBe(true)
+    expect(isKnownRuleId('mastra/vale-mastra-headings')).toBe(true)
+    expect(isKnownRuleId('mastra/remark-')).toBe(false)
+    expect(isKnownRuleId('mastra/not-a-rule')).toBe(false)
+  })
+
+  it('matches exact and prefix filters', () => {
+    expect(matchesRuleFilter('mastra/link-broken', 'mastra/link-broken')).toBe(true)
+    expect(matchesRuleFilter('mastra/link-broken', 'mastra/link-*')).toBe(true)
+    expect(matchesRuleFilter('mastra/link-broken', 'mastra/link')).toBe(false)
+  })
+
+  it('slugifies external rule names', () => {
+    expect(slugifyRuleName('Mastra.Headings')).toBe('mastra-headings')
+    expect(slugifyRuleName('write-good.Weasel')).toBe('write-good-weasel')
+    expect(slugifyRuleName('signs-of-ai-writing.AspectOveruse')).toBe('signs-of-ai-writing-aspect-overuse')
+  })
+})
+
+describe('frontmatter rules', () => {
+  it('passes a valid page', () => {
+    expect(checkFrontmatter(page('docs/agents/overview.mdx', '# Agents'))).toEqual([])
+  })
+
+  it('reports missing frontmatter', () => {
+    const file = parseContentFile(ROOT, 'src/content/en/docs/a.mdx', '# No frontmatter\n')
+    expect(checkFrontmatter(file).map(f => f.ruleId)).toEqual(['mastra/frontmatter-missing'])
+  })
+
+  it('reports invalid YAML with its line', () => {
+    const file = parseContentFile(
+      ROOT,
+      'src/content/en/docs/a.mdx',
+      `---\ntitle: 'ok'\ndescription: [unclosed\n---\n\n# A\n`,
+    )
+    const [item] = checkFrontmatter(file)
+    expect(item.ruleId).toBe('mastra/frontmatter-parse')
+    expect(item.line).toBeGreaterThan(1)
+  })
+
+  it('reports missing title, short description, and invalid packages', () => {
+    const file = page('docs/a.mdx', '# A', `---\ndescription: 'Too short.'\npackages:\n  - 'not-a-package'\n---`)
+    expect(checkFrontmatter(file).map(f => f.ruleId)).toEqual(
+      expect.arrayContaining([
+        'mastra/frontmatter-title',
+        'mastra/frontmatter-description-length',
+        'mastra/frontmatter-packages',
+      ]),
+    )
+  })
+
+  it('validates lintDisable entries', () => {
+    const good = page(
+      'docs/a.mdx',
+      '# A',
+      `${VALID_FRONTMATTER.slice(0, -3)}lintDisable:\n  - mastra/bare-url\n  - mastra/vale-mastra-headings\n---`,
+    )
+    expect(good.lintDisable).toEqual(['mastra/bare-url', 'mastra/vale-mastra-headings'])
+    expect(checkFrontmatter(good)).toEqual([])
+
+    const bad = page('docs/a.mdx', '# A', `${VALID_FRONTMATTER.slice(0, -3)}lintDisable:\n  - mastra/nope\n---`)
+    const [item] = checkFrontmatter(bad)
+    expect(item.ruleId).toBe('mastra/lint-disable-invalid')
+    expect(item.message).toContain('mastra/nope')
+  })
+})
+
+describe('structure rules', () => {
+  it('requires exactly one H1', async () => {
+    const good = page('docs/a.mdx', '# One\n\n## Two')
+    expect(checkSingleH1(good, await tree(good))).toEqual([])
+
+    const none = page('docs/a.mdx', '## Only a subheading')
+    expect(checkSingleH1(none, await tree(none)).map(f => f.ruleId)).toEqual(['mastra/single-h1'])
+
+    const two = page('docs/a.mdx', '# One\n\n# Two')
+    const findings = checkSingleH1(two, await tree(two))
+    expect(findings).toHaveLength(1)
+    expect(findings[0].line).toBe(two.source.split('\n').indexOf('# Two') + 1)
+  })
+
+  it('requires a language on fenced code blocks', async () => {
+    const good = page('docs/a.mdx', '# A\n\n```typescript\nconst a = 1\n```')
+    expect(checkCodeBlockLanguage(good, await tree(good))).toEqual([])
+
+    const bad = page('docs/a.mdx', '# A\n\n```\nconst a = 1\n```')
+    expect(checkCodeBlockLanguage(bad, await tree(bad)).map(f => f.ruleId)).toEqual(['mastra/code-block-language'])
+  })
+})
+
+describe('prose rules', () => {
+  it('reports bare URLs but not links or code', async () => {
+    const good = page(
+      'docs/a.mdx',
+      '# A\n\nSee [the site](https://example.com) or `https://example.com`.\n\n```bash\ncurl https://example.com\n```',
+    )
+    expect(checkBareUrls(good, await tree(good))).toEqual([])
+
+    const bad = page('docs/a.mdx', '# A\n\nSee https://example.com for details.')
+    const findings = checkBareUrls(bad, await tree(bad))
+    expect(findings.map(f => f.ruleId)).toEqual(['mastra/bare-url'])
+    expect(findings[0].suggestion).toBe('[descriptive text](https://example.com)')
+  })
+})
+
+describe('routes and links', () => {
+  const target = page('docs/agents/overview.mdx', '# Agents')
+  const indexPage = page('reference/index.mdx', '# Reference')
+  const slugged = page(
+    'reference/classifier/classifier.mdx',
+    '# Classifier',
+    `${VALID_FRONTMATTER.slice(0, -3)}slug: '/classifier/classifier'\n---`,
+  )
+  const partial = page('docs/agents/_partial.mdx', 'Shared text')
+  const files = [target, indexPage, slugged, partial]
+  const index = buildRouteIndex(files, [{ source: '/docs/agents', destination: '/docs/agents/overview' }])
+
+  it('derives Docusaurus routes', () => {
+    expect(routeForFile(target)).toBe('/docs/agents/overview')
+    expect(routeForFile(indexPage)).toBe('/reference')
+    expect(routeForFile(slugged)).toBe('/reference/classifier/classifier')
+    expect(routeForFile(partial)).toBeNull()
+  })
+
+  it('accepts links to existing routes, anchors, and external URLs', async () => {
+    const file = page(
+      'docs/a.mdx',
+      '# A\n\n[a](/docs/agents/overview#tools) [b](/reference/) [c](https://example.com) [d](#local)',
+    )
+    expect(checkLinks(file, await tree(file), index).findings).toEqual([])
+  })
+
+  it('reports broken links with a suggestion', async () => {
+    const file = page('docs/a.mdx', '# A\n\n[a](/docs/agents/overveiw)')
+    const { findings, edits } = checkLinks(file, await tree(file), index)
+    expect(findings.map(f => f.ruleId)).toEqual(['mastra/link-broken'])
+    expect(findings[0].suggestion).toBe('/docs/agents/overview')
+    expect(edits).toEqual([])
+  })
+
+  it('rewrites redirected and self-hosted links', async () => {
+    const file = page('docs/a.mdx', '# A\n\n[a](/docs/agents#tools) [b](https://mastra.ai/docs/agents/overview)')
+    const { findings, edits } = checkLinks(file, await tree(file), index)
+    expect(findings.map(f => f.ruleId)).toEqual(['mastra/link-redirected', 'mastra/link-self-host'])
+    expect(edits.map(edit => edit.text)).toEqual(['/docs/agents/overview#tools', '/docs/agents/overview'])
+    expect(edits.map(edit => file.source.slice(edit.start, edit.end))).toEqual([
+      '/docs/agents#tools',
+      'https://mastra.ai/docs/agents/overview',
+    ])
+  })
+})
+
+describe('redirect rules', () => {
+  const routes = new Set(['/docs/a', '/docs/b'])
+
+  it('passes valid redirects', () => {
+    expect(checkRedirectList([{ source: '/docs/old', destination: '/docs/a' }], routes, new Map())).toEqual([])
+  })
+
+  it('reports duplicates, chains, and missing destinations', () => {
+    const findings = checkRedirectList(
+      [
+        { source: '/docs/old', destination: '/docs/a' },
+        { source: '/docs/old', destination: '/docs/b' },
+        { source: '/docs/older', destination: '/docs/old' },
+        { source: '/docs/gone', destination: '/docs/missing' },
+        { source: '/docs/wild/:path*', destination: '/docs/new/:path*' },
+      ],
+      routes,
+      new Map([['/docs/old', 3]]),
+    )
+    expect(findings.map(f => f.ruleId).sort()).toEqual([
+      'mastra/redirect-chain',
+      'mastra/redirect-destination',
+      'mastra/redirect-duplicate',
+    ])
+    expect(findings.find(f => f.ruleId === 'mastra/redirect-duplicate')?.line).toBe(3)
+  })
+})
+
+describe('vale adapter', () => {
+  it('maps Vale alerts to findings', () => {
+    const findings = valeFindings(ROOT, {
+      [`${ROOT}/src/content/en/docs/a.mdx`]: [
+        { Check: 'Mastra.Headings', Message: 'Use sentence case', Severity: 'suggestion', Line: 4, Span: [3, 9] },
+      ],
+    })
+    expect(findings).toEqual([
+      expect.objectContaining({
+        ruleId: 'mastra/vale-mastra-headings',
+        severity: 'info',
+        category: 'prose',
+        file: 'src/content/en/docs/a.mdx',
+        line: 4,
+        column: 3,
+      }),
+    ])
+  })
+})
+
+describe('CLI', () => {
+  it('parses flags and files', () => {
+    expect(
+      parseArgs(['--json', '--fix', '--rule', 'mastra/link-*', '--category=links,prose', '-q', 'a.mdx']),
+    ).toMatchObject({
+      json: true,
+      fix: true,
+      quiet: true,
+      rules: ['mastra/link-*'],
+      categories: ['links', 'prose'],
+      files: ['a.mdx'],
+    })
+    expect(() => parseArgs(['--category', 'nope'])).toThrow(/Unknown category/)
+    expect(() => parseArgs(['--bogus'])).toThrow(/Unknown option/)
+  })
+})
+
+describe('runChecks', () => {
+  let rootDir: string
+
+  beforeEach(async () => {
+    rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docs-check-'))
+    await fs.writeFile(
+      path.join(rootDir, 'vercel.redirects.json'),
+      JSON.stringify({ redirects: [{ source: '/docs/old', destination: '/docs/good', permanent: true }] }),
+    )
+    const write = async (relative: string, content: string) => {
+      const full = path.join(rootDir, 'src/content/en', relative)
+      await fs.mkdir(path.dirname(full), { recursive: true })
+      await fs.writeFile(full, content)
+    }
+    await write('docs/good.mdx', `${VALID_FRONTMATTER}\n\n# Good\n\nSee [the bad page](/docs/bad).\n`)
+    await write(
+      'docs/bad.mdx',
+      `${VALID_FRONTMATTER.slice(0, -3)}lintDisable:\n  - mastra/code-block-language\n---\n\n# Bad\n\n[old](/docs/old) and [missing](/docs/nowhere).\n\n\`\`\`\nno language\n\`\`\`\n`,
+    )
+  })
+
+  afterEach(async () => {
+    await fs.rm(rootDir, { recursive: true, force: true })
+  })
+
+  it('reports normalized findings and a summary', async () => {
+    const report = await runChecks({ rootDir, categories: ['frontmatter', 'structure', 'links'] })
+    expect(report.version).toBe(1)
+    expect(report.summary).toMatchObject({ ok: true, errors: 0, warnings: 2, fixable: 1, fixed: 0, filesChecked: 2 })
+    expect(report.findings.map(f => [f.file, f.ruleId])).toEqual([
+      ['src/content/en/docs/bad.mdx', 'mastra/link-redirected'],
+      ['src/content/en/docs/bad.mdx', 'mastra/link-broken'],
+    ])
+    for (const item of report.findings) {
+      expect(item).toEqual(
+        expect.objectContaining({
+          severity: 'warning',
+          category: 'links',
+          fixable: expect.any(Boolean),
+          line: expect.any(Number),
+        }),
+      )
+    }
+    expect(formatHuman(report)).toContain('mastra/link-broken')
+  })
+
+  it('filters by rule and scopes to file arguments', async () => {
+    const report = await runChecks({ rootDir, rules: ['mastra/link-broken'], files: ['src/content/en/docs/bad.mdx'] })
+    expect(report.summary.filesChecked).toBe(1)
+    expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/link-broken'])
+  })
+
+  it('applies fixes with --fix', async () => {
+    const report = await runChecks({ rootDir, categories: ['links'], fix: true })
+    expect(report.summary.fixed).toBe(1)
+    expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/link-broken'])
+    const source = await fs.readFile(path.join(rootDir, 'src/content/en/docs/bad.mdx'), 'utf8')
+    expect(source).toContain('[old](/docs/good)')
+  })
+})
+
+describe('rule documentation', () => {
+  it('documents every rule in styleguides/CHECKS.md with its current severity', async () => {
+    const doc = await fs.readFile(path.join(__dirname, '../../../styleguides/CHECKS.md'), 'utf8')
+    for (const rule of [...RULES, ...RULE_FAMILIES]) {
+      const row = doc.split('\n').find(line => line.startsWith(`| \`${rule.id}\``))
+      expect(row, `${rule.id} is missing from CHECKS.md`).toBeDefined()
+      expect(row).toContain(`| ${rule.severity}`)
+    }
+  })
+})

@@ -20,6 +20,14 @@ Here's a quick start to run the docs locally
 
 ## Linting
 
+Run every docs check (formatting, frontmatter, sidebars, structure, links, remark, Vale, and redirects) with one command:
+
+```bash
+pnpm run check
+```
+
+Add `--fix` to apply safe fixes or `--json` for machine-readable output. See [`styleguides/CHECKS.md`](./styleguides/CHECKS.md) for every rule ID. The individual linters below still work on their own.
+
 ### Remark
 
 To lint Markdown files according to remark rules (e.g. enforcing consistent heading levels, list markers, etc.), you can use `remark`:

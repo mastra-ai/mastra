@@ -68,26 +68,30 @@ Never edit generated `vercel.json` directly. Commit it only when the task includ
 
 ## 5. Verify the change
 
-Run the narrowest checks that cover the change.
+Start with `pnpm check` from `docs/`. It runs formatting, frontmatter, sidebar, structure, link, remark, Vale, and redirect checks in one pass and reports each finding with a stable `mastra/` rule ID. Pass changed MDX files to scope file-level checks, and `--fix` to apply safe fixes. Rule IDs, the JSON schema, and per-page `lintDisable` are documented in `CHECKS.md` next to this file.
 
-| Change                            | Minimum checks                                                          |
-| --------------------------------- | ----------------------------------------------------------------------- |
-| Prose-only MDX                    | Focused MDX formatting, Remark, Vale                                    |
-| Frontmatter                       | Formatting and `pnpm validate`                                          |
-| Sidebar                           | Formatting, `pnpm validate`, and build when routes or navigation change |
-| Move or deletion                  | Focused script tests, redirects, validation, and build                  |
-| Redirect                          | Redirect generator tests, generation, validation, and build             |
-| MDX component or llms-txt handler | Focused Vitest tests, formatting, validation, and build                 |
-| Theme or navigation behavior      | Focused unit or Playwright test and build                               |
+```bash
+pnpm check src/content/en/docs/agents/overview.mdx
+pnpm check --fix
+```
+
+Then run the narrowest additional checks that cover the change.
+
+| Change                            | Minimum checks                                              |
+| --------------------------------- | ----------------------------------------------------------- |
+| Prose-only MDX                    | `pnpm check <files>`                                        |
+| Frontmatter                       | `pnpm check <files>`                                        |
+| Sidebar                           | `pnpm check`, and build when routes or navigation change    |
+| Move or deletion                  | Focused script tests, redirects, validation, and build      |
+| Redirect                          | Redirect generator tests, generation, validation, and build |
+| MDX component or llms-txt handler | Focused Vitest tests, formatting, validation, and build     |
+| Theme or navigation behavior      | Focused unit or Playwright test and build                   |
 
 Common commands from `docs/`:
 
 ```bash
-pnpm format:mdx:check
-pnpm format:check
-pnpm lint:remark
+pnpm check
 pnpm lint:vale:ai
-pnpm validate
 pnpm test
 pnpm build
 ```
