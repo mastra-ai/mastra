@@ -630,7 +630,7 @@ export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipeli
   skillCount?: number;
   /** Format the catalog was rendered in (inject only) */
   skillFormat?: string;
-  /** Whether the catalog was injected, or only a `skill_search` hint (inject only) */
+  /** Configured catalog-injection option; `false` means no catalog was rendered (inject only) */
   injectCatalog?: boolean;
   /** Skill the operation targeted (activate / read) */
   skillName?: string;
