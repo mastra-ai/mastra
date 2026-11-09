@@ -67,6 +67,24 @@ export interface GenUISpecResolver {
   reset(): void;
 }
 
+/** What one read of a spec or edit call touched: the calls it passed through and the interface it edits. */
+interface ReadPass {
+  seen: Set<string>;
+  /** Whether an edit chain looped back to a call already on the way. */
+  cyclic: boolean;
+  dependency?: { target: string; read: SpecRead };
+}
+
+interface CachedRead {
+  phase: NormalizedToolCall['phase'];
+  args: unknown;
+  argsText: string | undefined;
+  output: unknown;
+  implicitTarget: string | undefined;
+  dependency: { target: string; read: SpecRead } | undefined;
+  read: SpecRead;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -118,6 +136,12 @@ export function createSpecResolver(options: CreateSpecResolverOptions = {}): Gen
   let dataSpecOwners = new WeakMap<object, string>();
   let latestAssistant: string | undefined;
   const dataSpecReads = new Map<string, { count: number; read: DataSpecRead }>();
+  /**
+   * The last read of each spec and edit call, with what it was built from. A read is reused while the call's
+   * phase, arguments and result are the same objects and, for an edit, its target and the target's read are
+   * the same, so a conversation streaming elsewhere does not re-parse every spec or replay every edit chain.
+   */
+  const callReads = new Map<string, CachedRead>();
 
   const update = (messages: ReadonlyArray<MastraDBMessage>) => {
     const parts = new Map<string, SpecDataPart[]>();
@@ -208,7 +232,7 @@ export function createSpecResolver(options: CreateSpecResolverOptions = {}): Gen
     toolCallId: string,
     request: SpecEdit,
     stored: Record<string, unknown> | undefined,
-    seen: Set<string>,
+    pass: ReadPass,
   ): EditBaseRead => {
     let target = typeof stored?.target === 'string' ? stored.target : request.target;
     if (!target) {
@@ -217,10 +241,17 @@ export function createSpecResolver(options: CreateSpecResolverOptions = {}): Gen
     }
     if (!target) return { error: 'there is no interface to edit' };
     const call = specCalls.get(target);
-    if (!call || seen.has(target)) return { error: `there is no interface "${target}" to edit` };
+    if (!call) return { error: `there is no interface "${target}" to edit` };
+    if (pass.seen.has(target)) {
+      pass.cyclic = true;
+      return { error: `there is no interface "${target}" to edit` };
+    }
     if (resultOf(call)?.ok === false)
       return { error: `interface "${target}" could not be displayed, so it cannot be edited` };
-    const resolved = resolveSpecCall(call, new Set(seen).add(target));
+    const inner: ReadPass = { seen: new Set(pass.seen).add(target), cyclic: false };
+    const resolved = cachedRead(call, inner);
+    pass.cyclic ||= inner.cyclic;
+    pass.dependency = { target, read: resolved };
     if (!resolved.spec) return resolved.error ? { error: resolved.error } : { target };
     let state: StateModel;
     if (isRecord(stored?.baseState)) state = stored.baseState;
@@ -235,14 +266,14 @@ export function createSpecResolver(options: CreateSpecResolverOptions = {}): Gen
     return { spec: { ...resolved.spec, state }, target };
   };
 
-  const resolveSpecCall = (call: NormalizedToolCall, seen: Set<string>): SpecRead => {
+  const resolveSpecCall = (call: NormalizedToolCall, pass: ReadPass): SpecRead => {
     if (call.toolName !== edit?.name) return readSpecArgs(call);
     const args = partialArgsOf(call);
     if (!args) return {};
     const complete = call.phase !== 'input-streaming';
     const read = readSpecEditArgs(args, complete, edit.modes);
     if (!read.ok) return { error: read.error };
-    const base = editBase(call.toolCallId, read.edit, resultOf(call), seen);
+    const base = editBase(call.toolCallId, read.edit, resultOf(call), pass);
     if (!base.spec) return base.error ? { error: base.error } : {};
     if (!complete && !read.edit.patch?.length) return { spec: base.spec };
     const applied = applySpecEdit(base.spec, read.edit);
@@ -251,7 +282,51 @@ export function createSpecResolver(options: CreateSpecResolverOptions = {}): Gen
     return cycle ? { error: cycle } : { spec: applied.spec };
   };
 
-  const readCall = (call: NormalizedToolCall) => resolveSpecCall(call, new Set([call.toolCallId]));
+  /** The target an edit naming none falls back to: the latest spec or edit call before it. */
+  const implicitTarget = (toolCallId: string) => {
+    const at = specOrder.indexOf(toolCallId);
+    return (at === -1 ? specOrder : specOrder.slice(0, at)).at(-1);
+  };
+
+  const isFresh = (cached: CachedRead, call: NormalizedToolCall, pass: ReadPass): boolean => {
+    if (
+      cached.phase !== call.phase ||
+      cached.args !== call.args ||
+      cached.argsText !== call.argsText ||
+      cached.output !== call.output
+    )
+      return false;
+    if (call.toolName !== edit?.name) return true;
+    if (cached.implicitTarget !== implicitTarget(call.toolCallId)) return false;
+    if (!cached.dependency) return true;
+    const target = specCalls.get(cached.dependency.target);
+    if (!target || pass.seen.has(cached.dependency.target)) return false;
+    const inner: ReadPass = { seen: new Set(pass.seen).add(cached.dependency.target), cyclic: false };
+    return cachedRead(target, inner) === cached.dependency.read && !inner.cyclic;
+  };
+
+  const cachedRead = (call: NormalizedToolCall, pass: ReadPass): SpecRead => {
+    const cached = callReads.get(call.toolCallId);
+    if (cached && isFresh(cached, call, pass)) return cached.read;
+    const own: ReadPass = { seen: pass.seen, cyclic: false };
+    const read = resolveSpecCall(call, own);
+    pass.cyclic ||= own.cyclic;
+    // A read cut short by an edit chain looping back depends on where the chain was entered, so it is not kept.
+    if (own.cyclic) callReads.delete(call.toolCallId);
+    else
+      callReads.set(call.toolCallId, {
+        phase: call.phase,
+        args: call.args,
+        argsText: call.argsText,
+        output: call.output,
+        implicitTarget: call.toolName === edit?.name ? implicitTarget(call.toolCallId) : undefined,
+        dependency: own.dependency,
+        read,
+      });
+    return read;
+  };
+
+  const readCall = (call: NormalizedToolCall) => cachedRead(call, { seen: new Set([call.toolCallId]), cyclic: false });
 
   return {
     update,
@@ -262,10 +337,12 @@ export function createSpecResolver(options: CreateSpecResolverOptions = {}): Gen
     },
     readDataSpec,
     dataSpecOf: part => dataSpecOwners.get(part),
-    readEditBase: (toolCallId, request) => editBase(toolCallId, request, undefined, new Set([toolCallId])),
+    readEditBase: (toolCallId, request) =>
+      editBase(toolCallId, request, undefined, { seen: new Set([toolCallId]), cyclic: false }),
     reset() {
       editBases.clear();
       dataSpecReads.clear();
+      callReads.clear();
     },
   };
 }

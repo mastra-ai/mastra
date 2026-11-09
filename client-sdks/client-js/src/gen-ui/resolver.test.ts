@@ -298,6 +298,120 @@ describe('createSpecResolver', () => {
     });
   });
 
+  describe('when a call is read again', () => {
+    /** The chat keeps one `args` object while a call streams and grows its `argsText`. */
+    const streamingArgs = {};
+    /** A spec call the model is still writing, as the chat holds it mid-stream. */
+    const streaming = (toolCallId: string, argsText: string) => ({
+      type: 'tool-invocation',
+      argsText,
+      toolInvocation: { state: 'partial-call', toolCallId, toolName: 'ui_spec', args: streamingArgs },
+    });
+    const tripText = JSON.stringify(tripSpec);
+
+    it('returns the same read while the call has not changed', () => {
+      const resolver = createSpecResolver({ specTool });
+      const spec = invocation('s1', 'ui_spec', tripSpec, { ok: true, id: 's1' });
+      resolver.update([message('a1', 'assistant', [spec])]);
+      const first = resolver.specForCall('s1');
+
+      resolver.update([
+        message('a1', 'assistant', [spec]),
+        message('u2', 'user', [{ type: 'text', text: 'and the weather?' }]),
+        message('a2', 'assistant', [{ type: 'text', text: 'Sunny all week' }]),
+      ]);
+
+      expect(resolver.specForCall('s1')).toBe(first);
+    });
+
+    it('returns the same edit read while neither the edit nor its interface changed', () => {
+      const resolver = createSpecResolver({ specTool, stateOf: () => ({ remind: true }) });
+      const parts = [
+        invocation('s1', 'ui_spec', tripSpec, { ok: true, id: 's1' }),
+        invocation('e1', 'ui_spec_edit', retitle('Oslo', 's1'), { ok: true, id: 'e1' }),
+      ];
+      resolver.update([message('a1', 'assistant', parts)]);
+      const first = resolver.specForCall('e1');
+
+      resolver.update([message('a1', 'assistant', parts), message('a2', 'assistant', [streaming('s2', '{"ro')])]);
+
+      expect(resolver.specForCall('e1')).toBe(first);
+      expect(titleOf(first)).toBe('Oslo');
+    });
+
+    it('reads the call again once more of its arguments arrive', () => {
+      const resolver = createSpecResolver({ specTool });
+      resolver.update([message('a1', 'assistant', [streaming('s1', tripText.slice(0, 90))])]);
+      const early = resolver.specForCall('s1');
+
+      resolver.update([message('a1', 'assistant', [streaming('s1', tripText.slice(0, -10))])]);
+      const later = resolver.specForCall('s1');
+
+      // The last element written may be cut mid-value, so it waits until the call completes.
+      expect(early?.spec?.elements.card).toBeUndefined();
+      expect(Object.keys(later?.spec?.elements ?? {})).toEqual(['card']);
+    });
+
+    it('reads an edit again once the interface it edits is complete', () => {
+      const resolver = createSpecResolver({ specTool });
+      const edit = invocation('e1', 'ui_spec_edit', retitle('Oslo', 's1'));
+      resolver.update([message('a1', 'assistant', [streaming('s1', tripText.slice(0, 40)), edit])]);
+      expect(resolver.specForCall('e1')?.spec).toBeUndefined();
+
+      resolver.update([message('a1', 'assistant', [invocation('s1', 'ui_spec', tripSpec, { ok: true }), edit])]);
+
+      expect(titleOf(resolver.specForCall('e1'))).toBe('Oslo');
+    });
+
+    it('reads an edit again when an earlier interface becomes the one it edits', () => {
+      const resolver = createSpecResolver({ specTool });
+      const edit = invocation('e1', 'ui_spec_edit', retitle('Oslo'));
+      const s1 = invocation('s1', 'ui_spec', tripSpec, { ok: true });
+      const s2 = invocation('s2', 'ui_spec', { ...tripSpec, state: { remind: true } }, { ok: true });
+      resolver.update([message('a1', 'assistant', [s1, edit])]);
+      expect(resolver.specForCall('e1')?.spec?.state).toEqual({ remind: false });
+
+      resolver.update([message('a1', 'assistant', [s1, s2, edit])]);
+
+      expect(resolver.specForCall('e1')?.spec?.state).toEqual({ remind: true });
+    });
+
+    it('reads edits that edit each other the same whichever is read first', () => {
+      const thread = [
+        message('a1', 'assistant', [
+          invocation('e1', 'ui_spec_edit', retitle('Oslo', 'e2')),
+          invocation('e2', 'ui_spec_edit', retitle('Rome', 'e1')),
+        ]),
+      ];
+      const resolver = createSpecResolver({ specTool });
+      resolver.update(thread);
+      const fresh = createSpecResolver({ specTool });
+      fresh.update(thread);
+
+      resolver.specForCall('e1');
+
+      expect(resolver.specForCall('e2')).toEqual(fresh.specForCall('e2'));
+      expect(fresh.specForCall('e2')?.error).toBeDefined();
+    });
+
+    it('reads every call again after a reset', () => {
+      let state: StateModel = { remind: true };
+      const resolver = createSpecResolver({ specTool, stateOf: () => state });
+      resolver.update([
+        message('a1', 'assistant', [
+          invocation('s1', 'ui_spec', tripSpec, { ok: true }),
+          invocation('e1', 'ui_spec_edit', retitle('Oslo', 's1')),
+        ]),
+      ]);
+      expect(resolver.specForCall('e1')?.spec?.state).toEqual({ remind: true });
+
+      state = { remind: false };
+      resolver.reset();
+
+      expect(resolver.specForCall('e1')?.spec?.state).toEqual({ remind: false });
+    });
+  });
+
   describe('when the thread is updated', () => {
     it('says whether any spec changed', () => {
       const resolver = createSpecResolver({ specTool });
