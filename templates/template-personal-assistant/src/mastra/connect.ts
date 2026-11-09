@@ -100,11 +100,50 @@ export function normalizeMail(value: unknown) {
   const source = object(value);
   const result = {
     sourceMessageId: typeof source?.id === 'string' ? source.id : undefined,
+    ...(typeof source?.threadId === 'string' ? { sourceThreadId: source.threadId } : {}),
+    headers: [] as { name: string; value: string }[],
     text: '',
     status: 'unsupported',
     truncated: false,
     issues: [] as string[],
   };
+  const metadataIssue = (issue: string) => {
+    if (!result.issues.includes(issue)) result.issues.push(issue);
+  };
+  if (source?.threadId !== undefined && typeof source.threadId !== 'string')
+    metadataIssue('Malformed source thread identity omitted.');
+  const selectedNames = new Map([
+    ['from', 'From'],
+    ['to', 'To'],
+    ['cc', 'Cc'],
+    ['subject', 'Subject'],
+    ['date', 'Date'],
+  ]);
+  const headers = object(source?.payload)?.headers;
+  let headerBytes = 0;
+  if (headers !== undefined && !Array.isArray(headers)) metadataIssue('Malformed source headers omitted.');
+  if (Array.isArray(headers)) {
+    for (const value of headers) {
+      const header = object(value);
+      if (typeof header?.name !== 'string') {
+        metadataIssue('Malformed source headers omitted.');
+        continue;
+      }
+      const name = selectedNames.get(header.name.toLowerCase());
+      if (!name) continue;
+      if (typeof header.value !== 'string') {
+        metadataIssue('Malformed source headers omitted.');
+        continue;
+      }
+      const size = Buffer.byteLength(name) + Buffer.byteLength(header.value);
+      if (result.headers.length >= 64 || headerBytes + size > 16384) {
+        metadataIssue('Source header limit exceeded; entries omitted.');
+        continue;
+      }
+      result.headers.push({ name, value: header.value });
+      headerBytes += size;
+    }
+  }
   const pending: { part: unknown; depth: number }[] = [{ part: source?.payload, depth: 0 }];
   const texts: string[] = [];
   let bytes = 0;

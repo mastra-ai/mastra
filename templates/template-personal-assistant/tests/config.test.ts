@@ -156,6 +156,7 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
   const text = 'Full UTF-8 body: café and a recovery requirement.';
   assert.deepEqual(normalizeMail(message(Buffer.from(text).toString('base64url'))), {
     sourceMessageId: 'source-id',
+    headers: [],
     text,
     status: 'complete',
     truncated: false,
@@ -207,6 +208,128 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
   const over = normalizeMail(multipart(32768));
   assert.equal(over.truncated, true);
   assert.ok(Buffer.byteLength(over.text) <= 65536);
+});
+
+test('email metadata normalization preserves selected bounded source headers', async () => {
+  const { normalizeMail } = await import('../src/mastra/connect');
+  const mail = (headers?: unknown, extra: Record<string, unknown> = {}) => ({
+    id: 'metadata-message',
+    threadId: 'provider-thread',
+    payload: {
+      mimeType: 'text/plain',
+      body: { data: Buffer.from('Complete body.').toString('base64url') },
+      ...(headers === undefined ? {} : { headers }),
+    },
+    ...extra,
+  });
+  const selected = [
+    { name: 'fRoM', value: '  Sender <sender@example.test>  ' },
+    { name: 'TO', value: 'Owner <owner@example.test>' },
+    { name: 'Cc', value: 'First <first@example.test>' },
+    { name: 'cc', value: 'Second <second@example.test>' },
+    { name: 'sUbJeCt', value: 'Raw\r\n subject: café' },
+    { name: 'DATE', value: 'Thu, 5 Nov 2026 09:42:00 -0300' },
+    { name: 'X-Private-Transport', value: 'omit this transport field' },
+  ];
+  const expected = selected.slice(0, 6).map((header, index) => ({
+    name: ['From', 'To', 'Cc', 'Cc', 'Subject', 'Date'][index],
+    value: header.value,
+  }));
+  const result = normalizeMail(mail(selected));
+  assert.equal(result.sourceMessageId, 'metadata-message');
+  assert.equal(result.sourceThreadId, 'provider-thread');
+  assert.deepEqual(result.headers, expected);
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(result.issues, []);
+  const absent = normalizeMail({ payload: { mimeType: 'text/plain', body: { data: 'dGV4dA' } } });
+  assert.equal(absent.sourceThreadId, undefined);
+  assert.deepEqual(absent.headers, []);
+  assert.deepEqual(absent.issues, []);
+  assert.equal(absent.status, 'complete');
+  const nested = normalizeMail({ payload: { mimeType: 'multipart/mixed', parts: [mail(selected).payload] } });
+  assert.deepEqual(nested.headers, [], 'Nested MIME headers cannot replace message-level evidence.');
+  assert.equal(nested.text, 'Complete body.');
+  for (const headers of [
+    null,
+    {},
+    'private invalid headers',
+    [null, {}, { name: 5, value: 'private' }, { name: 'Subject', value: 123 }],
+  ]) {
+    const malformed = normalizeMail(mail(headers, { threadId: 42 }));
+    assert.equal(malformed.sourceThreadId, undefined);
+    assert.deepEqual(malformed.headers, []);
+    assert.equal(malformed.text, 'Complete body.');
+    assert.equal(malformed.status, 'partial');
+    assert.ok(malformed.issues.length > 0 && malformed.issues.length <= 4);
+    assert.doesNotMatch(JSON.stringify(malformed.issues), /private|42|123/);
+  }
+  const mixed = normalizeMail(
+    mail([selected[0], { name: 'Subject', value: null }, { name: 'To', value: '' }, selected[4]]),
+  );
+  assert.deepEqual(mixed.headers, [expected[0], { name: 'To', value: '' }, expected[4]]);
+  assert.equal(mixed.status, 'partial');
+  assert.match(JSON.stringify(mixed.issues), /Malformed/);
+  const invalidMany = normalizeMail(mail(Array.from({ length: 1000 }, () => ({ name: 'Subject', value: {} }))));
+  assert.ok(
+    invalidMany.issues.length > 0 && invalidMany.issues.length <= 4,
+    'Diagnostics must not grow with rejected source entries.',
+  );
+  const exactCount = Array.from({ length: 64 }, (_, index) => ({ name: 'To', value: String(index) }));
+  assert.deepEqual(normalizeMail(mail(exactCount)).headers, exactCount);
+  const countOverflow = normalizeMail(mail([...exactCount, { name: 'Cc', value: 'omitted whole' }]));
+  assert.deepEqual(countOverflow.headers, exactCount);
+  assert.equal(countOverflow.status, 'partial');
+  assert.equal(countOverflow.truncated, false, 'Metadata omissions do not mislabel body truncation.');
+  assert.match(JSON.stringify(countOverflow.issues), /limit/);
+  const exactBytes = [{ name: 'Subject', value: 'a'.repeat(16384 - 7) }];
+  const exact = normalizeMail(mail(exactBytes));
+  assert.deepEqual(exact.headers, exactBytes);
+  assert.equal(exact.status, 'complete');
+  const overflow = { name: 'Subject', value: 'é'.repeat(8189) };
+  assert.equal(Buffer.byteLength(overflow.name + overflow.value), 16385);
+  const later = { name: 'From', value: 'fits@example.test' };
+  const byteOverflow = normalizeMail(mail([overflow, later]));
+  assert.deepEqual(
+    byteOverflow.headers,
+    [later],
+    'An overflowing entry is omitted intact; later fitting entries remain eligible.',
+  );
+  assert.equal(byteOverflow.status, 'partial');
+  assert.equal(byteOverflow.truncated, false);
+  assert.match(JSON.stringify(byteOverflow.issues), /limit/);
+  assert.doesNotMatch(JSON.stringify(byteOverflow.issues), /é|fits@example/);
+  const multibyteFit = [
+    { name: 'Subject', value: 'é'.repeat(8187) },
+    { name: 'To', value: 'a' },
+  ];
+  assert.equal(
+    multibyteFit.reduce((bytes, header) => bytes + Buffer.byteLength(header.name + header.value), 0),
+    16384,
+  );
+  const cumulativeExact = normalizeMail(mail(multibyteFit));
+  assert.deepEqual(cumulativeExact.headers, multibyteFit);
+  assert.equal(cumulativeExact.status, 'complete');
+  const cumulative = normalizeMail(mail([...multibyteFit, { name: 'Cc', value: 'x' }]));
+  assert.deepEqual(cumulative.headers, multibyteFit);
+  assert.equal(cumulative.status, 'partial');
+  assert.match(JSON.stringify(cumulative.issues), /limit/);
+  const unsupported = normalizeMail(
+    mail(selected, { payload: { mimeType: 'text/html', headers: selected, body: { data: 'PGI-eDwvYj4' } } }),
+  );
+  assert.equal(unsupported.status, 'unsupported', 'Metadata cannot establish full body support.');
+  assert.equal(unsupported.text, '');
+  assert.deepEqual(unsupported.headers, expected);
+  const truncated = normalizeMail(
+    mail([overflow], {
+      payload: {
+        mimeType: 'text/plain',
+        headers: [overflow],
+        body: { data: Buffer.alloc(65537, 97).toString('base64url') },
+      },
+    }),
+  );
+  assert.equal(truncated.status, 'truncated');
+  assert.equal(truncated.truncated, true);
 });
 
 test('schedule timing preserves explicit timezone dates and rejects calendar or DST shifts', async () => {
