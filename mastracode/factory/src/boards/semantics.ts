@@ -51,8 +51,9 @@ const flows = new WeakMap<object, FactoryRuleBoardFlow>();
  *   there, verdicts on pull requests are recorded there, and a push or review request re-enters it.
  * - `selfReview`: the first working phase that grants `factory_record_review_verdict` without
  *   `factory_review_source`: an independent review of the builder's branch before a pull request.
- * - `triage`: the first working phase that neither builds (runs in `buildRole`) nor reviews: it
- *   sorts new cards before anyone accepts them.
+ * - `triage`: on a board with a `build` phase, the first working phase that neither builds (runs
+ *   in `buildRole`) nor reviews: it sorts new cards before anyone accepts them. A board that
+ *   builds nothing has no triage phase.
  * - `build`: the last working phase, in declaration order, that is neither of those and can move
  *   into the review that follows it (`selfReview`, else `pullRequestReview`). Self-review sends
  *   requested changes back here, and its seat (`buildRole`) is woken by pull request feedback.
@@ -86,13 +87,16 @@ export function boardFlow(board: InstalledBoard | undefined): FactoryRuleBoardFl
       )?.[0]
     : undefined;
   const buildRole = build ? board.roleForPhase(build) : undefined;
-  const triage = entries.find(
-    ([key, phase]) =>
-      phase.kind === 'working' &&
-      key !== build &&
-      phase.runner.context !== REVIEW_CONTEXT &&
-      (buildRole === undefined || phase.runner.context !== buildRole),
-  )?.[0];
+  // Only a board that builds sorts cards first; elsewhere a working phase is just its own step.
+  const triage = build
+    ? entries.find(
+        ([key, phase]) =>
+          phase.kind === 'working' &&
+          key !== build &&
+          phase.runner.context !== REVIEW_CONTEXT &&
+          phase.runner.context !== buildRole,
+      )?.[0]
+    : undefined;
   const terminals = entries.filter(([, phase]) => phase.kind === 'terminal').map(([key]) => key);
   const completed = board.sourceClosed?.completed ?? terminals[0];
   const canceled = board.sourceClosed?.canceled ?? terminals.find(key => key !== completed) ?? completed;

@@ -25,7 +25,14 @@ describe('needsApproval', () => {
       phases: {
         inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['sort', 'make'] },
         sort: { name: 'Sort', kind: 'working', runner: { context: 'triage' }, nextPhases: ['inbox', 'make'] },
-        make: { name: 'Make', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
+        make: { name: 'Make', kind: 'working', runner: { context: 'work' }, nextPhases: ['pr'] },
+        pr: {
+          name: 'PR',
+          kind: 'working',
+          runner: { context: 'review' },
+          tools: ['factory_review_source', 'factory_record_review_verdict'],
+          nextPhases: ['shipped'],
+        },
         shipped: { name: 'Shipped', kind: 'terminal' },
       },
     });
@@ -33,6 +40,7 @@ describe('needsApproval', () => {
     expect(needsApproval({ ...labeled, stages: ['inbox'] }, onShip)).toBe(true);
     expect(needsApproval({ ...labeled, stages: ['sort'] }, onShip)).toBe(true);
     expect(needsApproval({ ...labeled, stages: ['make'] }, onShip)).toBe(false);
+    expect(needsApproval({ ...labeled, stages: ['pr'] }, onShip)).toBe(false);
     // Work's phase names mean nothing on another board.
     expect(needsApproval({ ...labeled, stages: ['intake'] }, onShip)).toBe(false);
   });

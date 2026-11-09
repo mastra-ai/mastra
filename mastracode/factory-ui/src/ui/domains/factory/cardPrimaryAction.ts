@@ -1,13 +1,14 @@
 import { needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
 
-type FactoryRole = 'triage' | 'plan' | 'work' | 'review';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { itemSessionSpec, metadataLabels, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
 import { attachedPullRequestSource, cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
+
+type FactoryRole = 'triage' | 'plan' | 'work' | 'review';
 
 export interface CardPrimaryAction {
   label: string;

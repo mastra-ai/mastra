@@ -385,7 +385,7 @@ export interface FactoryRuleBoardFlow {
   readonly initialPhase?: string;
   /** Phase that takes pull requests: reviews them, records verdicts on them, and re-reviews pushes. */
   readonly pullRequestReview?: string;
-  /** Working phase that sorts new cards before anyone accepts them: the first one that neither builds nor reviews. */
+  /** Working phase that sorts new cards before anyone accepts them: on a board that builds, the first one that neither builds nor reviews. */
   readonly triage?: string;
   /** Working phase that reviews the builder's branch before a pull request opens. */
   readonly selfReview?: string;
