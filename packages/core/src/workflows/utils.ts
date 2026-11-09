@@ -471,8 +471,10 @@ export const createTimeTravelExecutionParams = (params: {
 
     const prevStep = graph.steps[index - 1]!;
     let stepPayload = undefined;
+    let callerOverridesStepPayload = inputData !== undefined;
     if (prevStep) {
       const prevStepIds = getStepIds(prevStep);
+      callerOverridesStepPayload ||= prevStepIds.some(stepId => context?.[stepId] !== undefined);
       if (prevStepIds.length > 0) {
         if (prevStepIds.length === 1) {
           stepPayload = (stepResults?.[prevStepIds[0]!] as any)?.output ?? {};
@@ -531,9 +533,18 @@ export const createTimeTravelExecutionParams = (params: {
       // Carry a loop body's iteration count so a time-travelled loop continues counting instead of restarting at 1.
       const iterationCount =
         context?.[stepId]?.metadata?.iterationCount ?? snapshotContext[stepId]?.metadata?.iterationCount;
+      // The previous step's output is only the loop's first input, so a loop continuing mid-way must
+      // resume with the recorded iteration's input unless the caller supplied a new one.
+      const resumesRecordedIteration =
+        iterationCount !== undefined && steps.includes(stepId) && !callerOverridesStepPayload;
       result = {
         status,
-        payload: context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {},
+        payload:
+          context?.[stepId]?.payload ??
+          (resumesRecordedIteration ? snapshotContext[stepId]?.payload : undefined) ??
+          stepPayload ??
+          snapshotContext[stepId]?.payload ??
+          {},
         output: isCompleteStatus
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,

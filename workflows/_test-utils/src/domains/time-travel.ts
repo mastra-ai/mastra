@@ -851,7 +851,12 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
   }
 
   // Test: time travel to a failed loop iteration continues the loop's iterationCount
-  for (const loopType of ['dountil', 'dowhile'] as const) {
+  for (const [loopType, position] of [
+    ['dountil', 'first'],
+    ['dowhile', 'first'],
+    ['dountil', 'after-step'],
+    ['dowhile', 'after-step'],
+  ] as const) {
     const inputs: number[] = [];
     const counts: number[] = [];
     let failures = 0;
@@ -869,23 +874,31 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       },
     });
 
-    const id = `timetravel-loop-iteration-${loopType}-workflow`;
+    const prep = createStep({
+      id: 'prep',
+      inputSchema: z.object({ n: z.number() }),
+      outputSchema: z.object({ n: z.number() }),
+      execute: async ({ inputData }) => inputData,
+    });
+
+    const id = `timetravel-loop-iteration-${loopType}-${position}-workflow`;
     const workflow = createWorkflow({
       id,
       inputSchema: z.object({ n: z.number() }),
       outputSchema: z.object({ n: z.number() }),
-      steps: [call],
+      steps: position === 'first' ? [call] : [prep, call],
     });
+    const loopParent = position === 'first' ? workflow : workflow.then(prep);
 
     if (loopType === 'dountil') {
-      workflow
+      loopParent
         .dountil(call, async ({ iterationCount }) => {
           counts.push(iterationCount);
           return iterationCount >= 3;
         })
         .commit();
     } else {
-      workflow
+      loopParent
         .dowhile(call, async ({ iterationCount }) => {
           counts.push(iterationCount);
           return iterationCount < 3;
@@ -1544,10 +1557,15 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
       },
     );
 
-    it.skipIf(skipTests.timeTravelLoopIterationCount || !timeTravel).each(['dountil', 'dowhile'] as const)(
-      'should continue a %s loop iterationCount when time travelling to a failed iteration',
-      async loopType => {
-        const entry = registry![`timetravel-loop-iteration-${loopType}-workflow`]!;
+    it.skipIf(skipTests.timeTravelLoopIterationCount || !timeTravel).each([
+      ['dountil', 'first'],
+      ['dowhile', 'first'],
+      ['dountil', 'after-step'],
+      ['dowhile', 'after-step'],
+    ] as const)(
+      'should continue a %s loop (%s) iterationCount when time travelling to a failed iteration',
+      async (loopType, position) => {
+        const entry = registry![`timetravel-loop-iteration-${loopType}-${position}-workflow`]!;
         entry.resetMocks?.();
         const runId = randomUUID();
 
