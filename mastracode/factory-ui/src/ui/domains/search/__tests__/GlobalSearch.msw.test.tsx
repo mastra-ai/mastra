@@ -992,6 +992,27 @@ describe('Global search', () => {
     expect(requests.createSessionRequests).toBe(0);
   });
 
+  it('stays open, and files nothing, when a candidate is picked before the board catalog is available', async () => {
+    const requests = stubSearchApi();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ error: 'unavailable' }, { status: 503 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    await screen.findByText('Review command palette PR');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
+    await user.click(await within(dialog).findByRole('option', { name: /Harden the review board drop target/ }));
+
+    expect(await screen.findByText('The board is still loading. Try again in a moment.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
+    expect(requests.created).toEqual([]);
+    expect(requests.transitions).toEqual([]);
+  });
+
   it('lists a pull request already filed as a card only once', async () => {
     stubSearchApi();
     const user = userEvent.setup();

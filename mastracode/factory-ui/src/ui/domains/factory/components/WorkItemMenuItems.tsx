@@ -113,7 +113,9 @@ export function WorkItemMenuItems({
             onClick={() => onMove(stage.id)}
           >
             <BoardStageIcon stage={stage.id} kind={stage.kind} decorative />
-            <span>{stage.id === loop?.completed ? `Mark ${stage.label.toLowerCase()}` : `Move to ${stage.label}`}</span>
+            <span>
+              {stage.id === board?.flow?.completed ? `Mark ${stage.label.toLowerCase()}` : `Move to ${stage.label}`}
+            </span>
           </DropdownMenu.Item>
         ))}
       <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>

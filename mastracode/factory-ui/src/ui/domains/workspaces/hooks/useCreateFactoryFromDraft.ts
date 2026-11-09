@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -44,7 +45,7 @@ export function useCreateFactoryFromDraft({
   // instead of guessing one.
   const resolveIntakeBoard = async (factoryProjectId: string) => {
     const { boards } = await queryClient.query(boardCatalogQueryOptions(client, factoryProjectId));
-    return boards.find(board => board.default)?.id ?? null;
+    return boards.find(board => board.id === DEFAULT_BOARD_ID)?.id ?? null;
   };
 
   const feedProject = async (input: {

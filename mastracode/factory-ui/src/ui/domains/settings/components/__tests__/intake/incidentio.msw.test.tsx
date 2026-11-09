@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { builtinBoardCatalog } from '../../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
 import {
@@ -22,9 +23,7 @@ describe('IntakeSection incidentio', () => {
       seedFactories();
       const { savedBindings } = useIncidentioHandlers();
       server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
-          HttpResponse.json({ boards: [{ id: 'work', title: 'Work' }] }),
-        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json(builtinBoardCatalog)),
       );
 
       renderIntakeSection();
