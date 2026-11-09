@@ -5,9 +5,11 @@ import { Outlet } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
+import { useServerStatus } from '../../hooks/useServerStatus';
 import { OverlaysProvider } from '../lib/overlays';
 import { PwaInstallBanner } from '../lib/pwa';
 import { AppSidebar } from '../AppSidebar';
+import { ServerProblemBanner } from './ServerProblemBanner';
 
 /** `[` toggles the sidebar, as the trigger's tooltip says. Needs the `Sidebar.Provider` context. */
 function SidebarShortcuts() {
@@ -19,7 +21,6 @@ function SidebarShortcuts() {
 function AppFrame() {
   const { state, collapsedWidth } = useSidebar();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
-
   return (
     <AppShell sidebar={<AppSidebar />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
@@ -36,8 +37,11 @@ function AppFrame() {
  * The mobile PWA install banner takes the top row so it never covers the page.
  */
 export function AppLayout() {
+  const problem = useServerStatus().data?.problems[0];
+
   return (
     <div className="bg-sidebar flex h-dvh flex-col">
+      {problem ? <ServerProblemBanner problem={problem} /> : null}
       <PwaInstallBanner />
       <div className="min-h-0 flex-1">
         <Sidebar.Provider storageKey="mastracode-web" collapsedWidth={0}>
