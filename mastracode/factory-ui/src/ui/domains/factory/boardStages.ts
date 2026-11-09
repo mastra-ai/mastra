@@ -79,12 +79,16 @@ export function itemStageLabel(item: WorkItem, stage: string, board: BoardInfo |
 }
 
 /** Furthest phase the item currently sits in; items with no known phase read as the board's first, like its columns. */
-export function currentItemStageLabel(item: WorkItem, board: BoardInfo | undefined): string {
+export function currentItemStage(item: WorkItem, board: BoardInfo | undefined): string | undefined {
   const options = itemStageOptions(item, board);
   const order = (stage: string) => options.findIndex(candidate => candidate.id === stage);
   // Phases the card can't sit in on its board would beat the real one, so they are dropped.
   const onBoard = item.stages.filter(stage => order(stage) !== -1);
   const furthest = onBoard.sort((a, b) => order(b) - order(a)).at(0);
-  const stage = furthest ?? board?.initialPhase ?? item.stages[0];
+  return furthest ?? board?.initialPhase ?? item.stages[0];
+}
+
+export function currentItemStageLabel(item: WorkItem, board: BoardInfo | undefined): string {
+  const stage = currentItemStage(item, board);
   return stage === undefined ? '' : itemStageLabel(item, stage, board);
 }

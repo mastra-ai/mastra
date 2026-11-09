@@ -1039,18 +1039,25 @@ describe('Global search', () => {
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
   });
 
-  it("starts a card with no session from the phase it sits in, not its board's first phase", async () => {
-    const planning = { ...workItems.find(item => item.id === 'work-item-unstarted-issue')!, stages: ['planning'] };
-    const requests = stubSearchApi({ workItems: [planning] });
-    const user = userEvent.setup();
-    renderSearchRoute();
-    await openWithShortcut();
+  // A card in more than one phase sits in its furthest one, as its card label says.
+  it.each([[['planning']], [['triage', 'planning']]])(
+    "starts a card with no session in %j from the phase it sits in, not its board's first phase",
+    async stages => {
+      const planning = { ...workItems.find(item => item.id === 'work-item-unstarted-issue')!, stages };
+      const requests = stubSearchApi({ workItems: [planning] });
+      const user = userEvent.setup();
+      renderSearchRoute();
+      await openWithShortcut();
 
-    await user.click(await screen.findByText('Palette keyboard traps focus on mobile'));
+      await user.click(await screen.findByText('Palette keyboard traps focus on mobile'));
 
-    await waitFor(() => expect(requests.transitions).toHaveLength(1));
-    expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-unstarted-issue', body: { stage: 'planning' } });
-  });
+      await waitFor(() => expect(requests.transitions).toHaveLength(1));
+      expect(requests.transitions[0]).toMatchObject({
+        itemId: 'work-item-unstarted-issue',
+        body: { stage: 'planning' },
+      });
+    },
+  );
 
   it('lists a pull request already filed as a card only once', async () => {
     stubSearchApi();
