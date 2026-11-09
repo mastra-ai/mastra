@@ -2860,21 +2860,36 @@ export class DurableAgent<
    * the run first has already moved it to `running`, and that run is stopped by the
    * abort request instead. Stores that cannot enforce the guard atomically get the
    * same check on a best-effort basis, so a finished or running run is never marked
-   * canceled. Resolves whether this call canceled the parked run. Storage errors
-   * propagate: an abort acknowledged without this write would not stop another
-   * server from resuming the run.
+   * canceled. Stores without concurrent updates (some don't implement
+   * `updateWorkflowState`) get the canceled status by rewriting the run's snapshot,
+   * which every store supports. Resolves whether this call canceled the parked run.
+   * Storage errors propagate: an abort acknowledged without this write would not stop
+   * another server from resuming the run.
    */
   async #cancelParkedRun(runId: string): Promise<boolean> {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) return false;
     const workflowName = DurableStepIds.AGENTIC_LOOP;
-    if ((await workflowsStore.loadWorkflowRunStatus({ workflowName, runId })) !== 'suspended') return false;
-    const updated = await workflowsStore.updateWorkflowState({
+    if (workflowsStore.supportsConcurrentUpdates()) {
+      if ((await workflowsStore.loadWorkflowRunStatus({ workflowName, runId })) !== 'suspended') return false;
+      const updated = await workflowsStore.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'canceled', expectedStatus: 'suspended' },
+      });
+      return updated !== undefined;
+    }
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+    const snapshot = typeof run?.snapshot === 'string' ? (JSON.parse(run.snapshot) as WorkflowRunState) : run?.snapshot;
+    if (snapshot?.status !== 'suspended') return false;
+    const written = await workflowsStore.persistWorkflowSnapshot({
       workflowName,
       runId,
-      opts: { status: 'canceled', expectedStatus: 'suspended' },
+      resourceId: run?.resourceId,
+      snapshot: { ...snapshot, status: 'canceled' },
+      expectedStatus: 'suspended',
     });
-    return updated !== undefined;
+    return written !== false;
   }
 
   async #isRunCanceledInStorage(runId: string): Promise<boolean> {
