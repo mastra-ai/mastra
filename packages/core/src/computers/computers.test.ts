@@ -260,6 +260,31 @@ describe('Computers', () => {
     }
   });
 
+  it('persists request_human control across restart and refuses agent pixel actions', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: first });
+    const created = await (first.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    await expect(
+      (first.tools().mastra_workspace_computer_request_human as any).execute({ reason: 'sign in' }, context),
+    ).resolves.toMatchObject({ control: 'human', revision: 1, enforced: true });
+
+    const second = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: second });
+    const restartedContext = { agent: { resourceId: 'resource', threadId: 'after-restart' } } as any;
+    await (second.tools().mastra_workspace_computer_attach as any).execute({ id: created.computer.id }, restartedContext);
+    await expect(
+      second.controlState(created.computer.id, { resourceId: 'resource', threadId: 'after-restart' }),
+    ).resolves.toMatchObject({ holder: 'human', reason: 'sign in', revision: 1, enforced: true });
+    await expect(
+      second.runComputerAction(
+        { sandboxId: 'sandbox-1', action: 'mutate', context: restartedContext },
+        async () => 'mutated',
+      ),
+    ).rejects.toThrow('the user has control of this computer; wait for them to hand it back');
+  });
+
   it('restores persistent control when attaching after restart', async () => {
     const storage = new InMemoryStore();
     storage.stores.computers = new InMemoryComputersStorage();

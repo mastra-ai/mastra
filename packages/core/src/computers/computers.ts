@@ -606,6 +606,7 @@ export class Computers implements MastraComputers {
           target: { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) },
         };
         enforced = await this.#enforceWithinDeadline(entry, scope);
+        await this.#persistAttachment(scope, entry);
       }
       const shown = entry.control.reason ?? reason;
       try {
