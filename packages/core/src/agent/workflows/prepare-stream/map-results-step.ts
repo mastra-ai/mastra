@@ -352,7 +352,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
           // context's config, so a per-run readOnly has to stop the pass here.
           if (memoryConfig?.readOnly || memoryContext?.memoryConfig?.readOnly) return false;
           // MessageHistory creates the request context's thread, but the saved rows keep the thread
-          // they were added under, so check every thread the pass can write.
+          // they were added under, so check every thread the pass can write. This is strict on purpose:
+          // a denial on any of them skips the whole save, even if another thread would have been allowed.
           const threadIds = new Set(
             [memoryContext?.thread?.id, memoryData.thread?.id, result.threadId].filter((id): id is string => !!id),
           );
