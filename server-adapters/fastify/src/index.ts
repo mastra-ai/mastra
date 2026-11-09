@@ -793,7 +793,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         // Fastify prefers static paths, but the custom route handler dispatches to the first
         // registered match. Check auth against the route that will actually run.
         const requestPath = String(request.url.split('?')[0] || '/');
-        const match = findMatchingCustomRoute(requestPath, String(request.method || 'GET'), routes);
+        // The custom route handler (Hono) is case-sensitive, so match it that way.
+        const match = findMatchingCustomRoute(requestPath, String(request.method || 'GET'), routes, {
+          caseSensitive: true,
+        });
         const dispatched = match?.route ?? route;
         const serverRoute: ServerRoute = {
           method: dispatched.method as any,

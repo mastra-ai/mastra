@@ -68,13 +68,18 @@ export const findMatchingCustomRoute = (
   path: string,
   method: string,
   apiRoutes?: ApiRoute[],
+  options?: { caseSensitive?: boolean },
 ): { route: ApiRoute; params: Record<string, string> } | undefined => {
   if (!apiRoutes) return undefined;
 
   for (const route of apiRoutes) {
     if (route.method !== method && route.method !== 'ALL') continue;
 
-    const { keys, pattern: regex } = parse(route.path);
+    const { keys, pattern } = parse(route.path);
+    // Patterns are case-insensitive by default. Adapters whose dispatcher is
+    // case-sensitive (e.g. Hono) must match the same way, or '/Admin' could pick a
+    // public '/admin' for the auth check while a protected '/Admin' handles it.
+    const regex = options?.caseSensitive ? new RegExp(pattern.source, pattern.flags.replace('i', '')) : pattern;
     const match = regex.exec(path);
     if (!match) continue;
 

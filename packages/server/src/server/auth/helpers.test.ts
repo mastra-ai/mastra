@@ -86,6 +86,17 @@ describe('auth helpers', () => {
       const match = findMatchingCustomRoute('/docs/%6fpen', 'GET', routes);
       expect(match?.params).toEqual({ docId: 'open' });
     });
+
+    it('matches case-sensitively when asked, like a case-sensitive dispatcher', () => {
+      const routes = [
+        { path: '/admin', method: 'GET', handler: async () => new Response('public'), requiresAuth: false },
+        { path: '/Admin', method: 'GET', handler: async () => new Response('protected'), requiresAuth: true },
+      ] as any;
+
+      expect(findMatchingCustomRoute('/Admin', 'GET', routes)?.route.path).toBe('/admin');
+      expect(findMatchingCustomRoute('/Admin', 'GET', routes, { caseSensitive: true })?.route.path).toBe('/Admin');
+      expect(findMatchingCustomRoute('/ADMIN', 'GET', routes, { caseSensitive: true })).toBeUndefined();
+    });
   });
 
   describe('matchesOrIncludes', () => {
