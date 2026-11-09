@@ -13,4 +13,4 @@ Intake routes can now move existing cards on pull request events. A route's `on`
 }
 ```
 
-New and existing projects get Work routes that keep today's behaviour: a merge moves the card to Done, a pull request closed unmerged moves its own card to Canceled and an issue card back to Intake, and a push or review request sends the card back to PR review. Deleted default routes stay deleted.
+New and existing projects get Work routes that keep today's behaviour: a merge moves the card to Done, a pull request closed unmerged moves its own card to Canceled and an issue card back to Intake, and a push or review request sends the card back to PR review. Deleted default routes aren't added back. When no enabled route takes the card, the built-in move still runs, so disabling or deleting a pull request route never strands a merged card in review.
