@@ -14,9 +14,12 @@ import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js';
 import type { SessionLayout, SessionLayoutRepository } from '../sandbox/session-sandbox.js';
 import { peekSessionEnvironment } from '../session/environment-state-processor.js';
+import { sessionMemoryResourceId } from '../session/session-threads.js';
+import type { SessionRunBindings, SessionThreadLookup } from '../session/session-threads.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
+import { canReadSessionResource, canViewSourceControlSession } from './session-access.js';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -464,12 +467,15 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
 export interface SessionFsDeps {
   auth: RouteAuth;
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
+  /** Resolves the memory resource a session runs on, so a session still on its owner's memory stays the owner's. */
+  controller?: SessionThreadLookup;
+  workItems?: SessionRunBindings;
 }
 
 /**
  * Resolve a `workspacePath` query param as a Factory session id. Returns the
- * session when one exists and the caller can see it (same org, and the owner
- * when the session is private), `null` when no session matches (the caller
+ * session when one exists and the caller may read it (the same rule as the
+ * session conversation routes), `null` when no session matches (the caller
  * should fall back to local-path handling), and throws otherwise.
  */
 async function resolveAuthorizedSession(
@@ -483,11 +489,11 @@ async function resolveAuthorizedSession(
   if (deps.auth.enabled()) {
     await deps.auth.ensureUser(c);
     const tenant = deps.auth.tenant(c);
-    if (
-      !tenant ||
-      tenant.orgId !== session.orgId ||
-      (session.visibility === 'private' && tenant.userId !== session.userId)
-    ) {
+    if (!tenant || !canViewSourceControlSession(session, tenant)) {
+      throw new Error('Session is not available to the current user');
+    }
+    const resourceId = await sessionMemoryResourceId(deps.controller, session, deps.workItems);
+    if (!canReadSessionResource(session, resourceId, tenant)) {
       throw new Error('Session is not available to the current user');
     }
   }

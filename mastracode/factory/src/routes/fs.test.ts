@@ -298,7 +298,14 @@ function seedSessionSandbox(
   return { executeCommand };
 }
 
-function makeSessionFs({ session = makeSession() }: { session?: SourceControlSession } = {}) {
+function makeSessionFs({
+  session = makeSession(),
+  ownThreadResourceId,
+}: {
+  session?: SourceControlSession;
+  /** The memory resource the session's own thread is on; no thread when omitted. */
+  ownThreadResourceId?: string;
+} = {}) {
   const ensureUser = vi.fn(async () => undefined);
   return {
     ensureUser,
@@ -310,6 +317,11 @@ function makeSessionFs({ session = makeSession() }: { session?: SourceControlSes
         isOrganizationAdmin: async () => false,
       },
       sessions: { getBySessionId: vi.fn(async () => session) },
+      controller: {
+        queryThreadById: vi.fn(async () =>
+          ownThreadResourceId ? ({ id: session.sessionId, resourceId: ownThreadResourceId } as never) : null,
+        ),
+      },
     },
   };
 }
@@ -732,9 +744,12 @@ describe('live session file tree', () => {
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
-  it("serves another org member's org-visible session", async () => {
+  it("serves another org member's org-visible session on its Factory's memory", async () => {
     await seedHostCheckouts();
-    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'org' }) });
+    const { deps } = makeSessionFs({
+      session: makeSession({ visibility: 'org', factoryProjectId: 'fp-1' }),
+      ownThreadResourceId: 'fp-1',
+    });
     deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
     const tree = await requestSessionRoute('/web/workspace/tree', deps);
     const rendered = await requestSessionRoute('/web/workspace/rendered/list', deps);
@@ -742,6 +757,19 @@ describe('live session file tree', () => {
 
     expect((await tree(`?workspacePath=${id}&path=src`)).status).toBe(200);
     expect((await rendered(`?workspacePath=${id}&root=.artifacts`)).status).toBe(200);
+  });
+
+  it("refuses another member an org-visible session still on its owner's memory", async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const { deps } = makeSessionFs({
+      session: makeSession({ visibility: 'org', factoryProjectId: 'fp-1' }),
+      ownThreadResourceId: 'user-1',
+    });
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('refuses an org-visible session to a caller from another org', async () => {
