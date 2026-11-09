@@ -45,6 +45,21 @@ function authoringCard(context: FactoryGithubRuleContext): boolean {
   );
 }
 
+/** Whether the card sits in `selfReview` with an approve verdict on the head its pull request opened with. */
+function selfReviewApprovedHead(context: FactoryGithubRuleContext, selfReview: string): boolean {
+  const { item, pullRequest } = context;
+  const metadata = item?.metadata;
+  const approvedHead = metadata?.selfReviewedHeadSha;
+  return (
+    item?.stages.length === 1 &&
+    item.stages[0] === selfReview &&
+    metadata?.selfReviewVerdict === 'approve' &&
+    typeof approvedHead === 'string' &&
+    pullRequest?.headSha !== undefined &&
+    approvedHead.toLowerCase() === pullRequest.headSha
+  );
+}
+
 /** Whether the card sits in its board's pull request review phase, alone. */
 function inPullRequestReview(context: FactoryGithubRuleContext): boolean {
   const phase = context.flow?.pullRequestReview;
@@ -209,15 +224,19 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // Opening a pull request is evaluated once per card it concerns. This rule
   // files the pull request's own card, which is the arrival — the
   // evaluation carrying `pullRequestIntake` — so the authoring card's own
-  // evaluation only moves it out for review. Self-review runs before a pull
-  // request exists and opens it itself, so a pull request opened while the
-  // card is still in its build phase skipped self-review: the card goes to its
-  // board's pull request review phase. It rests there through every round of
-  // feedback — the builder is woken in place — until the merge closes it.
+  // evaluation only moves it out for review: from its build phase (a board
+  // without self-review, or a pull request opened before self-review ran), or
+  // from self-review once it approved the very head the pull request opens
+  // with. Opening the pull request writes it onto the card, so the agent's own
+  // move at its pre-PR revision always loses that race; the event moves the
+  // card instead. It rests in the board's pull request review phase through
+  // every round of feedback — the builder is woken in place — until the merge
+  // closes it.
   if (context.item && context.pullRequestIntake !== true) {
     if (!authoringCard(context) || context.pullRequest.state !== 'open') return;
-    const { build, pullRequestReview } = context.flow ?? {};
-    if (!context.board || !build || !pullRequestReview || !context.item.stages.includes(build)) return;
+    const { build, selfReview, pullRequestReview } = context.flow ?? {};
+    if (!context.board || !build || !pullRequestReview) return;
+    if (!context.item.stages.includes(build) && !(selfReview && selfReviewApprovedHead(context, selfReview))) return;
     // Someone else's pull request attached to the issue does not mean this card's build is out.
     if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;
     // Resolution can match a card by branch alone, so a fork's pull
