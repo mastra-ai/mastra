@@ -198,8 +198,8 @@ export const agent = new Agent({
 
 1. Extracts text content from new user and assistant messages, skipping messages already embedded earlier in the same run
 1. Splits long messages into chunks of at most `maxChunkChars` characters and generates an embedding for each chunk
-1. Stores one vector row per chunk with metadata (thread metadata, message ID, thread ID, resource ID, role, content, timestamp). The first chunk's row ID is the message ID, so saving the same message again replaces its rows instead of adding new ones
-1. Uses LRU caching for embeddings to avoid redundant API calls. `Memory.saveMessages()` shares this cache
+1. Stores one vector row per chunk with metadata (thread metadata, message ID, thread ID, resource ID, role, content, timestamp). Row IDs come from the message ID (the first chunk uses it as is), so saving the same message again replaces its rows instead of adding new ones
+1. Uses LRU caching for embeddings to avoid redundant API calls
 
 ### Cross-thread recall
 

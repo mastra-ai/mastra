@@ -301,7 +301,7 @@ const agent = new Agent({
   id: 'agent',
   memory: new Memory({
     options: {
-      semanticRecall: { maxChunkChars: 6000 },
+      semanticRecall: { topK: 3, messageRange: 2, maxChunkChars: 6000 },
     },
   }),
 })

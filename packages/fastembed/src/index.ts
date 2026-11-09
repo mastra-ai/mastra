@@ -80,7 +80,7 @@ async function generateEmbeddingsWithWarnings(
 
 /**
  * The token window of every fastembed model here. Set as `maxInputTokens` on each model object:
- * `@mastra/memory` reads it to size semantic recall chunks, so long messages are split instead of
+ * Mastra's semantic recall reads it to size message chunks, so long messages are split instead of
  * having everything past the window silently dropped from the embedding.
  */
 const FASTEMBED_INPUT_LIMIT = { maxInputTokens: 512 } as const;
