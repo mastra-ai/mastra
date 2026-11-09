@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 
 import { BOARD_PERSON_FIELDS } from './boardPeople';
@@ -10,9 +11,9 @@ export type BoardFilterFieldId = (typeof BOARD_FILTER_FIELDS)[number];
 /** The values picked per filter. An empty set narrows nothing; filters combine with AND. */
 export type BoardFilterState = Readonly<Record<BoardFilterFieldId, ReadonlySet<string>>>;
 
-/** Requested reviewers only exist on pull requests, so only Work, which holds them, filters by them. */
+/** Requested reviewers only exist on pull requests, so only the default board, where they land, filters by them. */
 export function boardFilterFieldIds(kind: BoardKind): BoardFilterFieldId[] {
-  return BOARD_FILTER_FIELDS.filter(fieldId => fieldId !== 'reviewer' || kind === 'work');
+  return BOARD_FILTER_FIELDS.filter(fieldId => fieldId !== 'reviewer' || kind === DEFAULT_BOARD_ID);
 }
 
 function boardFilterState(kind: BoardKind, valuesOf: (fieldId: BoardFilterFieldId) => readonly unknown[]) {

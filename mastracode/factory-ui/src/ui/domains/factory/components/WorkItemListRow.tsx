@@ -3,7 +3,9 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { BoardCardStatus } from '../boardCardState';
+import { boardOf } from '../boardFlow';
 import type { DragPayload } from '../boardDrag';
 import { sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
@@ -61,7 +63,7 @@ export function WorkItemListRow({
   menu: ReactNode;
   rework?: ReworkReason;
 }) {
-  const verdict = columnReviewVerdict(item, columnStage);
+  const verdict = columnReviewVerdict(item, columnStage, boardOf(useBoardCatalog(item.githubProjectId).data, item));
   return (
     <BoardListRow
       testId="work-item-card"

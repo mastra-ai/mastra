@@ -1,3 +1,4 @@
+import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
@@ -82,9 +83,12 @@ export function BoardContent({
   definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
-  // A project that still has open cards on the retired Review board keeps it, laid out as before.
-  const review = kind === 'review';
-  const builtin = kind === 'work' || review;
+  // A board with a pull request loop runs Factory's automation; the default board keeps its own column icons.
+  const loop = boardLoop(definition);
+  const runsLoop = loop !== undefined;
+  // A board that reviews pull requests but builds nothing (the retired Review board a project still
+  // uses) takes no new cards: its cards come from pull requests.
+  const pullRequestsOnly = loop?.pullRequestReview !== undefined && loop.build === undefined;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
   const auth = useFactoryAuth();
   const currentUserId = auth.data?.user?.userId;
@@ -191,6 +195,7 @@ export function BoardContent({
   const boardWorkItems = [...workItemsByStage.values()].flat();
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
   const loadingStages = boardLoadingStages({
+    board: definition,
     stages,
     itemsPending: items.isPending,
     intakePending: intake.isPending,
@@ -246,11 +251,14 @@ export function BoardContent({
     const feedFailed = Boolean(columnFeed?.error);
     // No card is created by hand on the retired Review board: its cards come from pull requests.
     const canCreate =
-      !review && !items.isPending && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
+      !pullRequestsOnly &&
+      !items.isPending &&
+      stage.kind !== 'terminal' &&
+      (composer.stage === undefined || composerOpen);
     const canConnectSource = isInitialPhase && !hasIntakeSource;
     const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
-      builtin &&
+      runsLoop &&
       !isInitialPhase &&
       !loading &&
       !composerOpen &&
@@ -259,7 +267,7 @@ export function BoardContent({
       taskCount === 0;
     return {
       stage,
-      phaseKind: builtin ? undefined : stage.kind,
+      phaseKind: definition.default ? undefined : stage.kind,
       exitTool: stage.exitTool,
       loading,
       taskCount,
@@ -362,7 +370,7 @@ export function BoardContent({
               cardProjectRepositoryId(factory.repositories, candidate, repository.projectRepositoryId)
             }
             factoryProjectId={factoryProjectId}
-            board={builtin ? kind : undefined}
+            board={definition}
             onRun={(candidate, move, prompt) =>
               dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
             }
@@ -413,7 +421,7 @@ export function BoardContent({
             availableLabels={availableLabels}
             currentUserId={currentUserId}
             aside={
-              builtin && (
+              runsLoop && (
                 <BoardAutomationSettings
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}

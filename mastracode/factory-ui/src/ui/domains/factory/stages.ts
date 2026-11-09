@@ -1,7 +1,7 @@
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
 
-/** The default Work board's phases, in column order. */
+/** The default board's phases, in column order: its columns' labels and colours when no catalog names them. */
 const WORK_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'pr-review', 'done', 'canceled'] as const;
 
 const BOARD_STAGE_LABELS = {
@@ -28,11 +28,6 @@ export const BOARD_STAGES: ReadonlyArray<BoardStage> = WORK_STAGES.map(id => ({
   id,
   label: BOARD_STAGE_LABELS[id],
 }));
-
-/** Stages where the work has stopped for good. */
-export function isTerminalStage(stage: string): boolean {
-  return stage === 'done' || stage === 'canceled';
-}
 
 /** UI label for a stage, falling back to the raw id for unknown stages. */
 export function stageLabel(stage: string): string {

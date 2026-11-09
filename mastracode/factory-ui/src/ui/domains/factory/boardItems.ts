@@ -202,9 +202,13 @@ export function sourceCreatedAt(metadata: Record<string, unknown>): string | und
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
 }
 
-export function doneAt(item: Pick<WorkItem, 'stages' | 'stageHistory'>): number | undefined {
-  if (!item.stages.includes('done')) return undefined;
-  const entry = item.stageHistory.findLast(candidate => candidate.stage === 'done');
+/** When a card last entered its board's completed phase, if it sits there now. */
+export function doneAt(
+  item: Pick<WorkItem, 'stages' | 'stageHistory'>,
+  completed: string | undefined,
+): number | undefined {
+  if (completed === undefined || !item.stages.includes(completed)) return undefined;
+  const entry = item.stageHistory.findLast(candidate => candidate.stage === completed);
   return entry && Date.parse(entry.enteredAt);
 }
 

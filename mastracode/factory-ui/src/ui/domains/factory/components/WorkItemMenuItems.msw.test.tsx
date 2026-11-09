@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
-import { builtinBoardCatalog, releaseBoard } from '../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, releaseBoard, shipBoard } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../api/types';
@@ -103,6 +103,26 @@ describe('custom-board card menu', () => {
     const { client } = renderMenu('queued', []);
     await waitForMutationsIdle(client);
     expect(screen.queryByRole('menuitem', { name: /Move to|Mark done/ })).toBeNull();
+  });
+});
+
+describe('a board running the pull request loop under its own phase names', () => {
+  it("asks for the triage decision on a card triage left resting, naming the board's own phases", async () => {
+    const held: WorkItem = {
+      ...item,
+      board: 'ship',
+      source: 'github-issue',
+      stages: ['inbox'],
+      sessions: { triage: { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' } },
+    };
+    const { onMove } = renderMenu('inbox', [shipBoard], { item: held });
+    const accept = await screen.findByRole('menuitem', { name: 'Accept and build' });
+    expect(screen.getByRole('menuitem', { name: 'Close' })).toBeTruthy();
+    // A card with no pull request never enters review, and Work's phases are nowhere.
+    expect(screen.queryByRole('menuitem', { name: 'Move to Pr' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Planning|Intake/ })).toBeNull();
+    fireEvent.click(accept);
+    expect(onMove).toHaveBeenCalledWith('make');
   });
 });
 
