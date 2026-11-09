@@ -18,7 +18,7 @@
     "test:integration": "vitest run tests/billing/driver.test.ts tests/billing/retirement.test.ts tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts tests/billing/identity-organizations.test.ts tests/billing/accounting.test.ts tests/billing/mastra.test.ts tests/billing/polar.test.ts tests/billing/recovery.test.ts && vitest run tests/billing/http.test.ts",
     "setup": "node scripts/setup.mjs",
     "weather": "node scripts/weather.mjs",
-    "test:local": "vitest run tests/template/local.test.ts",
+    "test:local": "vitest run tests/template/local.test.ts tests/template/studio.test.ts",
     "test:openai": "node --env-file=.env scripts/test-openai-smoke.mjs --live"
   },
   "dependencies": {

@@ -17,6 +17,7 @@ const invitationSchema = z.strictObject({
 const memberSchema = z.strictObject({ memberId: identifierSchema, role: roleSchema.nullable() });
 const profileSchema = z.strictObject({ profileId: identifierSchema, displayName: z.string().trim().min(1).max(100) });
 const principalSchema = z.strictObject({
+  workspaceId: identifierSchema.optional(),
   issuer: z.url(),
   subject: z.string().min(1).max(256),
   displayName: profileSchema.shape.displayName,

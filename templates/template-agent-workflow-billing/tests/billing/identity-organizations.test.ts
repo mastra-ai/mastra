@@ -53,6 +53,30 @@ async function share(
   return service.context({ credential: recipient.credential, workspaceId: owner.workspaceId });
 }
 
+it('trusted JWT provisioning preserves an existing Polar workspace reference and rejects reassignment', async () => {
+  const { storage, observer } = await fixture();
+  const keys = await generateKeyPair('EdDSA');
+  const issuer = 'https://studio.example.test';
+  const service = new OrganizationService(storage, {
+    mode: 'production',
+    provider: 'polar',
+    identity: new JwtIdentityAdapter(storage, {
+      issuer,
+      audience: 'billing',
+      algorithms: ['EdDSA'],
+      jwks: { keys: [await exportJWK(keys.publicKey)] },
+    }),
+  });
+  const input = { issuer, subject: 'northstar-owner', displayName: 'Northstar Travel', workspaceId: 'northstar' };
+  const owner = await service.provisionJwt(input);
+  expect(owner.workspaceId).toBe('northstar');
+  expect(await service.provisionJwt(input)).toEqual(owner);
+  await expect(service.provisionJwt({ ...input, workspaceId: 'summit' })).rejects.toMatchObject({ code: 'conflict' });
+  await expect(service.provisionJwt({ ...input, subject: 'other-owner' })).rejects.toMatchObject({ code: 'conflict' });
+  expect((await observer.execute('SELECT id FROM workspaces')).rows).toEqual([{ id: 'northstar' }]);
+  expect((await observer.execute('SELECT COUNT(*) AS count FROM identities')).rows[0].count).toBe(1n);
+});
+
 describe('trusted identity and shared workspace journeys', () => {
   it('personal workspace becomes a shared payer through explicit invitation', async () => {
     const localRoot = await temporaryDatabase();

@@ -7,6 +7,10 @@ process.chdir(root);
 if (existsSync('.env')) process.loadEnvFile('.env');
 const [action, ...args] = process.argv.slice(2);
 if (!['dev', 'build', 'start'].includes(action)) throw new Error('Unknown server action.');
+if (action === 'build' && process.env.BILLING_STUDIO_ENABLED === 'true' && !args.includes('--studio'))
+  args.push('--studio');
+if (action === 'start' && process.env.BILLING_STUDIO_ENABLED === 'true')
+  process.env.MASTRA_STUDIO_PATH = fileURLToPath(new URL('../.mastra/output/studio', import.meta.url));
 const child = spawn(
   process.execPath,
   [fileURLToPath(new URL('../node_modules/mastra/dist/index.js', import.meta.url)), action, ...args],

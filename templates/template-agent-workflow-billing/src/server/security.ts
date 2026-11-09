@@ -1,3 +1,4 @@
+import type { MiddlewareHandler } from 'hono';
 import type { BillingRecovery } from '../billing/recovery.js';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ServerConfig } from '@mastra/core/server';
@@ -11,23 +12,26 @@ export function billingOnlyServer(
   execution?: BillingHttpGateway,
   commercial?: CommercialService,
   recovery?: BillingRecovery,
+  studio?: { middleware: MiddlewareHandler },
 ): Pick<ServerConfig, 'apiRoutes' | 'middleware' | 'cors'> {
   return {
     cors: false,
     middleware: [
       {
         path: '*',
-        handler: async (context, next) => {
-          if (context.req.path.startsWith('/billing/')) return next();
-          return context.json({ error: 'billing_gateway_required' }, 403);
-        },
+        handler:
+          studio?.middleware ??
+          (async (context, next) => {
+            if (context.req.path.startsWith('/billing/')) return next();
+            return context.json({ error: 'billing_gateway_required' }, 403);
+          }),
       },
     ],
     apiRoutes: [
       ...billingApiRoutes(organizations, execution, commercial, recovery),
-      // Native framework-public routes skip user middleware. This earlier route
-      // also denies those requests before any native execution/data handler.
-      registerApiRoute('/*', {
+      // Discovery remains closed in both modes. With Studio disabled, also
+      // cover framework-public routes that deliberately skip user middleware.
+      registerApiRoute(studio ? '/.well-known/*' : '/*', {
         method: 'ALL',
         handler: context => context.json({ error: 'billing_gateway_required' }, 403),
       }),

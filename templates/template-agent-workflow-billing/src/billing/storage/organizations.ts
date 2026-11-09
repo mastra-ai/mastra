@@ -22,6 +22,7 @@ const allowed: Record<Permission, readonly Role[]> = {
   'manage-ownership': ['owner'],
 };
 const principalSchema = z.strictObject({
+  workspaceId: identifierSchema.optional(),
   issuer: z.string().min(1).max(256),
   subject: z.string().min(1).max(256),
   displayName: identitySchema.shape.displayName,
@@ -64,10 +65,15 @@ export class OrganizationStorage implements IdentityDirectory {
             args: [existing.id],
           })
         ).rows[0];
+        if (principal.workspaceId && principal.workspaceId !== String(workspace.id)) throw new BillingError('conflict');
         return { identity: publicIdentity(existing), workspaceId: String(workspace.id), credential: null };
       }
       const identity = { id: randomUUID(), displayName: principal.displayName };
-      const workspaceId = randomUUID();
+      const workspaceId = principal.workspaceId ?? randomUUID();
+      if (
+        (await transaction.execute({ sql: 'SELECT id FROM workspaces WHERE id = ?', args: [workspaceId] })).rows.length
+      )
+        throw new BillingError('conflict');
       await transaction.execute({
         sql: 'INSERT INTO identities (id, issuer, subject, kind, display_name, active) VALUES (?, ?, ?, ?, ?, 1)',
         args: [identity.id, principal.issuer, principal.subject, local ? 'local' : 'jwt', identity.displayName],

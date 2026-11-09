@@ -25,6 +25,7 @@ We built this template to provide a straightforward starting point for billing i
    - Run `npm run setup` to create the example profiles and shared allowance: 30 credits and 10 tasks.
 4. **Start the dev server**
    - Run `npm run dev`. The billing API listens at `http://127.0.0.1:4111`.
+   - To use Studio, set `BILLING_STUDIO_ENABLED=true` before starting and follow the [Studio guide](docs/studio.md) to authenticate and run billed actions in **Tools**.
    - In another terminal, run the command below. Expect a weather summary and a billing receipt with `billedUnits: 3`. The CLI authenticates using the local profile created during setup.
 
 ```sh

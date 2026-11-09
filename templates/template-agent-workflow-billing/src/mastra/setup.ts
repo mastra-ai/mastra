@@ -1,3 +1,4 @@
+import { createBillingStudio } from '../server/studio.js';
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { z } from 'zod';
@@ -75,16 +76,20 @@ export async function createWeatherApplication(
           key,
         ),
     };
+    const studioEnabled =
+      parseInput(z.enum(['true', 'false']), environment.BILLING_STUDIO_ENABLED ?? 'false') === 'true';
+    const studio = studioEnabled ? createBillingStudio(organizations, execution, runtime.commercial) : undefined;
     const mastra = enforceBillingBoundary(
       new Mastra({
         logger: false,
+        tools: studio?.tools,
         agents: resources.nativeAgents,
         workflows: resources.nativeWorkflows,
         storage: runtime.storage,
         server: {
           host: '127.0.0.1',
           port: parseInput(z.coerce.number().int().min(1).max(65535), environment.BILLING_PORT ?? 4111),
-          ...billingOnlyServer(organizations, execution, runtime.commercial, runtime.recovery),
+          ...billingOnlyServer(organizations, execution, runtime.commercial, runtime.recovery, studio),
         },
       }),
     );
