@@ -10,7 +10,7 @@
 import { posix as posixPath } from 'node:path';
 import { z } from 'zod/v4';
 import type { ToolBackgroundConfig } from '../../background-tasks/types';
-import { RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../../tools/ordered-tools';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -273,8 +273,23 @@ function wrapTool(tool: any, workspace: Workspace, targets: ResolveTargets): any
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
-      const effectiveWorkspace = await resolveEffectiveWorkspace(context?.workspace ?? workspace, context, targets);
-      const enrichedContext = { ...context, workspace: effectiveWorkspace };
+      const threadId = context?.agent?.threadId;
+      const resourceId = context?.agent?.resourceId;
+      const executionContext =
+        threadId || resourceId
+          ? {
+              ...context,
+              requestContext: new RequestContext(context.requestContext?.entries?.()),
+            }
+          : context;
+      if (threadId) executionContext.requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+      if (resourceId) executionContext.requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+      const effectiveWorkspace = await resolveEffectiveWorkspace(
+        executionContext?.workspace ?? workspace,
+        executionContext,
+        targets,
+      );
+      const enrichedContext = { ...executionContext, workspace: effectiveWorkspace };
       const execute = () => tool.execute(input, enrichedContext);
       const sandbox = effectiveWorkspace.sandbox;
       const computers = context?.mastra?.getComputers?.();

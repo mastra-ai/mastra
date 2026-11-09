@@ -664,6 +664,38 @@ function parallelToolCallModel(calls: { toolName: string; input: unknown }[]) {
   };
 }
 
+function sequentialToolCallModel(calls: { toolName: string; input: unknown }[]) {
+  let step = 0;
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'test',
+    modelId: 'sequential-tool-calls',
+    supportedUrls: {},
+    doGenerate: async () => {
+      const call = calls[step++];
+      return call
+        ? {
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `call_${step}`,
+                toolName: call.toolName,
+                input: JSON.stringify(call.input),
+              },
+            ],
+            finishReason: 'tool-calls' as const,
+            usage,
+            warnings: [],
+          }
+        : { content: [{ type: 'text' as const, text: 'done' }], finishReason: 'stop' as const, usage, warnings: [] };
+    },
+    doStream: async () => {
+      throw new Error('not used');
+    },
+  };
+}
+
 function streamingToolCallModel(calls: { toolName: string; input: unknown }[]) {
   let step = 0;
   const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -729,6 +761,34 @@ describe('ordering through a real agent at default tool concurrency', () => {
     const workspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
     await runTools({ ...computers.tools(), ...(await createWorkspaceTools(workspace)) });
   }
+
+  it('propagates memory identity to resolver-backed computer tools in a real Agent run', async () => {
+    const computers = make();
+    const workspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
+    const agent = new Agent({
+      id: 'computer-memory-identity',
+      name: 'computer-memory-identity',
+      instructions: 'Create and use the computer.',
+      model: sequentialToolCallModel([
+        { toolName: 'mastra_workspace_computer_create', input: { name: 'box' } },
+        { toolName: WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, input: {} },
+        { toolName: WORKSPACE_TOOLS.COMPUTER.CLICK, input: { x: 1, y: 2 } },
+      ]) as any,
+      tools: computers.tools(),
+      workspace,
+    });
+
+    const requestContext = new RequestContext();
+    await agent.generate('go', {
+      maxSteps: 5,
+      memory: { thread: 't1', resource: 'r1' },
+      requestContext,
+    });
+
+    expect(backend.actions).toEqual(['screenshot', 'click', 'screenshot']);
+    expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBeUndefined();
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+  });
 
   it('reaches the desktop in model order even when earlier actions are slower', async () => {
     const computers = make();
