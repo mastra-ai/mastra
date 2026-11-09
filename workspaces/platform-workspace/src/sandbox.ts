@@ -601,6 +601,41 @@ export class PlatformSandbox extends MastraSandbox {
     return (await this._previewGrant(port))?.cookie ?? null;
   }
 
+  /** Mint a fresh, origin-bound Computer embed URL. Tokens are intentionally never cached. */
+  async createComputerEmbed(origin: string, mode: 'watch' | 'control'): Promise<string | null> {
+    const sandboxId = this.sandboxId;
+    if (!sandboxId) return null;
+    try {
+      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/embed-tokens`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          port: 6080,
+          mode: mode === 'control' ? 'control' : 'view',
+          origins: [origin],
+          path: '/vnc.html?autoconnect=1',
+        }),
+      });
+      const body = (await response.json()) as { url?: unknown };
+      return typeof body.url === 'string' ? body.url : null;
+    } catch (error) {
+      if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) return null;
+      throw error;
+    }
+  }
+
+  /** Project the authoritative Computer holder into every open Platform embed socket. */
+  async setComputerEmbedMode(mode: 'view' | 'control', signal: AbortSignal): Promise<void> {
+    const sandboxId = this.sandboxId;
+    if (!sandboxId) throw new Error('platform computer sandbox is not running');
+    await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/embed-tokens/mode`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode }),
+      signal,
+    });
+  }
+
   private async _previewGrant(port: number): Promise<{ url: string; cookie: SandboxPortAuthCookie } | null> {
     if (!Number.isInteger(port) || port < 1 || port > 65_535 || port === E2B_CONTROL_PORT) return null;
     // Only E2B-backed sandboxes serve their ports.

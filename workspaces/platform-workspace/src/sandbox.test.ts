@@ -4091,6 +4091,44 @@ describe('PlatformSandbox networking', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('mints uncached origin-bound Computer embeds and changes live mode', async () => {
+    const { sandbox, fetchMock } = makeSandbox(
+      json({ url: 'https://embed.test/one', expiresAt: '2026-06-26T00:10:00.000Z' }),
+      json({ url: 'https://embed.test/two', expiresAt: '2026-06-26T00:10:00.000Z' }),
+      json({ mode: 'control' }),
+    );
+    await sandbox._start();
+
+    await expect(sandbox.createComputerEmbed('https://app.slack.com', 'watch')).resolves.toBe(
+      'https://embed.test/one',
+    );
+    await expect(sandbox.createComputerEmbed('https://app.slack.com', 'control')).resolves.toBe(
+      'https://embed.test/two',
+    );
+    await sandbox.setComputerEmbedMode('control', new AbortController().signal);
+
+    expect(fetchMock.mock.calls.slice(1).map(([url]) => String(url))).toEqual([
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/embed-tokens',
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/embed-tokens',
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/embed-tokens/mode',
+    ]);
+    expect(fetchMock.mock.calls.slice(1).map(([, init]) => JSON.parse(init.body))).toEqual([
+      {
+        port: 6080,
+        mode: 'view',
+        origins: ['https://app.slack.com'],
+        path: '/vnc.html?autoconnect=1',
+      },
+      {
+        port: 6080,
+        mode: 'control',
+        origins: ['https://app.slack.com'],
+        path: '/vnc.html?autoconnect=1',
+      },
+      { mode: 'control' },
+    ]);
+  });
+
   it("is null before the sandbox is running, and doesn't start it", async () => {
     const { sandbox, fetchMock } = makeSandbox();
 

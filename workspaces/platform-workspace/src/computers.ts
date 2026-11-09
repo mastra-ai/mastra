@@ -2,7 +2,12 @@ import { hkdfSync } from 'node:crypto';
 import { createSemanticHands, withSemantic } from '@mastra/computer-semantic';
 import type { DaemonConnect } from '@mastra/computer-semantic';
 import { Computers } from '@mastra/core/computers';
-import type { ComputerProvider, ComputerSandbox, ComputersOptions } from '@mastra/core/computers';
+import type {
+  ComputerControlSubscriber,
+  ComputerProvider,
+  ComputerSandbox,
+  ComputersOptions,
+} from '@mastra/core/computers';
 import type { MastraComputerScope, MastraComputerViewer } from '@mastra/core/mastra';
 import { PlatformComputerControlSubscriber } from './computer-control.js';
 import type { PlatformComputerControlEnforcementOptions } from './computer-control.js';
@@ -65,9 +70,39 @@ function computerSecret(options: PlatformComputersOptions): string | Uint8Array 
 
 type PlatformComputerSandbox = ComputerSandbox & {
   getPortAuthCookie(port: number): Promise<{ name: string; value: string } | null>;
+  createComputerEmbed?(origin: string, mode: 'watch' | 'control'): Promise<string | null>;
+  setComputerEmbedMode?(mode: 'view' | 'control', signal: AbortSignal): Promise<void>;
 };
 
-function platformProvider(options: PlatformComputersOptions): ComputerProvider {
+class PlatformComputerEmbedControlSubscriber implements ComputerControlSubscriber {
+  readonly id = 'platform-computer-embed-control';
+  readonly required = true;
+
+  constructor(
+    private readonly sandboxes: Set<PlatformComputerSandbox>,
+    private readonly embedded: WeakSet<PlatformComputerSandbox>,
+  ) {}
+
+  async enforce(input: Parameters<ComputerControlSubscriber['enforce']>[0]) {
+    const sandboxId = (input.identity as { sandboxId?: unknown })?.sandboxId;
+    const sandbox = [...this.sandboxes].find(candidate => candidate.sandboxId === sandboxId);
+    if (!sandbox || !this.embedded.has(sandbox) || !sandbox.setComputerEmbedMode) {
+      return { status: 'enforced' as const, enforcedRevision: input.control.revision };
+    }
+    try {
+      await sandbox.setComputerEmbedMode(input.control.holder === 'human' ? 'control' : 'view', input.signal);
+      return { status: 'enforced' as const, enforcedRevision: input.control.revision };
+    } catch (error) {
+      return { status: 'retryable' as const, error: String((error as Error)?.message ?? error) };
+    }
+  }
+}
+
+function platformProvider(
+  options: PlatformComputersOptions,
+  sandboxes: Set<PlatformComputerSandbox>,
+  embedded: WeakSet<PlatformComputerSandbox>,
+): ComputerProvider {
   const semantic = options.hands === 'semantic';
   if (semantic && options.template === false) {
     throw new Error("PlatformComputers hands: 'semantic' needs a template to install the accessibility daemon into");
@@ -90,12 +125,14 @@ function platformProvider(options: PlatformComputersOptions): ComputerProvider {
     id: 'platform',
     macContext: options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '',
     create(input) {
-      return createSandbox({
+      const sandbox = createSandbox({
         ...sandboxOptions,
         computer: true,
         ...(input.sandboxId !== undefined && { sandboxId: input.sandboxId }),
         ...(input.reattach !== undefined && { reattach: input.reattach }),
-      });
+      }) as PlatformComputerSandbox;
+      sandboxes.add(sandbox);
+      return sandbox;
     },
     async viewer(sandbox: ComputerSandbox, _scope: MastraComputerScope): Promise<MastraComputerViewer | null> {
       const platformSandbox = sandbox as PlatformComputerSandbox;
@@ -113,6 +150,13 @@ function platformProvider(options: PlatformComputersOptions): ComputerProvider {
       const headers: Record<string, string> = cookie ? { cookie: `${cookie.name}=${cookie.value}` } : {};
       return { url, headers };
     },
+    async embed(sandbox, request) {
+      const platformSandbox = sandbox as PlatformComputerSandbox;
+      if (!platformSandbox.createComputerEmbed) return null;
+      const url = await platformSandbox.createComputerEmbed(request.origin, request.mode);
+      if (url) embedded.add(platformSandbox);
+      return url;
+    },
   };
 }
 
@@ -123,8 +167,10 @@ export class PlatformComputers extends Computers {
 
   constructor(options: PlatformComputersOptions = {}) {
     assertExperimentalComputerEnabled();
+    const sandboxes = new Set<PlatformComputerSandbox>();
+    const embedded = new WeakSet<PlatformComputerSandbox>();
     const generic: ComputersOptions = {
-      provider: platformProvider(options),
+      provider: platformProvider(options, sandboxes, embedded),
       secret: computerSecret(options),
       ...(options.screenshotAfterAction !== undefined && { screenshotAfterAction: options.screenshotAfterAction }),
       ...(options.hands === 'semantic' && {
@@ -132,6 +178,7 @@ export class PlatformComputers extends Computers {
       }),
     };
     super(generic);
+    this.registerControlSubscriber(new PlatformComputerEmbedControlSubscriber(sandboxes, embedded));
     if (options.controlEnforcement) {
       this.#controlSubscriber = new PlatformComputerControlSubscriber(options.controlEnforcement);
       this.#disposeControlSubscriber = this.registerControlSubscriber(this.#controlSubscriber);

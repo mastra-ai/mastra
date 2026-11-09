@@ -56,6 +56,9 @@ class FakeBackend {
   checkpoint: any = { status: 'captured', checkpointName: 'ck-internal' };
   viewerUrl: string | null = 'https://6080-vm.preview.test/vnc.html?autoconnect=1';
   cookie: { name: string; value: string } | null = { name: '__mastra_preview', value: 'secret-cookie' };
+  embedCalls: { origin: string; mode: 'watch' | 'control' }[] = [];
+  embedModeCalls: ('view' | 'control')[] = [];
+  failEmbedMode = false;
   #n = 0;
 
   create = (options: PlatformSandboxOptions): ComputerSandbox => {
@@ -120,6 +123,14 @@ class FakeBackend {
               sameSite: 'Lax' as const,
             }
           : null;
+      },
+      async createComputerEmbed(origin: string, mode: 'watch' | 'control') {
+        backend.embedCalls.push({ origin, mode });
+        return `https://embed.test/${id}/${backend.embedCalls.length}`;
+      },
+      async setComputerEmbedMode(mode: 'view' | 'control') {
+        backend.embedModeCalls.push(mode);
+        if (backend.failEmbedMode) throw new Error('embed mode unavailable');
       },
       computer: {
         screenshot: async () => {
@@ -634,6 +645,46 @@ describe('viewer', () => {
     backend.cookie = { name: 'a', value: 'b' };
     backend.viewerUrl = null;
     expect(await computers.viewer(computer.id, { resourceId: 'r1', threadId: 't1' })).toBeNull();
+  });
+
+  it('mints a fresh origin-bound embed and projects holder changes into its mode', async () => {
+    const computers = make();
+    const scope = { resourceId: 'r1', threadId: 't1' };
+    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+
+    await expect(computers.embed(computer.id, scope, { origin: 'https://app.slack.com', mode: 'watch' })).resolves.toBe(
+      'https://embed.test/sbx-1/1',
+    );
+    await expect(computers.embed(computer.id, scope, { origin: 'https://app.slack.com', mode: 'control' })).resolves.toBe(
+      'https://embed.test/sbx-1/2',
+    );
+    expect(backend.embedCalls).toEqual([
+      { origin: 'https://app.slack.com', mode: 'watch' },
+      { origin: 'https://app.slack.com', mode: 'control' },
+    ]);
+
+    await computers.control(computer.id, scope, { action: 'take' });
+    await computers.control(computer.id, scope, { action: 'release' });
+    expect(backend.embedModeCalls).toEqual(['control', 'view']);
+  });
+
+  it('leaves agent control pending when Platform cannot close embed input', async () => {
+    const computers = make();
+    const scope = { resourceId: 'r1', threadId: 't1' };
+    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await computers.embed(computer.id, scope, { origin: 'https://app.slack.com', mode: 'control' });
+    await computers.control(computer.id, scope, { action: 'take' });
+    backend.failEmbedMode = true;
+
+    await expect(computers.control(computer.id, scope, { action: 'release' })).resolves.toMatchObject({
+      holder: 'agent',
+      notified: false,
+      reason: 'not-delivered',
+    });
+    await expect(call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).rejects.toThrow(
+      CONTROL_NOT_ENFORCED,
+    );
+    expect(backend.actions).toEqual([]);
   });
 });
 
