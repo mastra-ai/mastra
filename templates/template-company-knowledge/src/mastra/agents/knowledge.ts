@@ -1,13 +1,12 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PIIDetector, UnicodeNormalizer } from '@mastra/core/processors';
-import { openai } from '@ai-sdk/openai';
 import type { ToolsResolverContext } from '@mastra/connect';
 import { searchKnowledge } from '../tools/knowledge-search';
 import { connectTools } from '../connect';
+import { webSearchTool } from '../tools/web-search';
 
 const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5.4';
-const usesOpenAI = /^(mastra\/)?openai\//.test(agentModel);
 
 async function getConnectTools(context: ToolsResolverContext) {
   if (!connectTools) return {};
@@ -43,7 +42,7 @@ Notion tools come from the Notion connection attached to this project. They cove
 Use these when indexed results are stale or the user asks about a specific Notion doc.
 
 **Public fallback:**
-- web_search — search the public web. Only use this for questions that aren't about internal company data (e.g. "what's the latest Node.js LTS version?"). It's only available on OpenAI models; without it, say the answer needs a web search.
+- web_search — search the public web. Only use this for questions that aren't about internal company data (e.g. "what's the latest Node.js LTS version?").
 
 ## Lookup strategy
 
@@ -86,6 +85,6 @@ Follow this order strictly — it saves API calls and gives faster answers:
   tools: async ({ requestContext, mastra }) => ({
     searchKnowledge,
     ...(await getConnectTools({ requestContext, mastra })),
-    ...(usesOpenAI ? { web_search: openai.tools.webSearch({}) } : {}),
+    web_search: webSearchTool,
   }),
 });
