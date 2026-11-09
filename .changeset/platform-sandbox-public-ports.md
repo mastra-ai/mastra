@@ -10,4 +10,4 @@ const sandbox = new PlatformSandbox({ publicPorts: true })
 
 The port URL is the same either way. The setting is fixed when the sandbox is created.
 
-`PlatformFactorySandbox` offers it as a **Public ports** setting, off by default. Changing it applies to sandboxes created afterwards.
+`PlatformFactorySandbox` offers it as a **Public preview links** setting, off by default. Changing it only affects new sessions.
