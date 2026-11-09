@@ -42,7 +42,7 @@ describe('getMastraPackages', () => {
     });
 
     expect(await getMastraPackages(rootDir)).toEqual([{ name: '@mastra/example', version: '^2.0.0' }]);
-    expect(mockGetPackageInfo).toHaveBeenCalledExactlyOnceWith('@mastra/example');
+    expect(mockGetPackageInfo).toHaveBeenCalledExactlyOnceWith('@mastra/example', expect.anything());
   });
 
   it.each([
