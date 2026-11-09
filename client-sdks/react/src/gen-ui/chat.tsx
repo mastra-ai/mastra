@@ -1,13 +1,14 @@
 import type { Catalog } from '@json-render/core';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '../agent/hooks';
 import type { MastraChatProps, SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
-import type { MessageRenderers } from '../ui/MessageFactory/types';
+import type { MessageRenderers, TextPart } from '../ui/MessageFactory/types';
 import { formatGenUIContext } from './context-store';
 import { createGenUIController } from './controller';
 import type { GenUIActionHandlers, GenUIController } from './controller';
+import { isMcpAppContextText, renderMcpApp, useMcpAppHost } from './mcp-apps';
 import type { GenUIRegistry } from './registry';
 import { createGenUIRenderers } from './renderers';
 
@@ -79,17 +80,27 @@ export function useGenUIChat<C extends Catalog = Catalog>({
       { messages: chatProps.initialMessages, threadId: chatProps.threadId },
     ),
   );
-  // Built once so memoized messages skip re-rendering while a reply streams. They read your
-  // renderers from a ref, so parts GenUI hands back to you use the latest ones.
-  const baseRenderers = useRef(renderers);
-  const [genUIRenderers] = useState(() =>
-    createGenUIRenderers(controller, {
-      ToolInvocation: part => baseRenderers.current?.ToolInvocation?.(part),
-      DynamicTool: part => baseRenderers.current?.DynamicTool?.(part),
-      Data: part => baseRenderers.current?.Data?.(part),
-    }),
-  );
   const { threadId } = chatProps;
+  const { host, takeModelContext } = useMcpAppHost(genUI.mcpApps, text => sendMessage({ message: text, threadId }));
+  // Rebuilt only when the MCP App tool list arrives, so memoized messages skip re-rendering while a
+  // reply streams. They read your renderers from a ref, so parts GenUI hands back to you use the latest ones.
+  // GenUI's own tools win over MCP Apps; your renderers handle the rest.
+  const baseRenderers = useRef(renderers);
+  const genUIRenderers = useMemo(
+    () =>
+      createGenUIRenderers(controller, {
+        ToolInvocation: part => renderMcpApp(controller, host, part) ?? baseRenderers.current?.ToolInvocation?.(part),
+        DynamicTool: part => renderMcpApp(controller, host, part) ?? baseRenderers.current?.DynamicTool?.(part),
+        Data: part => baseRenderers.current?.Data?.(part),
+      }),
+    [controller, host],
+  );
+  // MCP App context rides along as a user message part; keep it out of the transcript you render.
+  const text = renderers?.Text;
+  const textRenderer = useMemo(
+    () => (text ? { Text: (part: TextPart) => (isMcpAppContextText(part.text) ? false : text(part)) } : {}),
+    [text],
+  );
   const chat = useChat({ ...chatProps, clientTools: mergeTools(chatProps.clientTools, controller.clientTools) });
 
   useEffect(() => controller.retain(), [controller]);
@@ -103,13 +114,24 @@ export function useGenUIChat<C extends Catalog = Catalog>({
     const contextBlock = formatGenUIContext(controller.context.snapshot());
     const system = withContext(input.modelSettings?.system, contextBlock);
     const modelSettings = system ? { modelSettings: { ...input.modelSettings, system } } : {};
-    if (input.mode === 'network') return chat.sendMessage({ ...input, ...modelSettings });
-    return chat.sendMessage({
-      ...input,
-      // useChat prefers per-call tools over hook-level ones, so GenUI tools must ride along.
-      ...(input.clientTools ? { clientTools: mergeTools(input.clientTools, controller.clientTools) } : {}),
-      ...modelSettings,
-    });
+    const appContext = takeModelContext();
+    const coreUserMessages = appContext.messages.length
+      ? { coreUserMessages: [...(input.coreUserMessages ?? []), ...appContext.messages] }
+      : {};
+    try {
+      if (input.mode === 'network') return await chat.sendMessage({ ...input, ...modelSettings, ...coreUserMessages });
+      return await chat.sendMessage({
+        ...input,
+        // useChat prefers per-call tools over hook-level ones, so GenUI tools must ride along.
+        ...(input.clientTools ? { clientTools: mergeTools(input.clientTools, controller.clientTools) } : {}),
+        ...modelSettings,
+        ...coreUserMessages,
+      });
+    } catch (error) {
+      // The message wasn't sent, so the context waits for the next one.
+      appContext.restore();
+      throw error;
+    }
   }
 
   // Actions run after commit, so they always see the chat and handlers of the latest render.
@@ -126,7 +148,7 @@ export function useGenUIChat<C extends Catalog = Catalog>({
 
   const handle: GenUIChatHandle = {
     controller,
-    renderers: { ...renderers, ...genUIRenderers },
+    renderers: { ...renderers, ...textRenderer, ...genUIRenderers },
   };
   return { ...chat, sendMessage, genUI: handle };
 }

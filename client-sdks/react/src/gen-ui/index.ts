@@ -49,5 +49,7 @@ export type { GenUIValidationResult } from './validate';
 export { createGenUIRenderers } from './renderers';
 export { useGenUIChat } from './chat';
 export type { GenUIChatHandle, UseGenUIChatProps } from './chat';
+export { isMcpAppContextText } from './mcp-apps';
+export type { GenUIMcpAppsOptions, GenUIMcpAppViewProps } from './mcp-apps';
 export { normalizeToolPart } from './tool-parts';
 export type { NormalizedToolCall } from './tool-parts';

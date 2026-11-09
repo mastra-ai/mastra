@@ -11,6 +11,7 @@ import type { ComponentRegistry, Components } from '@json-render/react';
 import type { ComponentType } from 'react';
 import { z } from 'zod/v4';
 import type { JSONObject } from './json';
+import type { GenUIMcpAppsOptions } from './mcp-apps';
 
 /**
  * Props for the optional preview rendered while a component tool's arguments are still streaming.
@@ -170,6 +171,8 @@ export interface CreateGenUIOptions<C extends Catalog = Catalog> {
   validationFunctions?: Record<string, ValidationFunction>;
   /** Custom `$`-prefixed prop expressions specs may use. Their descriptions are sent to the model. */
   directives?: DirectiveDefinition[];
+  /** Render the result of agent tools that have an MCP App as the app itself. */
+  mcpApps?: GenUIMcpAppsOptions;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -215,6 +218,7 @@ export interface GenUIRegistry<C extends Catalog = Catalog> {
   readonly functions: Readonly<Record<string, ComputedFunction>>;
   readonly validationFunctions: Readonly<Record<string, ValidationFunction>>;
   readonly directives: DirectiveDefinition[];
+  readonly mcpApps?: GenUIMcpAppsOptions;
 }
 
 const COMPONENT_NAME = /^[A-Za-z0-9_\-.:]{1,128}$/;
@@ -331,5 +335,6 @@ export function createGenUI<C extends Catalog = Catalog>(options: CreateGenUIOpt
     functions: Object.freeze({ ...options.functions }),
     validationFunctions: Object.freeze({ ...options.validationFunctions }),
     directives: [...(options.directives ?? [])],
+    ...(options.mcpApps ? { mcpApps: options.mcpApps } : {}),
   });
 }

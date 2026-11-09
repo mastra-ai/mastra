@@ -42,6 +42,7 @@ export default defineConfig(options => ({
     'src/ui/index.ts',
     'src/chat/index.ts',
     'src/gen-ui/index.ts',
+    'src/mcp-apps/index.ts',
     'src/hooks/!(shared|__tests__)/index.ts',
   ],
   format: ['esm', 'cjs'],

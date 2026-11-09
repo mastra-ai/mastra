@@ -106,7 +106,7 @@ const UNBOUND: EventHandle = Object.freeze({ emit: ignoreEvent, shouldPreventDef
 const unboundEvent = () => UNBOUND;
 
 /** GenUI's context and a boundary so a throwing component only takes down its own part. */
-function frame(controller: GenUIController, name: string, resetKey: unknown, view: ReactNode) {
+export function frame(controller: GenUIController, name: string, resetKey: unknown, view: ReactNode) {
   const { Fallback } = resolveFallbacks(controller.registry.fallbacks);
   return (
     <GenUIProvider controller={controller}>

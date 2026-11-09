@@ -56,6 +56,16 @@
         "default": "./dist/gen-ui/index.cjs"
       }
     },
+    "./mcp-apps": {
+      "import": {
+        "types": "./dist/mcp-apps/index.d.ts",
+        "default": "./dist/mcp-apps/index.js"
+      },
+      "require": {
+        "types": "./dist/mcp-apps/index.d.ts",
+        "default": "./dist/mcp-apps/index.cjs"
+      }
+    },
     "./hooks/shared": null,
     "./hooks/*": {
       "import": {
@@ -97,6 +107,7 @@
     "@json-render/core": "^0.22.0",
     "@json-render/react": "^0.22.0",
     "@mastra/core": ">=1.67.0-0 <2.0.0-0",
+    "@mcp-ui/client": "^7.1.1",
     "@tanstack/react-query": "^5.90.21",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
@@ -108,6 +119,8 @@
     "@json-render/core": "^0.22.0",
     "@json-render/react": "^0.22.0",
     "@mastra/core": "workspace:*",
+    "@mcp-ui/client": "^7.1.1",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
     "@storybook/react-vite": "^9.1.21",
     "@tailwindcss/cli": "^4.3.3",
     "@tailwindcss/vite": "^4.3.3",
@@ -138,6 +151,9 @@
       "optional": true
     },
     "@json-render/react": {
+      "optional": true
+    },
+    "@mcp-ui/client": {
       "optional": true
     },
     "@tanstack/react-query": {
