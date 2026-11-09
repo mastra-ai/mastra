@@ -63,7 +63,7 @@ import {
   REVIEW_CONTEXT,
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
-import { ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
+import { occupiedPhasesOf, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
@@ -972,7 +972,10 @@ export class MastraFactory {
         codeSkills: this.#skills,
         // A project still using the retired Review board keeps it; work items are read once they're ready.
         ...(storage.isDomainReady('work-items')
-          ? { reviewBoardInUse: (scope: StoredBoardScope) => workItemsStorage.reviewBoardInUse(scope) }
+          ? {
+              reviewBoardInUse: (scope: StoredBoardScope) => workItemsStorage.reviewBoardInUse(scope),
+              occupiedPhases: occupiedPhasesOf(workItemsStorage),
+            }
           : {}),
       });
       this.#projectBoards = projectBoards;
@@ -1583,7 +1586,7 @@ export class MastraFactory {
         })
       : undefined;
     const workItemProcessor = workItemsReady
-      ? new FactoryWorkItemStateProcessor({ storage: workItemsStorage, boards, projects: factoryProjectsStorage })
+      ? new FactoryWorkItemStateProcessor({ storage: workItemsStorage, boards })
       : undefined;
 
     // Boot assertion: an active integration that signs OAuth `state` needs a
@@ -1895,7 +1898,6 @@ export class MastraFactory {
                         selfReviewApprovedHead({
                           requestContext,
                           workItems: workItemsStorage,
-                          projects: factoryProjectsStorage,
                           boards,
                         }),
                     }
@@ -2115,11 +2117,6 @@ export class MastraFactory {
                 boards: boards,
                 ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
-                isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.autoRunEnabled ?? false;
-                },
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;

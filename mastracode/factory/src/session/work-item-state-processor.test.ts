@@ -75,7 +75,7 @@ function stateArgs(context: RequestContext, overrides: Record<string, unknown> =
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-item signal on %s', backend => {
   /** `storedWithSelfReview`: the project's Work row was stored while Work still had its self-review phase. */
-  async function setup(options: { trusted: boolean; selfReviewEnabled?: boolean; storedWithSelfReview?: boolean }) {
+  async function setup(options: { trusted: boolean; storedWithSelfReview?: boolean }) {
     const storage =
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
@@ -89,13 +89,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
         workSeedWithSelfReview(),
         'factory',
       );
-    }
-    if (options.selfReviewEnabled !== undefined) {
-      await projects.update({
-        orgId: 'org-1',
-        id: project.id,
-        input: { selfReviewEnabled: options.selfReviewEnabled },
-      });
     }
     const { item, binding } = await workItems.prepareRunStart({
       orgId: 'org-1',
@@ -151,17 +144,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     const processor = new FactoryWorkItemStateProcessor({
       storage: workItems,
       boards: new ProjectBoardCache({ codeRegistry: createBoardRegistry(), storage: boards, recheckMs: 0 }),
-      projects,
     });
     return { processor, workItems, projects, project, item, binding, context: requestContext(project.id) };
   }
 
   it("renders the bound card's board position, sources and Factory state", async () => {
-    const { processor, context, item } = await setup({
-      trusted: true,
-      selfReviewEnabled: true,
-      storedWithSelfReview: true,
-    });
+    const { processor, context, item } = await setup({ trusted: true, storedWithSelfReview: true });
 
     const signal = await processor.computeStateSignal(stateArgs(context));
 
@@ -179,7 +167,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       `github pull request #34, key acme/app#34, https://github.com/acme/app/pull/34, state open, head branch factory/issue-12, head ${HEAD}, details: gh pr view 34`,
     );
     expect(contents).toContain('Plan approved: yes, 2026-11-06T10:00:00.000Z');
-    expect(contents).toContain('Self-review: on');
     expect(contents).toContain('Self-review rounds used: 1 of 3');
     expect(contents).toContain(`Last self-review: request changes on ${SELF_REVIEWED}`);
     expect(contents).toContain('Open change request: #34');
@@ -209,14 +196,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     expect(contents).not.toContain('A comment thread the signal must not carry.');
   });
 
-  it("says whether self-review is on only where the card's board has a self-review phase", async () => {
-    const stored = await setup({ trusted: true, selfReviewEnabled: false, storedWithSelfReview: true });
-    expect((await stored.processor.computeStateSignal(stateArgs(stored.context)))!.contents).toContain(
-      'Self-review: off',
-    );
+  it("leaves self-review to the card's board, with no project switch in the signal", async () => {
+    // A board with a self-review phase names it as where the card goes next.
+    const stored = await setup({ trusted: true, storedWithSelfReview: true });
+    const storedContents = (await stored.processor.computeStateSignal(stateArgs(stored.context)))!.contents;
+    expect(storedContents).toContain('Next phases: Review (review)');
+    expect(storedContents).not.toContain('Self-review:');
 
-    // A new project's Work has no self-review phase: the setting means nothing to its cards.
-    const fresh = await setup({ trusted: true, selfReviewEnabled: true });
+    // A new project's Work has no self-review phase: its cards go on to PR review.
+    const fresh = await setup({ trusted: true });
     const contents = (await fresh.processor.computeStateSignal(stateArgs(fresh.context)))!.contents;
     expect(contents).not.toContain('Self-review:');
     expect(contents).toContain('Next phases: Review (pr-review)');

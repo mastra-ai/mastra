@@ -55,7 +55,6 @@ describe('LinearRules', () => {
       boards,
       transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion: 'factory-config-v1' }),
       intakeRoutes: storedBoards,
-      isAutoRunEnabled: async () => false,
       ownerId: 'linear-close-routes',
     });
     const linearIssue = {

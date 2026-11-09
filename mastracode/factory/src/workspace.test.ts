@@ -624,14 +624,16 @@ describe('bundled Factory skill assets', () => {
     expect(plan).not.toContain('report the plan headline and stop');
 
     // Building runs as a goal: it may ask a person, but only through ask_user. It opens the change
-    // request itself, unless the card's board has a self-review phase the project turned on.
+    // request itself, unless the card's board has a self-review phase: no project setting decides it.
     const build = await read('factory-build');
     expect(build).toContain('only with `ask_user`');
     expect(build).toContain('do not open a pull or merge request. Move the card to its `self-review` phase');
-    // The phase's own moves pick the hand-off: without a move to pull request review, no change request is opened.
+    // The phase's own moves pick the hand-off: a move to self-review means no change request is opened.
     expect(build).toContain(
-      '- **The `pull request review` phase is not in `Next phases`, but a `self-review` phase is:** take the self-review path whatever the setting says',
+      '- **The board has a self-review phase** (`Board phases by part:` names a `self-review` phase and it is in `Next phases`): do not open a pull or merge request.',
     );
+    expect(build).not.toContain('Self-review: on');
+    expect(build).not.toContain('whatever the setting says');
     // A push to an open change request with no move to pull request review asks a person; self-review stops on an open one.
     expect(build).toContain(
       'If the `pull request review` phase is not in `Next phases`, move nothing and ask the person with `ask_user`',

@@ -2,16 +2,20 @@ import type { InlineSkill } from '@mastra/core/skills';
 
 import { findBoardSkillProblems } from '../skills/app-skills.js';
 import type {
+  BoardMigrationContext,
   StoredBoardInput,
   StoredBoardRecord,
   StoredBoardScope,
   StoredBoardsStorage,
 } from '../storage/domains/boards/base.js';
 import { DEFAULT_INTAKE_ROUTE_ACTOR } from '../storage/domains/boards/base.js';
+import type { RetiredAutomationSettings } from '../storage/domains/projects/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { LEGACY_REVIEW_BOARD } from '../storage/domains/work-items/legacy-review.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
+import { boardForWorkItem } from './semantics.js';
 import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from './stored-board.js';
 import { BOARD_MIGRATIONS } from './work-migrations.js';
 
@@ -102,8 +106,16 @@ export interface ProjectBoardCacheOptions {
   /** The code boards, built-ins included when enabled. */
   codeRegistry: BoardRegistry;
   storage: StoredBoardsStorage;
-  /** Lists every project, to warm them at boot. */
-  projects?: { listAll(): Promise<readonly { orgId: string; id: string }[]> };
+  /**
+   * Lists every project, to warm them at boot, and reads the retired switches the board
+   * migrations carry into each project's boards.
+   */
+  projects?: {
+    listAll(): Promise<readonly { orgId: string; id: string }[]>;
+    retiredAutomationSettings?(project: { orgId: string; id: string }): Promise<RetiredAutomationSettings | null>;
+  };
+  /** The phases cards sit in on each of the project's boards, which a board migration must not remove. */
+  occupiedPhases?: (scope: StoredBoardScope) => Promise<ReadonlyMap<string, ReadonlySet<string>>>;
   codeSkills?: readonly InlineSkill[];
   /**
    * Whether the project still uses the retired Review board (an open card is stored on it). Such
@@ -117,6 +129,20 @@ export interface ProjectBoardCacheOptions {
 
 function scopeKey(scope: StoredBoardScope): string {
   return `${scope.orgId}\0${scope.factoryProjectId}`;
+}
+
+/** Reads the phases cards sit in on each of a project's boards, for `occupiedPhases`. */
+export function occupiedPhasesOf(workItems: Pick<WorkItemsStorage, 'list'>) {
+  return async (scope: StoredBoardScope): Promise<ReadonlyMap<string, ReadonlySet<string>>> => {
+    const occupied = new Map<string, Set<string>>();
+    for (const item of await workItems.list(scope)) {
+      const board = boardForWorkItem(item);
+      const phases = occupied.get(board) ?? new Set<string>();
+      for (const stage of item.stages) phases.add(stage);
+      occupied.set(board, phases);
+    }
+    return occupied;
+  };
 }
 
 /**
@@ -147,11 +173,13 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #codeSkills: readonly InlineSkill[];
   readonly #seeds: ReadonlyMap<string, StoredBoardInput>;
   readonly #reviewBoardInUse: ProjectBoardCacheOptions['reviewBoardInUse'];
+  readonly #occupiedPhases: ProjectBoardCacheOptions['occupiedPhases'];
 
   constructor(options: ProjectBoardCacheOptions) {
     this.codeRegistry = options.codeRegistry;
     this.#storage = options.storage;
     this.#reviewBoardInUse = options.reviewBoardInUse;
+    this.#occupiedPhases = options.occupiedPhases;
     this.#projects = options.projects;
     this.#codeSkills = options.codeSkills ?? [];
     this.#recheckMs = options.recheckMs ?? DEFAULT_RECHECK_MS;
@@ -299,17 +327,28 @@ export class ProjectBoardCache implements ProjectBoardSource {
 
   /** Runs the board migrations of the boards Factory stores here that the project hasn't had yet. */
   async #migrate(scope: StoredBoardScope): Promise<void> {
-    // A migration rewrites Factory's own board; an app board under the same key keeps its settings.
+    // A migration of one board rewrites Factory's own board; an app board under the same key keeps
+    // its settings. One that carries a project setting into every board rewrites them all.
     const migrations = BOARD_MIGRATIONS.filter(migration => {
+      if (migration.boardKey === null) return true;
       const code = this.codeRegistry.get(migration.boardKey);
       return code !== undefined && defaultBoards.includes(code);
     });
-    const changed = await this.#storage.applyBoardMigrations(scope, migrations);
+    const changed = await this.#storage.applyBoardMigrations(scope, migrations, () => this.#migrationContext(scope));
     if (changed.length === 0) return;
     const filled = changed.map(({ boardKey, filled }) => `${boardKey}: ${filled.join(', ')}`).join('; ');
-    console.info(
-      `[factory] Updated the boards of project ${scope.factoryProjectId} that still held old defaults (${filled}).`,
-    );
+    console.info(`[factory] Migrated the boards of project ${scope.factoryProjectId} (${filled}).`);
+  }
+
+  async #migrationContext(scope: StoredBoardScope): Promise<BoardMigrationContext> {
+    const retiredSettings =
+      (await this.#projects?.retiredAutomationSettings?.({ orgId: scope.orgId, id: scope.factoryProjectId })) ?? null;
+    return {
+      retiredSettings,
+      occupiedPhases: retiredSettings && this.#occupiedPhases ? await this.#occupiedPhases(scope) : null,
+      warn: message =>
+        this.#warnOnce(`migration:${scopeKey(scope)}:${message}`, `${message} (project ${scope.factoryProjectId})`),
+    };
   }
 
   #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[], reviewInUse: boolean): ProjectBoards {

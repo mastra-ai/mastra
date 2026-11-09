@@ -249,10 +249,6 @@ export interface FactoryProjectPayload {
   modelScope?: FactoryModelScope;
   /** Thinking level every session and run uses until it picks its own. */
   defaultThinkingLevel?: ThinkingLevelSetting;
-  /** Whether Factory rules may start agent runs without someone asking for them. */
-  autoRunEnabled?: boolean;
-  /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
-  selfReviewEnabled?: boolean;
 }
 
 /** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
@@ -467,22 +463,6 @@ export async function applyFactoryDefaultModelToSessions(
     },
   );
   return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
-}
-
-/** Toggle a Factory's automation settings: rule-started runs and self-review. */
-export async function updateFactoryAutomation(
-  baseUrl: string,
-  factoryProjectId: string,
-  patch: Pick<FactoryProjectPayload, 'autoRunEnabled' | 'selfReviewEnabled'>,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(patch),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
-  return project;
 }
 
 /**

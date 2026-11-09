@@ -8,6 +8,7 @@ import type { StatusEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
+import type { RetiredAutomationSettings } from '../projects/base.js';
 import {
   FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,
   FACTORY_BOARD_PHASES_SCHEMA,
@@ -93,13 +94,33 @@ export interface StoredBoardRecord {
   phases: StoredPhaseRecord[];
 }
 
+/** What a board migration may know about the project besides the board it rewrites. */
+export interface BoardMigrationContext {
+  /** The project switches the boards replaced, as the project last stored them; null when unknown. */
+  readonly retiredSettings: RetiredAutomationSettings | null;
+  /** The phases of each board that cards sit in, by board key; null when the cards can't be read. */
+  readonly occupiedPhases: ReadonlyMap<string, ReadonlySet<string>> | null;
+  /** Tells the operator about a board a migration left as it is. */
+  warn(message: string): void;
+}
+
 /** A one-time rewrite of a stored board, keyed so each project gets it once. */
 export interface StoredBoardMigration {
   key: string;
-  boardKey: string;
+  /** The board it rewrites; `null` rewrites every board the project stores. */
+  boardKey: string | null;
   /** The board to write instead, with what changed; undefined leaves it as it is. */
-  migrate(board: StoredBoardRecord): { board: Omit<StoredBoardInput, 'key'>; filled: string[] } | undefined;
+  migrate(
+    board: StoredBoardRecord,
+    context: BoardMigrationContext,
+  ): { board: Omit<StoredBoardInput, 'key'>; filled: string[] } | undefined;
 }
+
+const EMPTY_MIGRATION_CONTEXT: BoardMigrationContext = {
+  retiredSettings: null,
+  occupiedPhases: new Map(),
+  warn: () => {},
+};
 
 export interface AppliedBoardMigration {
   key: string;
@@ -485,6 +506,8 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   async applyBoardMigrations(
     scope: StoredBoardScope,
     migrations: readonly StoredBoardMigration[],
+    /** Read once, before the transaction, and only when a migration is still pending. */
+    context: () => Promise<BoardMigrationContext> = async () => EMPTY_MIGRATION_CONTEXT,
   ): Promise<AppliedBoardMigration[]> {
     if (migrations.length === 0) return [];
     const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
@@ -492,6 +515,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       return [];
     }
     await ensureVersionRow(this.ops, scope);
+    const project = await context();
     return this.#transact(async ops => {
       const current = (await ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope)))!;
       const applied = current.applied_migrations ?? [];
@@ -499,13 +523,17 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       if (pending.length === 0) return [];
       const changed: AppliedBoardMigration[] = [];
       for (const migration of pending) {
-        const row = await ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: migration.boardKey });
-        if (!row) continue;
-        const phases = await ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: row.board_key });
-        const result = migration.migrate(toRecord(row, phases));
-        if (!result) continue;
-        await writeBoard(ops, scope, row, { ...result.board, key: row.board_key }, MIGRATION_ACTOR);
-        changed.push({ key: migration.key, boardKey: row.board_key, filled: result.filled });
+        const rows =
+          migration.boardKey === null
+            ? await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope))
+            : await ops.findMany<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: migration.boardKey });
+        for (const row of rows) {
+          const phases = await ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: row.board_key });
+          const result = migration.migrate(toRecord(row, phases), project);
+          if (!result) continue;
+          await writeBoard(ops, scope, row, { ...result.board, key: row.board_key }, MIGRATION_ACTOR);
+          changed.push({ key: migration.key, boardKey: row.board_key, filled: result.filled });
+        }
       }
       const updated = await ops.updateMany(
         VERSIONS,
