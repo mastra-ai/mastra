@@ -165,6 +165,51 @@ async function createForwardRequest(ctx: any): Promise<Request> {
   } as RequestInit);
 }
 
+/**
+ * srvx, which runs `@elysiajs/node`, creates `request.signal` on first access and only then listens for the response
+ * 'close'. A client that left during an earlier hook therefore never aborts it, so check the Node response directly.
+ */
+function getRequestAbortSignal(request: Request): AbortSignal {
+  const signal = request.signal;
+  const nodeRes = (request as { runtime?: { node?: { res?: { destroyed?: boolean } } } }).runtime?.node?.res;
+  return nodeRes?.destroyed && !signal.aborted ? AbortSignal.abort() : signal;
+}
+
+function getRequestSignal(ctx: unknown): AbortSignal | undefined {
+  const context = ctx as { abortSignal?: AbortSignal; request?: Request } | undefined;
+  return context?.abortSignal ?? (context?.request ? getRequestAbortSignal(context.request) : undefined);
+}
+
+/**
+ * Cancels `reader` once, through `cancel()` or when the request signal aborts. A runtime that skips the response body
+ * of a request that closed while the route handler ran never cancels that body, so the signal is the only notice.
+ */
+function cancelReaderOnRequestAbort(
+  reader: ReadableStreamDefaultReader<unknown>,
+  signal: AbortSignal | undefined,
+): { cancel: (reason?: unknown) => void; dispose: () => void } {
+  let canceled = false;
+  const onAbort = () => cancel('request aborted');
+  const dispose = () => signal?.removeEventListener('abort', onAbort);
+  const cancel = (reason?: unknown) => {
+    if (canceled) {
+      return;
+    }
+
+    canceled = true;
+    dispose();
+    void reader.cancel(reason).catch(() => {});
+  };
+
+  if (signal?.aborted) {
+    onAbort();
+  } else {
+    signal?.addEventListener('abort', onAbort, { once: true });
+  }
+
+  return { cancel, dispose };
+}
+
 function createSafeReadableStream(body: ReadableStream<Uint8Array> | null): ReadableStream<Uint8Array> | null {
   if (!body) return null;
 
@@ -183,6 +228,53 @@ function createSafeReadableStream(body: ReadableStream<Uint8Array> | null): Read
         controller.close();
         reader.releaseLock();
       }
+    },
+  });
+}
+
+/**
+ * Wraps a `datastream-response` body so a client disconnect cancels the upstream body. Unlike
+ * `createSafeReadableStream`, it reads one chunk per pull, so a slow client slows the upstream.
+ */
+function createDatastreamBody(
+  body: ReadableStream<Uint8Array> | null,
+  signal: AbortSignal | undefined,
+): ReadableStream<Uint8Array> | null {
+  if (!body) {
+    return null;
+  }
+
+  const reader = body.getReader();
+  const upstream = cancelReaderOnRequestAbort(reader, signal);
+  let finished = false;
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+
+        if (finished) {
+          return;
+        }
+
+        if (!done) {
+          controller.enqueue(value);
+          return;
+        }
+      } catch {
+        // Preserve chunks already sent before upstream stream errors.
+        if (finished) {
+          return;
+        }
+      }
+
+      finished = true;
+      upstream.dispose();
+      controller.close();
+    },
+    cancel(reason) {
+      finished = true;
+      upstream.cancel(reason);
     },
   });
 }
@@ -288,13 +380,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         mastra: this.mastra,
         registeredTools: this.tools || {},
         taskStore: this.taskStore,
-        abortSignal: ctx.request.signal,
+        abortSignal: getRequestAbortSignal(ctx.request),
         customRouteAuthConfig: this.customRouteAuthConfig,
       };
     };
   }
 
-  async stream(route: ServerRoute, _res: Response, result: { fullStream: ReadableStream }): Promise<any> {
+  async stream(route: ServerRoute, ctx: Response, result: { fullStream: ReadableStream }): Promise<any> {
     const streamFormat = route.streamFormat || 'stream';
     const encoder = new TextEncoder();
 
@@ -312,66 +404,84 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
-    // Set when the client disconnects; the controller is closed from then on, so nothing may be enqueued.
-    let cancelled = false;
+    const upstream = cancelReaderOnRequestAbort(reader, getRequestSignal(ctx));
+    // Set once the controller is closed, errored or cancelled; nothing may be enqueued from then on.
+    let finished = false;
 
+    // Reads one upstream chunk per pull so a slow client slows the upstream instead of buffering it here.
     const stream = new ReadableStream({
-      start: async controller => {
+      start: controller => {
+        if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+          controller.enqueue(encoder.encode(': connected\n\n'));
+        }
+      },
+      pull: async controller => {
         try {
-          if (streamFormat === 'sse' && route.sseFlushOnConnect) {
-            controller.enqueue(encoder.encode(': connected\n\n'));
-          }
-
           while (true) {
             const { done, value } = await reader.read();
-            if (done || cancelled) break;
 
-            if (value) {
-              // SSE comment passthrough — strings starting with ':' are written as-is
-              if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
-                controller.enqueue(encoder.encode(value));
-                continue;
-              }
-
-              // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
-              const shouldRedact = this.streamOptions?.redact ?? true;
-              const outputValue = shouldRedact ? redactStreamChunk(value) : value;
-              // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
-              const serialized = serializeStreamChunk(outputValue);
-              if (!serialized.ok) {
-                this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
-                  path: route.path,
-                  chunkType: (outputValue as { type?: string })?.type,
-                  error: serialized.error.message,
-                });
-                continue;
-              }
-              if (streamFormat === 'sse') {
-                controller.enqueue(encoder.encode(`data: ${serialized.json}\n\n`));
-              } else {
-                controller.enqueue(encoder.encode(serialized.json + '\x1E'));
-              }
+            if (finished) {
+              return;
             }
+
+            if (done) {
+              finished = true;
+              upstream.dispose();
+
+              if (streamFormat === 'sse') {
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              }
+
+              controller.close();
+              return;
+            }
+
+            if (!value) {
+              continue;
+            }
+
+            // SSE comment passthrough — strings starting with ':' are written as-is
+            if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+              controller.enqueue(encoder.encode(value));
+              return;
+            }
+
+            // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
+            const shouldRedact = this.streamOptions?.redact ?? true;
+            const outputValue = shouldRedact ? redactStreamChunk(value) : value;
+            // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+            const serialized = serializeStreamChunk(outputValue);
+            if (!serialized.ok) {
+              this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+                path: route.path,
+                chunkType: (outputValue as { type?: string })?.type,
+                error: serialized.error.message,
+              });
+              continue;
+            }
+            if (streamFormat === 'sse') {
+              controller.enqueue(encoder.encode(`data: ${serialized.json}\n\n`));
+            } else {
+              controller.enqueue(encoder.encode(serialized.json + '\x1E'));
+            }
+            return;
+          }
+        } catch (error) {
+          if (finished) {
+            return;
           }
 
-          if (cancelled) return;
-          if (streamFormat === 'sse') {
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          }
-          controller.close();
-        } catch (error) {
-          if (cancelled) return;
+          finished = true;
+          upstream.dispose();
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
           controller.error(error);
-        } finally {
-          await reader.cancel();
         }
       },
-      cancel: async reason => {
-        cancelled = true;
-        await reader.cancel(reason);
+      cancel: reason => {
+        finished = true;
+        upstream.cancel(reason);
       },
     });
 
@@ -509,7 +619,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const fetchResponse = result as globalThis.Response;
       const headers = new Headers(fetchResponse.headers);
       headers.delete('Transfer-Encoding');
-      return new Response(createSafeReadableStream(fetchResponse.body), {
+      return new Response(createDatastreamBody(fetchResponse.body, getRequestSignal(response)), {
         status: fetchResponse.status,
         statusText: fetchResponse.statusText,
         headers,

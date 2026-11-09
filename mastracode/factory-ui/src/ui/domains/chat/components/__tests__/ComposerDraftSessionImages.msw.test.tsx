@@ -232,7 +232,7 @@ describe('Starting a user session with images attached', () => {
 
       modelDefaults.reject(new Error('model settings down'));
 
-      expect(await screen.findByText(/Request failed \(500\)/)).toBeInTheDocument();
+      expect(await screen.findByText(/Model settings unavailable/)).toBeInTheDocument();
       await waitForMutationsIdle(client);
       expect(screen.getByTestId('pathname')).toHaveTextContent(DRAFT_URL);
       expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('look at this');

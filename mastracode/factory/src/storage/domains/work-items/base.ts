@@ -1134,6 +1134,10 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_run_bindings_session_idx',
         columns: ['factory_project_id', 'thread_id', 'resource_id', 'session_id'],
       },
+      {
+        name: 'factory_run_bindings_org_thread_idx',
+        columns: ['org_id', 'thread_id', 'resource_id', 'session_id'],
+      },
       // Restart reconciler enumerates active bindings across all tenants.
       { name: 'factory_run_bindings_status_idx', columns: ['status'] },
     ],

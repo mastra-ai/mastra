@@ -84,6 +84,7 @@ import type { UntrackedRunLiveness } from './execution-fence';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationOptions, PreparationResult } from './preparation';
+import { deleteDurableReplayOwner, readDurableReplayOwner, writeDurableReplayOwner } from './replay-owners';
 import { createRunAbortController } from './run-abort';
 import { createRunCleanup } from './run-cleanup';
 import { recordRunSavedMessages } from './run-message-refs';
@@ -983,6 +984,34 @@ export class DurableAgent<
   }
 
   /**
+   * Owner of a run whose replay history is still retained, for read access
+   * only: the owner this process tracks, else the one the executing process
+   * shared (see `replay-owners.ts`). Undefined once the run's topic is
+   * cleared. Rejects when the shared cache cannot be read.
+   * @internal
+   */
+  async __getReplayOwner(runId: string): Promise<{ resourceId?: string; threadId?: string } | undefined> {
+    const local = this.__getRunOwner(runId);
+    if (local) return local;
+    const shared = await readDurableReplayOwner(this.#streams.runRecordCache, this.id, runId);
+    if (!shared) return undefined;
+    return { resourceId: shared.resourceId, threadId: shared.threadId };
+  }
+
+  /**
+   * Share the owner of a run this process registered, so other replicas can
+   * authorize replay of its history. Lives until {@link #clearPubsubTopic}. A
+   * failed write only leaves other replicas refusing to replay the run.
+   */
+  async #publishReplayOwner(runId: string, owner: { resourceId?: string; threadId?: string }): Promise<void> {
+    try {
+      await writeDurableReplayOwner(this.#streams.runRecordCache, { agentId: this.id, runId, ...owner });
+    } catch (error) {
+      this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: failed to share its replay owner`, { error });
+    }
+  }
+
+  /**
    * Mark `runId` as being recovered by this process, and return the release.
    * A second `recover()` of the same run in this process fails fast instead
    * of contending for the claim. Across processes the run's execution claim
@@ -1292,6 +1321,7 @@ export class DurableAgent<
       registryEntry.agentId = this.id;
       this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
       globalRunRegistry.set(runId, registryEntry);
+      await this.#publishReplayOwner(runId, { threadId, resourceId });
 
       // Persistent backends may retain chunks from the pre-crash segment.
       const recoverOffset = await this.#getPubsubOffset(runId);
@@ -3139,6 +3169,7 @@ export class DurableAgent<
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
+    await this.#publishReplayOwner(runId, { threadId, resourceId });
     const segment = Symbol(runId);
     this.#segmentOwner.set(runId, segment);
 
@@ -4719,6 +4750,7 @@ export class DurableAgent<
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
+    await this.#publishReplayOwner(runId, { threadId, resourceId });
 
     // Tears down the registry entries and pubsub topic this execution still
     // owns, as stream() does: an execution that recovered the run in this
@@ -5889,6 +5921,10 @@ export class DurableAgent<
   #clearPubsubTopic(runId: string): void {
     void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
     void this.pubsub.clearTopic(`workflow.events.v2.${runId}`);
+    // Replay ownership must not outlive the history it guards.
+    deleteDurableReplayOwner(this.#streams.runRecordCache, this.id, runId).catch(error => {
+      this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: failed to delete its replay owner`, { error });
+    });
   }
 
   /**
@@ -6043,6 +6079,10 @@ export class DurableAgent<
 
     preparation.registryEntry.agentId = this.id;
     this.#runRegistry.registerWithMessageList(preparation.runId, preparation.registryEntry, preparation.messageList, {
+      threadId: preparation.threadId,
+      resourceId: preparation.resourceId,
+    });
+    await this.#publishReplayOwner(preparation.runId, {
       threadId: preparation.threadId,
       resourceId: preparation.resourceId,
     });
