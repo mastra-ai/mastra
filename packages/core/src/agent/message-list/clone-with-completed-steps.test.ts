@@ -38,7 +38,7 @@ describe('MessageList.cloneWithCompletedSteps', () => {
     live.content.content = 'pending';
     live.content.metadata = { structuredOutput: { answer: 1 } };
 
-    const clone = list.cloneWithCompletedSteps();
+    const clone = list.cloneWithCompletedSteps().turn;
 
     expect(shape(clone.get.response.db().find(m => m.id === 'a1')!.content.parts)).toEqual([
       { type: 'step-start' },
@@ -77,7 +77,7 @@ describe('MessageList.cloneWithCompletedSteps', () => {
     live.content.parts.push({ type: 'step-start' }, { type: 'text', text: 'pending' });
     live.content.metadata = { ...live.content.metadata, structuredOutput: { answer: 2 } };
 
-    const clone = list.cloneWithCompletedSteps();
+    const clone = list.cloneWithCompletedSteps().turn;
 
     expect(clone.get.response.db().find(m => m.id === 'a1')!.content.metadata).toEqual({
       structuredOutput: { answer: 1 },
@@ -106,7 +106,7 @@ describe('MessageList.cloneWithCompletedSteps', () => {
       'response',
     );
 
-    expect(responseText(list.cloneWithCompletedSteps('Partial answer.'))).toEqual(['Partial answer.']);
+    expect(responseText(list.cloneWithCompletedSteps('Partial answer.').turn)).toEqual(['Partial answer.']);
   });
 
   it('does not repeat streamed text a settled step already holds', () => {
@@ -124,6 +124,6 @@ describe('MessageList.cloneWithCompletedSteps', () => {
       'response',
     );
 
-    expect(responseText(list.cloneWithCompletedSteps('Partial answer.'))).toEqual(['Partial answer.']);
+    expect(responseText(list.cloneWithCompletedSteps('Partial answer.').turn)).toEqual(['Partial answer.']);
   });
 });

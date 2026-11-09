@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { TransformStreamDefaultController } from 'node:stream/web';
+import type { StepResult } from '@internal/ai-sdk-v5';
 import { convertMessages, coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -2138,7 +2139,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // Taken before the write check: a slow check must not stamp the cut-off reply with a
                 // time after a retry the deadline error already let the caller start.
                 // Like a cancel, the text the unfinished step already streamed is part of the turn.
-                const turn = self.messageList.cloneWithCompletedSteps(self.#bufferedByStep.text);
+                const { turn, inFlightMessageId } = self.messageList.cloneWithCompletedSteps(self.#bufferedByStep.text);
+                const cutOffStep = self.#bufferedByStep;
                 const deadlinePass = (async () => {
                   try {
                     if ((await beforeDeadlineSave()) === false) return;
@@ -2148,27 +2150,69 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     });
                     return;
                   }
+                  const writer = {
+                    custom: async (
+                      data: { type: string; data?: unknown; transient?: boolean },
+                      writerOptions?: { messageId?: string },
+                    ) => {
+                      persistProcessorDataChunk(
+                        turn,
+                        resolveProcessorWriterMessageId(turn, self.messageId, writerOptions?.messageId),
+                        data,
+                      );
+                      if (!streamOpen) return;
+                      self.#emitChunk(data as ChunkType<OUTPUT>);
+                      controller.enqueue(data as ChunkType<OUTPUT>);
+                    },
+                  };
+                  if (inFlightMessageId) {
+                    // The cut-off text never reached the step processors (redaction, refusal handling...).
+                    // Run them over that message alone: the rest of the turn already went through them.
+                    try {
+                      const stepList = turn.clone();
+                      stepList.removeByIds(
+                        stepList.get.all
+                          .db()
+                          .map(message => message.id)
+                          .filter(id => id !== inFlightMessageId),
+                      );
+                      await self.processorRunner!.runProcessOutputStep({
+                        // The loop hands step processors these same step results, typed as AI SDK steps.
+                        steps: [...self.#bufferedSteps] as unknown as StepResult<any>[],
+                        messages: stepList.get.all.db(),
+                        messageList: stepList,
+                        stepNumber: self.#bufferedSteps.length,
+                        finishReason: 'error',
+                        toolCalls: cutOffStep.toolCalls.length
+                          ? cutOffStep.toolCalls.map(({ payload }) => ({
+                              toolName: payload.toolName,
+                              toolCallId: payload.toolCallId,
+                              args: payload.args,
+                            }))
+                          : undefined,
+                        text: cutOffStep.text,
+                        usage: self.#usageCount,
+                        ...resolveObservabilityContext(options),
+                        requestContext: self.#options.requestContext,
+                        writer,
+                      });
+                      turn.removeByIds([inFlightMessageId]);
+                      for (const message of stepList.get.all.db()) turn.add(message, 'response', { merge: false });
+                    } catch (stepError) {
+                      // Fail closed: keep the completed steps rather than save unprocessed text.
+                      turn.removeByIds([inFlightMessageId]);
+                      self.logger?.warn('Output step processors failed on the text cut off at the total deadline', {
+                        error: stepError,
+                      });
+                    }
+                  }
                   try {
                     await self.processorRunner!.runOutputProcessors(
                       turn,
                       resolveObservabilityContext(options),
                       self.#options.requestContext,
                       0,
-                      {
-                        custom: async (
-                          data: { type: string; data?: unknown; transient?: boolean },
-                          writerOptions?: { messageId?: string },
-                        ) => {
-                          persistProcessorDataChunk(
-                            turn,
-                            resolveProcessorWriterMessageId(turn, self.messageId, writerOptions?.messageId),
-                            data,
-                          );
-                          if (!streamOpen) return;
-                          self.#emitChunk(data as ChunkType<OUTPUT>);
-                          controller.enqueue(data as ChunkType<OUTPUT>);
-                        },
-                      },
+                      writer,
                       {
                         text: self.#bufferedText.join(''),
                         usage: self.#usageCount,

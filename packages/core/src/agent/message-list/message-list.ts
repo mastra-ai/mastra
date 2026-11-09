@@ -1133,11 +1133,16 @@ export class MessageList {
    * messages a step still in flight added since the last {@link markStepCompleted} are left out.
    * A step whose tool calls all have results (an aborted call records a notice) counts as completed
    * even though the loop never reached its step-finish, and is kept whole. When the step is cut,
-   * or kept whole without the text it already streamed, `inFlightText` is added as its own assistant message.
+   * or kept whole without the text it already streamed, `inFlightText` is added as its own assistant message,
+   * returned as `inFlightMessageId` so the caller can run it through the step processors it never reached.
    * @internal
    */
-  public cloneWithCompletedSteps(inFlightText = ''): MessageList {
+  public cloneWithCompletedSteps(inFlightText = ''): { turn: MessageList; inFlightMessageId?: string } {
     const clone = this.clone();
+    const addInFlightText = () => {
+      clone.add({ role: 'assistant', content: [{ type: 'text', text: inFlightText }] }, 'response', { merge: false });
+      return clone.get.response.db().at(-1)!.id;
+    };
     const completed = this.#completedStepParts;
     const pending = clone.get.response
       .db()
@@ -1147,9 +1152,9 @@ export class MessageList {
       // Recovered eager work commits only the tool call and its result; the text streamed since is not in the list yet.
       const keptText = pending.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
       if (inFlightText.trim().length > 0 && !keptText.includes(inFlightText.trim())) {
-        clone.add({ role: 'assistant', content: [{ type: 'text', text: inFlightText }] }, 'response', { merge: false });
+        return { turn: clone, inFlightMessageId: addInFlightText() };
       }
-      return clone;
+      return { turn: clone };
     }
     for (const message of clone.get.response.db()) {
       const length = completed?.get(message.id);
@@ -1169,10 +1174,8 @@ export class MessageList {
         }
       }
     }
-    if (inFlightText.trim().length > 0) {
-      clone.add({ role: 'assistant', content: [{ type: 'text', text: inFlightText }] }, 'response', { merge: false });
-    }
-    return clone;
+    if (inFlightText.trim().length > 0) return { turn: clone, inFlightMessageId: addInFlightText() };
+    return { turn: clone };
   }
 
   private all = {

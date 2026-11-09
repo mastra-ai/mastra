@@ -249,6 +249,177 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
+  // The deadline cuts off text no step processor has seen. It must go through them before it is saved,
+  // so a redaction processor redacts it as it would have at the end of the step.
+  itDeadline(
+    'total-timeout runs the step processors over the streamed text before saving it',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-step-redact-${engine}`;
+      const redact: Processor = {
+        id: 'redact',
+        processOutputStep: async ({ messages }) => {
+          // Like PIIDetector, rewrite the parts and the content string that mirrors them.
+          for (const message of messages) {
+            for (const part of message.content.parts) {
+              if (part.type === 'text') part.text = part.text.replaceAll('SECRET', '[R]');
+            }
+            if (typeof message.content.content === 'string') {
+              message.content.content = message.content.content.replaceAll('SECRET', '[R]');
+            }
+          }
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        stopWhen: stepCountIs(5),
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        expectStreamError: true,
+        tools: { echoTool },
+        outputProcessors: [redact],
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 1 },
+            { content: 'SECRET '.repeat(200) },
+            { chunkSize: 7, latency: 50 },
+          );
+        },
+      });
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(toolResultIds(messages)).toEqual(['call_echo']);
+      expect(JSON.stringify(messages)).not.toContain('SECRET');
+      const streamed = messages.at(-1)!.content.parts.find(part => part.type === 'text');
+      expect(streamed?.type === 'text' && streamed.text).toMatch(/^(\[R\] )+/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Only the cut-off text goes through the step processors at the deadline: the completed step
+  // already did, and running them over it again would apply its changes twice.
+  itDeadline(
+    'total-timeout applies the step processors to the streamed text once, and not again to the completed step',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-step-marker-${engine}`;
+      const marker: Processor = {
+        id: 'marker',
+        processOutputStep: async ({ messages }) => {
+          for (const message of messages.filter(message => message.role === 'assistant')) {
+            for (const part of message.content.parts) if (part.type === 'text') part.text += '+';
+          }
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        stopWhen: stepCountIs(5),
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        expectStreamError: true,
+        tools: { echoTool },
+        outputProcessors: [marker],
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            {
+              content: 'Checking. ',
+              toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }],
+            },
+          );
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 1 },
+            { content: 'PARTIAL '.repeat(200) },
+            { chunkSize: 8, latency: 50 },
+          );
+        },
+      });
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(toolResultIds(messages)).toEqual(['call_echo']);
+      const texts = messages
+        .filter(message => message.role === 'assistant')
+        .flatMap(message => message.content.parts)
+        .flatMap(part => (part.type === 'text' ? [part.text] : []));
+      expect(texts).toHaveLength(2);
+      expect(texts[0]).toBe('Checking. +');
+      expect(texts[1]).toMatch(/^(PARTIAL )+\+$/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A step processor that fails on the cut-off text must not cost the rest of the turn: the save
+  // drops that text and keeps the completed step, rather than saving text no processor approved.
+  for (const failure of ['throws', 'trips'] as const) {
+    itDeadline(
+      `total-timeout keeps the completed step without the streamed text when a step processor ${failure}`,
+      async () => {
+        const memory = new MockMemory();
+        const threadId = `${THREAD}-timeout-step-${failure}-${engine}`;
+        const guard: Processor = {
+          id: 'guard',
+          processOutputStep: async ({ messages, finishReason, abort }) => {
+            if (finishReason === 'error') {
+              if (failure === 'trips') abort('Blocked the cut-off text');
+              throw new Error('guard failed');
+            }
+            return messages;
+          },
+        };
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Echo first, then answer.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          tools: { echoTool },
+          outputProcessors: [guard],
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+            );
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 1 },
+              { content: 'PARTIAL '.repeat(200) },
+              { chunkSize: 8, latency: 50 },
+            );
+          },
+        });
+
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(toolResultIds(messages)).toEqual(['call_echo']);
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+        expect(JSON.stringify(messages)).not.toContain('PARTIAL');
+      },
+      TEST_TIMEOUT_MS,
+    );
+  }
+
   // A processor that writes a data part when the turn ends must see it saved at the deadline too,
   // as it is on a normal finish, so the UI can re-render it from history.
   itDeadline(
