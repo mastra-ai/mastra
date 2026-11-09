@@ -436,6 +436,24 @@ export type SemanticRecall = {
    * ```
    */
   indexName?: string;
+
+  /**
+   * Largest number of characters of message text sent to the embedder in one input. Longer
+   * messages are split into chunks, each stored as its own vector row.
+   *
+   * Measured in characters because no single tokenizer matches every embedder. The default of
+   * 16,384 is about 4096 English tokens. Chinese, Japanese and Korean text, and code, use more
+   * tokens per character, so lower it when your embedder's input limit is close. When unset and
+   * the embedder declares `maxInputTokens` (as `@mastra/fastembed` models do), the limit is
+   * derived from that instead.
+   *
+   * @default 16384
+   * @example
+   * ```typescript
+   * maxChunkChars: 6000 // Mostly Japanese text with an 8192-token embedder
+   * ```
+   */
+  maxChunkChars?: number;
 };
 
 /**

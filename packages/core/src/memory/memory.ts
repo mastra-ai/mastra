@@ -546,6 +546,15 @@ https://mastra.ai/en/docs/memory/overview`,
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     observabilityContext?: Partial<ObservabilityContext>;
+    /**
+     * The run's record of messages already written to the semantic recall index, from
+     * `MessageList.getEmbeddedMessages()`. Messages recorded with the same text are not embedded
+     * again, and newly embedded ones are added. Agent runs pass it through the save queue;
+     * direct callers omit it.
+     *
+     * @internal
+     */
+    embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
