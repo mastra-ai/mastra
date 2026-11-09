@@ -243,7 +243,7 @@ describe('Computers', () => {
           { sandboxId: 'sandbox-1', action: 'mutate', context },
           async () => 'mutated',
         ),
-      ).rejects.toThrow('computer control change is still being enforced; try again');
+      ).rejects.toThrow('the user has control of this computer; wait for them to hand it back');
     } finally {
       vi.useRealTimers();
     }

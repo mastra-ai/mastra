@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { HUMAN_HAS_CONTROL } from '@mastra/core/computers';
+import { CONTROL_NOT_ENFORCED, HUMAN_HAS_CONTROL } from '@mastra/core/computers';
 import type { ComputerSandbox } from '@mastra/core/computers';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
@@ -404,6 +404,54 @@ describe('semantic tools over the daemon socket', () => {
     expect(await queued).toEqual({ text: 'v' });
     expect(await call(computers, 'mastra_workspace_computer_semantic_find', { application: 'kate', role: 'text' })).toBe(HUMAN_HAS_CONTROL);
     expect(daemon.requests.map(request => request.method)).toEqual(['readElementContent']);
+  });
+
+  it('refuses semantic input while agent control enforcement is pending', async () => {
+    const { computers, id } = await attached();
+    computers.registerControlSubscriber({
+      id: 'pending-semantic-relay',
+      required: true,
+      async enforce() {
+        return { status: 'retryable', error: 'relay pending' };
+      },
+    });
+    await computers.control(id, { resourceId: R, threadId: T }, { action: 'take' });
+    await computers.control(id, { resourceId: R, threadId: T }, { action: 'release' });
+
+    for (const [tool, input] of [
+      ['mastra_workspace_computer_semantic_set_text', { id: 'el-1', text: 'hi' }],
+      ['mastra_workspace_computer_semantic_activate', { id: 'el-1', action: 'press' }],
+      ['mastra_workspace_computer_semantic_key_chord', { id: 'el-1', chord: 'Enter' }],
+      ['mastra_workspace_computer_semantic_type', { text: 'hi' }],
+    ] as const) {
+      await expect(call(computers, tool, input)).resolves.toBe(CONTROL_NOT_ENFORCED);
+    }
+    expect(daemon.requests).toEqual([]);
+    expect(machine.actions).toEqual([]);
+  });
+
+  it('prefers the human-hold refusal across every computer mutation path', async () => {
+    const { computers, id } = await attached();
+    computers.registerControlSubscriber({
+      id: 'pending-human-relay',
+      required: true,
+      async enforce() {
+        return { status: 'retryable', error: 'relay pending' };
+      },
+    });
+    await computers.control(id, { resourceId: R, threadId: T }, { action: 'take' });
+
+    await expect(call(computers, 'computer_click', { x: 1, y: 1 })).rejects.toThrow(HUMAN_HAS_CONTROL);
+    await expect(call(computers, 'mastra_workspace_computer_snapshot', {})).resolves.toBe(HUMAN_HAS_CONTROL);
+    await expect(call(computers, 'mastra_workspace_computer_semantic_set_text', { id: 'el-1', text: 'hi' })).resolves.toBe(
+      HUMAN_HAS_CONTROL,
+    );
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, R);
+    requestContext.set(MASTRA_THREAD_ID_KEY, T);
+    await expect(computers.sandboxResolver()({ requestContext })).rejects.toThrow(HUMAN_HAS_CONTROL);
+    expect(daemon.requests).toEqual([]);
+    expect(machine.actions).toEqual([]);
   });
 
   it('explains when the daemon is missing, memory is short, or there is no preview network', async () => {

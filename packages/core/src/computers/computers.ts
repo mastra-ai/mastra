@@ -374,6 +374,12 @@ export class Computers implements MastraComputers {
     this.#attachments.set(scope.key, entry.id);
   }
 
+  #controlRefusal(entry: Entry): string | undefined {
+    if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
+    if (entry.control.enforcedRevision < entry.control.revision) return CONTROL_NOT_ENFORCED;
+    return undefined;
+  }
+
   /** Runs `fn` on the computer attached to this thread, in call order. Takes the slot synchronously. */
   #hands<T>(context: Context, fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>) {
     const scope = this.#scope(context);
@@ -381,11 +387,13 @@ export class Computers implements MastraComputers {
     const id = this.#attachments.get(scope.key);
     const entry = id ? this.#computers.get(id) : undefined;
     if (!entry || entry.ownerResourceId !== scope.resourceId) return Promise.resolve(NOT_ATTACHED);
-    if (entry.control.holder === 'human') return Promise.resolve(HUMAN_HAS_CONTROL);
+    const refusal = this.#controlRefusal(entry);
+    if (refusal) return Promise.resolve(refusal);
     // Re-checked when the action runs: a take while earlier actions are in flight refuses the rest.
-    const run = entry.queue.then((): T | string | Promise<T> =>
-      entry.control.holder === 'human' ? HUMAN_HAS_CONTROL : fn(entry.sandbox!, entry.sandbox!.computer!, entry),
-    );
+    const run = entry.queue.then((): T | string | Promise<T> => {
+      const queuedRefusal = this.#controlRefusal(entry);
+      return queuedRefusal ?? fn(entry.sandbox!, entry.sandbox!.computer!, entry);
+    });
     entry.queue = run.catch(() => {});
     return run;
   }
@@ -766,8 +774,8 @@ export class Computers implements MastraComputers {
           const sandbox = entry?.sandbox ?? (await entry?.ready);
           if (!entry || !sandbox || entry.ownerResourceId !== scope.resourceId) return NOT_ATTACHED;
           const run = entry.queue.then(async () => {
-            if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
-            if (entry.control.enforcedRevision < entry.control.revision) return CONTROL_NOT_ENFORCED;
+            const refusal = this.#controlRefusal(entry);
+            if (refusal) return refusal;
             const result = await sandbox.captureCheckpoint();
             return result.status === 'skipped' ? { status: result.status, reason: result.reason } : { status: result.status };
           });
@@ -834,8 +842,8 @@ export class Computers implements MastraComputers {
     }
     const run = entry.queue.then(async () => {
       if (input.signal?.aborted) throw input.signal.reason ?? new Error('computer action aborted');
-      if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
-      if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
+      const refusal = this.#controlRefusal(entry);
+      if (refusal) throw new Error(refusal);
       return fn();
     });
     entry.queue = run.catch(() => {});
@@ -850,17 +858,18 @@ export class Computers implements MastraComputers {
       const entry = await this.#attachedEntry(scope);
       const sandbox = entry?.sandbox ?? (await entry?.ready);
       if (!sandbox || entry?.ownerResourceId !== scope.resourceId) throw new Error(NOT_ATTACHED);
-      if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
-      if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
+      const refusal = this.#controlRefusal(entry);
+      if (refusal) throw new Error(refusal);
       const workspaceSandbox = sandbox as unknown as WorkspaceSandbox;
       if (!workspaceSandbox.computer) return workspaceSandbox;
+      const controlRefusal = () => this.#controlRefusal(entry);
       const computer = new Proxy(workspaceSandbox.computer, {
         get(target, property, receiver) {
           const value = Reflect.get(target, property, receiver);
           if (typeof value !== 'function') return value;
           return (...args: unknown[]) => {
-            if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
-            if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
+            const refusal = controlRefusal();
+            if (refusal) throw new Error(refusal);
             return Reflect.apply(value, target, args);
           };
         },
