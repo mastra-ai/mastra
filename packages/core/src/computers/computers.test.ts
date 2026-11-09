@@ -200,6 +200,40 @@ describe('Computers', () => {
     ).rejects.toThrow('still being enforced');
   });
 
+  it('bounds request_human enforcement and refuses later queued actions while pending', async () => {
+    vi.useFakeTimers();
+    try {
+      const computers = new Computers({ provider: provider(), secret: 'secret' });
+      await (computers.tools().mastra_workspace_computer_create as any).execute({}, context);
+      computers.registerControlSubscriber({
+        id: 'hanging-request-human-relay',
+        required: true,
+        async enforce() {
+          return new Promise(() => {});
+        },
+      });
+
+      let settled = false;
+      const requested = (computers.tools().mastra_workspace_computer_request_human as any)
+        .execute({ reason: 'log in' }, context)
+        .then((result: unknown) => {
+          settled = true;
+          return result;
+        });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(settled).toBe(true);
+      await expect(requested).resolves.toMatchObject({ control: 'human', revision: 1, enforced: false });
+      await expect(
+        computers.runComputerAction(
+          { sandboxId: 'sandbox-1', action: 'mutate', context },
+          async () => 'mutated',
+        ),
+      ).rejects.toThrow('computer control change is still being enforced; try again');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('bounds control enforcement and reports pending state when a subscriber hangs', async () => {
     vi.useFakeTimers();
     try {

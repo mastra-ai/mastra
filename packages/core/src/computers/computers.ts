@@ -253,20 +253,23 @@ export class Computers implements MastraComputers {
     const identity = { providerId: this.#provider.id, sandboxId: entry.sandbox?.sandboxId };
     const results = await Promise.all(
       required.map(async ({ subscriber }) => {
+        let resolveAbort!: (result: ComputerControlEnforcementResult) => void;
         const aborted = new Promise<ComputerControlEnforcementResult>(resolve => {
-          signal.addEventListener(
-            'abort',
-            () => resolve({ status: 'retryable', error: 'computer control enforcement timed out' }),
-            { once: true },
-          );
+          resolveAbort = resolve;
         });
-        return Promise.race([
-          subscriber.enforce({ computerId: entry.id, scope, identity, control, signal }).catch(error => ({
-            status: 'retryable' as const,
-            error: String((error as Error)?.message ?? error),
-          })),
-          aborted,
-        ]);
+        const abort = () => resolveAbort({ status: 'retryable', error: 'computer control enforcement timed out' });
+        signal.addEventListener('abort', abort, { once: true });
+        try {
+          return await Promise.race([
+            subscriber.enforce({ computerId: entry.id, scope, identity, control, signal }).catch(error => ({
+              status: 'retryable' as const,
+              error: String((error as Error)?.message ?? error),
+            })),
+            aborted,
+          ]);
+        } finally {
+          signal.removeEventListener('abort', abort);
+        }
       }),
     );
     const enforced = results.every(
@@ -274,6 +277,12 @@ export class Computers implements MastraComputers {
     );
     if (enforced) entry.control.enforcedRevision = entry.control.revision;
     return enforced;
+  }
+
+  async #enforceWithinDeadline(entry: Entry, scope: MastraComputerScope): Promise<boolean> {
+    const enforcement = new AbortController();
+    const enforcementTimer = setTimeout(() => enforcement.abort(), CONTROL_ENFORCEMENT_TIMEOUT_MS);
+    return this.#enforce(entry, scope, enforcement.signal).finally(() => clearTimeout(enforcementTimer));
   }
 
   #mac(flag: 'p' | 'e', sandboxId: string, ownerResourceId: string): Buffer {
@@ -587,6 +596,7 @@ export class Computers implements MastraComputers {
     if (!entry || entry.ownerResourceId !== scope.resourceId || !entry.sandbox || entry.destroyed) return NOT_ATTACHED;
     const reason = input.reason.trim();
     const run = entry.queue.then(async () => {
+      let enforced = entry.control.enforcedRevision >= entry.control.revision;
       if (entry.control.holder !== 'human') {
         entry.control = {
           holder: 'human',
@@ -595,7 +605,7 @@ export class Computers implements MastraComputers {
           enforcedRevision: entry.control.enforcedRevision,
           target: { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) },
         };
-        await this.#enforce(entry, scope, new AbortController().signal);
+        enforced = await this.#enforceWithinDeadline(entry, scope);
       }
       const shown = entry.control.reason ?? reason;
       try {
@@ -611,6 +621,7 @@ export class Computers implements MastraComputers {
         reason: shown,
         revision: entry.control.revision,
         control: 'human' as const,
+        enforced,
         message: 'Stop using the computer and end your turn. You will be notified when the user hands it back.',
       };
     });
@@ -814,8 +825,8 @@ export class Computers implements MastraComputers {
     }
     const run = entry.queue.then(async () => {
       if (input.signal?.aborted) throw input.signal.reason ?? new Error('computer action aborted');
-      if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
       if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
+      if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
       return fn();
     });
     entry.queue = run.catch(() => {});
@@ -830,8 +841,8 @@ export class Computers implements MastraComputers {
       const entry = await this.#attachedEntry(scope);
       const sandbox = entry?.sandbox ?? (await entry?.ready);
       if (!sandbox || entry?.ownerResourceId !== scope.resourceId) throw new Error(NOT_ATTACHED);
-      if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
       if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
+      if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
       const workspaceSandbox = sandbox as unknown as WorkspaceSandbox;
       if (!workspaceSandbox.computer) return workspaceSandbox;
       const computer = new Proxy(workspaceSandbox.computer, {
@@ -839,8 +850,8 @@ export class Computers implements MastraComputers {
           const value = Reflect.get(target, property, receiver);
           if (typeof value !== 'function') return value;
           return (...args: unknown[]) => {
-            if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
             if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
+            if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
             return Reflect.apply(value, target, args);
           };
         },
@@ -927,9 +938,7 @@ export class Computers implements MastraComputers {
       revision: entry.control.revision + 1,
       enforcedRevision: entry.control.enforcedRevision,
     };
-    const enforcement = new AbortController();
-    const enforcementTimer = setTimeout(() => enforcement.abort(), CONTROL_ENFORCEMENT_TIMEOUT_MS);
-    const enforced = await this.#enforce(entry, scope, enforcement.signal).finally(() => clearTimeout(enforcementTimer));
+    const enforced = await this.#enforceWithinDeadline(entry, scope);
     await this.#persistAttachment({ ...scope, key }, entry);
     if (!enforced) return { holder, revision: entry.control.revision, notified: false, reason: 'not-delivered' };
     return { holder, revision: entry.control.revision, ...(await this.#notify(entry, holder, target, note)) };
