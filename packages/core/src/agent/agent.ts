@@ -1750,9 +1750,20 @@ export class Agent<
     return this.#ownStreamBus();
   }
 
+  /**
+   * Whether runs this class executes publish through the plain Agent stream
+   * publisher. DurableAgent returns false: it publishes on its own bus, so the
+   * plain bus (and its abort requests and run records) must not exist for it.
+   * @internal
+   */
+  protected __ownsPlainStreamPublisher(): boolean {
+    return true;
+  }
+
   // Not overridable: DurableAgent exposes its own bus through __getStreamBus,
   // but runs it executes never go through this class's publisher.
   #ownStreamBus(): AgentStreamBus | undefined {
+    if (!this.__ownsPlainStreamPublisher()) return undefined;
     if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     if (!this.#streamBus) {
       const config = agentStreamsConfig(this.#durable);
