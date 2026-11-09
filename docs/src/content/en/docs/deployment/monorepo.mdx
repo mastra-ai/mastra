@@ -100,6 +100,8 @@ When your Mastra application imports from other workspace packages, Mastra handl
 For most setups, this works without configuration. If you encounter issues with workspace package imports, add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages):
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   bundler: {
     transpilePackages: ['@my-org/utils'],

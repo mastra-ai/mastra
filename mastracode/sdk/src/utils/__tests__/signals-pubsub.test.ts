@@ -279,9 +279,15 @@ describe('SignalsPubSub', () => {
     const pubsub = createSignalsPubSub('mastra-bbb');
 
     await pubsub.getLeaseProvider().acquireLease(notificationDispatchLeaseKey('sentinel-aaa'), 'owner', 1000);
+    await pubsub
+      .getLeaseProvider()
+      .acquireLease(notificationDispatchLeaseKey('sentinel-aaa', '/repo/a'), 'owner', 1000);
     await pubsub.getLeaseProvider().acquireLease(notificationDispatchLeaseKey('../escape'), 'owner', 1000);
 
-    expect(findSocket('/tmp/mc/sentinel-aaa/.leases.sock')?.leaseKeys).toEqual(['notification-dispatch:sentinel-aaa']);
+    expect(findSocket('/tmp/mc/sentinel-aaa/.leases.sock')?.leaseKeys).toEqual([
+      'notification-dispatch:sentinel-aaa',
+      'notification-dispatch:sentinel-aaa\0/repo/a',
+    ]);
     expect(findSocket('/tmp/mc/mastra-bbb/.leases.sock')?.leaseKeys).toEqual(['notification-dispatch:../escape']);
   });
 

@@ -139,6 +139,23 @@ export function formatDate(value: DateInput, preset: DatePreset, options: Format
   return getFormatter(preset, locale, timeZone).format(date);
 }
 
+function calendarDay(date: Date, timeZone?: string) {
+  const { year, month, day } = calendarDate(date, timeZone);
+  return Date.UTC(Number(year), Number(month) - 1, Number(day)) / 86_400_000;
+}
+
+/** When something happened, by its day and clock: `Today at 10:44:44 AM`, `Yesterday at …`, `Oct 21 at …`. */
+export function formatMoment(value: DateInput, options: FormatOptions = {}) {
+  const date = toDate(value);
+  if (!date) return undefined;
+  const clock = formatDate(date, 'time-seconds', options);
+  const daysAgo =
+    calendarDay(new Date(options.now ?? Date.now()), options.timeZone) - calendarDay(date, options.timeZone);
+  if (daysAgo === 0) return `Today at ${clock}`;
+  if (daysAgo === 1) return `Yesterday at ${clock}`;
+  return `${formatShortDate(date, options)} at ${clock}`;
+}
+
 /** Locale-aware compact date range, e.g. `Sep 2 – 5, 2026`. */
 export function formatDateRange(start: DateInput, end: DateInput, options: Omit<FormatOptions, 'now'> = {}) {
   const from = toDate(start);

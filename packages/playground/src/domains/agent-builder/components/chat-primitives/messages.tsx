@@ -147,7 +147,7 @@ const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | nu
       ...message.content,
       parts: [{ type: 'data-signal', data }],
     },
-  } as MastraDBMessage;
+  };
 };
 
 const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMetadata | undefined => {
@@ -222,7 +222,7 @@ export const MessageRow = ({ message }: MessageRowProps) => {
   const dbMessage = toDisplayMessage(message);
   if (dbMessage === null) return null;
 
-  const metadata = message.content.metadata as MessageMetadata | undefined;
+  const metadata = message.content.metadata;
 
   const renderers: MessageRenderers = {
     Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} metadata={metadata} />,

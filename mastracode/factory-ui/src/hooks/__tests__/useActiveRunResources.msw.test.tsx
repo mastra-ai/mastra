@@ -5,8 +5,8 @@ import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { TEST_BASE_URL } from '../../../e2e/ui/render';
-import { ApiConfigProvider } from '../../api/config';
+import { TEST_API, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { ApiConfigProvider, createApiConfig } from '../../api/config';
 import { createQueryClient } from '../../query-client';
 import { useActiveRunResources } from '../useActiveRunResources';
 
@@ -29,14 +29,16 @@ describe('active run lookup across Factory servers', () => {
     stubActiveRuns(TEST_BASE_URL, [sessionId]);
     stubActiveRuns(OTHER_BASE_URL, []);
     const client = createQueryClient();
-    const wrapper = (baseUrl: string) =>
-      function Providers({ children }: { children: ReactNode }) {
+    const wrapper = (baseUrl: string) => {
+      const config = createApiConfig({ baseUrl });
+      return function Providers({ children }: { children: ReactNode }) {
         return (
           <QueryClientProvider client={client}>
-            <ApiConfigProvider baseUrl={baseUrl}>{children}</ApiConfigProvider>
+            <ApiConfigProvider config={config}>{children}</ApiConfigProvider>
           </QueryClientProvider>
         );
       };
+    };
     const hook = () => useActiveRunResources({ agentControllerId: controllerId, resourceIds: [sessionId] });
 
     const running = renderHook(hook, { wrapper: wrapper(TEST_BASE_URL) });
@@ -44,5 +46,28 @@ describe('active run lookup across Factory servers', () => {
 
     await waitFor(() => expect(running.result.current[sessionId]).toBe(true));
     await waitFor(() => expect(idle.result.current[sessionId]).toBe(false));
+  });
+
+  it('finds a session whose run is on its thread under a shared Factory resource', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/active-runs`, () =>
+        HttpResponse.json({ runs: [{ runId: 'run-a', resourceId: 'factory-1', threadId: 'run-a' }] }),
+      ),
+    );
+    const client = createQueryClient();
+    const { result } = renderHook(
+      () => useActiveRunResources({ agentControllerId: controllerId, resourceIds: ['run-a', 'run-b'] }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>
+            <ApiConfigProvider config={TEST_API}>{children}</ApiConfigProvider>
+          </QueryClientProvider>
+        ),
+      },
+    );
+
+    await waitFor(() => expect(result.current['run-a']).toBe(true));
+    expect(result.current['run-b']).toBe(false);
+    expect(result.current['factory-1']).toBeUndefined();
   });
 });

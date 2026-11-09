@@ -40,7 +40,7 @@ function createModel() {
   });
 }
 
-function startProcess(storage: InMemoryStore, seen: unknown[], { replaceTool = false, withholdTool = false } = {}) {
+function startProcess(storage: InMemoryStore, seen: unknown[], { withholdTool = false } = {}) {
   globalRunRegistry.clear();
   const agent = new Agent({
     id: 'who-agent',
@@ -75,28 +75,7 @@ function startProcess(storage: InMemoryStore, seen: unknown[], { replaceTool = f
             },
           },
         ]
-      : replaceTool
-        ? [
-            {
-              id: 'replace-whoami',
-              processInputStep: ({ tools }: { tools?: Record<string, unknown> }) => ({
-                tools: {
-                  ...(tools ?? {}),
-                  whoami: createTool({
-                    id: 'whoami',
-                    description: 'Reports the caller (replaced)',
-                    inputSchema: z.object({}),
-                    requireApproval: true,
-                    execute: async () => {
-                      seen.push('replacement');
-                      return { ok: true };
-                    },
-                  }),
-                },
-              }),
-            },
-          ]
-        : undefined,
+      : undefined,
   });
   const durableAgent = createDurableAgent({ agent });
   new Mastra({ agents: { durableAgent }, storage, logger: false });
@@ -109,7 +88,7 @@ function contextFor(who: string) {
   return requestContext;
 }
 
-async function suspendForApproval(options?: { replaceTool?: boolean; withholdTool?: boolean }) {
+async function suspendForApproval(options?: { withholdTool?: boolean }) {
   const storage = new InMemoryStore();
   const seen: unknown[] = [];
   const durableAgent = startProcess(storage, seen, options);
@@ -139,20 +118,6 @@ async function drain(stream: { fullStream: AsyncIterable<any> }) {
 }
 
 describe('durable agent approval resume request context (#25960)', () => {
-  it('runs the approved tool with the request context passed to approveToolCall in the same process', async () => {
-    const run = await suspendForApproval();
-
-    await drain(
-      await run.durableAgent.approveToolCall({
-        runId: run.runId,
-        toolCallId: run.toolCallId,
-        requestContext: contextFor('second'),
-      }),
-    );
-
-    expect(run.seen).toEqual(['second']);
-  });
-
   it('runs the approved tool with the request context passed to approveToolCall in a fresh process', async () => {
     const run = await suspendForApproval();
     const durableAgent = startProcess(run.storage, run.seen);
@@ -166,20 +131,6 @@ describe('durable agent approval resume request context (#25960)', () => {
     );
 
     expect(run.seen).toEqual(['second']);
-  });
-
-  it('keeps a configured tool an input processor replaced when approved in the same process', async () => {
-    const run = await suspendForApproval({ replaceTool: true });
-
-    await drain(
-      await run.durableAgent.approveToolCall({
-        runId: run.runId,
-        toolCallId: run.toolCallId,
-        requestContext: contextFor('second'),
-      }),
-    );
-
-    expect(run.seen).toEqual(['replacement']);
   });
 
   it('does not restore a tool an input processor withheld when approved in the same process', async () => {

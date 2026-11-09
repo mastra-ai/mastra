@@ -897,6 +897,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds,
         version,
         agentVersion,
+        agentModel,
         maxConcurrency,
         provenance,
         grouping,
@@ -913,6 +914,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
+        agentModel?: { provider: string; modelId: string };
         maxConcurrency?: number;
         provenance?: {
           source?: string;
@@ -970,6 +972,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         agentVersion,
+        agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
         maxConcurrency,
         provenance,
         grouping,
@@ -1256,7 +1259,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
   description: 'Updates the status, tags, and/or comment on an experiment result',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, resultId, experimentId, ...params }) => {
+  handler: async ({ mastra, datasetId, resultId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
       const storage = mastra.getStorage();
@@ -1268,6 +1271,11 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Experiments storage not available' });
       }
 
+      const experiment = await experimentsStore.getExperimentById({ id: experimentId });
+      if (!experiment || experiment.datasetId !== datasetId) {
+        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+      }
+
       const result = await experimentsStore.updateExperimentResult({
         id: resultId,
         experimentId,
@@ -1275,9 +1283,8 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
         tags: params.tags,
         comment: params.comment,
       });
-      const experiment = await experimentsStore.getExperimentById({ id: experimentId });
 
-      return withTargetType(result, experiment?.targetType);
+      return withTargetType(result, experiment.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });

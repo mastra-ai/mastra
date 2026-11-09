@@ -9,9 +9,8 @@ import { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-button
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import type { MetricsShareListRow } from '@/ds/components/MetricsShareList';
-import { MetricsShareList } from '@/ds/components/MetricsShareList';
+import { ShareBar } from '@/ds/components/ShareBar';
+import type { ShareBarRow } from '@/ds/components/ShareBar';
 
 type Entity = 'agents' | 'workflows' | 'tools';
 
@@ -21,6 +20,18 @@ const ROOT_ENTITY: Record<Entity, EntityType> = {
   tools: EntityType.TOOL,
 };
 const COLUMNS = [{ label: 'Error rate' }];
+
+const TITLE: Record<Entity, string> = {
+  agents: 'Agent runs',
+  workflows: 'Workflow runs',
+  tools: 'Tool calls',
+};
+
+const VIEWS = [
+  { value: 'agents', label: TITLE.agents },
+  { value: 'workflows', label: TITLE.workflows },
+  { value: 'tools', label: TITLE.tools },
+] as const;
 
 const errorRate = (errors: number, runs: number) => formatPercent(runs > 0 ? errors / runs : 0);
 
@@ -47,7 +58,7 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
     tools: volume.data?.toolData ?? [],
   };
   const source = byEntity[entity];
-  const rows: MetricsShareListRow[] = source.map(r => ({
+  const rows: ShareBarRow[] = source.map(r => ({
     key: r.name,
     label: r.name,
     share: r.completed + r.errors,
@@ -56,29 +67,16 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
     onClick: onEntityClick && (() => onEntityClick(rootEntityType, r.name)),
   }));
   const errorsOf = new Map(source.map(r => [r.name, r.errors]));
-  const total = [...byEntity.agents, ...byEntity.workflows, ...byEntity.tools].reduce(
-    (sum, r) => sum + r.completed + r.errors,
-    0,
-  );
+  const total = source.reduce((sum, r) => sum + r.completed + r.errors, 0);
 
   const layout = {
-    title: 'Trace volume',
-    description: 'Runs and calls, with error rate.',
+    title: TITLE[entity],
+    titleMenu: { value: entity, onValueChange: setEntity, options: VIEWS },
     actions: (onViewTraces || onViewErrors) && (
       <>
         {onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(rootEntityType)} />}
         {onViewErrors && <OpenErrorsInLogsButton onClick={() => onViewErrors(rootEntityType)} />}
       </>
-    ),
-    toolbar: (
-      <MetricsCard.Toolbar>
-        <MetricsCard.Tabs<Entity> value={entity} onValueChange={setEntity}>
-          <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
-          <MetricsCard.Tab value="workflows">Workflows</MetricsCard.Tab>
-          <MetricsCard.Tab value="tools">Tools</MetricsCard.Tab>
-        </MetricsCard.Tabs>
-        <MetricsShareList.Header columns={COLUMNS} valueLabel="Runs" />
-      </MetricsCard.Toolbar>
     ),
   };
 
@@ -93,16 +91,16 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
   return (
     <ChartCard
       {...layout}
-      summary={<MetricsCard.Summary value={formatCount(total)} label="runs and calls" isLoading={volume.isLoading} />}
+      total={formatCount(total)}
+      isLoading={volume.isLoading}
       isUpdating={volume.isPlaceholderData}
     >
       <ChartArea>
-        <MetricsShareList
+        <ShareBar
           key={entity}
           rows={rows}
           columns={COLUMNS}
           valueLabel="Runs"
-          showHeader={false}
           color={CHART_COLORS.sky}
           other={rest => {
             const errors = rest.reduce((sum, r) => sum + (errorsOf.get(r.key) ?? 0), 0);

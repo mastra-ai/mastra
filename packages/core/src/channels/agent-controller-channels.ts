@@ -248,6 +248,7 @@ export class AgentControllerChannels extends AgentChannels {
     chatThread: Thread;
     message: Message;
     defaultResourceId: string;
+    requestContext: RequestContext;
   }): string | (() => string | Promise<string>) {
     const base = super.resolveChannelResourceId(args);
     // The base returns a thunk only when a custom resolveResourceId was
@@ -320,7 +321,9 @@ export class AgentControllerChannels extends AgentChannels {
       // rejects after the next tick and the message vanishes with no trace,
       // no log, and no reply. Rejecting here reaches handleChatMessage's
       // error boundary, which tells the sender.
-      { requestContext, requireDelivery: true },
+      // Keep the run open until background tasks finish: it carries the channel's render
+      // context, so it's the run that posts their results to the chat.
+      { requestContext, requireDelivery: true, untilIdle: true },
     );
     await result.accepted;
   }
@@ -507,8 +510,8 @@ export class AgentControllerChannels extends AgentChannels {
    * Only render Approve/Deny controls when the session actually arms a human
    * gate. `allow` tools auto-approve and `deny` tools auto-decline inside the
    * session run, so a card for them would offer a decision nobody is waiting
-   * on. The session is looked up in the controller's live registry and must
-   * match the run's session id; otherwise controls are rendered as a fallback.
+   * on. The session is looked up in the controller's live registry by the
+   * run's session id; when it isn't live, controls are rendered as a fallback.
    *
    * @internal
    */
@@ -517,9 +520,9 @@ export class AgentControllerChannels extends AgentChannels {
     toolName: string,
   ): Promise<boolean> {
     const ctx = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
-    if (!this.controller || !ctx?.resourceId || !ctx.session?.id) return true;
-    const session = await this.controller.getSessionByResource(ctx.resourceId, ctx.scope, requestContext);
-    if (!session || session.identity.getId() !== ctx.session.id) return true;
+    if (!this.controller || !ctx?.sessionId) return true;
+    const session = await this.controller.getSession(ctx.sessionId, requestContext);
+    if (!session) return true;
     return session.resolveToolApproval(toolName) === 'ask';
   }
 

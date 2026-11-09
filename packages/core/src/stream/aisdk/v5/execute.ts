@@ -119,11 +119,42 @@ function readStrictJsonSchemaOption(options: unknown): boolean | undefined {
 // Native @ai-sdk/openai ids are 'openai.chat', 'openai.responses', ...; 'openai-compatible.*' reads its own provider options.
 const isNativeOpenAIProvider = (provider: string) => /^openai(\.|$)/.test(provider);
 
+// @ai-sdk/azure wraps the @ai-sdk/openai Chat and Responses models; `azure-openai` is the AzureOpenAIGateway router id.
+const isAzureOpenAIProvider = (provider: string) =>
+  provider === 'azure-openai' || provider === 'azure.chat' || provider === 'azure.responses';
+
+/**
+ * Whether @ai-sdk/azure sends this request as strict json_schema.
+ * AI SDK 5 (`v2`) defaults to non-strict; AI SDK 6+ defaults to strict.
+ */
+function azureSendsStrictJsonSchema(
+  model: { provider: string; specificationVersion?: unknown },
+  providerOptions: SharedProviderOptions | undefined,
+): boolean {
+  const options = providerOptions as Record<string, unknown> | undefined;
+  let strictJsonSchema: boolean | undefined;
+  if (model.provider === 'azure-openai') {
+    // AzureOpenAIGateway copies `azure` over `openai` before calling the Responses model.
+    strictJsonSchema = readStrictJsonSchemaOption(options?.azure) ?? readStrictJsonSchemaOption(options?.openai);
+  } else if (model.provider === 'azure.responses' && model.specificationVersion !== 'v2') {
+    // AI SDK 6+ Responses reads `azure`, and falls back to `openai` only when `azure` is absent.
+    strictJsonSchema = readStrictJsonSchemaOption(options?.azure ?? options?.openai);
+  } else {
+    // Chat models, and AI SDK 5 Responses models, read `openai` only.
+    strictJsonSchema = readStrictJsonSchemaOption(options?.openai);
+  }
+  return strictJsonSchema ?? model.specificationVersion !== 'v2';
+}
+
 export function usesOpenAIStrictJsonSchema(
-  model: Pick<MastraLanguageModel, 'provider'> & { supportsStructuredOutputs?: unknown },
+  model: Pick<MastraLanguageModel, 'provider'> & {
+    supportsStructuredOutputs?: unknown;
+    specificationVersion?: unknown;
+  },
   providerOptions?: SharedProviderOptions,
 ): boolean {
   if (isNativeOpenAIProvider(model.provider)) return true;
+  if (isAzureOpenAIProvider(model.provider)) return azureSendsStrictJsonSchema(model, providerOptions);
   if (model instanceof ModelRouterLanguageModel || model.supportsStructuredOutputs !== true) return false;
 
   const providerKey = model.provider.split('.')[0]!;
@@ -262,6 +293,16 @@ type ExecutionProps<OUTPUT = undefined> = {
   shouldThrowError?: boolean;
   methodType: ModelMethodType;
   generateId?: IdGenerator;
+  /**
+   * Called when a provider request fails, before it is retried. A run that lost its thread lease while the
+   * request was out stops here, so the failed request is its last.
+   */
+  onRequestFailed?: () => void;
+  /**
+   * Called when a failed request is about to be sent again, after the retry delay. A run that lost its thread
+   * lease during that delay has already stopped, so this is only reached by a run that still holds it.
+   */
+  onRequestRetry?: () => void;
 };
 
 export function execute<OUTPUT = undefined>({
@@ -281,6 +322,8 @@ export function execute<OUTPUT = undefined>({
   shouldThrowError,
   methodType,
   generateId,
+  onRequestFailed,
+  onRequestRetry,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -378,14 +421,16 @@ export function execute<OUTPUT = undefined>({
   const isOpenAIProvider = isNativeOpenAIProvider(model.provider);
   // OpenAI rejects free-form objects in strict mode, so send those schemas non-strict instead of
   // rewriting them into objects that can hold no keys. Mastra still validates the result against the schema.
-  const sendNonStrict =
-    isOpenAIProvider &&
-    providerOptions?.openai?.strictJsonSchema !== true &&
-    hasFreeFormObject(responseFormat?.type === 'json' ? responseFormat.schema : undefined);
+  const hasFreeFormOutput = hasFreeFormObject(responseFormat?.type === 'json' ? responseFormat.schema : undefined);
+  const sendNonStrict = isOpenAIProvider && providerOptions?.openai?.strictJsonSchema !== true && hasFreeFormOutput;
+  // The Azure strict flag is sent as the user set it, so a free-form schema cannot fall back to non-strict.
+  // Preparing it would remove every free-form key, so send it unprepared.
+  const keepAzureFreeFormSchema = isAzureOpenAIProvider(model.provider) && hasFreeFormOutput;
   const isStrictJsonSchemaMode =
     responseFormat?.type === 'json' &&
     !injectionMode &&
     !sendNonStrict &&
+    !keepAzureFreeFormSchema &&
     usesOpenAIStrictJsonSchema(model, providerOptions);
 
   if (isStrictJsonSchemaMode && responseFormat?.schema) {
@@ -436,7 +481,11 @@ export function execute<OUTPUT = undefined>({
         const pRetry = await import('p-retry');
         const retryResult = await pRetry
           .default(
-            async () => {
+            async attemptNumber => {
+              if (attemptNumber > 1) {
+                onRequestRetry?.();
+                abortSignal?.throwIfAborted();
+              }
               const firstChunkTimeout = createTimeoutAbortSignal({
                 parentSignal: abortSignal,
                 timeoutMs: methodType === 'stream' ? timeout?.firstChunkMs : undefined,
@@ -470,6 +519,8 @@ export function execute<OUTPUT = undefined>({
                 return streamResult as unknown as LanguageModelV2StreamResult;
               } catch (error) {
                 cleanupFirstChunkTimeout();
+                onRequestFailed?.();
+                abortSignal?.throwIfAborted();
                 throw error;
               }
             },

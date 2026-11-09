@@ -60,6 +60,7 @@ export function useSessionListRows(factoryId: string | undefined): {
         session,
         item: workItem?.item,
         boards: catalog.data,
+        context: workItem?.context,
         threadId: workItem?.threadId,
         pullRequest: workItem?.pullRequest,
         factoryId,
@@ -71,16 +72,19 @@ export function useSessionListRows(factoryId: string | undefined): {
       }),
     ];
   });
-  const userRows = (query.data?.userSessions ?? []).map(session =>
-    buildUserSessionRow({
+  const userRows = (query.data?.userSessions ?? []).map(session => {
+    const workItem = workItemBySessionId.get(session.sessionId);
+    return buildUserSessionRow({
       session,
+      item: workItem?.item,
+      pullRequest: workItem?.pullRequest,
       factoryId,
       pathname,
       running: runningById[session.sessionId] === true,
       pinned: pinnedSessions.has(session.sessionId),
       viewer,
-    }),
-  );
+    });
+  });
 
   return { rows: [...factoryRows, ...userRows], ...loadState };
 }

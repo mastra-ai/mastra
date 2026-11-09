@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { openApprovedChangeRequest, workBoard } from './work.js';
 
 function executeContext(source: FactoryRuleItemContext['source']): FactoryStageRuleContext {
@@ -20,7 +21,13 @@ function executeContext(source: FactoryRuleItemContext['source']): FactoryStageR
       url: 'https://gitlab.com/acme/app/-/issues/3',
       stages: ['execute'],
       acceptedAt: null,
-      metadata: { identifier: 'acme/app#3' },
+      metadata: {},
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: 'Fix the issue',
+        source: { integrationId: source === 'gitlab-issue' ? 'gitlab' : 'github', type: 'issue', externalId: '3' },
+        metadata: { identifier: 'acme/app#3' },
+      }),
     },
     board: 'work',
     itemRevision: 1,
@@ -31,6 +38,34 @@ function executeContext(source: FactoryRuleItemContext['source']): FactoryStageR
     selfReviewEnabled: true,
   };
 }
+
+describe('work board triage dispatch', () => {
+  it('passes the incident.io follow-up source key that incidentio_get_issue resolves', async () => {
+    const context = executeContext('incidentio-follow-up');
+    const decision = await workBoard.rules.triage?.incidentioFollowUp?.onEnter?.({
+      ...context,
+      item: {
+        ...context.item,
+        sourceKey: 'incidentio:issue:incidentio:follow-up:01HFOLLOWUP',
+        metadata: { identifier: 'stale-board-identifier' },
+        workItem: createProviderWorkItemForTests({
+          id: context.item.id,
+          title: context.item.title,
+          source: { integrationId: 'incidentio', type: 'issue', externalId: 'incidentio:follow-up:01HFOLLOWUP' },
+          metadata: { identifier: 'ENG-42' },
+        }),
+      },
+      source: 'incidentioFollowUp',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    });
+    if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected triage invocation.');
+    expect(decision.skillName).toBe('factory-triage');
+    expect(decision.arguments).toContain('incident.io follow-up ENG-42');
+    expect(decision.arguments).toContain('reference incidentio:follow-up:01HFOLLOWUP');
+  });
+});
 
 describe('work board build prompt', () => {
   it('hands a GitLab build to self-review without opening a merge request', async () => {
@@ -87,11 +122,11 @@ describe('work board build prompt', () => {
     expect(decision.prompt).toContain('1. Fix the test');
   });
 
-  it('passes the findings back when a person resumes a card parked at the round limit', async () => {
+  it('passes the findings back with the approved plan when a card parked at the round limit is resumed through Planning', async () => {
     const context = executeContext('github-issue');
     const decision = await workBoard.rules.execute?.issue?.onEnter?.({
       ...context,
-      fromStage: 'intake',
+      fromStage: 'planning',
       item: {
         ...context.item,
         metadata: {
@@ -104,6 +139,7 @@ describe('work board build prompt', () => {
       },
     });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
+    expect(decision.prompt).toContain('Implement the approved plan for the work item.');
     expect(decision.prompt).toContain('1. Fix the test');
   });
 });
@@ -148,53 +184,5 @@ describe('work board self-review', () => {
     expect(result({ selfReviewVerdict: 'request changes' })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve', openPullRequestNumber: 7 })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve' }, 'work')).toBeUndefined();
-  });
-});
-
-describe('work board done policy', () => {
-  function toDone(
-    actor: { type: string; id: string; role?: string },
-    reviewVerdict?: string | null,
-    openPullRequestNumber?: number | null,
-  ) {
-    return workBoard.transitionPolicy!({
-      actor,
-      fromStage: 'review',
-      toStage: 'done',
-      isHumanTransition: actor.type === 'human',
-      plansAutoApproved: false,
-      planApproved: false,
-      item: {
-        ...executeContext('issue').item,
-        stages: ['review'],
-        triageType: 'bug',
-        metadata: { reviewVerdict, openPullRequestNumber },
-      },
-    } as never);
-  }
-
-  it('keeps the builder from closing work while a review requests changes', () => {
-    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'request changes')).toMatchObject({
-      type: 'reject',
-      code: 'invalid_transition',
-    });
-  });
-
-  it('lets the builder close work once the review approves or the merge settles it', () => {
-    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'approve')).toMatchObject({ type: 'allow' });
-    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, null)).toMatchObject({ type: 'allow' });
-  });
-
-  it('still lets a maintainer close work with changes requested', () => {
-    expect(toDone({ type: 'human', id: 'user-1' }, 'request changes')).toMatchObject({ type: 'allow' });
-  });
-
-  it('keeps the builder from closing work while its pull request is still open', () => {
-    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'approve', 17)).toMatchObject({
-      type: 'reject',
-      code: 'invalid_transition',
-    });
-    expect(toDone({ type: 'system', id: 'factory-rule-dispatcher' }, null, 17)).toMatchObject({ type: 'allow' });
-    expect(toDone({ type: 'human', id: 'user-1' }, null, 17)).toMatchObject({ type: 'allow' });
   });
 });

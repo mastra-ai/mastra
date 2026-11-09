@@ -2,10 +2,9 @@ import { createContext, use } from 'react';
 
 import type { EnvironmentVariablesEditorRowErrors } from './environment-variables-editor.types';
 import type { EnvironmentVariablesEditorController } from '@/hooks/use-environment-variables-editor';
-import type { EnvironmentVariableEntry } from '@/lib/env-file';
 
 type EnvironmentVariablesEditorRenderController = Pick<
-  EnvironmentVariablesEditorController<EnvironmentVariableEntry>,
+  EnvironmentVariablesEditorController,
   | 'rows'
   | 'uploadError'
   | 'fileInputRef'

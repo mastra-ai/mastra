@@ -1,5 +1,5 @@
 import type { FactoryRuleBoardClosure, FactoryRulePhaseContext } from '../rules/types.js';
-import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
 import type {
   BoardEventIntegration,
   BoardEventRules,
@@ -19,8 +19,34 @@ export interface PhaseSemantics {
  * they belong to Review when they track a pull request and to Work otherwise, matching the
  * legacy assignment the transition service performs on their next move.
  */
-export function boardForWorkItem(item: Pick<WorkItemRow, 'board' | 'externalSource'>): string {
+export function boardForWorkItem(item: Pick<Card, 'board' | 'externalSource'>): string {
   return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
+}
+
+/**
+ * A card that tracks a pull or merge request itself, as opposed to the card whose work opened it.
+ * Both can sit on Work, so rules tell them apart by source rather than by board.
+ */
+export function isPullRequestCard(item: { readonly source: string }): boolean {
+  return item.source === 'github-pr' || item.source === 'gitlab-pr';
+}
+
+/** Whether the rule's card is the change request's own card, which the reviewer reviews. */
+export function reviewsPullRequest(context: {
+  readonly board?: string;
+  readonly item?: { readonly source: string };
+}): boolean {
+  if (context.board === 'review') return true;
+  return context.board === 'work' && context.item !== undefined && isPullRequestCard(context.item);
+}
+
+/**
+ * The phase a pull or merge request's own card is reviewed in: Work's `pr-review`, or Review's
+ * `review` for cards filed on the Review board before pull requests moved to Work. Work's own
+ * `review` phase is the builder's self-review, which a pull request card never enters.
+ */
+export function pullRequestReviewPhase(board: string | undefined): 'review' | 'pr-review' {
+  return board === 'review' ? 'review' : 'pr-review';
 }
 
 /**
@@ -81,16 +107,22 @@ export function eventBoardId(context: {
 /** What a card's single current phase means on its installed board, for integration rule contexts. */
 export function rulePhaseContext(
   boards: Pick<BoardRegistry, 'get'>,
-  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+  item: Pick<Card, 'board' | 'externalSource' | 'stages'>,
 ): FactoryRulePhaseContext | undefined {
   const stage = item.stages.length === 1 ? item.stages[0] : undefined;
   if (!stage) return undefined;
   const board = boards.get(boardForWorkItem(item));
   const kind = board?.phaseKind(stage);
   if (!board || !kind) return undefined;
-  const role = board.roleForPhase(stage);
-  const outcomes = Object.freeze(Object.keys(board.phases[stage]?.outcomes ?? {}));
-  return Object.freeze({ id: stage, kind, ...(role === undefined ? {} : { role }), outcomes });
+  const context = board.roleForPhase(stage);
+  const phase = board.phases[stage];
+  return Object.freeze({
+    id: stage,
+    kind,
+    ...(context === undefined ? {} : { context, role: context }),
+    nextPhases: Object.freeze([...(phase?.nextPhases ?? [])]),
+    outcomes: Object.freeze(Object.keys(phase?.outcomes ?? {})),
+  });
 }
 
 /**
@@ -101,7 +133,7 @@ export function rulePhaseContext(
  */
 export function isTerminalWorkItem(
   boards: BoardRegistry,
-  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+  item: Pick<Card, 'board' | 'externalSource' | 'stages'>,
 ): boolean {
   const semantics = workItemPhaseSemantics(boards, item);
   if (semantics) return semantics.kind === 'terminal';
@@ -114,7 +146,7 @@ export function isTerminalWorkItem(
 /** Semantics of the single stage a work item currently occupies; undefined for multi-stage rows. */
 export function workItemPhaseSemantics(
   boards: BoardRegistry,
-  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+  item: Pick<Card, 'board' | 'externalSource' | 'stages'>,
 ): PhaseSemantics | undefined {
   const stage = item.stages.length === 1 ? item.stages[0] : undefined;
   if (!stage) return undefined;
@@ -128,15 +160,15 @@ export function workItemPhaseSemantics(
  */
 export function resolveBoardClosure(
   boards: BoardRegistry,
-  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+  item: Pick<Card, 'board' | 'externalSource' | 'stages'>,
 ): FactoryRuleBoardClosure | undefined {
   const board = boards.get(boardForWorkItem(item));
   if (!board?.sourceClosed) return undefined;
   const { completed, canceled } = board.sourceClosed;
   return {
-    boardTitle: board.title,
-    completed: { phase: completed, title: board.phases[completed]!.title },
-    canceled: { phase: canceled, title: board.phases[canceled]!.title },
+    boardTitle: board.name,
+    completed: { phase: completed, title: board.phases[completed]!.name },
+    canceled: { phase: canceled, title: board.phases[canceled]!.name },
     itemTerminal: item.stages.some(stage => board.isTerminal(stage)),
   };
 }
@@ -144,7 +176,7 @@ export function resolveBoardClosure(
 /** Rule-context fragment carrying the card's `boardClosure`, empty when the board declares none. */
 export function withBoardClosure(
   boards: BoardRegistry,
-  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+  item: Pick<Card, 'board' | 'externalSource' | 'stages'>,
 ): { boardClosure?: FactoryRuleBoardClosure } {
   const boardClosure = resolveBoardClosure(boards, item);
   return boardClosure ? { boardClosure } : {};
@@ -153,7 +185,7 @@ export function withBoardClosure(
 /** `{ phase }` for spreading into an integration rule context, or `{}` when the phase is unknown. */
 export function rulePhaseField(
   boards: Pick<BoardRegistry, 'get'>,
-  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+  item: Pick<Card, 'board' | 'externalSource' | 'stages'>,
 ): { readonly phase?: FactoryRulePhaseContext } {
   const phase = rulePhaseContext(boards, item);
   return phase ? { phase } : {};

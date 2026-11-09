@@ -5,7 +5,13 @@ import { ComposerImagesContext } from './ComposerImagesContext';
 import type { PendingImage } from './ComposerImagesContext';
 
 /** Owns composer attachments above the Composer so a failed first-prompt handoff can restore them. */
-export function ComposerImagesProvider({ children }: { children: ReactNode }) {
-  const [images, setImages] = useState<PendingImage[]>([]);
+export function ComposerImagesProvider({
+  children,
+  initialImages = [],
+}: {
+  children: ReactNode;
+  initialImages?: PendingImage[];
+}) {
+  const [images, setImages] = useState(initialImages);
   return <ComposerImagesContext.Provider value={{ images, setImages }}>{children}</ComposerImagesContext.Provider>;
 }

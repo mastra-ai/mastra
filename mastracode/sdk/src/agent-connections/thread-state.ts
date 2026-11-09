@@ -1,12 +1,12 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
-import {
-  AGENT_CONNECTIONS_STATE_TYPE,
-  type AgentConnectionsState,
-  type AgentSignalPriority,
-  type AgentSignalRoutingAction,
-  type ConnectedAgentPeer,
-  type SentAgentSignal,
+import { AGENT_CONNECTIONS_STATE_TYPE } from './types.js';
+import type {
+  AgentConnectionsState,
+  AgentSignalPriority,
+  AgentSignalRoutingAction,
+  ConnectedAgentPeer,
+  SentAgentSignal,
 } from './types.js';
 
 export const AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY = 'mastracode.agentConnections';

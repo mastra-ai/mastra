@@ -16,7 +16,7 @@ type Story = StoryObj<typeof AlertDialog>;
 export const Default: Story = {
   render: () => (
     <AlertDialog>
-      <AlertDialog.Trigger render={<Button>Open Alert Dialog</Button>} />
+      <AlertDialog.Trigger render={<Button>Open alert dialog</Button>} />
       <AlertDialog.Content>
         <AlertDialog.Header>
           <AlertDialog.Title>Are you sure?</AlertDialog.Title>
@@ -37,7 +37,7 @@ export const Default: Story = {
 export const DeleteConfirmation: Story = {
   render: () => (
     <AlertDialog>
-      <AlertDialog.Trigger render={<Button>Delete Item</Button>} />
+      <AlertDialog.Trigger render={<Button>Delete item</Button>} />
       <AlertDialog.Content>
         <AlertDialog.Header>
           <AlertDialog.Title>Delete this item?</AlertDialog.Title>
@@ -46,7 +46,7 @@ export const DeleteConfirmation: Story = {
           </AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Footer>
-          <AlertDialog.Cancel>Keep Item</AlertDialog.Cancel>
+          <AlertDialog.Cancel>Keep item</AlertDialog.Cancel>
           <AlertDialog.Action>Delete</AlertDialog.Action>
         </AlertDialog.Footer>
       </AlertDialog.Content>

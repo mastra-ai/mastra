@@ -1,5 +1,5 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -11,7 +11,7 @@ import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
-import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
+import { groupSessionsByBoard, pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 const viewerUserId = 'user-me';
@@ -89,49 +89,25 @@ describe('Sessions sidebar owner filter', () => {
     userSession(5, 'user-grace'),
   ];
 
-  it("starts on the viewer's own sessions across factory and user rows", async () => {
-    stubSessions(mixedSessions());
-
-    const rendered = renderSection();
-    await waitForMutationsIdle(rendered.client);
-
-    const work = await screen.findByRole('region', { name: 'Work sessions' });
-    const userGroup = await screen.findByRole('region', { name: 'User sessions' });
-    expect(await within(work).findByRole('button', { name: 'factory/issue-20001' })).toBeInTheDocument();
-    expect(within(userGroup).getByRole('button', { name: 'task-20002' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'factory/issue-20003' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'task-20005' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Review sessions' })).not.toBeInTheDocument();
-    expect(sessionPropertiesTrigger()).toBeInTheDocument();
-  });
-
-  it('says so when the viewer owns none of the sessions', async () => {
-    stubSessions([workSession(3, 'user-grace'), reviewSession(4, 'user-grace'), userSession(5, 'user-grace')]);
-
-    const rendered = renderSection();
-    await waitForMutationsIdle(rendered.client);
-
-    expect(await screen.findByRole('status')).toHaveTextContent('No sessions of your own.');
-    expect(screen.queryByRole('region', { name: /sessions$/ })).not.toBeInTheDocument();
-  });
-
-  it('widens every group to all owners', async () => {
+  it("narrows every group to the viewer's own sessions", async () => {
+    groupSessionsByBoard();
     stubSessions(mixedSessions());
     const user = userEvent.setup();
 
     const rendered = renderSection();
     await waitForMutationsIdle(rendered.client);
-    await screen.findByRole('button', { name: 'factory/issue-20001' });
+    await screen.findByRole('link', { name: 'factory/pr-20004' });
 
-    await pickSessionProperty(user, 'Owner', 'All owners');
+    await pickSessionProperty(user, 'Owner', 'Mine');
 
-    const work = await screen.findByRole('region', { name: 'Work sessions' });
-    const review = await screen.findByRole('region', { name: 'Review sessions' });
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Review sessions' })).not.toBeInTheDocument());
+    const work = screen.getByRole('region', { name: 'Work sessions' });
     const userGroup = screen.getByRole('region', { name: 'User sessions' });
-    expect(within(work).getByRole('button', { name: 'factory/issue-20003' })).toBeInTheDocument();
-    expect(within(review).getByRole('button', { name: 'factory/pr-20004' })).toBeInTheDocument();
-    expect(within(userGroup).getByRole('button', { name: 'task-20005' })).toBeInTheDocument();
-    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+    expect(within(work).getByRole('link', { name: 'factory/issue-20001' })).toBeInTheDocument();
+    expect(within(userGroup).getByRole('link', { name: 'task-20002' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'factory/issue-20003' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'task-20005' })).not.toBeInTheDocument();
+    expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
   });
 
   it('keeps the Properties menu reachable when the sidebar is collapsed', async () => {
@@ -141,9 +117,10 @@ describe('Sessions sidebar owner filter', () => {
     const rendered = renderSection('collapsed');
     await waitForMutationsIdle(rendered.client);
 
-    await pickSessionProperty(user, 'Owner', 'All owners');
+    await screen.findByRole('link', { name: 'factory/pr-20004' });
+    await pickSessionProperty(user, 'Owner', 'Mine');
 
-    expect(await screen.findByRole('button', { name: 'factory/pr-20004' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'factory/pr-20004' })).not.toBeInTheDocument());
     expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
   });
 });

@@ -112,7 +112,8 @@ describe('Sidebar command header', () => {
     expect(container.querySelector('[data-slot="sidebar-footer-meta"]')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Search' })).toBeDefined();
     expect(screen.getByText('Mastra')).toBeDefined();
-    expect(screen.getByText('⌘ K')).toBeDefined();
+    // The shortcut lives in the tooltip, not next to the icon
+    expect(screen.queryByText('⌘ K')).toBeNull();
     expect(screen.getByText('Mastra v0.24.6')).toBeDefined();
   });
 

@@ -1,4 +1,5 @@
 import type { SpanRecord } from '../types';
+import { getSignalInputPreview } from './span-signal';
 import { toDate } from '@/utils/date-format';
 
 type MessageLike = { role?: string; content?: unknown };
@@ -48,11 +49,16 @@ export function getInputPreview(input: unknown, maxLength = 100): string {
       })
       .filter(Boolean);
 
-    const joined = userMessages.join(' | ');
+    const joined = userMessages.join('; ');
     if (joined.length > maxLength) {
       return joined.slice(0, maxLength) + '…';
     }
     return joined;
+  }
+
+  const signalPreview = getSignalInputPreview(input);
+  if (signalPreview !== undefined) {
+    return signalPreview.length > maxLength ? signalPreview.slice(0, maxLength) + '…' : signalPreview;
   }
 
   if (typeof input === 'string') {

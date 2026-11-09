@@ -32,10 +32,6 @@ import { ScheduleFireComponent } from './components/schedule-fire.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
-import {
-  parseSubconsciousActivitySnapshot,
-  SubconsciousActivityComponent,
-} from './components/subconscious-activity.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { formatTaskProgressLine } from './components/task-progress.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -59,6 +55,7 @@ import {
 import type { AssistantRenderPart } from './db-message-parts.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
+import { clearPendingTools } from './state.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
@@ -521,18 +518,12 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       return true;
     }
 
-    const subconsciousActivity =
-      stateSignal.stateId === 'subconscious-activity'
-        ? parseSubconsciousActivitySnapshot(stateSignal.value)
-        : undefined;
-    const component = subconsciousActivity
-      ? new SubconsciousActivityComponent(subconsciousActivity)
-      : new StateSignalComponent({
-          stateId: stateSignal.stateId,
-          mode: stateSignal.mode,
-          version: stateSignal.version,
-          message: stateSignal.message,
-        });
+    const component = new StateSignalComponent({
+      stateId: stateSignal.stateId,
+      mode: stateSignal.mode,
+      version: stateSignal.version,
+      message: stateSignal.message,
+    });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
@@ -948,8 +939,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
 
   disposeAssistantRenderState(state);
   state.chatContainer.clear();
-  state.pendingTools.clear();
-  state.pendingTaskToolIds?.clear();
+  clearPendingTools(state);
   state.pendingSubagents.clear();
   state.followUpComponents = [];
   state.allToolComponents = [];

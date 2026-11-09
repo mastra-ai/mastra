@@ -26,7 +26,7 @@ describe('createLLMMappingStep HITL behavior', () => {
   let messageList: MessageList;
   let llmExecutionStep: any;
   let bail: Mock;
-  let getStepResult: Mock;
+  let getStepResultAsync: Mock;
   let llmMappingStep: ReturnType<typeof createLLMMappingStep>;
 
   // Helper function to create properly typed execute params
@@ -42,7 +42,8 @@ describe('createLLMMappingStep HITL behavior', () => {
     retryCount: 1,
     tracingContext: {} as any,
     getInitData: vi.fn(),
-    getStepResult,
+    getStepResult: vi.fn(),
+    getStepResultAsync,
     suspend: vi.fn(),
     bail,
     abort: vi.fn(),
@@ -101,7 +102,7 @@ describe('createLLMMappingStep HITL behavior', () => {
     });
 
     bail = vi.fn(data => data);
-    getStepResult = vi.fn(() => ({
+    getStepResultAsync = vi.fn(async () => ({
       stepResult: {
         isContinued: true,
         reason: undefined,
@@ -684,7 +685,7 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
   let messageList: MessageList;
   let llmExecutionStep: any;
   let bail: Mock;
-  let getStepResult: Mock;
+  let getStepResultAsync: Mock;
   let llmMappingStep: ReturnType<typeof createLLMMappingStep>;
 
   const createExecuteParams = (
@@ -699,7 +700,8 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
     retryCount: 1,
     tracingContext: {} as any,
     getInitData: vi.fn(),
-    getStepResult,
+    getStepResult: vi.fn(),
+    getStepResultAsync,
     suspend: vi.fn(),
     bail,
     abort: vi.fn(),
@@ -758,7 +760,7 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
     });
 
     bail = vi.fn(data => data);
-    getStepResult = vi.fn(() => ({
+    getStepResultAsync = vi.fn(async () => ({
       stepResult: {
         isContinued: true,
         reason: undefined,
@@ -939,7 +941,7 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
   let messageList: MessageList;
   let llmExecutionStep: any;
   let bail: ReturnType<typeof vi.fn>;
-  let getStepResult: ReturnType<typeof vi.fn>;
+  let getStepResultAsync: ReturnType<typeof vi.fn>;
   let llmMappingStep: ReturnType<typeof createLLMMappingStep>;
 
   const createExecuteParams = (
@@ -954,7 +956,8 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
     retryCount: 1,
     tracingContext: {} as any,
     getInitData: vi.fn(),
-    getStepResult,
+    getStepResult: vi.fn(),
+    getStepResultAsync,
     suspend: vi.fn(),
     bail,
     abort: vi.fn(),
@@ -996,7 +999,7 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
     });
 
     bail = vi.fn(data => data);
-    getStepResult = vi.fn(() => ({
+    getStepResultAsync = vi.fn(async () => ({
       stepResult: { isContinued: true, reason: undefined },
       metadata: {},
     }));
@@ -1097,7 +1100,7 @@ describe('createLLMMappingStep toModelOutput', () => {
   let messageList: MessageList;
   let llmExecutionStep: any;
   let bail: Mock;
-  let getStepResult: Mock;
+  let getStepResultAsync: Mock;
 
   const createExecuteParams = (
     inputData: ToolCallOutput[],
@@ -1111,7 +1114,8 @@ describe('createLLMMappingStep toModelOutput', () => {
     retryCount: 1,
     tracingContext: {} as any,
     getInitData: vi.fn(),
-    getStepResult,
+    getStepResult: vi.fn(),
+    getStepResultAsync,
     suspend: vi.fn(),
     bail,
     abort: vi.fn(),
@@ -1153,7 +1157,7 @@ describe('createLLMMappingStep toModelOutput', () => {
     });
 
     bail = vi.fn(data => data);
-    getStepResult = vi.fn(() => ({
+    getStepResultAsync = vi.fn(async () => ({
       stepResult: { isContinued: true, reason: undefined },
       metadata: {},
     }));

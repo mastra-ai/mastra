@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
-import { formatSkillsCatalog, SkillsProcessor, type SkillCatalogEntry } from './skills';
+import { formatSkillsCatalog, SkillsProcessor } from './skills';
+import type { SkillCatalogEntry } from './skills';
 
 // =============================================================================
 // Mock Types and Helpers

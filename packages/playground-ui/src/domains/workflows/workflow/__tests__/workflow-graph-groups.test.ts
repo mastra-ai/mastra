@@ -12,7 +12,7 @@ describe('Workflow graph groups', () => {
       expect(getWorkflowGraphGroups(nodes)).toEqual([
         expect.objectContaining({
           label: 'Parallel',
-          description: '2 paths · Run together',
+          description: '2 paths run together',
           nodeIds: ['node-add-letter-b', 'node-add-letter-c'],
         }),
       ]);

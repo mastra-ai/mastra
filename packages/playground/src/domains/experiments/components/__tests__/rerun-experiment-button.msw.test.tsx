@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RerunExperimentButton } from '../rerun-experiment-button';
@@ -96,11 +96,11 @@ describe('RerunExperimentButton', () => {
     renderButton();
 
     fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
-    await screen.findByRole('dialog', { name: /new experiment/i });
+    const dialog = await screen.findByRole('dialog', { name: /new experiment/i });
 
     await waitFor(() => expect(targetField().value).toBe('Agent One'));
     expect(datasetField().value).toBe('Dataset 1');
-    expect(await screen.findByText(/· v11$/)).toBeDefined();
+    expect(await within(dialog).findByText('v11')).toBeDefined();
 
     fireEvent.click(runButton());
 
@@ -147,11 +147,15 @@ describe('RerunExperimentButton', () => {
     fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
     await screen.findByRole('dialog', { name: /new experiment/i });
 
-    // Then Advanced is open with the name/description prefilled, and both are sent with the new run
+    // Then Advanced stays closed, still holds the prefilled name/description, and both are sent with the new run
+    await waitFor(() => expect(targetField().value).toBe('Agent One'));
+    const advanced = screen.getByRole('button', { name: 'Advanced' });
+    expect(advanced.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(advanced);
     expect((await screen.findByLabelText<HTMLInputElement>('Experiment name')).value).toBe('Original run');
     expect(screen.getByLabelText<HTMLTextAreaElement>('Description').value).toBe('Original description');
 
-    await waitFor(() => expect(targetField().value).toBe('Agent One'));
     fireEvent.click(runButton());
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));

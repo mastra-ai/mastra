@@ -46,10 +46,14 @@ function renderBoard(search = '', itemCount = ITEM_COUNT) {
 
 describe('Large factory boards', () => {
   beforeEach(() => {
-    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    const height = function (this: Element) {
       return this.matches('.overflow-auto') ? 600 : 48;
-    });
+    };
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(height);
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(1200);
+    // TanStack Virtual sizes the scroll viewport from its client box.
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(height);
+    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(1200);
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
       const scroller = this.closest<HTMLElement>('.overflow-auto');
       const height = this.matches('.overflow-auto') ? 600 : 48;
@@ -221,7 +225,7 @@ describe('Large factory boards', () => {
         }),
         http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues/1`, () =>
           HttpResponse.json({
-            ...largeCandidatePage(1).issues[0]!,
+            ...largeCandidatePage(1).issues[0],
             description: 'Candidate description',
           } satisfies GithubIssueDetail),
         ),

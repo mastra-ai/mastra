@@ -41,7 +41,7 @@ describe('resolvePhaseSemantics', () => {
     expect(resolvePhaseSemantics(boards, 'release', 'queued')).toEqual({ kind: 'resting' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipping')).toEqual({ kind: 'working', role: 'release' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipped')).toEqual({ kind: 'terminal' });
-    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'plan' });
+    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'work' });
     expect(resolvePhaseSemantics(boards, 'work', 'done')).toEqual({ kind: 'terminal' });
   });
 
@@ -107,6 +107,7 @@ describe('resolveBoardToolRule', () => {
     });
     const boards = createBoardRegistry({ boards: [release] });
     expect(resolveBoardToolRule(boards, 'release', 'ship_it')).toBe(onResult);
+    expect(resolveBoardToolRule(boards, 'work', 'factory_record_review_verdict')).toBeTypeOf('function');
     expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeTypeOf('function');
     expect(resolveBoardToolRule(boards, 'review', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'release', 'submit_plan')).toBeUndefined();

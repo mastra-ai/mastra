@@ -1,8 +1,16 @@
 import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { InMemoryStore } from '@mastra/core/storage';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
+import { factoryProjectSettingsUserId } from '../../storage/domains/projects/base.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
+import { NEW_CHANNEL_SESSION_KEY } from './channel-session-link-processor.js';
 
 // Captures the tenant each prime saw: the stamp can be overwritten later in
 // the gate, so asserting on the final request context alone isn't enough.
@@ -11,8 +19,8 @@ const prime = vi.fn(async (context: RequestContext) => {
   primedUsers.push(context.get('user'));
 });
 const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
-const providerDefault = vi.fn(async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> =>
-  undefined,
+const providerDefault = vi.fn(
+  async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> => undefined,
 );
 vi.mock('../../routes/tenant-credentials.js', () => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
@@ -24,11 +32,12 @@ import {
   createChannelResourceIdResolver,
   createChannelSessionResolver,
   createChannelSessionStartHook,
-  resolveChannelThreadId,
+  createChannelThreadIdResolver,
   createHandlers,
   resolveLinkedSender,
   resolveFactoryForLink,
 } from './slack.js';
+import type { SlackStartedSessions } from './slack.js';
 
 /**
  * The 4th argument core hands every channel handler. The handlers write the
@@ -36,7 +45,7 @@ import {
  * real one — a bare `{}` throws once the sender resolves as linked.
  */
 function handlerCtx(mastra?: unknown) {
-  return { mastra: mastra as any, requestContext: new RequestContext() };
+  return { mastra: mastra as any, requestContext: new RequestContext(), skipped: [] };
 }
 
 function chatOnlyMastra() {
@@ -56,6 +65,8 @@ function makeThread({ isDM = false } = {}) {
     isDM,
     post: vi.fn().mockResolvedValue({ id: 'msg-1' }),
     postEphemeral: vi.fn().mockResolvedValue({ id: 'eph-1' }),
+    startTyping: vi.fn().mockResolvedValue(undefined),
+    mentionUser: (userId: string) => `<@${userId}>`,
   } as any;
 }
 
@@ -63,6 +74,7 @@ function makeMessage(teamId?: string) {
   return {
     author: { userId: 'U-sender', userName: 'caleb' },
     text: 'hello bot',
+    attachments: [],
     raw: teamId ? { team_id: teamId } : {},
   } as any;
 }
@@ -84,7 +96,7 @@ describe('resolveLinkedSender', () => {
     const thread = makeThread();
     const result = await resolveLinkedSender({ thread, message: makeMessage('T-1') });
     expect(result).toEqual({ status: 'ungated' });
-    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(thread.post).not.toHaveBeenCalled();
   });
 
   it('resolves the tenant for a linked sender, no card posted', async () => {
@@ -99,10 +111,10 @@ describe('resolveLinkedSender', () => {
       externalTeamId: 'T-1',
       externalUserId: 'U-sender',
     });
-    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(thread.post).not.toHaveBeenCalled();
   });
 
-  it('blocks the run and posts an ephemeral Connect card for an unlinked sender', async () => {
+  it('blocks the run and replies in the thread with a Connect card mentioning an unlinked sender', async () => {
     process.env.MASTRACODE_CHANNELS_PUBLIC_URL = 'https://mc.example.com';
     const thread = makeThread();
     const accountLinks = makeStore(null);
@@ -110,17 +122,15 @@ describe('resolveLinkedSender', () => {
     const result = await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks });
 
     expect(result).toEqual({ status: 'blocked' });
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
-
-    // Ephemeral (visible only to the sender), with fallbackToDM.
-    // Addressed to the sender, not the channel: the card is a private nudge.
-    const [user, , options] = thread.postEphemeral.mock.calls[0];
-    expect(user).toEqual({ userId: 'U-sender', userName: 'caleb' });
-    expect(options).toEqual({ fallbackToDM: true });
+    // A public thread reply, so the sender is notified and the rest of the
+    // thread can see why the agent didn't answer.
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledTimes(1);
 
     // The link carries NO identity: Slack proves the account during OIDC, so
     // a forwarded card can't bind the original sender to whoever clicks it.
-    const card = thread.postEphemeral.mock.calls[0][1];
+    const card = thread.post.mock.calls[0][0];
+    expect(JSON.stringify(card)).toContain('<@U-sender> Connect your Slack account');
     expect(JSON.stringify(card)).toContain('then mention me again.');
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
@@ -133,8 +143,10 @@ describe('resolveLinkedSender', () => {
 
     await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks: makeStore(null) });
 
-    const card = thread.postEphemeral.mock.calls[0][1];
+    const card = thread.post.mock.calls[0][0];
     expect(JSON.stringify(card)).toContain('then message me again.');
+    // No mention needed in a DM.
+    expect(JSON.stringify(card)).not.toContain('<@U-sender>');
   });
 
   it('treats a missing team id as unlinked and blocks the run, still offering the card', async () => {
@@ -148,7 +160,7 @@ describe('resolveLinkedSender', () => {
     expect(result).toEqual({ status: 'blocked' });
     expect(accountLinks.getAccountLink).not.toHaveBeenCalled();
     // The card needs no team id now, and connecting is still the way out.
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
   });
 
   it('blocks the run without a card when no public URL is configured', async () => {
@@ -160,7 +172,7 @@ describe('resolveLinkedSender', () => {
     const result = await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks });
 
     expect(result).toEqual({ status: 'blocked' });
-    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(thread.post).not.toHaveBeenCalled();
   });
 });
 
@@ -360,6 +372,7 @@ describe('handler dispatch gating', () => {
     expect(thread.postEphemeral).not.toHaveBeenCalled();
     // The run must carry the linked tenant, or it resolves default credentials.
     expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBe(true);
     expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
   });
 
@@ -379,38 +392,162 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
     expect(primedUsers).toEqual([{ id: 'user-1', organizationId: 'org-1' }]);
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBe(true);
     expect(prime.mock.invocationCallOrder[0]).toBeLessThan(defaultHandler.mock.invocationCallOrder[0]!);
   });
 
-  it("uses the existing Factory session owner's credentials when another linked user replies", async () => {
+  it.each(['owner-1', 'responder-1'])(
+    'keeps linked Slack sender %s as the interactive tool actor in an existing session',
+    async senderId => {
+      const thread = makeSubscribedThread();
+      const accountLinks = fullStore({ orgId: 'org-1', userId: senderId, defaultFactoryProjectId: 'fp-1' });
+      const projects = makeProjects([{ id: 'fp-1' }]);
+      const sourceControl = {
+        sessions: {
+          getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+        },
+      } as any;
+      const mastra = {
+        getStorage: () => ({
+          getStore: vi.fn().mockResolvedValue({
+            listThreads: vi.fn().mockResolvedValue({
+              threads: [{ id: 'thread-1', resourceId: 'session-1' }],
+            }),
+          }),
+        }),
+      };
+      const defaultHandler = vi.fn();
+      const handlers = createHandlers({ accountLinks, projects, sourceControl });
+      const message = makeMessage('T-1');
+
+      const ctx = handlerCtx(mastra);
+      await handlers.onSubscribedMessage!(thread, message, defaultHandler, ctx);
+
+      expect(defaultHandler).toHaveBeenCalledWith(thread, message);
+      expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+      expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+      expect(ctx.requestContext.get(FACTORY_SLACK_SENDER_KEY)).toEqual({ userId: senderId, orgId: 'org-1' });
+      expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBe(true);
+      expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+    },
+  );
+
+  it('does not dispatch a private Slack session for another linked participant', async () => {
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
     const projects = makeProjects([{ id: 'fp-1' }]);
     const sourceControl = {
       sessions: {
-        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1', visibility: 'private' }),
       },
     } as any;
     const mastra = {
       getStorage: () => ({
         getStore: vi.fn().mockResolvedValue({
-          listThreads: vi.fn().mockResolvedValue({
-            threads: [{ id: 'thread-1', resourceId: 'session-1' }],
-          }),
+          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'session-1' }] }),
         }),
       }),
     };
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks, projects, sourceControl });
-    const message = makeMessage('T-1');
+    const ctx = handlerCtx(mastra);
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledWith('This private Factory session belongs to another user.');
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).not.toBe(true);
+  });
+
+  it("authorizes a Factory-resource thread as its session's owner", async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn(async (sessionId: string) =>
+          sessionId === 'session-1' ? { orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' } : null,
+        ),
+      },
+    } as any;
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'session-1', resourceId: 'fp-1' }] }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
 
     const ctx = handlerCtx(mastra);
-    await handlers.onSubscribedMessage!(thread, message, defaultHandler, ctx);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
-    expect(defaultHandler).toHaveBeenCalledWith(thread, message);
-    expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+    expect(defaultHandler).toHaveBeenCalled();
+    // The run is authorized as the session the thread is named after, never as the shared Factory resource.
+    expect(sourceControl.sessions.getBySessionId).toHaveBeenLastCalledWith('session-1');
     expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
-    expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+  });
+
+  it('authorizes a migrated legacy thread through the session id it was stamped with', async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn(async (sessionId: string) =>
+          sessionId === 'session-1' ? { orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' } : null,
+        ),
+      },
+    } as any;
+    // Created before Slack threads were named after their session, then moved onto the Factory.
+    const legacy = { id: 'C-1:1700.42', resourceId: 'fp-1', metadata: { factorySessionId: 'session-1' } };
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [legacy] }),
+          getThreadById: vi.fn(async () => null),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    const ctx = handlerCtx(mastra);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(defaultHandler).toHaveBeenCalled();
+    expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+  });
+
+  it.each([
+    ['another resource', { id: 'thread-atk', resourceId: 'user-atk', metadata: { factorySessionId: 'session-1' } }, {}],
+    ['another resource, named after the session', { id: 'session-1', resourceId: 'user-atk' }, {}],
+  ])("doesn't run a thread under %s as the session it claims", async (_case, internal, overrides) => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn(async (sessionId: string) =>
+          sessionId === 'session-1' ? { ...{ orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' }, ...overrides } : null,
+        ),
+      },
+    } as any;
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [internal] }),
+          getThreadById: vi.fn(async () => null),
+        }),
+      }),
+    };
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    const ctx = handlerCtx(mastra);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), vi.fn(), ctx);
+
+    expect(ctx.requestContext.get('user')).not.toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
   });
 
   it('rejects an existing Factory session when the responder is linked to another organization', async () => {
@@ -477,7 +614,10 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
 
     expect(output).toHaveBeenCalledExactlyOnceWith(
-      expect.stringContaining(`Could not authorize the owner of Slack Factory session session-1: ${reason}.`),
+      // With no row naming the thread, its session is the thread itself.
+      expect.stringContaining(
+        `Could not authorize the owner of Slack Factory session ${session ? 'session-1' : 'thread-1'}: ${reason}.`,
+      ),
     );
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(prime).not.toHaveBeenCalled();
@@ -548,6 +688,7 @@ describe('handler dispatch gating', () => {
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBeUndefined();
   });
 
   it('does not stamp a tenant for an unlinked sender, and does not dispatch', async () => {
@@ -565,8 +706,33 @@ describe('handler dispatch gating', () => {
     // The host handler is now the only gate — core dispatches whatever reaches it.
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(ctx.requestContext.get('user')).toBeUndefined();
+    // Plain thread chatter didn't address the agent: only the sender sees the card.
+    expect(thread.post).not.toHaveBeenCalled();
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
     expect(prime).not.toHaveBeenCalled();
+  });
+
+  it('publicly prompts an unlinked sender only when they mention the agent in a subscribed thread', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeSubscribedThread();
+    const handlers = createHandlers({ accountLinks: fullStore(null) });
+    const defaultHandler = vi.fn();
+
+    for (const text of ['lgtm', 'I think the build is red', 'ok merging']) {
+      await handlers.onSubscribedMessage!(thread, { ...makeMessage('T-1'), text }, defaultHandler, handlerCtx());
+    }
+    expect(thread.post).not.toHaveBeenCalled();
+    expect(thread.postEphemeral).toHaveBeenCalledTimes(3);
+
+    await handlers.onSubscribedMessage!(
+      thread,
+      { ...makeMessage('T-1'), text: '@shipyard can you check the build?', isMention: true },
+      defaultHandler,
+      handlerCtx(),
+    );
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('<@U-sender> Connect your Slack account');
   });
 
   it('blocks dispatch for a linked sender with several factories and no default', async () => {
@@ -675,7 +841,9 @@ describe('pre-dispatch error feedback', () => {
       const f = fixture(slot);
       if (card === 'connect') {
         f.accountLinks.getAccountLink.mockResolvedValue(null as any);
-        f.thread.postEphemeral.mockRejectedValue(new Error('card failed'));
+        // Subscribed-thread chatter gets the ephemeral card; mentions and DMs a public one.
+        if (slot === 'onSubscribedMessage') f.thread.postEphemeral.mockRejectedValue(new Error('card failed'));
+        else f.thread.post.mockRejectedValueOnce(new Error('card failed'));
       } else {
         f.projects.get.mockResolvedValue(null);
         f.projects.list.mockResolvedValue([]);
@@ -748,15 +916,6 @@ describe('pre-dispatch error feedback', () => {
     });
   });
 
-  it.each(['onMention', 'onDirectMessage'] as const)('reports subscription lookup failure in %s', async slot => {
-    const f = fixture(slot);
-    f.thread.isSubscribed.mockRejectedValue(new Error('subscription unavailable'));
-    await f.run();
-    expect(f.defaultHandler).not.toHaveBeenCalled();
-    expect(f.thread.post).toHaveBeenCalledExactlyOnceWith(reply);
-    expect(f.record().error.message).toBe('subscription unavailable');
-  });
-
   it.each([
     ['plain failure', 'plain failure'],
     ['', 'Unknown error'],
@@ -818,21 +977,6 @@ describe('pre-dispatch error feedback', () => {
     expect(f.accountLinks.getAccountLink).not.toHaveBeenCalled();
     expect(f.defaultHandler).not.toHaveBeenCalled();
     expect(f.thread.post).not.toHaveBeenCalled();
-    expect(f.output).not.toHaveBeenCalled();
-  });
-
-  it.each(['lookup', 'card'])('does not turn a post-dispatch %s failure into pre-dispatch feedback', async source => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const f = fixture();
-    const error = new Error('post-dispatch failed');
-    f.thread.isSubscribed.mockResolvedValue(false);
-    const listThreads = vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'session-1' }] });
-    if (source === 'lookup') listThreads.mockRejectedValue(error);
-    else f.thread.post.mockRejectedValue(error);
-    const getStorage = () => ({ getStore: async () => ({ listThreads }) });
-    await expect(f.run({ getStorage })).rejects.toBe(error);
-    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
-    expect(f.thread.post.mock.calls.filter(([text]: [unknown]) => text === reply)).toHaveLength(0);
     expect(f.output).not.toHaveBeenCalled();
   });
 
@@ -906,6 +1050,12 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     return { accountLinks, projects, sourceControl };
   }
 
+  // The thread-id resolver names a new thread after the session the resourceId
+  // resolver started for the same message.
+  const started: SlackStartedSessions = new WeakMap();
+  const threadIdFor = (args: ReturnType<typeof resolveArgs>) =>
+    createChannelThreadIdResolver(started)({ ...args, resourceId: 'fp-1', defaultThreadId: 'uuid-1' } as any);
+
   const resolveArgs = (thread = { id: 'slack:C-1:1700.42' }) => ({
     platform: 'slack',
     thread: thread as any,
@@ -913,11 +1063,13 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     defaultResourceId: 'slack:U-sender',
   });
 
-  it('a linked sender with a repo-backed factory gets a user-session id, row created with repo + thread branch', async () => {
+  it('a linked sender with a repo-backed factory gets a Factory session on the Factory resource, row created with repo + thread branch', async () => {
     const deps = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('us-new');
+    const args = resolveArgs();
+    await expect(resolve(args)).resolves.toBe('fp-1');
+    expect(threadIdFor(args)).toBe('us-new');
 
     expect(deps.sourceControl.connections.list).toHaveBeenCalledWith({
       orgId: 'org-1',
@@ -940,19 +1092,23 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const github = makeSourceControl({ hasRepo: false });
     const gitlab = makeSourceControl({ integrationId: 'gitlab' });
     const { sourceControl: _legacy, ...deps } = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver({ ...deps, sourceControls: [github, gitlab] } as any);
+    const resolve = createChannelResourceIdResolver({ ...deps, sourceControls: [github, gitlab] } as any, started);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('us-new');
+    const args = resolveArgs();
+    await expect(resolve(args)).resolves.toBe('fp-1');
+    expect(threadIdFor(args)).toBe('us-new');
 
     expect(github.sessions.create).not.toHaveBeenCalled();
     expect(gitlab.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ projectRepositoryId: 'pr-1' }));
   });
 
-  it('a DM thread creates a private session; channel threads stay org-visible', async () => {
+  it('a DM thread creates a private session under the sender; channel threads stay org-visible on the Factory', async () => {
     const deps = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
-    await expect(resolve(resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any))).resolves.toBe('us-new');
+    const args = resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any);
+    await expect(resolve(args)).resolves.toBe('user-1');
+    expect(threadIdFor(args)).toBe('us-new');
 
     expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private' }));
   });
@@ -967,9 +1123,11 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     'a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)',
     async ({ id, branch }) => {
       const deps = makeResolverDeps();
-      const resolve = createChannelResourceIdResolver(deps as any);
+      const resolve = createChannelResourceIdResolver(deps as any, started);
 
-      await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
+      const args = resolveArgs({ id });
+      await expect(resolve(args)).resolves.toBe('fp-1');
+      expect(threadIdFor(args)).toBe('us-new');
 
       expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
     },
@@ -978,9 +1136,11 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it('a repeat message on the same thread reuses the existing session, no second row', async () => {
     const sourceControl = makeSourceControl({ existingSession: { sessionId: 'us-existing' } });
     const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
-    await expect(resolve(resolveArgs())).resolves.toBe('us-existing');
+    const args = resolveArgs();
+    await expect(resolve(args)).resolves.toBe('fp-1');
+    expect(threadIdFor(args)).toBe('us-existing');
 
     expect(sourceControl.sessions.getForBranch).toHaveBeenCalledWith({
       factoryProjectId: 'fp-1',
@@ -992,7 +1152,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
   it('no sourceControl → chat-only channel resourceId', async () => {
     const { sourceControl: _unused, ...deps } = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
   });
@@ -1000,7 +1160,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it('an unlinked sender is refused rather than given a chat-only thread', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ link: null, sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     await expect(resolve(resolveArgs())).rejects.toThrow(ChannelSessionRejectedError);
     await expect(resolve(resolveArgs())).rejects.toThrow(/not linked to a Factory account/);
@@ -1013,7 +1173,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const deps = makeResolverDeps({ sourceControl });
     deps.projects = makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]);
     deps.accountLinks.getAccountLink = vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1' });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     await expect(resolve(resolveArgs())).rejects.toThrow(/has no Factory project/);
     expect(sourceControl.sessions.create).not.toHaveBeenCalled();
@@ -1022,7 +1182,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it('a message with no sender id falls back to the chat-only resourceId', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     const args = resolveArgs();
     args.message.author.userId = '';
@@ -1033,7 +1193,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it('a message from no identifiable Slack workspace is refused', async () => {
     const sourceControl = makeSourceControl();
     const deps = makeResolverDeps({ sourceControl });
-    const resolve = createChannelResourceIdResolver(deps as any);
+    const resolve = createChannelResourceIdResolver(deps as any, started);
 
     const args = resolveArgs();
     args.message.raw = {};
@@ -1099,7 +1259,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const message = { ...makeMessage('T-1'), id: 'msg-1', attachments: [] };
     const channels = new AgentChannels({
       adapters: { slack: { name: 'slack' } as any },
-      resolveResourceId: createChannelResourceIdResolver(resolverDeps as any),
+      resolveResourceId: createChannelResourceIdResolver(resolverDeps as any, started),
     });
     const handlers = createHandlers({ ...resolverDeps, workItems } as any);
     const ctx = handlerCtx(mastra);
@@ -1146,7 +1306,7 @@ describe('channel session creation context (resolveSession)', () => {
         }),
       },
     };
-    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
     const requestContext = new RequestContext();
 
     const session = await createChannelSessionResolver({ sourceControl } as any)({
@@ -1168,6 +1328,131 @@ describe('channel session creation context (resolveSession)', () => {
     });
   });
 
+  it('runs a session-bound thread under its Factory resource, addressed by its session id', async () => {
+    const row = {
+      orgId: 'org-1',
+      userId: 'user-1',
+      projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
+      branch: 'slack/1700-42',
+      visibility: 'org',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? row : null)) },
+    };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
+
+    await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'session-1', resourceId: 'fp-1' },
+    } as any);
+
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'session-1',
+        resourceId: 'fp-1',
+        threadId: 'session-1',
+        tags: { factoryProjectId: 'fp-1' },
+      }),
+    );
+  });
+
+  it('addresses a thread under the Factory with no session row by its own id, not the shared resource', async () => {
+    const sourceControl = { sessions: { getBySessionId: vi.fn(async () => null) } };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn(async () => null),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
+
+    await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'thread-9', resourceId: 'fp-1' },
+    } as any);
+
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'thread-9', resourceId: 'fp-1', threadId: 'thread-9' }),
+      );
+    });
+
+  it('resolves a migrated legacy thread passed without metadata through its stored session stamp', async () => {
+    const row = {
+      orgId: 'org-1',
+      userId: 'user-1',
+      projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
+      branch: 'slack/1700-42',
+      visibility: 'org',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? row : null)) },
+    };
+    const legacy = { id: 'C-1:1700.42', resourceId: 'fp-1' };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) =>
+        threadId === legacy.id ? { ...legacy, metadata: { factorySessionId: 'session-1' } } : null,
+      ),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
+
+    // Approval clicks resolve the session from the bare thread address.
+    await createChannelSessionResolver({ sourceControl } as any)({ controller, thread: legacy } as any);
+
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-1', resourceId: 'fp-1', threadId: 'C-1:1700.42' }),
+    );
+  });
+
+  it("doesn't resolve a thread under the Factory to a DM session it is stamped with", async () => {
+    const dm = {
+      orgId: 'org-1',
+      userId: 'user-1',
+      projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
+      branch: 'slack/1700-42',
+      visibility: 'private',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? dm : null)) },
+    };
+    const forged = { id: 'thread-atk', resourceId: 'fp-1', metadata: { factorySessionId: 'session-1' } };
+    const controller = { id: 'code', queryThreadById: vi.fn(async () => null), createSession: vi.fn().mockResolvedValue({}) };
+
+    await createChannelSessionResolver({ sourceControl } as any)({ controller, thread: forged } as any);
+
+    expect(controller.createSession).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }));
+  });
+
+  it("doesn't resolve a thread under the Factory to a private run it is stamped with", async () => {
+    const run = {
+      sessionId: 'session-1',
+      orgId: 'org-1',
+      userId: 'user-1',
+      projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
+      branch: 'factory/run-1',
+      visibility: 'private',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? run : null)) },
+    };
+    // The run is bound and its own thread is under the Factory, so only the stamp's trust decides.
+    const workItems = { hasRunBindingForSession: vi.fn(async () => true) };
+    const forged = { id: 'thread-atk', resourceId: 'fp-1', metadata: { factorySessionId: 'session-1' } };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) =>
+        threadId === 'session-1' ? { id: 'session-1', resourceId: 'fp-1' } : null,
+      ),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
+
+    await createChannelSessionResolver({ sourceControl, workItems } as any)({ controller, thread: forged } as any);
+
+    expect(controller.createSession).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }));
+  });
+
   it('leaves ownership off a session row whose factory the backfill could not resolve', async () => {
     const sourceControl = {
       sessions: {
@@ -1176,7 +1461,7 @@ describe('channel session creation context (resolveSession)', () => {
           .mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: null }),
       },
     };
-    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1190,7 +1475,7 @@ describe('channel session creation context (resolveSession)', () => {
     const sourceControl = {
       sessions: { getBySessionId: vi.fn() },
     };
-    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1210,111 +1495,149 @@ describe('channel session creation context (resolveSession)', () => {
 });
 
 describe('repo-backed thread ids (resolveThreadId)', () => {
-  it('a repo-backed thread takes the session id as its thread id (web convention: threadId = sessionId)', () => {
-    expect(resolveChannelThreadId({ resourceId: 'us-new', defaultThreadId: 'uuid-1' } as any)).toBe('us-new');
+  it('a repo-backed thread takes its session id as its thread id (web convention: threadId = sessionId)', () => {
+    const started: SlackStartedSessions = new WeakMap();
+    const message = makeMessage('T-1');
+    started.set(message, 'us-new');
+    expect(
+      createChannelThreadIdResolver(started)({ message, resourceId: 'fp-1', defaultThreadId: 'uuid-1' } as any),
+    ).toBe('us-new');
   });
 
   it('a chat-only thread keeps the default random id', () => {
-    expect(resolveChannelThreadId({ resourceId: 'channel:slack:C-1:1700.42', defaultThreadId: 'uuid-1' } as any)).toBe(
-      'uuid-1',
-    );
+    expect(
+      createChannelThreadIdResolver(new WeakMap())({
+        message: makeMessage('T-1'),
+        resourceId: 'channel:slack:C-1:1700.42',
+        defaultThreadId: 'uuid-1',
+      } as any),
+    ).toBe('uuid-1');
   });
 });
 
-describe('View Session card link', () => {
-  function makeCardDeps({
-    link = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' },
-    internalThread = { id: 'uuid-thread-1', resourceId: 'channel:slack:C-1:1700.42' },
-    projects = makeProjects([{ id: 'fp-1' }]),
-  }: {
-    link?: { orgId?: string; userId: string; defaultFactoryProjectId?: string } | null;
-    internalThread?: { id: string; resourceId: string } | null;
-    projects?: any;
-  } = {}) {
+describe('new session link', () => {
+  function makeLinkDeps() {
+    const accountLinks = {
+      getAccountLink: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
+      setDefaultFactory: vi.fn().mockResolvedValue(true),
+    } as any;
+    return { accountLinks, projects: makeProjects([{ id: 'fp-1', name: 'Acme' }]) };
+  }
+
+  function makeLinkThread({ subscribed = false } = {}) {
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(subscribed);
+    thread.post = vi.fn();
+    return thread;
+  }
+
+  it('marks the run that opens a thread so the link processor ends the first reply with the session link', async () => {
+    const deps = makeLinkDeps();
+    const thread = makeLinkThread();
+    const ctx = handlerCtx();
+    const defaultHandler = vi.fn();
+
+    await createHandlers(deps as any).onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(ctx.requestContext.get(NEW_CHANNEL_SESSION_KEY)).toBe(true);
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    // Nothing of Factory's own: link and reply are one message.
+    expect(thread.post).not.toHaveBeenCalled();
+  });
+
+  it('a follow-up mention on a subscribed thread is not marked', async () => {
+    const deps = makeLinkDeps();
+    const thread = makeLinkThread({ subscribed: true });
+    const ctx = handlerCtx();
+    const defaultHandler = vi.fn();
+
+    await createHandlers(deps as any).onMention!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(ctx.requestContext.get(NEW_CHANNEL_SESSION_KEY)).toBeUndefined();
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(thread.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('early typing status', () => {
+  function makeDeps(link: { orgId?: string; userId: string; defaultFactoryProjectId?: string } | null) {
     const accountLinks = {
       getAccountLink: vi.fn().mockResolvedValue(link),
       setDefaultFactory: vi.fn().mockResolvedValue(true),
     } as any;
     const store = {
-      listThreads: vi.fn().mockResolvedValue({ threads: internalThread ? [internalThread] : [] }),
+      listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'uuid-thread-1', resourceId: 'us-42' }] }),
     };
     const mastra = { getStorage: () => ({ getStore: () => Promise.resolve(store) }) };
-    return { accountLinks, projects, mastra };
+    return { accountLinks, projects: makeProjects([{ id: 'fp-1' }]), mastra };
   }
+  const linked = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' };
 
-  function makeCardThread() {
+  function makeTypingThread() {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
-    thread.isSubscribed = vi.fn().mockResolvedValue(false);
-    thread.post = vi.fn();
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
     return thread;
   }
 
-  it('a repo-backed thread deep-links to the user-session workspace route with no resourceId param', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeCardDeps({ internalThread: { id: 'uuid-thread-1', resourceId: 'us-42' } });
+  it('a linked sender sees the bot thinking before the run is dispatched', async () => {
+    const deps = makeDeps(linked);
     const handlers = createHandlers(deps as any);
-    const thread = makeCardThread();
+    const thread = makeTypingThread();
+    const order: string[] = [];
+    thread.startTyping.mockImplementation(async () => void order.push('typing'));
+    const defaultHandler = vi.fn(async () => void order.push('run'));
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
 
-    expect(thread.post).toHaveBeenCalledTimes(1);
-    const card = thread.post.mock.calls[0][0];
-    const actions = card.children.find((c: any) => c.type === 'actions');
-    // The workspace segment already IS the resourceId — the param would duplicate it.
-    expect(actions.children[0].url).toBe(
-      'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1',
-    );
-    expect(actions.children[0].url).not.toContain('resourceId=');
+    expect(thread.startTyping).toHaveBeenCalledWith('is thinking...');
+    expect(order).toEqual(['typing', 'run']);
   });
 
-  it('an unrouted repo-backed thread keeps the param, having no workspace segment to carry it', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    // Repo-backed resourceId AND no routing: isolates the `!gate.routed` half of
-    // the predicate, which the chat-only unrouted case below cannot distinguish.
-    const { projects: _unused, ...deps } = makeCardDeps({
-      internalThread: { id: 'uuid-thread-1', resourceId: 'us-42' },
-    });
+  it('a subscribed follow-up gets the same early status', async () => {
+    const deps = makeDeps(linked);
     const handlers = createHandlers(deps as any);
-    const thread = makeCardThread();
+    const thread = makeTypingThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
-    const card = thread.post.mock.calls[0][0];
-    const actions = card.children.find((c: any) => c.type === 'actions');
-    expect(actions.children[0].url).toBe('https://mc.example.com/threads/uuid-thread-1?resourceId=us-42');
+    expect(thread.startTyping).toHaveBeenCalledWith('is thinking...');
   });
 
-  it('a chat-only thread keeps the channel workspace segment', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeCardDeps();
+  it('an unlinked sender gets the Connect card, never a typing status', async () => {
+    const deps = makeDeps(null);
     const handlers = createHandlers(deps as any);
-    const thread = makeCardThread();
+    const thread = makeTypingThread();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
-    const card = thread.post.mock.calls[0][0];
-    const actions = card.children.find((c: any) => c.type === 'actions');
-    expect(actions.children[0].url).toBe(
-      'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1' +
-        `?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
-    );
+    expect(thread.startTyping).not.toHaveBeenCalled();
   });
 
-  it('an unrouted sender falls back to the factory-agnostic redirect', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    // No projects domain → gate passes without routing (pre-routing behavior).
-    const { projects: _unused, ...deps } = makeCardDeps();
+  it('respects typingStatus: false on the adapter options', async () => {
+    const deps = { ...makeDeps(linked), adapterOptions: { typingStatus: false as const } };
     const handlers = createHandlers(deps as any);
-    const thread = makeCardThread();
+    const thread = makeTypingThread();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
-    const card = thread.post.mock.calls[0][0];
-    const actions = card.children.find((c: any) => c.type === 'actions');
-    expect(actions.children[0].url).toBe(
-      `https://mc.example.com/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
-    );
+    expect(thread.startTyping).not.toHaveBeenCalled();
+  });
+
+  it('a failing status call does not stop the run', async () => {
+    const deps = makeDeps(linked);
+    const handlers = createHandlers(deps as any);
+    const thread = makeTypingThread();
+    thread.startTyping.mockRejectedValue(new Error('slack down'));
+    const defaultHandler = vi.fn().mockResolvedValue(undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });
 
@@ -1334,15 +1657,6 @@ describe('Slack threads create no work items', () => {
     return { accountLinks, projects, mastra, workItems: { upsert } as any, upsert };
   }
 
-  function expectSessionCard(thread: any, url: string) {
-    expect(thread.post).toHaveBeenCalledTimes(1);
-    const card = thread.post.mock.calls[0][0];
-    expect(card.title).toBe('New session started');
-    const button = card.children.find((c: any) => c.type === 'actions').children[0];
-    expect(button.label).toBe('View session');
-    expect(button.url).toBe(url);
-  }
-
   function makeWorkItemThread() {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
@@ -1351,8 +1665,7 @@ describe('Slack threads create no work items', () => {
     return thread;
   }
 
-  it('a routed DM starts the session and posts its card without creating a work item', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+  it('a routed DM starts the session without creating a work item', async () => {
     const deps = makeWorkItemDeps();
     const thread = makeWorkItemThread();
     const defaultHandler = vi.fn();
@@ -1365,12 +1678,10 @@ describe('Slack threads create no work items', () => {
     );
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expectSessionCard(thread, 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1');
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 
-  it('a routed @-mention starts the session and posts its card without creating a work item', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+  it('a routed @-mention starts the session without creating a work item', async () => {
     const deps = makeWorkItemDeps();
     const thread = makeWorkItemThread();
     const defaultHandler = vi.fn();
@@ -1378,12 +1689,10 @@ describe('Slack threads create no work items', () => {
     await createHandlers(deps as any).onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expectSessionCard(thread, 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1');
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 
   it('a chat-only (channel:) thread creates no work item', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const deps = makeWorkItemDeps({ internalThread: { id: 'uuid-thread-1', resourceId: 'channel:slack:C-1:1700.42' } });
     const thread = makeWorkItemThread();
     const defaultHandler = vi.fn();
@@ -1396,10 +1705,6 @@ describe('Slack threads create no work items', () => {
     );
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expectSessionCard(
-      thread,
-      'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?resourceId=channel%3Aslack%3AC-1%3A1700.42',
-    );
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 });
@@ -1419,10 +1724,14 @@ describe('session start (onSessionStart)', () => {
     // Thread settings outlive the session object that wrote them; pass the same
     // map to a second session to stand in for a restarted process.
     settings = new Map<string, unknown>(),
+    sessionId = 'us-1',
+    // Session-bound Slack sessions run under their Factory's resource.
+    resourceId = 'fp-1',
   } = {}) {
     if (persistedModel) settings.set('currentModelId', persistedModel);
     if (persistedModeModel) settings.set(`modeModelId_${mode}`, persistedModeModel);
     return {
+      identity: { getId: () => sessionId, getResourceId: () => resourceId },
       mode: { get: () => mode, resolve: () => ({ defaultModelId: currentModel }) },
       thread: {
         getId: vi.fn(() => 'thread-1'),
@@ -1522,10 +1831,17 @@ describe('session start (onSessionStart)', () => {
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
-    // Resolved from the session row, not from anything held in memory, so it
-    // works on a thread created before this process started.
+    // Resolved from the session row, by session id rather than the shared Factory
+    // resource, so it works on a thread created before this process started.
     expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
+    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalledWith('fp-1');
     expect(deps.projects.getById).toHaveBeenCalledWith({ id: 'fp-1' });
+    // The Factory's threads share one resource; the stamp ties this one to its session.
+    expect(session.thread.setSettingOn).toHaveBeenCalledWith({
+      threadId: expect.any(String),
+      key: 'factorySessionId',
+      value: 'us-1',
+    });
     // Factory scope never reads the owner's personal model default.
     expect(deps.modelDefaults.get).not.toHaveBeenCalled();
     expect(session.state.set).toHaveBeenCalledWith({
@@ -1584,7 +1900,7 @@ describe('session start (onSessionStart)', () => {
 
       expect(deps.workItems.findRunBindingByThread).toHaveBeenCalledWith({
         orgId: 'org-1',
-        resourceId: 'us-1',
+        resourceId: 'fp-1',
         sessionId: 'us-1',
         threadId: 'thread-1',
         rejectAmbiguous: true,
@@ -1942,6 +2258,7 @@ describe('Slack aside ingest', () => {
       id: '1700.99',
       author: { userId: 'U-sender', userName: 'caleb', fullName: 'Caleb Stone', isBot: false },
       text,
+      attachments: [],
       metadata: { dateSent: new Date('2026-08-30T10:00:00.000Z'), edited: false },
       raw: { team_id: 'T-1' },
     } as any;
@@ -2069,5 +2386,447 @@ describe('Slack aside ingest', () => {
     ).resolves.toBeUndefined();
     expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
     expect(thread.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('@bot mute / unmute', () => {
+  async function fixture({ linked = true } = {}) {
+    const storage = new InMemoryStore();
+    const memory = (await storage.getStore('memory'))!;
+    await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'channel:slack-thread-1',
+        title: 'slack thread',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          channel_platform: 'slack',
+          channel_externalThreadId: 'slack:C-1:1700.42',
+          channel_externalChannelId: 'C-1',
+          channel_subscribed: 'true',
+        },
+      },
+    });
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.adapter.addReaction = vi.fn().mockResolvedValue(undefined);
+    // Gate reached = the sender's link was looked up.
+    const accountLinks = {
+      getAccountLink: vi
+        .fn()
+        .mockResolvedValue(linked ? { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' } : null),
+    };
+    const defaultHandler = vi.fn().mockResolvedValue(undefined);
+    const handlers = createHandlers({ accountLinks: accountLinks as any, projects: makeProjects([{ id: 'fp-1' }]) });
+    const ctx = handlerCtx({ getStorage: () => storage, getLogger: () => ({ error: vi.fn() }) });
+    let n = 0;
+    const send = (
+      text: string,
+      {
+        isMention = false,
+        slot = 'onSubscribedMessage' as 'onSubscribedMessage' | 'onMention',
+        rawText = undefined as string | undefined,
+      } = {},
+    ) => {
+      const base = makeMessage('T-1');
+      const raw = rawText === undefined ? base.raw : { ...(base.raw as object), text: rawText };
+      const message = { ...base, id: `1700.${++n}`, text, isMention, raw };
+      return handlers[slot]!(thread, message, defaultHandler, ctx).then(() => message);
+    };
+    const muted = async () => (await memory.getThreadById({ threadId: 'thread-1' }))?.metadata?.factory_muted;
+    return { thread, accountLinks, defaultHandler, send, muted, memory };
+  }
+
+  it('mutes on a tagged `mute`, confirms with a reaction, and starts no run', async () => {
+    const f = await fixture();
+    const message = await f.send('@shipyard mute', { isMention: true });
+
+    expect(await f.muted()).toBe('true');
+    expect(f.thread.adapter.addReaction).toHaveBeenCalledWith('slack:C-1:1700.42', message.id, 'mute');
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+    expect(f.thread.post).not.toHaveBeenCalled();
+  });
+
+  it('looks the thread up once per message for the mute check and the access gate', async () => {
+    const f = await fixture();
+    const listThreads = vi.spyOn(f.memory, 'listThreads');
+
+    await f.send('just chatting among ourselves');
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(listThreads).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets only a sender who passes the link gate mute the thread', async () => {
+    const f = await fixture({ linked: false });
+    await f.send('@shipyard mute', { isMention: true });
+
+    expect(f.accountLinks.getAccountLink).toHaveBeenCalledTimes(1);
+    expect(await f.muted()).toBeUndefined();
+    expect(f.thread.adapter.addReaction).not.toHaveBeenCalled();
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+  });
+
+  it('ignores untagged messages while muted, but still answers a tag', async () => {
+    const f = await fixture();
+    await f.send('<@U-BOT> mute', { isMention: true });
+
+    await f.send('just chatting among ourselves');
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+
+    await f.send('@shipyard can you check the build?', { isMention: true });
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognizes `mute` after a bot display name with spaces and punctuation', async () => {
+    // What Slack actually delivers: the raw event keeps `<@U…>`, while the
+    // normalized text spells the mention as the bot's display name.
+    const f = await fixture();
+    await f.send('@Mastra Factory(Caleb) mute', { isMention: true, rawText: '<@U-BOT> mute' });
+    expect(await f.muted()).toBe('true');
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+  });
+
+  it('listens again after a tagged `unmute`', async () => {
+    const f = await fixture();
+    await f.send('@shipyard mute', { isMention: true });
+    const unmute = await f.send('@shipyard unmute!', { isMention: true });
+
+    expect(await f.muted()).toBe('false');
+    expect(f.thread.adapter.addReaction).toHaveBeenLastCalledWith('slack:C-1:1700.42', unmute.id, 'loud_sound');
+    await f.send('back to you');
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a message that only contains the word as a normal message', async () => {
+    const f = await fixture();
+    await f.send('@shipyard mute the flaky alerts', { isMention: true });
+    expect(await f.muted()).toBeUndefined();
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+
+    await f.send('mute');
+    expect(await f.muted()).toBeUndefined();
+  });
+
+  it('does not start a session about `mute` in a thread the bot never joined', async () => {
+    const f = await fixture();
+    await f.send('@shipyard mute', { isMention: true, slot: 'onMention' });
+    expect(f.accountLinks.getAccountLink).not.toHaveBeenCalled();
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+  });
+});
+
+describe('Slack voice clips', () => {
+  const OPENAI_URL = 'https://api.openai.com/v1/audio/transcriptions';
+  const MISTRAL_URL = 'https://api.mistral.ai/v1/audio/transcriptions';
+  const events: string[] = [];
+  const server = setupServer(
+    http.post(OPENAI_URL, ({ request }) => {
+      events.push(`openai ${request.headers.get('authorization')}`);
+      return HttpResponse.json({ text: 'hello from whisper' });
+    }),
+    http.post(MISTRAL_URL, ({ request }) => {
+      events.push(`mistral ${request.headers.get('authorization')}`);
+      return HttpResponse.json({ model: 'voxtral-mini-latest', text: 'ship the fix', language: 'en', usage: {} });
+    }),
+  );
+  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  afterAll(() => server.close());
+  beforeEach(() => {
+    events.length = 0;
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://mc.example.com');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const SENDER = { orgId: 'org-1', userId: 'user-1' };
+
+  async function fixture() {
+    const seed = await createFactoryStorageForTests();
+    await seed.channelIdentity.saveAccountLink({ ...linkKey, ...SENDER });
+    const storage = new InMemoryStore();
+    const memory = (await storage.getStore('memory'))!;
+    const saveInternalThread = (id: string, resourceId: string) =>
+      memory.saveThread({
+        thread: {
+          id,
+          resourceId,
+          title: 'slack thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'slack',
+            channel_externalThreadId: 'slack:C-1:1700.42',
+            channel_externalChannelId: 'C-1',
+            channel_subscribed: 'true',
+          },
+        },
+      });
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
+    thread.startTyping = vi.fn(async (status: string) => {
+      events.push(status ? 'typing' : 'typing cleared');
+    });
+    thread.adapter.addReaction = vi.fn().mockResolvedValue(undefined);
+    const defaultHandler = vi.fn().mockResolvedValue(undefined);
+    const ctx = handlerCtx({ getStorage: () => storage, getLogger: () => ({ error: vi.fn() }) });
+    const deps = {
+      accountLinks: seed.channelIdentity,
+      projects: seed.projects,
+      modelCredentials: seed.credentials,
+      voiceSettings: seed.voiceSettings,
+    };
+    const defaultFactory = (factoryProjectId: string) =>
+      seed.channelIdentity.setDefaultFactory({ ...linkKey, userId: SENDER.userId, factoryProjectId });
+    return { seed, thread, ctx, deps, defaultHandler, defaultFactory, saveInternalThread };
+  }
+
+  const CLIP_URL = 'https://files.slack.com/files-pri/T-1-F1/audio_message.m4a';
+
+  function voiceMessage({
+    isMention = false,
+    rawText,
+    text = '',
+  }: { isMention?: boolean; rawText?: string; text?: string } = {}) {
+    return {
+      ...makeMessage('T-1'),
+      id: '1700.43',
+      text,
+      isMention,
+      raw: {
+        team_id: 'T-1',
+        files: [{ subtype: 'slack_audio', url_private: CLIP_URL }],
+        ...(rawText ? { text: rawText } : {}),
+      },
+      formatted: { type: 'root', children: [] },
+      attachments: [
+        {
+          type: 'audio',
+          url: CLIP_URL,
+          mimeType: 'audio/mp4',
+          name: 'audio_message.m4a',
+          size: 15,
+          fetchData: async () => Buffer.from('fake aac bytes'),
+        },
+      ],
+    };
+  }
+
+  async function factoryScopeDefault(f: Awaited<ReturnType<typeof fixture>>) {
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Shared', modelScope: 'factory' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    await f.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    await f.seed.voiceSettings.set({
+      orgId: 'org-1',
+      userId: factoryProjectSettingsUserId(project.id),
+      provider: 'openai',
+      model: 'whisper-1',
+    });
+    return project;
+  }
+
+  it("answers a subscribed follow-up clip as its transcript on the sender's key, after showing typing", async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    const message = voiceMessage();
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(message.text).toBe('ship the fix');
+    expect(message.attachments).toEqual([]);
+    expect(events).toEqual(['typing', 'mistral Bearer sk-personal']);
+  });
+
+  it("bills a chat-only thread's clip to the sender, even when their default Factory spends org keys", async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    await factoryScopeDefault(f);
+    const message = voiceMessage();
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(message.text).toBe('ship the fix');
+    expect(events).toEqual(['typing', 'mistral Bearer sk-personal']);
+  });
+
+  it("transcribes a clip that starts a repo-backed thread under the sender's routed Factory", async () => {
+    const f = await fixture();
+    await factoryScopeDefault(f);
+    f.thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    const sourceControl = { sessions: { getBySessionId: vi.fn(async () => null) } } as any;
+    const message = voiceMessage({ isMention: true });
+
+    await createHandlers({ ...f.deps, sourceControl }).onMention!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(message.text).toBe('hello from whisper');
+    expect(events).toEqual(['typing', 'openai Bearer sk-org']);
+  });
+
+  it("transcribes under the thread's session Factory, not the sender's default Factory", async () => {
+    const f = await fixture();
+    const sessionFactory = await f.seed.projects.create({
+      ...SENDER,
+      input: { name: 'Shared', modelScope: 'factory' },
+    });
+    await f.saveInternalThread('session-1', sessionFactory.id);
+    const senderDefault = await f.seed.projects.create({ ...SENDER, input: { name: 'Mine', modelScope: 'user' } });
+    await f.defaultFactory(senderDefault.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    await f.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    await f.seed.voiceSettings.set({
+      orgId: 'org-1',
+      userId: factoryProjectSettingsUserId(sessionFactory.id),
+      provider: 'openai',
+      model: 'whisper-1',
+    });
+    const sessionRow = {
+      orgId: 'org-1',
+      userId: 'owner-1',
+      factoryProjectId: sessionFactory.id,
+      branch: 'slack/1700-42',
+      visibility: 'org',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (id: string) => (id === 'session-1' ? sessionRow : null)) },
+    } as any;
+    const message = voiceMessage();
+
+    await createHandlers({ ...f.deps, sourceControl }).onSubscribedMessage!(
+      f.thread,
+      message,
+      f.defaultHandler,
+      f.ctx,
+    );
+
+    expect(message.text).toBe('hello from whisper');
+    expect(events).toEqual(['typing', 'openai Bearer sk-org']);
+  });
+
+  it("looks up the session's run binding only for a message that carries a clip", async () => {
+    const f = await fixture();
+    const sessionFactory = await f.seed.projects.create({ ...SENDER, input: { name: 'Shared', modelScope: 'user' } });
+    await f.saveInternalThread('session-1', sessionFactory.id);
+    await f.defaultFactory(sessionFactory.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    const sessionRow = {
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: sessionFactory.id,
+      branch: 'slack/1700-42',
+      visibility: 'org',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (id: string) => (id === 'session-1' ? sessionRow : null)) },
+    } as any;
+    const findRunBinding = vi.spyOn(f.seed.workItems, 'findRunBindingByThread');
+    const handlers = createHandlers({ ...f.deps, sourceControl, workItems: f.seed.workItems });
+
+    await handlers.onSubscribedMessage!(f.thread, { ...makeMessage('T-1'), id: '1700.44' }, f.defaultHandler, f.ctx);
+    expect(findRunBinding).not.toHaveBeenCalled();
+
+    await handlers.onSubscribedMessage!(f.thread, voiceMessage(), f.defaultHandler, f.ctx);
+    expect(findRunBinding).toHaveBeenCalledTimes(1);
+  });
+
+  it('spends no key on a clip sent with `@bot mute`', async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+
+    await createHandlers(f.deps).onSubscribedMessage!(
+      f.thread,
+      voiceMessage({ isMention: true, rawText: '<@U-BOT> mute' }),
+      f.defaultHandler,
+      f.ctx,
+    );
+
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+  });
+
+  it.each([
+    { mentions: 'the bot', text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' },
+    { mentions: 'the bot and @here', text: '@Mastra Factory(Caleb) @here', rawText: '<@U-BOT> <!here>' },
+  ])("cards the sender, and starts no session, when a clip sent with only a mention of $mentions can't be transcribed for lack of a key", async ({
+    text,
+    rawText,
+  }) => {
+    const f = await fixture();
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    f.thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    const message = voiceMessage({ isMention: true, text, rawText });
+
+    await createHandlers(f.deps).onMention!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+    expect(events).toEqual(['typing', 'typing cleared']);
+    expect(f.thread.postEphemeral).toHaveBeenCalledTimes(1);
+    const [user, card, options] = f.thread.postEphemeral.mock.calls[0];
+    expect(user).toEqual(message.author);
+    expect(options).toEqual({ fallbackToDM: true });
+    expect(card.title).toBe('Voice clip not transcribed');
+    expect(JSON.stringify(card)).toContain('API key');
+    expect(card.children).toContainEqual(
+      expect.objectContaining({
+        type: 'actions',
+        children: [
+          expect.objectContaining({
+            label: 'Open voice settings',
+            url: `https://mc.example.com/factories/${project.id}/settings/models#voice-input`,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('answers the clip it could transcribe when another clip of the batch failed', async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    const expired = { ...voiceMessage({ text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' }), id: '1700.41' };
+    expired.attachments = expired.attachments.map(clip => ({
+      ...clip,
+      fetchData: async () => {
+        throw new Error('file gone');
+      },
+    }));
+    const message = voiceMessage({ isMention: true, text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' });
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, {
+      ...f.ctx,
+      skipped: [expired],
+    });
+
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(message.text).toBe('@Mastra Factory(Caleb)\n\nship the fix');
+    expect(f.thread.postEphemeral).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatches a message's text without a clip that couldn't be transcribed", async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    const message = voiceMessage({ text: 'see the clip' });
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(message.text).toBe('see the clip');
+    expect(message.attachments).toEqual([]);
+    expect(f.thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(['typing']);
   });
 });

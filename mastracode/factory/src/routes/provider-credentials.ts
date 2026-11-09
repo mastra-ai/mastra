@@ -17,6 +17,7 @@
 import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
+import { providerDisplayName } from '../provider-display-name.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -37,7 +38,7 @@ export { getCredentialProviderId as getAuthProviderId } from '@mastra/code-sdk/p
  * *catalog* provider id (what the routes and settings UI use). All flows need
  * no inbound connection to the server: Anthropic uses paste-code PKCE, the
  * rest use RFC 8628-style device codes. `subscription` names the plan the
- * sign-in bills, as shown under a reply.
+ * sign-in bills, as shown under a reply and in the composer.
  */
 export const WEB_OAUTH_PROVIDERS: Readonly<Record<string, { flow: LoginSessionKind; subscription: string }>> = {
   anthropic: { flow: 'paste-code', subscription: 'Claude Pro/Max' },
@@ -45,6 +46,12 @@ export const WEB_OAUTH_PROVIDERS: Readonly<Record<string, { flow: LoginSessionKi
   'github-copilot': { flow: 'device-code', subscription: 'GitHub Copilot' },
   xai: { flow: 'device-code', subscription: 'SuperGrok/X Premium+' },
 };
+
+export function credentialLabel(provider: string, credentialType: CredentialRecord['credential']['type']) {
+  return credentialType === 'api_key'
+    ? `${providerDisplayName(provider)} API key`
+    : WEB_OAUTH_PROVIDERS[provider]?.subscription;
+}
 
 export type CredentialContext =
   | { mode: 'local' }
@@ -59,13 +66,26 @@ export async function getTenantCredentialsStorage(
   credentials: ModelCredentialsStorage | undefined,
 ): Promise<ModelCredentialsStorage | undefined> {
   if (!credentials) return undefined;
+  const failedAt = failedInitAt.get(credentials);
+  if (failedAt !== undefined && Date.now() - failedAt < INIT_RETRY_MS) return undefined;
   try {
     await credentials.ensureReady();
-  } catch {
+  } catch (error) {
+    failedInitAt.set(credentials, Date.now());
+    // Callers degrade to "no credentials", so this log is the only trace of why.
+    if (error !== lastReportedInitError) {
+      lastReportedInitError = error;
+      console.error('[factory] model credential storage is unavailable; providers will show as not set:', error);
+    }
     return undefined;
   }
   return credentials;
 }
+
+let lastReportedInitError: unknown;
+/** Init is a full table scan and callers run per request and per model call, so a failure retries at most this often. */
+const INIT_RETRY_MS = 15_000;
+const failedInitAt = new WeakMap<ModelCredentialsStorage, number>();
 
 /**
  * Org key for tenant rows. Personal accounts get an org bootstrapped by the
@@ -126,16 +146,22 @@ export async function listTenantCredentialsForRequest({
   c,
   auth,
   credentials,
+  userId,
 }: {
   c: Context;
   auth: RouteAuth;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   credentials?: ModelCredentialsStorage;
+  /**
+   * List another member's rows instead of the caller's — used when a preview
+   * must mirror a run that authenticates as the addressed session's owner.
+   */
+  userId?: string;
 }): Promise<CredentialRecord[] | undefined> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant) return auth.enabled() ? [] : undefined;
   const storage = await getTenantCredentialsStorage(credentials);
   if (!storage) return [];
-  return storage.listCredentials(tenantOrgId(tenant), tenant.userId);
+  return storage.listCredentials(tenantOrgId(tenant), userId ?? tenant.userId);
 }

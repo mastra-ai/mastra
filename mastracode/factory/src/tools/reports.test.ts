@@ -1,8 +1,9 @@
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { WorkItemSubscription } from '../storage/domains/work-items/base.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import type { FactoryDeliveryTarget } from './deliver.js';
 import {
   createStageChangeNotifier,
@@ -11,7 +12,7 @@ import {
   reportNotification,
   sendRunEndReport,
 } from './reports.js';
-import type { FactoryReporting } from './reports.js';
+import type { FactoryReporting, FactoryRunOutcome } from './reports.js';
 
 const SENDER = { sessionId: 'session-w', threadId: 'thread-session-w', userId: 'user-1' };
 const PARENT = { sessionId: 'session-1', threadId: 'thread-session-1' };
@@ -196,6 +197,114 @@ describe('sendRunEndReport', () => {
     expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['failed']);
   });
 
+  it('reports a failure that keeps repeating once, until something else is reported', async () => {
+    // The guard compares creation times; keep each report in its own millisecond.
+    vi.useFakeTimers({ toFake: ['Date'], now: 0 });
+    onTestFinished(() => void vi.useRealTimers());
+    const tick = () => vi.setSystemTime(Date.now() + 1000);
+    const env = reporting();
+    const fail = (reason: string) => {
+      tick();
+      return sendRunEndReport(env.reporting, {
+        sender: SENDER,
+        recipients: [PARENT],
+        since: new Date(),
+        outcome: { status: 'failed', reason },
+        subject: 'The work session for #7',
+      });
+    };
+    await fail('no authenticated user');
+    await fail('no authenticated user');
+    await fail('no authenticated user');
+    expect(env.deliveries).toHaveLength(1);
+    await fail('provider overloaded');
+    expect(env.deliveries).toHaveLength(2);
+    tick();
+    await env.agentReport('progress');
+    await fail('provider overloaded');
+    expect(env.deliveries).toHaveLength(3);
+  });
+
+  it('says a session finished once, not again for each later run that ends with nothing new', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: 0 });
+    onTestFinished(() => void vi.useRealTimers());
+    const tick = () => vi.setSystemTime(Date.now() + 1000);
+    const env = reporting();
+    const runEnds = (outcome: FactoryRunOutcome) => {
+      tick();
+      return sendRunEndReport(env.reporting, {
+        sender: SENDER,
+        recipients: [PARENT],
+        since: new Date(),
+        outcome,
+        subject: 'The work session for #7',
+      });
+    };
+    // The agent says it opened the PR, then comments, reviews and CI results wake it again.
+    tick();
+    await env.agentReport('done');
+    await runEnds({ status: 'done' });
+    await runEnds({ status: 'done' });
+    await runEnds({ status: 'done' });
+    expect(env.deliveries).toHaveLength(0);
+    // A failure still goes out after a "done", and a later "done" goes out after it.
+    await runEnds({ status: 'failed', reason: 'boom' });
+    await runEnds({ status: 'done' });
+    await runEnds({ status: 'done' });
+    expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['failed', 'done']);
+  });
+
+  it('says a session finished again after progress that coalesced into an older report', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: 0 });
+    onTestFinished(() => void vi.useRealTimers());
+    const tick = () => vi.setSystemTime(Date.now() + 1000);
+    const env = reporting();
+    // An unread progress report, then "done", then new progress folds into the first record.
+    tick();
+    await env.agentReport('progress');
+    tick();
+    await env.agentReport('done');
+    tick();
+    await env.agentReport('progress');
+    tick();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(),
+      outcome: { status: 'done' },
+      subject: 'The work session for #7',
+    });
+    expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['done']);
+  });
+
+  it('still reports a repeat failure when the earlier one was read after a newer report', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: 0 });
+    onTestFinished(() => void vi.useRealTimers());
+    const tick = () => vi.setSystemTime(Date.now() + 1000);
+    const env = reporting();
+    const fail = () => {
+      tick();
+      return sendRunEndReport(env.reporting, {
+        sender: SENDER,
+        recipients: [PARENT],
+        since: new Date(),
+        outcome: { status: 'failed', reason: 'no authenticated user' },
+        subject: 'The work session for #7',
+      });
+    };
+    await fail();
+    tick();
+    await env.agentReport('progress');
+    // Reading the failure moves its `updatedAt` past the progress report.
+    tick();
+    const failure = (await env.notifications.listNotifications({ threadId: PARENT.threadId })).find(
+      r => r.kind === 'failed',
+    );
+    await env.notifications.updateNotification({ id: failure!.id, threadId: PARENT.threadId, status: 'seen' });
+    await fail();
+    expect(env.deliveries).toHaveLength(2);
+  });
+
   it('names the failure code and the parked tool', async () => {
     const env = reporting();
     const since = new Date(Date.now() - 1000);
@@ -231,7 +340,20 @@ describe('sendRunEndReport', () => {
 describe('createWorkItemRunEndReporter', () => {
   const workItems = (subscribers: WorkItemSubscription[]) => ({
     listWorkItemSubscribers: vi.fn(async () => subscribers),
-    getForProject: vi.fn(async () => ({ id: 'item-7', title: 'Item', metadata: { number: 7 } }) as never),
+    getForProject: vi.fn(
+      async () =>
+        ({
+          id: 'item-7',
+          title: 'Item',
+          workItem: createProviderWorkItemForTests({
+            id: 'item-7',
+            title: 'Item',
+            source: { integrationId: 'github', type: 'issue', externalId: '7' },
+            metadata: { number: 7 },
+          }),
+          metadata: {},
+        }) as never,
+    ),
   });
 
   it('reports to every subscriber but the sender, labelled with the item and role', async () => {
@@ -288,7 +410,20 @@ describe('createStageChangeNotifier', () => {
           subscriber('item-7', 'session-1'),
           subscriber('item-7', 'session-2'),
         ]),
-        getForProject: vi.fn(async () => ({ id: 'item-7', title: 'Item', metadata: { number: 7 } }) as never),
+        getForProject: vi.fn(
+          async () =>
+            ({
+              id: 'item-7',
+              title: 'Item',
+              workItem: createProviderWorkItemForTests({
+                id: 'item-7',
+                title: 'Item',
+                source: { integrationId: 'github', type: 'issue', externalId: '7' },
+                metadata: { number: 7 },
+              }),
+              metadata: {},
+            }) as never,
+        ),
       },
       reporting: async () => env.reporting,
     });

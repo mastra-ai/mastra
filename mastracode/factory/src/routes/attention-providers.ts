@@ -1,4 +1,7 @@
+import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 /**
  * Per-kind attention providers. Each kind owns its counts, its bounded page
@@ -18,7 +21,7 @@ import type {
   FactoryAttentionReceiptRecord,
   FactoryDeferredDecisionRecord,
   FactoryDispatchStatus,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import {
@@ -155,7 +158,7 @@ export function matchesView(view: FactoryAttentionView, receipt: FactoryAttentio
   return receipt?.state !== 'archived';
 }
 
-function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined) {
+function attentionTarget(decision: FactoryDeferredDecisionRecord, item: Card | undefined) {
   if (!item) return { kind: 'rules' as const };
   const role = typeof decision.decision.role === 'string' ? decision.decision.role : undefined;
   const session = role ? item.sessions[role] : undefined;
@@ -169,13 +172,8 @@ function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItem
   return {
     kind: 'work-item' as const,
     workItemId: item.id,
-    board: workItemBoard(item),
+    board: boardForWorkItem(item),
   };
-}
-
-export function workItemBoard(item: WorkItemRow): 'review' | 'work' {
-  const review = item.externalSource?.integrationId === 'github' && item.externalSource.type === 'pull-request';
-  return review ? 'review' : 'work';
 }
 
 /** One deferred-decision status seen as attention: failures and parked runs differ only by this. */
@@ -184,24 +182,24 @@ export interface DecisionAttentionSpec {
   status: FactoryDispatchStatus;
   identity(decision: FactoryDeferredDecisionRecord): FactoryAttentionIdentity;
   occurredAt(decision: FactoryDeferredDecisionRecord): Date;
-  title(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
-  detail(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
+  title(decision: FactoryDeferredDecisionRecord, item: Card | undefined): string;
+  detail(decision: FactoryDeferredDecisionRecord, item: Card | undefined): string;
   extra?(decision: FactoryDeferredDecisionRecord, context: { overtaken: boolean }): Record<string, unknown>;
-  matches(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean;
+  matches(decision: FactoryDeferredDecisionRecord, item: Card | undefined, search: string): boolean;
 }
 
 export class DecisionAttentionProvider implements AttentionProvider {
   readonly kind: FactoryAttentionKind;
   readonly #workItems: WorkItemsStorage;
   readonly #spec: DecisionAttentionSpec;
-  readonly #boards: BoardRegistry;
+  readonly #boards: ProjectBoardSource;
 
   constructor(
-    { workItems, boards }: { workItems: WorkItemsStorage; boards: BoardRegistry },
+    { workItems, boards }: { workItems: WorkItemsStorage; boards: BoardRegistry | ProjectBoardSource },
     spec: DecisionAttentionSpec,
   ) {
     this.#workItems = workItems;
-    this.#boards = boards;
+    this.#boards = toBoardSource(boards);
     this.#spec = spec;
     this.kind = spec.kind;
   }
@@ -265,7 +263,7 @@ export class DecisionAttentionProvider implements AttentionProvider {
       const [receiptByKey, itemById, overtaken] = await Promise.all([
         this.#receiptsFor(scope, decisions),
         this.#linkedItems(scope, decisions),
-        overtakenDecisionIds(this.#workItems, this.#boards, scope, decisions),
+        this.#boards.load(scope).then(boards => overtakenDecisionIds(this.#workItems, boards, scope, decisions)),
       ]);
       const entries: AttentionEntry[] = [];
       for (const decision of decisions) {
@@ -310,10 +308,7 @@ export class DecisionAttentionProvider implements AttentionProvider {
     return new Map(receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]));
   }
 
-  async #linkedItems(
-    scope: AttentionScope,
-    decisions: FactoryDeferredDecisionRecord[],
-  ): Promise<Map<string, WorkItemRow>> {
+  async #linkedItems(scope: AttentionScope, decisions: FactoryDeferredDecisionRecord[]): Promise<Map<string, Card>> {
     const items = await this.#workItems.listByIds({
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,
@@ -356,7 +351,7 @@ export const failedDecisionAttentionSpec: DecisionAttentionSpec = {
 interface ResolvedMention {
   mention: WorkItemMentionRow;
   comment: WorkItemCommentRow;
-  item: WorkItemRow;
+  item: Card;
   identity: FactoryAttentionIdentity;
   receipt: FactoryAttentionReceiptRecord | undefined;
 }
@@ -514,7 +509,7 @@ function toMentionItem(scope: AttentionScope, { mention, comment, item, identity
     target: {
       kind: 'work-item' as const,
       workItemId: mention.workItemId,
-      board: workItemBoard(item),
+      board: boardForWorkItem(item),
       commentId: mention.commentId,
     },
   };

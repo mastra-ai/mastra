@@ -8,7 +8,7 @@ import type { z } from 'zod';
 import { AgentBuilder } from '../../agent';
 import { AgentBuilderDefaults } from '../../defaults';
 import { resolveModel } from '../../utils';
-import { planningAndApprovalWorkflow } from '../task-planning/task-planning';
+import { createPlanningAndApprovalWorkflow } from '../task-planning/task-planning';
 import { workflowBuilderPrompts, workflowResearch as research } from './prompts';
 import {
   WorkflowBuilderInputSchema,
@@ -519,73 +519,84 @@ ${workflowBuilderPrompts.validation.instructions}`;
   },
 });
 
-// Main Workflow Builder Workflow
-export const workflowBuilderWorkflow = createWorkflow({
-  id: 'workflow-builder',
-  description: 'Create or edit Mastra workflows using AI-powered assistance with iterative planning',
-  inputSchema: WorkflowBuilderInputSchema,
-  outputSchema: WorkflowBuilderResultSchema,
-  steps: [
-    workflowDiscoveryStep,
-    projectDiscoveryStep,
-    workflowResearchStep,
-    planningAndApprovalWorkflow,
-    taskExecutionStep,
-  ],
-})
-  // Step 1: Always discover existing workflows
-  .then(workflowDiscoveryStep)
-  // Step 2: Always discover project structure
-  .then(projectDiscoveryStep)
-  // Step 3: Research workflows and documentation
-  .then(workflowResearchStep)
-  // Map research result to planning input format
-  .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData<WorkflowBuilderInputSchemaType>();
-    const discoveryResult = getStepResult(workflowDiscoveryStep);
-    const projectResult = getStepResult(projectDiscoveryStep);
-    // const researchResult = getStepResult(workflowResearchStep);
+/**
+ * Builds a new workflow-builder workflow, with its own planning-and-approval sub-workflow, on every call. See
+ * `createAgentBuilderWorkflows` for when to use a factory instead of the shared `workflowBuilderWorkflow`.
+ */
+export function createWorkflowBuilderWorkflow() {
+  const planningAndApprovalWorkflow = createPlanningAndApprovalWorkflow();
 
-    return {
-      action: initData.action,
-      workflowName: initData.workflowName,
-      description: initData.description,
-      requirements: initData.requirements,
-      discoveredWorkflows: discoveryResult.workflows,
-      projectStructure: projectResult,
-      // research: researchResult,
-      research,
+  const workflow = createWorkflow({
+    id: 'workflow-builder',
+    description: 'Create or edit Mastra workflows using AI-powered assistance with iterative planning',
+    inputSchema: WorkflowBuilderInputSchema,
+    outputSchema: WorkflowBuilderResultSchema,
+    steps: [
+      workflowDiscoveryStep,
+      projectDiscoveryStep,
+      workflowResearchStep,
+      planningAndApprovalWorkflow,
+      taskExecutionStep,
+    ],
+  })
+    // Step 1: Always discover existing workflows
+    .then(workflowDiscoveryStep)
+    // Step 2: Always discover project structure
+    .then(projectDiscoveryStep)
+    // Step 3: Research workflows and documentation
+    .then(workflowResearchStep)
+    // Map research result to planning input format
+    .map(async ({ getStepResult, getInitData }) => {
+      const initData = getInitData<WorkflowBuilderInputSchemaType>();
+      const discoveryResult = getStepResult(workflowDiscoveryStep);
+      const projectResult = getStepResult(projectDiscoveryStep);
+      // const researchResult = getStepResult(workflowResearchStep);
 
-      userAnswers: undefined,
-    };
-  })
-  // Step 4: Planning and Approval Sub-workflow (loops until approved)
-  .dountil(planningAndApprovalWorkflow, async ({ inputData }) => {
-    // Continue looping until user approves the task list
-    console.info(`Sub-workflow check: approved=${inputData.approved}`);
-    return inputData.approved === true;
-  })
-  // Map sub-workflow result to task execution input
-  .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData<WorkflowBuilderInputSchemaType>();
-    const discoveryResult = getStepResult(workflowDiscoveryStep);
-    const projectResult = getStepResult(projectDiscoveryStep);
-    // const researchResult = getStepResult(workflowResearchStep);
-    const subWorkflowResult = getStepResult(planningAndApprovalWorkflow);
+      return {
+        action: initData.action,
+        workflowName: initData.workflowName,
+        description: initData.description,
+        requirements: initData.requirements,
+        discoveredWorkflows: discoveryResult.workflows,
+        projectStructure: projectResult,
+        // research: researchResult,
+        research,
 
-    return {
-      action: initData.action,
-      workflowName: initData.workflowName,
-      description: initData.description,
-      requirements: initData.requirements,
-      tasks: subWorkflowResult.tasks,
-      discoveredWorkflows: discoveryResult.workflows,
-      projectStructure: projectResult,
-      // research: researchResult,
-      research,
-      projectPath: initData.projectPath || process.cwd(),
-    };
-  })
-  // Step 5: Execute the approved tasks
-  .then(taskExecutionStep)
-  .commit();
+        userAnswers: undefined,
+      };
+    })
+    // Step 4: Planning and Approval Sub-workflow (loops until approved)
+    .dountil(planningAndApprovalWorkflow, async ({ inputData }) => {
+      // Continue looping until user approves the task list
+      console.info(`Sub-workflow check: approved=${inputData.approved}`);
+      return inputData.approved === true;
+    })
+    // Map sub-workflow result to task execution input
+    .map(async ({ getStepResult, getInitData }) => {
+      const initData = getInitData<WorkflowBuilderInputSchemaType>();
+      const discoveryResult = getStepResult(workflowDiscoveryStep);
+      const projectResult = getStepResult(projectDiscoveryStep);
+      // const researchResult = getStepResult(workflowResearchStep);
+      const subWorkflowResult = getStepResult(planningAndApprovalWorkflow);
+
+      return {
+        action: initData.action,
+        workflowName: initData.workflowName,
+        description: initData.description,
+        requirements: initData.requirements,
+        tasks: subWorkflowResult.tasks,
+        discoveredWorkflows: discoveryResult.workflows,
+        projectStructure: projectResult,
+        // research: researchResult,
+        research,
+        projectPath: initData.projectPath || process.cwd(),
+      };
+    })
+    // Step 5: Execute the approved tasks
+    .then(taskExecutionStep)
+    .commit();
+
+  return workflow;
+}
+
+export const workflowBuilderWorkflow = createWorkflowBuilderWorkflow();

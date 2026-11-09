@@ -21,7 +21,8 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 }
 
 const API = `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}`;
-const RESOURCE_ID = 'resource-1';
+const SESSION_ID = 'session-1';
+const RESOURCE_ID = 'user-1';
 const PRIMARY_THREAD_ID = 'primary-thread';
 const WORK_THREAD_ID = 'work-thread';
 const CHAT_THREAD_ID = 'chat-thread';
@@ -32,6 +33,7 @@ const models: AvailableModelOption[] = [
 ];
 
 const session: ChatSessionContextApi = {
+  sessionId: SESSION_ID,
   resourceId: RESOURCE_ID,
   sessionThreadId: PRIMARY_THREAD_ID,
   sessionEnabled: true,
@@ -50,8 +52,8 @@ function RoutedThread() {
   return (
     <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady={false}>
       <ModelPicker />
-      <Link to={`/factories/fp-1/workspaces/${RESOURCE_ID}/threads/${WORK_THREAD_ID}`}>Open work thread</Link>
-      <Link to={`/factories/fp-1/workspaces/${RESOURCE_ID}/threads/${CHAT_THREAD_ID}`}>Open chat thread</Link>
+      <Link to={`/factories/fp-1/workspaces/${SESSION_ID}/threads/${WORK_THREAD_ID}`}>Open work thread</Link>
+      <Link to={`/factories/fp-1/workspaces/${SESSION_ID}/threads/${CHAT_THREAD_ID}`}>Open chat thread</Link>
     </ChatSessionBoundary>
   );
 }
@@ -74,10 +76,13 @@ function renderRoute(initialThreadId: string) {
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5' })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: 'openai/gpt-5', thinkingLevel: null }),
+    ),
     // The server resolves the thread's owner and billing scope; a work-item thread is Factory-billed.
     http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
       const params = new URL(request.url).searchParams;
+      expect(params.get('sessionId')).toBe(SESSION_ID);
       expect(params.get('resourceId')).toBe(RESOURCE_ID);
       const threadId = params.get('threadId') ?? '';
       requestedThreads.push(threadId);
@@ -88,8 +93,10 @@ function renderRoute(initialThreadId: string) {
         models: models.filter(model => model.provider === (factoryBilled ? 'openai' : 'anthropic')),
       });
     }),
-    http.post(`${API}/sessions`, () => HttpResponse.json({ resourceId: RESOURCE_ID, threadId: PRIMARY_THREAD_ID })),
-    http.get(`${API}/sessions/:resourceId`, () =>
+    http.post(`${API}/sessions`, () =>
+      HttpResponse.json({ sessionId: SESSION_ID, resourceId: RESOURCE_ID, threadId: PRIMARY_THREAD_ID }),
+    ),
+    http.get(`${API}/sessions/:sessionId`, () =>
       HttpResponse.json({
         controllerId: AGENT_CONTROLLER_ID,
         resourceId: RESOURCE_ID,
@@ -97,13 +104,13 @@ function renderRoute(initialThreadId: string) {
         modelId: 'openai/gpt-5',
       }),
     ),
-    http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({ ok: true })),
+    http.put(`${API}/sessions/:sessionId/state`, () => HttpResponse.json({ ok: true })),
     http.get(
-      `${API}/sessions/:resourceId/stream`,
+      `${API}/sessions/:sessionId/stream`,
       () => new HttpResponse(new ReadableStream(), { headers: { 'Content-Type': 'text/event-stream' } }),
     ),
-    http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
-    http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${API}/sessions/:sessionId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
+    http.get(`${API}/sessions/:sessionId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
   );
 
   renderWithProviders(
@@ -113,6 +120,7 @@ function renderRoute(initialThreadId: string) {
           status: 'ready',
           state: {
             controllerId: AGENT_CONTROLLER_ID,
+            sessionId: SESSION_ID,
             resourceId: RESOURCE_ID,
             modeId: 'build',
             modelId: 'openai/gpt-5',
@@ -120,7 +128,7 @@ function renderRoute(initialThreadId: string) {
         }}
       >
         <ChatPermissionsProvider>
-          <MemoryRouter initialEntries={[`/factories/fp-1/workspaces/${RESOURCE_ID}/threads/${initialThreadId}`]}>
+          <MemoryRouter initialEntries={[`/factories/fp-1/workspaces/${SESSION_ID}/threads/${initialThreadId}`]}>
             <Routes>
               <Route path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId" element={<RoutedThread />} />
             </Routes>

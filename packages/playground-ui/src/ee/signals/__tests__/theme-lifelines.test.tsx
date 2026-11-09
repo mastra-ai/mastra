@@ -364,7 +364,7 @@ describe('SankeySignals lifelines mode', () => {
         name: 'Resolve support request: present in 5 of 5 landmarks',
       });
       const firstPoint = within(row)
-        .getAllByRole('button', { name: /^Resolve support request ·/ })
+        .getAllByRole('button', { name: /^Resolve support request:/ })
         .at(0);
       if (!firstPoint) throw new Error('Expected a lifeline point');
       fireEvent.click(firstPoint);
@@ -403,7 +403,7 @@ describe('SankeySignals lifelines mode', () => {
         name: 'Resolve support request: present in 5 of 5 landmarks',
       });
       const point = within(row)
-        .getAllByRole('button', { name: /^Resolve support request ·/ })
+        .getAllByRole('button', { name: /^Resolve support request:/ })
         .at(0);
       if (!point) throw new Error('Expected a lifeline point');
 
@@ -441,7 +441,8 @@ describe('SankeySignals lifelines mode', () => {
 
       const lifelines = screen.getByRole('region', { name: 'Theme lifelines' });
       const summary = within(lifelines).getByTestId('snapshot-summary');
-      expect(summary.textContent).toContain('· 50 traces · 10 themes');
+      expect(within(summary).getByText('50 traces')).not.toBeNull();
+      expect(within(summary).getByText('10 themes')).not.toBeNull();
     });
 
     it('returns to the flow chart when the user switches back', async () => {

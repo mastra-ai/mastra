@@ -21,17 +21,7 @@
     "zai/GLM-5.2"
   ],
   "reasoning": {
-    "zai/GLM-5.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": [
       {
         "type": "toggle"
       }
@@ -46,7 +36,17 @@
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": [
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/GLM-5.2": [
       {
         "type": "toggle"
       }

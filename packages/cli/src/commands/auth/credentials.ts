@@ -26,7 +26,7 @@ export interface Credentials {
 }
 
 /** Which CLI entry point started the browser login. Sent to the platform for signup attribution. */
-export type LoginSource = 'create-mastra' | 'mastra-create' | 'create-factory' | 'mastra-cli';
+export type LoginSource = 'create-mastra' | 'mastra-cli-create' | 'create-factory' | 'mastra-cli';
 
 export interface LoginOptions {
   skipOnInput?: boolean;
@@ -107,7 +107,14 @@ export function openBrowser(url: string) {
   } else if (process.platform === 'win32') {
     execFileSync('cmd', ['/c', 'start', '', url]);
   } else if (isWSL()) {
-    execFileSync('powershell.exe', ['-NoProfile', '-Command', `Start-Process '${url.replace(/'/g, "''")}'`]);
+    // Pass the URL through the environment so it is never parsed as PowerShell code.
+    execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', 'Start-Process -FilePath $env:MASTRA_OPEN_URL'],
+      {
+        env: { ...process.env, MASTRA_OPEN_URL: url },
+      },
+    );
   } else {
     execFileSync('xdg-open', [url]);
   }
@@ -152,11 +159,17 @@ export async function tryRefreshToken(creds: Credentials, signal?: AbortSignal):
   }
 }
 
-function callbackPage({ success }: { success: boolean }): string {
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, char => `&#${char.charCodeAt(0)};`);
+}
+
+function callbackPage({ success, error }: { success: boolean; error?: string }): string {
   const title = success ? 'Logged in!' : 'Login failed';
   const message = success
     ? 'You can close this tab and return to the terminal.'
-    : 'Missing parameters. Close this tab and try again.';
+    : error
+      ? `${escapeHtml(error)}. Close this tab and return to the terminal.`
+      : 'Missing parameters. Close this tab and try again.';
 
   return `<!doctype html>
 <html lang="en">
@@ -204,35 +217,88 @@ function callbackPage({ success }: { success: boolean }): string {
 </html>`;
 }
 
-function listenForSkipInput(onSkip: () => void): () => void {
+interface CallbackResult {
+  token: string;
+  refreshToken: string | null;
+  user: Credentials['user'];
+  organizationId: string;
+}
+
+/** Platform's error redirect after a rejected sign-in, e.g. `email_domain_not_allowed` or `sso_required`. */
+interface CallbackError {
+  error: string;
+}
+
+function parseCallback(url: URL, state: string): CallbackResult | CallbackError | null {
+  if (url.pathname !== '/callback') return null;
+  const error = url.searchParams.get('error');
+  if (error && url.searchParams.get('state') === state) {
+    return { error: url.searchParams.get('error_description') || error };
+  }
+  const token = url.searchParams.get('token');
+  const userParam = url.searchParams.get('user');
+  const organizationId = url.searchParams.get('org');
+  if (url.searchParams.get('state') !== state || !token || !userParam || !organizationId) return null;
+
+  try {
+    const user = JSON.parse(decodeURIComponent(userParam)) as Credentials['user'] | null;
+    if (typeof user?.email !== 'string') return null;
+    return { token, refreshToken: url.searchParams.get('refresh_token'), user, organizationId };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads the terminal while waiting for the browser. A pasted URL is passed to `onPaste` on Enter: when the
+ * browser runs on another machine, it can't reach the callback server, but its address bar holds the callback.
+ * With `onSkip`, any other key skips the login.
+ */
+function listenForInput({ onSkip, onPaste }: { onSkip?: () => void; onPaste: (text: string) => void }): () => void {
   const stdin = process.stdin;
   if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return () => {};
 
   const wasRaw = stdin.isRaw;
-  const wasPaused = stdin.isPaused();
+  // A fresh stdin is neither paused nor flowing; leaving it flowing would keep the process alive after login.
+  const wasFlowing = stdin.readableFlowing === true;
   let listening = true;
+  let buffer = '';
 
   const cleanup = () => {
     if (!listening) return;
     listening = false;
     stdin.removeListener('data', handleInput);
     if (!wasRaw) stdin.setRawMode(false);
-    if (wasPaused) stdin.pause();
+    if (!wasFlowing) stdin.pause();
   };
 
   const handleInput = (input: Buffer | string) => {
-    const data = typeof input === 'string' ? Buffer.from(input) : input;
-    cleanup();
-    if (data.includes(3)) {
+    const data = typeof input === 'string' ? input : input.toString('utf8');
+    if (data.includes('\x03')) {
+      cleanup();
       process.kill(process.pid, 'SIGINT');
       return;
     }
-    onSkip();
+
+    // With a skip key, input that doesn't start with the scheme (even a lone `h`) is a keypress, not a paste.
+    buffer += data;
+    if (onSkip && !buffer.startsWith('http')) {
+      cleanup();
+      onSkip();
+      return;
+    }
+
+    // Raw mode has no line length limit, so long pasted URLs arrive whole (possibly in several chunks).
+    const end = buffer.search(/[\r\n]/);
+    if (end === -1) return;
+    const line = buffer.slice(0, end).trim();
+    buffer = '';
+    if (line) onPaste(line);
   };
 
   stdin.setRawMode(true);
   stdin.resume();
-  stdin.once('data', handleInput);
+  stdin.on('data', handleInput);
   return cleanup;
 }
 
@@ -253,37 +319,37 @@ async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): P
   });
 
   const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}&source=${options.source ?? 'mastra-cli'}`;
-  console.info(`   Opening browser...\n`);
+
+  // Always print the link: the opened browser may not be the one the user sees (SSH, containers, dev boxes).
+  console.info(`   Opening browser. If it doesn't open, visit:\n   ${loginUrl}\n`);
+  try {
+    openBrowser(loginUrl);
+  } catch {
+    console.info(`   Could not open browser automatically. Open the URL above.\n`);
+    if (isWSL()) {
+      console.info(`   Note: If login times out, ensure localhost forwarding is enabled in your .wslconfig.\n`);
+    }
+  }
+  if (process.stdin.isTTY) {
+    console.info(
+      `   Signing in on another device? If the page fails to load after sign-in, paste its URL here and press Enter.\n`,
+    );
+  }
   console.info(
     options.skipOnInput
       ? `   Waiting for browser sign-in. Press any key to skip this step.\n`
       : `   Waiting for browser sign-in...\n`,
   );
 
-  try {
-    openBrowser(loginUrl);
-  } catch {
-    console.info(`   Could not open browser automatically.`);
-    console.info(`   Open this URL manually: ${loginUrl}\n`);
-    if (isWSL()) {
-      console.info(`   Note: If login times out, ensure localhost forwarding is enabled in your .wslconfig.\n`);
-    }
-  }
-
-  const result = await new Promise<{
-    token: string;
-    refreshToken: string | null;
-    user: Credentials['user'];
-    organizationId: string;
-  }>((resolve, reject) => {
+  const result = await new Promise<CallbackResult>((resolve, reject) => {
     let settled = false;
-    let stopListeningForSkip = () => {};
+    let stopListeningForInput = () => {};
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       signal?.removeEventListener('abort', handleAbort);
-      stopListeningForSkip();
+      stopListeningForInput();
       server.close(callback);
       server.closeAllConnections();
     };
@@ -302,33 +368,41 @@ async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): P
       handleAbort();
       return;
     }
-    if (options.skipOnInput) {
-      stopListeningForSkip = listenForSkipInput(() => finish(() => reject(new LoginCancelledError())));
-    }
+    const settle = (result: CallbackResult | CallbackError) => {
+      if ('error' in result) finish(() => reject(new Error(`Sign-in failed: ${result.error}.`)));
+      else finish(() => resolve(result));
+    };
+
+    stopListeningForInput = listenForInput({
+      onSkip: options.skipOnInput ? () => finish(() => reject(new LoginCancelledError())) : undefined,
+      onPaste: text => {
+        const result = URL.canParse(text) ? parseCallback(new URL(text), state) : null;
+        if (!result) {
+          console.info(
+            `\n   That doesn't look like the sign-in address. Copy the full URL from the browser's address bar and paste it again.\n`,
+          );
+          return;
+        }
+        settle(result);
+      },
+    });
 
     server.on('request', (req, res) => {
       const url = new URL(req.url!, `http://localhost:${port}`);
+      if (url.pathname !== '/callback') return;
 
-      if (url.pathname === '/callback') {
-        const callbackState = url.searchParams.get('state');
-        const token = url.searchParams.get('token');
-        const refreshToken = url.searchParams.get('refresh_token');
-        const userParam = url.searchParams.get('user');
-        const orgId = url.searchParams.get('org');
-
-        if (callbackState !== state || !token || !userParam || !orgId) {
-          res.writeHead(400, { 'Content-Type': 'text/html' });
-          res.end(callbackPage({ success: false }));
-          return;
-        }
-
-        const user = JSON.parse(decodeURIComponent(userParam));
-
-        res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
-        res.end(callbackPage({ success: true }));
-
-        finish(() => resolve({ token, refreshToken, user, organizationId: orgId }));
+      const result = parseCallback(url, state);
+      if (!result || 'error' in result) {
+        res.writeHead(400, { 'Content-Type': 'text/html', Connection: 'close' });
+        res.end(callbackPage({ success: false, error: result?.error }));
+        if (result) settle(result);
+        return;
       }
+
+      res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
+      res.end(callbackPage({ success: true }));
+
+      settle(result);
     });
   });
 
@@ -369,7 +443,7 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
   }
 }
 
-function isInteractive(): boolean {
+export function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
 }
 

@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -17,14 +17,14 @@ type ExecutableTool = {
 };
 
 function requestContext(
-  overrides: Partial<{ orgId: string; projectId: string; threadId: string; resourceId: string; scope: string }> = {},
+  overrides: Partial<{ orgId: string; projectId: string; threadId: string; resourceId: string }> = {},
 ) {
   const context = new RequestContext();
   context.set('user', { workosId: 'user-1', organizationId: overrides.orgId ?? 'org-1' });
   context.set('controller', {
     resourceId: overrides.resourceId ?? 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    scope: overrides.scope ?? '/worktree',
+    sessionId: overrides.resourceId ?? 'resource-1',
     session: { id: 'session-1', ownerId: 'code', modeId: 'build' },
     getState: () => ({ factoryProjectId: overrides.projectId ?? PROJECT_ID }),
   });
@@ -41,7 +41,7 @@ function crashResumedContext(
   context.set('controller', {
     resourceId: overrides.resourceId ?? 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    scope: '/worktree',
+    sessionId: overrides.resourceId ?? 'resource-1',
     session: { id: 'session-1', ownerId: 'code', modeId: 'build' },
     getState: () => ({}),
     setState,
@@ -236,89 +236,58 @@ describe('factory_transition_work_item', () => {
     expect((tools.factory_transition_work_item as ExecutableTool).requireApproval).toBe(true);
   });
 
-  it('requires triageType only for triage bindings', async () => {
+  it('lets a triage agent send an open non-bug back to Intake without recording a classification', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepareBoundItem(storage, 'github-issue', 'triage');
-    const tools = await createFactoryTransitionTools({
-      requestContext: requestContext(),
-      storage,
-      transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
-    });
-    const triageTool = tools.factory_transition_work_item as ExecutableTool;
-    expect(
-      triageTool.inputSchema.safeParse({ stage: 'intake', expectedRevision: 1, rationale: 'Await approval.' }).success,
-    ).toBe(false);
-    expect(
-      triageTool.inputSchema.safeParse({
-        stage: 'intake',
-        expectedRevision: 1,
-        rationale: 'Await approval.',
-        triageType: 'feature request',
-      }).success,
-    ).toBe(true);
-  });
-
-  it('accepts and drops triageType from a non-triage binding instead of rejecting the call', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBoundItem(storage);
-    const transition = vi.fn(async () => ({
-      status: 'accepted' as const,
-      transitionId: 'transition-1',
-      itemId: prepared.item.id,
-      revision: 2,
-      stage: 'execute' as const,
-      decisions: [],
-    }));
-    const context = requestContext();
-    const tools = await createFactoryTransitionTools({
-      requestContext: context,
-      storage,
-      transitionService: { transition },
-    });
-    const tool = tools.factory_transition_work_item as ExecutableTool;
-    expect(
-      tool.inputSchema.safeParse({ stage: 'execute', expectedRevision: 1, rationale: 'Done.', triageType: 'bug' })
-        .success,
-    ).toBe(true);
-    expect(tool.inputSchema.safeParse({ stage: 'execute', expectedRevision: 1, rationale: 'Done.' }).success).toBe(
-      true,
-    );
-
-    await execute(tool, context, { stage: 'execute', expectedRevision: 1, rationale: 'Done.', triageType: 'bug' });
-    expect(transition).toHaveBeenCalledTimes(1);
-    expect(transition.mock.calls[0]?.[0]).not.toHaveProperty('triageType');
-  });
-
-  it('propagates a triage binding classification to the transition service', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const prepared = await prepareBoundItem(storage, 'github-issue', 'triage');
-    const transition = vi.fn(async () => ({
-      status: 'accepted' as const,
-      transitionId: 'transition-1',
-      itemId: prepared.item.id,
-      revision: 2,
-      stage: 'intake' as const,
-      decisions: [],
-    }));
+    const triaging = await service.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: prepared.item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'start-triage' },
+      cause: 'Triage it.',
+    });
+    expect(triaging).toMatchObject({ status: 'accepted' });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({
-      requestContext: context,
-      storage,
-      transitionService: { transition },
-    });
-    await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+    const tool = (await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service }))
+      .factory_transition_work_item as ExecutableTool & { description: string };
+    expect(tool.description).toContain('to intake');
+    const input = {
       stage: 'intake',
-      expectedRevision: 1,
-      rationale: 'Await approval.',
-      triageType: 'feature request',
-    });
-    expect(transition).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workItemId: prepared.item.id,
-        actor: { type: 'agent', bindingId: prepared.binding.id, role: 'triage' },
-        triageType: 'feature request',
-      }),
-    );
+      expectedRevision: (triaging as { revision: number }).revision,
+      rationale: 'Feature request: needs a maintainer decision.',
+    };
+    expect(tool.inputSchema.safeParse(input).success).toBe(true);
+
+    await expect(execute(tool, context, input)).resolves.toMatchObject({ status: 'accepted', stage: 'intake' });
+    const item = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+    expect(item).toMatchObject({ stages: ['intake'], triageType: null, acceptedAt: null });
+  });
+
+  it('accepts and ignores a stale triageType copied from session history, for every role', async () => {
+    for (const role of ['triage', 'work'] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+      const prepared = await prepareBoundItem(storage, 'github-issue', role);
+      const context = requestContext();
+      const tool = (
+        await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service })
+      ).factory_transition_work_item as ExecutableTool;
+      const input = {
+        stage: 'canceled',
+        expectedRevision: prepared.item.revision,
+        rationale: 'Duplicate.',
+        triageType: 'duplicate',
+      };
+      expect(tool.inputSchema.safeParse(input).success).toBe(true);
+      await expect(execute(tool, context, input, `call-${role}`)).resolves.toMatchObject({ status: 'accepted' });
+      const item = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+      expect(item).toMatchObject({ stages: ['canceled'], triageType: null });
+    }
   });
 
   it('derives the item, board, actor, and immutable ingress from the binding and tool call', async () => {
@@ -776,6 +745,81 @@ describe('factory_transition_work_item', () => {
         reviewVerdict: 'request changes',
         reviewedHeadSha: 'abc1234def000000000000000000000000000000',
       });
+    });
+
+    it('records the published PR verdict on a pull request card reviewed on the Work board', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const id = await reviewingItem(storage, 'pr-review');
+      const parent = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: { board: 'work', title: 'Authoring work', stages: ['review'], metadata: { openPullRequestNumber: 1 } },
+      });
+      await storage.update({
+        orgId: 'org-1',
+        id,
+        userId: 'user-1',
+        patch: { board: 'work', parentWorkItemId: parent.item.id },
+      });
+      const context = requestContext();
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+      });
+
+      await expect(
+        execute(tools.factory_record_review_verdict as ExecutableTool, context, {
+          verdict: 'approve',
+          reviewedHeadSha: 'ABC1234DEF000000000000000000000000000000',
+          findings: 'Looks good',
+        }),
+      ).resolves.toMatchObject({ status: 'recorded', verdict: 'approve' });
+
+      const item = await storage.get({ orgId: 'org-1', id });
+      expect(item?.board).toBe('work');
+      expect(item?.stages).toEqual(['pr-review']);
+      expect(item?.metadata).toMatchObject({
+        reviewVerdict: 'approve',
+        reviewedHeadSha: 'abc1234def000000000000000000000000000000',
+      });
+      // A PR verdict is not a self-review: no self-review rounds, no builder wake-up.
+      expect(item?.metadata).not.toHaveProperty('selfReviewVerdict');
+      expect(item?.metadata).not.toHaveProperty('selfReviewRounds');
+      expect((await storage.get({ orgId: 'org-1', id: parent.item.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 1,
+        reviewVerdict: 'approve',
+      });
+      const onResult = workBoard.tools.factory_record_review_verdict?.onResult;
+      expect(
+        onResult?.({
+          tenant: { orgId: 'org-1', projectId: PROJECT_ID },
+          actor: { type: 'agent', id: 'binding-1', role: 'review' },
+          ingress: { type: 'rule', id: 'ingress-1' },
+          cause: 'test',
+          causalChain: [],
+          configVersion: 'rules-v1',
+          item: {
+            id,
+            source: 'github-pr',
+            sourceKey: null,
+            parentWorkItemId: parent.item.id,
+            title: item!.title,
+            url: null,
+            stages: item!.stages,
+            acceptedAt: null,
+            metadata: item!.metadata,
+          },
+          board: 'work',
+          itemRevision: item!.revision,
+          toolName: 'factory_record_review_verdict',
+          threadId: 'thread-1',
+          assistantMessageId: 'message-1',
+          toolCallId: 'call-1',
+          result: { status: 'success', value: { status: 'recorded' } },
+        }),
+      ).toBeUndefined();
     });
 
     it('rejects a verdict for a card that is no longer Reviewing', async () => {

@@ -161,6 +161,8 @@ const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
 const LINEAR_TEAMS_PAGE_SIZE = 100;
 const LINEAR_TEAMS_MAX_PAGES = 20;
+const LINEAR_PROJECTS_PAGE_SIZE = 100;
+const LINEAR_PROJECTS_MAX_PAGES = 20;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
 
@@ -184,6 +186,8 @@ export interface LinearConnectionCheck {
   connected: boolean;
   /** Whether the granted OAuth scope allows posting issue comments. */
   canComment: boolean;
+  /** Linear workspace slug, for `https://linear.app/<urlKey>/issue/<ID>` links. */
+  workspaceUrlKey: string | null;
   checkedAt: number;
 }
 
@@ -469,6 +473,7 @@ export class LinearIntegration implements FactoryIntegration {
     const check: LinearConnectionCheck = {
       connected: connection !== null,
       canComment: connection !== null && this.canPostComments(connection),
+      workspaceUrlKey: connection?.workspaceUrlKey ?? null,
       checkedAt: Date.now(),
     };
     this.#connectionChecks.set(orgId, check);
@@ -837,20 +842,33 @@ export class LinearIntegration implements FactoryIntegration {
 
   /** List the workspace's projects (for the Settings intake-source picker). */
   async listProjects(accessToken: string): Promise<LinearProject[]> {
-    const data = await linearGraphql<{
-      projects: {
-        nodes: Array<{
-          id: string;
-          name: string;
-          state: string;
-          teams: { nodes: Array<{ id: string; key: string; name: string }> };
-        }>;
-      };
-    }>(
-      accessToken,
-      `query { projects(first: 100) { nodes { id name state teams(first: 10) { nodes { id key name } } } } }`,
-    );
-    return data.projects.nodes.map(node => ({
+    type ProjectNode = {
+      id: string;
+      name: string;
+      state: string;
+      teams: { nodes: Array<{ id: string; key: string; name: string }> };
+    };
+    const projects: ProjectNode[] = [];
+    let after: string | undefined;
+    for (let page = 0; page < LINEAR_PROJECTS_MAX_PAGES; page += 1) {
+      const data = await linearGraphql<{
+        projects: { nodes: ProjectNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
+      }>(
+        accessToken,
+        `query Projects($first: Int!, $after: String) {
+          projects(first: $first, after: $after) {
+            nodes { id name state teams(first: 10) { nodes { id key name } } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }`,
+        { first: LINEAR_PROJECTS_PAGE_SIZE, ...(after ? { after } : {}) },
+      );
+      projects.push(...data.projects.nodes);
+      if (!data.projects.pageInfo.hasNextPage || !data.projects.pageInfo.endCursor) break;
+      if (data.projects.pageInfo.endCursor === after) throw invalidLinearCursor();
+      after = data.projects.pageInfo.endCursor;
+    }
+    return projects.map(node => ({
       id: node.id,
       name: node.name,
       state: node.state,
@@ -957,6 +975,8 @@ export class LinearIntegration implements FactoryIntegration {
       },
     );
     const { nodes, pageInfo } = data.issues;
+    // A page that hands back the cursor it was asked for would replay forever.
+    if (pageInfo.hasNextPage && after && pageInfo.endCursor === after) throw invalidLinearCursor();
     return {
       issues: nodes.map(node => ({
         id: node.id,

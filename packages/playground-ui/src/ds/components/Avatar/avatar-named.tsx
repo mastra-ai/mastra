@@ -1,7 +1,8 @@
 import { useContext, useState } from 'react';
 
 import { Txt } from '../Txt/Txt';
-import { AvatarSizeContext, avatarSizeClasses, type AvatarSize } from './avatar-size';
+import { AvatarSizeContext, avatarSizeClasses } from './avatar-size';
+import type { AvatarSize } from './avatar-size';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 

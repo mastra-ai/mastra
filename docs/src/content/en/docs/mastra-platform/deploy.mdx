@@ -66,6 +66,8 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix. Guard the path with an environment variable first so the file is only used during local development:
 
     ```ts title="src/mastra/index.ts"
+    import { LibSQLStore } from '@mastra/libsql'
+
     new LibSQLStore({
       id: 'mastra-storage',
       // Uses the hosted database when deployed, a local file during development

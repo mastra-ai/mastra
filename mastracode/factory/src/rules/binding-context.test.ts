@@ -12,7 +12,8 @@ function context(threadId: string | null) {
   requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
   requestContext.set('controller', {
     threadId,
-    resourceId: 'session-1',
+    resourceId: 'project-1',
+    sessionId: 'session-1',
     session: { id: 'session-1' },
     getState: () => ({ factoryProjectId: 'project-1' }),
   });
@@ -20,19 +21,19 @@ function context(threadId: string | null) {
 }
 
 describe('Factory single-thread host coordinates', () => {
-  it('uses the controller thread binding without rekeying the Factory session row', () => {
+  it('uses the controller session id, not its resource, for the Factory session row', () => {
     const requestContext = context('conversation-1');
     expect(getFactorySessionCoordinates(requestContext)).toEqual({
       factoryProjectId: 'project-1',
       sessionId: 'session-1',
-      resourceId: 'session-1',
+      resourceId: 'project-1',
       threadId: 'conversation-1',
     });
     expect(getFactorySessionAddress(requestContext)).toEqual({
       orgId: 'org-1',
       factoryProjectId: 'project-1',
       sessionId: 'session-1',
-      resourceId: 'session-1',
+      resourceId: 'project-1',
       threadId: 'conversation-1',
     });
   });

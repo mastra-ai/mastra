@@ -7,7 +7,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { FactoryEnvironmentBuildTriggers } from '../../../workspaces/services/environment';
-import { CommittedInput, type SaveEnvironment } from './CommittedInput';
+import { CommittedInput } from './CommittedInput';
+import type { SaveEnvironment } from './CommittedInput';
 
 const DEFAULT_CRON = '0 3 * * *';
 
@@ -168,7 +169,7 @@ function ScheduleRows({
             : 'Needs a storage adapter with schedules. Build now and push builds still work.'
         }
       >
-        <Select value={frequency} onValueChange={next => pick(next as Frequency)} disabled={locked}>
+        <Select value={frequency} onValueChange={next => pick(next)} disabled={locked}>
           <SelectTrigger size="sm" aria-label="Build frequency" className="w-auto">
             {FREQUENCY_LABEL[frequency]}
           </SelectTrigger>

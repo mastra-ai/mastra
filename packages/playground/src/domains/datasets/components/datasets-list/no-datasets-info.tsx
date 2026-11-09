@@ -28,7 +28,7 @@ export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
 
           icon={<ExternalLinkIcon />}
         >
-          Datasets Documentation
+          Datasets documentation
         </Button>
       </div>
     }

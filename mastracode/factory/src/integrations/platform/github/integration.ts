@@ -3,7 +3,6 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 import { Octokit } from '@octokit/rest';
-import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type {
@@ -41,6 +40,7 @@ import type {
   UpdateReviewersInput,
   VersionControl,
 } from '../../../capabilities/version-control.js';
+import { loose } from '../../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type {
   SourceControlInstallation,
@@ -62,6 +62,7 @@ import { reconcileInterval, reconciliationEnabled } from '../../github/reconcili
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
+import type { GitIdentity } from '../../github/sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -213,14 +214,14 @@ const REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
   pull_requests: 'write',
+  // Read-only CI visibility so sessions can verify checks and workflow runs.
+  checks: 'read',
+  actions: 'read',
+  statuses: 'read',
 } as const;
 
 /** The Platform mints one installation token for at most this many named repositories. */
 const MAX_REPOSITORIES_PER_TOKEN = 10;
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
   return (ctx.baseUrl || new URL(requestUrl).origin).replace(/\/+$/, '');
@@ -602,6 +603,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
       legacyReconcileIntervalMs;
+  }
+
+  /** Commit authorship follows the Platform App's authoritative writer identity. */
+  get gitIdentity(): GitIdentity | undefined {
+    const login = this.identity.login;
+    return login ? { login } : undefined;
   }
 
   /** GitHub App slug when the deployment explicitly provides it. */
@@ -1164,6 +1171,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       expiresAt: Date.now() + INSTALLATION_REPOS_CACHE_TTL_MS,
     });
     return repos;
+  }
+
+  /**
+   * The Platform has no single-repository endpoint, so read the (cached)
+   * installation listing. The repo picker's search warms that cache.
+   */
+  async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
+    const repositories = await this.listInstallationRepos(installationId);
+    return repositories.find(repository => repository.fullName === repoFullName) ?? null;
   }
 
   async mintInstallationToken(installationId: number): Promise<string> {

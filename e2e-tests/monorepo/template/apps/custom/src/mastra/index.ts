@@ -12,7 +12,10 @@ import { shutdownDrainWorkflowRoute } from '@/api/route/shutdown-drain-workflow'
 import { shutdownDrainWorkflow } from '@/workflows/shutdown-drain';
 import { transitiveWorkspaceRoute } from '@/api/route/transitive-workspace';
 import { protobufSubpathRoute } from '@/api/route/protobuf-subpath';
+import { excelSubpathRoute } from '@/api/route/excel-subpath';
 import { modelUsageRoute } from '@/api/route/model-usage';
+import { stackRoute } from '@/api/route/stack';
+import { pinoTransportRoute } from '@/api/route/pino-transport';
 import { myAgent } from '@inner/hello-world/agent';
 import { calculatorMcpServer } from '@/mcp';
 import 'nodemailer';
@@ -36,11 +39,15 @@ export const mastra = new Mastra({
       shutdownDrainWorkflowRoute,
       transitiveWorkspaceRoute,
       protobufSubpathRoute,
+      excelSubpathRoute,
       modelUsageRoute,
+      stackRoute,
+      pinoTransportRoute,
     ],
   },
   bundler: {
     externals: ['bcrypt', '@inner/subpath-only'],
+    pnpmWorkspaceSettings: { blockExoticSubdeps: false },
   },
   // Model token metrics flow through observability; telemetry counts usage from there.
   observability: new Observability({

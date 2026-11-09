@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import type { ModelRouterModelId } from '@mastra/core/llm';
 import { Memory } from '@mastra/memory';
 import { previewScorers } from '../scorers/preview-scorers';
 import { storage } from '../store';
@@ -22,7 +21,7 @@ function resolvePreviewModel() {
   return PREVIEW_MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__;
 }
 
-const model = resolvePreviewModel() as ModelRouterModelId;
+const model = resolvePreviewModel();
 
 export const studioPreviewAgent = new Agent({
   id: 'studio-preview-agent',

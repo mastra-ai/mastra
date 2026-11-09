@@ -29,7 +29,7 @@ export interface KnowledgeBrowserOptions {
 }
 
 const SECTIONS: KnowledgeBrowserSection[] = ['scopes', 'nodes', 'activity'];
-const NODE_SORTS: KnowledgeInspectorNodeSort[] = ['relevant', 'recent', 'connected'];
+const NODE_SORTS: KnowledgeInspectorNodeSort[] = ['name', 'connected'];
 const PAGE_SIZE = 12;
 const MAX_BODY_LINES = 10;
 const MIN_CONTENT_WIDTH = 20;
@@ -106,8 +106,8 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
   private activity: KnowledgeInspectorActivityEvent[] = [];
   private nextCursor?: string;
   private query = '';
-  private nodeSort: KnowledgeInspectorNodeSort = 'relevant';
-  private nodeCoverage?: 'exact' | 'recent-window';
+  private nodeSort: KnowledgeInspectorNodeSort = 'name';
+  private nodeCoverage?: 'exact' | 'window';
   private selectedIndex = 0;
   private detail?: Detail;
   private detailHistory: Detail[] = [];
@@ -260,14 +260,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     current: KnowledgeInspectorNodeSummary[],
     next: KnowledgeInspectorNodeSummary[],
   ): KnowledgeInspectorNodeSummary[] {
-    return [
-      ...new Map(
-        [...current, ...next].map(node => [
-          `${node.type}:${node.kind ?? ''}:${node.name}:${node.scope.level}:${node.scope.id}`,
-          node,
-        ]),
-      ).values(),
-    ];
+    return [...new Map([...current, ...next].map(node => [node.id, node])).values()];
   }
 
   private async loadMoreRecords(kind: 'about' | 'mentioning'): Promise<void> {
@@ -477,11 +470,8 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         }
       }
       const marker = index === this.selectedIndex ? '→' : ' ';
-      const kind = record.kind ? ` (${record.kind})` : '';
       const badge = scopeLabel(record, this.level);
-      lines.push(
-        truncateAnsi(`${marker} ${record.name}${kind}${countsBadge(record)} ${theme.fg('muted', badge)}`, width),
-      );
+      lines.push(truncateAnsi(`${marker} ${record.name}${countsBadge(record)} ${theme.fg('muted', badge)}`, width));
     });
     if (this.nextCursor) lines.push(`${this.selectedIndex === this.nodes.length ? '→' : ' '} Load more…`);
     if (!this.loading && lines.length === 0) lines.push(theme.fg('muted', `No ${this.section} found.`));
@@ -511,7 +501,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     const role = graphRole(detail.node);
     const roleSummary = `${role ? `${roleLabel(role)} · ` : ''}${counts.records} records · ${counts.outgoing} outgoing · ${counts.incoming} incoming${counts.sampled ? ' (sampled)' : ''}`;
     const lines = [
-      `${theme.bold(detail.node.name)}  ${detail.node.kind ?? 'node'}  ${scopeLabel(detail.node, this.level)}  v${detail.node.version}`,
+      `${theme.bold(detail.node.name)}  page  ${scopeLabel(detail.node, this.level)}  v${detail.node.version}`,
       theme.fg('muted', roleSummary),
     ];
     if (detail.content) {
@@ -571,7 +561,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     const contentWidth = Math.max(MIN_CONTENT_WIDTH, width - 4);
     const lines = [this.breadcrumb(contentWidth), this.renderTabs(contentWidth), ''];
     if (this.section === 'nodes' && !this.detail) {
-      const coverage = this.nodeCoverage === 'recent-window' ? ' · recent window' : '';
+      const coverage = this.nodeCoverage === 'window' ? ' · first 50 by name' : '';
       const label = this.nodeSort[0]!.toUpperCase() + this.nodeSort.slice(1);
       lines.push(theme.fg('muted', `Sort: ${label}${coverage} · Ctrl+S change`), '');
     }

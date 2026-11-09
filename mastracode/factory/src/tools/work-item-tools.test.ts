@@ -33,7 +33,9 @@ async function setup({
   transition,
   feed,
   actorProfile,
+  interactive = true,
 }: {
+  interactive?: boolean;
   transition?: Transition;
   feed?: Pick<CommentsDomain, 'createComment'>;
   actorProfile?: FactoryToolScope['actorProfile'];
@@ -84,14 +86,17 @@ async function setup({
     ),
   };
   const auditRecorder = { record: vi.fn(async () => null) };
-  const tools = createFactoryWorkItemTools(actorProfile ? { ...scope, actorProfile } : scope, {
-    workItems: seed.workItems,
-    boards,
-    transitionService,
-    auditRecorder,
-    feed: feed ?? commentsDomain,
-    sessions: { getSourceControlBySessionId: async () => sourceControl },
-  }) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
+  const tools = createFactoryWorkItemTools(
+    { ...scope, interactive, ...(actorProfile ? { actorProfile } : {}) },
+    {
+      workItems: seed.workItems,
+      boards,
+      transitionService,
+      auditRecorder,
+      feed: feed ?? commentsDomain,
+      sessions: { getSourceControlBySessionId: async () => sourceControl },
+    },
+  ) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
   const run = <T>(name: string, input: unknown) => tools[name]!.execute(input, {}) as Promise<T>;
   const fileItem = (factoryProjectId: string, title: string) =>
     seed.workItems.upsert({
@@ -284,8 +289,8 @@ describe('factory_update_work_item', () => {
       updated: ['title', 'repository', 'parentWorkItemId'],
       repository: 'mastra-ai/mastra',
       parentWorkItemId: parent.id,
-      plansPreapproved: false,
     });
+    expect(result).not.toHaveProperty('plansPreapproved');
     const stored = await workItems.getForProject('org-1', 'project-1', item.id);
     expect(stored).toMatchObject({ title: 'New title', parentWorkItemId: parent.id, stages: item.stages });
     expect(stored!.metadata).toMatchObject({ repository: 'mastra-ai/mastra' });
@@ -322,13 +327,17 @@ describe('factory_update_work_item', () => {
   });
 
   it("refuses to repoint a card synced from an issue, which follows the issue's repository", async () => {
-    const { run, workItems, fileItem } = await setup();
-    const { item } = await fileItem('project-1', 'Issue card');
-    await workItems.update({
+    const { run, workItems } = await setup();
+    const { item } = await workItems.upsert({
       orgId: 'org-1',
-      id: item.id,
+      factoryProjectId: 'project-1',
       userId: 'user-1',
-      patch: { metadata: { githubRepositoryId: '2', repository: 'mastra-ai/mastra' } },
+      input: {
+        title: 'Issue card',
+        stages: ['intake'],
+        externalSource: { integrationId: 'github', type: 'issue', externalId: '42' },
+        metadata: { githubRepositoryId: '2', repository: 'mastra-ai/mastra' },
+      },
     });
 
     await expect(
@@ -336,19 +345,21 @@ describe('factory_update_work_item', () => {
     ).rejects.toThrow("This card runs in mastra-ai/mastra, which comes from its linked issue and can't be changed.");
   });
 
-  it('detaches a card from its parent and pre-approves its plans', async () => {
+  it('detaches a card from its parent, and refuses the retired plan pre-approval', async () => {
     const { run, workItems, fileItem } = await setup();
     const { item: parent } = await fileItem('project-1', 'Epic');
     const { item } = await fileItem('project-1', 'Child');
     await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { parentWorkItemId: parent.id } });
 
-    const result = await run('factory_update_work_item', {
-      workItem: item.id,
-      parentWorkItem: null,
-      plansPreapproved: true,
-    });
+    // Plans always wait for a person (or the board's exit tool), so there is nothing to pre-approve.
+    await expect(
+      run('factory_update_work_item', { workItem: item.id, parentWorkItem: null, plansPreapproved: true }),
+    ).resolves.toMatchObject({ error: true });
+    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.parentWorkItemId).toBe(parent.id);
 
-    expect(result).toMatchObject({ parentWorkItemId: null, plansPreapproved: true });
+    const result = await run('factory_update_work_item', { workItem: item.id, parentWorkItem: null });
+
+    expect(result).toMatchObject({ parentWorkItemId: null });
   });
 
   it('refuses a parent from another Factory and a card that would be its own ancestor', async () => {
@@ -417,6 +428,12 @@ describe('approval', () => {
         'factory_message_origin',
         'factory_start_session',
         'factory_answer_approval',
+        'factory_switch_session_model',
+        'factory_recreate_sandbox',
+        'factory_sandbox_port_url',
+        'factory_list_side_sessions',
+        'factory_subscribe_session',
+        'factory_unsubscribe_session',
       ].sort(),
     );
   });
@@ -582,5 +599,53 @@ describe('another Factory', () => {
     await expect(
       run('factory_resolve_proposal', { decisionId: FOREIGN_DECISION_ID, action: 'approve' }),
     ).rejects.toThrow('belongs to another Factory');
+  });
+});
+
+describe('on a turn nobody signed in started', () => {
+  it("moves the item as this session's agent, so the plan and done gates apply and nothing is armed", async () => {
+    const { run, fileItem, transitionService } = await setup({ interactive: false });
+    const { item } = await fileItem('project-1', 'Move me');
+
+    await run('factory_transition_work_item', { workItem: item.id, stage: 'triage' });
+
+    expect(transitionService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: { type: 'agent', bindingId: 'session:session-1', role: 'session' },
+        ingress: expect.objectContaining({ type: 'agent', identity: expect.stringMatching(/^session:session-1:/) }),
+      }),
+    );
+  });
+
+  it('edits a card, audited as the session rather than the person', async () => {
+    const { run, fileItem, auditRecorder } = await setup({ interactive: false });
+    const { item } = await fileItem('project-1', 'Rename me');
+
+    await expect(run('factory_update_work_item', { workItem: item.id, title: 'Renamed' })).resolves.toMatchObject({
+      workItem: { title: 'Renamed' },
+      updated: ['title'],
+    });
+    expect(auditRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'agent:session:session-1', actorType: 'agent' }),
+    );
+  });
+
+  it('refuses to approve or dismiss proposals, and changes nothing', async () => {
+    const { run, workItems, fileItem, auditRecorder } = await setup({ interactive: false });
+    const { item } = await fileItem('project-1', 'Keep my gate');
+    const approve = vi.spyOn(workItems, 'approveDeferredDecision');
+    const dismiss = vi.spyOn(workItems, 'dismissDeferredDecision');
+
+    await expect(run('factory_resolve_proposal', { decisionId: DECISION_ID, action: 'approve' })).rejects.toThrow(
+      'Only a person can approve or dismiss a proposed run',
+    );
+    await expect(run('factory_dismiss_decision', { decisionId: DECISION_ID })).rejects.toThrow(
+      'Only a person can dismiss a proposed run',
+    );
+
+    expect(approve).not.toHaveBeenCalled();
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(auditRecorder.record).not.toHaveBeenCalled();
+    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(item.revision);
   });
 });

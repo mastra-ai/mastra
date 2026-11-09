@@ -1,12 +1,14 @@
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
-import { REPROCESS_PART_KEY } from '../stream-reprocess';
+import { FLUSH_HELD_PARTS_KEY, REPROCESS_PART_KEY, withoutHeldContent } from '../stream-reprocess';
+import type { FlushHeldParts } from '../stream-reprocess';
 
 export type BatchPartsState = {
   batch: ChunkType[];
   timeoutId: NodeJS.Timeout | undefined;
   timeoutTriggered: boolean;
+  pendingNonText?: ChunkType;
 };
 
 export interface BatchPartsOptions {
@@ -62,6 +64,10 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     if (!state.timeoutTriggered) {
       state.timeoutTriggered = false;
     }
+    state[FLUSH_HELD_PARTS_KEY] ??= ((options?: { discard?: boolean }) =>
+      options?.discard
+        ? this.discardAll(state as BatchPartsState)
+        : this.releaseAll(state as BatchPartsState)) satisfies FlushHeldParts;
 
     // Emit any pending non-text part that was deferred from the previous call
     if (state.pendingNonText) {
@@ -181,6 +187,28 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     state.batch = state.batch.slice(textRunEnd);
 
     return combinedChunk;
+  }
+
+  private discardAll(state: BatchPartsState): ChunkType[] {
+    if (state.timeoutId) clearTimeout(state.timeoutId);
+    state.timeoutId = undefined;
+    state.timeoutTriggered = false;
+    const held = state.pendingNonText ? [state.pendingNonText, ...state.batch] : state.batch;
+    state.batch = [];
+    state.pendingNonText = undefined;
+    return withoutHeldContent(held);
+  }
+
+  private releaseAll(state: BatchPartsState): ChunkType[] {
+    const released: ChunkType[] = [];
+    if (state.pendingNonText) {
+      released.push(state.pendingNonText);
+      state.pendingNonText = undefined;
+    }
+    for (let part = this.flushBatch(state); part; part = this.flushBatch(state)) {
+      released.push(part);
+    }
+    return released;
   }
 
   /**

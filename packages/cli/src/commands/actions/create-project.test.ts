@@ -61,7 +61,7 @@ describe('createProject', () => {
     expect(mocks.runCreateCommand).toHaveBeenCalledWith('private-project-name', args, {
       analytics,
       resolveVersionTag: expect.any(Function),
-      loginSource: 'mastra-create',
+      loginSource: 'mastra-cli-create',
     });
 
     const trackedArgs = trackCommandExecution.mock.calls[0]?.[0].args;

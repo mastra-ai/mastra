@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
-import { getSuspensionAddressKey, type Session } from './session';
+import { getSuspensionAddressKey } from './session';
+import type { Session } from './session';
 import { createTestSession } from './test-utils';
 import type { AgentControllerEvent, AgentControllerSubagent, AgentControllerSubagentHistoryEntry } from './types';
 import { createEmptyTokenUsage, defaultDisplayState } from './types';
@@ -329,6 +330,40 @@ describe('tool lifecycle', () => {
   });
 
   describe('shell_output', () => {
+    it('retains only the latest output after a long command, without truncating events', () => {
+      emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
+      const limit = 1024 * 1024;
+      const chunk = 'x'.repeat(limit / 4);
+      let received = 0;
+      session.subscribe(event => {
+        if (event.type === 'shell_output') received += event.output.length;
+      });
+      for (let i = 0; i < 8; i++) {
+        emit(session, { type: 'shell_output', toolCallId: 't1', output: chunk, stream: 'stdout' });
+      }
+      emit(session, { type: 'shell_output', toolCallId: 't1', output: 'latest stderr\n', stream: 'stderr' });
+      const output = session.displayState.get().activeTools.get('t1')!.shellOutput!;
+      expect(output).toHaveLength(limit);
+      expect(output.endsWith('latest stderr\n')).toBe(true);
+      expect(received).toBe(chunk.length * 8 + 'latest stderr\n'.length);
+    });
+
+    it('retains the tail of an oversized chunk and continues appending', () => {
+      emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
+      const limit = 1024 * 1024;
+      emit(session, { type: 'shell_output', toolCallId: 't1', output: 'old', stream: 'stdout' });
+      emit(session, {
+        type: 'shell_output',
+        toolCallId: 't1',
+        output: 'x'.repeat(limit * 2) + 'end',
+        stream: 'stdout',
+      });
+      expect(session.displayState.get().activeTools.get('t1')!.shellOutput).toBe('x'.repeat(limit - 3) + 'end');
+      emit(session, { type: 'shell_output', toolCallId: 't1', output: '', stream: 'stdout' });
+      emit(session, { type: 'shell_output', toolCallId: 't1', output: '!', stream: 'stderr' });
+      expect(session.displayState.get().activeTools.get('t1')!.shellOutput).toBe('x'.repeat(limit - 4) + 'end!');
+    });
+
     it('appends shell output to tool', () => {
       emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: {} });
       emit(session, { type: 'shell_output', toolCallId: 't1', output: 'line1\n', stream: 'stdout' });
@@ -666,6 +701,49 @@ describe('tool lifecycle', () => {
       expect(suspension!.toolName).toBe('confirmAction');
       expect(suspension!.args).toEqual({ action: 'deploy' });
       expect(suspension!.suspendPayload).toEqual({ reason: 'Needs confirmation' });
+    });
+
+    it("clears the ending run's own prompts on a non-suspended agent_end and keeps other runs' prompts", () => {
+      // A run can end with its prompt never answered or cancelled, e.g. when it
+      // loses the thread lease: the error path skips the per-prompt cancel.
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+
+      emit(session, { type: 'agent_end', reason: 'error' });
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
+    it('clears the prompts of the run that ended even when the tracked run moves on before agent_end', async () => {
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+      session.onBeforeAgentEnd(() => session.run.setRunId({ runId: 'run-other' }));
+
+      await session.finishAgentRun('error');
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
     });
 
     it('keeps duplicate tool-call ids from separate runs independently addressable', () => {

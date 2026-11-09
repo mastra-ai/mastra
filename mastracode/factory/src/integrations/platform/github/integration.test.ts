@@ -607,7 +607,14 @@ describe('PlatformGithubIntegration', () => {
     ]);
     expect(JSON.parse(String((fetchImpl.mock.calls[2]?.[1] as RequestInit).body))).toEqual({
       repositories: ['app'],
-      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+      permissions: {
+        contents: 'write',
+        issues: 'write',
+        pull_requests: 'write',
+        checks: 'read',
+        actions: 'read',
+        statuses: 'read',
+      },
     });
     expect(JSON.parse(String((fetchImpl.mock.calls[3]?.[1] as RequestInit).body))).toEqual({ assignees: ['grace'] });
   });
@@ -807,7 +814,14 @@ describe('PlatformGithubIntegration', () => {
     });
     expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
       repositories: ['app'],
-      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+      permissions: {
+        contents: 'write',
+        issues: 'write',
+        pull_requests: 'write',
+        checks: 'read',
+        actions: 'read',
+        statuses: 'read',
+      },
     });
   });
 
@@ -851,7 +865,14 @@ describe('PlatformGithubIntegration', () => {
       expect(String((fetchImpl.mock.calls[0] as unknown[])[0])).toContain('/github-app/installations/7/token');
       expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
         repositories: ['app', 'docs'],
-        permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+        permissions: {
+          contents: 'write',
+          issues: 'write',
+          pull_requests: 'write',
+          checks: 'read',
+          actions: 'read',
+          statuses: 'read',
+        },
       });
 
       // The grant is reused for the same set, in any order.
@@ -928,7 +949,14 @@ describe('PlatformGithubIntegration', () => {
     await expect(integration.mintInstallationToken(7)).resolves.toBe('ghs_installation');
     expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
       repositories: ['app'],
-      permissions: { contents: 'write', issues: 'write', pull_requests: 'write' },
+      permissions: {
+        contents: 'write',
+        issues: 'write',
+        pull_requests: 'write',
+        checks: 'read',
+        actions: 'read',
+        statuses: 'read',
+      },
     });
   });
 
@@ -960,6 +988,21 @@ describe('PlatformGithubIntegration', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('looks up one installation repository from the cached listing', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+      json({
+        repositories: [
+          { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+        ],
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.getInstallationRepo(7, 'acme/app')).resolves.toMatchObject({ id: 101 });
+    await expect(integration.getInstallationRepo(7, 'acme/other')).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('evicts the oldest installation listing once the cache bound is reached', async () => {

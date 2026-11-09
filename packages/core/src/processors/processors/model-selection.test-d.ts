@@ -1,7 +1,9 @@
-import { expectTypeOf } from 'vitest';
+import { expectTypeOf, test } from 'vitest';
 
-import { Classifier, type BooleanAnswer, type ChoiceAnswer } from '../../classifier';
-import { ModelSelectionProcessor, type ModelSelectionInstanceOptions, type ModelSelectionRegisteredOptions } from '.';
+import { Classifier } from '../../classifier';
+import type { BooleanAnswer, ChoiceAnswer, RefusalAnswer } from '../../classifier';
+import { ModelSelectionProcessor } from '.';
+import type { ModelSelectionInstanceOptions, ModelSelectionRegisteredOptions } from '.';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
 
@@ -18,26 +20,31 @@ const triage = new Classifier({
 new ModelSelectionProcessor({
   classifier: triage,
   select: ({ complexity, sensitive }, { result }) => {
-    expectTypeOf(complexity).toEqualTypeOf<ChoiceAnswer<'trivial' | 'complex'>>();
-    expectTypeOf(sensitive).toEqualTypeOf<BooleanAnswer>();
-    expectTypeOf(result.answers.complexity.choice).toEqualTypeOf<'trivial' | 'complex'>();
-    if (sensitive.probability > 0.3) return undefined;
-    return complexity.choice === 'trivial' ? 'openai/gpt-4o-mini' : undefined;
+    expectTypeOf(complexity).toEqualTypeOf<ChoiceAnswer<'trivial' | 'complex'> | RefusalAnswer>();
+    expectTypeOf(sensitive).toEqualTypeOf<BooleanAnswer | RefusalAnswer>();
+    if (result.answers.complexity.type === 'choice') {
+      expectTypeOf(result.answers.complexity.choice).toEqualTypeOf<'trivial' | 'complex'>();
+    }
+    if (sensitive.type !== 'boolean' || sensitive.probability > 0.3) return undefined;
+    return complexity.type === 'choice' && complexity.choice === 'trivial' ? 'openai/gpt-4o-mini' : undefined;
   },
 });
 
 // A misspelled choice is a type error.
 new ModelSelectionProcessor({
   classifier: triage,
-  // @ts-expect-error 'trivail' is not a choice of this question
-  select: ({ complexity }) => (complexity.choice === 'trivail' ? 'openai/gpt-4o-mini' : undefined),
+  select: ({ complexity }) =>
+    // @ts-expect-error 'trivail' is not a choice of this question
+    complexity.type === 'choice' && complexity.choice === 'trivail' ? 'openai/gpt-4o-mini' : undefined,
 });
 
 // Registered id: explicit questions type the answers.
 new ModelSelectionProcessor<{ complexity: { type: 'choice'; criteria: { low: string; high: string } } }>({
   classifier: 'triage',
   select: ({ complexity }) => {
-    expectTypeOf(complexity.choice).toEqualTypeOf<'low' | 'high'>();
+    if (complexity.type === 'choice') {
+      expectTypeOf(complexity.choice).toEqualTypeOf<'low' | 'high'>();
+    }
     return undefined;
   },
 });
@@ -62,3 +69,6 @@ const registeredOptions: ModelSelectionRegisteredOptions<typeof triage.questions
 };
 new ModelSelectionProcessor(instanceOptions);
 new ModelSelectionProcessor(registeredOptions);
+
+// Vitest 5 fails typecheck files without a test; the assertions above are still checked file-wide.
+test('model-selection types', () => {});

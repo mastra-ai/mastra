@@ -46,7 +46,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 393216,
     "inputCost": 0.15,
     "outputCost": 0.6
@@ -58,7 +58,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 393216,
     "inputCost": 0.66,
     "outputCost": 1.98
@@ -73,6 +73,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -90,6 +92,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

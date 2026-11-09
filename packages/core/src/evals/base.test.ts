@@ -1708,6 +1708,37 @@ describe('createScorer', () => {
       });
     });
 
+    describe('when a scorer run starts its span', () => {
+      function captureScorerRunSpan(config: { id: string; name?: string }) {
+        const captured: { options?: any } = {};
+        const mockMastra = createMockMastra({
+          startSpan: (options: any) => {
+            captured.options = options;
+            return createMockSpan('entity-trace', SpanType.SCORER_RUN);
+          },
+        });
+        const scorer = createScorer({ ...config, description: 'entity scorer' }).generateScore(() => 1);
+        scorer.__registerMastra(mockMastra as any);
+        return { captured, scorer };
+      }
+
+      it('records the scorer name as the span entity name', async () => {
+        const { captured, scorer } = captureScorerRunSpan({ id: 'tone-scorer', name: 'Tone' });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(captured.options).toMatchObject({ entityId: 'tone-scorer', entityName: 'Tone' });
+      });
+
+      it('falls back to the scorer id when the scorer has no name', async () => {
+        const { captured, scorer } = captureScorerRunSpan({ id: 'tone-scorer' });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(captured.options).toMatchObject({ entityId: 'tone-scorer', entityName: 'tone-scorer' });
+      });
+    });
+
     describe('requestContext persistence on the scorer-run input', () => {
       function captureScorerRun() {
         const captured: { input?: any } = {};

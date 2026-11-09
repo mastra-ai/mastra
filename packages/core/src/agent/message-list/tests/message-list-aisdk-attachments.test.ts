@@ -122,11 +122,7 @@ describe('MessageList - AI SDK v4 Attachment Handling', () => {
 
     // Let's see what actually happens
     let result;
-    try {
-      result = AIV4.convertToCoreMessages(problematicMessages as any);
-    } catch (error) {
-      throw error;
-    }
+    result = AIV4.convertToCoreMessages(problematicMessages as any);
 
     // Check what the conversion produced
     expect(result).toBeDefined();

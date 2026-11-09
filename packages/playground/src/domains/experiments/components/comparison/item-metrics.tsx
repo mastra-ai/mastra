@@ -58,6 +58,7 @@ export function itemMetrics({
           icon: <CoinsIcon />,
           label: 'Cost',
           value: formatCostValue(usage?.estimatedCost, costUnit),
+          rawValue: usage?.estimatedCost,
           delta: costDelta ?? null,
           formatDelta: costDeltaFormatter(costUnit),
           higherIsBetter: false,
@@ -72,6 +73,7 @@ export function itemMetrics({
           icon: <HashIcon />,
           label: 'Tokens',
           value: formatTokenCount(totalTokens(usage)),
+          rawValue: totalTokens(usage),
           delta: tokenDelta ?? null,
           formatDelta: formatTokenCount,
           higherIsBetter: false,
@@ -88,6 +90,7 @@ export function itemMetrics({
             icon: <ClockIcon />,
             label: 'Duration',
             value: formatDuration(durationMs) ?? '-',
+            rawValue: durationMs,
             delta: durationDeltaMs ?? null,
             formatDelta: formatDurationDelta,
             higherIsBetter: false,
@@ -101,6 +104,7 @@ export function itemMetrics({
           icon: <GaugeIcon />,
           label: 'Avg score',
           value: formatScore(averageScore.value),
+          rawValue: averageScore.value,
           delta: averageScore.delta ?? null,
         },
       ]
@@ -123,6 +127,7 @@ export function itemMetrics({
       ) : (
         formatScore(score.value)
       ),
+      rawValue: score.value,
       delta: score.delta ?? null,
     })),
   ];

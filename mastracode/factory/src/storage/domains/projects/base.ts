@@ -3,8 +3,9 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
+
 export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
-export const DEFAULT_FACTORY_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
 export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
 export type FactoryModelScope = (typeof FACTORY_MODEL_SCOPES)[number];
 /** The single credential scope one session or run resolves from; `hybrid` is never effective. */
@@ -17,6 +18,15 @@ export type EffectiveModelScope = Exclude<FactoryModelScope, 'hybrid'>;
 export function effectiveModelScope(scope: FactoryModelScope, context: 'run' | 'session'): EffectiveModelScope {
   if (scope === 'hybrid') return context === 'run' ? 'factory' : 'user';
   return scope;
+}
+
+/**
+ * Sentinel `user_id` for a Factory's own settings rows (memory, voice) in the
+ * per-`(org, user)` settings tables. Real user ids are WorkOS ids (`user_…`) or
+ * the `local` sentinel, so the prefix cannot collide.
+ */
+export function factoryProjectSettingsUserId(factoryProjectId: string): string {
+  return `factory-project:${factoryProjectId}`;
 }
 
 export interface FactoryProject {
@@ -36,8 +46,6 @@ export interface FactoryProject {
   defaultThinkingLevel: ThinkingLevelSetting;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
-  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
-  autoApprovePlans: boolean;
   /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
   sandboxWorkingDirectory: string | null;
   /** Provider settings document validated by the configured FactorySandbox. Only keys the user set. */
@@ -89,7 +97,6 @@ export interface UpdateFactoryProjectInput {
   modelScope?: FactoryModelScope;
   defaultThinkingLevel?: ThinkingLevelSetting;
   autoRunEnabled?: boolean;
-  autoApprovePlans?: boolean;
   sandboxWorkingDirectory?: string | null;
   sandboxSettings?: Record<string, unknown> | null;
   workspaceSetupCommand?: string | null;
@@ -115,12 +122,13 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
     model_scope: { type: 'text', default: 'hybrid' },
-    default_thinking_level: { type: 'text', default: DEFAULT_FACTORY_THINKING_LEVEL },
+    default_thinking_level: { type: 'text', default: DEFAULT_THINKING_LEVEL },
     // Deprecated: no longer read or written. Kept so existing databases need no
     // migration. Old rows may still hold `true`, so never read it to bring Slack
     // work items back. Drop it in a later migration.
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
+    // Retired project switch: no longer read or written. Plans are approved per board (`exitTool.autoApprove`).
     auto_approve_plans: { type: 'boolean', default: false },
     sandbox_working_directory: { type: 'text', nullable: true },
     sandbox_settings: { type: 'json', nullable: true },
@@ -191,9 +199,8 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     modelScope: row.model_scope === 'factory' || row.model_scope === 'user' ? row.model_scope : 'hybrid',
     defaultThinkingLevel: isThinkingLevelSetting(row.default_thinking_level)
       ? row.default_thinking_level
-      : DEFAULT_FACTORY_THINKING_LEVEL,
+      : DEFAULT_THINKING_LEVEL,
     autoRunEnabled: row.auto_run_enabled,
-    autoApprovePlans: row.auto_approve_plans ?? false,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
     sandboxSettings: row.sandbox_settings ?? null,
     workspaceSetupCommand: row.workspace_setup_command ?? null,
@@ -249,7 +256,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       default_model_id: input.defaultModelId ?? null,
       model_scope: input.modelScope ?? 'hybrid',
       auto_run_enabled: false,
-      auto_approve_plans: false,
       created_at: now,
       updated_at: now,
     });
@@ -309,7 +315,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
             ? { default_thinking_level: changes.defaultThinkingLevel }
             : {}),
           ...(changes.autoRunEnabled !== undefined ? { auto_run_enabled: changes.autoRunEnabled } : {}),
-          ...(changes.autoApprovePlans !== undefined ? { auto_approve_plans: changes.autoApprovePlans } : {}),
           ...(changes.sandboxWorkingDirectory !== undefined
             ? { sandbox_working_directory: changes.sandboxWorkingDirectory }
             : {}),
@@ -513,10 +518,20 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     return pinned;
   }
 
-  async delete({ orgId, id }: { orgId: string; id: string }): Promise<FactoryProject | null> {
-    const project = await this.get({ orgId, id });
-    if (!project) return null;
-    const deleted = await this.#db.deleteMany('factory_projects', { org_id: orgId, id });
-    return deleted > 0 ? project : null;
+  /** `release` runs in the deleting transaction, so nothing can be routed to the project between the two. */
+  async delete(
+    { orgId, id }: { orgId: string; id: string },
+    release?: (ops: FactoryStorageOps) => Promise<void>,
+  ): Promise<FactoryProject | null> {
+    return this.storage.withTransaction(
+      async ops => {
+        const row = await ops.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
+        if (!row) return null;
+        await release?.(ops);
+        await ops.deleteMany('factory_projects', { org_id: orgId, id });
+        return toFactoryProject(row);
+      },
+      { isolationLevel: 'serializable' },
+    );
   }
 }

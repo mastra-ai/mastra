@@ -88,22 +88,13 @@ describe('incident.io issue reconciler', () => {
       expect.arrayContaining([
         expect.objectContaining({
           externalSource: expect.objectContaining({ externalId: 'incidentio:incident:incident-1' }),
-          metadata: expect.objectContaining({
-            autoStartCandidate: true,
-            incidentioItemType: 'incident',
-            incidentioState: 'Learning',
-            incidentioStateType: 'started',
-            incidentioDescription: 'Requests are failing.',
-            priority: 'Major',
-            author: 'Ada Lovelace',
-            labels: ['Major', 'Production outage', 'standard'],
-          }),
+          metadata: expect.objectContaining({autoStartCandidate: true}), workItem: expect.objectContaining({ metadata: expect.objectContaining({incidentioItemType: 'incident', incidentioState: 'Learning', incidentioStateType: 'started', incidentioDescription: 'Requests are failing.', priority: 'Major', author: 'Ada Lovelace', labels: ['Major', 'Production outage', 'standard']}) }),
         }),
         // Close handling is a rules-ingress commit, not a metadata patch: the
         // stale metadata stays until the dispatcher applies the transition.
         expect.objectContaining({
           externalSource: expect.objectContaining({ externalId: 'incidentio:follow-up:follow-up-1' }),
-          metadata: expect.objectContaining({ labels: ['stale'] }),
+          workItem: expect.objectContaining({ metadata: expect.objectContaining({labels: ['stale']}) }),
         }),
       ]),
     );

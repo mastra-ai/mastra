@@ -23,7 +23,7 @@ export const Default: Story = {
       <MainHeader>
         <MainHeader.Column>
           <MainHeader.Title>
-            <BotIcon /> Agents <CopyButton content={'Agents'} />
+            <BotIcon /> Agents <CopyButton content="Agents" />
           </MainHeader.Title>
           <MainHeader.Description>Create and manage AI agents for your workflows</MainHeader.Description>
         </MainHeader.Column>

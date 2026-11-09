@@ -1,0 +1,335 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-durable-agent-goal-recovery-anthropic-durable",
+    "testFile": "src/durable-agent-goal-recovery.test.ts",
+    "testName": "T21 goal recovery · anthropic > durable engine > judges the reply against the thread objective",
+    "model": "claude-sonnet-4-6",
+    "createdAt": "2026-10-22T05:44:48.122Z",
+    "updatedAt": "2026-10-22T05:45:20.885Z"
+  },
+  "recordings": [
+    {
+      "hash": "450e2afec8f85040",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Follow the instructions exactly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Call the step tool once, then reply with the single word DONE."
+                },
+                {
+                  "type": "text",
+                  "text": "<current-objective status=\"active\">\n  The assistant has replied with the word DONE.\n</current-objective>"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "step",
+              "description": "Take one step. Returns 1.",
+              "input_schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "required": []
+              },
+              "eager_input_streaming": true
+            }
+          ],
+          "tool_choice": {
+            "type": "auto"
+          },
+          "stream": true
+        },
+        "timestamp": 1792647918030
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:45:18Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:45:18Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:45:18Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:45:18Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e631f02d964799-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:45:18 GMT",
+          "request-id": "req_011CgGkCaTrnZuhPykxin6Pk",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a2ee00000000cd8d149a420cb7b0-d5086706b4653be5-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\nd",
+          "ata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGkCaijsMqHwvFQ6bytB\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":620,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":22,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}              }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01F12yD1ukqUc3iuEoV5tvRw\",\"name\":\"step\",\"input\":{},\"caller\":{\"type\":\"direct\"}}            }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0   }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":620,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":35}     }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"               }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          0,
+          102,
+          8
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "f55b9fc4c04ba930",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Follow the instructions exactly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Call the step tool once, then reply with the single word DONE."
+                },
+                {
+                  "type": "text",
+                  "text": "<current-objective status=\"active\">\n  The assistant has replied with the word DONE.\n</current-objective>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "toolu_01F12yD1ukqUc3iuEoV5tvRw",
+                  "name": "step",
+                  "input": {},
+                  "caller": {
+                    "type": "direct"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_01F12yD1ukqUc3iuEoV5tvRw",
+                  "content": "{\"step\":1}"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "step",
+              "description": "Take one step. Returns 1.",
+              "input_schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "required": []
+              },
+              "eager_input_streaming": true
+            }
+          ],
+          "tool_choice": {
+            "type": "auto"
+          },
+          "stream": true
+        },
+        "timestamp": 1792647919063
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:45:19Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:45:19Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:45:19Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:45:19Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e631f69ab94799-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:45:19 GMT",
+          "request-id": "req_011CgGkCetGzrCpb5iWanZpQ",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a2ef000000002418d419d0e684ff-f87b50e4576ebb4a-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\nd",
+          "ata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGkCfCcbBfq4CygGTbRa\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":671,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":5,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}     }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"} }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"DONE\"}        }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":671,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":5}     }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"   }\n\n"
+        ],
+        "chunkTimings": [
+          1,
+          0,
+          1,
+          5
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "aa268905759a68c6",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "output_config": {
+            "format": {
+              "type": "json_schema",
+              "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "description": "Whether the goal is done, should continue autonomously, or is at an explicit user checkpoint required by the goal",
+                    "enum": [
+                      "done",
+                      "continue",
+                      "waiting"
+                    ],
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "Brief explanation of what was accomplished or what remains to be done",
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "decision",
+                  "reason"
+                ]
+              }
+            }
+          },
+          "system": [
+            {
+              "type": "text",
+              "text": "You are the goal judge. Your decision directly controls whether the assistant continues working toward the goal.\n\nGiven a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.\n\nUse \"done\" when the goal is fully achieved.\nUse \"waiting\" when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint.\nUse \"waiting\" when the latest user message asks a question or requests clarification and the latest assistant message answers it; let the user acknowledge the answer, ask a follow-up, or otherwise return control before continuing goal work. Use common sense and do not wait if the user explicitly asked the assistant to continue autonomously after answering.\nUse \"continue\" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.\nIf your previous decision was \"waiting\" for an explicit user checkpoint, keep choosing \"waiting\" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.\nIf the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose \"continue\" when the assistant should proceed to the next step. Do not choose \"waiting\" for judge-controlled checkpoints, because that would mean waiting for yourself.\n\nYour \"reason\" field is sent back to the assistant as guidance when the goal is not yet done — be specific about what still needs to be accomplished. When choosing \"continue\", write the reason as an instruction for what the assistant should do next. When choosing \"waiting\", explain what specific user checkpoint is still outstanding."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Goal: The assistant has replied with the word DONE.\n\nLatest user message:\nCall the step tool once, then reply with the single word DONE.\n\nAssistant steps since that user message: 1\n\nLatest assistant message:\nDONE"
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792647919772
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "9999000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:45:19Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:45:19Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:45:19Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "11999000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:45:19Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e631fb0dd64799-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:45:20 GMT",
+          "request-id": "req_011CgGkChuLbCixTtPgLM8sF",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a2ef000000004aa7f34112c52585-580afd2e5c4f5c52-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\nda",
+          "ta: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGkCi9yQXWTT1gTUToVx\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":772,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}            }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}    }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"{\\\"\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"decision\\\":\\\"\"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"done\\\",\\\"reason\\\":\\\"The assistant has\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" replied with the word DONE.\"}     }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\\"}\"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0         }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":772,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":21}  }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"            }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          0,
+          109,
+          30,
+          57,
+          53,
+          4
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

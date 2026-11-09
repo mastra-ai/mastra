@@ -33,9 +33,17 @@ describe('close() drains in-flight publishes', () => {
       quit: vi.fn(async () => {
         order.push('quit');
       }),
-      xAdd: vi.fn(async () => {
-        order.push('xAdd');
-        return '1-0';
+      // Default publishes (idle TTL on) run XADD + PEXPIRE in one MULTI.
+      multi: vi.fn(() => {
+        const tx = {
+          xAdd: () => tx,
+          pExpire: () => tx,
+          exec: vi.fn(async () => {
+            order.push('xAdd');
+            return ['1-0', 1];
+          }),
+        };
+        return tx;
       }),
     };
     clients.create.mockReturnValue(writer);
@@ -58,7 +66,7 @@ describe('close() drains in-flight publishes', () => {
   });
 
   it('rejects publishes issued after close()', async () => {
-    const writer = { isOpen: false, on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xAdd: vi.fn() };
+    const writer = { isOpen: false, on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xAdd: vi.fn(), multi: vi.fn() };
     clients.create.mockReturnValue(writer);
     const pubsub = new ValkeyStreamsPubSub();
     await pubsub.close();
@@ -66,5 +74,6 @@ describe('close() drains in-flight publishes', () => {
       'cannot publish on closed client',
     );
     expect(writer.xAdd).not.toHaveBeenCalled();
+    expect(writer.multi).not.toHaveBeenCalled();
   });
 });

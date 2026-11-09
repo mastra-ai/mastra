@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { ParkedRun } from '../session/live-sessions.js';
-import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
+import type { FactoryDeferredDecisionRecord, Card } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
@@ -53,7 +53,7 @@ function request(method: string, path: string, user: typeof orgUser | null = org
   return buildApp(user).request(path, { method });
 }
 
-async function seedWorkItem(title = 'Fix login'): Promise<WorkItemRow> {
+async function seedWorkItem(title = 'Fix login'): Promise<Card> {
   const { item } = await seed.workItems.upsert({
     orgId: 'org1',
     userId: 'u1',
@@ -87,7 +87,7 @@ async function seedMention({
   });
 }
 
-async function seedFailure(workItem: WorkItemRow, now: Date): Promise<FactoryDeferredDecisionRecord> {
+async function seedFailure(workItem: Card, now: Date): Promise<FactoryDeferredDecisionRecord> {
   await seed.workItems.commitRuleEvaluation({
     orgId: 'org1',
     factoryProjectId: PROJECT_ID,
@@ -542,7 +542,7 @@ describe('mention attention items', () => {
 const PROPOSED_TRIAGE = { type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' } as const;
 
 async function seedProposal(
-  workItem: WorkItemRow,
+  workItem: Card,
   now: Date,
   decision: Record<string, unknown> = PROPOSED_TRIAGE,
 ): Promise<FactoryDeferredDecisionRecord> {
@@ -801,5 +801,81 @@ describe('activity attention items', () => {
     const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?kind=bogus`);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: 'invalid_attention_kind' });
+  });
+});
+
+describe('attention links open the board the card is on', () => {
+  async function seedCard(input: Pick<Card, 'board' | 'externalSource'>): Promise<Card> {
+    const { item } = await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        title: 'Ship it',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+        ...(input.board ? { board: input.board } : {}),
+        externalSource: input.externalSource,
+      },
+    });
+    return item;
+  }
+
+  /** One item of every work-item-targeted kind on `item`, keyed by kind to the board its link opens. */
+  async function targetBoards(item: Card): Promise<Record<string, unknown>> {
+    await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
+    await seedFailure(item, new Date('2030-01-01T00:01:00.000Z'));
+    await seedMention({ workItemId: item.id, body: 'Look @you', occurredAt: new Date('2030-01-01T00:02:00.000Z') });
+    await seed.comments.create({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      author: { kind: 'user', id: 'user-author', displayName: 'Author' },
+      body: 'pushed a fix',
+      occurredAt: new Date('2030-01-01T00:03:00.000Z'),
+    });
+
+    const page = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    return Object.fromEntries(
+      (page.items as { kind: string; target: { kind: string; board?: string } }[]).map(entry => {
+        expect(entry.target.kind).toBe('work-item');
+        return [entry.kind, entry.target.board];
+      }),
+    );
+  }
+
+  const everyKind = (board: string) => ({
+    'automation-proposed': board,
+    'automation-failed': board,
+    mention: board,
+    activity: board,
+  });
+
+  it('links to a custom board the card was placed on', async () => {
+    const item = await seedCard({ board: 'release', externalSource: null });
+    expect(await targetBoards(item)).toEqual(everyKind('release'));
+  });
+
+  it('links a pull request on the Review board to Review', async () => {
+    const item = await seedCard({
+      board: 'review',
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:12' },
+    });
+    expect(await targetBoards(item)).toEqual(everyKind('review'));
+  });
+
+  it('links a GitLab merge request with no stored board to Review', async () => {
+    const item = await seedCard({
+      board: null,
+      externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: 'gitlab-mr:17' },
+    });
+    expect(await targetBoards(item)).toEqual(everyKind('review'));
+  });
+
+  it('links a plain card with no stored board to Work', async () => {
+    const item = await seedCard({ board: null, externalSource: null });
+    expect(item.board).toBeNull();
+    expect(await targetBoards(item)).toEqual(everyKind('work'));
   });
 });

@@ -25,7 +25,13 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines, createSharedAgent } from '../aimock-scenario';
+import {
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  createSharedAgent,
+  anyToolResult,
+} from '../aimock-scenario';
 
 const INTERJECTION = 'Interjection while active';
 const SECOND_INTERJECTION = 'Second interjection while active';
@@ -74,7 +80,7 @@ describeForAllEngines('AIMock scenario: signal delivery into an active run', eng
         // Turn 1: call the tool (the interjection cannot be in this request —
         // it is sent during the tool execution that this turn triggers).
         llm.on(
-          { endpoint: 'chat', hasToolResult: false },
+          { endpoint: 'chat', predicate: req => !anyToolResult(req) },
           { toolCalls: [{ id: 'call_work', name: 'do_work', arguments: {} }] },
         );
         // Any request that has seen the interjection answers it.
@@ -86,8 +92,7 @@ describeForAllEngines('AIMock scenario: signal delivery into an active run', eng
         llm.on(
           {
             endpoint: 'chat',
-            hasToolResult: true,
-            predicate: req => !JSON.stringify(req).includes(INTERJECTION),
+            predicate: req => anyToolResult(req) && !JSON.stringify(req).includes(INTERJECTION),
           },
           { content: 'pre-drain response' },
         );
@@ -148,7 +153,7 @@ describeForAllEngines('AIMock scenario: signal delivery into an active run', eng
       stopWhen: stepCountIs(5),
       fixtures: llm => {
         llm.on(
-          { endpoint: 'chat', hasToolResult: false },
+          { endpoint: 'chat', predicate: req => !anyToolResult(req) },
           { toolCalls: [{ id: 'call_work', name: 'do_work', arguments: {} }] },
         );
         llm.on(
@@ -158,8 +163,7 @@ describeForAllEngines('AIMock scenario: signal delivery into an active run', eng
         llm.on(
           {
             endpoint: 'chat',
-            hasToolResult: true,
-            predicate: req => !JSON.stringify(req).includes(SECOND_INTERJECTION),
+            predicate: req => anyToolResult(req) && !JSON.stringify(req).includes(SECOND_INTERJECTION),
           },
           { content: 'pre-drain response' },
         );

@@ -3,15 +3,13 @@ import { lstat, mkdtemp, readFile, readdir, readlink, rm, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { BundlerConfig } from '@mastra/core/bundler';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
-import {
-  EXPERIMENT_DATASET_CANONICALIZATION_VERSION,
-  EXPERIMENT_WORKER_PROTOCOL_VERSION,
-  type ExperimentWorkerBuildIdentity,
-} from './runtime.js';
+import { EXPERIMENT_DATASET_CANONICALIZATION_VERSION, EXPERIMENT_WORKER_PROTOCOL_VERSION } from './runtime.js';
+import type { ExperimentWorkerBuildIdentity } from './runtime.js';
 
 export { EXPERIMENT_DATASET_CANONICALIZATION_VERSION, EXPERIMENT_WORKER_PROTOCOL_VERSION } from './runtime.js';
 
@@ -96,8 +94,9 @@ export class ExperimentBundler extends Bundler {
     outputDirectory: string,
     rootDir?: string,
     pnpmOverrides?: Record<string, string>,
+    pnpmWorkspaceSettings?: BundlerConfig['pnpmWorkspaceSettings'],
   ): Promise<void> {
-    await super.installDependencies(outputDirectory, rootDir, pnpmOverrides);
+    await super.installDependencies(outputDirectory, rootDir, pnpmOverrides, pnpmWorkspaceSettings);
     await removePnpmInstallMetadata(join(outputDirectory, this.outputDir));
   }
 

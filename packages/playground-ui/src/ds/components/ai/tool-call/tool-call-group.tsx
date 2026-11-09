@@ -16,6 +16,7 @@ import {
   ActivityTrigger,
 } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { Metadata } from '@/ds/components/Metadata';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 
@@ -46,7 +47,7 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
         <ActivityHeader>
           <ActivityLeading>{leading}</ActivityLeading>
           <ActivityIcon>
-            <FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-placeholder" />
+            <FoldVertical size={14} aria-hidden className="text-placeholder" />
           </ActivityIcon>
           <ActivityLabel>{steps.length} steps</ActivityLabel>
           {live && live.description ? (
@@ -92,30 +93,31 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
     succeeded > 0 && `${succeeded} OK`,
     failed > 0 && `${failed} failed`,
     incomplete > 0 && `${incomplete} incomplete`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  ].filter((part): part is string => typeof part === 'string');
 
   return (
     <>
       {errorIndicator}
       <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
-        {summary}
+        <Metadata>
+          {summary.map(part => (
+            <Metadata.Item key={part}>{part}</Metadata.Item>
+          ))}
+        </Metadata>
       </Txt>
     </>
   );
 }
 
 function GroupKinds({ steps }: { steps: ToolCallGroupStep[] }) {
-  const iconByLabel = new Map(
-    steps.map(step => presentTool(step.toolName, step.args)).map(({ label, icon }) => [label, icon]),
-  );
-  const kinds = [...iconByLabel].slice(0, MAX_KIND_GLYPHS);
+  const presented = steps.map(step => presentTool(step.toolName, step.args));
+  const labels = new Set(presented.map(({ label }) => label));
+  const glyphs = [...new Map(presented.map(({ pose, icon }) => [pose, icon]))].slice(0, MAX_KIND_GLYPHS);
 
   return (
-    <ActivitySummary role="img" aria-label={kinds.map(([label]) => label).join(', ')} className="shrink-0 gap-1.5">
-      {kinds.map(([label, Kind]) => (
-        <Kind key={label} size={12} strokeWidth={1.75} className="text-placeholder" />
+    <ActivitySummary role="img" aria-label={[...labels].join(', ')} className="shrink-0 gap-1.5">
+      {glyphs.map(([pose, Kind]) => (
+        <Kind key={pose} size={12} className="text-placeholder" />
       ))}
     </ActivitySummary>
   );

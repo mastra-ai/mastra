@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { IntakeFeed, IntakeSource } from '../boardCandidates';
-import { SKELETON_ROW_CLASS } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardKind } from '../boardStages';
 import type { BoardStageId } from '../stages';
 import { BoardColumnEmptyState } from './BoardColumnEmptyState';
 import { IntakeColumnExtras } from './IntakeColumnExtras';
 import { IntakeFeedNotice } from './IntakeFeedNotice';
+import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 
 export function BoardStageCards({
   stage,
@@ -46,9 +45,7 @@ export function BoardStageCards({
     <>
       {composer}
       {children}
-      {loading && (
-        <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName={SKELETON_ROW_CLASS[layout]} />
-      )}
+      {loading && <BoardItemsSkeleton label={`Loading ${stage.label} column`} layout={layout} />}
       {showEmptyState && (
         <BoardColumnEmptyState
           stage={stage.id}

@@ -1,14 +1,23 @@
 import { useMemo } from 'react';
 
-import { useFactoryDecisionAction, useFactoryDecisionStatus } from '../../../../hooks/useFactoryDecisions';
+import {
+  factoryDecisionStatusQueryOptions,
+  useFactoryDecisionAction,
+  useFactoryDecisionStatus,
+} from '../../../../hooks/useFactoryDecisions';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/decisions';
 
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
+/** The decisions every board and the session list show on their cards. */
+export function boardDecisionsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return factoryDecisionStatusQueryOptions(baseUrl, factoryProjectId, BOARD_STATUSES);
+}
+
 /** Per card: the run proposed on it, and the effect already in flight or failed behind it. */
 export function useItemDecisions(factoryProjectId: string | undefined) {
   const status = useFactoryDecisionStatus(factoryProjectId, BOARD_STATUSES);
-  return useMemo(() => {
+  const byItem = useMemo(() => {
     const proposalByItem = new Map<string, FactoryDecisionSummary>();
     const effectByItem = new Map<string, FactoryDecisionSummary>();
     for (const decision of status.data?.decisions ?? []) {
@@ -18,6 +27,7 @@ export function useItemDecisions(factoryProjectId: string | undefined) {
     }
     return { proposalByItem, effectByItem };
   }, [status.data]);
+  return { ...byItem, isPending: status.isPending };
 }
 
 /** The board's decisions with the actions a person takes on them. */

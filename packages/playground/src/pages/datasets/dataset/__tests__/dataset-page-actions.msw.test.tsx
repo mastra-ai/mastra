@@ -118,6 +118,30 @@ describe('DatasetPage', () => {
       expect(runButton.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
+    it('places the Schema action right after "Experiments"', async () => {
+      mockDataset(dataset, items);
+      renderPage();
+      await screen.findByRole('button', { name: /new experiment/i });
+
+      const header = getPageHeader();
+      const link = within(header).getByRole('link', { name: 'Experiments' });
+      const schemaButton = within(header).getByRole('button', { name: 'Schema' });
+      const menuButton = within(header).getByRole('button', { name: 'Dataset actions menu' });
+
+      expect(link.compareDocumentPosition(schemaButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(schemaButton.compareDocumentPosition(menuButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('opens the dataset schema dialog from the Schema action', async () => {
+      mockDataset(dataset, items);
+      renderPage();
+      await screen.findByRole('button', { name: /new experiment/i });
+
+      fireEvent.click(within(getPageHeader()).getByRole('button', { name: 'Schema' }));
+
+      expect(await screen.findByRole('dialog', { name: 'Dataset schema' })).toBeDefined();
+    });
+
     it('does not show when the dataset was created in the page header', async () => {
       mockDataset(dataset, items);
       renderPage();
@@ -145,12 +169,13 @@ describe('DatasetPage', () => {
   });
 
   describe('when the dataset is new and empty', () => {
-    it('only keeps the dataset menu in the header', async () => {
+    it('only keeps the Schema action and the dataset menu in the header', async () => {
       mockDataset(newDataset, []);
       renderPage();
       await screen.findByText('No items yet');
 
       const header = getPageHeader();
+      expect(within(header).getByRole('button', { name: 'Schema' })).toBeDefined();
       expect(within(header).getByRole('button', { name: 'Dataset actions menu' })).toBeDefined();
       expect(within(header).queryByText(/^Created/)).toBeNull();
       expect(screen.queryByRole('button', { name: /new experiment/i })).toBeNull();

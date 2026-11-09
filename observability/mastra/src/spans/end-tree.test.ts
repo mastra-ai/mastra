@@ -71,8 +71,23 @@ describe('Span.endTree', () => {
     const step = root.createChildSpan({ type: SpanType.WORKFLOW_STEP, name: 'step' });
     const tool = step.createChildSpan({ type: SpanType.TOOL_CALL, name: 'tool' });
 
-    root.endTree({ attributes: { status: 'canceled' } });
+    root.endTree({
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      attributes: { status: 'canceled' },
+      metadata: { source: 'caller' },
+      output: { canceled: true },
+    });
 
+    expect(root.outcome).toBe('abort');
+    for (const span of [step, tool]) {
+      expect(span.exportSpan()).toMatchObject({
+        outcome: 'interrupted',
+        stopReason: 'caller_cancelled',
+        metadata: { source: 'caller' },
+        output: { canceled: true },
+      });
+    }
     expect(root.attributes?.status).toBe('canceled');
     expect(step.attributes?.status).toBe('canceled');
     expect((tool.attributes as Record<string, unknown>)?.status).toBe('canceled');

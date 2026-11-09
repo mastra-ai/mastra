@@ -121,13 +121,15 @@ function createState() {
     },
   };
 
+  const controller = {
+    listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
+    session,
+  };
   return {
     options: {},
     session,
-    controller: {
-      listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
-      session,
-    },
+    controller,
+    local: { controller, session },
     statusLine: { setText },
     memoryStatusLine: { setText: memorySetText },
     editor: {},
@@ -176,6 +178,30 @@ describe('updateStatusLine', () => {
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('3 queued');
     expect(state.memoryStatusLine.setText).toHaveBeenCalledWith('');
+  });
+
+  it('right-aligns the mouse mode indicator only when the setting is on', () => {
+    const state = createState();
+    updateStatusLine(state);
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).not.toContain('mouse mode');
+
+    let enabled = false;
+    let active = false;
+    state.mouseController = { isInputMouseModeEnabled: () => enabled, isInputMouseMode: () => active };
+    updateStatusLine(state);
+    expect(state.statusLine.setText.mock.calls.at(-1)?.[0]).not.toContain('mouse mode');
+
+    enabled = true;
+    updateStatusLine(state);
+    const off = state.statusLine.setText.mock.calls.at(-1)?.[0] as string;
+    expect(off.endsWith('mouse mode: off')).toBe(true);
+    expect(off.length).toBe(199);
+
+    active = true;
+    updateStatusLine(state);
+    const auto = state.statusLine.setText.mock.calls.at(-1)?.[0] as string;
+    expect(auto.endsWith('mouse mode: auto')).toBe(true);
+    expect(auto.length).toBe(199);
   });
 
   it('omits the queued count when nothing is queued', () => {

@@ -1,20 +1,29 @@
 import { defineConfig } from 'oxlint';
 import rootConfig from '../oxlint.config.ts';
 
-export default defineConfig({
-  extends: [rootConfig],
-  rules: {
-    'no-restricted-imports': [
-      'error',
+const noCoreImports = [
+  'error',
+  {
+    patterns: [
       {
-        patterns: [
-          {
-            group: ['@mastra/core', '@mastra/core/*'],
-            message:
-              'Voice packages must import shared voice/core primitives from @internal/voice or @internal/core, not @mastra/core.',
-          },
-        ],
+        group: ['@mastra/core', '@mastra/core/*'],
+        message:
+          'Voice packages must import shared voice/core primitives from @internal/voice or @internal/core, not @mastra/core.',
       },
     ],
   },
+];
+
+export default defineConfig({
+  extends: [rootConfig],
+  rules: {
+    'no-restricted-imports': noCoreImports,
+  },
+  overrides: [
+    {
+      // Also in src test files, which the root config's test-file override exempts from top-level rules.
+      files: ['*/src/**/*.{ts,tsx,js,jsx}'],
+      rules: { 'no-restricted-imports': noCoreImports },
+    },
+  ],
 });

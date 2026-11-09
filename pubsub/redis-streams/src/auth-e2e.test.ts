@@ -127,7 +127,7 @@ async function fireStartAsync(
   }
 }
 
-describe.sequential('step-execution endpoint auth (end-to-end)', () => {
+describe('step-execution endpoint auth (end-to-end)', { concurrent: false }, () => {
   let pair: Pair | undefined;
 
   beforeAll(async () => {

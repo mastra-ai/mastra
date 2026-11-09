@@ -9,17 +9,16 @@ import {
 
 interface AgentControllerRunMutationArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   baseUrl?: string;
   enabled?: boolean;
 }
 
-function useSessionInvalidation({ agentControllerId, resourceId, scope }: AgentControllerRunMutationArgs) {
+function useSessionInvalidation({ agentControllerId, sessionId }: AgentControllerRunMutationArgs) {
   const queryClient = useQueryClient();
   return async () => {
     await queryClient.invalidateQueries({
-      queryKey: queryKeys.agentControllerSession(agentControllerId, resourceId, scope),
+      queryKey: queryKeys.agentControllerSession(agentControllerId, sessionId),
       exact: true,
     });
   };

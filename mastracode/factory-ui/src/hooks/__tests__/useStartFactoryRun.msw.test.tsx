@@ -4,9 +4,12 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { useStartFactoryRun, type StartFactoryRunWorkItem } from '../useStartFactoryRun';
+import { providerFactsCard } from '../../ui/__tests__/fixtures/providerFactsCard';
+import { useStartFactoryRun } from '../useStartFactoryRun';
+import type { StartFactoryRunWorkItem } from '../useStartFactoryRun';
 
 const FACTORY_ID = 'fp-1';
 
@@ -28,23 +31,21 @@ function stubEndpoints(
   let started: Record<string, unknown> | undefined;
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: repositories.map(repository => ({
-          id: `conn-${repository.id}`,
-          installationId: `inst-${repository.id}`,
-          integrationId: repository.provider ?? 'github',
-          repositories: [
-            {
-              id: repository.id,
-              branch: 'main',
-              sandboxWorkdir: '/repo',
-              repository: { externalId: repository.externalId, slug: repository.slug, defaultBranch: 'main' },
-            },
-          ],
-        })),
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: repositories.map(repository =>
+              listedRepository(repository.id, repository.slug, {
+                integrationId: repository.provider ?? 'github',
+                externalId: repository.externalId,
+                branch: 'main',
+                sandboxWorkdir: '/repo',
+              }),
+            ),
+          },
+        ],
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
@@ -101,7 +102,7 @@ describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provi
         { id: 'repo-1', externalId: '101', slug: 'acme/renamed' },
       ],
     ],
-  ])('starts a renamed repository card by its provider id with %s', async (_label, repositories) => {
+  ])('starts a renamed repository card by its normalized provider id with %s', async (_label, repositories) => {
     const providerWorkItem: StartFactoryRunWorkItem = {
       ...workItem,
       source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
@@ -109,7 +110,14 @@ describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provi
       metadata: {
         number: 7,
         repository: 'acme/old-name',
-        ...(provider === 'github' ? { githubRepositoryId: 101 } : { gitlabProjectId: '101' }),
+        githubRepositoryId: 202,
+        gitlabProjectId: '202',
+        labels: ['stale-label'],
+        state: 'closed',
+      },
+      workItem: {
+        ...providerFactsCard.workItem,
+        metadata: provider === 'github' ? { githubRepositoryId: 101 } : { gitlabProjectId: '101' },
       },
     };
     const calls = stubEndpoints(repositories.map(repository => ({ ...repository, provider })));
@@ -123,9 +131,8 @@ describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provi
     });
 
     expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
-    expect(calls.patches).toEqual([{ metadata: { ...providerWorkItem.metadata, repository: 'acme/renamed' } }]);
-    const startedWorkItem = calls.started()?.workItem as { input: { metadata: Record<string, unknown> } };
-    expect(startedWorkItem.input.metadata.repository).toBe('acme/renamed');
+    expect(calls.patches).toEqual([{ metadata: { repository: 'acme/renamed' } }]);
+    expect(calls.started()).toHaveProperty('workItem.input.metadata', { repository: 'acme/renamed' });
   });
 });
 

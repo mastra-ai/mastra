@@ -3,17 +3,24 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import { needsApproval } from '../rules/types.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
+import { sessionActivity } from './deliver.js';
+import type { FactorySessionActivity } from './deliver.js';
+import type { FactoryMessaging } from './messaging-tools.js';
 import type { FactoryToolScope } from './scope.js';
 
 export const MAX_TEXT = 600;
@@ -24,7 +31,7 @@ const DEFAULT_LIST = 25;
 export interface FactoryReadToolDependencies {
   workItems: Pick<
     WorkItemsStorage,
-    | 'list'
+    | 'listShared'
     | 'getForProject'
     | 'listRunBindings'
     | 'listDeferredDecisions'
@@ -35,7 +42,10 @@ export interface FactoryReadToolDependencies {
   >;
   comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
+  /** The live controller, for whether a session is mid-run and when it last moved; absent before the mount is up. */
+  messaging?: () => Promise<Pick<FactoryMessaging, 'controller'> | null>;
 }
 
 export function truncate(text: string, max: number): string {
@@ -49,12 +59,15 @@ function iso(value: Date | string | null | undefined): string | null {
 }
 
 /** The number a person sees on the card: the issue or PR number the item was filed from. */
-export function workItemNumber(item: Pick<WorkItemRow, 'metadata'>): number | null {
-  const number = item.metadata?.number ?? item.metadata?.githubIssueNumber ?? item.metadata?.githubPullRequestNumber;
+export function workItemNumber(item: Pick<Card, 'workItem'>): number | null {
+  const number =
+    item.workItem.metadata?.number ??
+    item.workItem.metadata?.githubIssueNumber ??
+    item.workItem.metadata?.githubPullRequestNumber;
   return typeof number === 'number' ? number : null;
 }
 
-export function workItemStage(item: Pick<WorkItemRow, 'stages'>): string {
+export function workItemStage(item: Pick<Card, 'stages'>): string {
   return item.stages.join('+');
 }
 
@@ -70,17 +83,18 @@ export const workItemRefSchema = z
 
 /** Resolve `<uuid>` or `#123` to an item in this Factory only. Pass a ref validated by `workItemRefSchema`. */
 export async function findWorkItem(
-  workItems: Pick<WorkItemsStorage, 'list' | 'getForProject'>,
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'getForProject'>,
   scope: Pick<FactoryToolScope, 'orgId' | 'factoryProjectId'>,
   ref: string,
-): Promise<WorkItemRow | null> {
+): Promise<Card | null> {
   const trimmed = ref.trim();
   const number = /^#?(\d+)$/.exec(trimmed)?.[1];
   if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
-  const items = await workItems.list(scope);
+  const items = await workItems.listShared(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
   // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
-  return matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0] ?? null;
+  const match = matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0];
+  return match ? structuredClone(match) : null;
 }
 
 export function workItemNotFound(ref: string): Error {
@@ -92,13 +106,25 @@ function activeWorker(bindings: FactoryRunBindingRecord[], itemId: string) {
   return binding ? { role: binding.role, sessionId: binding.sessionId } : null;
 }
 
-function summarizeItem(item: WorkItemRow, bindings: FactoryRunBindingRecord[]) {
+/** The card on its Factory board; null when the server has no public URL configured. */
+function workItemUrl(item: Card) {
+  return (
+    factoryWorkItemUrl({
+      factoryProjectId: item.factoryProjectId,
+      board: boardForWorkItem(item),
+      workItemId: item.id,
+    }) ?? null
+  );
+}
+
+function summarizeItem(item: Card, bindings: FactoryRunBindingRecord[]) {
   return {
     id: item.id,
     number: workItemNumber(item),
     title: truncate(item.title, MAX_TEXT),
     board: boardForWorkItem(item),
     stage: workItemStage(item),
+    url: workItemUrl(item),
     activeWorker: activeWorker(bindings, item.id),
     requestedBy: item.createdBy,
     updatedAt: iso(item.updatedAt),
@@ -124,9 +150,17 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = 
   };
 }
 
-/** Held: a non-bug item triage parked until a person accepts it. */
-function isHeld(item: WorkItemRow): boolean {
-  return item.stages.includes('triage') && !!item.triageType && item.triageType !== 'bug' && !item.acceptedAt;
+const PAST_TRIAGE = new Set(['planning', 'execute', 'review']);
+
+/**
+ * Held: a Work card triage left in Intake (or whose source asks for approval), until a person
+ * moves it on. A card that has been past Triage since (parked by self-review, or dragged back)
+ * resumes instead, matching the board's held state.
+ */
+function isHeld(item: Card): boolean {
+  if (boardForWorkItem(item) !== 'work' || item.stages[0] !== 'intake') return false;
+  if (needsApproval(item)) return true;
+  return item.sessions.triage !== undefined && !item.stageHistory.some(entry => PAST_TRIAGE.has(entry.stage));
 }
 
 const listInputSchema = z
@@ -162,7 +196,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
       inputSchema: listInputSchema,
       execute: async input => {
         const [items, bindings, followed] = await Promise.all([
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
           input.subscribed === undefined
             ? undefined
@@ -202,7 +236,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_inspect_work_item: createTool({
       id: 'factory_inspect_work_item',
       description:
-        'Everything the Factory knows about one work item: stage history, sessions by role, decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
+        'Everything the Factory knows about one work item: stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
       inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await findWorkItem(deps.workItems, scope, workItem);
@@ -212,29 +246,50 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: item.id }),
           deps.audit.list({ ...project, limit: 200 }),
           deps.comments.listRecent({ ...project, workItemId: item.id, limit: 10 }),
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
           deps.workItems.listWorkItemSubscribers({ orgId: scope.orgId, workItemId: item.id }),
         ]);
         const itemDecisions = decisions.slice(-MAX_LIST);
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          deps.boards,
+          await toBoardSource(deps.boards).load(project),
           project,
           itemDecisions.filter(decision => decision.status === 'failed'),
         );
-        const labels = Array.isArray(item.metadata?.labels)
-          ? item.metadata.labels.filter((label): label is string => typeof label === 'string').slice(0, MAX_LIST)
+        const labels = Array.isArray(item.workItem.labels)
+          ? item.workItem.labels.filter((label): label is string => typeof label === 'string').slice(0, MAX_LIST)
           : [];
         const parent = item.parentWorkItemId
           ? all.find(candidate => candidate.id === item.parentWorkItemId)
           : undefined;
         const children = all.filter(candidate => candidate.parentWorkItemId === item.id);
+        const controller = (await deps.messaging?.())?.controller;
+        const activity = async (sessionId: string, threadId: string): Promise<FactorySessionActivity | null> =>
+          controller ? sessionActivity(controller, sessionId, threadId) : null;
+        const sessions = await Promise.all(
+          Object.entries(item.sessions).map(async ([role, ref]) => ({
+            role,
+            sessionId: ref.sessionId,
+            threadId: ref.threadId,
+            url:
+              factorySessionUrl({
+                factoryProjectId: item.factoryProjectId,
+                sessionId: ref.sessionId,
+                threadId: ref.threadId,
+              }) ?? null,
+            startedBy: ref.startedBy,
+            active: bindings.some(
+              binding => binding.role === role && binding.sessionId === ref.sessionId && binding.status === 'active',
+            ),
+            // `running` with an old `lastActivityAt` is a stuck run; `running` with a recent one is a long one.
+            ...((await activity(ref.sessionId, ref.threadId)) ?? { running: null, lastActivityAt: null }),
+          })),
+        );
         return {
           item: {
             ...summarizeItem(item, bindings),
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
-            url: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
-            triageType: item.triageType,
+            sourceUrl: typeof item.workItem.url === 'string' ? item.workItem.url : null,
             revision: item.revision,
           },
           labels,
@@ -244,15 +299,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             exitedAt: entry.exitedAt ?? null,
             by: entry.by,
           })),
-          sessions: Object.entries(item.sessions).map(([role, ref]) => ({
-            role,
-            sessionId: ref.sessionId,
-            threadId: ref.threadId,
-            startedBy: ref.startedBy,
-            active: bindings.some(
-              binding => binding.role === role && binding.sessionId === ref.sessionId && binding.status === 'active',
-            ),
-          })),
+          sessions,
           decisions: itemDecisions.map(decision => summarizeDecision(decision, overtaken.has(decision.id))),
           audit: audit.events
             .filter(event => event.targets.some(target => target.type === 'work_item' && target.id === item.id))
@@ -284,14 +331,14 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_list_attention: createTool({
       id: 'factory_list_attention',
       description:
-        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, and items triage is holding until someone accepts them.',
+        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, and Work cards triage left in Intake for a person to move on.',
       inputSchema: z.object({ limit: z.number().int().min(1).max(MAX_LIST).optional() }).strict(),
       execute: async ({ limit = DEFAULT_LIST }) => {
         const [decisions, items] = await Promise.all([
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
             statuses: ['failed', 'proposed'],
           }),
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
         ]);
         const itemsById = new Map(items.map(item => [item.id, item]));
         const failed = decisions.filter(decision => decision.status === 'failed');
@@ -312,6 +359,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             workItemId,
             number: item ? workItemNumber(item) : null,
             title: item ? truncate(item.title, MAX_TEXT) : null,
+            url: item ? workItemUrl(item) : null,
           };
         };
         const allIncidents = [...groups.values()].sort((a, b) => b.decisions.length - a.decisions.length);
@@ -321,7 +369,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         // Check exactly the decisions this call returns, so every canRetry is real.
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          deps.boards,
+          await toBoardSource(deps.boards).load(project),
           project,
           incidents.flatMap(group => group.shown),
         );
@@ -345,7 +393,6 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             .map(decision => ({ ...summarizeDecision(decision), ...ref(decision.workItemId) })),
           held: held.slice(0, limit).map(item => ({
             ...ref(item.id),
-            triageType: item.triageType,
             stage: workItemStage(item),
           })),
           truncated:

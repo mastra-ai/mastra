@@ -897,6 +897,8 @@ Manages authentication for Mastra platform. Credentials are stored in `~/.mastra
 
 Opens a browser for login and stores the credentials locally.
 
+When browser sign-in is needed and there's no interactive terminal (in CI, when input or output is piped, or in an agent's shell), the command first prints how to authenticate headless shells, then still waits for browser sign-in. On the same machine, you can run `mastra auth login` once in your own terminal so later commands reuse the saved session. In CI or on another machine, set `MASTRA_API_TOKEN` and `MASTRA_ORG_ID` instead. Create the token from a signed-in terminal with [`mastra auth tokens create`](#mastra-auth-tokens-create) or in the dashboard. If the browser sign-in wait times out, the command exits with status 1. If `MASTRA_API_TOKEN` is already set in a non-interactive shell, the command skips browser sign-in: it verifies the token and checks that an organization is selected (from `MASTRA_ORG_ID` or saved credentials), then exits with status 0. If either check fails, it exits with status 1 and names what's missing.
+
 ### `mastra auth logout`
 
 Removes stored credentials. If `MASTRA_API_TOKEN` is still set in the environment, the CLI warns that it will continue to be used.
@@ -923,6 +925,14 @@ Creates a new API token. The secret is displayed once and can't be retrieved aga
 
 ```bash
 mastra auth tokens create <name>
+```
+
+Use `--permission` to grant the token extra access. The available permission is `databases:write`, which lets the token create and delete managed databases, for example from CI. Only organization admins can create tokens with permissions. Repeat the flag to grant more than one.
+
+If the platform creates the token without a requested permission, the command revokes that token and exits with an error. If the revoke also fails, the error shows the `mastra auth tokens revoke` command to run.
+
+```bash
+mastra auth tokens create ci --permission databases:write
 ```
 
 #### `mastra auth tokens revoke`
@@ -955,7 +965,7 @@ Connects a provider to the project. When the organization already has connection
 
 OAuth providers open the provider's consent screen in your browser and print its URL if you need to open it manually. API key and Basic auth providers prompt for credentials in the terminal and verify them before completing the connection. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
-Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. See [provider setup](/docs/mastra-platform/connect/providers) for API keys and required permissions.
+Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. Each provider's [integration page](/docs/mastra-platform/connect#providers) lists its API key and permission requirements.
 
 Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming. Setting a display name requires the organization admin role; if naming fails, the connection remains active.
 
@@ -1257,6 +1267,13 @@ Errors are written to `stderr` as JSON and return a non-zero exit code:
   }
 }
 ```
+
+The exit code reflects whether the request succeeded, not the contents of the response:
+
+- `0`: The server returned a successful response. This includes empty results and payloads that report existing state, such as a tool result saying a record already exists. A tool that returns an object with an `error` field still exits `0`, so check the `data` payload when the tool reports its own failures.
+- `1`: The request failed. This includes an unreachable server, invalid JSON input, a missing resource, or a tool that throws an error.
+
+If the command reading the output exits early, as with `| head`, the exit code still reflects whether the request succeeded.
 
 ### Target resolution
 
@@ -1661,13 +1678,13 @@ Inspect the command with:
 mastra api trace query --help
 ```
 
-For supported fields, operators, and request options, see [Trace queries](/reference/observability/tracing/trace-query). For a local Mastra server, you can also inspect its request and response schemas:
+For supported fields, operators, and request options, see [Query traces](/reference/observability/tracing/advanced-queries#query-traces). For a local Mastra server, you can also inspect its request and response schemas:
 
 ```bash
 mastra api --url http://localhost:4111 trace query --schema
 ```
 
-Mastra Platform doesn't currently expose the schema endpoint used by `--schema`. To find fields and values recorded in your project, use [field and value discovery](/reference/observability/tracing/trace-query#discover-fields-and-values).
+Mastra Platform doesn't currently expose the schema endpoint used by `--schema`. To find fields and values recorded in your project, use [field and value discovery](/reference/observability/tracing/advanced-queries#discover-fields-and-values).
 
 The response remains nested under `data` to preserve cursor pagination:
 
@@ -1680,7 +1697,7 @@ The response remains nested under `data` to preserve cursor pagination:
 }
 ```
 
-Each invocation makes one query. Pass a non-null `data.page.next` value back as `page.after` in the next query. See [Pagination and errors](/reference/observability/tracing/trace-query#pagination-and-errors) for pagination modes, cursor handling, and errors.
+Each invocation makes one query. Pass a non-null `data.page.next` value back as `page.after` in the next query. See [Pagination and errors](/reference/observability/tracing/advanced-queries#pagination-and-errors) for pagination modes, cursor handling, and errors.
 
 To load a numbered page and then poll, keep the same time range and predicate in both requests:
 
@@ -1691,7 +1708,68 @@ mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"20
 
 Replace `CURSOR_FROM_NUMBERED_RESPONSE` with `data.deltaCursor` from the first response. Delta results remain under `data`, with `traces`, `delta: { limit, hasMore }`, and `deltaCursor`. Merge traces by `traceId`, retain each returned cursor, and continue immediately while `data.delta.hasMore` is `true`. Don't combine delta mode with `page`, `pagination`, or `orderBy`.
 
-Omitting `after` establishes a cursor and returns no historical traces. Changing the time range or predicate requires a fresh numbered request. See [Delta polling limitations](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) before using this workflow to maintain a local trace list.
+Omitting `after` establishes a cursor and returns no historical traces. Changing the time range or predicate requires a fresh numbered request. See [Delta polling limitations](/reference/observability/tracing/advanced-queries#poll-after-loading-a-numbered-page) before using this workflow to maintain a local trace list.
+
+#### `mastra api trace aggregate`
+
+Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group, or per group and non-empty time bucket when `interval` is set. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+
+```bash
+mastra api trace aggregate <input>
+mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["count","errorRate"]}'
+```
+
+Set `interval` to `1m`, `5m`, `15m`, `1h`, or `1d` to split each group into time buckets:
+
+```bash
+mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}},"interval":"1d","measures":["count","duration.p95"]}'
+```
+
+For dimensions, measures, and request options, see [Aggregate traces](/reference/client-js/observability#aggregate-traces). Run `mastra api trace aggregate --help` for more examples.
+
+The response stays nested under `data` so `truncated` is preserved. `truncated` is `true` when more groups matched than `limit`:
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "dimensions": { "entityName": "weather-agent" },
+        "measures": { "count": 42, "errorRate": 0.05 }
+      }
+    ],
+    "truncated": false
+  }
+}
+```
+
+Servers whose observability store doesn't support trace aggregation return `501`. The CLI prints it like other request failures, as an `HTTP_ERROR` with the server response in `error.details.body`.
+
+#### `mastra api span query`
+
+Queries completed observability spans across traces, including agent runs and tool calls nested inside other traces. The inline JSON input is required and uses the same request as [`querySpans()`](/reference/observability/tracing/advanced-queries#query-spans). Its `where` predicate filters span fields directly. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+
+```bash
+mastra api span query <input>
+mastra api span query '{"timeRange":{"from":"2026-08-07T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},{"op":"eq","left":{"path":"status"},"right":{"literal":"error"}}]}}'
+```
+
+The response stays nested under `data` as `{ "spans": [], "page": { "next": "opaque-cursor" } }`. Pass a non-null `data.page.next` value back as `page.after` in the next query, keeping the same time range, predicate, and ordering. Run `mastra api span query --help` for more examples.
+
+Servers whose observability store doesn't support span queries return `501`. Filters on identity, context, and parent or root entity fields return `422` when the store doesn't support them. Check `spanQueryContextFields` in the server's observability capabilities before using them. The CLI prints both as an `HTTP_ERROR` with the server response in `error.details.body`.
+
+#### `mastra api span aggregate`
+
+Groups the spans selected by a time range and optional `where` predicate, and returns one row of measures per group, or per group and non-empty time bucket when `interval` is set. It accepts the same fixed measures, `interval`, `having`, `orderBy`, and `limit` as `trace aggregate`. Its `where` filters spans directly, and its dimensions and `countDistinct` fields follow the span contract. It groups by span fields such as `spanType`, `entityName`, `status`, and `rootEntityName`.
+
+```bash
+mastra api span aggregate <input>
+mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},"groupBy":["entityName"],"measures":["count","errorRate","duration.p95"],"orderBy":{"field":"errorRate","direction":"desc"},"limit":10}'
+```
+
+Token and cost measures count usage on the span that recorded it, usually a `model_generation` span. They aren't added to parent spans such as `agent_run`. For span dimensions, measures, and limits, see [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans). Run `mastra api span aggregate --help` for more examples.
+
+Like `trace aggregate`, the command prints `rows` and `truncated` under `data`, and if the observability store can't aggregate spans, the CLI prints the server's `501` response as an `HTTP_ERROR`.
 
 #### `mastra api trace get`
 

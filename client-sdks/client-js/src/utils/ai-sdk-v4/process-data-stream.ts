@@ -1,6 +1,7 @@
 // Vendored from @ai-sdk/ui-utils@1.2.11 (Apache-2.0, Copyright Vercel, Inc.) to avoid depending on
 // @ai-sdk/provider-utils@2.x (GHSA-866g-f22w-33x8). Only the v4 data stream protocol pieces used by this package.
-import { type DataStreamPartType, parseDataStreamPart } from './data-stream-parts';
+import { parseDataStreamPart } from './data-stream-parts';
+import type { DataStreamPartType } from './data-stream-parts';
 
 const NEWLINE = '\n'.charCodeAt(0);
 

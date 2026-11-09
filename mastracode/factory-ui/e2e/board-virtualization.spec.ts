@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
 import { largeBoard, largeCandidatePage } from '../src/ui/__tests__/fixtures/largeBoard';
+import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
 const viewports = [
@@ -21,22 +22,12 @@ test.describe('Factory board virtualization', () => {
     server.use(
       http.get('*/auth/me', () => HttpResponse.json({ authenticated: true, authEnabled: false })),
       http.get('*/web/factory/projects', () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Large factory' }] }),
-      ),
-      http.get('*/web/factory/projects/fp-1/source-control-connections', () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
-              repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '/repo',
-                  repository: { slug: 'acme/app', defaultBranch: 'main' },
-                },
-              ],
+              id: 'fp-1',
+              name: 'Large factory',
+              repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
             },
           ],
         }),
@@ -70,6 +61,65 @@ test.describe('Factory board virtualization', () => {
         });
       },
     );
+  });
+
+  test('keeps the activity halo visible on the first and last list rows after expanding a group', async ({ page }) => {
+    server.use(
+      http.get('*/web/factory/projects/fp-1/work-items', () =>
+        HttpResponse.json({
+          workItems: largeBoard(2).map((item, index) => ({
+            ...item,
+            sessions: {
+              chat: {
+                sessionId: `session-${index}`,
+                threadId: `session-${index}`,
+                branch: 'fix/list-glow',
+                startedBy: 'user-1',
+              },
+            },
+          })),
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({
+          runs: [0, 1].map(index => ({
+            runId: `run-${index}`,
+            resourceId: `session-${index}`,
+            threadId: `session-${index}`,
+          })),
+        }),
+      ),
+    );
+    await page.goto('/factories/fp-1/work?item=large-1');
+    const halos = page.getByTestId('work-item-card').locator('.session-wick');
+    await expect(halos).toHaveCount(2);
+
+    // Check the actual clipping geometry, including the halo's 6px outset.
+    // Both the nested list viewport and the collapsible panel used to cut it off.
+    const clippedHalos = () =>
+      halos.evaluateAll(elements =>
+        elements.flatMap(element => {
+          const bounds = element.getBoundingClientRect();
+          for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+            const style = getComputedStyle(parent);
+            const clip = parent.getBoundingClientRect();
+            const clipsX =
+              style.overflowX !== 'visible' && (bounds.left - 6 < clip.left || bounds.right + 6 > clip.right);
+            const clipsY =
+              style.overflowY !== 'visible' && (bounds.top - 6 < clip.top || bounds.bottom + 6 > clip.bottom);
+            if (clipsX || clipsY) return [parent.className];
+          }
+          return [];
+        }),
+      );
+    await expect.poll(clippedHalos).toEqual([]);
+
+    const group = page.getByRole('button', { name: 'Triage, 2', exact: true });
+    await group.click();
+    await expect(halos.first()).toBeHidden();
+    await group.click();
+    await expect(halos.first()).toBeVisible();
+    await expect.poll(clippedHalos).toEqual([]);
   });
 
   for (const viewport of viewports) {
@@ -195,7 +245,7 @@ test.describe('Factory board virtualization', () => {
             }),
           );
           for (let index = 1; index < bounds.length; index++) {
-            expect(bounds[index]!.top).toBeGreaterThanOrEqual(bounds[index - 1]!.bottom);
+            expect(bounds[index].top).toBeGreaterThanOrEqual(bounds[index - 1].bottom);
           }
           await scroll.evaluate(element => {
             element.scrollTop = 0;
@@ -255,7 +305,7 @@ test.describe('Factory board virtualization', () => {
   }
 
   test.describe('when a card with open details is sorted out of the rendered range', () => {
-    test.use(viewports[0]!.use);
+    test.use(viewports[0].use);
     test('keeps the card mounted so its draft is there when the user scrolls back', async ({ page }) => {
       await page.goto('/factories/fp-1/work');
       await page

@@ -5,12 +5,13 @@ import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlSession,
-  type SourceControlSessionVisibility,
-  type SourceControlStorageHandle,
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type {
+  SourceControlSession,
+  SourceControlSessionVisibility,
+  SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import { legacyGithubWorkItemBranch } from '../work-item-branch.js';
 import { resolveEnvironmentRepositories } from './environment-repositories.js';
 import { seedSessionOrg } from './org-seed.js';
 
@@ -55,6 +56,7 @@ export interface SourceControlSessionLookup {
   /** Side sessions started by `originSessionId`, across every provider. */
   listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
   rename(args: { sessionId: string; title: string }): Promise<void>;
+  setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
   markFirstMessage(args: { sessionId: string }): Promise<void>;
   markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
 }
@@ -91,6 +93,7 @@ export function createSourceControlSessionLookup(
     listByOrigin: async args =>
       (await Promise.all(sourceControls.map(sourceControl => sourceControl.sessions.listByOrigin(args)))).flat(),
     rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
+    setOriginMuted: async args => (await resolve(args.sessionId))?.sourceControl.sessions.setOriginMuted(args),
     markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
     markFirstMeaningfulExec: async args =>
       (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMeaningfulExec(args),
@@ -284,13 +287,21 @@ export async function ensureFactorySourceSession(
   if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
+  // Prefer an existing current branch, then the legacy branch on this exact
+  // repository and owner. Never reuse another repository's same-number card.
+  const legacyBranch = legacyGithubWorkItemBranch(branch);
+  const lookup = { projectRepositoryId: resolved.projectRepositoryId, userId };
+  const existing = legacyBranch
+    ? ((await sourceControl.sessions.getForBranch({ ...lookup, branch })) ??
+      (await sourceControl.sessions.getForBranch({ ...lookup, branch: legacyBranch })))
+    : null;
   const session = await sourceControl.sessions.create({
     sessionId: args.sessionId ?? globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     factoryProjectId,
     orgId,
     userId,
-    branch,
+    branch: existing?.branch ?? branch,
     baseBranch: resolved.baseBranch,
     visibility: args.visibility ?? 'org',
     ...(args.origin ? { origin: args.origin } : {}),

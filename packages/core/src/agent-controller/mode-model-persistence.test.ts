@@ -4,7 +4,8 @@ import { InMemoryStore } from '../storage/mock';
 import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { AgentController } from './agent-controller';
-import { migratePersistedModelSelection, type Session } from './session';
+import { migratePersistedModelSelection } from './session';
+import type { Session } from './session';
 import { createMockWorkspace } from './test-utils';
 
 type AgentControllerTestState = { currentModelId?: string };

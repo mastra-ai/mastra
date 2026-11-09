@@ -3,8 +3,9 @@ import type { ActiveToolState } from './types';
 import type {
   AgentControllerWireEvent,
   ErrorCarryingAgentControllerEvent,
-  JsonReadyAgentControllerEvent,
   Jsonify,
+  JsonReadyAgentControllerEvent,
+  WireError,
 } from './wire';
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -52,10 +53,8 @@ describe('AgentControllerWireEvent', () => {
     expectTypeOf<ReadyEventOf<'display_state_changed'>['displayState']['activeTools']>().toEqualTypeOf<
       Record<string, ActiveToolState>
     >();
-    expectTypeOf<ReadyEventOf<'error'>['error']>().toEqualTypeOf<{ name: string; message: string }>();
-    expectTypeOf<ReadyEventOf<'workspace_status_changed'>['error']>().toEqualTypeOf<
-      { name: string; message: string } | undefined
-    >();
+    expectTypeOf<ReadyEventOf<'error'>['error']>().toEqualTypeOf<WireError>();
+    expectTypeOf<ReadyEventOf<'workspace_status_changed'>['error']>().toEqualTypeOf<WireError | undefined>();
     expectTypeOf<ReadyEventOf<'om_observation_failed'>['error']>().toEqualTypeOf<string>();
     expectTypeOf<ErrorCarryingAgentControllerEvent['type']>().toEqualTypeOf<
       'error' | 'workspace_error' | 'workspace_status_changed'

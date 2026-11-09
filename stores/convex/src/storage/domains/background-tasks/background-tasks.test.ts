@@ -97,8 +97,58 @@ describe('BackgroundTasksConvex', () => {
         completedAt: null,
         ownerId: null,
         leaseExpiresAt: null,
+        expiresAt: null,
+        metadata: null,
       },
     });
+  });
+
+  it('round-trips expiresAt and metadata and filters expired terminal rows', async () => {
+    const rows = new Map<string, Record<string, unknown>>();
+    const { client } = createClient({
+      callStorage: vi.fn(async (request: StorageRequest) => {
+        if (request.op === 'insert') rows.set(String(request.record.id), request.record);
+        if (request.op === 'queryTable') return [...rows.values()];
+        if (request.op === 'load') return rows.get(String((request.keys as { id: string }).id)) ?? null;
+        return undefined;
+      }),
+    });
+    const storage = new BackgroundTasksConvex({ client });
+    const metadata = { ttlMs: 60_000, resumeSchema: { type: 'object' } };
+
+    await storage.createTask(
+      createTask({
+        id: 'expired',
+        status: 'completed',
+        expiresAt: new Date('2026-01-01T01:00:00.000Z'),
+        metadata,
+      }),
+    );
+    await storage.createTask(
+      createTask({ id: 'live', status: 'completed', expiresAt: new Date('2026-01-03T00:00:00.000Z') }),
+    );
+    await storage.createTask(createTask({ id: 'ttl-only', status: 'completed' }));
+    // Rows written before the fields existed have no key at all.
+    rows.set('legacy', createStoredTask({ id: 'legacy', status: 'completed' }));
+
+    expect(rows.get('expired')).toMatchObject({
+      expiresAt: '2026-01-01T01:00:00.000Z',
+      metadata: JSON.stringify(metadata),
+    });
+    expect(await storage.getTask('expired')).toMatchObject({
+      expiresAt: new Date('2026-01-01T01:00:00.000Z'),
+      metadata,
+    });
+
+    const expired = await storage.listTasks({
+      status: 'completed',
+      dateFilterBy: 'expiresAt',
+      toDate: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    expect(expired.tasks.map(t => t.id)).toEqual(['expired']);
+
+    const withoutExpiry = await storage.listTasks({ hasExpiresAt: false });
+    expect(withoutExpiry.tasks.map(t => t.id).sort()).toEqual(['legacy', 'ttl-only']);
   });
 
   it('patches task updates without deleting and reinserting the task row', async () => {

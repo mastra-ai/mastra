@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -270,6 +270,35 @@ describe('DropdownMenu', () => {
     await user.click(screen.getByRole('menuitemradio', { name: 'Oldest' }));
 
     expect(onValueChange).toHaveBeenCalledWith('oldest');
+  });
+
+  it('closes the menu on a pick with closeOnSelect, and stays open without it', async () => {
+    const user = userEvent.setup();
+    const menu = (closeOnSelect?: boolean) => (
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.RadioOptions
+            options={[
+              { value: 'newest', label: 'Newest' },
+              { value: 'oldest', label: 'Oldest' },
+            ]}
+            value="newest"
+            onValueChange={() => {}}
+            closeOnSelect={closeOnSelect}
+          />
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+
+    const { unmount } = render(menu());
+    await user.click(screen.getByRole('menuitemradio', { name: 'Oldest' }));
+    expect(screen.queryByRole('menu')).not.toBeNull();
+    unmount();
+
+    render(menu(true));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Oldest' }));
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   });
 });
 

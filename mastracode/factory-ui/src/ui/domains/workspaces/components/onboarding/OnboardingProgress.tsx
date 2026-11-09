@@ -1,5 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { type OnboardingStep } from '../../services/onboardingFlow';
+import type { OnboardingStep } from '../../services/onboardingFlow';
 import { onboardingSteps, STEP_META } from '../../services/onboardingSteps';
 
 export function OnboardingProgress({

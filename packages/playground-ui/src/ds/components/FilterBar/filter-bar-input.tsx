@@ -1,5 +1,5 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
+import { BracesIcon, ListFilterIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
@@ -64,7 +64,7 @@ export function FilterBarInput(props: FilterBarInputProps) {
 }
 
 function FilterBarInputImpl({
-  placeholder = 'Filter…',
+  placeholder = 'Filter',
   className,
   'aria-label': ariaLabel = 'Add filter',
   groupId,
@@ -73,6 +73,7 @@ function FilterBarInputImpl({
   const ctx = useFilterBarContext();
   const container = usePortalContainer();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState<Item | null>(null);
@@ -83,8 +84,10 @@ function FilterBarInputImpl({
   const { draft, setDraft: setDraftState, commitDraft } = ctx;
   const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
   const field = draft ? ctx.getField(draft.fieldId) : undefined;
-  const operator = draft?.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
+  const operator = draft?.operatorId
+    ? (fieldOperators.find(o => o.id === draft.operatorId) ?? ctx.getOperator(draft.operatorId))
+    : undefined;
   // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
   const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
   const visibleFields = useMemo(() => {
@@ -278,19 +281,16 @@ function FilterBarInputImpl({
     [],
   );
 
-  const searchPlaceholder =
-    step === 'field' ? 'Search fields…' : step === 'operator' ? 'Search operators…' : 'Search values…';
-
   const inputPlaceholder =
     step === 'field'
       ? placeholder
       : step === 'operator'
-        ? 'Operator…'
+        ? 'Operator'
         : valueStep.hasSuggestions && valueStep.allowFreeText
-          ? 'Search or type a value…'
+          ? 'Search or type a value'
           : field?.type === 'number'
-            ? 'Number…'
-            : 'Value…';
+            ? 'Number'
+            : 'Value';
 
   return (
     <>
@@ -332,6 +332,7 @@ function FilterBarInputImpl({
         modal={false}
       >
         <div
+          ref={anchorRef}
           data-slot="filter-bar-input-trigger"
           className={cn(
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
@@ -339,13 +340,14 @@ function FilterBarInputImpl({
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
             comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
+            groupId === undefined && 'max-w-80 grow basis-32',
             'focus-within:bg-fill-hover',
             inputFocusBorderWithin,
-            step === 'field' ? 'min-w-40' : 'min-w-28',
+            step === 'field' ? 'min-w-32' : 'min-w-24',
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="-ml-[.3em] shrink-0 text-muted-foreground" />
+          <ListFilterIcon aria-hidden className="shrink-0" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;
@@ -361,7 +363,7 @@ function FilterBarInputImpl({
             placeholder={inputPlaceholder}
             className={cn(
               unstyledFormElementStyle,
-              'min-w-0 flex-1 bg-transparent',
+              'min-w-0 flex-1 bg-transparent zoom-safe-text',
               'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             )}
             onFocus={() => setOpen(true)}
@@ -370,36 +372,17 @@ function FilterBarInputImpl({
         </div>
         <ComboboxPrimitive.Portal container={container}>
           <ComboboxPrimitive.Positioner
+            // Base UI anchors to the input, which starts after the filter icon; align with the pill instead.
+            anchor={anchorRef}
             align="start"
             sideOffset={MENU_SIDE_OFFSET}
             positionMethod={FLOATING_POSITION_METHOD}
             className={comboboxStyles.positioner}
           >
-            <ComboboxPrimitive.Popup // The input stretches across the bar, so drop the anchor-width floor: size to content.
-              className={cn(comboboxStyles.popup, 'min-w-56')}
+            <ComboboxPrimitive.Popup // Match the pill, with the DS Combobox's 11rem floor (replaces the menu's anchor-width minimum).
+              className={cn(comboboxStyles.popup, 'w-(--anchor-width) min-w-44')}
               data-slot="filter-bar-editor"
             >
-              {(step !== 'value' || valueStep.hasSuggestions) && (
-                // Search row mirroring the bar input, so the popup reads as a searchable combobox.
-                // The bar input stays the only real input: focus and keyboard navigation never move.
-                <div
-                  className={cn(comboboxStyles.searchContainer, 'cursor-text')}
-                  data-slot="filter-bar-search"
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => inputRef.current?.focus()}
-                >
-                  <Search className={comboboxStyles.searchIcon} />
-                  <span
-                    className={cn(
-                      comboboxStyles.searchInput,
-                      'flex items-center truncate',
-                      query === '' && comboboxStyles.placeholder,
-                    )}
-                  >
-                    {query === '' ? searchPlaceholder : query}
-                  </span>
-                </div>
-              )}
               {step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
@@ -435,7 +418,7 @@ function FilterBarInputImpl({
                   isLoading={valueStep.isLoading}
                   error={valueStep.error}
                   emptyText={
-                    valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
+                    valueStep.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'
                   }
                 />
               )}

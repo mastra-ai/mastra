@@ -5,10 +5,12 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
+import { datedModels } from '../../../settings/components/__tests__/fixtures/models';
 import { CreateFactoryModelStep } from '../create-factory/CreateFactoryModelStep';
 import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
+import { PersonalProviderFactoryStep } from '../PersonalProviderFactoryStep';
 
 function registerAuthHandler() {
   server.use(
@@ -82,6 +84,111 @@ describe('Model provider onboarding', () => {
     });
   });
 
+  describe('when creating a custom provider', () => {
+    function registerCustomProviderHandlers() {
+      let created = false;
+      const provider = {
+        id: 'my-llm',
+        name: 'my-llm',
+        url: 'https://api.example.com/v1',
+        hasApiKey: true,
+        models: ['model-a'],
+      };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: created ? [{ provider: 'my-llm', source: 'stored-org', custom: true }] : [],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: created
+              ? [{ id: 'my-llm/model-a', provider: 'my-llm', modelName: 'model-a', hasApiKey: true }]
+              : [],
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/custom-providers`, async ({ request }) => {
+          expect(await request.json()).toEqual({
+            name: 'my-llm',
+            url: 'https://api.example.com/v1',
+            apiKey: 'sk-test',
+            models: ['model-a'],
+          });
+          created = true;
+          return HttpResponse.json({ ok: true, provider });
+        }),
+      );
+    }
+
+    async function createCustomProvider() {
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
+      await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
+      await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-test');
+      await user.type(screen.getByPlaceholderText('model-a, model-b'), 'model-a');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+      return user;
+    }
+
+    it('requires a model before creating a provider during setup', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
+      await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+
+      expect(await screen.findByText('At least one model is required.')).toBeVisible();
+    });
+
+    it('refreshes the catalogs and continues to organization model selection', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      const onComplete = vi.fn<() => void>();
+      const { client } = renderWithProviders(
+        <ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />,
+      );
+
+      const user = await createCustomProvider();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(onComplete).toHaveBeenCalledWith({
+        providerId: 'my-llm',
+        modelId: 'my-llm/model-a',
+        method: 'api_key',
+      });
+    });
+
+    it('continues to personal model selection with the stored custom provider', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        ),
+      );
+      const onContinue = vi.fn<() => void>();
+      const { client } = renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
+
+      const user = await createCustomProvider();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Review setup' }));
+      expect(onContinue).toHaveBeenCalledWith({
+        providerId: 'my-llm',
+        modelId: 'my-llm/model-a',
+        method: 'api_key',
+      });
+    });
+  });
+
   describe('when a provider supports browser sign-in', () => {
     it('starts the OAuth flow directly from its sign-in button', async () => {
       const providers: ProviderInfo[] = [
@@ -151,7 +258,7 @@ describe('Model provider onboarding', () => {
       expect(screen.getByText('OpenAI')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
+      expect(screen.getByRole('combobox')).toHaveValue('GPT-5.6 Sol');
       await user.click(screen.getByRole('button', { name: 'Continue' }));
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
@@ -261,7 +368,7 @@ describe('Model provider onboarding', () => {
       await user.click(bedrock);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toHaveTextContent('Claude Sonnet 4.5');
+      expect(screen.getByRole('combobox')).toHaveValue('Claude Sonnet 4.5');
     });
   });
 
@@ -350,6 +457,36 @@ describe('Model provider onboarding', () => {
 
       expect(await screen.findByText('openai/gpt-5.6-sol')).toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: 'Connect OpenAI' })).not.toBeInTheDocument();
+    });
+
+    it('offers newer models first', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: datedModels })),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(
+        <Command>
+          <CreateFactoryModelStep query="" onPick={vi.fn()} />
+        </Command>,
+      );
+
+      await user.click(await screen.findByText('OpenAI'));
+      await screen.findByText('openai/gpt-5');
+
+      expect(screen.getAllByRole('option').map(option => option.getAttribute('data-value'))).toEqual([
+        'openai/gpt-5',
+        'openai/gpt-4.1',
+        'openai/gpt-4o',
+        'change-provider',
+      ]);
     });
   });
 

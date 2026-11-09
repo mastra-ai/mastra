@@ -14,13 +14,14 @@ export interface IntakeSelection {
   repositoryByLinearProject?: Record<string, string>;
 }
 
-export interface IntakeConfig {
+/** Built-in providers always present, plus any custom integration ids the server returns. */
+export type IntakeConfig = Record<string, IntakeSelection> & {
   github: IntakeSelection;
   gitlab: IntakeSelection;
   linear: IntakeSelection;
   jira: IntakeSelection;
   incidentio: IntakeSelection;
-}
+};
 
 /**
  * The server keeps intake config as a dynamic map keyed by integration id and
@@ -28,13 +29,13 @@ export interface IntakeConfig {
  * is absent whenever that integration isn't connected. Fill the fixed shape the
  * UI relies on so reads like `config.github.enabled` never touch `undefined`.
  * An absent key means the integration is not registered in this deployment,
- * so every synthetic placeholder stays disabled. Registered integrations are
- * returned by the server with their effective defaults, and saving the fixed
- * shape back is safe because the server ignores disabled/unselected keys for
- * unregistered integrations.
+ * so every synthetic placeholder stays disabled. Saves send one integration
+ * at a time, so placeholders only reach the server when that integration is
+ * edited. Custom integration keys pass through.
  */
 function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | null | undefined): IntakeConfig {
   return {
+    ...raw,
     github: raw?.github ?? { enabled: false, sourceIds: null },
     gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
     linear: raw?.linear ?? { enabled: false, sourceIds: null },
@@ -76,9 +77,13 @@ export async function fetchIntakeConfig(baseUrl: string): Promise<IntakeConfig> 
   return requestIntakeConfig(baseUrl);
 }
 
-/** Save the org's intake config; resolves to the persisted config. */
-export async function saveIntakeConfig(baseUrl: string, config: IntakeConfig): Promise<IntakeConfig> {
-  return requestIntakeConfig(baseUrl, { method: 'PUT', body: JSON.stringify(config) });
+/** Save one integration's selection; the server keeps the others. Resolves to the persisted config. */
+export async function saveIntakeSelection(
+  baseUrl: string,
+  integrationId: string,
+  selection: IntakeSelection,
+): Promise<IntakeConfig> {
+  return requestIntakeConfig(baseUrl, { method: 'PUT', body: JSON.stringify({ [integrationId]: selection }) });
 }
 
 /** Routing of one intake source to the Factory project its items land in. */
@@ -88,24 +93,67 @@ export interface IntakeSourceBinding {
   factoryProjectId: string;
   /** Installed board the source feeds; `null` keeps the built-in routing (issues → Work, PRs → Review). */
   board: string | null;
+  /**
+   * Jira only: labels whose issues this factory takes; `null` takes every issue no other factory's
+   * labels claim. Absent from servers that predate label filters, which means `null`.
+   */
+  labels?: string[] | null;
+  /** ISO timestamp; when two label filters match one issue, the older binding takes it. */
+  createdAt?: string;
 }
 
-async function requestIntakeBindings(baseUrl: string, init?: RequestInit): Promise<IntakeSourceBinding[]> {
-  const res = await fetch(`${baseUrl}/web/intake/bindings`, {
+/** Route one source to a Factory project; `factoryProjectId: null` clears it, omitted `labels` keep the filter. */
+export interface IntakeBindingWrite {
+  integrationId: string;
+  sourceId: string;
+  factoryProjectId: string | null;
+  board: string | null;
+  labels?: string[] | null;
+}
+
+/** One factory's binding of a source; a type alias so it doubles as query parameters. */
+export type IntakeBindingTarget = {
+  integrationId: string;
+  sourceId: string;
+  factoryProjectId: string;
+};
+
+/** Another factory's binding that already takes some of the requested issues. */
+export interface IntakeBindingConflict {
+  factoryProjectId: string;
+  /** Overlapping labels, or `null` when both bindings would take all issues. */
+  labels: string[] | null;
+}
+
+/** The server refused a binding because another factory already takes some of the same issues. */
+export class IntakeBindingConflictError extends Error {
+  readonly conflicts: IntakeBindingConflict[];
+
+  constructor(message: string, conflicts: IntakeBindingConflict[]) {
+    super(message);
+    this.name = 'IntakeBindingConflictError';
+    this.conflicts = conflicts;
+  }
+}
+
+async function requestIntakeBindings(baseUrl: string, init?: RequestInit, query = ''): Promise<IntakeSourceBinding[]> {
+  const res = await fetch(`${baseUrl}/web/intake/bindings${query}`, {
     headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
     credentials: 'include',
     ...init,
   });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
+    let conflicts: IntakeBindingConflict[] | undefined;
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
+      const body = (await res.json()) as { error?: string; message?: string; conflicts?: IntakeBindingConflict[] };
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
+      if (body.error === 'binding_conflict') conflicts = body.conflicts ?? [];
     } catch {
       /* ignore non-JSON */
     }
-    throw new Error(message);
+    throw conflicts ? new IntakeBindingConflictError(message, conflicts) : new Error(message);
   }
   const { bindings } = (await res.json()) as { bindings?: IntakeSourceBinding[] };
   return bindings ?? [];
@@ -123,6 +171,13 @@ export interface IntakeLabelRoute {
   /** Normalized (trimmed, lower-cased) label name. */
   label: string;
   board: string;
+}
+
+/** Route a label to a board, or clear it with `board: null`. */
+export interface IntakeLabelRouteWrite {
+  integrationId: string;
+  label: string;
+  board: string | null;
 }
 
 async function requestIntakeLabelRoutes(
@@ -158,15 +213,76 @@ export async function fetchIntakeLabelRoutes(baseUrl: string, factoryProjectId: 
 /** Route a label to a board, or clear it with `board: null`. Resolves to the project's routes. */
 export async function saveIntakeLabelRoute(
   baseUrl: string,
-  route: { factoryProjectId: string; integrationId: string; label: string; board: string | null },
+  route: IntakeLabelRouteWrite & { factoryProjectId: string },
 ): Promise<IntakeLabelRoute[]> {
   return requestIntakeLabelRoutes(baseUrl, '', { method: 'PUT', body: JSON.stringify(route) });
 }
 
-/** Route one source to a Factory project, or clear it with `factoryProjectId: null`. */
-export async function saveIntakeBinding(
-  baseUrl: string,
-  binding: { integrationId: string; sourceId: string; factoryProjectId: string | null; board?: string | null },
-): Promise<IntakeSourceBinding[]> {
+/**
+ * Route one source to a Factory project, or clear it with `factoryProjectId: null`. Jira sources
+ * can feed several factories, each with its own `labels` filter (omitted keeps the current one);
+ * remove a Jira binding with {@link deleteIntakeBinding}. Rejects with
+ * {@link IntakeBindingConflictError} when another factory already takes the same issues.
+ */
+export async function saveIntakeBinding(baseUrl: string, binding: IntakeBindingWrite): Promise<IntakeSourceBinding[]> {
   return requestIntakeBindings(baseUrl, { method: 'PUT', body: JSON.stringify(binding) });
+}
+
+/** Remove one factory's binding of a source, leaving other factories' bindings of it in place. */
+export async function deleteIntakeBinding(
+  baseUrl: string,
+  binding: IntakeBindingTarget,
+): Promise<IntakeSourceBinding[]> {
+  return requestIntakeBindings(baseUrl, { method: 'DELETE' }, `?${new URLSearchParams(binding)}`);
+}
+
+/** `bindings` as they read once `write` is saved; an edited binding keeps its place. */
+export function withIntakeBinding(bindings: IntakeSourceBinding[], write: IntakeBindingWrite): IntakeSourceBinding[] {
+  const current = bindings.find(
+    binding =>
+      binding.integrationId === write.integrationId &&
+      binding.sourceId === write.sourceId &&
+      // Jira sources feed several factories, so a Jira binding is also told apart by factory.
+      (write.integrationId !== 'jira' || binding.factoryProjectId === write.factoryProjectId),
+  );
+  if (write.factoryProjectId === null) return bindings.filter(binding => binding !== current);
+  const next: IntakeSourceBinding = {
+    ...current,
+    integrationId: write.integrationId,
+    sourceId: write.sourceId,
+    factoryProjectId: write.factoryProjectId,
+    board: write.board,
+    labels: write.labels === undefined ? (current?.labels ?? null) : write.labels,
+  };
+  return current ? bindings.map(binding => (binding === current ? next : binding)) : [...bindings, next];
+}
+
+/** `bindings` as they read once `target` is deleted. */
+export function withoutIntakeBinding(
+  bindings: IntakeSourceBinding[],
+  target: IntakeBindingTarget,
+): IntakeSourceBinding[] {
+  return bindings.filter(
+    binding =>
+      binding.integrationId !== target.integrationId ||
+      binding.sourceId !== target.sourceId ||
+      binding.factoryProjectId !== target.factoryProjectId,
+  );
+}
+
+/** `routes` as they read once `write` is saved; an edited route keeps its place. */
+export function withIntakeLabelRoute(
+  routes: IntakeLabelRoute[],
+  write: IntakeLabelRouteWrite & { factoryProjectId: string },
+): IntakeLabelRoute[] {
+  const label = write.label.trim().toLowerCase();
+  const isRoute = (route: IntakeLabelRoute) => route.integrationId === write.integrationId && route.label === label;
+  if (write.board === null) return routes.filter(route => !isRoute(route));
+  const next = {
+    factoryProjectId: write.factoryProjectId,
+    integrationId: write.integrationId,
+    label,
+    board: write.board,
+  };
+  return routes.some(isRoute) ? routes.map(route => (isRoute(route) ? next : route)) : [...routes, next];
 }

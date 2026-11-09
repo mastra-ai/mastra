@@ -66,7 +66,9 @@ async function parseSubcommand(args: string[], onAction = vi.fn()) {
 
 describe('create option parsing', () => {
   it('rejects providers outside the create-specific provider set', () => {
-    expect(() => parseCreateLLMProvider('groq')).toThrow('Choose a valid provider: openai, anthropic, google, xai');
+    expect(() => parseCreateLLMProvider('groq')).toThrow(
+      'Choose a valid provider: mastra, openai, anthropic, google, xai',
+    );
   });
 
   it.each([

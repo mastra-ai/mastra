@@ -36,11 +36,43 @@ export function parseSkillActivation(text: string): SkillActivation | undefined 
   // Unescape the boundary sentinel inserted to prevent premature envelope closure.
   body = body.replaceAll('&lt;/skill&gt;', '</skill>');
 
+  return splitSkillBody(name, body, feedBlock?.[1]);
+}
+
+const TRAILING_FEED_PATTERN = new RegExp(`\\n\\n<${WORK_ITEM_FEED_TAG}>\\s*([\\s\\S]*?)\\s*</${WORK_ITEM_FEED_TAG}>$`);
+
+/**
+ * Parses the contents of a typed `skill` signal (the skill name travels as a signal
+ * attribute, so there is no envelope). A trailing work-item feed is split out.
+ */
+export function parseSkillBody(name: string, text: string): SkillActivation | undefined {
+  if (!name) return undefined;
+  const trimmed = text.trim();
+  const feedMatch = TRAILING_FEED_PATTERN.exec(trimmed);
+  const body = feedMatch ? trimmed.slice(0, feedMatch.index) : trimmed;
+  return splitSkillBody(name, body, feedMatch?.[1]);
+}
+
+/**
+ * Parses a skill as the model sees it in a user message: the legacy envelope (feed trailing it) or
+ * a typed skill signal rendered as `<skill name="…">contents</skill>`, whose contents may end
+ * with the work-item feed.
+ */
+export function parseSkillMarkup(text: string): SkillActivation | undefined {
+  const activation = parseSkillActivation(text);
+  if (!activation || activation.feed !== undefined) return activation;
+  const body = activation.arguments
+    ? `${activation.instructions}${ARGUMENTS_MARKER}${activation.arguments}`
+    : activation.instructions;
+  return parseSkillBody(activation.name, body);
+}
+
+function splitSkillBody(name: string, body: string, feed: string | undefined): SkillActivation | undefined {
   if (!body.trim()) return undefined;
 
   const argIndex = body.lastIndexOf(ARGUMENTS_MARKER);
   const instructions = argIndex >= 0 ? body.slice(0, argIndex) : body;
   const args = argIndex >= 0 ? body.slice(argIndex + ARGUMENTS_MARKER.length).trim() : undefined;
 
-  return { name, instructions, arguments: args || undefined, ...(feedBlock ? { feed: feedBlock[1] ?? '' } : {}) };
+  return { name, instructions, arguments: args || undefined, ...(feed !== undefined ? { feed } : {}) };
 }

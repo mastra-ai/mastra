@@ -1,6 +1,7 @@
 import { SidebarFooter } from './footer/sidebar-footer';
 import { SidebarFooterMeta } from './footer/sidebar-footer-meta';
 import { SidebarMeter } from './footer/sidebar-meter';
+import { SidebarBadge } from './header/sidebar-badge';
 import { SidebarBrand } from './header/sidebar-brand';
 import { SidebarCommandHeader } from './header/sidebar-command-header';
 import { SidebarHeader } from './header/sidebar-header';
@@ -21,6 +22,7 @@ import { SidebarTrigger } from './root/sidebar-trigger';
 import { SidebarSections } from './sections/sidebar-sections';
 
 export const Sidebar = Object.assign(SidebarRoot, {
+  Badge: SidebarBadge,
   Brand: SidebarBrand,
   CommandHeader: SidebarCommandHeader,
   Footer: SidebarFooter,

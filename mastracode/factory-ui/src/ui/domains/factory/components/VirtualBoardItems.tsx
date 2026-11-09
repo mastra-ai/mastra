@@ -28,9 +28,9 @@ export function VirtualBoardItems<T>({
       virtualized={items.length > MAX_UNVIRTUALIZED_ITEMS}
       layout={layout}
       pinnedKey={pinnedKey}
-      getItemKey={index => itemKey(items[index]!)}
+      getItemKey={index => itemKey(items[index])}
       itemIndexes={itemIndexes}
-      renderItem={index => renderItem(items[index]!)}
+      renderItem={index => renderItem(items[index])}
     />
   );
 }

@@ -554,8 +554,8 @@ describe('threshold observation after partial buffered activation', () => {
     expect(ctx.observed).toBe(true);
     expect(ctx.status.shouldObserve).toBe(false);
     expect(ctx.status.pendingTokens).toBeLessThan(ctx.status.threshold);
-    // Older history is compacted; the newest observed message stays as the retention floor.
-    expect(messageList.get.all.db().map(m => m.id)).toEqual(['big-tool-result']);
+    // Older history is compacted. The turn's request and its unread tool result stay in the prompt (#25372).
+    expect(messageList.get.all.db().map(m => m.id)).toEqual(['new-user', 'big-tool-result']);
 
     const finalRecord = await storage.getObservationalMemory(threadId, resourceId);
     expect(finalRecord?.activeObservations).toContain('cycle-a observation');
@@ -651,7 +651,7 @@ describe('threshold observation after partial buffered activation', () => {
 
     expect(ctx.status.shouldObserve).toBe(false);
     expect(ctx.status.pendingTokens).toBeLessThan(ctx.status.threshold);
-    expect(messageList.get.all.db().map(m => m.id)).toEqual(['big-tool-result']);
+    expect(messageList.get.all.db().map(m => m.id)).toEqual(['new-user', 'big-tool-result']);
   });
 
   it('does not run a synchronous observation when activation brings pending tokens under the threshold', async () => {

@@ -1,11 +1,13 @@
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { workBoardCatalog } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import type { BoardCatalogResponse } from '../../../../api/types';
 import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
 import { FactorySessionPage } from '../components/RelatedFactorySessions';
 
@@ -107,6 +109,51 @@ function renderHeader() {
 }
 
 describe('FactorySessionPage', () => {
+  describe('when a related work item has a session', () => {
+    it.each([true, false])('links to the session when live=%s, or its board otherwise', async live => {
+      const currentItem = workItem(undefined);
+      const relatedSession = {
+        ...workspaceSession,
+        id: 'related-row',
+        sessionId: 'related-session',
+        branch: 'factory/issue-8',
+      };
+      const relatedItem = {
+        ...workItem(undefined),
+        id: 'related-item',
+        parentWorkItemId: currentItem.id,
+        title: 'Follow-up work',
+        metadata: { number: 8 },
+        sessions: {
+          execute: {
+            sessionId: relatedSession.sessionId,
+            branch: relatedSession.branch,
+            threadId: 'related-thread',
+            startedBy: 'user-1',
+          },
+        },
+      };
+      stubHeader(currentItem);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+          HttpResponse.json({ workItems: [currentItem, relatedItem] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+          HttpResponse.json({ sessions: live ? [workspaceSession, relatedSession] : [workspaceSession] }),
+        ),
+      );
+      renderHeader();
+
+      const link = await screen.findByRole('link', { name: /Open .*Follow-up work/ });
+      expect(link).toHaveAttribute(
+        'href',
+        live
+          ? `/factories/${FACTORY_ID}/workspaces/related-session/threads/related-thread`
+          : `/factories/${FACTORY_ID}/work`,
+      );
+    });
+  });
+
   describe('when the active work item has an external issue URL', () => {
     it('renders an issue pill that opens the external issue in a new tab', async () => {
       const issueUrl = 'https://github.com/acme/app/issues/7';
@@ -144,6 +191,88 @@ describe('FactorySessionPage', () => {
 
       expect(await screen.findByText('Issue #7: Fix sandbox setup')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Open Issue #7' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when the card holds sessions in several contexts', () => {
+    const triageRef = {
+      sessionId: 'triage-session',
+      branch: 'factory/issue-7-triage',
+      threadId: 'triage-thread',
+      startedBy: 'user-1',
+    };
+    const workRef = { sessionId: SESSION_ID, branch: 'factory/issue-7', threadId: THREAD_ID, startedBy: 'user-1' };
+
+    const currentCrumb = () => document.querySelector('[aria-current="page"]');
+
+    const reviewRef = {
+      sessionId: 'review-session',
+      branch: 'factory/issue-7',
+      threadId: 'review-thread',
+      startedBy: 'user-1',
+    };
+
+    function renderContextHeader(sessionId: string, threadId: string, stage = 'execute') {
+      const item = {
+        ...workItem(undefined),
+        stages: [stage],
+        sessions: { triage: triageRef, work: workRef, review: reviewRef },
+      };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+          HttpResponse.json({ sessions: [workspaceSession] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+          HttpResponse.json({ workItems: [item] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, () =>
+          HttpResponse.json({ session: { ...workspaceSession, sessionId } }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+          HttpResponse.json(workBoardCatalog satisfies BoardCatalogResponse),
+        ),
+      );
+      return renderWithProviders(
+        <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/workspaces/${sessionId}/threads/${threadId}`]}>
+          <SidebarProvider storageKey="related-factory-sessions-test">
+            <Routes>
+              <Route
+                path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+                element={
+                  <WorkspaceFilesProvider>
+                    <FactorySessionPage>{null}</FactorySessionPage>
+                  </WorkspaceFilesProvider>
+                }
+              />
+            </Routes>
+          </SidebarProvider>
+        </MemoryRouter>,
+      );
+    }
+
+    it("names the session's context and the phase the card moved on to", async () => {
+      renderContextHeader('triage-session', 'triage-thread');
+
+      const cardPhase = await screen.findByText('card is now in Building');
+      expect(currentCrumb()).toContainElement(cardPhase);
+      expect(currentCrumb()).toHaveTextContent(/^Triagecard is now in Building$/);
+      expect(screen.getByText('Issue #7: Fix sandbox setup')).toBeInTheDocument();
+    });
+
+    it('names only the context when the card still works in it', async () => {
+      renderContextHeader(SESSION_ID, THREAD_ID);
+
+      await screen.findByText('Issue #7: Fix sandbox setup');
+      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Work$/));
+      expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
+    });
+
+    it("names only the context of self-review's session, which no phase runs in", async () => {
+      renderContextHeader('review-session', 'review-thread', 'review');
+
+      await screen.findByText('Issue #7: Fix sandbox setup');
+      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Review$/));
+      expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
     });
   });
 });

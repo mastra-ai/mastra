@@ -5,9 +5,8 @@ import {
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
   planReflectionGenerationText,
-  type UpdateActiveObservationsResult,
-  type UpdateBufferedObservationsResult,
 } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
@@ -2516,12 +2515,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
               bestOverBoundary = boundary;
               bestOverTokens = cumulativeMessageTokens;
             }
-          } else {
+          } else if (cumulativeMessageTokens > bestUnderTokens) {
             // Under — track the closest (highest) under boundary
-            if (cumulativeMessageTokens > bestUnderTokens) {
-              bestUnderBoundary = boundary;
-              bestUnderTokens = cumulativeMessageTokens;
-            }
+
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
           }
         }
 

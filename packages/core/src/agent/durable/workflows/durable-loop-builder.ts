@@ -5,6 +5,7 @@ import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
 import { AgenticLoopBuilder } from '../../../loop/loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { decideContinuation } from '../../../loop/shared/continuation-core';
+import { agentLoopTermination } from '../../../loop/shared/execution-outcome';
 import { drainSignalsToTranscript } from '../../../loop/shared/steps/signal-drain-core';
 import { getAbortReason, isMastraTimeoutError } from '../../../loop/timeout';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
@@ -16,12 +17,18 @@ import { calculateObservedUsage, isUsageIncomplete } from '../../../observabilit
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
+import { markNonRedeliverable } from '../../../workflows/evented/helpers';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
-import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
-import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
+import {
+  isExecutionFenceError,
+  isForeignExecutionContext,
+  watchExecutionLoss,
+  withExecutionFence,
+} from '../execution-fence';
+import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -50,6 +57,10 @@ import {
   seedMessageListState,
   storeMessageListState,
   buildDeferredStepFinishChunk,
+  readAccumulatedSteps,
+  storeAccumulatedSteps,
+  expandDurableSteps,
+  carriedSpanClocks,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -106,6 +117,12 @@ export interface DurableAgenticWorkflowOptions {
    * `recovery.durableAgents: 'auto'` is configured.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+  /**
+   * Sets `autoStorageVersion` on the outer loop workflow, so new runs are
+   * stored as version 2 where the engine and store support it. The
+   * iteration workflow's runs are nested, so they follow the outer run.
+   */
+  autoStorageVersion?: boolean;
 }
 
 /**
@@ -163,6 +180,7 @@ const durableAgenticInputSchema = z.object({
   // JSON-safe snapshot of requestContext.entries() so durable steps can read
   // it (e.g. is-task-complete scorers pass it as customContext).
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
 });
 
 /**
@@ -237,7 +255,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   /**
    * Engine-aware snapshot pruning. The `running`-only history strip (#20747)
    * keeps what a crash-restart reads back, including `stepResultReads`: steps
-   * that read an earlier step's result via `getStepResult` (reader → sources).
+   * that read an earlier step's result via `getStepResultAsync` (reader → sources).
    * The evented engine also reads persisted step results during normal
    * execution, but the only such reads are the declared ones below, so the
    * strip keeps exactly what it reads. Retaining *all* terminal history instead
@@ -432,11 +450,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       const llmOutput = await executeLLM(withParams(params, { setState }));
       if (llmOutput && llmOutput.stepResult.reason === 'abort') {
         const initData = params.getInitData() as IterationState;
-        // Preserve transcript, usage and span bookkeeping, then finish only this
-        // iteration. The outer loop still runs its normal terminal side effects.
+        // Preserve transcript, step records, usage and span bookkeeping, then
+        // finish only this iteration. The outer loop still runs its normal
+        // terminal side effects. Both stores replace workflow state, so each
+        // builds on the state the previous one wrote.
         const executionOutput = await llmMappingStep.execute(
           withParams(params, {
             state: workflowState,
+            setState,
             bail: params.bail<unknown>,
             inputData: {
               llmOutput,
@@ -449,8 +470,13 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           }),
         );
         if (!executionOutput) return executionOutput;
+        const { accumulatedSteps, ...update } = createBaseIterationStateUpdate({
+          currentState: { ...initData, accumulatedSteps: readAccumulatedSteps(workflowState, initData) },
+          executionOutput,
+        });
         return params.bail<IterationState>({
-          ...createBaseIterationStateUpdate({ currentState: initData, executionOutput }),
+          ...update,
+          ...(await storeAccumulatedSteps({ state: workflowState, setState }, accumulatedSteps)),
           modelList: initData.modelList,
         });
       }
@@ -478,6 +504,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // (the evented engine otherwise merges, marks failed, or deletes it).
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
+          watchExecutionLoss,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads. The declared reads below cover every
           // same-iteration step-result read (see pruneSnapshotHook).
@@ -529,15 +556,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               state: state.state,
               messageId: state.messageId,
               requestContextEntries: state.requestContextEntries,
+              inputTripwire: state.inputTripwire,
               stepIndex: state.iterationCount,
               signalPreempted: state.lastStepResult?.signalPreempted,
               // Processor hooks receive the running step list (#24293) — the
-              // llm-execution step reads this for stepNumber/steps parity with
-              // the main loop.
+              // llm-execution step reads it for stepNumber/steps parity with
+              // the main loop. Absent when the run keeps it in workflow state.
               accumulatedSteps: state.accumulatedSteps,
               agentSpanData: state.agentSpanData,
               modelSpanData: state.modelSpanData,
               completionStartTime: state.completionStartTime,
+              timeToFirstTokenMs: state.timeToFirstTokenMs,
             };
           },
           { id: 'map-to-llm-input' },
@@ -552,6 +581,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
               completionStartTime: llmOutput.completionStartTime,
+              timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
+              // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
+              stepUsage: llmOutput.stepResult?.totalUsage,
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
@@ -574,11 +606,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         })
         // Step 4: Collect tool results and bundle with LLM output for mapping step
         .map(
-          async ({ inputData, getStepResult, getInitData }) => {
+          async ({ inputData, getStepResultAsync, getInitData }) => {
             const toolResults = inputData as DurableToolCallOutput[];
             // Direct read of an earlier step: declared to pruneSnapshotHook above
             // so snapshot pruning keeps it for a crash-restart.
-            const llmOutput = getStepResult(llmExecutionStep.id) as DurableLLMStepOutput;
+            const llmOutput = (await getStepResultAsync(llmExecutionStep.id)) as DurableLLMStepOutput;
             const initData = getInitData() as IterationState;
 
             return {
@@ -586,7 +618,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               toolResults,
               runId: initData.runId,
               agentId: initData.agentId,
-              messageId: initData.messageId,
+              messageId: llmOutput?.stepResult?.messageId ?? initData.messageId,
               state: llmOutput?.state ?? initData.state,
             };
           },
@@ -602,19 +634,20 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         .then(signalDrainStep)
         // Step 7: Map back to iteration state format using shared function
         .map(
-          async ({ inputData, getInitData }) => {
-            const executionOutput = inputData as DurableAgenticExecutionOutput;
-            const initData = getInitData() as IterationState;
+          async params => {
+            const executionOutput = params.inputData as DurableAgenticExecutionOutput;
+            const initData = params.getInitData() as IterationState;
 
             // Use shared function for base state update
-            const baseUpdate = createBaseIterationStateUpdate({
-              currentState: initData,
+            const { accumulatedSteps, ...baseUpdate } = createBaseIterationStateUpdate({
+              currentState: { ...initData, accumulatedSteps: readAccumulatedSteps(params.state, initData) },
               executionOutput,
             });
 
             // Extend with core-specific fields
             const newIterationState: IterationState = {
               ...baseUpdate,
+              ...(await storeAccumulatedSteps(params, accumulatedSteps)),
               modelList: initData.modelList,
             };
 
@@ -644,6 +677,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   protected override buildContinuationPredicate(): LoopContinuationPredicate {
     return async (params: any) => {
       const state = params.inputData as IterationState;
+      const steps = readAccumulatedSteps(params.state, state);
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
@@ -654,7 +688,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           state.lastStepResult.isContinued = isContinued;
         }
 
-        const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
+        const deferredChunk = buildDeferredStepFinishChunk({ ...state, accumulatedSteps: steps }, isContinued);
         state.deferredStepFinishChunk = undefined;
         if (!deferredChunk) return;
 
@@ -793,15 +827,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               return await (condition as (context: any) => boolean | PromiseLike<boolean>)(context);
             } catch (error) {
               const originalError = getErrorFromUnknown(error);
-              throw new MastraError(
-                {
-                  id: DURABLE_STOP_WHEN_ERROR_ID,
-                  domain: ErrorDomain.AGENT,
-                  category: ErrorCategory.USER,
-                  text: originalError.message,
-                  details: { name: originalError.name, message: originalError.message },
-                },
-                originalError,
+              // A throwing predicate is deterministic; redelivering the event would only rerun it.
+              throw markNonRedeliverable(
+                new MastraError(
+                  {
+                    id: DURABLE_STOP_WHEN_ERROR_ID,
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    text: originalError.message,
+                    details: { name: originalError.name, message: originalError.message },
+                  },
+                  originalError,
+                ),
               );
             }
           })
@@ -812,8 +849,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         llmWantsToContinue: state.lastStepResult?.isContinued === true || drainForcedContinue,
         // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
         // Retries stay bounded by maxProcessorRetries.
-        underMaxSteps: state.accumulatedSteps.filter(s => s.finishReason !== 'retry').length < runMaxSteps,
-        steps: state.accumulatedSteps,
+        underMaxSteps: steps.filter(s => s.finishReason !== 'retry').length < runMaxSteps,
+        steps: expandDurableSteps(steps),
         stopWhen,
         consumeDelegationBail: () => {
           if (state.delegationBailed) {
@@ -826,9 +863,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         backgroundTaskPending: state.backgroundTaskPending,
         onIterationComplete: rt.onIterationComplete,
         buildIterationContext: isFinal => {
-          const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+          const lastStep = steps[steps.length - 1];
           return {
-            iteration: state.accumulatedSteps.length,
+            iteration: steps.length,
             maxIterations: runMaxSteps,
             text: lastStep?.text ?? '',
             toolCalls: (lastStep?.toolCalls ?? []).map((tc: any) => ({
@@ -887,6 +924,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
+      state.tracingStopCause = decision.stopCause;
+      // Also on the registry, which the final step still falls back to.
+      const tracingRegistry = getRunRegistryEntry(state.runId, rt.mastra);
+      if (tracingRegistry) tracingRegistry.tracingStopCause = decision.stopCause;
       const isFinal = decision.isFinal;
       await emitStepFinish(!isFinal);
 
@@ -899,7 +940,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // above has already been evaluated and its result applied to the
       // continuation decision.
       if (rt.pubsub) {
-        const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+        const lastStep = steps[steps.length - 1];
         await emitIterationCompleteEvent(rt.pubsub, state.runId, {
           iteration: state.iterationCount,
           maxIterations: runMaxSteps,
@@ -938,12 +979,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // policy may exclude `running`, in which case resume claims cannot
           // be de-duplicated.
           allowUnclaimedResumes: true,
+          // listSuspendedRuns() reads this row's status, so a resume must flip it
+          // off `suspended` even when `running` checkpoints are skipped (#27619).
+          persistResumeClaim: true,
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
+          watchExecutionLoss,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads. This loop reads iteration state from workflow
           // `value`, so it has no declared step-result reads (see pruneSnapshotHook).
+          // Runs stored as v2 (see autoStorageVersion) skip this.
           pruneSnapshot: this.pruneSnapshotHook(),
+          autoStorageVersion: this.#options?.autoStorageVersion,
           // Snapshots written up to the end reference this process's saved
           // rows, so release them only once the run has persisted its result.
           // A suspended run releases too: it may wait indefinitely, and on
@@ -975,15 +1022,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const initialMessageList = createRunMessageList({
               mastra: params.mastra as Mastra | undefined,
             }).deserialize(messageListState);
-            // The transcript rides in workflow state from here on: each
-            // persisted snapshot then holds one copy (in `value`) rather than
-            // one per step payload. Steps read and update it there.
-            await seedMessageListState(params, messageListState);
+            // The transcript and the step records ride in workflow state from
+            // here on: each persisted snapshot then holds one copy (in `value`)
+            // rather than one per step payload. Steps read and update them
+            // there. One write seeds both, since setState replaces state.
+            await seedMessageListState(
+              withParams(params, { state: { ...(params.state as object), accumulatedSteps: [] } }),
+              messageListState,
+            );
             const iterationState: IterationState = {
               ...input,
               initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
               iterationCount: 0,
-              accumulatedSteps: [],
               accumulatedUsage: {
                 inputTokens: 0,
                 outputTokens: 0,
@@ -1008,11 +1058,23 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
             const logger = mastra?.getLogger?.();
 
+            const storedSteps = readAccumulatedSteps(params.state, state);
+            const steps = expandDurableSteps(storedSteps);
+
             // Extract final text from last step
-            const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+            const lastStep = storedSteps[storedSteps.length - 1];
             let finalText = lastStep?.text;
 
             const messageListState = await readMessageListState(params, state);
+
+            // Read before the finish side effects: saving moves messages out of the input/response
+            // sets, and plain builds its finish envelope before saving too.
+            const finalMessageList = createRunMessageList({}).deserialize(messageListState);
+            const finishMessages = {
+              all: finalMessageList.get.all.aiV5.model(),
+              user: finalMessageList.get.input.aiV5.model(),
+              nonUser: finalMessageList.get.response.aiV5.model(),
+            };
 
             const finishResult = await runDurableFinishSideEffects({
               runId: state.runId,
@@ -1022,19 +1084,33 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               requestContext,
               tracingContext,
               logger,
+              messageId: state.messageId,
               outputResult: {
                 text: finalText ?? '',
                 usage: state.accumulatedUsage,
                 finishReason: state.lastStepResult?.reason ?? 'unknown',
-                steps: state.accumulatedSteps,
+                steps,
               },
             });
             if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
               lastStep.text = finishResult.outputText;
+              steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
               finalText = finishResult.outputText;
             }
 
             const tripwire = finishResult.tripwire;
+            if (pubsub && !tripwire) {
+              for (const chunk of finishResult.structuredOutputChunks ?? []) {
+                await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+              }
+            }
+
+            if (pubsub) {
+              for (const chunk of finishResult.outputResultChunks ?? []) {
+                await emitChunkEvent(pubsub, state.runId, chunk, true);
+              }
+            }
+
             if (tripwire && pubsub) {
               await emitChunkEvent(pubsub, state.runId, {
                 type: 'tripwire',
@@ -1044,9 +1120,16 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               });
             }
 
-            if (pubsub && !tripwire) {
-              for (const chunk of finishResult.structuredOutputChunks ?? []) {
-                await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+            // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a
+            // transient chunk so consumers see it before the stream closes (as the in-process loop does).
+            if (pubsub && !tripwire && finishResult.titleForStream) {
+              const title = await finishResult.titleForStream;
+              if (title && initData.state?.threadId) {
+                await emitChunkEvent(pubsub, state.runId, {
+                  type: 'data-thread-title',
+                  data: { threadId: initData.state.threadId, title },
+                  transient: true,
+                });
               }
             }
 
@@ -1063,7 +1146,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               output: {
                 text: finalText,
                 usage: state.accumulatedUsage,
-                steps: state.accumulatedSteps,
+                // Saved with the run, so keep tool outputs compacted; the stream adapter expands them.
+                steps: storedSteps,
               },
               state: state.state,
             };
@@ -1072,6 +1156,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
+                messages: finishMessages,
               });
             }
 
@@ -1088,19 +1173,40 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
-              // Rebuilt spans end from snapshots taken at run start, so the clock the
-              // steps carried is applied here: the loop state's for the originals, the
-              // registry's for a resumed segment's fresh spans.
-              const clock = reg?.resumeModelSpanData ? reg.resumeCompletionStartTime : state.completionStartTime;
-              const completionStartTime = clock ? new Date(clock) : undefined;
+              // Rebuilt spans end from snapshots taken at run start, so the clocks the
+              // steps carried are applied here.
+              const clocks = carriedSpanClocks(reg, state);
+              // The state carries the facts across workers; the registry is the fallback for
+              // runs whose snapshots predate those fields.
+              const finishReason = finalOutput.stepResult?.reason;
+              const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
+              const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
+              if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
+                logger?.warn?.(
+                  `[DurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
+                );
+              }
+              const termination =
+                ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
+                  ? recordedTermination
+                  : agentLoopTermination({
+                      stopCause,
+                      delegationFailure: state.tracingDelegationFailure ?? reg?.tracingDelegationFailure,
+                      finishReason,
+                      tripwire: tripwire ?? state.lastStepResult?.tripwire,
+                      maxSteps: initData.options?.maxSteps,
+                    });
               if (observability) {
                 if (modelSpanData) {
-                  const modelSpan = observability.rebuildSpan(
-                    modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
-                  ) as AIModelGenerationSpan | undefined;
+                  const modelSpan =
+                    reg?.resumeModelSpan ??
+                    reg?.modelSpan ??
+                    (observability.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
+                      | AIModelGenerationSpan
+                      | undefined);
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
-                  const toolCalls = state.accumulatedSteps.flatMap(step =>
+                  const toolCalls = steps.flatMap(step =>
                     ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                       toolCallId: tc.toolCallId,
                       toolName: tc.toolName,
@@ -1109,20 +1215,27 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   );
                   const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
                   modelSpan?.createTracker()?.endGeneration({
+                    ...termination,
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
                       ...(usageIncomplete ? { usageIncomplete: true } : {}),
-                      ...(completionStartTime ? { completionStartTime } : {}),
+                      ...clocks,
+                      responseId: state.lastResponse?.id,
+                      responseModel: state.lastResponse?.modelId,
                     },
-                    usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
+                    usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
                   });
                 }
                 if (agentSpanData) {
-                  const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+                  const agentSpan =
+                    reg?.resumeAgentSpan ??
+                    reg?.agentSpan ??
+                    observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
                   agentSpan?.end({
+                    ...termination,
                     output: { text: finalText },
-                    ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+                    ...(clocks ? { attributes: clocks } : {}),
                   });
                 }
               }
@@ -1153,6 +1266,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   requestContext,
                   tracingContext,
                   loadStoredMessages: loadRunStoredMessages(params),
+                  scorerInstances: takeRunScorerInstances(initData.runId, mastra as Mastra | undefined),
                 }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
               } catch (error) {
                 mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`);

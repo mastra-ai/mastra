@@ -1,3 +1,4 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -14,7 +15,8 @@ import { ChatSessionContext } from '../../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
-import { ModelPicker } from '../ModelPicker';
+import { ChangeModelAction, ModelPicker } from '../ModelPicker';
+import { datedModels } from '../../../../settings/components/__tests__/fixtures/models';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -42,7 +44,8 @@ const models: AvailableModelOption[] = [
 ];
 
 const baseSession: ChatSessionContextApi = {
-  resourceId: 'session-1',
+  sessionId: 'session-1',
+  resourceId: 'user-1',
   sessionEnabled: true,
   resourceReady: true,
   sandboxReady: true,
@@ -67,7 +70,10 @@ function renderPicker({
   emptyCatalog = false,
   catalogFails = false,
   sessionPolicy,
+  catalog = models,
+  withChangeModelAction = false,
 }: {
+  catalog?: AvailableModelOption[];
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
   defaultModelId?: string | null;
@@ -76,30 +82,38 @@ function renderPicker({
   catalogLoaded?: Promise<void>;
   modelSwitched?: Promise<void>;
   thinkingDefaultsFail?: boolean;
-  /** Mount on a Factory route, so the Factory's thinking level applies. */
+  /** Mount on a Factory-routed Factory, so the Factory's thinking level applies. */
   inFactory?: boolean;
   /** Mount on a Factory route whose project has this model scope. */
   modelScope?: 'factory' | 'user' | 'hybrid';
   factoryDefaultModelId?: string;
-  sessionPolicy?: { modelScope: 'factory' | 'user'; defaultModelId: string | null };
+  sessionPolicy?: {
+    modelScope: 'factory' | 'user';
+    defaultModelId: string | null;
+    personalThinkingLevel?: ThinkingLevelSetting | null;
+  };
   /** The Factory's scope has no credentials, so its catalog is empty. */
   emptyCatalog?: boolean;
   /** The session catalog request fails. */
   catalogFails?: boolean;
+  withChangeModelAction?: boolean;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
   server.use(
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
-      if (!modelScope) return HttpResponse.json({ models });
+      if (!modelScope) return HttpResponse.json({ models: catalog });
       const params = new URL(request.url).searchParams;
       if (params.has('resourceId')) {
         if (catalogFails) {
           return HttpResponse.json({ error: 'session_model_policy_unavailable' }, { status: 503 });
         }
-        expect(params.get('resourceId')).toBe('session-1');
+        expect(params.get('sessionId')).toBe('session-1');
+        expect(params.get('resourceId')).toBe('user-1');
         expect(params.get('threadId')).toBe('session-1');
         const effectiveScope = sessionPolicy?.modelScope ?? (modelScope === 'hybrid' ? kind : modelScope);
         return HttpResponse.json({
@@ -109,6 +123,7 @@ function renderPicker({
             : effectiveScope === 'factory'
               ? (factoryDefaultModelId ?? null)
               : defaultModelId,
+          personalThinkingLevel: sessionPolicy?.personalThinkingLevel ?? null,
           models: emptyCatalog
             ? []
             : models.filter(model => model.provider === (effectiveScope === 'factory' ? 'openai' : 'anthropic')),
@@ -127,7 +142,9 @@ function renderPicker({
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
       thinkingDefaultsFail
         ? HttpResponse.json({ error: 'unavailable' }, { status: 500 })
-        : HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultThinkingLevel: 'medium' } }),
+        : HttpResponse.json({
+            project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultThinkingLevel: 'medium' },
+          }),
     ),
     http.get(`${API}/sessions/:resourceId`, async ({ params }) => {
       await settingsLoaded;
@@ -169,7 +186,7 @@ function renderPicker({
             name: 'Mastra',
             modelScope,
             defaultModelId: factoryDefaultModelId,
-            defaultThinkingLevel: 'medium',
+            defaultThinkingLevel: 'low',
           },
         }),
       ),
@@ -181,12 +198,19 @@ function renderPicker({
       <ChatConnectionContext.Provider
         value={{
           status: 'ready',
-          state: { controllerId: AGENT_CONTROLLER_ID, resourceId: 'session-1', modeId: 'build', modelId },
+          state: {
+            controllerId: AGENT_CONTROLLER_ID,
+            sessionId: 'session-1',
+            resourceId: 'user-1',
+            modeId: 'build',
+            modelId,
+          },
         }}
       >
         <ChatModelsProvider>
           <ChatThinkingProvider>
             <ModelPicker />
+            {withChangeModelAction ? <ChangeModelAction /> : null}
             <Toaster position="bottom-right" />
           </ChatThinkingProvider>
         </ChatModelsProvider>
@@ -213,6 +237,19 @@ afterEach(() => {
 });
 
 describe('ModelPicker', () => {
+  describe('when the catalog contains release dates', () => {
+    it('offers newer models first within each provider', async () => {
+      const user = userEvent.setup();
+      renderPicker({ catalog: datedModels, defaultModelId: 'openai/gpt-5' });
+      await user.click(await screen.findByLabelText('Session model'));
+      const options = await screen.findAllByRole('option');
+      expect(options.map(option => option.getAttribute('data-value'))).toEqual([
+        'openai/gpt-5',
+        'openai/gpt-4.1',
+        'openai/gpt-4o',
+      ]);
+    });
+  });
   it.each(['user', 'hybrid'] as const)(
     'shows the thread owner catalog and default to a collaborator in %s scope',
     async modelScope => {
@@ -248,6 +285,32 @@ describe('ModelPicker', () => {
     expect(await screen.findByRole('note')).toHaveTextContent(
       "Showing models this Factory's organization credentials can run.",
     );
+  });
+
+  it("starts a chat on personal defaults at its owner's personal thinking level", async () => {
+    const user = userEvent.setup();
+    renderPicker({
+      modelScope: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      sessionPolicy: {
+        modelScope: 'user',
+        defaultModelId: 'anthropic/claude-sonnet-4-6',
+        personalThinkingLevel: 'high',
+      },
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Thinking: High (Personal default)' }));
+    expect(screen.getByText('Follows the Personal default.')).toBeInTheDocument();
+  });
+
+  it("starts a chat on personal defaults at medium, never the Factory's level, when its owner set no personal level", async () => {
+    renderPicker({
+      modelScope: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      sessionPolicy: { modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-6', personalThinkingLevel: null },
+    });
+
+    expect(await screen.findByRole('button', { name: 'Thinking: Medium (Built-in default)' })).toBeEnabled();
   });
 
   it('uses personal credentials to show a hybrid user session model as configured', async () => {
@@ -307,15 +370,16 @@ describe('ModelPicker', () => {
   it('reports a failed session catalog instead of staying locked as loading', async () => {
     renderPicker({ modelScope: 'hybrid', kind: 'user', catalogFails: true });
 
-    const unavailable = await screen.findByLabelText('GPT-5 · model list unavailable');
-    expect(unavailable).toHaveTextContent('GPT-5 · model list unavailable');
+    const unavailable = await screen.findByLabelText('GPT-5: model list unavailable');
+    expect(within(unavailable).getByText('GPT-5')).toBeInTheDocument();
+    expect(within(unavailable).getByText('model list unavailable')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Session model/ })).not.toBeInTheDocument();
   });
 
   it('keeps the plain not-configured label for a personal-scoped Factory with no usable models', async () => {
     renderPicker({ modelScope: 'user', emptyCatalog: true });
 
-    expect(await screen.findByLabelText(/gpt-5 is not configured/i)).toHaveTextContent('· not configured');
+    expect(await screen.findByLabelText(/gpt-5 is not configured/i)).toHaveTextContent('not configured');
     expect(screen.queryByRole('link', { name: 'needs an organization credential' })).not.toBeInTheDocument();
   });
 
@@ -394,7 +458,7 @@ describe('ModelPicker', () => {
       thinkingLevel: 'max',
     });
 
-    await screen.findByRole('button', { name: 'Thinking: Max · this session' });
+    await screen.findByRole('button', { name: 'Thinking: Max (this session)' });
     await user.click(screen.getByLabelText('Session model'));
     await user.click(screen.getByRole('option', { name: /gpt-5/i }));
     await waitForMutationsIdle(client);
@@ -406,14 +470,14 @@ describe('ModelPicker', () => {
   it('shows the level the model runs when the saved choice is above what it supports', async () => {
     renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'max' });
 
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Thinking: High (this session)' })).toBeEnabled();
   });
 
   it('given no session level, when the session picks one, then it leaves the Factory default and saves it', async () => {
     const user = userEvent.setup();
     const { client, stateUpdates } = renderPicker({ inFactory: true });
 
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Factory default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium (Factory default)' }));
     expect(screen.getByText('Follows the Factory default.')).toBeInTheDocument();
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     expect(screen.queryByText('Max')).not.toBeInTheDocument();
@@ -422,7 +486,7 @@ describe('ModelPicker', () => {
     await waitForMutationsIdle(client);
 
     expect(stateUpdates).toEqual([{ thinkingLevel: 'high' }]);
-    expect(screen.getByRole('button', { name: 'Thinking: High · this session' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thinking: High (this session)' })).toBeInTheDocument();
     expect(screen.getByText('Set for this session.')).toBeInTheDocument();
   });
 
@@ -430,12 +494,12 @@ describe('ModelPicker', () => {
     const user = userEvent.setup();
     const { client, stateUpdates } = renderPicker({ thinkingLevel: 'high', inFactory: true });
 
-    await user.click(await screen.findByRole('button', { name: 'Thinking: High · this session' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: High (this session)' }));
     await user.click(screen.getByRole('button', { name: 'Use default' }));
     await waitForMutationsIdle(client);
 
     expect(stateUpdates).toEqual([{ thinkingLevel: null }]);
-    expect(screen.getByRole('button', { name: 'Thinking: Medium · Factory default' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thinking: Medium (Factory default)' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Use default' })).not.toBeInTheDocument();
   });
 
@@ -454,7 +518,7 @@ describe('ModelPicker', () => {
   it("keeps the session's own level usable when the defaults fail to load", async () => {
     renderPicker({ thinkingLevel: 'high', thinkingDefaultsFail: true, inFactory: true });
 
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Thinking: High (this session)' })).toBeEnabled();
   });
 
   it('holds the thinking control disabled, not the Factory default, until the session level loads', async () => {
@@ -467,10 +531,10 @@ describe('ModelPicker', () => {
     expect(
       await screen.findByRole('button', { name: "Thinking: unavailable. The thinking level isn't loaded yet." }),
     ).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByRole('button', { name: 'Thinking: Medium · Factory default' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thinking: Medium (Factory default)' })).not.toBeInTheDocument();
 
     loadSettings();
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Thinking: High (this session)' })).toBeEnabled();
   });
 
   it("holds the thinking control until the model's levels load, then shows the level it runs", async () => {
@@ -487,7 +551,7 @@ describe('ModelPicker', () => {
     ).toHaveAttribute('aria-disabled', 'true');
 
     loadCatalog();
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Thinking: High (this session)' })).toBeEnabled();
   });
 
   it('locks the thinking level while a model switch is in flight', async () => {
@@ -498,7 +562,7 @@ describe('ModelPicker', () => {
     const user = userEvent.setup();
     const { client } = renderPicker({ modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'high', modelSwitched });
 
-    await screen.findByRole('button', { name: 'Thinking: High · this session' });
+    await screen.findByRole('button', { name: 'Thinking: High (this session)' });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Session model' }));
     await user.click(screen.getByRole('option', { name: /gpt-5/i }));
@@ -510,6 +574,36 @@ describe('ModelPicker', () => {
 
     finishSwitch();
     await waitForMutationsIdle(client);
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Thinking: High (this session)' })).toBeEnabled();
+  });
+
+  it('locks the status-line picker while the error card switches the model', async () => {
+    let finishSwitch = () => {};
+    const modelSwitched = new Promise<void>(resolve => {
+      finishSwitch = resolve;
+    });
+    const user = userEvent.setup();
+    const { client } = renderPicker({
+      modelId: 'anthropic/claude-sonnet-4-6',
+      thinkingLevel: 'high',
+      modelSwitched,
+      withChangeModelAction: true,
+    });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Change model' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Change model' }));
+    await user.click(screen.getByRole('option', { name: /gpt-5/i }));
+
+    const sessionModel = await screen.findByRole('button', { name: 'Session model' });
+    await waitFor(() => expect(sessionModel).toBeDisabled());
+    expect(sessionModel).toHaveTextContent(/gpt-5/i);
+    expect(screen.getByRole('button', { name: 'Thinking: unavailable. Switching model…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    finishSwitch();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());
   });
 });

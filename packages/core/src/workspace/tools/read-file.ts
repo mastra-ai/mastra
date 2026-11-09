@@ -33,10 +33,40 @@ const TEXT_APPLICATION_TYPES = new Set([
   'application/yaml',
   'application/ld+json',
   'application/sql',
+  'application/jsonl',
+  'application/x-jsonl',
+  'application/ndjson',
+  'application/x-ndjson',
+  'application/jsonlines',
+  'application/json-lines',
+  'application/x-jsonlines',
+  'application/x-php',
+  'application/dart',
 ]);
+
+/**
+ * Charsets whose bytes decode correctly as utf-8. Text content declared with
+ * any other charset (e.g. `utf-16le`) would be garbled by a utf-8 read.
+ */
+const UTF8_COMPATIBLE_CHARSETS = new Set(['utf-8', 'utf8', 'us-ascii', 'ascii']);
+
+/** Matches `; name=value` MIME parameters, keeping quoted values (which may contain `;`) whole. */
+const MIME_PARAMETER_PATTERN = /;\s*([^\s;=]+)\s*=\s*("(?:[^"\\]|\\.)*"|[^;]*)/g;
+
+function getMimeCharset(mimeType: string): string | undefined {
+  for (const [, name, value] of mimeType.matchAll(MIME_PARAMETER_PATTERN)) {
+    if (name!.toLowerCase() !== 'charset') continue;
+    const unquoted = value!.startsWith('"') ? value!.slice(1, -1).replace(/\\(.)/g, '$1') : value!;
+    return unquoted.trim().toLowerCase();
+  }
+  return undefined;
+}
 
 function isTextLikeMimeType(mimeType: string | undefined): boolean {
   if (!mimeType) return true;
+  const charset = getMimeCharset(mimeType);
+  if (charset !== undefined && !UTF8_COMPATIBLE_CHARSETS.has(charset)) return false;
+  mimeType = mimeType.split(';', 1)[0]!.trim().toLowerCase();
   // `application/octet-stream` is the catch-all for unknown extensions; we
   // optimistically treat it as text so files like `.log` or `.conf` (which
   // have no registered mime mapping) still get read as utf-8.

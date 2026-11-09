@@ -296,6 +296,17 @@ describe('DockerSandbox', () => {
         expect(sandbox.workingDirectory).toBe('/srv/repo');
       });
 
+      it('forwards onTemplateBuildProgress to the template build', async () => {
+        const template = fakeTemplate();
+        const onTemplateBuildProgress = vi.fn();
+        await new DockerSandbox({ template, onTemplateBuildProgress })._start();
+        expect(template.build).toHaveBeenCalledWith({
+          docker: mockDocker,
+          abortSignal: undefined,
+          onProgress: onTemplateBuildProgress,
+        });
+      });
+
       it('keeps an explicit workingDirectory over the template workdir', async () => {
         const sandbox = new DockerSandbox({ template: fakeTemplate({ workdir: '/srv/repo' }), workingDirectory: '/x' });
         await sandbox._start();

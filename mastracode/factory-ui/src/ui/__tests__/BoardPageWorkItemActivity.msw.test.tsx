@@ -4,7 +4,14 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
+import {
+  closePropertiesMenus,
+  openPropertiesMenu,
+  openPropertySubmenu,
+  togglePropertyOption,
+} from '../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
@@ -226,22 +233,12 @@ function stubBoardEndpoints() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-ada' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -290,8 +287,6 @@ function renderBoard(board: 'work' | 'review', search = '') {
   return { ...rendered, router };
 }
 
-const filterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
-
 async function expectActivity(name: string, eventLabel: string, avatarAvailable = true) {
   const user = userEvent.setup();
   const trigger = await screen.findByRole('button', { name: `View activity by ${name}` });
@@ -315,7 +310,10 @@ describe('Board work-item activity', () => {
     renderBoard('work');
 
     await expectActivity('Ada Lovelace', 'Moved the item');
-    expect(screen.getByLabelText('Work item activity')).toHaveTextContent('build agent · anthropic/claude-sonnet-4-5');
+    const activity = within(screen.getByLabelText('Work item activity'));
+    expect(activity.getByText('build agent').closest('[data-slot="metadata"]')).toHaveTextContent(
+      'anthropic/claude-sonnet-4-5',
+    );
   });
 
   it('loads older audit pages so cards are not limited to the newest project events', async () => {
@@ -340,7 +338,7 @@ describe('Board work-item activity', () => {
     expect(requestedBefore).toContain('cursor-2');
   });
 
-  it('filters work cards by teammate and selected relevance types', async () => {
+  it('narrows work cards from anyone involved to one role, then resets', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -352,12 +350,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored issue');
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
-    await user.type(filterInput(), 'octo');
-    expect(screen.queryByRole('option', { name: /Grace Hopper/ })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('option', { name: /octocat/ }));
-    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
+    await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
 
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get('teammate')).toBe('github:octocat');
@@ -366,30 +359,24 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
     expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
 
-    await user.type(filterInput(), 'relevant{ArrowDown}{Enter}');
-    await screen.findByRole('option', { name: 'Worked on' });
-    expect(screen.queryByRole('option', { name: 'Review requested' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('option', { name: 'Worked on' }));
-    await user.click(screen.getByRole('option', { name: 'Assigned' }));
-    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Assignee', /octocat/);
     await waitFor(() => {
-      expect(new URLSearchParams(router.state.location.search).get('relevance')).toBe('worked,assigned');
+      expect(new URLSearchParams(router.state.location.search).get('assignee')).toBe('github:octocat');
     });
-
     expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
 
-    await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await openPropertiesMenu(user, 'Board properties');
+    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
     await waitFor(() => {
-      const params = new URLSearchParams(router.state.location.search);
-      expect(params.get('teammate')).toBeNull();
-      expect(params.get('relevance')).toBeNull();
+      expect(new URLSearchParams(router.state.location.search).get('assignee')).toBeNull();
     });
     expect(screen.getByText('Authored issue')).toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
     expect(screen.getByText('Unrelated issue')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+    await closePropertiesMenus(user);
+    expect(screen.getByRole('button', { name: 'Board properties' })).toBeInTheDocument();
   });
 
   it('restores work filters from a shared URL', async () => {
@@ -400,7 +387,7 @@ describe('Board work-item activity', () => {
       ),
     );
 
-    const { client } = renderBoard('work', '?teammate=github%3Aoctocat&relevance=assigned');
+    const { client } = renderBoard('work', '?assignee=github%3Aoctocat');
     await waitForMutationsIdle(client);
 
     expect(await screen.findByText('Assigned issue')).toBeInTheDocument();
@@ -466,11 +453,7 @@ describe('Board work-item activity', () => {
 
     await screen.findByText('Linear planning item');
     await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
-    await user.type(filterInput(), 'Linear Ada');
-    await user.click(await screen.findByRole('option', { name: /Linear Ada/i }));
-    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
+    await togglePropertyOption(user, 'Board properties', 'Author', /Linear Ada/i);
 
     expect(screen.getByText('Linear planning item')).toBeInTheDocument();
   });
@@ -506,7 +489,7 @@ describe('Board work-item activity', () => {
     expect(within(popup).getByText(`Created at: ${createdAt}`)).toHaveAttribute('datetime', reviewItem.createdAt);
   });
 
-  it('filters review cards by teammate and selected relevance types', async () => {
+  it('filters review cards by anyone involved, by reviewer, and by who worked on them', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -525,30 +508,22 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
-    await user.click(await screen.findByRole('option', { name: /octocat/ }));
-    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
+    await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
 
     expect(screen.getByText('Authored PR')).toBeInTheDocument();
     expect(screen.getByText('Assigned PR')).toBeInTheDocument();
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
     expect(screen.queryByText('Worked PR')).not.toBeInTheDocument();
 
-    await user.type(filterInput(), 'relevant{ArrowDown}{Enter}');
-    await user.click(await screen.findByRole('option', { name: 'Worked on' }));
-    await user.click(screen.getByRole('option', { name: 'Assigned' }));
-    await user.click(screen.getByRole('option', { name: 'Review requested' }));
-    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Review requested', /octocat/);
 
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
-    expect(screen.getByText('Assigned PR')).toBeInTheDocument();
+    expect(screen.queryByText('Assigned PR')).not.toBeInTheDocument();
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('combobox', { name: /^Value: .*octocat/ }));
-    await user.click(await screen.findByRole('option', { name: /octocat/ }));
-    await user.click(screen.getByRole('option', { name: /Ada Lovelace/ }));
-    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
+    await togglePropertyOption(user, 'Board properties', 'Review requested', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Worked on by', /You$/);
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
@@ -602,5 +577,28 @@ describe('Board work-item activity', () => {
 
     const row = await screen.findByRole('article', { name: reviewItem.title });
     expect(within(row).getByText('Changes requested')).toBeVisible();
+  });
+
+  it('keeps the full self-review verdict on hover when a narrow row truncates it', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...reviewItem,
+              sessions: {},
+              metadata: { ...reviewItem.metadata, selfReviewVerdict: 'approve', selfReviewRounds: 1 },
+            },
+          ],
+        }),
+      ),
+    );
+    renderBoard('review');
+
+    const row = await screen.findByRole('article', { name: reviewItem.title });
+    expect(within(row).getByTitle('Self-review: approved (round 1)')).toHaveTextContent(
+      'Self-review: approved (round 1)',
+    );
   });
 });

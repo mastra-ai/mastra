@@ -46,15 +46,18 @@ describe('Composer on a lazy user-session draft', () => {
     await user.type(message, '  fix the login bug  ');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug' }]));
-    expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`);
-    expect(preparation.controllerCreates).toBe(0);
-
-    finishCreate();
-
+    await waitFor(() =>
+      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug', visibility: 'private' }]),
+    );
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
     );
+    expect(screen.getByLabelText('Loading session')).toBeInTheDocument();
+    expect(preparation.controllerCreates).toBe(0);
+    expect(preparation.sessionLookups).toBe(0);
+
+    finishCreate();
+
     await waitFor(() => expect(preparation.posted).toEqual(['fix the login bug']));
     expect(preparation.delivered).toEqual([]);
     await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
@@ -93,6 +96,53 @@ describe('Composer on a lazy user-session draft', () => {
     renderThread();
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
     expect(preparation.posted).toEqual(['recover this prompt']);
+  });
+
+  describe('when the first send fails', () => {
+    const MESSAGES = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/messages`;
+
+    async function sendFirstPrompt(text: string, failure: () => Response) {
+      const preparation = stubPreparingSession({ createdSessionTitle: text });
+      const attempts: string[] = [];
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+          HttpResponse.json({ session: createdDraftSession(text) }),
+        ),
+        http.post(MESSAGES, async ({ request }) => {
+          attempts.push(JSON.stringify(await request.json()));
+          return failure();
+        }),
+      );
+      const user = userEvent.setup();
+      const { client } = renderDraft();
+      const message = await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(message).toBeEnabled());
+      await user.type(message, text);
+      await user.keyboard('{Enter}');
+      await waitFor(() =>
+        expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
+      );
+      preparation.finishWorkspace();
+      await waitForMutationsIdle(client);
+      await waitFor(() => expect(attempts).toHaveLength(1));
+      return attempts;
+    }
+
+    it('warns that a send which may have reached the server could already be in the transcript', async () => {
+      const attempts = await sendFirstPrompt('maybe delivered', () => HttpResponse.error());
+
+      expect(await screen.findByText(/may have been sent\. Check the transcript before retrying/)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('maybe delivered'));
+      expect(attempts).toHaveLength(1);
+    });
+
+    it('gives a refused send back without the duplicate warning', async () => {
+      await sendFirstPrompt('refused', () => HttpResponse.json({ message: 'Message too long' }, { status: 413 }));
+
+      expect(await screen.findByText(/Message too long/)).toBeInTheDocument();
+      expect(screen.queryByText(/may have been sent/)).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('refused'));
+    });
   });
 
   it('applies a draft-selected model before dispatching the first prompt', async () => {
@@ -178,19 +228,21 @@ describe('Composer on a lazy user-session draft', () => {
     await user.type(message, '  retry this prompt  ');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(message).toHaveValue('retry this prompt'));
-    expect(screen.getByTestId('pathname')).toHaveTextContent(draftUrl);
     expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
+    expect(screen.getByTestId('pathname')).toHaveTextContent(draftUrl);
+    const restored = screen.getByRole('textbox', { name: 'Message' });
+    expect(restored).toHaveValue('retry this prompt');
     expect(preparation.posted).toEqual([]);
 
+    restored.focus();
     await user.keyboard('{Enter}');
 
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
     );
     expect(createBodies).toEqual([
-      { sessionId: SESSION_ID, title: 'retry this prompt' },
-      { sessionId: SESSION_ID, title: 'retry this prompt' },
+      { sessionId: SESSION_ID, title: 'retry this prompt', visibility: 'private' },
+      { sessionId: SESSION_ID, title: 'retry this prompt', visibility: 'private' },
     ]);
 
     preparation.finishWorkspace();

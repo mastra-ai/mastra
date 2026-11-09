@@ -90,7 +90,9 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
 
     this.protected = options?.protected;
     this.public = options?.public;
-    this.mapUserToResourceId = options?.mapUserToResourceId;
+    if (options?.mapUserToResourceId) {
+      this.mapUserToResourceId = options.mapUserToResourceId;
+    }
   }
 
   /**

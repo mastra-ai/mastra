@@ -479,7 +479,10 @@ export interface ObservationalMemoryObservationConfig {
    *
    * Cannot be set if a top-level `model` is also provided.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default the top-level `model`, else `reflection.model`, else `'auto'` — Google's low-cost Gemini
+   * model when Google is usable (`canUseProvider('google')`, or `GOOGLE_GENERATIVE_AI_API_KEY`
+   * when no callback is configured), otherwise a low-cost model from the main model's provider,
+   * otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -685,13 +688,15 @@ export interface ObservationalMemoryObservationConfig {
 
   /**
    * Whether image/file attachment parts are forwarded to the Observer LLM.
-   * - `true` forwards attachments
+   * - `true` forwards every attachment
    * - `false` drops attachments and leaves placeholder text
    * - `'auto'` checks model capabilities to decide
+   * - a `string[]` forwards only attachments whose MIME type matches an entry; entries may be
+   *   exact (`'application/pdf'`) or a wildcard (`'image/*'`)
    *
-   * @default true
+   * @default ['image/*', 'application/pdf']
    */
-  observeAttachments?: 'auto' | boolean;
+  observeAttachments?: 'auto' | boolean | string[];
 }
 
 /**
@@ -706,7 +711,10 @@ export interface ObservationalMemoryReflectionConfig {
    *
    * Cannot be set if a top-level `model` is also provided.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default the top-level `model`, else `observation.model`, else `'auto'` — Google's low-cost Gemini
+   * model when Google is usable (`canUseProvider('google')`, or `GOOGLE_GENERATIVE_AI_API_KEY`
+   * when no callback is configured), otherwise a low-cost model from the main model's provider,
+   * otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -858,7 +866,9 @@ export interface ObservationalMemoryOptions {
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto' — Google's low-cost Gemini model when Google is usable (`canUseProvider('google')`,
+   * or `GOOGLE_GENERATIVE_AI_API_KEY` when no callback is configured), otherwise a low-cost model
+   * from the main model's provider, otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -1346,6 +1356,20 @@ export type SharedMemoryConfig = {
   embedderOptions?: MastraEmbeddingOptions;
 
   /**
+   * Output dimension of the embedder, if known. When set, Memory uses it to name the semantic
+   * recall index instead of embedding a probe string on first use, which saves one embedding
+   * call per Memory instance and removes the startup dependency on the embedding provider.
+   * Must be a positive integer that matches the vectors the embedder returns.
+   *
+   * @example
+   * ```typescript
+   * embedder: 'openai/text-embedding-3-small',
+   * embeddingDimension: 1536
+   * ```
+   */
+  embeddingDimension?: number;
+
+  /**
    * @deprecated This option is deprecated and will throw an error if used.
    * Use the new Input/Output processor system instead.
    *
@@ -1514,7 +1538,7 @@ export type SerializedObservationalMemoryObservationConfig = {
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
   /** Whether image/file attachment parts are forwarded to the Observer LLM */
-  observeAttachments?: 'auto' | boolean;
+  observeAttachments?: 'auto' | boolean | string[];
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

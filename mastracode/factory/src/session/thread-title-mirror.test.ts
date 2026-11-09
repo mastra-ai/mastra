@@ -2,11 +2,8 @@ import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/a
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
-import {
-  observeSessionThreadTitle,
-  type ThreadTitleMirrorDependencies,
-  type ThreadTitleMirrorSession,
-} from './thread-title-mirror.js';
+import { observeSessionThreadTitle } from './thread-title-mirror.js';
+import type { ThreadTitleMirrorDependencies, ThreadTitleMirrorSession } from './thread-title-mirror.js';
 
 function createSession(title?: string) {
   const listeners: Array<(event: AgentControllerEvent) => void> = [];
@@ -20,7 +17,7 @@ function createSession(title?: string) {
     }),
   );
   const session: ThreadTitleMirrorSession = {
-    identity: { getResourceId: () => 'resource-1' },
+    identity: { getId: () => 'resource-1' },
     thread: { getById },
     subscribe: listener => {
       listeners.push(listener);

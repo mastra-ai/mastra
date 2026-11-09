@@ -1,10 +1,11 @@
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/base';
+import type { Card } from '@mastra/factory/storage/domains/work-items/base';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
@@ -27,7 +28,7 @@ function deferred() {
 }
 
 function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
-  const items: WorkItemRow[] = candidate ? [] : [{ ...reviewItem, stages: decision ? ['review'] : ['intake'] }];
+  const items: Card[] = candidate ? [] : [{ ...reviewItem, stages: decision ? ['review'] : ['intake'] }];
   const decisions: FactoryDecisionSummary[] = decision ? [decision] : [];
   const runningSessionIds: string[] = [];
   const data = { items, decisions, runningSessionIds, transitionCommitted: false, decisionRefreshStarted: false };
@@ -42,22 +43,12 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${projectUrl}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: 'repo-1',
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -197,7 +188,7 @@ describe('Review card action lifecycle', () => {
     await waitForMutationsIdle(client);
     const card = await screen.findByTestId('work-item-card');
     expect(within(card).getByRole('button', { name: 'Retrying…' })).toBeDisabled();
-    expect(within(card).getByText('Automated run could not start — retrying…')).toBeVisible();
+    expect(within(card).getByText('Automated run could not start. Retrying…')).toBeVisible();
     expect(within(card).queryByRole('button', { name: 'Review' })).toBeNull();
 
     data.decisions = [{ ...reviewDecision, status: 'failed', canRetry: true, attempts: 5, lastError: 'Timeout' }];

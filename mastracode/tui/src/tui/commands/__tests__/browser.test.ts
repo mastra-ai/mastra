@@ -1,6 +1,7 @@
 import type { BrowserSettings } from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { closeActiveBrowser } from '../../../browser-lifecycle.js';
 import { handleBrowserCommand } from '../browser.js';
 import type { SlashCommandContext } from '../types.js';
 
@@ -49,7 +50,7 @@ vi.mock('../../prompt-api-key.js', () => ({
 }));
 
 function createContext() {
-  const browserInstance = { id: 'browser-instance' };
+  const browserInstance = { id: 'browser-instance', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
   const staticAgent = { setBrowser: vi.fn() };
   const dynamicAgent = { setBrowser: vi.fn() };
   const controllerState = { mode: 'review' };
@@ -106,7 +107,8 @@ async function openedPicker() {
 }
 
 describe('handleBrowserCommand', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await closeActiveBrowser();
     browserMocks.checkProfileProviderMismatch.mockReset();
     browserMocks.createBrowserFromSettings.mockReset();
     browserMocks.loadSettings.mockReset();
@@ -141,8 +143,6 @@ describe('handleBrowserCommand', () => {
     expect(browserMocks.createBrowserFromSettings).toHaveBeenCalledWith(enabledSettings, {
       chatModelId: 'anthropic/claude-sonnet-4-5',
     });
-    expect(ctx.controller.listModes).toHaveBeenCalledOnce();
-    expect(ctx.state.session.state.get).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).toHaveBeenCalledWith(browserInstance);
     expect(dynamicAgent.setBrowser).toHaveBeenCalledWith(browserInstance);
     const dynamicMode = (ctx.controller.listModes as ReturnType<typeof vi.fn>).mock.results[0]?.value[1];
@@ -158,6 +158,150 @@ describe('handleBrowserCommand', () => {
     expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
     expect(settings.browser.enabled).toBe(true);
     expect(ctx.showInfo).toHaveBeenCalledWith('Browser enabled (Stagehand).');
+  });
+
+  it('closes the running browser before attaching its replacement, so the profile is free to relaunch', async () => {
+    const { ctx, settings, browserInstance, staticAgent } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
+    const replacement = { id: 'replacement', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    browserMocks.createBrowserFromSettings.mockResolvedValueOnce(browserInstance).mockResolvedValueOnce(replacement);
+
+    await handleBrowserCommand(ctx, ['on']);
+    expect(browserInstance.retire).not.toHaveBeenCalled();
+
+    const order: string[] = [];
+    browserInstance.retire.mockImplementation(async () => {
+      order.push('close old');
+    });
+    staticAgent.setBrowser.mockImplementation((b: { id: string } | undefined) => {
+      order.push(`attach ${b?.id}`);
+    });
+    await handleBrowserCommand(ctx, ['on']);
+
+    // Agents drop the old browser before it closes, so they can't relaunch it while it closes,
+    // and the old browser releases the profile before agents can launch the replacement on it.
+    expect(order).toEqual(['attach undefined', 'close old', 'attach replacement']);
+    expect(replacement.retire).not.toHaveBeenCalled();
+  });
+
+  it('does not attach or save a browser that a later /browser command replaced while the old one closed', async () => {
+    const { ctx, settings, browserInstance, staticAgent } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
+    const first = { id: 'first', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    const second = { id: 'second', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    browserMocks.createBrowserFromSettings
+      .mockResolvedValueOnce(browserInstance)
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+
+    await handleBrowserCommand(ctx, ['on']);
+    browserMocks.saveSettings.mockClear();
+
+    let finishOldClose!: () => void;
+    browserInstance.retire.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
+    const losing = handleBrowserCommand(ctx, ['on']);
+    await vi.waitFor(() => expect(finishOldClose).toBeDefined());
+    const winning = handleBrowserCommand(ctx, ['on']);
+    await vi.waitFor(() => expect(browserMocks.createBrowserFromSettings).toHaveBeenCalledTimes(3));
+    await new Promise(r => setTimeout(r, 0));
+    // The old browser still holds the profile, so the replacement is not handed out yet.
+    expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(second);
+    finishOldClose();
+    await Promise.all([losing, winning]);
+
+    expect(first.retire).toHaveBeenCalledOnce();
+    expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(first);
+    expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(second);
+    expect(browserMocks.saveSettings).toHaveBeenCalledOnce();
+    expect(ctx.showInfo).toHaveBeenCalledWith('Another /browser command replaced this browser.');
+  });
+
+  it('does not save or report a /browser clear that a later /browser command replaced', async () => {
+    const { ctx, settings, browserInstance, staticAgent } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
+    const cleared = { id: 'cleared', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    const second = { id: 'second', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    browserMocks.createBrowserFromSettings
+      .mockResolvedValueOnce(browserInstance)
+      .mockResolvedValueOnce(cleared)
+      .mockResolvedValueOnce(second);
+
+    await handleBrowserCommand(ctx, ['on']);
+    browserMocks.saveSettings.mockClear();
+
+    let finishOldClose!: () => void;
+    browserInstance.retire.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
+    const losing = handleBrowserCommand(ctx, ['clear']);
+    await vi.waitFor(() => expect(finishOldClose).toBeDefined());
+    const winning = handleBrowserCommand(ctx, ['on']);
+    await vi.waitFor(() => expect(browserMocks.createBrowserFromSettings).toHaveBeenCalledTimes(3));
+    await new Promise(r => setTimeout(r, 0));
+    // The old browser still holds the profile, so the replacement is not handed out yet.
+    expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(second);
+    finishOldClose();
+    await Promise.all([losing, winning]);
+
+    expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(cleared);
+    expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(second);
+    expect(browserMocks.saveSettings).toHaveBeenCalledOnce();
+    expect(ctx.showInfo).not.toHaveBeenCalledWith('Browser settings reset to defaults.');
+    expect(ctx.showInfo).toHaveBeenCalledWith('Another /browser command replaced this browser.');
+  });
+
+  it('does not let a /browser clear still creating its browser replace one a later /browser command attached', async () => {
+    const { ctx, settings, browserInstance, staticAgent } = createContext();
+    // Each load gets its own copy of what was last saved, so the clear's in-memory
+    // reset can't leak into the later /browser on.
+    let persisted = structuredClone(settings);
+    browserMocks.loadSettings.mockImplementation(() => structuredClone(persisted));
+    browserMocks.saveSettings.mockImplementation(next => {
+      persisted = structuredClone(next);
+    });
+    browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
+    const cleared = { id: 'cleared', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    const second = { id: 'second', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    let finishClearedCreate!: () => void;
+    browserMocks.createBrowserFromSettings
+      .mockResolvedValueOnce(browserInstance)
+      .mockImplementationOnce(() => new Promise(resolve => (finishClearedCreate = () => resolve(cleared))))
+      .mockResolvedValueOnce(second);
+
+    await handleBrowserCommand(ctx, ['on']);
+    browserMocks.saveSettings.mockClear();
+
+    const losing = handleBrowserCommand(ctx, ['clear']);
+    await vi.waitFor(() => expect(finishClearedCreate).toBeDefined());
+    await handleBrowserCommand(ctx, ['on']);
+    finishClearedCreate();
+    await losing;
+
+    expect(second.retire).not.toHaveBeenCalled();
+    expect(cleared.retire).toHaveBeenCalledOnce();
+    expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(cleared);
+    expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(second);
+    expect(browserMocks.saveSettings).toHaveBeenCalledOnce();
+    expect(persisted.browser).toMatchObject({
+      enabled: true,
+      provider: 'stagehand',
+      profile: '/tmp/mastracode-browser-profile',
+    });
+    expect(ctx.showInfo).toHaveBeenCalledWith('Another /browser command replaced this browser.');
+  });
+
+  it('closes the running browser when the browser is turned off', async () => {
+    const { ctx, settings, browserInstance, staticAgent } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
+    browserMocks.createBrowserFromSettings.mockResolvedValue(browserInstance);
+
+    await handleBrowserCommand(ctx, ['on']);
+    await handleBrowserCommand(ctx, ['off']);
+
+    expect(browserInstance.retire).toHaveBeenCalledOnce();
+    expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(undefined);
   });
 
   describe('set model', () => {

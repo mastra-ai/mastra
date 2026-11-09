@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GitLabIntegrationBase } from './integration.js';
 
 const mocks = vi.hoisted(() => ({
-  subscribe: vi.fn(async (_input: { source: string; sessionScope?: string }) => ({ created: true })),
-  unsubscribe: vi.fn(async (_input: { sessionScope?: string }) => undefined),
+  subscribe: vi.fn(async (_input: { source: string; sessionId?: string }) => ({ created: true })),
+  unsubscribe: vi.fn(async (_input: { sessionId?: string }) => undefined),
   getPullRequest: vi.fn(async () => ({
     id: '17',
     url: 'https://gitlab.example.com/acme/app/-/merge_requests/17',
@@ -57,13 +57,14 @@ function gitlabStub(overrides: Partial<typeof rows> = {}) {
   } as unknown as GitLabIntegrationBase;
 }
 
-function authenticatedRequestContext(scope = '/worktrees/a') {
+function authenticatedRequestContext() {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+  // The session runs under its Factory resource; only its session id names it.
   requestContext.set('controller', {
+    sessionId: 'session-1',
     resourceId: 'resource-1',
     threadId: 'thread-1',
-    scope,
     session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
     getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
   });
@@ -140,9 +141,9 @@ describe('GitLab subscription entry points', () => {
     const requestContext = new RequestContext();
     requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     requestContext.set('controller', {
+      sessionId: 'session-1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      scope: '/worktrees/a',
       session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
       getState: () => ({ factoryProjectId: 'resource-1' }),
     });
@@ -159,7 +160,7 @@ describe('GitLab subscription entry points', () => {
       projectRepositoryId: 'project-repository-1',
     });
     await expect(subscribeCurrentSessionToMergeRequest(requestContext, 17, 'explicit-tool', stub)).resolves.toBe(17);
-    expect(stub.sourceControlStorage!.sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
+    expect(stub.sourceControlStorage!.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
   });
 
   it('auto-subscribes the active GitLab session to a merge request it created', async () => {
@@ -189,7 +190,6 @@ describe('GitLab subscription entry points', () => {
         ownerId: 'user-1',
         resourceId: 'resource-1',
         threadId: 'thread-1',
-        sessionScope: '/worktrees/a',
         source: 'auto-create-change-request',
         subscribedByUserId: 'user-1',
       }),
@@ -269,10 +269,10 @@ describe('GitLab subscription entry points', () => {
 
   it('unsubscribes the same session identity it subscribed with', async () => {
     await expect(
-      unsubscribeCurrentSessionFromMergeRequest(authenticatedRequestContext('/worktrees/b'), '17', gitlabStub()),
+      unsubscribeCurrentSessionFromMergeRequest(authenticatedRequestContext(), '17', gitlabStub()),
     ).resolves.toBe(17);
     expect(mocks.unsubscribe).toHaveBeenCalledWith(
-      expect.objectContaining({ changeRequestId: '17', sessionScope: '/worktrees/b', sessionId: 'session-1' }),
+      expect.objectContaining({ changeRequestId: '17', sessionId: 'session-1', threadId: 'thread-1' }),
       expect.anything(),
     );
   });

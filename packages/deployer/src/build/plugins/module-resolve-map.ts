@@ -48,7 +48,7 @@ export function moduleResolveMap(externals: string[], projectRoot: string): Plug
       this.emitFile({
         type: 'asset',
         name: 'module-resolve-map.json',
-        source: `${JSON.stringify(resolveMapJson, null, 2)}`,
+        source: JSON.stringify(resolveMapJson, null, 2),
       });
     },
   } satisfies Plugin;

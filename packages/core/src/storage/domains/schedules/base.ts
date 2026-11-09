@@ -272,7 +272,10 @@ export abstract class SchedulesStorage extends StorageDomain {
   abstract listSchedules(filter?: ScheduleFilter): Promise<Schedule[]>;
 
   /**
-   * List schedules whose `nextFireAt <= now` and whose `status === 'active'`.
+   * List schedules whose `nextFireAt <= now` and whose `status === 'active'`,
+   * ordered by `nextFireAt` ascending. Adapters must apply that ordering
+   * before `limit`: the scheduler relies on `listDueSchedules(Number.MAX_SAFE_INTEGER, 1)`
+   * to find the earliest active fire without loading every schedule.
    * Used by the scheduler tick loop.
    */
   abstract listDueSchedules(now: number, limit?: number): Promise<Schedule[]>;

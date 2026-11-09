@@ -81,7 +81,7 @@ describe('useTraceSearch', () => {
     ['inputPreview', { inputPreview: 'What is the weather in Paris?' }, 'paris'],
     ['traceId', { traceId: 'trace-xyz' }, 'trace-xyz'],
   ])('matches on %s', (_field, overrides, term) => {
-    const spans = [makeSpan('a', null, overrides as Partial<LightSpanRecord>), makeSpan('b', null)];
+    const spans = [makeSpan('a', null, overrides), makeSpan('b', null)];
     const { result } = renderHook(() => useTraceSearch(spans));
 
     act(() => result.current.setQuery(term));

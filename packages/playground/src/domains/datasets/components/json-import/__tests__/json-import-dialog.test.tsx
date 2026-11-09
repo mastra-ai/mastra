@@ -1,8 +1,8 @@
 import type { RouteResponse } from '@mastra/client-js';
 import type { CodeEditorProps } from '@mastra/playground-ui/components/CodeEditor';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { JSONImportDialog } from '../json-import-dialog';
 import { server } from '@/test/msw-server';
@@ -92,7 +92,8 @@ describe('JSONImportDialog', () => {
     renderDialog();
 
     pasteJSON(VALID_ITEMS);
-    expect(screen.getByRole('status').textContent).toBe('3 items ready · 1 without groundTruth');
+    expect(screen.getByRole('status').textContent).toMatch(/^3 items ready/);
+    expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
     expect((screen.getByRole('button', { name: 'Import 3 items' }) as HTMLButtonElement).disabled).toBe(false);
 
     pasteJSON('{}');
@@ -105,7 +106,7 @@ describe('JSONImportDialog', () => {
     expect(screen.getByRole('status').textContent).toBe('1 of 1 item has no input');
 
     pasteJSON('[');
-    expect(screen.getByRole('status').textContent).toMatch(/^Not valid JSON — /);
+    expect(screen.getByRole('status').textContent).toMatch(/^Not valid JSON: /);
     expect((screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -136,7 +137,7 @@ describe('JSONImportDialog', () => {
     const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
     fireEvent.change(screen.getByLabelText('Choose a JSON file'), { target: { files: [file] } });
 
-    expect(screen.getByRole('status').textContent).toBe('Not valid JSON — Only .json files are supported');
+    expect(screen.getByRole('status').textContent).toBe('Not valid JSON: Only .json files are supported');
   });
 
   it('discards a file read that resolves after a newer selection', async () => {
@@ -158,13 +159,15 @@ describe('JSONImportDialog', () => {
 
       vi.stubGlobal('FileReader', OriginalFileReader);
       await uploadFile('fast.json', '[{"input":"only"}]');
-      expect(screen.getByRole('status').textContent).toBe('1 item ready · 1 without groundTruth');
+      expect(screen.getByRole('status').textContent).toMatch(/^1 item ready/);
+      expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
 
       releaseRead!();
       await new Promise(resolve => setTimeout(resolve, 20));
       expect(screen.getByText('fast.json')).not.toBeNull();
       expect(screen.queryByText('slow.json')).toBeNull();
-      expect(screen.getByRole('status').textContent).toBe('1 item ready · 1 without groundTruth');
+      expect(screen.getByRole('status').textContent).toMatch(/^1 item ready/);
+      expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
     } finally {
       vi.unstubAllGlobals();
     }
@@ -174,13 +177,15 @@ describe('JSONImportDialog', () => {
     renderDialog();
 
     await uploadFile('items.json', VALID_ITEMS);
-    expect(screen.getByRole('status').textContent).toBe('3 items ready · 1 without groundTruth');
+    expect(screen.getByRole('status').textContent).toMatch(/^3 items ready/);
+    expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Paste JSON' }));
     expect(screen.getByRole('status').textContent).toBe('No items yet');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Upload file' }));
-    expect(screen.getByRole('status').textContent).toBe('3 items ready · 1 without groundTruth');
+    expect(screen.getByRole('status').textContent).toMatch(/^3 items ready/);
+    expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
   });
 
   it('imports the validated items and closes the dialog', async () => {
@@ -229,6 +234,64 @@ describe('JSONImportDialog', () => {
 
     release();
     await waitForMutationsIdle(queryClient);
+  });
+
+  describe('when the dialog unmounts while a reset is pending or about to be scheduled', () => {
+    const trackResetTimers = () => {
+      const resetTimers: ReturnType<typeof setTimeout>[] = [];
+      const realSetTimeout = globalThis.setTimeout;
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler: () => void, ms?: number) => {
+        const id = realSetTimeout(handler, ms);
+        if (ms === 150) resetTimers.push(id);
+        return id;
+      });
+      return resetTimers;
+    };
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('cancels the post-close reset timer', () => {
+      const resetTimers = trackResetTimers();
+      const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+      const { unmount, onOpenChange } = renderDialog();
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(resetTimers).toHaveLength(1);
+
+      // If the timer survives unmount it fires into a torn-down tree ("window is not defined" after jsdom teardown).
+      unmount();
+      expect(clearSpy).toHaveBeenCalledWith(resetTimers[0]);
+    });
+
+    it('does not schedule a reset when the import finishes after unmount', async () => {
+      let release: () => void = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.post(BATCH_URL, async () => {
+          await held;
+          const response: BatchInsertResponse = { items: [], count: 3 };
+          return HttpResponse.json(response);
+        }),
+      );
+      const resetTimers = trackResetTimers();
+
+      const { unmount, onSuccess, queryClient } = renderDialog();
+      pasteJSON(VALID_ITEMS);
+      fireEvent.click(screen.getByRole('button', { name: 'Import 3 items' }));
+      await waitFor(() => expect(queryClient.isMutating()).toBe(1));
+
+      unmount();
+      release();
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+      await waitForMutationsIdle(queryClient);
+
+      expect(resetTimers).toHaveLength(0);
+    });
   });
 
   it('copies the example JSON and flips the button label', async () => {

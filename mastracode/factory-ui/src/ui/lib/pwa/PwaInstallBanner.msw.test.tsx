@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BeforeInstallPromptEvent } from './usePwaInstall';
+import { takeCapturedInstallPrompt } from './installPromptCapture';
 import { PwaInstallBanner } from './PwaInstallBanner';
 
 const DISMISSED_KEY = 'mastracode.pwaInstallDismissedAt';
@@ -19,13 +20,13 @@ function setUserAgent(userAgent: string) {
 }
 
 function setStandalone(standalone: boolean) {
-  window.matchMedia = ((query: string) =>
+  window.matchMedia = (query: string) =>
     ({
       matches: standalone && query === '(display-mode: standalone)',
       media: query,
       addEventListener: () => {},
       removeEventListener: () => {},
-    }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    }) as unknown as MediaQueryList;
 }
 
 function fireInstallPromptEvent() {
@@ -45,6 +46,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  takeCapturedInstallPrompt();
   setUserAgent(originalUserAgent);
   window.matchMedia = originalMatchMedia;
 });

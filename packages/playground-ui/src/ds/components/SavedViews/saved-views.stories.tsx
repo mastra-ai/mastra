@@ -92,10 +92,10 @@ export const Default: Story = {
             </Txt>
           )}
         />
-        <SavedViewEditor views={views}>
+        <SavedViewEditor views={views} saveCaption="Saved in this browser">
           <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={filters} onValueChange={setFilters}>
             <FilterBar.Chips />
-            <FilterBar.Input placeholder="Filter issues…" />
+            <FilterBar.Input placeholder="Filter issues" />
           </FilterBar>
           <SegmentedControl aria-label="Layout" size="sm" iconOnly value={settings.layout} onValueChange={setLayout}>
             <SegmentedControlItem value="list" aria-label="List" title="List">

@@ -47,7 +47,7 @@ function parseSkillSource(topSource: string): { owner: string; repo: string } | 
   let cleaned = topSource.replace(/^https?:\/\//, '').replace(/^github\.com\//, '');
   const parts = cleaned.split('/').filter(Boolean);
   if (parts.length < 2) return null;
-  return { owner: parts[0]!, repo: parts[1]! };
+  return { owner: parts[0], repo: parts[1] };
 }
 
 function getSkillUniqueId(skill: BuilderRegistrySkillSummary): string {
@@ -183,7 +183,7 @@ export function BuilderAddSkillDialog({
         <DialogBody layout="fill">
           <SearchInput
             label={`Search ${registryLabel}`}
-            placeholder={`Search ${registryLabel}...`}
+            placeholder={`Search ${registryLabel}`}
             value={searchQuery}
             onValueChange={handleSearch}
             data-testid="builder-add-skill-search"

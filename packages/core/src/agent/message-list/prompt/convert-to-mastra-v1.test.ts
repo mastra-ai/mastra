@@ -1859,13 +1859,10 @@ describe('convertToV1Messages', () => {
     expect(hasToolResult).toBe(true);
 
     // Count the messages to understand the structure
-    const messagesByRole = promptMessages.reduce(
-      (acc, m) => {
-        acc[m.role] = (acc[m.role] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
+    const messagesByRole = promptMessages.reduce<Record<string, number>>((acc, m) => {
+      acc[m.role] = (acc[m.role] || 0) + 1;
+      return acc;
+    }, {});
 
     // We should have: system, user, assistant (tool-call), tool (result), assistant (text), user
     expect(messagesByRole.system).toBe(1);

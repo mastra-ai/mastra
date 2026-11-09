@@ -11,7 +11,7 @@ import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
 import { OVERLAY_FACTORY_ID, OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
-const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`;
+const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId`;
 const FACTORY_API = `${TEST_BASE_URL}/web/factory/projects/${OVERLAY_FACTORY_ID}`;
 
 function useThinkingHandlers({
@@ -29,7 +29,7 @@ function useThinkingHandlers({
     http.get(SESSION_API, ({ params }) =>
       HttpResponse.json({
         controllerId: 'code',
-        resourceId: params.resourceId,
+        sessionId: params.sessionId,
         modeId: 'build',
         modelId,
         threadId: 'thread-test',
@@ -39,7 +39,9 @@ function useThinkingHandlers({
     http.get(FACTORY_API, () =>
       failThinkingConfig
         ? new HttpResponse(null, { status: 503 })
-        : HttpResponse.json({ project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', defaultThinkingLevel: 'low' } }),
+        : HttpResponse.json({
+            project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', modelScope: 'factory', defaultThinkingLevel: 'low' },
+          }),
     ),
     http.put(`${SESSION_API}/state`, async ({ request }) => {
       const body: unknown = await request.json();
@@ -157,7 +159,8 @@ describe('the /think command', () => {
           client.getQueryData(
             queryKeys.availableModels({
               factoryProjectId: OVERLAY_FACTORY_ID,
-              resourceId: 'session-overlay',
+              sessionId: 'session-overlay',
+              resourceId: 'user-overlay',
               threadId: 'thread-test',
             }),
           ),

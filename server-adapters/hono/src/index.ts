@@ -12,9 +12,11 @@ import {
   checkRouteFGA,
   getFGAProvider,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
+  propagateRequestAbort,
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -27,6 +29,7 @@ export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
 export { setupBrowserStream } from './browser-stream';
+export type { HonoBrowserStreamConfig } from './browser-stream';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -98,6 +101,37 @@ export const skipIfFrameworkPublic = (handler: MiddlewareHandler): MiddlewareHan
 const MASTRA_PRISTINE_REQUEST_KEY = '__mastraPristineRequest';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * Cancels a response body the runtime never started reading once the request aborts. @hono/node-server skips the body
+ * of a request that closed while the route handler ran without cancelling it. A body the runtime already reads is
+ * locked, and the runtime cancels that one itself on disconnect.
+ *
+ * `body` is only read after the abort: reading it earlier turns off @hono/node-server's fast path for string and byte
+ * bodies, which is what sets `Content-Length` and the default content type.
+ */
+function cancelUnreadBodyOnAbort(response: Response, signal: AbortSignal): void {
+  const cancel = () => {
+    let body: ReadableStream | null;
+
+    try {
+      body = response.body;
+    } catch {
+      // @hono/node-server's Response throws on `body` once it is streaming the body, and it cancels that body itself.
+      return;
+    }
+
+    if (body && !body.locked) {
+      void body.cancel('request aborted').catch(() => {});
+    }
+  };
+
+  if (signal.aborted) {
+    cancel();
+  } else {
+    signal.addEventListener('abort', cancel, { once: true });
+  }
+}
 
 export type HonoBindings = {};
 
@@ -227,10 +261,6 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return stream(
       res,
       async stream => {
-        if (streamFormat === 'sse' && route.sseFlushOnConnect) {
-          await stream.write(': connected\n\n');
-        }
-
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
 
@@ -238,7 +268,21 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           void reader.cancel('request aborted').catch(() => {});
         });
 
+        // Hono only aborts the stream when the runtime cancels the response body. @hono/node-server never reads or
+        // cancels the body of a request that closed while the route handler ran, so follow the request signal too.
+        const signal = res.req.raw.signal;
+        const abortStream = () => stream.abort();
+        if (signal.aborted) {
+          abortStream();
+        } else {
+          signal.addEventListener('abort', abortStream, { once: true });
+        }
+
         try {
+          if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+            await stream.write(': connected\n\n');
+          }
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -278,6 +322,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
         } finally {
+          signal.removeEventListener('abort', abortStream);
           await stream.close();
         }
       },
@@ -387,6 +432,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       return this.stream(route, response, result as { fullStream: ReadableStream });
     } else if (route.responseType === 'datastream-response') {
       const fetchResponse = result as globalThis.Response;
+      cancelUnreadBodyOnAbort(fetchResponse, response.req.raw.signal);
       return fetchResponse;
     } else if (route.responseType === 'mcp-http') {
       // MCP Streamable HTTP transport
@@ -432,6 +478,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             // Response stream already closed or destroyed - nothing more to do
           }
         });
+
+      // Client disconnect before any response bytes: abort the in-flight MCP request.
+      propagateRequestAbort(response.req.raw.signal, res);
 
       return propagateClientDisconnect(await toFetchResponse(res), res);
     } else if (route.responseType === 'mcp-sse') {
@@ -674,41 +723,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             return customResponse;
           }
 
-          // Check if it's an HTTPException or MastraError with a status code
-          if (error && typeof error === 'object') {
-            // Check for direct status property (HTTPException)
-            if ('status' in error) {
-              const status = (error as any).status;
-              let safeCause: { failingItems: unknown[] } | undefined;
-              try {
-                const raw = error instanceof Error ? error.cause : undefined;
-                if (
-                  raw &&
-                  typeof raw === 'object' &&
-                  !Array.isArray(raw) &&
-                  'failingItems' in raw &&
-                  Array.isArray((raw as any).failingItems)
-                ) {
-                  safeCause = { failingItems: (raw as any).failingItems };
-                }
-              } catch {
-                // serialization or access error — omit cause
-              }
-              return c.json(
-                {
-                  error: error instanceof Error ? error.message : 'Unknown error',
-                  ...(safeCause ? { cause: safeCause } : {}),
-                },
-                status,
-              );
-            }
-            // Check for MastraError with status in details
-            if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
-              const status = (error.details as any).status;
-              return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, status);
-            }
-          }
-          return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+          const { status, body } = getHTTPErrorResponse(error);
+          return c.json(body, status as any);
         }
       },
     );
@@ -803,10 +819,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
         }
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
-          ...c.req.param(),
           ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
           ...bodyParams,
+          ...c.req.param(),
         });
         if (fgaError) {
           return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);

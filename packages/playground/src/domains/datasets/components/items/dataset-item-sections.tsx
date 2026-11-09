@@ -14,6 +14,12 @@ export interface DatasetItemSection {
 
 const toJson = (value: unknown) => JSON.stringify(value ?? null, null, 2);
 
+/** True for a payload that carries nothing to show: null, undefined, '' or `{}`. */
+const isEmptyPayload = (value: unknown) =>
+  value == null ||
+  value === '' ||
+  (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
+
 /** Ordered list of code sections shown for a dataset item; shared by details and diff views. */
 export const datasetItemSections: DatasetItemSection[] = [
   {
@@ -27,8 +33,8 @@ export const datasetItemSections: DatasetItemSection[] = [
     key: 'groundTruth',
     title: 'Ground Truth',
     icon: <FileOutputIcon />,
-    value: item => toJson(item.groundTruth),
-    payload: item => item.groundTruth,
+    value: item => (isEmptyPayload(item.groundTruth) ? undefined : toJson(item.groundTruth)),
+    payload: item => (isEmptyPayload(item.groundTruth) ? null : item.groundTruth),
   },
   {
     key: 'expectedTrajectory',
@@ -36,7 +42,12 @@ export const datasetItemSections: DatasetItemSection[] = [
     icon: <RouteIcon />,
     value: item => (item.expectedTrajectory != null ? toJson(item.expectedTrajectory) : undefined),
   },
-  { key: 'toolMocks', title: 'Tool Mocks', icon: <WrenchIcon />, value: item => toJson(item.toolMocks ?? []) },
+  {
+    key: 'toolMocks',
+    title: 'Tool Mocks',
+    icon: <WrenchIcon />,
+    value: item => (item.toolMocks?.length ? toJson(item.toolMocks) : undefined),
+  },
   {
     key: 'requestContext',
     title: 'Request Context',

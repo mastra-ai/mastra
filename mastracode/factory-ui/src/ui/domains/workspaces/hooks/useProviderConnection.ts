@@ -9,7 +9,7 @@ import {
 } from '../../../../hooks/use-providers';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { credentialAt } from '../../settings/components/provider-credential';
+import { credentialAt, signInRequest } from '../../settings/components/provider-credential';
 
 export type ProviderCredentialScope = 'org' | 'user';
 export type ProviderConnectionMethod = 'api_key' | 'oauth';
@@ -47,6 +47,7 @@ export interface ProviderConnection {
   clear: () => void;
   chooseSignInProvider: (provider: ProviderInfo) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
+  chooseCustomProvider: (providerId: string) => void;
   closeKeyDialog: () => void;
   closeOAuth: () => void;
   completeOAuth: () => void;
@@ -56,6 +57,7 @@ export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
+  if (provider.custom) return 'api_key';
   if (scope === 'user') return credentialAt(provider, 'user');
   if (provider.source === 'deployment') return 'api_key';
   if (scope === 'org') return credentialAt(provider, 'org');
@@ -137,12 +139,7 @@ export function useProviderConnection({
   const startOAuth = async (chosen: ProviderInfo) => {
     setError(undefined);
     try {
-      const modes = chosen.oauth?.modes ?? [];
-      const session = await startOAuthMutation.mutateAsync({
-        provider: chosen.provider,
-        mode: modes.length === 1 ? modes[0] : undefined,
-        ...(authEnabled && scope ? { scope } : {}),
-      });
+      const session = await startOAuthMutation.mutateAsync(signInRequest(chosen, credentialScope));
       setActiveOAuth({
         provider: chosen.provider,
         session,
@@ -193,6 +190,7 @@ export function useProviderConnection({
       select({ providerId: chosen.provider, method: 'api_key' });
       if (!isConfigured(chosen, 'api_key')) setKeyDialogProvider(chosen);
     },
+    chooseCustomProvider: providerId => select({ providerId, method: 'api_key' }),
     closeKeyDialog: () => setKeyDialogProvider(undefined),
     closeOAuth: () => {
       const flow = activeOAuth;

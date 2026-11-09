@@ -48,7 +48,15 @@ class CapabilityFilesystem extends LocalFilesystem {
       if (options?.maxDepth !== undefined && depth >= options.maxDepth) return;
       const dirents = await fs.readdir(dir, { withFileTypes: true });
       for (const dirent of dirents) {
-        if (!options?.includeHidden && dirent.name.startsWith('.')) continue;
+        const isGitignoreFile = dirent.isFile() && dirent.name === '.gitignore';
+        if (
+          !options?.includeHidden &&
+          dirent.name.startsWith('.') &&
+          !(options?.includeGitignoreFiles && isGitignoreFile)
+        ) {
+          continue;
+        }
+        if (dirent.isDirectory() && options?.skipDirectoryNames?.includes(dirent.name)) continue;
         const entryRel = rel ? `${rel}/${dirent.name}` : dirent.name;
         entries.push({
           name: dirent.name,
@@ -194,7 +202,34 @@ describe('filesystem capability delegation', () => {
     it('passes maxDepth and showHidden to walk', async () => {
       const capFs = new CapabilityFilesystem(tempDir);
       await formatAsTree(capFs, '.', { maxDepth: 2, showHidden: true });
-      expect(capFs.walkCalls[0]!.options).toEqual({ maxDepth: 2, includeHidden: true });
+      expect(capFs.walkCalls[0]!.options).toEqual({
+        maxDepth: 2,
+        includeHidden: true,
+        includeGitignoreFiles: true,
+        skipDirectoryNames: ['node_modules'],
+      });
+    });
+
+    it('lets walk return node_modules when gitignore handling is off', async () => {
+      const capFs = new CapabilityFilesystem(tempDir);
+      await formatAsTree(capFs, '.', { respectGitignore: false });
+      expect(capFs.walkCalls[0]!.options).toEqual({ maxDepth: undefined, includeHidden: false });
+    });
+
+    it('applies nested .gitignore files returned by walk', async () => {
+      await fs.mkdir(path.join(tempDir, 'repo', 'app', 'src'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'repo', 'app', 'dist'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'repo', 'node_modules', 'dep'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'repo', 'app', '.gitignore'), 'dist\n');
+      await fs.writeFile(path.join(tempDir, 'repo', 'app', 'src', 'app.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'repo', 'app', 'dist', 'app.js'), '');
+      await fs.writeFile(path.join(tempDir, 'repo', 'node_modules', 'dep', 'index.js'), '');
+      const capFs = new CapabilityFilesystem(tempDir);
+
+      const result = await formatAsTree(capFs, 'repo');
+
+      expect(capFs.readdirCalls).toEqual([]);
+      expect(result.paths).toEqual(['app', 'app/src', 'app/src/app.ts']);
     });
   });
 
@@ -215,8 +250,10 @@ describe('filesystem capability delegation', () => {
 
       expect(capFs.grepCalls).toHaveLength(1);
       expect(capFs.readdirCalls).toHaveLength(0);
-      // Only the .gitignore load reads a file host-side
-      expect(capFs.readFileCalls).toEqual(['.gitignore']);
+      // Only .gitignore files are read host-side (the root's and those of
+      // directories holding results), never the files being searched.
+      expect(capFs.readFileCalls).toContain('.gitignore');
+      expect(capFs.readFileCalls.every(file => file.endsWith('.gitignore'))).toBe(true);
       expect(result).toContain('index.ts');
     });
 
@@ -274,7 +311,9 @@ describe('filesystem capability delegation', () => {
       expect(result).toContain('index.ts');
       // Expected downgrade: logged at info, not warn
       expect(logger.info).toHaveBeenCalledTimes(1);
-      expect(logger.info.mock.calls[0]![0]).toMatch(/does not support pattern .*falling back to host-side search/);
+      expect(logger.info.mock.calls[0]![0]).toMatch(
+        /could not run pattern .* \(Unsupported grep pattern: .*\); falling back to host-side search/,
+      );
       expect(logger.warn).not.toHaveBeenCalled();
     });
 

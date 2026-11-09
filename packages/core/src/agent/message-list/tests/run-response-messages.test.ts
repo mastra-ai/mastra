@@ -32,6 +32,33 @@ describe('MessageList.getRunResponseMessages', () => {
     expect(ids(await list.getRunResponseMessages())).toEqual(['a1', 'a2']);
   });
 
+  it('keeps pruned response bodies when splitting a live response for processors', async () => {
+    const list = new MessageList({
+      threadId: 't',
+      resourceId: 'r',
+      generateMessageId: () => 'current-response',
+    });
+    list.add(message('a1', 'assistant', 'first', 2000), 'response');
+    list.removeByIds(['a1'], { pruned: true });
+    list.add(
+      {
+        ...message('a2', 'assistant', 'second', 3000),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'sec' },
+            { type: 'text', text: 'ond' },
+          ],
+        },
+      },
+      'response',
+    );
+
+    list.splitResponseMessageAtPartOffset('a2', 1);
+
+    expect(ids(await list.getRunResponseMessages())).toEqual(['a1', 'a2', 'current-response']);
+  });
+
   it('drops messages removed without the pruned option', async () => {
     const list = new MessageList({ threadId: 't', resourceId: 'r' });
     list.add(message('a1', 'assistant', 'rejected', 2000), 'response');

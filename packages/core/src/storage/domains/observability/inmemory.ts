@@ -80,6 +80,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   CreateSpanArgs,
   CreateSpanRecord,
   GetRootSpanArgs,
@@ -729,11 +730,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
         const diff = aVal.getTime() - bVal.getTime();
         return sortDirection === 'DESC' ? -diff : diff;
-      } else {
-        // startedAt is never null (required field)
-        const diff = a.startedAt.getTime() - b.startedAt.getTime();
-        return sortDirection === 'DESC' ? -diff : diff;
       }
+      // startedAt is never null (required field)
+      const diff = a.startedAt.getTime() - b.startedAt.getTime();
+      return sortDirection === 'DESC' ? -diff : diff;
     });
 
     // Apply pagination
@@ -1173,6 +1173,17 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     for (const record of args.records) {
       await this.updateSpan(record);
     }
+  }
+
+  async batchUpdateUnendedSpans(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse> {
+    const updated: BatchUpdateUnendedSpansResponse['updated'] = [];
+    for (const record of args.records) {
+      const span = this.db.traces.get(record.traceId)?.spans[record.spanId];
+      if (!span || span.endedAt != null) continue;
+      await this.updateSpan(record);
+      updated.push({ traceId: record.traceId, spanId: record.spanId });
+    }
+    return { updated };
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
@@ -2282,9 +2293,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       feedbackSource: args.feedback.feedbackSource ?? args.feedback.source ?? '',
       source: args.feedback.feedbackSource ?? args.feedback.source ?? '',
       feedbackUserId:
-        args.feedback.feedbackUserId ??
-        args.feedback.userId ??
-        (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
+        args.feedback.feedbackUserId !== undefined
+          ? args.feedback.feedbackUserId
+          : (args.feedback.userId ??
+            (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null)),
       reviewStatus: args.feedback.reviewStatus ?? 'needs-review',
     } as FeedbackRecord;
     this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
@@ -2297,7 +2309,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         feedbackSource: fb.feedbackSource ?? fb.source ?? '',
         source: fb.feedbackSource ?? fb.source ?? '',
         feedbackUserId:
-          fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+          fb.feedbackUserId !== undefined
+            ? fb.feedbackUserId
+            : (fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null)),
         reviewStatus: fb.reviewStatus ?? 'needs-review',
       } as FeedbackRecord;
       this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
@@ -2352,6 +2366,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         ),
       ),
     };
+  }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.db.feedbackRecords.find(record => record.feedbackId === feedbackId) ?? null;
   }
 
   async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {

@@ -1,12 +1,13 @@
-import { BrainIcon, GaugeIcon } from 'lucide-react';
+import { BrainIcon } from 'lucide-react';
 import type { UISpanStyle } from '../types';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { FolderIcon } from '@/ds/icons/FolderIcon';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { WorkspacesIcon } from '@/ds/icons/WorkspacesIcon';
 
 export const spanTypePrefixes = [
   'agent',
@@ -66,7 +67,7 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     typePrefix: 'memory',
   },
   workspace: {
-    icon: <FolderIcon />,
+    icon: <WorkspacesIcon />,
     color: 'var(--span-workspace)',
     label: 'Workspace',
     typePrefix: 'workspace',
@@ -78,7 +79,7 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     typePrefix: 'skill',
   },
   scorer: {
-    icon: <GaugeIcon />,
+    icon: <ScorersIcon />,
     color: 'var(--span-scorer)',
     label: 'Scorer',
     typePrefix: 'scorer',

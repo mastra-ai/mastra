@@ -90,7 +90,7 @@ describe('resolveWorkflowRunResult', () => {
 
   describe('when the observed run finished', () => {
     it('keeps the observed status', () => {
-      const live = { ...replayedSuspension, status: 'success', steps: {} } as WorkflowRunStreamResult;
+      const live: WorkflowRunStreamResult = { ...replayedSuspension, status: 'success', steps: {} };
       const stored = storedRun({ approval: { status: 'success', startedAt: 100, endedAt: 120 } });
       expect(resolveWorkflowRunResult(live, stored)?.status).toBe('success');
     });

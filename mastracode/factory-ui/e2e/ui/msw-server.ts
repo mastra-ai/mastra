@@ -1,7 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
-import { attentionKindSummaries } from './attention';
 import { builtinBoardCatalog } from './board-catalog';
 
 /**
@@ -48,14 +47,15 @@ export const server = setupServer(
   // Ambient GitHub label routing (read by every board's intake feed); label-routing
   // tests override it with `server.use(...)`.
   http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
+  // Ambient pull requests: Work and Review both list their linked repositories'
+  // open pull requests. Pull-request tests override these with `server.use(...)`.
+  http.get('*/web/github/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
+  http.get('*/web/gitlab/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
   // GitLab intake is optional; feature tests override these ambient 404s.
   http.get('*/web/gitlab/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
-  http.get('*/web/factory/projects/:id/attention', () =>
-    HttpResponse.json({ items: [], kinds: attentionKindSummaries([]), hasMore: false }),
-  ),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),

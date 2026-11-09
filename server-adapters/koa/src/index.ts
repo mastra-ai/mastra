@@ -1,3 +1,4 @@
+import { errorMonitor } from 'node:events';
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
@@ -8,15 +9,19 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
+  cancelReaderOnResponseClose,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
   serializeStreamChunk,
+  writeWithBackpressure,
 } from '@mastra/server/server-adapter';
-import type Koa from 'koa';
+import Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
@@ -46,6 +51,25 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
       });
   }
   return _hasPermissionPromise;
+}
+
+/**
+ * Once the adapter writes a streaming response itself, a client that leaves while a write is still pending makes the
+ * socket fail with `EPIPE` or `ECONNRESET`. Koa passes that socket error to `ctx.onerror`, and the default
+ * `app.onerror` prints it as a server error, so drop those here: they only mean the client disconnected.
+ */
+function ignoreClientDisconnectErrors(ctx: Context): void {
+  const onerror = ctx.onerror;
+  ctx.onerror = function (this: Context, err: Error | null) {
+    switch ((err as NodeJS.ErrnoException | null)?.code) {
+      // Client disconnect error codes
+      case 'EPIPE':
+      case 'ECONNRESET':
+        return;
+      default:
+        return onerror.call(this, err as Error);
+    }
+  };
 }
 
 /**
@@ -123,29 +147,31 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         // Default error handling
         const error = err instanceof Error ? err : new Error(String(err));
-        let status = 500;
-        if (err && typeof err === 'object') {
-          if ('status' in err) {
-            status = (err as any).status;
-          } else if (
-            'details' in err &&
-            (err as any).details &&
-            typeof (err as any).details === 'object' &&
-            'status' in (err as any).details
-          ) {
-            status = (err as any).details.status;
-          }
-        }
+        const routeErrorResponse = (ctx as any)._mastraRouteErrorResponse;
+        const { status, body } =
+          routeErrorResponse?.error === err ? routeErrorResponse.response : getHTTPErrorResponse(err);
         ctx.status = status;
-        ctx.body = { error: error.message || 'Unknown error' };
+        ctx.body = { ...body, error: error.message || 'Unknown error' };
 
-        // The route handler already logged this 501 at warn level. Skip the emit when only
-        // Koa's default listener would receive it, since that prints to console.error.
-        // Apps that register their own 'error' listeners still get the event.
+        // Client errors (4xx) aren't server faults, and the route handler already logged this 501
+        // at warn level, so keep them away from Koa's built-in listener, which prints to
+        // console.error. When no other 'error' listener would receive it (this also covers an
+        // empty listener list, where emit('error') would throw), notify only errorMonitor
+        // listeners and skip the 'error' emit. A subclass onerror override is an app listener,
+        // so compare against Koa.prototype.onerror itself. Otherwise mark the error
+        // `expose` so the built-in listener returns early while app listeners still get the event.
+        // The response is already written, so `expose` doesn't change what the client sees.
+        const isClientError = status >= 400 && status < 500;
         const loggedAsWarning = status === 501 && (ctx as any)._mastraLoggedNotImplementedError === err;
-        const onlyDefaultListener = ctx.app.listeners('error').every(listener => listener === ctx.app.onerror);
-        if (loggedAsWarning && onlyDefaultListener) {
-          return;
+        if (isClientError || loggedAsWarning) {
+          if (ctx.app.rawListeners('error').every(listener => listener === Koa.prototype.onerror)) {
+            ctx.app.emit(errorMonitor, err, ctx);
+            return;
+          }
+          // Reflect.set returns false instead of throwing on frozen or non-writable errors.
+          if (typeof err === 'object' && err !== null) {
+            Reflect.set(err, 'expose', true);
+          }
         }
 
         // Emit the error for logging (standard Koa pattern) but don't re-throw
@@ -269,12 +295,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       // Create abort controller for request cancellation
       const controller = new AbortController();
-      ctx.req.on('close', () => {
+      // Listen on the response, not the request: once a body parser has consumed the request,
+      // `ctx.req` is already closed, so its 'close' event never reports a client disconnect.
+      ctx.res.on('close', () => {
         // Only abort if the response wasn't successfully completed
-        if (!ctx.res.writableEnded) {
+        if (!ctx.res.writableFinished) {
           controller.abort();
         }
       });
+      // A client that dropped while earlier middleware ran (async auth, body parsing) fired 'close' before this
+      // listener existed.
+      if (ctx.res.destroyed) {
+        controller.abort();
+      }
+
       ctx.state.abortSignal = controller.signal;
 
       await next();
@@ -537,6 +571,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         return;
       }
 
+      // Computed before the status is copied onto the error below, so a MastraError's
+      // details.status keeps its message-only body when it reaches the error boundary.
+      (ctx as any)._mastraRouteErrorResponse = { error, response: getHTTPErrorResponse(error) };
+
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
         if (!('status' in error)) {
@@ -560,6 +598,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   async stream(route: ServerRoute, ctx: Context, result: { fullStream: ReadableStream }): Promise<void> {
     // Tell Koa we're handling the response ourselves
     ctx.respond = false;
+    ignoreClientDisconnectErrors(ctx);
 
     const streamFormat = route.streamFormat || 'stream';
 
@@ -587,10 +626,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
-
-    ctx.res.on('close', () => {
-      void reader.cancel('request aborted').catch(() => {});
-    });
+    const readerCancel = cancelReaderOnResponseClose(reader, ctx.res);
 
     try {
       while (true) {
@@ -599,7 +635,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         if (value) {
           if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
-            ctx.res.write(value);
+            await writeWithBackpressure(ctx.res, value);
             continue;
           }
 
@@ -617,9 +653,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             continue;
           }
           if (streamFormat === 'sse') {
-            ctx.res.write(`data: ${serialized.json}\n\n`);
+            await writeWithBackpressure(ctx.res, `data: ${serialized.json}\n\n`);
           } else {
-            ctx.res.write(serialized.json + '\x1E');
+            await writeWithBackpressure(ctx.res, serialized.json + '\x1E');
           }
         }
       }
@@ -628,6 +664,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
     } finally {
+      readerCancel.dispose();
       ctx.res.end();
     }
   }
@@ -752,6 +789,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // Handle AI SDK Response objects - pipe Response.body to Koa response
       // Tell Koa we're handling the response ourselves
       ctx.respond = false;
+      ignoreClientDisconnectErrors(ctx);
 
       const fetchResponse = result as globalThis.Response;
       const headers: Record<string, string> = {};
@@ -762,12 +800,13 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+        const readerCancel = cancelReaderOnResponseClose(reader, ctx.res);
 
         const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error').catch(() => {});
+          readerCancel.cancel('response write error');
         };
         ctx.res.once('error', onResError);
 
@@ -775,7 +814,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            ctx.res.write(value);
+            await writeWithBackpressure(ctx.res, value);
           }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in datastream processing', {
@@ -783,6 +822,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           });
         } finally {
           ctx.res.off('error', onResError);
+          readerCancel.dispose();
           ctx.res.end();
         }
       } else {
@@ -803,7 +843,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
 
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+        await applyMcpRequestAuth({ req: rawReq, requestContext: ctx.state.requestContext, setRequestAuth });
 
         await server.startHTTP({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
@@ -838,6 +880,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         if (ctx.request.body !== undefined) {
           rawReq.body = ctx.request.body;
         }
+
+        await applyMcpRequestAuth({
+          req: rawReq,
+          requestContext: ctx.state.requestContext,
+          setRequestAuth: this.mcpOptions?.setRequestAuth,
+        });
 
         await server.startSSE({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
@@ -995,12 +1043,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           }
 
           // Check FGA authorization (EE feature)
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
           const fgaError = await checkRouteFGA(server.mastra, serverRoute, ctx.state.requestContext, {
-            ...(matchedRoute?.params ?? {}),
             ...(ctx.query as Record<string, string>),
             ...(typeof ctx.request.body === 'object' && ctx.request.body !== null
               ? (ctx.request.body as Record<string, unknown>)
               : {}),
+            ...(matchedRoute?.params ?? {}),
           });
           if (fgaError) {
             ctx.status = fgaError.status;

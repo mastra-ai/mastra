@@ -152,6 +152,30 @@ describe('useKeydown', () => {
 
       expect(onSearch).toHaveBeenCalledTimes(1);
     });
+
+    it('when insideFields is set, then Escape fires from a textarea and only for that binding', () => {
+      const onClose = vi.fn();
+      const onHelp = vi.fn();
+      renderHook(() => useKeydown({ Escape: onClose }, { insideFields: true }));
+      renderHook(() => useKeydown({ '?': onHelp }));
+
+      const escape = typeInField('textarea', 'Escape');
+      typeInField('textarea', '?', { shiftKey: true });
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(escape.defaultPrevented).toBe(true);
+      expect(onHelp).not.toHaveBeenCalled();
+    });
+
+    it('when insideFields is set and a widget already handled the key, then the binding does not fire', () => {
+      const onClose = vi.fn();
+      renderHook(() => useKeydown({ Escape: onClose }, { insideFields: true }));
+      render(<div role="menu" data-testid="menu" onKeyDown={event => event.preventDefault()} />);
+
+      fireEvent.keyDown(screen.getByTestId('menu'), { key: 'Escape' });
+
+      expect(onClose).not.toHaveBeenCalled();
+    });
   });
 
   it('does not let a shifted symbol relax Shift for letter bindings', () => {

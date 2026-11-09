@@ -43,8 +43,10 @@ import {
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
+  createPromptCacheKeyMiddleware,
   createReasoningEffortMiddleware,
   getEffectiveThinkingLevel,
+  getRequestThreadId,
   openaiCodexProvider,
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
@@ -57,6 +59,8 @@ import {
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
+
+const PROVIDERS: Record<string, ProviderConfig> = PROVIDER_REGISTRY;
 
 export {
   MASTRA_GATEWAY_PREFIX,
@@ -175,9 +179,10 @@ function openaiApiKeyProvider(
           THINKING_LEVEL_TO_REASONING_EFFORT[getEffectiveThinkingLevel(modelId, thinkingLevel)],
         )
       : undefined;
+  const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(headers));
   return wrapLanguageModel({
     model: openai.responses(modelId),
-    middleware: middleware ? [middleware] : [],
+    middleware: [...(middleware ? [middleware] : []), ...(promptCacheKeyMiddleware ? [promptCacheKeyMiddleware] : [])],
   });
 }
 
@@ -260,7 +265,7 @@ async function resolveGatewayProviderAuth(
 async function getMastraCodeProviderConfigs(
   gateway: MastraModelGatewayInterface,
 ): Promise<Record<string, ProviderConfig>> {
-  const providers: Record<string, ProviderConfig> = { ...(PROVIDER_REGISTRY as Record<string, ProviderConfig>) };
+  const providers: Record<string, ProviderConfig> = { ...PROVIDERS };
 
   try {
     const gatewayProviders = await gateway.fetchProviders();
@@ -282,13 +287,17 @@ function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | 
   return Array.isArray(envVars) ? envVars[0] : envVars;
 }
 
+export function providerApiKeyEnvVar(providerId: string): string | undefined {
+  return getApiKeyEnvVar(PROVIDERS[providerId]);
+}
+
 /**
  * Whether the process environment has a key for a models.dev provider. Checks every
  * env var the registry lists, as the models.dev gateway does when `resolveModel`
  * gets no gateway credential (e.g. `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`).
  */
 export function hasProviderEnvironmentKey(providerId: string): boolean {
-  const envVars = (PROVIDER_REGISTRY as Record<string, ProviderConfig>)[providerId]?.apiKeyEnvVar;
+  const envVars = PROVIDERS[providerId]?.apiKeyEnvVar;
   if (!envVars) return false;
   return (Array.isArray(envVars) ? envVars : [envVars]).some(envVar => Boolean(process.env[envVar]?.trim()));
 }
@@ -661,6 +670,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         const effectiveLevel = getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel ?? 'medium');
         const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
         const middleware = createCodexMiddleware(reasoningEffort);
+        const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(args.headers));
         const openai = createOpenAI({
           apiKey: 'oauth-gateway-placeholder',
           baseURL: `${this.#mastraGatewayBaseUrl}/v1`,
@@ -673,7 +683,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
         return wrapLanguageModel({
           model: openai.responses(resolvedBareModelId),
-          middleware: [middleware],
+          middleware: [middleware, ...(promptCacheKeyMiddleware ? [promptCacheKeyMiddleware] : [])],
         });
       }
 

@@ -355,16 +355,19 @@ export class DatasetsManager {
     });
 
     const items = [...itemIds].map(itemId => {
-      const results: Record<string, { output: unknown; scores: Record<string, number | null> } | null> = {};
       let source: { input: unknown; groundTruth: unknown } | undefined;
-
-      for (const experimentId of experimentIds) {
-        const result = resultsByExperiment.get(experimentId)!.get(itemId);
-        source ??= result;
-        results[experimentId] = result
-          ? { output: result.output, scores: scores.get(experimentId)!.get(itemId) ?? {} }
-          : null;
-      }
+      // Object.fromEntries keeps caller-chosen experiment IDs like "__proto__" as own keys.
+      const results: Record<string, { output: unknown; scores: Record<string, number | null> } | null> =
+        Object.fromEntries(
+          experimentIds.map(experimentId => {
+            const result = resultsByExperiment.get(experimentId)!.get(itemId);
+            source ??= result;
+            return [
+              experimentId,
+              result ? { output: result.output, scores: scores.get(experimentId)!.get(itemId) ?? {} } : null,
+            ];
+          }),
+        );
 
       return {
         itemId,

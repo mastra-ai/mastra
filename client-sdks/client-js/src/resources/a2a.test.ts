@@ -218,7 +218,7 @@ describe('A2A', () => {
       const { card, publicJwk } = await createSignedAgentCard(baseCard);
       const tamperedSignature = (() => {
         const bytes = base64url.decode(card.signatures?.[0]?.signature ?? '');
-        bytes[0] = bytes[0] ^ 0xff;
+        bytes[0] ^= 0xff;
         return base64url.encode(bytes);
       })();
       const invalidCard: AgentCard = {

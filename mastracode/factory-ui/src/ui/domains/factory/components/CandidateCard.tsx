@@ -1,18 +1,20 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
 
-import { useCardMorph } from '../hooks/useCardMorph';
-import { boardCardState } from '../boardCardState';
 import type { BoardCandidate } from '../boardCandidates';
+import { boardCardState } from '../boardCardState';
 import { candidatePayload, setDragPayload } from '../boardDrag';
 import { externalLinkLabel } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
+import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
 import { cardMoves } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
+import { useCardMorph } from '../hooks/useCardMorph';
 import { CardActions, CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { actionIcon } from './BoardIcons';
 import { CandidateCardRows } from './CandidateCardRows';
@@ -24,6 +26,7 @@ export function CandidateCard({
   candidate,
   projectRepositoryId,
   factoryProjectId,
+  board,
   onRun,
   layout,
 }: {
@@ -32,6 +35,8 @@ export function CandidateCard({
   projectRepositoryId: string;
   /** Factory project id resolving Linear descriptions in the detail panel. */
   factoryProjectId: string;
+  /** Board the candidate is filed on. */
+  board?: string;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
   layout: BoardLayout;
@@ -39,7 +44,7 @@ export function CandidateCard({
   const detailsTitleId = useId();
   const morph = useCardMorph();
 
-  const moves = cardMoves(candidate, candidate.column);
+  const moves = cardMoves(board === undefined ? candidate : { ...candidate, board }, candidate.column);
   const [defaultMove] = moves;
   const { status } = boardCardState({});
 
@@ -78,6 +83,7 @@ export function CandidateCard({
       menu={menuItems}
       defaultMove={defaultMove}
       onRun={onRun}
+      layout={layout}
     />
   );
 
@@ -99,7 +105,10 @@ export function CandidateCard({
         data-testid="candidate-card"
         onDragStart={event => setDragPayload(event, candidatePayload(candidate))}
         // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
-        className="group border-surface-rim bg-fill-subtle hover:bg-fill-hover rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
+        className={cn(
+          BOARD_CARD_LAYOUT_CLASS,
+          'group cursor-grab transition-colors outline-none hover:bg-fill-hover [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing',
+        )}
       >
         <button
           type="button"

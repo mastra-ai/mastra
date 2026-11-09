@@ -3,13 +3,18 @@ import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, useMatch, useNavigate, useParams } from 'react-router';
+import { Link, useMatch, useParams } from 'react-router';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
+import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
+import { cardContextSessions, linearIdentifierForItem, phaseContext } from '../boardItems';
+import type { ContextPhase } from '../boardItems';
+import { itemBoard } from '../boardStages';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
@@ -38,7 +43,7 @@ function externalWorkItemLabel(item: WorkItem): string {
   if (item.source === 'gitlab-pr') return number ? `MR !${number}` : 'Merge request';
   if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
   if (item.source === 'linear-issue') {
-    return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Linear issue');
+    return linearIdentifierForItem(item) ?? number ?? 'Linear issue';
   }
   return 'Work item';
 }
@@ -55,6 +60,29 @@ function activeWorkItem(
   );
 }
 
+/** The context this session runs in, and the phase the card is in when that runs elsewhere. */
+function sessionContextCrumb(
+  item: WorkItem,
+  phases: readonly ContextPhase[] | undefined,
+  sessionId: string,
+  threadId: string,
+): { label: string; cardPhase?: string } | undefined {
+  const stage = item.stages[0];
+  if (stage === undefined) return undefined;
+  const entry = cardContextSessions(item, phases, stage).find(
+    candidate => candidate.ref.sessionId === sessionId && candidate.ref.threadId === threadId,
+  );
+  if (!entry) return undefined;
+  const currentPhase = phases?.find(phase => phase.id === stage);
+  // A context no phase runs in (self-review's `review`, legacy `plan`) is not
+  // one the card moves out of, so the card being elsewhere says nothing.
+  const phaseRunsHere = phases?.some(phase => phaseContext(phase) === entry.context);
+  if (entry.current || !phaseRunsHere || !currentPhase || phaseContext(currentPhase) === undefined) {
+    return { label: entry.label };
+  }
+  return { label: entry.label, cardPhase: currentPhase.name ?? currentPhase.title };
+}
+
 /** Chat page frame for a factory thread: breadcrumb of the work item or session, plus its actions. */
 export function FactorySessionPage({ children }: { children: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
@@ -65,6 +93,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(factoryId);
+  const catalog = useBoardCatalog(factoryId);
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
@@ -73,6 +102,15 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
   const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
+  const contextCrumb =
+    currentItem && sessionId && threadId
+      ? sessionContextCrumb(
+          currentItem,
+          catalog.data?.find(board => board.id === itemBoard(currentItem))?.phases,
+          sessionId,
+          threadId,
+        )
+      : undefined;
 
   const crumbs =
     currentItem && factoryId ? (
@@ -80,9 +118,19 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
         <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
           {isReview ? 'Review' : 'Work'}
         </Crumb>
-        <Crumb as="span" isCurrent>
+        <Crumb as="span" isCurrent={!contextCrumb}>
           {sessionTitle(currentItem)}
         </Crumb>
+        {contextCrumb ? (
+          <Crumb as="span" isCurrent>
+            <span className="flex items-baseline gap-2">
+              <span>{contextCrumb.label}</span>
+              {contextCrumb.cardPhase ? (
+                <span className="text-muted-foreground">card is now in {contextCrumb.cardPhase}</span>
+              ) : null}
+            </span>
+          </Crumb>
+        ) : null}
       </>
     ) : isUserThread && session ? (
       <>
@@ -105,6 +153,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
       crumbs={crumbs}
       headerActions={
         <>
+          {isUserThread && factoryId && session ? <UserSessionSharing factoryId={factoryId} session={session} /> : null}
           {currentItem && factoryId && threadId ? (
             <WorkItemActions
               item={currentItem}
@@ -139,13 +188,8 @@ function WorkItemActions({
   threadId: string;
   projectRepositoryId?: string;
 }) {
-  const navigate = useNavigate();
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
-
-  const openSession = (session: WorkItemSessionRef) => {
-    void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
-  };
 
   return (
     <>
@@ -186,11 +230,10 @@ function WorkItemActions({
         return (
           <Button
             key={related.id}
-            type="button"
             variant="ghost"
             size="sm"
             aria-label={`Open ${label}: ${related.title}`}
-            onClick={() => openSession(session)}
+            render={<Link to={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`} />}
           >
             <Link2 size={13} aria-hidden />
             {label}

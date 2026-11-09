@@ -13,6 +13,7 @@ import { renderStatusAnimationFrame } from '../footer-animation-renderer.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
 import { flushRender } from '../render-scheduler.js';
+import { clearPendingTools } from '../state.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -64,10 +65,8 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
     state.activeGoalJudge = undefined;
   }
   state.followUpComponents = [];
-  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
   state.idleCounter?.setThinking(false);
-  state.pendingTools.clear();
-  state.pendingTaskToolIds?.clear();
+  clearPendingTools(state);
   pruneChatContainer(state);
   ctx.updateStatusLine();
   flushRender(state);
@@ -150,10 +149,8 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
 
   state.followUpComponents = [];
   clearPendingUserMessages(state, state.pendingSlashCommandMessageIds);
-  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
   state.idleCounter?.setThinking(false);
-  state.pendingTools.clear();
-  state.pendingTaskToolIds?.clear();
+  clearPendingTools(state);
   pruneChatContainer(state);
   ctx.updateStatusLine();
   flushRender(state);
@@ -177,10 +174,8 @@ export function handleAgentError(ctx: EventHandlerContext): void {
 
   state.followUpComponents = [];
   clearPendingUserMessages(state, state.pendingSlashCommandMessageIds);
-  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
   state.idleCounter?.setThinking(false);
-  state.pendingTools.clear();
-  state.pendingTaskToolIds?.clear();
+  clearPendingTools(state);
   pruneChatContainer(state);
   ctx.updateStatusLine();
   flushRender(state);

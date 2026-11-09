@@ -2,12 +2,8 @@ import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  runTraceImport,
-  resolveTraceImportWindow,
-  traceImportAction,
-  type TraceImportActionDependencies,
-} from './action.js';
+import { runTraceImport, resolveTraceImportWindow, traceImportAction } from './action.js';
+import type { TraceImportActionDependencies } from './action.js';
 import type { TraceImportProvider } from './provider.js';
 import type { PreparedTraceBatch, TraceImportSpan, TraceImportTrace } from './types.js';
 import { uploadTraceImport } from './upload.js';

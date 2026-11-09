@@ -57,9 +57,10 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "minimax-m3": [
+    "glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "doubao-seed-evolving": [
@@ -73,10 +74,9 @@
         "type": "toggle"
       }
     ],
-    "glm-5.3": [
+    "minimax-m3": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "deepseek-v4-flash": [

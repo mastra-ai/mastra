@@ -8,7 +8,7 @@ packages:
 
 # SemanticRecall
 
-The `SemanticRecall` is a **hybrid processor** that enables semantic search over conversation history using vector embeddings. On input, it performs semantic search to find relevant historical messages. On output, it creates embeddings for new messages to enable future semantic retrieval.
+The `SemanticRecall` is a **hybrid processor** that enables semantic search over conversation history using vector embeddings. On input, it performs semantic search to find relevant historical messages. On output, it creates embeddings for new messages to enable future semantic retrieval. With a self-embedding vector store and no `embedder`, it sends the message text to the store, which creates the embeddings.
 
 ## Usage example
 
@@ -54,8 +54,9 @@ const processor = new SemanticRecall({
           {
             name: 'embedder',
             type: 'MastraEmbeddingModel<string>',
-            description: 'Embedder for generating query embeddings',
-            isOptional: false,
+            description:
+              'Embedder for generating query embeddings. Required unless the vector store embeds text itself (self-embedding)',
+            isOptional: true,
           },
           {
             name: 'topK',

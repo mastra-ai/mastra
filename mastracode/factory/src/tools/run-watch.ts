@@ -1,6 +1,8 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import { toPersistedErrorIdentity } from '@mastra/core/error';
 
-import { FACTORY_OPEN_RUN_STALE_MS, heartbeatSessionOpenRun, type RunEndCaptureSession } from '../session/run-audit.js';
+import { FACTORY_OPEN_RUN_STALE_MS, heartbeatSessionOpenRun } from '../session/run-audit.js';
+import type { RunEndCaptureSession } from '../session/run-audit.js';
 import type { FactoryRunOutcome } from './reports.js';
 
 type RunEndReason = Extract<AgentControllerEvent, { type: 'agent_end' }>['reason'];
@@ -58,7 +60,7 @@ export function observeSessionRunReports(
       return;
     }
     if (event.type === 'error') {
-      lastError = event.error?.message;
+      lastError = toPersistedErrorIdentity(event.error).reason ?? event.error?.message;
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {

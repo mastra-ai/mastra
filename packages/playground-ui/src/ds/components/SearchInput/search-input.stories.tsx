@@ -11,7 +11,7 @@ const meta: Meta<typeof SearchInput> = {
   parameters: { layout: 'centered' },
   args: {
     label: 'Search spans',
-    placeholder: 'Search spans...',
+    placeholder: 'Search spans',
   },
 };
 
@@ -60,6 +60,6 @@ function CollapsibleSearch(props: Pick<SearchInputProps, 'label' | 'placeholder'
 }
 
 export const Collapsible: Story = {
-  args: { label: 'Search code', placeholder: 'Search...' },
+  args: { label: 'Search code', placeholder: 'Search' },
   render: args => <CollapsibleSearch {...args} />,
 };

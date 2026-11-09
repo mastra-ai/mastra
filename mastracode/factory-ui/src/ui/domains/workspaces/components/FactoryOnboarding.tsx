@@ -18,12 +18,10 @@ import {
   persistOnboardingReviewReturn,
   readOnboardingDraft,
   readOnboardingReviewReturn,
-  type OnboardingDraft,
   persistOnboardingStep,
   readOnboardingStep,
-  type OnboardingModelScope,
-  type OnboardingStep as Step,
 } from '../services/onboardingFlow';
+import type { OnboardingDraft, OnboardingModelScope, OnboardingStep as Step } from '../services/onboardingFlow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft } from 'lucide-react';
