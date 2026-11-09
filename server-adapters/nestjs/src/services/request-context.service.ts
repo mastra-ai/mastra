@@ -153,7 +153,9 @@ export class RequestContextService {
     };
     response.on('close', onClose);
     // This request-scoped service can be created after async guards ran, so the client may already be gone.
-    if (response.destroyed) onClose();
+    if (response.destroyed) {
+      onClose();
+    }
   }
 
   /**

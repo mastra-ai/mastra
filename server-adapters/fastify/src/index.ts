@@ -159,7 +159,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       });
       // A client that dropped while an earlier hook ran (for example async auth in onRequest) fired 'close' before
       // these listeners existed.
-      if (reply.raw.destroyed) controller.abort();
+      if (reply.raw.destroyed) {
+        controller.abort();
+      }
+
       request.abortSignal = controller.signal;
     };
   }

@@ -181,8 +181,8 @@ function getRequestSignal(ctx: unknown): AbortSignal | undefined {
 }
 
 /**
- * Cancels `reader` once, through `cancel()` or when the request signal aborts. Bun never cancels the response body
- * of a request that closed while the route handler ran, so the signal is the only notice of that disconnect.
+ * Cancels `reader` once, through `cancel()` or when the request signal aborts. A runtime that skips the response body
+ * of a request that closed while the route handler ran never cancels that body, so the signal is the only notice.
  */
 function cancelReaderOnRequestAbort(
   reader: ReadableStreamDefaultReader<unknown>,
@@ -192,13 +192,21 @@ function cancelReaderOnRequestAbort(
   const onAbort = () => cancel('request aborted');
   const dispose = () => signal?.removeEventListener('abort', onAbort);
   const cancel = (reason?: unknown) => {
-    if (canceled) return;
+    if (canceled) {
+      return;
+    }
+
     canceled = true;
     dispose();
     void reader.cancel(reason).catch(() => {});
   };
-  if (signal?.aborted) onAbort();
-  else signal?.addEventListener('abort', onAbort, { once: true });
+
+  if (signal?.aborted) {
+    onAbort();
+  } else {
+    signal?.addEventListener('abort', onAbort, { once: true });
+  }
+
   return { cancel, dispose };
 }
 
@@ -232,7 +240,9 @@ function createDatastreamBody(
   body: ReadableStream<Uint8Array> | null,
   signal: AbortSignal | undefined,
 ): ReadableStream<Uint8Array> | null {
-  if (!body) return null;
+  if (!body) {
+    return null;
+  }
 
   const reader = body.getReader();
   const upstream = cancelReaderOnRequestAbort(reader, signal);
@@ -242,15 +252,22 @@ function createDatastreamBody(
     async pull(controller) {
       try {
         const { done, value } = await reader.read();
-        if (finished) return;
+
+        if (finished) {
+          return;
+        }
+
         if (!done) {
           controller.enqueue(value);
           return;
         }
       } catch {
         // Preserve chunks already sent before upstream stream errors.
-        if (finished) return;
+        if (finished) {
+          return;
+        }
       }
+
       finished = true;
       upstream.dispose();
       controller.close();
@@ -402,19 +419,26 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (finished) return;
+
+            if (finished) {
+              return;
+            }
 
             if (done) {
               finished = true;
               upstream.dispose();
+
               if (streamFormat === 'sse') {
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
               }
+
               controller.close();
               return;
             }
 
-            if (!value) continue;
+            if (!value) {
+              continue;
+            }
 
             // SSE comment passthrough — strings starting with ':' are written as-is
             if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
@@ -443,7 +467,10 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             return;
           }
         } catch (error) {
-          if (finished) return;
+          if (finished) {
+            return;
+          }
+
           finished = true;
           upstream.dispose();
           this.mastra.getLogger()?.error('Error in stream processing', {

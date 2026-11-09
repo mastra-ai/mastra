@@ -103,41 +103,27 @@ const MASTRA_PRISTINE_REQUEST_KEY = '__mastraPristineRequest';
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /**
- * Wraps a response body so it is cancelled when the request aborts. @hono/node-server never reads or cancels the
- * body of a request that closed while the route handler ran, so the request signal is the only notice of that.
+ * Cancels a response body the runtime never started reading once the request aborts. @hono/node-server skips the body
+ * of a request that closed while the route handler ran without cancelling it. A body the runtime already reads is
+ * locked, and the runtime cancels that one itself on disconnect.
+ *
+ * `body` is only read after the abort: reading it earlier turns off @hono/node-server's fast path for string and byte
+ * bodies, which is what sets `Content-Length` and the default content type.
  */
-function cancelBodyOnAbort(body: ReadableStream<Uint8Array>, signal: AbortSignal): ReadableStream<Uint8Array> {
-  const reader = body.getReader();
-  let canceled = false;
-  const cancel = (reason?: unknown) => {
-    if (canceled) return;
-    canceled = true;
-    signal.removeEventListener('abort', onAbort);
-    void reader.cancel(reason).catch(() => {});
-  };
-  const onAbort = () => cancel('request aborted');
-  if (signal.aborted) onAbort();
-  else signal.addEventListener('abort', onAbort, { once: true });
+function cancelUnreadBodyOnAbort(response: Response, signal: AbortSignal): void {
+  const cancel = () => {
+    const body = response.body;
 
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      try {
-        const { done, value } = await reader.read();
-        if (canceled) return;
-        if (done) {
-          signal.removeEventListener('abort', onAbort);
-          controller.close();
-        } else {
-          controller.enqueue(value);
-        }
-      } catch (error) {
-        if (canceled) return;
-        signal.removeEventListener('abort', onAbort);
-        controller.error(error);
-      }
-    },
-    cancel,
-  });
+    if (body && !body.locked) {
+      void body.cancel('request aborted').catch(() => {});
+    }
+  };
+
+  if (signal.aborted) {
+    cancel();
+  } else {
+    signal.addEventListener('abort', cancel, { once: true });
+  }
 }
 
 export type HonoBindings = {};
@@ -279,8 +265,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // cancels the body of a request that closed while the route handler ran, so follow the request signal too.
         const signal = res.req.raw.signal;
         const abortStream = () => stream.abort();
-        if (signal.aborted) abortStream();
-        else signal.addEventListener('abort', abortStream, { once: true });
+        if (signal.aborted) {
+          abortStream();
+        } else {
+          signal.addEventListener('abort', abortStream, { once: true });
+        }
 
         try {
           if (streamFormat === 'sse' && route.sseFlushOnConnect) {
@@ -436,12 +425,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       return this.stream(route, response, result as { fullStream: ReadableStream });
     } else if (route.responseType === 'datastream-response') {
       const fetchResponse = result as globalThis.Response;
-      if (!fetchResponse.body) return fetchResponse;
-      return new Response(cancelBodyOnAbort(fetchResponse.body, response.req.raw.signal), {
-        status: fetchResponse.status,
-        statusText: fetchResponse.statusText,
-        headers: fetchResponse.headers,
-      });
+      cancelUnreadBodyOnAbort(fetchResponse, response.req.raw.signal);
+      return fetchResponse;
     } else if (route.responseType === 'mcp-http') {
       // MCP Streamable HTTP transport
       const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;

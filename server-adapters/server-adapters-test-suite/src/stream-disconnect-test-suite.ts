@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -5,14 +6,23 @@ export interface StreamDisconnectTestConfig {
   /**
    * Serves `route` over real HTTP with no prefix and returns the route's absolute URL. When `beforeContext` is
    * given, run it as async middleware (or the framework's request hook) before the adapter's context middleware.
+   * When `compress` is set, gzip responses with the framework's usual compression middleware.
    */
   startServer: (
     route: ServerRoute<any, any, any>,
-    options?: { beforeContext?: () => Promise<void> },
+    options?: { beforeContext?: () => Promise<void>; compress?: boolean },
   ) => Promise<{ url: string; close: () => Promise<void> }>;
+  /** Set when `startServer` supports `compress`, to run the compressed-response cases. */
+  supportsCompression?: boolean;
 }
 
 type ResponseType = 'stream' | 'datastream-response';
+
+// Base64 of random bytes: gzip can't shrink it much, so a compressed response still fills the socket buffer.
+const incompressible = (bytes: number) =>
+  randomBytes(Math.ceil((bytes * 3) / 4))
+    .toString('base64')
+    .slice(0, bytes);
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -36,19 +46,21 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
       chunkBytes = 16,
       paceMs = 10,
       holdUntilDisconnect = false,
+      compress = false,
     }: {
       responseType: ResponseType;
       chunks?: number;
       chunkBytes?: number;
       paceMs?: number;
       holdUntilDisconnect?: boolean;
+      compress?: boolean;
     }) {
       const state = { pulls: 0, canceled: false };
       let handlerEntered!: () => void;
       const handlerStarted = new Promise<void>(resolve => (handlerEntered = resolve));
       let handlerReturned!: () => void;
       const handlerDone = new Promise<void>(resolve => (handlerReturned = resolve));
-      const padding = 'x'.repeat(chunkBytes);
+      const padding = compress ? incompressible(chunkBytes) : 'x'.repeat(chunkBytes);
 
       const route: ServerRoute<any, any, any> = {
         method: 'POST',
@@ -61,7 +73,10 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
             // after its 'close' already fired. The timeout keeps a broken abort signal from hanging the test.
             await Promise.race([
               new Promise<void>(resolve => {
-                if (abortSignal?.aborted) resolve();
+                if (abortSignal?.aborted) {
+                  resolve();
+                }
+
                 abortSignal?.addEventListener('abort', () => resolve(), { once: true });
               }),
               sleep(2_000),
@@ -70,9 +85,16 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
           handlerReturned();
           const body = new ReadableStream({
             async pull(controller) {
-              if (state.pulls >= chunks) return controller.close();
+              if (state.pulls >= chunks) {
+                return controller.close();
+              }
+
               state.pulls++;
-              if (paceMs) await sleep(paceMs);
+
+              if (paceMs) {
+                await sleep(paceMs);
+              }
+
               controller.enqueue(
                 responseType === 'stream'
                   ? { type: 'chunk', n: state.pulls, padding }
@@ -89,7 +111,7 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
         },
       };
 
-      const server = await config.startServer(route);
+      const server = await config.startServer(route, { compress });
       close = server.close;
       return { url: server.url, state, handlerStarted, handlerDone };
     }
@@ -192,6 +214,50 @@ export function createStreamDisconnectTestSuite(config: StreamDisconnectTestConf
         await sleep(300);
         expect(state.canceled, 'upstream cancel()').toBe(true);
       });
+
+      // The `compression` middleware forwards `res.on('drain')` to its zlib stream but not `res.off`, so a listener
+      // per backpressure wait piles up there and Node warns about a possible memory leak.
+      it.runIf(config.supportsCompression)(
+        'streams a compressed response to a slow client without piling up drain listeners',
+        async () => {
+          const warnings: string[] = [];
+          const onWarning = (warning: Error) => {
+            if (warning.name === 'MaxListenersExceededWarning') {
+              warnings.push(warning.message);
+            }
+          };
+          process.on('warning', onWarning);
+          try {
+            const { url } = await setup({
+              responseType,
+              chunks: 100,
+              chunkBytes: 64 * 1024,
+              paceMs: 0,
+              compress: true,
+            });
+
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', 'accept-encoding': 'gzip' },
+              body: '{}',
+            });
+            expect(response.headers.get('content-encoding')).toBe('gzip');
+            const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+            let text = '';
+            for (let next = await reader.read(); !next.done; next = await reader.read()) {
+              text += next.value;
+              // Read slower than the server writes, so it keeps waiting for the socket to drain.
+              await sleep(1);
+            }
+            await sleep(50);
+
+            expect(text.match(/"n":\d+|chunk-\d+/g)).toHaveLength(100);
+            expect(warnings, 'MaxListenersExceededWarning').toEqual([]);
+          } finally {
+            process.off('warning', onWarning);
+          }
+        },
+      );
     });
   });
 }

@@ -33,7 +33,9 @@ createDurableDisconnectTestSuite({
     const app = new Koa();
     app.use(async (ctx, next) => {
       ctx.res.on('close', () => {
-        if (!ctx.res.writableFinished) onDisconnect(ctx.path);
+        if (!ctx.res.writableFinished) {
+          onDisconnect(ctx.path);
+        }
       });
       await next();
     });
@@ -43,7 +45,11 @@ createDurableDisconnectTestSuite({
       const started = app.listen(0, '127.0.0.1', () => resolve(started));
     });
     const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
+
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected TCP listener');
+    }
+
     return {
       baseUrl: `http://127.0.0.1:${address.port}`,
       close: async () => {

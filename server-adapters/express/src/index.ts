@@ -153,7 +153,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       });
       // A client that dropped while earlier middleware ran (async auth, body parsing) fired 'close' before this
       // listener existed.
-      if (res.destroyed) controller.abort();
+      if (res.destroyed) {
+        controller.abort();
+      }
+
       res.locals.abortSignal = controller.signal;
       next();
     };

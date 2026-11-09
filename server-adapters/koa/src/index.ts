@@ -54,6 +54,25 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
 }
 
 /**
+ * Once the adapter writes a streaming response itself, a client that leaves while a write is still pending makes the
+ * socket fail with `EPIPE` or `ECONNRESET`. Koa passes that socket error to `ctx.onerror`, and the default
+ * `app.onerror` prints it as a server error, so drop those here: they only mean the client disconnected.
+ */
+function ignoreClientDisconnectErrors(ctx: Context): void {
+  const onerror = ctx.onerror;
+  ctx.onerror = function (this: Context, err: Error | null) {
+    switch ((err as NodeJS.ErrnoException | null)?.code) {
+      // Client disconnect error codes
+      case 'EPIPE':
+      case 'ECONNRESET':
+        return;
+      default:
+        return onerror.call(this, err as Error);
+    }
+  };
+}
+
+/**
  * Convert Koa context to Web API Request for cookie-based auth providers.
  */
 function toWebRequest(ctx: Context): globalThis.Request {
@@ -286,7 +305,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       });
       // A client that dropped while earlier middleware ran (async auth, body parsing) fired 'close' before this
       // listener existed.
-      if (ctx.res.destroyed) controller.abort();
+      if (ctx.res.destroyed) {
+        controller.abort();
+      }
+
       ctx.state.abortSignal = controller.signal;
 
       await next();
@@ -576,6 +598,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   async stream(route: ServerRoute, ctx: Context, result: { fullStream: ReadableStream }): Promise<void> {
     // Tell Koa we're handling the response ourselves
     ctx.respond = false;
+    ignoreClientDisconnectErrors(ctx);
 
     const streamFormat = route.streamFormat || 'stream';
 
@@ -766,6 +789,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // Handle AI SDK Response objects - pipe Response.body to Koa response
       // Tell Koa we're handling the response ourselves
       ctx.respond = false;
+      ignoreClientDisconnectErrors(ctx);
 
       const fetchResponse = result as globalThis.Response;
       const headers: Record<string, string> = {};

@@ -36,14 +36,20 @@ createDurableDisconnectTestSuite({
     const app = moduleRef.createNestApplication({ logger: false });
     app.use((req: Request, res: Response, next: NextFunction) => {
       res.on('close', () => {
-        if (!res.writableFinished) onDisconnect(req.path);
+        if (!res.writableFinished) {
+          onDisconnect(req.path);
+        }
       });
       next();
     });
     await app.listen(0, '127.0.0.1');
     const server = app.getHttpServer() as Server;
     const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
+
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected TCP listener');
+    }
+
     return {
       baseUrl: `http://127.0.0.1:${address.port}`,
       close: async () => {

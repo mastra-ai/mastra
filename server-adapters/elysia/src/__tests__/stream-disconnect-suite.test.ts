@@ -18,7 +18,10 @@ async function getFreePort(): Promise<number> {
 createStreamDisconnectTestSuite({
   startServer: async (route, { beforeContext } = {}) => {
     const app = new Elysia({ adapter: node() });
-    if (beforeContext) app.onRequest(beforeContext);
+    if (beforeContext) {
+      app.onRequest(beforeContext);
+    }
+
     const adapter = new MastraServer({ app, mastra: new Mastra({ logger: false }) });
     adapter.registerContextMiddleware();
     await adapter.registerRoute(app, route, { prefix: '' });
