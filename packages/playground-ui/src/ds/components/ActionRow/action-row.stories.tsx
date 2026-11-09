@@ -105,6 +105,7 @@ export const WithFilterBar: Story = {
       <div data-testid="narrow" className="w-104">
         <MonitoringRow />
       </div>
+      <hr className="h-px border-0 bg-border" />
       <div data-testid="wide" className="w-240">
         <MonitoringRow />
       </div>
