@@ -39,7 +39,8 @@ export function CreateReplayDatasetDialog({ source, onClose }: { source: ReplayS
     queryFn: async () => {
       const all = [];
       for (let page = 0; ; page++) {
-        const result = await client.listDatasets({ page, perPage: 100 });
+        // Replay items are agent inputs; workflow datasets would feed them to a workflow as input.
+        const result = await client.listDatasets({ page, perPage: 100, targetType: 'agent' });
         all.push(...result.datasets);
         if (!result.pagination.hasMore) return all;
       }

@@ -14,8 +14,12 @@ function setup(turnCount = 10) {
   const previews: unknown[] = [];
   const created: unknown[] = [];
   const inserted: unknown[] = [];
+  const listed: string[] = [];
   server.use(
-    http.get(`${base}/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
+    http.get(`${base}/datasets`, ({ request }) => {
+      listed.push(new URL(request.url).search);
+      return HttpResponse.json(buildListDatasetsResponse([]));
+    }),
     http.post(`${base}/datasets/replay/preview`, async ({ request }) => {
       previews.push(await request.json());
       return HttpResponse.json(buildReplayPreview(turnCount));
@@ -41,7 +45,7 @@ function setup(turnCount = 10) {
       </QueryClientProvider>
     </MastraReactProvider>,
   );
-  return { previews, created, inserted };
+  return { previews, created, inserted, listed };
 }
 
 describe('CreateReplayDatasetDialog', () => {
@@ -57,6 +61,8 @@ describe('CreateReplayDatasetDialog', () => {
       fireEvent.click(submit);
       await screen.findByRole('button', { name: 'Run experiment' });
       expect(requests.created).toEqual([{ name: 'Golden thread replay', targetType: 'agent', targetIds: ['support'] }]);
+      // Only agent datasets are offered as import targets.
+      expect(requests.listed[0]).toContain('targetType=agent');
       expect(requests.inserted).toEqual([
         { agentId: 'support', threadId: 'golden', resourceId: 'customer', historyLimit: false },
       ]);

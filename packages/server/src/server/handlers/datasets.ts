@@ -138,6 +138,13 @@ export const ITEMS_FROM_THREAD_ROUTE = createRoute({
     assertDatasetsAvailable();
     try {
       const dataset = await params.mastra.datasets.get({ id: params.datasetId });
+      // Replay items are agent inputs; a workflow experiment would pass them through as workflow input.
+      const { targetType } = await dataset.getDetails();
+      if (targetType !== 'agent') {
+        throw new HTTPException(400, {
+          message: `Replay items can only be added to agent datasets; this dataset targets ${targetType}.`,
+        });
+      }
       const { items, turnCount } = await replaySource(params);
       const added = items.length ? await dataset.addItems({ items }) : [];
       return { itemIds: added.map(item => item.id), turnCount };
