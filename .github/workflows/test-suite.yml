@@ -101,7 +101,7 @@ jobs:
           retention-days: 1
 
   affected-unit-test:
-    name: Affected UNIT Test (Shard ${{ matrix.shard }})
+    name: Affected UNIT Test${{ strategy.job-total > 1 && format(' ({0}/{1})', matrix.shard, strategy.job-total) || '' }}
     if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true' && inputs.unit_shards != '[]'
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
