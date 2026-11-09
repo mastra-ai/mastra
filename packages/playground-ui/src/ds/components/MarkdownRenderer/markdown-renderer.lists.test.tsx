@@ -59,6 +59,7 @@ describe('MarkdownRenderer lists', () => {
     ['a task list', '- [ ] todo\n- [x] done\n- [X] shouted\n- plain'],
     ['checkboxes with nothing after them', '- [ ]\n- [x]\n- [ ] x\n- [ ]   '],
     ['a checkbox the stream has half written', '- one\n- [\n- [ \n- [x'],
+    ['a checkbox whose next line turns it into a heading', '- a\n- [x] done\n  -\n- [ ] todo\n  ==='],
     ['bullets that change marker', '- a\n- b\n* c\n+ d'],
     ['numbers that change delimiter', '1. a\n2. b\n3) c'],
     ['a thematic break between items', '* a\n* * *\n* b'],
@@ -89,6 +90,16 @@ describe('MarkdownRenderer lists', () => {
 
       expect(rendered(prefix), prefix).toBe(whole(prefix));
     }
+  });
+
+  it('closes a marker the stream left open inside the item still being written', () => {
+    const streamed = renderToStaticMarkup(
+      <MarkdownRenderer components={PLAIN} streaming>
+        {'0) **bold** text\n\n1) **unclosed bold\n\n'}
+      </MarkdownRenderer>,
+    );
+
+    expect(streamed).toBe(whole('0) **bold** text\n\n1) **unclosed bold**'));
   });
 
   it('draws every list through the host’s own list element when it overrides one', () => {

@@ -91,7 +91,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     !span || settled >= span.end ? undefined : Math.max(0, settled - span.start);
 
   const tail = pieces[last] ?? '';
-  const mended = useMemo(() => (streaming ? remend(tail, REMEND_OPTIONS) : tail), [streaming, tail]);
+  const tailIsItem = typeof blocks.at(-1) === 'object';
+  const mended = useMemo(() => {
+    if (!streaming) return tail;
+    if (!tailIsItem) return remend(tail, REMEND_OPTIONS);
+    // Closed after the blank lines, a marker would start a paragraph outside the item, inside the list.
+    const body = tail.replace(/\n\s*$/, '');
+    return remend(body, REMEND_OPTIONS) + tail.slice(body.length);
+  }, [streaming, tail, tailIsItem]);
 
   const piece = (content: string, at: number, key: number, listItem?: ListItem) => (
     <MarkdownBlock

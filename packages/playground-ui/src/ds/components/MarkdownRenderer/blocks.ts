@@ -10,6 +10,7 @@ const ITEM = /^( {0,3})(?:([-*+])|(\d{1,9})([.)]))( {1,4})(?=\S)/;
 const EMPTY_ITEM = /^ {0,3}(?:([-*+])|(\d{1,9})([.)])) *$/;
 const THEMATIC_BREAK = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const CHECKBOX = /^\[[ \txX]\](.*)$/;
+const SETEXT_UNDERLINE = /^ {0,3}(?:=+|-+)[ \t]*$/;
 // Unlike FENCE_OPEN, exact: a backtick in the info string makes the line inline code, not a fence.
 const ITEM_FENCE = /^ {0,3}(?:(`{3,})[^`]*|(~{3,}).*)$/;
 // A fence the item does not open itself, or raw HTML, here or behind a nested marker or quote: either can
@@ -153,10 +154,12 @@ export function splitList(block: string): ListBlock | undefined {
   let blankInside = false;
   let loose = false;
   let tasks = false;
+  let taskLine = false;
 
   for (const [index, line] of lines.entries()) {
     if (line.trim() === '') {
       blank = true;
+      taskLine = false;
       continue;
     }
 
@@ -164,6 +167,9 @@ export function splitList(block: string): ListBlock | undefined {
     if (line.slice(0, indent).includes('\t') || DEFINITION_LABEL_END.test(line)) return undefined;
 
     let content = line.slice(width);
+    // An underline straight after a task's line makes it a heading, and the list no longer holds a task.
+    if (taskLine && indent >= width && SETEXT_UNDERLINE.test(content)) return undefined;
+    taskLine = false;
 
     if (index === 0 || indent < width) {
       const item = listItemStart(line, index === last);
@@ -178,6 +184,7 @@ export function splitList(block: string): ListBlock | undefined {
       fence = undefined;
       opaque = false;
       tasks ||= task;
+      taskLine = task;
       loose ||= blank;
     } else {
       blankInside ||= blank;
