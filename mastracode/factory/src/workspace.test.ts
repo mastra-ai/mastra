@@ -6,7 +6,7 @@ import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-i
 import { RequestContext } from '@mastra/core/request-context';
 import { FactorySandbox, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
-import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   /** Whether the mock VM already carries a matching setup marker (warm template image). */
@@ -2590,6 +2590,86 @@ describe('GitHub session workspace preparation', () => {
     await sandbox.start();
 
     expect(() => requireGithubTokenInjector(workerContext)('rotated-worker-token')).not.toThrow();
+  });
+
+  describe('when the installed installation token ages', () => {
+    const originalAccess = mocks.getRepositoryAccess.getMockImplementation()!;
+    let minted = 0;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      minted = 0;
+      mocks.getRepositoryAccess.mockImplementation(async () => ({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer' as const, token: `minted-${++minted}` },
+      }));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      mocks.getRepositoryAccess.mockImplementation(originalAccess);
+    });
+
+    async function startSession() {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const installed = lastGhToken();
+      expect(installed).toMatch(/^minted-/);
+      const reuse = () =>
+        workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a'),
+          mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        });
+      return { installed, reuse };
+    }
+
+    it('re-mints GH_TOKEN on reuse once it is 45 minutes old', async () => {
+      const { installed, reuse } = await startSession();
+
+      vi.advanceTimersByTime(44 * 60_000);
+      mocks.setEnv.mockClear();
+      await reuse();
+      expect(mocks.setEnv).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(2 * 60_000);
+      await reuse();
+      expect(lastGhToken()).toMatch(/^minted-/);
+      expect(lastGhToken()).not.toBe(installed);
+    });
+
+    it('installs a fresh token instead of the expired one on sandbox reconnect', async () => {
+      const { installed } = await startSession();
+
+      vi.advanceTimersByTime(61 * 60_000);
+      mocks.setEnv.mockClear();
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      await sandbox.start();
+
+      expect(lastGhToken()).toMatch(/^minted-/);
+      expect(lastGhToken()).not.toBe(installed);
+    });
+
+    it('keeps an org PAT installed regardless of age', async () => {
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('ghp_org_pat');
+
+      vi.advanceTimersByTime(61 * 60_000);
+      mocks.setEnv.mockClear();
+      await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      });
+      expect(mocks.setEnv).not.toHaveBeenCalled();
+
+      await mocks.createSandbox.mock.results[0]!.value.start();
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
   });
 
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {

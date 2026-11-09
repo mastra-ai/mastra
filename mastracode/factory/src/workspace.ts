@@ -66,6 +66,11 @@ import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
+// GitHub installation tokens live 60 minutes and minted access is cached for
+// up to 5, so replace an installed token well before it can expire.
+const GITHUB_TOKEN_REFRESH_AFTER_MS = 45 * 60_000;
+const isGithubTokenStale = (registration: { tokenIssuedAt: number }): boolean =>
+  Date.now() - registration.tokenIssuedAt >= GITHUB_TOKEN_REFRESH_AFTER_MS;
 /** The Factory UI renders plans only from `.artifacts/`, so every session writes them there. */
 export const FACTORY_PLANS_DIR = '.artifacts/plans';
 const FACTORY_WORKSPACE_TOOLS = createMastraCodeWorkspaceTools(false, FACTORY_PLANS_DIR);
@@ -683,6 +688,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     inject: (token: string) => void;
     patKind: GithubPatKind;
     ghToken: string;
+    // When `ghToken` was installed. Minted installation tokens expire after
+    // an hour, so reconcile and reconnect re-mint once it is stale.
+    tokenIssuedAt: number;
     generation: number;
     tokenReplacementPending: boolean;
   };
@@ -891,11 +899,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           existingRegistration.ghToken = freshToken;
+          existingRegistration.tokenIssuedAt = Date.now();
         };
+        // A minted token may have expired while the VM was away; re-mint it
+        // instead of reinstalling it over the fresh one setup just used.
+        const reinstallToken =
+          isGithubTokenStale(existingRegistration) &&
+          !(await getGithubPat(() => githubProvider.integrationStorage, session.orgId, existingRegistration.patKind))
+            ? await getRepositoryToken()
+            : existingRegistration.ghToken;
         // Install through inject (not optional-chained setEnv) so a provider
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
-        existingRegistration.inject(existingRegistration.ghToken);
+        existingRegistration.inject(reinstallToken);
         await finishStart();
         return;
       }
@@ -916,9 +932,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           tokenRegistration.ghToken = freshToken;
+          tokenRegistration.tokenIssuedAt = Date.now();
         },
         patKind,
         ghToken: ghCliToken,
+        tokenIssuedAt: Date.now(),
         generation: 0,
         tokenReplacementPending: false,
       };
@@ -1235,7 +1253,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
 
           let token = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
-          if (!token && registered.tokenReplacementPending) token = await getRepositoryToken();
+          if (!token && (registered.tokenReplacementPending || isGithubTokenStale(registered))) {
+            token = await getRepositoryToken();
+          }
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (token && token !== registered.ghToken) {
