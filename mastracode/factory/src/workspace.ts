@@ -823,13 +823,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
         })
       : createSessionSetupHook(runSetupOn, session.id, repoFullName, projectRepository.setupCommand ?? undefined);
-    // Composed start hook: marker-guarded repo setup, then per-start
-    // credential install. It runs inside the provider's start lifecycle on
-    // EVERY start (create or reconnect) — providers own lazy start
-    // (`ensureRunning()` on first command) and dead-VM self-healing (E2B
-    // `retryOnDead`, Platform status reset on destroy), so a replacement VM
-    // re-enters this hook and heals itself with credentials at least as
-    // fresh as the start that installed them.
     // Replaces the installed minted token once it is stale, so `gh` and the
     // `gh auth git-credential` helper never run with an expired GH_TOKEN. Org
     // PATs are left alone. Returns whether a fresh token was injected.
@@ -848,6 +841,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       registration.inject(token);
       return true;
     };
+    // Composed start hook: marker-guarded repo setup, then per-start
+    // credential install. It runs inside the provider's start lifecycle on
+    // EVERY start (create or reconnect) — providers own lazy start
+    // (`ensureRunning()` on first command) and dead-VM self-healing (E2B
+    // `retryOnDead`, Platform status reset on destroy), so a replacement VM
+    // re-enters this hook and heals itself with credentials at least as
+    // fresh as the start that installed them.
     const setupHook: SandboxStartHook = async args => {
       // A session retired before its first start must not set anything up.
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
