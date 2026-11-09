@@ -392,6 +392,11 @@ describe('UpstashFilterTranslator', () => {
     it('negates $contains inside a top-level $not field', () => {
       expect(translator.translate({ $not: { f: { $contains: 'x' } } })).toBe("f NOT CONTAINS 'x'");
     });
+
+    it('negates mixed field and logical keys of a top-level $not', () => {
+      expect(translator.translate({ $not: { a: 1, $or: [{ b: 2 }] } })).toBe('(a != 1 OR (b != 2))');
+      expect(translator.translate({ $not: { $and: [{ b: 2 }], a: 1 } })).toBe('((b != 2) OR a != 1)');
+    });
   });
 
   describe('array access', () => {

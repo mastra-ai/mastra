@@ -133,9 +133,8 @@ export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorF
     }
 
     // NOT(a AND b) is (NOT a OR NOT b), so every entry is negated and the results are OR-ed
-    const isOperatorMap = Object.keys(value).some(k => k.startsWith('$'));
     const negated = Object.entries(value).map(([key, val]) =>
-      isOperatorMap ? this.negateOperator(path, key, val) : this.negateField(key, val),
+      key.startsWith('$') ? this.negateOperator(path, key, val) : this.negateField(key, val),
     );
 
     return negated.length > 1 ? `(${negated.join(' OR ')})` : (negated[0] ?? '');
