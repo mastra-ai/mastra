@@ -30,7 +30,7 @@ Open the comparison URL printed by the script, then choose **Replay conversation
 node --import tsx server-adapters/hono/scripts/nfl-news-comparison.ts --serve
 ```
 
-Results and the SQLite database persist in the ignored `.artifacts/nfl-news` directory. `--directory` selects another location; `--port` changes the API port. Each live run creates a new dataset and pair of experiments, and `latest.json` records the latest comparison URL. `--serve` requires no API keys and performs no research.
+Results and the SQLite database persist in the ignored `.artifacts/nfl-news` directory. `--directory` selects another location; `--port` changes the API port, and the Studio command must then use the same value for `PORT` because Studio proxies API requests to it. Each live run creates a new dataset and pair of experiments, and `latest.json` records the latest comparison URL. `--serve` requires no API keys and performs no research.
 
 ## Existing infrastructure
 
