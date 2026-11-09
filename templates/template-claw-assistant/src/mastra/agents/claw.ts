@@ -6,6 +6,9 @@ import { AgentBrowser } from '@mastra/agent-browser';
 import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import 'playwright';
 
+const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5.4';
+const usesOpenAI = /^(mastra\/)?openai\//.test(agentModel);
+
 const headless = process.env.BROWSER_HEADLESS !== 'false';
 
 function getProjectRoot() {
@@ -92,7 +95,7 @@ export const claw = new Agent({
    - What you did (briefly).
    - Where the artifacts are (file paths, URLs, etc.).
    - Anything that needs follow-up.`,
-  model: 'mastra/openai/gpt-5.4',
+  model: agentModel,
   defaultOptions: {
     maxSteps: 100,
   },
@@ -106,7 +109,5 @@ export const claw = new Agent({
     headless,
     ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' as const } : {}),
   }),
-  tools: {
-    web_search: openai.tools.webSearch({}),
-  },
+  tools: usesOpenAI ? { web_search: openai.tools.webSearch({}) } : {},
 });
