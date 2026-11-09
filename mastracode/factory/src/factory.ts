@@ -92,6 +92,7 @@ import {
 } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
+import { SandboxEnvRoutes } from './routes/sandbox-envs.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -719,7 +720,9 @@ export class MastraFactory {
     const configuredAuth = this.#config.auth;
     const auth: IMastraAuthProvider | undefined =
       configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth());
-    if (auth && !this.#config.secretEncryption) {
+    // Secrets would be stored as plaintext for a multi-user deploy; sandbox env writes are refused then.
+    const secretsUnencrypted = Boolean(auth) && !this.#config.secretEncryption;
+    if (secretsUnencrypted) {
       console.warn(
         "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
           'custom-provider API keys, and integration secrets will be stored as plaintext. Provide ' +
@@ -2103,6 +2106,13 @@ export class MastraFactory {
             },
           }),
           ...projectRoutes.routes(),
+          ...new SandboxEnvRoutes({
+            auth: routeAuth,
+            projects: factoryProjectsStorage,
+            sandboxEnvs: sandboxEnvsStorage,
+            writable: !secretsUnencrypted,
+            audit: auditDomain,
+          }).routes(),
           ...auditDomain.routes(),
           ...commentsDomain.routes(),
           // Connect/reconnect session minting for Platform-managed providers.
