@@ -12,6 +12,8 @@ import { RequestError } from '../services/request';
 const RETRY_MS = 3_000;
 /** Frames this close together refresh the board once. */
 const BOARD_REFRESH_SETTLE_MS = 300;
+/** A busy board refreshes at most this often, about the pace it used to poll at. */
+const BOARD_REFRESH_MIN_GAP_MS = 3_000;
 /** While frames refresh the board, a poll only bounds how long a write that never announced itself stays hidden. */
 const FEED_SAFETY_POLL_MS = 60_000;
 
@@ -49,6 +51,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     let retry: ReturnType<typeof setTimeout> | undefined;
     let settling: ReturnType<typeof setTimeout> | undefined;
     let refreshing: Promise<unknown> = Promise.resolve();
+    let lastRefreshAt = Number.NEGATIVE_INFINITY;
     const boardKeys = [
       queryKeys.workItems(factoryProjectId),
       queryKeys.factoryDecisionsRoot(factoryProjectId),
@@ -57,13 +60,15 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     // One refresh at a time: a frame cancelling a slow board read for the next would starve a busy board.
     const refreshBoard = () => {
       if (settling) return;
+      const wait = Math.max(BOARD_REFRESH_SETTLE_MS, lastRefreshAt + BOARD_REFRESH_MIN_GAP_MS - Date.now());
       settling = setTimeout(() => {
         refreshing = refreshing.then(() => {
           settling = undefined;
           if (abort.signal.aborted) return;
+          lastRefreshAt = Date.now();
           return Promise.all(boardKeys.map(queryKey => queryClient.invalidateQueries({ queryKey })));
         });
-      }, BOARD_REFRESH_SETTLE_MS);
+      }, wait);
     };
 
     const connect = () => {

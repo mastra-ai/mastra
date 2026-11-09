@@ -118,6 +118,32 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
+  it('refreshes a busy board at most once every 3 s, however fast frames arrive', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    server.use(stream.handler);
+    const { requests } = boardEndpoints();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      const rendered = await renderConnectedBoard();
+      const before = { ...requests };
+
+      for (let frame = 0; frame < 60; frame += 1) {
+        stream.push();
+        act(() => vi.advanceTimersByTime(100));
+        await delay(0);
+      }
+      act(() => vi.advanceTimersByTime(1_000));
+
+      await waitFor(() => expect(requests.cards).toBe(before.cards + 3));
+      await delay(50);
+      expect(requests).toEqual({ cards: before.cards + 3, decisions: before.decisions + 3, runs: before.runs + 3 });
+      await waitForMutationsIdle(rendered.client);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('still lands a card change while frames keep arriving faster than the board reads', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);

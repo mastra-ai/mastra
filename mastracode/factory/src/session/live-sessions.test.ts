@@ -177,4 +177,32 @@ describe('LiveSessions', () => {
     expect(changed).toHaveBeenCalledTimes(2);
     expect(registry.parkedIn('project-1')).toEqual([]);
   });
+
+  it('announces a session torn down mid-run, so its running marker clears', () => {
+    const controller = fakeController();
+    const registry = new LiveSessions(controller);
+    const running = { value: true };
+    const fake = fakeSession('session-1', running);
+    controller.create(fake.session);
+    const changed = vi.fn();
+    registry.onRunChanged(changed);
+
+    controller.delete(fake.session);
+
+    expect(changed).toHaveBeenCalledOnce();
+    expect(registry.isRunning('session-1')).toBe(false);
+  });
+
+  it('stays quiet when an idle session is torn down, since no board showed it', () => {
+    const controller = fakeController();
+    const registry = new LiveSessions(controller);
+    const fake = fakeSession('session-1');
+    controller.create(fake.session);
+    const changed = vi.fn();
+    registry.onRunChanged(changed);
+
+    controller.delete(fake.session);
+
+    expect(changed).not.toHaveBeenCalled();
+  });
 });
