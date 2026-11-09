@@ -23,7 +23,6 @@ function fakeController() {
   };
 }
 
-/** `factoryProjectId: null` is a session recovered after a restart: its state kept the org only. */
 function fakeSession(
   id: string,
   running: { value: boolean } = { value: false },

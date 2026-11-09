@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
-import { queryKeys } from '../../../../api/keys';
+import { cardMoveMutationKey, queryKeys } from '../../../../api/keys';
 import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { streamFeedEvents } from '../services/feedEvents';
@@ -12,8 +12,8 @@ import { RequestError } from '../services/request';
 const RETRY_MS = 3_000;
 /** Frames this close together refresh the board once. */
 const BOARD_REFRESH_SETTLE_MS = 300;
-/** A busy board refreshes at most this often, about the pace it used to poll at. */
-const BOARD_REFRESH_MIN_GAP_MS = 3_000;
+/** A busy board refreshes no more often than it polls without a stream, so frames never cost more reads than polling. */
+const BOARD_REFRESH_MIN_GAP_MS = 5_000;
 /** While frames refresh the board, a poll only bounds how long a write that never announced itself stays hidden. */
 const FEED_SAFETY_POLL_MS = 60_000;
 
@@ -42,7 +42,6 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   // A quick tab switch keeps the stream; only a tab left hidden releases it.
   const visible = useRecentlyVisible();
   const [connected, setConnected] = useState(false);
-  const streamedProject = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!visible) return;
@@ -57,12 +56,24 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       queryKeys.factoryDecisionsRoot(factoryProjectId),
       queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
     ];
+    // A board read taken while a card is moving puts it back in the column it is leaving.
+    const cardMovesSettled = () => {
+      const moves = { mutationKey: cardMoveMutationKey(factoryProjectId) };
+      if (queryClient.isMutating(moves) === 0) return;
+      return new Promise<void>(resolve => {
+        const unsubscribe = queryClient.getMutationCache().subscribe(() => {
+          if (queryClient.isMutating(moves) > 0) return;
+          unsubscribe();
+          resolve();
+        });
+      });
+    };
     // One refresh at a time: a frame cancelling a slow board read for the next would starve a busy board.
     const refreshBoard = () => {
       if (settling) return;
       const wait = Math.max(BOARD_REFRESH_SETTLE_MS, lastRefreshAt + BOARD_REFRESH_MIN_GAP_MS - Date.now());
       settling = setTimeout(() => {
-        refreshing = refreshing.then(() => {
+        refreshing = refreshing.then(cardMovesSettled).then(() => {
           settling = undefined;
           if (abort.signal.aborted) return;
           lastRefreshAt = Date.now();
@@ -84,10 +95,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
           },
           onConnected: () => {
             setConnected(true);
-            // Whatever landed while this tab held no stream was never announced. A project's
-            // first stream opens right after the page read its board, so that board is current.
-            if (streamedProject.current === factoryProjectId) refreshBoard();
-            streamedProject.current = factoryProjectId;
+            // Whatever landed while this tab held no stream was never announced.
+            refreshBoard();
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
           },
         },

@@ -1,9 +1,3 @@
-/**
- * The announcement every board-visible write owes open boards: they stop
- * polling while their feed stream is up, so a card or decision write that stays
- * silent leaves every board stale until its slow safety poll.
- */
-
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
@@ -21,7 +15,6 @@ async function makeStorage() {
   const storage = backend.registerDomain(new WorkItemsStorage());
   await backend.init();
   const announced: FactoryBoardScope[] = [];
-  // What the listener can read is what a board refetching on the frame would show.
   const titlesAtAnnounce: Array<Promise<string[]>> = [];
   storage.onBoardChanged(scope => {
     announced.push({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });

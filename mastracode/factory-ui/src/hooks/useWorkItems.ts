@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { queryKeys } from '../api/keys';
+import { cardMoveMutationKey, queryKeys } from '../api/keys';
 import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import {
   createWorkItem,
@@ -169,7 +169,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
-  const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
+  const mutationKey = cardMoveMutationKey(factoryProjectId);
   const mutation = useMutation({
     mutationKey,
     mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
