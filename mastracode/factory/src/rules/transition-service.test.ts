@@ -2828,6 +2828,31 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       expect((await storage.get({ orgId: org, id: item.id }))?.stages).toEqual(['intake']);
     });
 
+    it('starts the reviewer from the Reviewing runner of a Review board a project still uses', async () => {
+      org = `org-${randomUUID()}`;
+      const storage = await workItemsOn(backend);
+      const service = new FactoryTransitionService({
+        configVersion: 'review-rules',
+        storage,
+        boards: createBoardRegistry({ boards: [reviewBoard] }),
+      });
+      const card = await createItem(storage, {
+        orgId: org,
+        board: 'review',
+        source: 'github-pr',
+        sourceKey: `${org}-reviewing`,
+        stages: ['intake'],
+        metadata: { authorTrusted: true },
+      });
+      const result = await service.transition(
+        request(card, { orgId: org, board: 'review', stage: 'review', identity: 'start-review' }),
+      );
+      expect(result).toMatchObject({ status: 'accepted', stage: 'review' });
+      expect(result.status === 'accepted' ? result.decisions : []).toEqual([
+        expect.objectContaining({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' }),
+      ]);
+    });
+
     it('leaves Done on a Review board a project still uses to its own flow: the review prompts keep it for the merge', async () => {
       org = `org-${randomUUID()}`;
       const storage = await workItemsOn(backend);
