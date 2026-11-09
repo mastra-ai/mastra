@@ -116,9 +116,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
     const exporters = config.exporters ?? [];
-    const effectiveExporters = isMastraPlatformDeployment()
-      ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
-      : exporters;
+    const effectiveExporters =
+      isMastraPlatformDeployment() && config.allowStorageOnPlatform !== true
+        ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
+        : exporters;
 
     // Apply defaults for optional fields
     this.config = {
@@ -126,6 +127,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       name: config.name,
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
       exporters: effectiveExporters,
+      allowStorageOnPlatform: config.allowStorageOnPlatform ?? false,
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
@@ -135,6 +137,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       serializationOptions: config.serializationOptions,
       logging: config.logging,
     };
+
+    for (const exporter of exporters) {
+      if (!effectiveExporters.includes(exporter)) {
+        this.warnStorageExporterSkipped(exporter);
+      }
+    }
 
     // Initialize cardinality filter for metrics (uses user config or defaults)
     this.cardinalityFilter = new CardinalityFilter(config.cardinality);
@@ -459,17 +467,28 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     return [...this.exporters];
   }
 
+  private warnStorageExporterSkipped(exporter: ObservabilityExporter): void {
+    this.logger.warn(
+      'Storage exporter skipped on Mastra Platform. Set allowStorageOnPlatform: true on this observability config to enable storage export.',
+      {
+        exporterName: exporter.name,
+        serviceName: this.config.serviceName,
+        instanceName: this.config.name,
+      },
+    );
+  }
+
   /**
    * Register an additional exporter at runtime.
    * Adds to both the bus (for event routing) and the config (for getExporters).
    */
   registerExporter(exporter: ObservabilityExporter): void {
-    if (isMastraPlatformDeployment() && isMastraBuiltInStorageExporter(exporter)) {
-      this.logger.warn('Storage exporter registration skipped on Mastra Platform', {
-        exporterName: exporter.name,
-        serviceName: this.config.serviceName,
-        instanceName: this.config.name,
-      });
+    if (
+      isMastraPlatformDeployment() &&
+      this.config.allowStorageOnPlatform !== true &&
+      isMastraBuiltInStorageExporter(exporter)
+    ) {
+      this.warnStorageExporterSkipped(exporter);
       return;
     }
 

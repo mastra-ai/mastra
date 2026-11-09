@@ -83,6 +83,28 @@ export const mastra = new Mastra({
 })
 ```
 
+## Export to storage and Platform
+
+On Mastra Platform, a nonempty `MASTRA_DEPLOYMENT_ID` disables `MastraStorageExporter` and the deprecated `DefaultExporter` by default. Other exporters remain enabled.
+
+To keep writing to your own database alongside Platform observability, set [`allowStorageOnPlatform`](/reference/observability/tracing/configuration#observabilityinstanceconfig) to `true` on the observability config:
+
+```typescript
+import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability'
+
+const observability = new Observability({
+  configs: {
+    production: {
+      serviceName: 'my-service',
+      allowStorageOnPlatform: true,
+      exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+    },
+  },
+})
+```
+
+Pass this `observability` instance to `new Mastra()` alongside your configured `storage` provider. The option applies only to this config, including exporters registered later. It doesn't configure a database or add exporters automatically. Other configs keep the default suppression unless they also opt in.
+
 ## Studio
 
 Access your traces through Studio:

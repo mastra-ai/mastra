@@ -59,6 +59,7 @@ interface ObservabilityInstanceConfig {
   serviceName: string
   sampling?: SamplingStrategy
   exporters?: ObservabilityExporter[]
+  allowStorageOnPlatform?: boolean
   spanOutputProcessors?: SpanOutputProcessor[]
   includeInternalSpans?: boolean
   excludeSpanTypes?: SpanType[]
@@ -93,6 +94,13 @@ interface ObservabilityInstanceConfig {
     name: 'exporters',
     type: 'ObservabilityExporter[]',
     description: 'Trace data exporters',
+    required: false,
+  },
+  {
+    name: 'allowStorageOnPlatform',
+    type: 'boolean',
+    description:
+      'Defaults to `false`. Set to `true` to keep configured `MastraStorageExporter` and deprecated `DefaultExporter` instances when `MASTRA_DEPLOYMENT_ID` is set. Applies only to this observability config, including exporters registered later. Does not add exporters or configure storage. See [storage export on Platform](/docs/observability/integrations/exporters/mastra-storage#export-to-storage-and-platform).',
     required: false,
   },
   {

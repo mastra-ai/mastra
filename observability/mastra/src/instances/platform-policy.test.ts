@@ -1,5 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
+import { SpanType } from '@mastra/core/observability';
 import type { InitExporterOptions, TracingEvent } from '@mastra/core/observability';
+import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from '../default';
 import { BaseExporter } from '../exporters/base';
@@ -7,6 +9,7 @@ import { CloudExporter } from '../exporters/cloud';
 import { DefaultExporter } from '../exporters/default';
 import { MastraPlatformExporter } from '../exporters/mastra-platform';
 import { MastraStorageExporter } from '../exporters/mastra-storage';
+import { TestExporter } from '../exporters/test';
 import { DefaultObservabilityInstance } from './default';
 
 class CustomExporter extends BaseExporter {
@@ -147,11 +150,14 @@ describe('Platform storage exporter supersession', () => {
     expect(instance.getConfig().exporters).toEqual([customExporter]);
     expect(instance.getObservabilityBus().getExporters()).toEqual([customExporter]);
     expect(warnSpy).toHaveBeenCalledOnce();
-    expect(warnSpy).toHaveBeenCalledWith('Storage exporter registration skipped on Mastra Platform', {
-      exporterName: 'mastra-storage-exporter',
-      serviceName: 'test-service',
-      instanceName: 'default',
-    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Storage exporter skipped on Mastra Platform. Set allowStorageOnPlatform: true on this observability config to enable storage export.',
+      {
+        exporterName: 'mastra-storage-exporter',
+        serviceName: 'test-service',
+        instanceName: 'default',
+      },
+    );
   });
 
   it('registers a storage exporter through Mastra outside a Platform deployment', () => {
@@ -192,5 +198,81 @@ describe('Platform storage exporter supersession', () => {
     });
 
     expect(storageExporter.initSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('Opt-in storage export on Platform', () => {
+  it.each([undefined, false, true])(
+    'exports to a second destination and persists customer traces only with allowStorageOnPlatform=%s',
+    async allowStorageOnPlatform => {
+      vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
+      const mirror = new TestExporter();
+      const storage = new InMemoryStore();
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'customer-app',
+            allowStorageOnPlatform,
+            exporters: [new MastraStorageExporter(), mirror],
+          },
+        },
+      });
+      const mastra = new Mastra({ storage, observability, logger: false });
+      try {
+        const instance = observability.getDefaultInstance()!;
+        const span = instance.startSpan({ type: SpanType.GENERIC, name: 'customer operation' });
+        instance.getLoggerContext?.(span).warn('customer log');
+        span.end({ output: 'completed' });
+        await instance.flush();
+
+        expect(mirror.getSpansByType(SpanType.GENERIC)).toEqual(
+          expect.arrayContaining([expect.objectContaining({ traceId: span.traceId, name: 'customer operation' })]),
+        );
+        const store = (await storage.getStore('observability'))!;
+        expect(mirror.getLogsByTraceId(span.traceId)).toEqual([expect.objectContaining({ message: 'customer log' })]);
+        const logs = await store.listLogs({ filters: { traceId: span.traceId } });
+        const result = await store.getSpan({ traceId: span.traceId, spanId: span.id });
+        if (allowStorageOnPlatform) {
+          expect(logs.logs).toEqual([expect.objectContaining({ message: 'customer log' })]);
+          expect(result?.span).toMatchObject({ name: 'customer operation', output: 'completed' });
+        } else {
+          expect(logs.logs).toEqual([]);
+          expect(result?.span ?? null).toBeNull();
+        }
+      } finally {
+        await mastra.shutdown();
+      }
+    },
+  );
+
+  it.each([
+    { name: 'MastraStorageExporter', Exporter: MastraStorageExporter },
+    { name: 'DefaultExporter', Exporter: DefaultExporter },
+  ])('allows late registration of $name only on the opted-in instance', async ({ Exporter }) => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
+    const enabled = new DefaultObservabilityInstance({
+      name: 'enabled',
+      serviceName: 'customer-app',
+      allowStorageOnPlatform: true,
+    });
+    const disabled = createInstance([], 'disabled');
+    const exporter = new Exporter();
+    enabled.registerExporter(exporter);
+    disabled.registerExporter(new Exporter());
+    const storage = new InMemoryStore();
+    const observability = new Observability({ configs: { enabled, disabled }, configSelector: () => 'enabled' });
+    const mastra = new Mastra({ storage, observability, logger: false });
+    try {
+      const kept = enabled.startSpan({ type: SpanType.GENERIC, name: 'kept' });
+      kept.end();
+      const skipped = disabled.startSpan({ type: SpanType.GENERIC, name: 'skipped' });
+      skipped.end();
+      await Promise.all([enabled.flush(), disabled.flush()]);
+      const store = (await storage.getStore('observability'))!;
+      expect((await store.getSpan({ traceId: kept.traceId, spanId: kept.id }))?.span).toMatchObject({ name: 'kept' });
+      expect((await store.getSpan({ traceId: skipped.traceId, spanId: skipped.id }))?.span ?? null).toBeNull();
+    } finally {
+      await mastra.shutdown();
+    }
   });
 });
