@@ -434,6 +434,17 @@ export const assertTimeTravelGraphMatchesSnapshot = (params: {
   }
 };
 
+const nestedRunIdentity = (metadata: Record<string, any> | undefined) => {
+  const identity = removeUndefinedValues({
+    nestedRunId: typeof metadata?.nestedRunId === 'string' ? metadata.nestedRunId : undefined,
+    foreachNestedRunIds:
+      metadata?.foreachNestedRunIds && typeof metadata.foreachNestedRunIds === 'object'
+        ? metadata.foreachNestedRunIds
+        : undefined,
+  });
+  return Object.keys(identity).length > 0 ? identity : undefined;
+};
+
 export const createTimeTravelExecutionParams = (params: {
   steps: string[];
   inputData?: any;
@@ -541,11 +552,8 @@ export const createTimeTravelExecutionParams = (params: {
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
-        // The evented engine reuses the recorded nested run (and its snapshot) only when this id survives.
-        metadata:
-          typeof stepContext?.metadata?.nestedRunId === 'string'
-            ? { nestedRunId: stepContext.metadata.nestedRunId }
-            : undefined,
+        // The evented engine reuses the recorded nested run (and its snapshot) only when these ids survive.
+        metadata: nestedRunIdentity(stepContext?.metadata),
       };
       const execPathLengthToUse = perStep ? executionPath.length : currentExecPathLength;
       if (
