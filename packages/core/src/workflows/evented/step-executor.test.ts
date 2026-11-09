@@ -550,10 +550,7 @@ describe('StepExecutor', () => {
   });
 
   describe('step pubsub numbering', () => {
-    async function captureStepPubsub(
-      target: Mastra,
-      onExecutor?: (executor: StepExecutor) => void,
-    ): Promise<Record<PropertyKey, any>> {
+    async function captureStepPubsub(target: Mastra): Promise<Record<PropertyKey, any>> {
       let captured: Record<PropertyKey, any> | undefined;
       const step = createStep({
         id: 'capture-pubsub',
@@ -566,7 +563,6 @@ describe('StepExecutor', () => {
       });
 
       const executor = new StepExecutor({ mastra: target });
-      onExecutor?.(executor);
       const result = await executor.execute({
         workflowId: 'test-workflow',
         entry: { type: 'step', step } as Extract<StepFlowEntry, { type: 'step' }>,
@@ -671,12 +667,14 @@ describe('StepExecutor', () => {
       ]);
     });
 
-    it('publishes step frames unnumbered and warns when the run started in another process', async () => {
+    it('publishes step frames unnumbered and warns the configured logger when the run started in another process', async () => {
       const cache = new InMemoryServerCache();
-      const target = new Mastra({ pubsub: new RemoteTransport(), cache });
       const warn = vi.spyOn(noopLogger, 'warn');
       onTestFinished(() => warn.mockRestore());
-      const context = await captureStepPubsub(target, executor => executor.__setLogger(noopLogger));
+      // Workflow event processors build executors with `new StepExecutor({ mastra })` and never
+      // register them, so the warning must reach the Mastra logger without `__registerMastra`.
+      const target = new Mastra({ pubsub: new RemoteTransport(), cache, logger: noopLogger });
+      const context = await captureStepPubsub(target);
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
       const topic = AGENT_STREAM_TOPIC('run-elsewhere');
       const live: Event[] = [];

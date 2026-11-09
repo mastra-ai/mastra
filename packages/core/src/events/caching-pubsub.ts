@@ -41,9 +41,15 @@ export interface CachingPubSubOptions {
    * process that started its log. Another process numbering the same topic
    * from 0 in its own cache would produce indices that observers drop as
    * duplicates.
+   *
+   * @internal
    */
   extendExistingLogsOnly?: boolean;
-  /** Called when `extendExistingLogsOnly` leaves a publish unnumbered. */
+  /**
+   * Called when `extendExistingLogsOnly` leaves a publish unnumbered.
+   *
+   * @internal
+   */
   onUnlogged?: (topic: string) => void;
   /**
    * @deprecated No longer used. Evented steps now cache their frames when they

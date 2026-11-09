@@ -40,6 +40,12 @@ export class StepExecutor extends MastraBase {
   constructor({ mastra }: { mastra?: Mastra }) {
     super({ name: 'StepExecutor', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
+    // Workflow event processors construct executors without registering them,
+    // so adopt the Mastra logger here or warnings fall back to an ERROR-level console logger.
+    const logger = mastra?.getLogger?.();
+    if (logger) {
+      this.__setLogger(logger);
+    }
   }
 
   __registerMastra(mastra: Mastra) {

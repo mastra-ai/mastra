@@ -347,6 +347,51 @@ describe('CachingPubSub', () => {
         expect(await policyPubsub.getHistory(cachedTopic)).toHaveLength(0);
       });
     });
+
+    describe('extendExistingLogsOnly', () => {
+      const topic = 'agent.stream.run-1';
+      let onUnlogged: ReturnType<typeof vi.fn>;
+      let extendPubsub: CachingPubSub;
+
+      beforeEach(() => {
+        onUnlogged = vi.fn();
+        extendPubsub = new CachingPubSub(innerPubsub, cache, { extendExistingLogsOnly: true, onUnlogged });
+      });
+
+      it('should deliver live and unnumbered without caching when the topic has no log', async () => {
+        const receivedEvents: Event[] = [];
+        await extendPubsub.subscribe(topic, event => {
+          receivedEvents.push(event);
+        });
+
+        await extendPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+
+        expect(receivedEvents).toHaveLength(1);
+        expect(receivedEvents[0].index).toBeUndefined();
+        expect(await extendPubsub.getHistory(topic)).toHaveLength(0);
+        expect(await cache.get(`pubsub:${topic}:counter`)).toBeUndefined();
+        expect(onUnlogged).toHaveBeenCalledTimes(1);
+        expect(onUnlogged).toHaveBeenCalledWith(topic);
+      });
+
+      it('should append with the next index when the topic already has a log', async () => {
+        await cachingPubsub.publish(topic, { type: 'start', runId: 'run-1', data: {} });
+
+        const receivedEvents: Event[] = [];
+        await extendPubsub.subscribe(topic, event => {
+          receivedEvents.push(event);
+        });
+        await extendPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+
+        expect(receivedEvents.map(event => event.index)).toEqual([1]);
+        const history = await extendPubsub.getHistory(topic);
+        expect(history.map(event => [event.type, event.index])).toEqual([
+          ['start', 0],
+          ['chunk', 1],
+        ]);
+        expect(onUnlogged).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('publish failures', () => {
