@@ -102,11 +102,12 @@ The default `ISOLATED` mode allows outbound internet access only, with no privat
 
 ### Public ports
 
-Ports are private by default: opening one needs a signed-in preview link. Set `publicPorts` to let anyone with a port's URL reach it, for example a webhook receiver:
+Ports are available on E2B sandboxes and are private by default: opening one needs a signed-in preview link. Set `publicPorts` to let anyone with a port's URL reach it, for example a webhook receiver:
 
 ```typescript
 const workspace = new Workspace({
   sandbox: new PlatformSandbox({
+    sandboxProvider: 'e2b',
     publicPorts: true,
   }),
 })
