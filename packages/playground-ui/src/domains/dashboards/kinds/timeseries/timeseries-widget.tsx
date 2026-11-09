@@ -95,14 +95,9 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
     ) : (
       heading.actions
     ),
-    // Range totals per series; with no series in the range, one plain 0 (none while a request failed).
-    total: withRangeTotals
-      ? rangeTotals.length
-        ? rangeTotals
-        : failed.length
-          ? undefined
-          : format.value(0)
-      : undefined,
+    // Range totals per series; with no series in the range, one plain 0. None while a request
+    // failed, so no total sits beside the error.
+    total: !withRangeTotals || failed.length ? undefined : rangeTotals.length ? rangeTotals : format.value(0),
     isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
