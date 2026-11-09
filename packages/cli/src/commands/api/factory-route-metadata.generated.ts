@@ -1319,8 +1319,37 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "string"
                 }
               },
+              "default": {
+                "type": "boolean"
+              },
               "initialPhase": {
                 "type": "string"
+              },
+              "flow": {
+                "type": "object",
+                "properties": {
+                  "triage": {
+                    "type": "string"
+                  },
+                  "build": {
+                    "type": "string"
+                  },
+                  "buildContext": {
+                    "type": "string"
+                  },
+                  "selfReview": {
+                    "type": "string"
+                  },
+                  "pullRequestReview": {
+                    "type": "string"
+                  },
+                  "completed": {
+                    "type": "string"
+                  },
+                  "canceled": {
+                    "type": "string"
+                  }
+                }
               },
               "phases": {
                 "type": "array",
