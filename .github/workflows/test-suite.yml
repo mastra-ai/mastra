@@ -13,11 +13,11 @@ on:
         required: false
         type: string
         default: 'false'
-      # JSON array of shard numbers from "Plan unit test shards" in prebuild.yml.
       unit_shards:
+        description: JSON list of shard numbers for the affected unit job, e.g. [1] or [1, 2, 3]
         required: false
         type: string
-        default: '[]'
+        default: '[1]'
       e2e_test_files:
         required: false
         type: string
@@ -102,9 +102,9 @@ jobs:
 
   affected-unit-test:
     name: Affected UNIT Test${{ strategy.job-total > 1 && format(' ({0}/{1})', matrix.shard, strategy.job-total) || '' }}
-    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true' && inputs.unit_shards != '[]'
+    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -148,20 +148,21 @@ jobs:
           path: /tmp/affected-outputs
 
       - name: Run affected tests
-        # One vitest run for the shard's whole list. xargs would split a long list into several
-        # runs that overwrite each other's blob report.
+        # One vitest run for the whole list. xargs would split a long list into several runs
+        # that overwrite each other's blob report.
         run: |
-          # Start the slowest files first (scripts/vitest-slow-first-sequencer.ts), when timings exist.
+          # With recorded timings, --shard balances by duration (scripts/vitest-timing-sequencer.ts).
           if [ -f /tmp/affected-outputs/test-timings.json ]; then
-            export VITEST_SLOW_FIRST_TIMINGS=/tmp/affected-outputs/test-timings.json
+            export VITEST_TEST_TIMINGS=/tmp/affected-outputs/test-timings.json
           fi
-          mapfile -t test_files < /tmp/affected-outputs/shards/shard-${{ matrix.shard }}.txt
+          mapfile -t test_files < /tmp/affected-outputs/unit_test_files.txt
           pnpm vitest run \
             --project 'unit:*' --project 'typecheck:*' \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
             --outputFile.blob=.vitest-reports/blob-unit-affected-${{ matrix.shard }}.json \
+            --shard=${{ matrix.shard }}/${{ strategy.job-total }} \
             --passWithNoTests \
             "${test_files[@]}"
 

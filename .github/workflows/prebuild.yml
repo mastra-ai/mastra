@@ -162,7 +162,7 @@ jobs:
       has_code: ${{ steps.detect.outputs.has_code }}
       run_full: ${{ steps.compute.outputs.run_full }}
       has_unit_tests: ${{ steps.compute.outputs.has_unit_tests }}
-      unit_shards: ${{ steps.plan.outputs.unit_shards || '[]' }}
+      unit_shards: ${{ steps.plan.outputs.unit_shards }}
       e2e_test_files: ${{ steps.compute.outputs.e2e_test_files }}
       e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
       experiment_worker_e2e_changed: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
@@ -437,18 +437,18 @@ jobs:
           key: test-timings-v1-${{ runner.os }}-${{ github.sha }}
           restore-keys: test-timings-v1-${{ runner.os }}-
 
-      # Splits the affected unit tests into as many shards as their recorded durations call for
-      # (about 2.5 minutes each, at most 16) and balances them by duration. Each shard downloads
-      # its own list from the artifact below.
+      # Picks how many shards the affected unit tests need from their recorded durations (about
+      # 2.5 minutes each, at most 16). Each shard runs `vitest --shard=k/N`, which balances the
+      # files by the same timings (scripts/vitest-timing-sequencer.ts).
       - name: Plan unit test shards
         id: plan
         if: steps.compute.outputs.has_unit_tests == 'true'
         env:
           TIMINGS: ${{ runner.temp }}/test-timings.json
         run: |
-          shards=$(node .github/scripts/test-shards.cjs /tmp/affected-outputs/unit_test_files.txt /tmp/affected-outputs/shards "$TIMINGS")
+          shards=$(node .github/scripts/test-shards.cjs /tmp/affected-outputs/unit_test_files.txt "$TIMINGS")
           echo "unit_shards=$shards" >> "$GITHUB_OUTPUT"
-          # The shards start their slowest files first from the same timings.
+          # The shards split and order their files by the same timings.
           if [ -f "$TIMINGS" ]; then cp "$TIMINGS" /tmp/affected-outputs/test-timings.json; fi
 
       - name: Save affected-tests outputs for downstream workflow
@@ -502,7 +502,7 @@ jobs:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       has_code: ${{ needs.changes.outputs.has_code }}
       has_unit_tests: ${{ needs.affected-tests.outputs.has_unit_tests }}
-      unit_shards: ${{ needs.affected-tests.outputs.unit_shards }}
+      unit_shards: ${{ needs.affected-tests.outputs.unit_shards || '[1]' }}
       e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
       run_full: ${{ needs.affected-tests.outputs.run_full }}
       durable_streams_changed: ${{ needs.affected-tests.outputs.durable_streams_changed }}
