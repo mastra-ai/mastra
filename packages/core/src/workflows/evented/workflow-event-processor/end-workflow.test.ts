@@ -69,9 +69,7 @@ describe('WorkflowEventProcessor #endWorkflow', () => {
       status: 'canceled',
     });
     expect(run).not.toBeNull();
-    expect((run?.snapshot as any).result).toMatchObject({
-      status: 'canceled',
-    });
+    expect((run?.snapshot as any).result).toBeUndefined();
 
     await mastra.shutdown();
   });

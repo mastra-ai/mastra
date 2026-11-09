@@ -2337,7 +2337,8 @@ export type StorageMemoryRef =
 
 export interface UpdateWorkflowStateOptions {
   status: WorkflowRunStatus;
-  result?: StepResult<any, any, any, any>;
+  /** The workflow's output. Only set when the run succeeded. */
+  result?: any;
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
