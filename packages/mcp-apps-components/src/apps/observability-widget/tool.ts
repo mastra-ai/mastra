@@ -1,3 +1,5 @@
+import type { FilterNode } from '@mastra/core/storage/dashboards';
+
 /** The app-only tool the observability widget calls, on the server that opened it, for every read. */
 export const QUERY_OBSERVABILITY_TOOL = 'queryObservability';
 
@@ -35,12 +37,35 @@ export const OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY = 'mastra.ai/observability-
 /** `structuredContent` key of the model context update the app sends when the user (un)pins. */
 export const OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY = 'mastra.ai/observability-widget-pin';
 
+/** Host context key holding what the host's page draws the widgets over (`ObservabilityWidgetView`). */
+export const OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY = 'mastra.ai/observability-widget-view';
+
+/** A custom window, as ISO date strings. A missing `from` is 24h before `to`; a missing `to` is now. */
+export type ObservabilityWidgetDateRange = { from?: string; to?: string };
+
+/**
+ * What the host's page draws the widgets over, e.g. the Metrics page's date range and filter bar.
+ * Each field the host sets wins over the opening tool's result and the dashboard's `defaults`.
+ */
+export type ObservabilityWidgetView = {
+  /** One of the presets, or `custom` to draw over `customRange`. */
+  datePreset?: ObservabilityDatePreset | 'custom';
+  /** The window drawn when `datePreset` is `custom`, as the Metrics page's custom range. */
+  customRange?: ObservabilityWidgetDateRange;
+  /** Replaces the dashboard's `defaults.filters`; only top-level chips filter, as on the Metrics page. */
+  filters?: FilterNode[];
+  /** Sent with every `queryObservability` call, so the server reads that project's data. */
+  projectId?: string;
+};
+
 /** What the app sends under `OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY`: the state the user asked for. */
 export type ObservabilityWidgetPin = {
   pinned: boolean;
   /** The stored dashboard widget, as the opening tool returned it. */
   widget: { id: string; [key: string]: unknown };
   datePreset: string;
-  /** The dashboard's `defaults.filters` the widget was drawn under, when it has any. */
+  /** The window the widget was drawn over, when `datePreset` is `custom`. */
+  customRange?: ObservabilityWidgetDateRange;
+  /** The filters the widget was drawn under (the host's, else the dashboard's `defaults.filters`), when any. */
   filters?: unknown[];
 };
