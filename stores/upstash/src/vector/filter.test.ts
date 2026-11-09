@@ -356,6 +356,42 @@ describe('UpstashFilterTranslator', () => {
         }),
       ).toBe("(field IN ('a', 'b') OR field > 100)");
     });
+
+    it('negates every operator of a field-level $not', () => {
+      expect(translator.translate({ price: { $not: { $gte: 10, $lte: 20 } } })).toBe('(price < 10 OR price > 20)');
+    });
+
+    it('negates every field of a top-level $not', () => {
+      expect(translator.translate({ $not: { a: 1, b: 2 } })).toBe('(a != 1 OR b != 2)');
+    });
+
+    it('negates every operator of a field inside a top-level $not', () => {
+      expect(translator.translate({ $not: { a: { $gt: 1, $lt: 5 } } })).toBe('(a <= 1 OR a >= 5)');
+    });
+
+    it('negates every key of each $nor element', () => {
+      expect(translator.translate({ $nor: [{ a: 1, b: 2 }] })).toBe('((a != 1 OR b != 2))');
+      expect(translator.translate({ $nor: [{ a: 1, b: 2 }, { c: 3 }] })).toBe('((a != 1 OR b != 2) AND c != 3)');
+    });
+
+    it('negates every key of each element of $not with $or and $and', () => {
+      expect(translator.translate({ $not: { $or: [{ a: 1, b: 2 }, { c: 3 }] } })).toBe(
+        '((a != 1 OR b != 2) AND c != 3)',
+      );
+      expect(translator.translate({ $not: { $and: [{ a: 1, b: 2 }, { c: 3 }] } })).toBe(
+        '((a != 1 OR b != 2) OR c != 3)',
+      );
+    });
+
+    it('negates nested logical elements under $not', () => {
+      expect(translator.translate({ $not: { $or: [{ $and: [{ a: 1 }, { b: 2 }] }, { c: 3 }] } })).toBe(
+        '((a != 1 OR b != 2) AND c != 3)',
+      );
+    });
+
+    it('negates $contains inside a top-level $not field', () => {
+      expect(translator.translate({ $not: { f: { $contains: 'x' } } })).toBe("f NOT CONTAINS 'x'");
+    });
   });
 
   describe('array access', () => {
