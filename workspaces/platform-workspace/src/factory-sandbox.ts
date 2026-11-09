@@ -80,7 +80,8 @@ const SETTINGS_SCHEMA = {
     publicPorts: {
       type: 'boolean',
       title: 'Public preview links',
-      description: "Anyone with a sandbox's preview link can open it without signing in. Only affects new sessions.",
+      description:
+        "Anyone with a sandbox's preview link can open it without signing in. Applies to newly created sandboxes, not existing ones.",
       default: DEFAULT_SETTINGS.publicPorts,
     },
   },
