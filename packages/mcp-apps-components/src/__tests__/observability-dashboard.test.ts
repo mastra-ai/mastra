@@ -3,6 +3,7 @@ import type { DashboardColumn, DashboardWidget, DashboardWidgetView } from '@mas
 import { createTool } from '@mastra/core/tools';
 import { METRICS_DASHBOARD } from '@mastra/playground-ui/domains/dashboards/metrics-dashboard';
 import { afterEach, expect, it } from 'vitest';
+import { strictDashboardDefinitionSchema } from '../dashboards';
 import {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
   createObservabilityDashboardInputSchema,
@@ -45,6 +46,13 @@ const chartDraft = draftOf(agentRunsChart) as Extract<ObservabilityWidgetDraft, 
 const widgets = (opened: ReturnType<typeof toObservabilityDashboard>) =>
   opened.dashboard.rows.flatMap(row => row.widgets);
 
+/** Storage takes `definition` as written and as core parses it, filling in defaults; both must render. */
+const expectRenderable = (definition: unknown) => {
+  expect(strictDashboardDefinitionSchema.safeParse(definition).error?.issues).toBeUndefined();
+  const parsed = dashboardDefinitionSchema.parse(definition);
+  expect(strictDashboardDefinitionSchema.safeParse(parsed).error?.issues).toBeUndefined();
+};
+
 it("advertises each kind's options to the model, with each read's arguments listed once", async () => {
   const client = await connect();
 
@@ -81,6 +89,7 @@ it('opens through the tool with missing ids assigned and given ids kept', async 
   const opened = result.structuredContent as ReturnType<typeof toObservabilityDashboard>;
   expect(opened.datePreset).toBe('14d');
   expect(dashboardDefinitionSchema.safeParse(opened.dashboard).success).toBe(true);
+  expectRenderable(opened.dashboard);
   const [first, second, chart] = widgets(opened);
   expect(first).toEqual({ ...agentRunsKpi, id: first!.id });
   // The same widget twice gets two ids, so each can be pinned on its own.
@@ -191,6 +200,7 @@ it.each(METRICS_DASHBOARD.rows.flatMap(row => row.widgets).map(widget => [widget
     const [opened] = widgets(toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draft] }] } }));
 
     expect(dashboardDefinitionSchema.safeParse({ schemaVersion: 1, rows: [{ widgets: [opened] }] }).success).toBe(true);
+    expectRenderable({ schemaVersion: 1, rows: [{ widgets: [opened] }] });
     expect(draftOf(opened!)).toEqual(draft);
     opened!.views.forEach((view, i) =>
       expect(view.queries.length).toBeLessThanOrEqual(widget.views[i]!.queries.length),

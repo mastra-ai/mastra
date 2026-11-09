@@ -1,12 +1,11 @@
 import type { DashboardDefinitionEnvelope, DashboardWidget } from '@mastra/client-js';
 import { dashboardWidgetSchema } from '@mastra/core/storage/dashboards';
 import type { AnyWidgetKind, ResolvedView } from '../widget-kind';
-import { viewValue } from './chrome';
-import { inScope } from './definition';
 import type { DashboardScope } from './definition';
+import { inScope, resolveViews } from './resolve-views';
+import type { WidgetIssue } from './resolve-views';
 
-type Issue = { path: PropertyKey[]; message: string };
-export const describeIssue = (issue: Issue | undefined) =>
+export const describeIssue = (issue: WidgetIssue | undefined) =>
   !issue ? 'Invalid.' : issue.path.length ? `${issue.path.join('.')}: ${issue.message}` : issue.message;
 
 /** A widget as storage accepts it: only `id`, `kind` and `views` are known before it's parsed. */
@@ -45,26 +44,8 @@ export function prepareWidget(
   const kind = registry.get(widget.kind);
   if (!kind) return { ok: false, message: 'This widget needs a newer version.' };
 
-  const views: ResolvedView<unknown>[] = [];
-  const values = new Set<string>();
-  for (const [index, view] of widget.views.entries()) {
-    if (!inScope(view, scope)) continue;
-    const options = kind.optionsSchema.safeParse(view.options ?? {});
-    if (!options.success) {
-      const issue = options.error.issues[0] ?? { path: [], message: 'Invalid options' };
-      return { ok: false, message: describeIssue({ ...issue, path: ['views', index, 'options', ...issue.path] }) };
-    }
-    // Columns at the other scope are left out before the kind sees them.
-    const resolved = { ...view, columns: view.columns?.filter(c => inScope(c, scope)), options: options.data };
-    const issue = kind.issues?.(resolved)[0];
-    if (issue) return { ok: false, message: `views.${index}: ${issue}` };
-    // Each view at the scope is an option in the card's menu, picked by its value; two with one value would leave one unreachable.
-    const value = viewValue(view.label, views.length);
-    if (values.has(value))
-      return { ok: false, message: `views.${index}: another view is already labelled '${view.label ?? value}'` };
-    values.add(value);
-    views.push(resolved);
-  }
+  const { views, issues } = resolveViews(widget, kind, scope);
+  if (issues[0]) return { ok: false, message: describeIssue(issues[0]) };
   const [first, ...rest] = views;
   return first ? { ok: true, kind, widget, views: [first, ...rest] } : { ok: 'hidden' };
 }

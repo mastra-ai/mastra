@@ -197,6 +197,33 @@ const host = useMemo(
 
 To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `observabilityWidgetPins` is the same helper with only pins.
 
+### Validating stored dashboards
+
+`dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` checks a definition's structure and queries, but not what each widget kind needs. A definition can pass it and still show an error in place of a widget. To store only dashboards that draw, check every write with `strictDashboardDefinitionSchema`:
+
+```ts
+import { strictDashboardDefinitionSchema } from '@mastra/mcp-apps-components/dashboards';
+import type { StrictDashboardDefinition } from '@mastra/mcp-apps-components/dashboards';
+
+const result = strictDashboardDefinitionSchema.safeParse(body.definition);
+if (!result.success) {
+  // Each issue has a path, such as rows.0.widgets.1.views.0.options.series.0.value
+  throw new BadRequestError(result.error.issues);
+}
+const definition: StrictDashboardDefinition = result.data;
+```
+
+On top of core's checks, the schema:
+
+- Rejects widget kinds other than `kpis`, `table`, `timeseries` and `scores`.
+- Checks each view's `options`, and each table column's `options`, against the kind's own schema.
+- Runs each kind's checks, such as a KPI reading a query its view has, or a chart's series all fitting its buckets.
+- Checks the widget at both `org` and `project` scope, so a widget that only breaks on one kind of page is rejected too.
+
+`result.data` is the definition you passed in, unchanged; store it as sent. Definitions that core has already parsed, with its defaults filled in, also pass. Use `strictDashboardWidgetSchema` to check a single widget, such as one being added or pinned; its issue paths start at the widget. Checks across widgets, such as unique ids and the widget limit, need the full definition.
+
+Dashboards with custom widget kinds should keep using core's `dashboardDefinitionSchema`.
+
 ## Documentation
 
 - [MCP Apps in Mastra](https://mastra.ai/docs/connections/mcp)

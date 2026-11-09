@@ -14,10 +14,6 @@ import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 export type DashboardScope = 'org' | 'project';
 
-/** Whether a widget, view or column tagged with `scope` shows at the page's scope. */
-export const inScope = (item: { scope?: DashboardScope }, scope: DashboardScope) =>
-  item.scope === undefined || item.scope === scope;
-
 export type DashboardDrilldownPage = DashboardDrilldownTarget['page'];
 
 /** Where a widget's button or a click leads; the page turns it into a URL. */

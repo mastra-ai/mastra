@@ -324,6 +324,56 @@ describe('DashboardRenderer', () => {
       expect(screen.getByTestId('note-b').textContent).toBe('Still here');
     });
 
+    describe("shows a built-in kind's first problem as its error", () => {
+      const [kpisView] = kpisWidget.views;
+      const [kpiItem] = (kpisView.options as { items: Record<string, unknown>[] }).items;
+      const [modelsView] = modelsWidget.views;
+      const badLabel = { ...kpisView, label: 'Bad', options: { items: [{ ...kpiItem, label: '' }] } };
+      const missingQuery = {
+        ...kpisView,
+        label: 'Missing',
+        options: { items: [{ ...kpiItem, value: { query: 'nope' } }] },
+      };
+
+      it.each([
+        [
+          "a view's options",
+          { ...kpisWidget, views: [{ ...kpisView, label: 'Good' }, badLabel] },
+          'views.1.options.items.0.label: Too small: expected string to have >=1 characters',
+        ],
+        [
+          'a query the view lacks',
+          { ...kpisWidget, views: [missingQuery] },
+          "views.0: options: reads query 'nope', which the view doesn't have",
+        ],
+        [
+          "a table column's options",
+          {
+            ...modelsWidget,
+            views: [
+              {
+                ...modelsView,
+                columns: modelsView.columns?.map((column, i) =>
+                  i === 2 ? { ...column, options: { type: 'bogus' } } : column,
+                ),
+              },
+            ],
+          },
+          // Counted among the columns at the page's scope: the org-only Project column before it is left out.
+          "views.0: columns.1.options.type: Invalid discriminator value. Expected 'name' | 'dimension' | 'value' | 'change'",
+        ],
+        [
+          'the first of two failing views',
+          { ...kpisWidget, views: [missingQuery, badLabel] },
+          "views.0: options: reads query 'nope', which the view doesn't have",
+        ],
+      ])('%s', (_, widget, message) => {
+        const { container } = renderDashboard(definition(widget, note('b', 'Still here')));
+        expect(within(cell(container, widget.id)).getByText(message)).toBeDefined();
+        expect(screen.getByTestId('note-b').textContent).toBe('Still here');
+      });
+    });
+
     it("says a trace widget can't apply a page filter it has no equivalent for, and sends nothing", async () => {
       serveCapabilities(traceAggregateCapabilities);
       const traces: TraceAggregateRequest[] = [];
