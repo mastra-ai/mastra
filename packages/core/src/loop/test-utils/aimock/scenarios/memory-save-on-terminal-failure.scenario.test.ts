@@ -365,50 +365,59 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   );
 
   // A step processor that writes a data part while it handles the cut-off text must see it saved,
-  // even when it returns its own copy of the message, which replaces the one the part merged into.
-  itDeadline(
-    'total-timeout saves the data part a step processor writes for the streamed text',
-    async () => {
-      const memory = new MockMemory();
-      const threadId = `${THREAD}-timeout-step-data-${engine}`;
-      const note: Processor = {
-        id: 'note',
-        processOutputStep: async ({ messages, finishReason, writer }) => {
-          const copies = messages.map(message => ({
-            ...message,
-            content: { ...message.content, parts: [...message.content.parts] },
-          }));
-          if (finishReason === 'error') await writer?.custom({ type: 'data-step-note', data: { cut: true } });
-          return copies;
-        },
-      };
-      await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Answer slowly.',
-        memory,
-        threadId,
-        resourceId: RESOURCE,
-        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
-        expectStreamError: true,
-        outputProcessors: [note],
-        fixtures: llm => {
-          llm.on(
-            { endpoint: 'chat', sequenceIndex: 0 },
-            { content: 'PARTIAL '.repeat(200) },
-            { chunkSize: 8, latency: 50 },
-          );
-        },
-      });
-      await new Promise(resolve => setTimeout(resolve, 300));
+  // even when it returns its own copy of the message, which replaces the one the part merged into,
+  // and whether or not it names that message.
+  for (const targeting of ['implicit', 'explicit'] as const) {
+    itDeadline(
+      `total-timeout saves the data part a step processor writes for the streamed text (${targeting} target)`,
+      async () => {
+        const memory = new MockMemory();
+        const threadId = `${THREAD}-timeout-step-data-${targeting}-${engine}`;
+        const note: Processor = {
+          id: 'note',
+          processOutputStep: async ({ messages, finishReason, writer }) => {
+            const copies = messages.map(message => ({
+              ...message,
+              content: { ...message.content, parts: [...message.content.parts] },
+            }));
+            if (finishReason === 'error') {
+              const data = { type: 'data-step-note', data: { cut: true } } as const;
+              if (targeting === 'explicit') await writer?.custom(data, { messageId: messages.at(-1)!.id });
+              else await writer?.custom(data);
+            }
+            return copies;
+          },
+        };
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Answer slowly.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          outputProcessors: [note],
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { content: 'PARTIAL '.repeat(200) },
+              { chunkSize: 8, latency: 50 },
+            );
+          },
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
 
-      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      const parts = messages.filter(message => message.role === 'assistant').flatMap(message => message.content.parts);
-      expect(parts.some(part => part.type === 'text' && part.text.startsWith('PARTIAL'))).toBe(true);
-      expect(parts.filter(part => part.type === 'data-step-note')).toHaveLength(1);
-    },
-    TEST_TIMEOUT_MS,
-  );
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        const parts = messages
+          .filter(message => message.role === 'assistant')
+          .flatMap(message => message.content.parts);
+        expect(parts.some(part => part.type === 'text' && part.text.startsWith('PARTIAL'))).toBe(true);
+        expect(parts.filter(part => part.type === 'data-step-note')).toHaveLength(1);
+      },
+      TEST_TIMEOUT_MS,
+    );
+  }
 
   // A step processor that fails on the cut-off text must not cost the rest of the turn: the save
   // drops that text and keeps the completed step, rather than saving text no processor approved.

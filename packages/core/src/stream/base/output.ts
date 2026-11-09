@@ -2150,15 +2150,22 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     });
                     return;
                   }
-                  // Data parts a step processor writes for the cut-off text are held until that message is
-                  // written back: the write-back replaces it, and would drop parts merged into it.
-                  let heldDataChunks: { type: string; data?: unknown; transient?: boolean }[] | undefined;
+                  // Data parts a step processor writes for the cut-off text, whether it names that message or
+                  // not, are held until the message is written back: the write-back replaces it, and would
+                  // drop parts merged into it.
+                  let heldDataChunks:
+                    | { data: { type: string; data?: unknown; transient?: boolean }; messageId?: string }[]
+                    | undefined;
                   const writer = {
                     custom: async (
                       data: { type: string; data?: unknown; transient?: boolean },
                       writerOptions?: { messageId?: string },
                     ) => {
-                      if (heldDataChunks && !writerOptions?.messageId) heldDataChunks.push(data);
+                      if (
+                        heldDataChunks &&
+                        (!writerOptions?.messageId || writerOptions.messageId === inFlightMessageId)
+                      )
+                        heldDataChunks.push({ data, messageId: writerOptions?.messageId });
                       else
                         persistProcessorDataChunk(
                           turn,
@@ -2213,8 +2220,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                         error: stepError,
                       });
                     }
-                    for (const data of heldDataChunks) {
-                      persistProcessorDataChunk(turn, resolveProcessorWriterMessageId(turn, self.messageId), data);
+                    for (const { data, messageId } of heldDataChunks) {
+                      // A part aimed at the cut-off message lands on it if it survived the write-back,
+                      // otherwise on the message an untargeted write would reach.
+                      const target =
+                        messageId && turn.get.all.db().some(message => message.id === messageId)
+                          ? messageId
+                          : resolveProcessorWriterMessageId(turn, self.messageId);
+                      persistProcessorDataChunk(turn, target, data);
                     }
                     heldDataChunks = undefined;
                   }
