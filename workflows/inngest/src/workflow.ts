@@ -1,6 +1,6 @@
 import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
-import { getErrorFromUnknown } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
@@ -21,6 +21,9 @@ import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { RESUME_CLAIM_RUN_LEASE_MS } from './durable-event-payload';
 import { InngestExecutionEngine } from './execution-engine';
+import { isLeafInfrastructureError } from './leaf/contracts';
+import { createLeafFunction } from './leaf/leaf-function';
+import { InngestRunWriter } from './leaf/run-writer';
 import {
   compactNestedWorkflowResult,
   NESTED_WORKFLOW_OUTPUT_MODE,
@@ -181,6 +184,7 @@ export class InngestWorkflow<
   #emitWorkflowEvents = true;
   /** Functions a host (e.g. the durable agent loop) serves alongside this workflow's own. */
   #hostFunctions: ReturnType<Inngest['createFunction']>[] = [];
+  #leafFunction?: ReturnType<Inngest['createFunction']>;
 
   constructor(
     params: InngestWorkflowConfig<
@@ -337,6 +341,38 @@ export class InngestWorkflow<
     }
   }
 
+  /** Inngest runs storage v2 by running steps as leaves (`storageVersion: 2`). */
+  protected override supportsStorageVersion2(): boolean {
+    return true;
+  }
+
+  /** Whether new runs of this workflow are storage v2 runs, whose steps run as leaf functions. */
+  get usesLeafExecution(): boolean {
+    return this.options.storageVersion === 2;
+  }
+
+  /**
+   * The storage version of a run: a stored run keeps the version it was written with, a new one takes
+   * the workflow's `storageVersion` option.
+   */
+  async #runStorageVersion(runId: string, existsInStorage: boolean): Promise<1 | 2> {
+    const store = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (existsInStorage) {
+      if (!store?.supportsRunJournal()) return 1;
+      return (await store.loadWorkflowRunHeader({ workflowName: this.id, runId })) ? 2 : 1;
+    }
+    if (!this.usesLeafExecution) return 1;
+    if (!store?.supportsRunJournal() || !store.supportsLeafAdoption()) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${this.id}" sets storageVersion: 2, but its storage doesn't support storage v2 leaf runs on the Inngest engine`,
+      });
+    }
+    return 2;
+  }
+
   async createRun(options?: {
     runId?: string;
     resourceId?: string;
@@ -345,48 +381,48 @@ export class InngestWorkflow<
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     const runIdToUse = options?.runId || globalThis.crypto.randomUUID();
 
-    // Return a new Run instance with object parameters
-    const existingInMemoryRun = this.runs.get(runIdToUse);
-    const newRun = new InngestRun<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>(
-      {
-        workflowId: this.id,
-        runId: runIdToUse,
-        resourceId: options?.resourceId,
-        executionEngine: this.executionEngine,
-        executionGraph: this.executionGraph,
-        serializedStepGraph: this.serializedStepGraph,
-        mastra: this.#mastra,
-        retryConfig: this.retryConfig,
-        cleanup: () => this.runs.delete(runIdToUse),
-        workflowSteps: this.steps,
-        workflowEngineType: this.engineType,
-        validateInputs: this.options.validateInputs,
-      },
-      this.inngest,
-    );
-    const run = (existingInMemoryRun ?? newRun) as Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>;
-
-    this.runs.set(runIdToUse, run);
-
-    const shouldPersistSnapshot = this.options.shouldPersistSnapshot({
-      workflowStatus: run.workflowRunStatus,
-      stepResults: {},
-    });
-
     const existingStoredRun = await this.getWorkflowRunById(runIdToUse, {
       withNestedWorkflows: false,
     });
 
     // Check if run exists in persistent storage (not just in-memory)
-    const existsInStorage = existingStoredRun && !existingStoredRun.isFromInMemory;
+    const existsInStorage = Boolean(existingStoredRun && !existingStoredRun.isFromInMemory);
+
+    // Return a new Run instance with object parameters
+    const existingInMemoryRun = this.runs.get(runIdToUse);
+    const run = (existingInMemoryRun ??
+      new InngestRun<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>(
+        {
+          workflowId: this.id,
+          runId: runIdToUse,
+          resourceId: options?.resourceId,
+          executionEngine: this.executionEngine,
+          executionGraph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
+          mastra: this.#mastra,
+          retryConfig: this.retryConfig,
+          cleanup: () => this.runs.delete(runIdToUse),
+          workflowSteps: this.steps,
+          workflowEngineType: this.engineType,
+          validateInputs: this.options.validateInputs,
+          storageVersion: await this.#runStorageVersion(runIdToUse, existsInStorage),
+        },
+        this.inngest,
+      )) as Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>;
+
+    this.runs.set(runIdToUse, run);
+
+    // Storage v2 runs are always written; their steps' results and state live only in the store.
+    const shouldPersistSnapshot =
+      run.storageVersion === 2 ||
+      this.options.shouldPersistSnapshot({
+        workflowStatus: run.workflowRunStatus,
+        stepResults: {},
+      });
 
     if (!existsInStorage && shouldPersistSnapshot) {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: this.id,
-        runId: runIdToUse,
-        resourceId: options?.resourceId,
-        snapshot: {
+      await run.runStorage.writeInitial(
+        {
           runId: runIdToUse,
           status: 'pending',
           value: {},
@@ -401,7 +437,8 @@ export class InngestWorkflow<
           error: undefined,
           timestamp: Date.now(),
         },
-      });
+        options?.resourceId,
+      );
     }
 
     return run;
@@ -473,7 +510,7 @@ export class InngestWorkflow<
        * @param context - The Inngest event, durable step tools, and current attempt.
        * @returns The workflow result and run identifier returned to Inngest.
        */
-      async ({ event, step, attempt }) => {
+      async ({ event, step, attempt, runId: driveId }) => {
         let {
           inputData,
           initialState,
@@ -489,6 +526,7 @@ export class InngestWorkflow<
           parentStream,
           nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
         } = event.data;
+        const leafRun = event.data.storageVersion === 2;
         const nestedWorkflowOutputMode = resolveNestedWorkflowOutputMode(requestedNestedWorkflowOutputMode);
         const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
@@ -519,6 +557,22 @@ export class InngestWorkflow<
             return lease?.renewed ?? true;
           });
           if (!held) return { result: undefined, runId };
+        }
+
+        // A storage v2 run's start state is read at the version this drive started from, so replays agree
+        // even after leaves adopted newer state.
+        let leafStartState: Record<string, any> | undefined;
+        if (leafRun && resume) {
+          const store = await this.#leafStore();
+          const startSeq = await step.run(`workflow.${this.id}.leaf.start-seq`, async () => {
+            const stored = await store.loadWorkflowRunHeader({ workflowName: this.id, runId });
+            return stored?.lastSeq ?? null;
+          });
+          leafStartState =
+            startSeq === null
+              ? {}
+              : ((await store.loadWorkflowRunState({ workflowName: this.id, runId, seq: startSeq })) ?? {});
+          initialState = leafStartState;
         }
 
         if (resume && (initialState === undefined || resume.stepResults === undefined)) {
@@ -581,6 +635,22 @@ export class InngestWorkflow<
         });
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
+        if (leafRun) {
+          engine.enableLeafExecution({
+            writer: new InngestRunWriter({
+              store: await this.#leafStore(),
+              workflowName: this.id,
+              runId,
+              resourceId,
+              state: leafStartState ?? {},
+              steps: resume?.stepResults,
+            }),
+            driveId,
+            leafFunction: this.getLeafFunction(),
+            graph: this.executionGraph.steps,
+            actor,
+          });
+        }
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -633,6 +703,8 @@ export class InngestWorkflow<
             },
           });
         } catch (executionError) {
+          // A leaf whose machinery failed fails this function, so Inngest retries it rather than the run failing.
+          if (isLeafInfrastructureError(executionError)) throw executionError;
           // Execution threw an exception (not just returned failed status)
           // Create a failed result to pass to finalize
           result = {
@@ -715,10 +787,27 @@ export class InngestWorkflow<
 
             // Ensure final snapshot is persisted BEFORE publishing workflow-finish
             // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
-            const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
-              workflowStatus: result.status,
-              stepResults: result.steps,
-            });
+            // A storage v2 run's engine wrote its steps, state and result; the final write settles the header, always.
+            if (leafRun) {
+              const store = await this.#leafStore();
+              await store.updateWorkflowRunHeader({
+                workflowName: this.id,
+                runId,
+                // The engine's last write carried the result; this covers an execution that threw before it.
+                opts: {
+                  status: result.status,
+                  ...(result.status === 'failed' ? { error: result.error } : {}),
+                  activePaths: [],
+                  activeStepsPath: {},
+                },
+              });
+            }
+            const shouldPersistFinalSnapshot =
+              !leafRun &&
+              this.options.shouldPersistSnapshot({
+                workflowStatus: result.status,
+                stepResults: result.steps,
+              });
             if (shouldPersistFinalSnapshot) {
               const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
               if (workflowsStore) {
@@ -843,9 +932,36 @@ export class InngestWorkflow<
     });
   }
 
+  async #leafStore() {
+    const store = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (!store?.supportsLeafAdoption()) {
+      throw new NonRetriableError(`Workflow "${this.id}" runs storage v2 leaves, but its storage doesn't support them`);
+    }
+    return store;
+  }
+
+  /** The function that runs this workflow's storage v2 steps, one occurrence and attempt at a time. */
+  getLeafFunction(): ReturnType<Inngest['createFunction']> {
+    this.#leafFunction ??= createLeafFunction(this.inngest, {
+      workflowId: this.id,
+      getMastra: () => this.#mastra,
+      getGraph: () => ({ graph: this.executionGraph.steps, serializedStepGraph: this.serializedStepGraph }),
+      getOptions: () => this.options,
+      createPubsub: () => {
+        const defaultPubsub = new InngestPubSub(this.inngest, this.id, this.logger);
+        return new WorkflowEventPolicyPubSub(
+          this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub,
+          this.#emitWorkflowEvents,
+        );
+      },
+    });
+    return this.#leafFunction;
+  }
+
   getFunctions(): ReturnType<Inngest['createFunction']>[] {
     return [
       this.getFunction(),
+      ...(this.usesLeafExecution ? [this.getLeafFunction()] : []),
       ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),
       ...this.getNestedFunctions(this.executionGraph.steps),
       ...this.#hostFunctions,

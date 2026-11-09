@@ -4,6 +4,7 @@ import type { StatePatchOp } from './state-patch';
 
 /**
  * The kind of a leaf record:
+ * - `request`: what one leaf execution runs, keyed by the leaf run id. Written by the parent run.
  * - `candidate`: one execution's staged outcome, keyed by its candidate id. Immutable once stored.
  * - `final`: the candidate a leaf run settled on, keyed by the leaf run id. The first write wins,
  *   so duplicated leaf executions agree on it.
@@ -11,31 +12,19 @@ import type { StatePatchOp } from './state-patch';
  *   by the occurrence key. Written by `adoptWorkflowLeaf` only.
  * @experimental
  */
-export type WorkflowLeafRecordKind = 'candidate' | 'final' | 'adoption';
+export type WorkflowLeafRecordKind = 'request' | 'candidate' | 'final' | 'adoption';
 
 /**
- * A leaf candidate: the outcome of running one step occurrence once, against the parent run's
- * state as of `baseSeq`.
+ * A leaf candidate: the outcome of running one step occurrence once. Engines define `outcome`.
  * @experimental
  */
-export interface WorkflowLeafCandidate {
+export interface WorkflowLeafCandidate<TOutcome = unknown> {
   v: 1;
   candidateId: string;
-  occurrenceKey: string;
-  /** The parent run state version the step ran against. */
-  baseSeq: number;
-  /** The step result, as the parent run stores it. */
-  result: StepResult<any, any, any, any>;
-  /** The step's state changes relative to the state as of `baseSeq`. Empty when it failed. */
+  leafRunId: string;
+  /** The step's state changes relative to the state it ran against. Empty when it failed. */
   statePatch: StatePatchOp[];
-  /** The step's context changes: suspended paths and resume labels the parent applies. */
-  control?: {
-    suspendedPaths?: Record<string, number[]>;
-    resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
-    requestContextUpdate?: Record<string, any>;
-    bailed?: boolean;
-    nestedWflowStepPaused?: boolean;
-  };
+  outcome: TOutcome;
 }
 
 /**

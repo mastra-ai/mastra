@@ -2192,9 +2192,17 @@ export class Workflow<
     return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
+  /**
+   * Whether this workflow's engine can run storage v2 runs. Engines other than the default one opt in.
+   * @internal
+   */
+  protected supportsStorageVersion2(): boolean {
+    return this.engineType === 'default';
+  }
+
   __registerMastra(mastra: Mastra) {
     // Checked here rather than in the constructor: other engines set engineType after super().
-    if (this.#options.storageVersion === 2 && this.engineType !== 'default') {
+    if (this.#options.storageVersion === 2 && !this.supportsStorageVersion2()) {
       throw new MastraError({
         id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE',
         domain: ErrorDomain.MASTRA_WORKFLOW,

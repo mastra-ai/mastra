@@ -68,6 +68,7 @@ export class InngestRun<
       workflowSteps: Record<string, StepWithComponent>;
       workflowEngineType: WorkflowEngineType;
       validateInputs?: boolean;
+      storageVersion?: 1 | 2;
     },
     inngest: Inngest,
   ) {
@@ -247,6 +248,31 @@ export class InngestRun<
     });
   }
 
+  /** The snapshot a start writes before its event is sent, so polling sees the run as running. */
+  async #writeStartSnapshot(): Promise<void> {
+    await this.runStorage.writeInitial(
+      {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: {} as any,
+        activePaths: [],
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      },
+      this.resourceId,
+    );
+  }
+
+  /** Storage v2 runs say so in their events; storage v1 events stay as they were. */
+  #storageVersionData(): { storageVersion?: 2 } {
+    return this.storageVersion === 2 ? { storageVersion: 2 } : {};
+  }
+
   async cancel() {
     const storage = this.#mastra?.getStorage();
 
@@ -256,6 +282,11 @@ export class InngestRun<
         runId: this.runId,
       },
     });
+
+    if (this.storageVersion === 2) {
+      await this.runStorage.updateHeader({ status: 'canceled' });
+      return;
+    }
 
     const workflowsStore = await storage?.getStore('workflows');
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
@@ -337,26 +368,7 @@ export class InngestRun<
         perStep?: boolean;
       },
   ): Promise<{ runId: string }> {
-    // Persist initial snapshot
-    const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: {
-        runId: this.runId,
-        serializedStepGraph: this.serializedStepGraph,
-        status: 'running',
-        value: {},
-        context: {} as any,
-        activePaths: [],
-        suspendedPaths: {},
-        activeStepsPath: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        timestamp: Date.now(),
-      },
-    });
+    await this.#writeStartSnapshot();
 
     // Validate inputs
     const inputDataToUse = await this._validateInput(args.inputData);
@@ -375,6 +387,7 @@ export class InngestRun<
         requestContext: args.requestContext,
         actor: args.actor,
         perStep: args.perStep,
+        ...this.#storageVersionData(),
       }),
     });
 
@@ -409,25 +422,7 @@ export class InngestRun<
     format?: 'legacy' | 'vnext' | undefined;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: {
-        runId: this.runId,
-        serializedStepGraph: this.serializedStepGraph,
-        status: 'running',
-        value: {},
-        context: {} as any,
-        activePaths: [],
-        suspendedPaths: {},
-        activeStepsPath: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        timestamp: Date.now(),
-      },
-    });
+    await this.#writeStartSnapshot();
 
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
@@ -447,6 +442,7 @@ export class InngestRun<
         requestContext,
         actor,
         perStep,
+        ...this.#storageVersionData(),
       }),
     });
 
@@ -553,18 +549,22 @@ export class InngestRun<
 
     // Mark the snapshot as 'running' before sending the event so that
     // snapshot-based polling doesn't return the stale suspended/paused result.
-    await workflowsStore.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: {
-        ...snapshot,
-        status: 'running',
-        result: undefined,
-        error: undefined,
-        timestamp: Date.now(),
-      } as any,
-    });
+    if (this.storageVersion === 2) {
+      await this.runStorage.updateHeader({ status: 'running' });
+    } else {
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: {
+          ...snapshot,
+          status: 'running',
+          result: undefined,
+          error: undefined,
+          timestamp: Date.now(),
+        } as any,
+      });
+    }
 
     let eventOutput;
     try {
@@ -582,6 +582,7 @@ export class InngestRun<
           requestContext: mergedRequestContext,
           actor: params.actor,
           perStep: params.perStep,
+          ...this.#storageVersionData(),
         }),
       });
     } catch (err) {
@@ -589,12 +590,16 @@ export class InngestRun<
       // The rollback itself can fail (e.g. transient storage error); log it but
       // always rethrow the original error so the underlying failure isn't masked.
       try {
-        await workflowsStore.persistWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-          resourceId: this.resourceId,
-          snapshot: snapshot as any,
-        });
+        if (this.storageVersion === 2) {
+          await this.runStorage.updateHeader({ status: snapshot.status });
+        } else {
+          await workflowsStore.persistWorkflowSnapshot({
+            workflowName: this.workflowId,
+            runId: this.runId,
+            resourceId: this.resourceId,
+            snapshot: snapshot as any,
+          });
+        }
       } catch (rollbackErr) {
         console.error('Failed to rollback snapshot during resume error recovery:', rollbackErr);
       }
@@ -715,6 +720,9 @@ export class InngestRun<
     };
     perStep?: boolean;
   }) {
+    if (this.storageVersion === 2) {
+      throw new Error(`Time travel is not supported yet for storage v2 Inngest runs (run ${this.runId})`);
+    }
     if (!params.step || (Array.isArray(params.step) && params.step?.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
     }
