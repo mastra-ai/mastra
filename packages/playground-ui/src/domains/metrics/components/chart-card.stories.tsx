@@ -65,7 +65,7 @@ const meta: Meta<typeof ChartCard> = {
 export default meta;
 type Story = StoryObj<typeof ChartCard>;
 
-/** The Metrics page's card: title and total, a 240px body. */
+/** The Metrics page's card: the title over the total, the legend beside the total, a 240px body. */
 export const Default: Story = {
   render: () => (
     <div className="w-[min(36rem,calc(100vw-3rem))]">
@@ -124,7 +124,7 @@ function SpendCard() {
 }
 
 /**
- * `variant="compact"`, for a grid of small cards: title and total on one line, one card height,
+ * `variant="compact"`, for a grid of small cards: the same header, one card height,
  * the chart filling what the legend leaves. The title can switch views (`titleMenu`). The charts
  * use `lineStyle="thin"` and `dots="hover"`.
  */
@@ -157,7 +157,7 @@ export const Compact: Story = {
   ),
 };
 
-/** `href`: the title links to a fuller view of the chart (e.g. an explorer), marked by an expand icon. */
+/** `href`: an expand button in the corner links to a fuller view of the chart (e.g. an explorer). */
 export const TitleLink: Story = {
   render: () => (
     <div className="w-[min(32rem,calc(100vw-3rem))]">
@@ -200,6 +200,39 @@ export const CompactLoading: Story = {
       >
         <ChartArea>
           <MetricsLineChart data={data} series={tokenSeries} height="fill" showLegend={false} isLoading />
+        </ChartArea>
+      </ChartCard>
+    </div>
+  ),
+};
+
+/**
+ * An empty range: the chart keeps its dates under three rulers and one message, without its y-axis,
+ * legend or a total other than 0.
+ */
+export const CompactEmpty: Story = {
+  render: () => (
+    <div className="w-[min(32rem,calc(100vw-3rem))]">
+      <ChartCard
+        variant="compact"
+        title="Tokens"
+        href="#query"
+        total="0"
+        toolbar={<MetricsLineChartLegend series={tokenSeries} />}
+      >
+        <ChartArea isEmpty>
+          <MetricsLineChart
+            data={data.map(row => ({ ...row, input: 0, cached: 0, output: 0 }))}
+            series={tokenSeries}
+            height="fill"
+            xLabels="edges"
+            showLegend={false}
+            lineStyle="thin"
+            dots="hover"
+            valueFormatter={tokens.format}
+            axisFormatter={tokens.format}
+            {...EDGE_BUCKET_AXIS}
+          />
         </ChartArea>
       </ChartCard>
     </div>
