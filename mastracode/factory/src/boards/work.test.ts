@@ -111,10 +111,9 @@ describe('the Work board seed', () => {
     // The judge cannot see the project's self-review setting: the objective never asks it to.
     expect(BUILD_OBJECTIVE).not.toMatch(/self-review/);
     expect(BUILD_OBJECTIVE).toMatch(/out of Building/);
-    // A change request tracked on its own card refuses the move to PR review; pushing to it finishes the build.
-    expect(BUILD_OBJECTIVE).toContain(
-      'tracked on its own card, the branch was pushed to that change request and the card stays in Building',
-    );
+    // A change request tracked on its own card never lets the card into PR review: that hand-off is done too.
+    expect(BUILD_OBJECTIVE).toContain('tracked on its own card');
+    expect(BUILD_OBJECTIVE).toContain('says a person should confirm it is reviewed there');
     expect(BUILD_OBJECTIVE).toMatch(/[Ww]aiting/);
     expect(BUILD_OBJECTIVE.length).toBeLessThanOrEqual(2_000);
   });
