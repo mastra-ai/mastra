@@ -14,6 +14,7 @@ import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
 import { BuildStatusBlock } from './environment/BuildStatusBlock';
 import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
+import { SandboxEnvsBlock } from './environment/SandboxEnvsBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { useEnvironmentSave } from './environment/useEnvironmentSave';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -51,6 +52,13 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
         >
           <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
         </WorkspaceSetupBlock>
+      </SettingsSubsection>
+      <SettingsSubsection
+        scope="factory"
+        title="Environment variables"
+        description="Available to every sandbox of this Factory. Values are encrypted and can't be viewed after saving, and anything running in the sandbox can read them. Runtime changes apply to the next command; processes already running keep the old value. Build changes apply on the next build."
+      >
+        <SandboxEnvsBlock factoryId={factoryId} />
       </SettingsSubsection>
       {canBuild && (
         <SettingsSubsection
