@@ -393,6 +393,10 @@ export interface FactoryRuleBoardFlow {
   readonly build?: string;
   /** Seat that runs {@link build}; pull request feedback wakes it. */
   readonly buildRole?: string;
+  /** Terminal phase a merge finishes the card in: the board's `sourceClosed.completed`, else its first terminal phase. */
+  readonly completed?: Readonly<FactoryRuleBoardClosurePhase>;
+  /** Terminal phase a pull request closed unmerged ends its own card in: `sourceClosed.canceled`, else the next terminal phase. */
+  readonly canceled?: Readonly<FactoryRuleBoardClosurePhase>;
 }
 
 export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {

@@ -93,8 +93,14 @@ export function boardFlow(board: InstalledBoard | undefined): FactoryRuleBoardFl
       phase.runner.context !== REVIEW_CONTEXT &&
       (buildRole === undefined || phase.runner.context !== buildRole),
   )?.[0];
+  const terminals = entries.filter(([, phase]) => phase.kind === 'terminal').map(([key]) => key);
+  const completed = board.sourceClosed?.completed ?? terminals[0];
+  const canceled = board.sourceClosed?.canceled ?? terminals.find(key => key !== completed) ?? completed;
+  const ref = (phase: string) => Object.freeze({ phase, title: board.phases[phase]!.name });
   const flow = Object.freeze({
     initialPhase: board.initialPhase,
+    ...(completed ? { completed: ref(completed) } : {}),
+    ...(canceled ? { canceled: ref(canceled) } : {}),
     ...(triage ? { triage } : {}),
     ...(pullRequestReview ? { pullRequestReview } : {}),
     ...(selfReview ? { selfReview } : {}),
