@@ -1,5 +1,9 @@
 import type { Agent } from '../agent';
-import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
+import {
+  abandonDurableAgentExecutions,
+  getActiveDurableAgentWorkflowExecutions,
+  isDurableAgentExecutionDetached,
+} from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -805,6 +809,10 @@ const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 // Mirrors BackgroundTaskManager's grace period and the deployer's
 // `server.drainTimeout` default.
 const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
+// A thread run still executing at shutdown is aborted and gets at least this long to stop before its thread is
+// handed back, even when the drain budget is already spent, so its tools aren't still running once another process
+// can take the thread.
+const SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS = 500;
 // Spreads re-checks of durable-agent runs other instances still drove at boot,
 // so replicas that skipped the same run don't all try it at the same instant.
 const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
@@ -7595,6 +7603,34 @@ export class Mastra<
   }
 
   /**
+   * Hand back the thread runs this Mastra still holds once its durable executions are abandoned: announce each run's
+   * end, stop its lease renewal and release its thread lease, so another process can take the thread right away.
+   */
+  async #shutdownThreadRuns(deadline: number): Promise<void> {
+    // Agents can carry their own pubsub; thread runs live in a separate runtime state per pubsub.
+    const pubsubs = new Set<PubSub | undefined>([this.pubsub]);
+    for (const agent of Object.values(this.#agents as Record<string, Agent<any>>)) {
+      if (typeof agent?.getPubSub === 'function') pubsubs.add(agent.getPubSub());
+    }
+    const abortGraceMs = Math.max(SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS, deadline - Date.now());
+    const executesElsewhere = (runId: string) => isDurableAgentExecutionDetached(this, runId);
+    const results = await this.#awaitBounded(
+      Promise.allSettled(
+        [...pubsubs].map(pubsub =>
+          agentThreadStreamRuntime.shutdown(pubsub, this, { abortGraceMs, executesElsewhere }),
+        ),
+      ),
+      abortGraceMs + 1_000,
+      'thread run handback',
+    );
+    results?.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Handing back thread runs failed during shutdown', { error: result.reason });
+      }
+    });
+  }
+
+  /**
    * Await an already-started promise for at most `timeoutMs`. Returns its value
    * when it settles in time, or `undefined` after logging a warning when the
    * budget is exhausted — the work keeps running in the background so teardown
@@ -7996,6 +8032,10 @@ export class Mastra<
     // the next boot recovers it right away. Storage must still be open.
     await abandonDurableAgentExecutions(this);
 
+    // Hand back the thread runs this instance still holds: announce each run's end to observers in other
+    // processes and release its thread lease, so the thread is free right away instead of after the lease
+    // lapses. Pubsub must still be open.
+    await this.#shutdownThreadRuns(deadline);
     // The shared BackgroundTaskWorker deliberately delegates manager ownership
     // to Mastra. Stop the manager while workers, pubsub, and storage are still
     // available so it can abort active tasks, preserve retry recovery, and
