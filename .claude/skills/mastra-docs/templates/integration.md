@@ -45,7 +45,7 @@ packages:
 
 # $PRODUCT
 
-In this guide, you'll $RESULT using Mastra and [$PRODUCT]($PRODUCT_DOCS_URL). Say what the integration gives readers that they wouldn't get otherwise.
+$OPENING: what Mastra and [$PRODUCT]($PRODUCT_DOCS_URL) do together, what readers build, and what the integration gives them that they wouldn't get otherwise. Don't open with a fixed formula such as "In this guide".
 
 ## Before you begin
 
