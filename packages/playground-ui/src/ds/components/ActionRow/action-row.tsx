@@ -20,7 +20,7 @@ export function ActionRowStart({ className, ...props }: DivProps) {
   return (
     <div
       data-slot="action-row-start"
-      className={cn('flex min-w-64 flex-1 flex-wrap items-center gap-1.5', className)}
+      className={cn('flex min-w-64 flex-auto flex-wrap items-center gap-1.5', className)}
       {...props}
     />
   );
