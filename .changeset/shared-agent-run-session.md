@@ -3,4 +3,10 @@
 '@mastra/inngest': patch
 ---
 
-Internal: durable and Inngest agents now share one helper for wiring a caller's `abortSignal` into a run. No behavior change.
+Export `AgentStreamBus`, `createRunAbortController`, and the `RunAbortController` type from `@mastra/core/agent/durable` for shared stream-bus and caller-cancellation setup.
+
+```ts
+import { AgentStreamBus, createRunAbortController, type RunAbortController } from '@mastra/core/agent/durable';
+```
+
+Plain, durable, and Inngest agents share caller-abort forwarding. Inngest reuses core's stream-bus setup. Existing stream delivery and cleanup policies are preserved.
