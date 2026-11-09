@@ -21,6 +21,8 @@ Don't use it for:
 
 ## Frontmatter
 
+In the skeleton, `$CLI_PACKAGE` is the npm package that provides the command (`create-mastra`, `mastra`), and `$SUBCOMMAND` is the rest of the command (`dev`). Leave `$SUBCOMMAND` empty for a standalone command such as `create-mastra`.
+
 ```yaml
 ---
 title: 'Reference: $COMMAND | CLI'
@@ -45,7 +47,7 @@ packages:
 Say what the command does and what it creates or changes.
 
 ```bash npm2yarn
-npx $COMMAND@latest
+npx $CLI_PACKAGE@latest $SUBCOMMAND
 ```
 
 ## $MODE_OR_BEHAVIOR
@@ -53,7 +55,7 @@ npx $COMMAND@latest
 Describe each mode or major behavior, with one example command each. Remove this section for a single-purpose command.
 
 ```bash npm2yarn
-npx $COMMAND@latest $ARGUMENT --$FLAG $VALUE
+npx $CLI_PACKAGE@latest $SUBCOMMAND $ARGUMENT --$FLAG $VALUE
 ```
 
 ## Arguments and flags

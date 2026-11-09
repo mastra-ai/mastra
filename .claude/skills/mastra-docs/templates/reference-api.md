@@ -23,12 +23,14 @@ Don't use it for:
 
 ## Frontmatter
 
+`$OWNING_PACKAGE` is the package that exports the API, such as `@mastra/core` or `@mastra/memory`. List it so embedded docs ship the page with that package. In the skeleton, `$NAME` is the API as readers write it (`Agent.getMemory()`), and `$EXPORT` is the symbol they import (`Agent`).
+
 ```yaml
 ---
 title: 'Reference: $NAME | $CATEGORY'
 description: 'API reference for $NAME, including its parameters, return value, and $BEHAVIOR.'
 packages:
-  - '@mastra/core'
+  - '$OWNING_PACKAGE'
 ---
 ```
 
@@ -39,7 +41,7 @@ packages:
 title: 'Reference: $NAME | $CATEGORY'
 description: 'API reference for $NAME, including its parameters, return value, and $BEHAVIOR.'
 packages:
-  - '@mastra/core'
+  - '$OWNING_PACKAGE'
 ---
 
 # $NAME
@@ -49,7 +51,7 @@ Say what the API does and when readers use it. Link to an alternative API when c
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { $NAME } from '@mastra/$PACKAGE';
+import { $EXPORT } from '$OWNING_PACKAGE';
 
 // Minimal supported usage
 ```
