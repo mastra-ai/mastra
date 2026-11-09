@@ -9,10 +9,10 @@ const USAGE = `Usage: pnpm check [options] [files...]
 Runs every docs check and reports findings with stable rule IDs.
 
 Options:
-  --json                Print a JSON report instead of human-readable output
+  --format <human|json> Output format (default: human). --json is shorthand for --format json
   --fix                 Apply safe fixes (formatting, sidebar sort, link rewrites, generated redirects)
-  --rule <id>           Only report this rule. Repeatable. A trailing * matches a prefix: --rule 'mastra/link-*'
-  --category <name>     Only run this category. Repeatable. One of: ${CATEGORIES.join(', ')}
+  --rule <id>           Only report this rule. Repeatable. A trailing * matches a prefix: --rule 'mastra/sidebar-*'
+  --only <category>     Only run this category. Repeatable. Alias: --category. One of: ${CATEGORIES.join(', ')}
   --quiet               Only print errors
   --no-vale             Skip Vale
   -h, --help            Show this help
@@ -46,12 +46,16 @@ export function parseArgs(argv: string[]): CliOptions {
       return next
     }
     if (arg === '--json') options.json = true
-    else if (arg === '--fix') options.fix = true
+    else if (arg === '--format' || arg.startsWith('--format=')) {
+      const format = value()
+      if (format !== 'json' && format !== 'human') throw new Error(`Unknown format "${format}". Use human or json`)
+      options.json = format === 'json'
+    } else if (arg === '--fix') options.fix = true
     else if (arg === '--quiet' || arg === '-q') options.quiet = true
     else if (arg === '--no-vale') options.skipVale = true
     else if (arg === '--help' || arg === '-h') options.help = true
     else if (arg === '--rule' || arg.startsWith('--rule=')) options.rules!.push(...value().split(','))
-    else if (arg === '--category' || arg.startsWith('--category=')) {
+    else if (arg === '--only' || arg.startsWith('--only=') || arg === '--category' || arg.startsWith('--category=')) {
       for (const category of value().split(',')) {
         if (!CATEGORIES.includes(category as Category)) {
           throw new Error(`Unknown category "${category}". Use one of: ${CATEGORIES.join(', ')}`)
@@ -64,7 +68,7 @@ export function parseArgs(argv: string[]): CliOptions {
   return options
 }
 
-const COLORS = { error: '\x1b[31m', warning: '\x1b[33m', info: '\x1b[36m', dim: '\x1b[2m', reset: '\x1b[0m' }
+const COLORS = { error: '\x1b[31m', warn: '\x1b[33m', info: '\x1b[36m', dim: '\x1b[2m', reset: '\x1b[0m' }
 
 export function formatHuman(report: CheckReport, { quiet = false, color = false } = {}): string {
   const paint = (key: keyof typeof COLORS, text: string) => (color ? `${COLORS[key]}${text}${COLORS.reset}` : text)
@@ -90,7 +94,7 @@ export function formatHuman(report: CheckReport, { quiet = false, color = false 
   }
 
   const { summary } = report
-  for (const skip of summary.skipped) lines.push(paint('warning', `Skipped ${skip.check}: ${skip.reason}`))
+  for (const skip of summary.skipped) lines.push(paint('warn', `Skipped ${skip.check}: ${skip.reason}`))
   const parts = [
     `${summary.errors} error${summary.errors === 1 ? '' : 's'}`,
     `${summary.warnings} warning${summary.warnings === 1 ? '' : 's'}`,

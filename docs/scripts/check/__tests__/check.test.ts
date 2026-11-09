@@ -44,9 +44,9 @@ describe('rule registry', () => {
   })
 
   it('matches exact and prefix filters', () => {
-    expect(matchesRuleFilter('mastra/link-broken', 'mastra/link-broken')).toBe(true)
-    expect(matchesRuleFilter('mastra/link-broken', 'mastra/link-*')).toBe(true)
-    expect(matchesRuleFilter('mastra/link-broken', 'mastra/link')).toBe(false)
+    expect(matchesRuleFilter('mastra/internal-link', 'mastra/internal-link')).toBe(true)
+    expect(matchesRuleFilter('mastra/sidebar-unlinked-page', 'mastra/sidebar-*')).toBe(true)
+    expect(matchesRuleFilter('mastra/internal-link', 'mastra/link')).toBe(false)
   })
 
   it('slugifies external rule names', () => {
@@ -80,11 +80,7 @@ describe('frontmatter rules', () => {
   it('reports missing title, short description, and invalid packages', () => {
     const file = page('docs/a.mdx', '# A', `---\ndescription: 'Too short.'\npackages:\n  - 'not-a-package'\n---`)
     expect(checkFrontmatter(file).map(f => f.ruleId)).toEqual(
-      expect.arrayContaining([
-        'mastra/frontmatter-title',
-        'mastra/frontmatter-description-length',
-        'mastra/frontmatter-packages',
-      ]),
+      expect.arrayContaining(['mastra/frontmatter-title', 'mastra/description-length', 'mastra/frontmatter-packages']),
     )
   })
 
@@ -123,7 +119,7 @@ describe('structure rules', () => {
     expect(checkCodeBlockLanguage(good, await tree(good))).toEqual([])
 
     const bad = page('docs/a.mdx', '# A\n\n```\nconst a = 1\n```')
-    expect(checkCodeBlockLanguage(bad, await tree(bad)).map(f => f.ruleId)).toEqual(['mastra/code-block-language'])
+    expect(checkCodeBlockLanguage(bad, await tree(bad)).map(f => f.ruleId)).toEqual(['mastra/code-block-lang'])
   })
 })
 
@@ -172,7 +168,7 @@ describe('routes and links', () => {
   it('reports broken links with a suggestion', async () => {
     const file = page('docs/a.mdx', '# A\n\n[a](/docs/agents/overveiw)')
     const { findings, edits } = checkLinks(file, await tree(file), index)
-    expect(findings.map(f => f.ruleId)).toEqual(['mastra/link-broken'])
+    expect(findings.map(f => f.ruleId)).toEqual(['mastra/internal-link'])
     expect(findings[0].suggestion).toBe('/docs/agents/overview')
     expect(edits).toEqual([])
   })
@@ -180,7 +176,7 @@ describe('routes and links', () => {
   it('rewrites redirected and self-hosted links', async () => {
     const file = page('docs/a.mdx', '# A\n\n[a](/docs/agents#tools) [b](https://mastra.ai/docs/agents/overview)')
     const { findings, edits } = checkLinks(file, await tree(file), index)
-    expect(findings.map(f => f.ruleId)).toEqual(['mastra/link-redirected', 'mastra/link-self-host'])
+    expect(findings.map(f => f.ruleId)).toEqual(['mastra/redirected-link', 'mastra/no-self-host-url'])
     expect(edits.map(edit => edit.text)).toEqual(['/docs/agents/overview#tools', '/docs/agents/overview'])
     expect(edits.map(edit => file.source.slice(edit.start, edit.end))).toEqual([
       '/docs/agents#tools',
@@ -240,15 +236,18 @@ describe('vale adapter', () => {
 describe('CLI', () => {
   it('parses flags and files', () => {
     expect(
-      parseArgs(['--json', '--fix', '--rule', 'mastra/link-*', '--category=links,prose', '-q', 'a.mdx']),
+      parseArgs(['--json', '--fix', '--rule', 'mastra/sidebar-*', '--category=links,prose', '-q', 'a.mdx']),
     ).toMatchObject({
       json: true,
       fix: true,
       quiet: true,
-      rules: ['mastra/link-*'],
+      rules: ['mastra/sidebar-*'],
       categories: ['links', 'prose'],
       files: ['a.mdx'],
     })
+    expect(parseArgs(['--format', 'json', '--only', 'sidebar'])).toMatchObject({ json: true, categories: ['sidebar'] })
+    expect(parseArgs(['--format=human']).json).toBe(false)
+    expect(() => parseArgs(['--format', 'xml'])).toThrow(/Unknown format/)
     expect(() => parseArgs(['--category', 'nope'])).toThrow(/Unknown category/)
     expect(() => parseArgs(['--bogus'])).toThrow(/Unknown option/)
   })
@@ -271,7 +270,7 @@ describe('runChecks', () => {
     await write('docs/good.mdx', `${VALID_FRONTMATTER}\n\n# Good\n\nSee [the bad page](/docs/bad).\n`)
     await write(
       'docs/bad.mdx',
-      `${VALID_FRONTMATTER.slice(0, -3)}lintDisable:\n  - mastra/code-block-language\n---\n\n# Bad\n\n[old](/docs/old) and [missing](/docs/nowhere).\n\n\`\`\`\nno language\n\`\`\`\n`,
+      `${VALID_FRONTMATTER.slice(0, -3)}lintDisable:\n  - mastra/code-block-lang\n---\n\n# Bad\n\n[old](/docs/old) and [missing](/docs/nowhere).\n\n\`\`\`\nno language\n\`\`\`\n`,
     )
   })
 
@@ -284,32 +283,33 @@ describe('runChecks', () => {
     expect(report.version).toBe(1)
     expect(report.summary).toMatchObject({ ok: true, errors: 0, warnings: 2, fixable: 1, fixed: 0, filesChecked: 2 })
     expect(report.findings.map(f => [f.file, f.ruleId])).toEqual([
-      ['src/content/en/docs/bad.mdx', 'mastra/link-redirected'],
-      ['src/content/en/docs/bad.mdx', 'mastra/link-broken'],
+      ['src/content/en/docs/bad.mdx', 'mastra/redirected-link'],
+      ['src/content/en/docs/bad.mdx', 'mastra/internal-link'],
     ])
     for (const item of report.findings) {
       expect(item).toEqual(
         expect.objectContaining({
-          severity: 'warning',
+          severity: 'warn',
           category: 'links',
           fixable: expect.any(Boolean),
           line: expect.any(Number),
         }),
       )
     }
-    expect(formatHuman(report)).toContain('mastra/link-broken')
+    expect(formatHuman(report)).toContain('mastra/internal-link')
   })
 
   it('filters by rule and scopes to file arguments', async () => {
-    const report = await runChecks({ rootDir, rules: ['mastra/link-broken'], files: ['src/content/en/docs/bad.mdx'] })
+    const report = await runChecks({ rootDir, rules: ['mastra/internal-link'], files: ['src/content/en/docs/bad.mdx'] })
     expect(report.summary.filesChecked).toBe(1)
-    expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/link-broken'])
+    expect(report.summary.status).toBe('passed')
+    expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/internal-link'])
   })
 
   it('applies fixes with --fix', async () => {
     const report = await runChecks({ rootDir, categories: ['links'], fix: true })
     expect(report.summary.fixed).toBe(1)
-    expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/link-broken'])
+    expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/internal-link'])
     const source = await fs.readFile(path.join(rootDir, 'src/content/en/docs/bad.mdx'), 'utf8')
     expect(source).toContain('[old](/docs/good)')
   })

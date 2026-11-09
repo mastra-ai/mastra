@@ -18,7 +18,7 @@ interface ValeAlert {
   Span: [number, number]
 }
 
-const SEVERITY: Record<ValeAlert['Severity'], Severity> = { error: 'error', warning: 'warning', suggestion: 'info' }
+const SEVERITY: Record<ValeAlert['Severity'], Severity> = { error: 'error', warning: 'warn', suggestion: 'info' }
 
 /** The Vale binary from `pnpm vale:download`, or `vale` on PATH (as installed in CI). */
 async function findVale(rootDir: string): Promise<string | undefined> {
@@ -46,7 +46,7 @@ export function valeFindings(rootDir: string, output: Record<string, ValeAlert[]
           alert.Message,
           { file: relative, line: alert.Line, column: alert.Span[0] },
           {
-            severity: SEVERITY[alert.Severity] ?? 'warning',
+            severity: SEVERITY[alert.Severity] ?? 'warn',
           },
         ),
       )

@@ -1,4 +1,4 @@
-export type Severity = 'error' | 'warning' | 'info'
+export type Severity = 'error' | 'warn' | 'info'
 
 export const CATEGORIES = ['frontmatter', 'sidebar', 'structure', 'links', 'prose', 'format', 'redirects'] as const
 export type Category = (typeof CATEGORIES)[number]
@@ -25,6 +25,8 @@ export interface SkippedCheck {
 
 export interface Summary {
   ok: boolean
+  /** `partial` when no errors were found but a check (usually Vale) was skipped. */
+  status: 'passed' | 'failed' | 'partial'
   errors: number
   warnings: number
   info: number

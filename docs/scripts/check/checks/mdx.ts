@@ -59,7 +59,7 @@ export function checkCodeBlockLanguage(file: ContentFile, tree: Root): Finding[]
     if (fenced && !code.lang) {
       findings.push(
         finding(
-          'mastra/code-block-language',
+          'mastra/code-block-lang',
           'Code block has no language; add one, e.g. ```typescript or ```text',
           at(file, node),
         ),
@@ -126,7 +126,7 @@ export function checkLinks(
     if (selfHost) {
       const replacement = selfHost[1]
       const edit = urlEdit(file, node, url, replacement)
-      const item = finding('mastra/link-self-host', `Use a root-relative link instead of ${url}`, location, {
+      const item = finding('mastra/no-self-host-url', `Use a root-relative link instead of ${url}`, location, {
         suggestion: replacement,
         fixable: edit !== undefined,
       })
@@ -145,7 +145,7 @@ export function checkLinks(
       const replacement = destination.includes('#') ? destination : `${destination}${suffix}`
       const edit = urlEdit(file, node, url, replacement)
       const item = finding(
-        'mastra/link-redirected',
+        'mastra/redirected-link',
         `${url} redirects to ${destination}; link to the destination`,
         location,
         {
@@ -161,7 +161,7 @@ export function checkLinks(
     const suggestion = suggestRoute(index, route)
     findings.push(
       finding(
-        'mastra/link-broken',
+        'mastra/internal-link',
         `${url} does not resolve to a page${suggestion ? `. Did you mean ${suggestion}?` : ''}`,
         location,
         suggestion ? { suggestion: `${suggestion}${suffix}` } : {},

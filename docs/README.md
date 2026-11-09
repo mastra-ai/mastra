@@ -26,7 +26,7 @@ Run every docs check (formatting, frontmatter, sidebars, structure, links, remar
 pnpm run check
 ```
 
-Add `--fix` to apply safe fixes or `--json` for machine-readable output. See [`styleguides/CHECKS.md`](./styleguides/CHECKS.md) for every rule ID. The individual linters below still work on their own.
+Add `--fix` to apply safe fixes or `--format json` for machine-readable output. See [`styleguides/CHECKS.md`](./styleguides/CHECKS.md) for every rule ID. The individual linters below still work on their own.
 
 ### Remark
 

@@ -127,8 +127,9 @@ export async function runChecks(options: RunOptions): Promise<CheckReport> {
     version: 1,
     summary: {
       ok: errors === 0,
+      status: errors > 0 ? 'failed' : skipped.length > 0 ? 'partial' : 'passed',
       errors,
-      warnings: count('warning'),
+      warnings: count('warn'),
       info: count('info'),
       fixable: findings.filter(f => f.fixable).length,
       fixed,

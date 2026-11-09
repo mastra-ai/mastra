@@ -62,7 +62,7 @@ export const sidebarCheck: Check = {
       for (const tag of stale) {
         findings.push(
           finding(
-            'mastra/sidebar-stale-new-tag',
+            'mastra/sidebar-new-tag-stale',
             `"${tag.label}" has had a \`new\` tag since ${tag.date} (${tag.ageDays} days); remove it`,
             { file: tag.file, line: tag.lineNo },
           ),
@@ -70,7 +70,7 @@ export const sidebarCheck: Check = {
       }
     } catch (error) {
       result.skipped!.push({
-        check: 'mastra/sidebar-stale-new-tag',
+        check: 'mastra/sidebar-new-tag-stale',
         reason: `git blame unavailable: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
       })
     }

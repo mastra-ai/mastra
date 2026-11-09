@@ -23,7 +23,7 @@ export const RULE_FAMILIES: RuleDefinition[] = [
   {
     id: 'mastra/vale-*',
     category: 'prose',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description:
       'Vale checks from `.vale.ini`, e.g. `mastra/vale-mastra-headings`. Severity follows the Vale level (error → error, warning → warning, suggestion → info).',
@@ -54,16 +54,16 @@ export const RULES: RuleDefinition[] = [
     description: 'The frontmatter has no non-empty `title`.',
   },
   {
-    id: 'mastra/frontmatter-description',
+    id: 'mastra/description-required',
     category: 'frontmatter',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'The frontmatter has no non-empty `description`.',
   },
   {
-    id: 'mastra/frontmatter-description-length',
+    id: 'mastra/description-length',
     category: 'frontmatter',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'The `description` is shorter than 50 or longer than 200 characters.',
   },
@@ -77,7 +77,7 @@ export const RULES: RuleDefinition[] = [
   {
     id: 'mastra/frontmatter-packages-max',
     category: 'frontmatter',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'The `packages` field lists more than 4 packages. Each package embeds a full copy of the page.',
   },
@@ -113,14 +113,14 @@ export const RULES: RuleDefinition[] = [
   {
     id: 'mastra/sidebar-reference-item',
     category: 'sidebar',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'A reference sidebar item has an unknown type, or a property the sort fixer would drop.',
   },
   {
-    id: 'mastra/sidebar-stale-new-tag',
+    id: 'mastra/sidebar-new-tag-stale',
     category: 'sidebar',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'A sidebar `new` tag was added more than 30 days ago.',
   },
@@ -128,36 +128,36 @@ export const RULES: RuleDefinition[] = [
   {
     id: 'mastra/single-h1',
     category: 'structure',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'The page must have exactly one `#` heading.',
   },
   {
-    id: 'mastra/code-block-language',
+    id: 'mastra/code-block-lang',
     category: 'structure',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'A fenced code block has no language, e.g. ` ```typescript `.',
   },
   // links
   {
-    id: 'mastra/link-broken',
+    id: 'mastra/internal-link',
     category: 'links',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'An internal link points to a route that does not exist.',
   },
   {
-    id: 'mastra/link-redirected',
+    id: 'mastra/redirected-link',
     category: 'links',
-    severity: 'warning',
+    severity: 'warn',
     fixable: true,
     description: 'An internal link points to a redirect source. The fix rewrites it to the destination.',
   },
   {
-    id: 'mastra/link-self-host',
+    id: 'mastra/no-self-host-url',
     category: 'links',
-    severity: 'warning',
+    severity: 'warn',
     fixable: true,
     description: 'A link uses `https://mastra.ai/...` for a docs route. The fix rewrites it to a root-relative path.',
   },
@@ -165,7 +165,7 @@ export const RULES: RuleDefinition[] = [
   {
     id: 'mastra/bare-url',
     category: 'prose',
-    severity: 'warning',
+    severity: 'warn',
     fixable: false,
     description: 'A URL appears as plain text instead of a Markdown link.',
   },
@@ -223,7 +223,7 @@ export function isKnownRuleId(id: string): boolean {
   return RULES_BY_ID.has(id) || RULE_FAMILIES.some(f => id.startsWith(f.id.slice(0, -1)) && id.length > f.id.length - 1)
 }
 
-/** Matches a rule ID against a filter: exact ID, or a trailing `*` prefix such as `mastra/link-*`. */
+/** Matches a rule ID against a filter: exact ID, or a trailing `*` prefix such as `mastra/sidebar-*`. */
 export function matchesRuleFilter(id: string, filter: string): boolean {
   return filter.endsWith('*') ? id.startsWith(filter.slice(0, -1)) : id === filter
 }

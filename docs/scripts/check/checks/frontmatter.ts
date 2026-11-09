@@ -52,7 +52,7 @@ export function checkFrontmatter(file: ContentFile): Finding[] {
   if (typeof data.description !== 'string' || data.description.trim() === '') {
     findings.push(
       finding(
-        'mastra/frontmatter-description',
+        'mastra/description-required',
         'Missing `description` in frontmatter',
         at(frontmatterKeyLine(file, 'description') ?? 1),
       ),
@@ -62,7 +62,7 @@ export function checkFrontmatter(file: ContentFile): Finding[] {
     if (length < DESCRIPTION_MIN || length > DESCRIPTION_MAX) {
       findings.push(
         finding(
-          'mastra/frontmatter-description-length',
+          'mastra/description-length',
           `\`description\` is ${length} characters; keep it between ${DESCRIPTION_MIN} and ${DESCRIPTION_MAX}`,
           at(frontmatterKeyLine(file, 'description')),
         ),
