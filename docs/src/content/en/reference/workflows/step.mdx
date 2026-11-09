@@ -330,7 +330,7 @@ A classifier without constructor-configured questions can't be used as a workflo
             name: 'state',
             type: 'z.infer<TState>',
             description:
-              "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema. On the default engine, reading it in a run stored with `storageVersion: 2` throws; use `await getState()` instead.",
+              "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema. Reading it in a run stored with `storageVersion: 2` throws; use `await getState()` instead.",
           },
           {
             name: 'getState',
