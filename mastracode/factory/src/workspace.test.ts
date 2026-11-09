@@ -2701,6 +2701,23 @@ describe('GitHub session workspace preparation', () => {
       expect(lastGhToken()).not.toBe(installed);
     });
 
+    it('still reconnects with the current token when the re-mint fails', async () => {
+      const { installed } = await startSession();
+
+      vi.advanceTimersByTime(61 * 60_000);
+      mocks.setEnv.mockClear();
+      const access = mocks.getRepositoryAccess.getMockImplementation()!;
+      let calls = 0;
+      mocks.getRepositoryAccess.mockImplementation(async (...args: any[]) => {
+        if (++calls > 1) throw new Error('mint failed');
+        return (access as any)(...args);
+      });
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      await expect(sandbox.start()).resolves.not.toThrow();
+
+      expect(lastGhToken()).toBe(installed);
+    });
+
     it('keeps an org PAT installed regardless of age', async () => {
       mocks.githubPat = 'ghp_org_pat';
       const { workspace } = await createLocalFactory();
@@ -2717,6 +2734,29 @@ describe('GitHub session workspace preparation', () => {
       });
       expect(mocks.setEnv).not.toHaveBeenCalled();
 
+      await mocks.createSandbox.mock.results[0]!.value.executeCommand('gh', ['pr', 'list']);
+      expect(mocks.setEnv).not.toHaveBeenCalled();
+
+      await mocks.createSandbox.mock.results[0]!.value.start();
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
+    it('does not replace an installed org PAT when a later PAT lookup fails', async () => {
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('ghp_org_pat');
+
+      // getGithubPat fails soft: a storage error reads as "no PAT configured".
+      mocks.githubPat = null;
+      vi.advanceTimersByTime(46 * 60_000);
+      mocks.setEnv.mockClear();
+      await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      });
       await mocks.createSandbox.mock.results[0]!.value.executeCommand('gh', ['pr', 'list']);
       expect(mocks.setEnv).not.toHaveBeenCalled();
 
