@@ -35,7 +35,6 @@ export type {
   ResolvedView,
   ShownGate,
   WidgetKind,
-  WidgetKindCheck,
   WidgetKindProps,
   WidgetPin,
   WidgetPlanContext,

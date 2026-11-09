@@ -6,11 +6,10 @@ import { kpisIssues } from '../kinds/kpis/options';
 import type { KpisOptions } from '../kinds/kpis/options';
 import { scoresIssues } from '../kinds/scores/options';
 import type { ResolvedView } from '../widget-kind';
-import { dashboardDefaults, targetScope, viewDrilldown } from './definition';
+import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
 import { buildPreviousRequest, buildRequest, pageQuery, sendRequest } from './requests';
 import type { DashboardAnswer, DashboardPageContext, DashboardRequestOptions } from './requests';
-import { inScope } from './resolve-views';
 import {
   buildTableRows,
   countRows,

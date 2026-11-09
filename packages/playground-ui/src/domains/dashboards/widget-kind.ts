@@ -130,24 +130,17 @@ export type DashboardExpand = {
 };
 
 /**
- * The part of a kind that checks a view, with no React: what `prepareWidget` and the strict stored
- * schema both run.
- */
-export type WidgetKindCheck<Options = unknown> = {
-  kind: string;
-  /** Each view's `options`, parsed before the widget renders. */
-  optionsSchema: z.ZodType<Options>;
-  /** Further problems with a view, e.g. options naming a query the view doesn't have. */
-  issues?: (view: ResolvedView<Options>) => string[];
-};
-
-/**
  * One kind of widget, self-contained: the renderer only looks it up by name, checks each view's
  * options against `optionsSchema`, sends what `discover` then `requests` plan, and renders
  * `component` with the answers. A kind planning neither sends nothing; its component may still fetch
  * on its own (`ViewGate`, `useDashboardRequests`), but then only `DashboardRenderer` can host it.
  */
-export type WidgetKind<Options = unknown> = WidgetKindCheck<Options> & {
+export type WidgetKind<Options = unknown> = {
+  kind: string;
+  /** Each view's `options`, parsed before the widget renders. */
+  optionsSchema: z.ZodType<Options>;
+  /** Further problems with a view, e.g. options naming a query the view doesn't have. */
+  issues?: (view: ResolvedView<Options>) => string[];
   /**
    * Shows the widget even when a page filter can't apply to some of its queries: its views say so
    * on their own, checking `blocked` (a table's tabs).

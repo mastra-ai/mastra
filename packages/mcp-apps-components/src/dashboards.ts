@@ -10,10 +10,10 @@ import type {
   DashboardWidget,
   DashboardWidgetView,
 } from '@mastra/core/storage/dashboards';
-import { BUILT_IN_WIDGET_CHECKS } from '@mastra/playground-ui/domains/dashboards/kinds/checks';
-import { inScope, resolveViews } from '@mastra/playground-ui/domains/dashboards/lib/resolve-views';
 import { tableColumnOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/table';
 import { z } from 'zod/v4';
+import { inScope, KIND_CHECKS, viewIssues } from './dashboard-views';
+import type { WidgetIssue } from './dashboard-views';
 
 /*
  * The stored dashboard format, checked as strictly as the dashboard renderer checks it: core's
@@ -185,10 +185,9 @@ export type StrictDashboardDefinition = Omit<DashboardDefinition, 'rows'> & {
   rows: { widgets: StrictDashboardWidget[] }[];
 };
 
-type Issue = { path: PropertyKey[]; message: string };
+type Issue = WidgetIssue;
 
-const isBuiltInKind = (kind: string): kind is keyof typeof BUILT_IN_WIDGET_CHECKS =>
-  Object.hasOwn(BUILT_IN_WIDGET_CHECKS, kind);
+const isBuiltInKind = (kind: string): kind is keyof typeof KIND_CHECKS => Object.hasOwn(KIND_CHECKS, kind);
 
 const zodIssues = (error: z.ZodError, prefix: PropertyKey[]): Issue[] =>
   error.issues.map(issue => ({ path: [...prefix, ...issue.path], message: issue.message }));
@@ -207,7 +206,7 @@ function widgetIssues(widget: DashboardWidget): Issue[] {
       },
     ];
   }
-  const check = BUILT_IN_WIDGET_CHECKS[widget.kind];
+  const check = KIND_CHECKS[widget.kind];
 
   const parsed: Issue[] = [];
   for (const [i, view] of widget.views.entries()) {
@@ -230,7 +229,7 @@ function widgetIssues(widget: DashboardWidget): Issue[] {
   const issues = new Map<string, Issue>();
   for (const scope of DASHBOARD_SCOPES) {
     if (!inScope(widget, scope)) continue;
-    for (const issue of resolveViews(widget, check, scope).issues) {
+    for (const issue of viewIssues(widget, check, scope)) {
       issues.set(`${JSON.stringify(issue.path)} ${issue.message}`, issue);
     }
   }
