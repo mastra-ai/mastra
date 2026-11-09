@@ -16,9 +16,12 @@ Relevant guidance:
 - @styleguides/COMPONENTS.md
 - @styleguides/DIAGRAM.md: Mermaid diagram style and accessibility
 - @styleguides/AUTHORING_WORKFLOW.md
+- @styleguides/CHECKS.md: `pnpm check` usage, rule IDs, and per-page `lintDisable`
 - @CONTRIBUTING.md: Setup, frontmatter, and MDX syntax
 - .claude/skills/docs-diagrams: Existing image-to-Mermaid conversions
 
 Use model tokens from src/plugins/remark-model-tokens/models.ts for model names and IDs.
 
 Follow @styleguides/AUTHORING_WORKFLOW.md for operational commands and checks.
+
+After editing docs, run `pnpm check <changed .mdx files>` from `docs/` and fix every error. It runs frontmatter, sidebar, structure, link, prose (Vale), formatting, and redirect checks in one command. Use `pnpm check --fix` for fixable findings, `--format json` for machine-readable output, and `--only <category>` or `--rule <id>` to narrow the run. The older `validate:*`, `lint:*`, and `format:check` scripts still work but are not needed.

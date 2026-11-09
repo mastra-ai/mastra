@@ -183,6 +183,14 @@ describe('routes and links', () => {
       'https://mastra.ai/docs/agents/overview',
     ])
   })
+
+  it('keeps self-hosted links to static files absolute', async () => {
+    const file = page(
+      'docs/a.mdx',
+      '# A\n\n[a](https://mastra.ai/docs/llms.txt) [b](https://mastra.ai/reference/agents/agent.md)',
+    )
+    expect(checkLinks(file, await tree(file), index).findings).toEqual([])
+  })
 })
 
 describe('redirect rules', () => {

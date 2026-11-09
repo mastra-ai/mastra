@@ -44,7 +44,7 @@ export const sidebarCheck: Check = {
     }
     // Sorting rewrites the whole file, which would drop properties the serializer doesn't know about.
     const canFix = analysis.propertyWarnings.length === 0
-    if (analysis.sortErrors.length > 0 && ctx.fix && canFix) {
+    if (analysis.sortErrors.length > 0 && ctx.fix && canFix && ctx.isRuleActive('mastra/sidebar-reference-sort')) {
       await writeSortedReferenceSidebar(items)
       result.fixed = analysis.sortErrors.length
     } else {

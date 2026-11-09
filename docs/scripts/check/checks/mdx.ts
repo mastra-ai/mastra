@@ -123,7 +123,8 @@ export function checkLinks(
     const location = at(file, node)
 
     const selfHost = url.match(SELF_HOST)
-    if (selfHost) {
+    // Files like /docs/llms.txt or *.md are served as static assets, not Docusaurus routes, so keep them absolute.
+    if (selfHost && !/\.[a-z0-9]+$/i.test(splitUrl(selfHost[1]).pathname)) {
       const replacement = selfHost[1]
       const edit = urlEdit(file, node, url, replacement)
       const item = finding('mastra/no-self-host-url', `Use a root-relative link instead of ${url}`, location, {
