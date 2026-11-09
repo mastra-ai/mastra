@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
+import { loadStepResults } from '../run-journal';
 import { createStep, createWorkflow } from '.';
 
 // On storage v2 an evented run's step messages leave out what the processor loads from storage:
@@ -73,7 +74,8 @@ async function runWorkflow(workflow: { createRun: () => Promise<any> }, storage 
   try {
     const run = await workflow.createRun();
     const result = await run.start({ inputData: {} });
-    return { result, run, messages };
+    // A v2 result's `steps` is a loader; these tests check the steps it loads.
+    return { result: { ...result, steps: await loadStepResults(result.steps) }, run, messages };
   } finally {
     await mastra.stopWorkers();
   }
@@ -638,5 +640,44 @@ describe('evented step code on storage v2', () => {
     const { result } = await runWorkflow(workflow);
     expect(result.status).toBe('success');
     expect(result.result).toEqual({ a: { a: true }, state: { a: 1 } });
+  });
+});
+
+describe('evented run results on storage v2', () => {
+  it.each([1, 2] as const)('give the result and onFinish the same steps as the default engine (v%i)', async v => {
+    let finished: unknown;
+    const workflow = createWorkflow({
+      id: `result-steps-v${v}`,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion: v, onFinish: ({ steps }) => void (finished = steps) },
+    })
+      .then(
+        createStep({ id: 'a', inputSchema: looseObject, outputSchema: looseObject, execute: async () => ({ a: BIG }) }),
+      )
+      .commit();
+
+    const storage = new MockStore();
+    const loadSteps = vi.spyOn(storage.stores.workflows!, 'loadWorkflowRunSteps');
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { wf: workflow },
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startWorkers();
+    try {
+      const result = await (await workflow.createRun()).start({ inputData: {} });
+      // A v2 result's steps is a loader, a v1 result's a record.
+      expect(typeof result.steps).toBe(v === 2 ? 'function' : 'object');
+      expect(finished).toBe(result.steps);
+
+      // The finish event carries every step result, so the loader reads none from storage.
+      loadSteps.mockClear();
+      expect((await loadStepResults(result.steps)).a).toMatchObject({ status: 'success', output: { a: BIG } });
+      expect(loadSteps).not.toHaveBeenCalled();
+    } finally {
+      await mastra.stopWorkers();
+    }
   });
 });

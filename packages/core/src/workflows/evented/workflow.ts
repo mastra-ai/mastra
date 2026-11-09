@@ -1723,7 +1723,18 @@ export function createWorkflow<
     EventedEngineType
   >[],
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
->(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
+  TStorageVersion extends 1 | 2 = 1,
+>(
+  params: CreateWorkflowParams<
+    TWorkflowId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TSteps,
+    TRequestContextSchema,
+    TStorageVersion
+  >,
+) {
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({
     mastra: params.mastra!,
@@ -1745,7 +1756,8 @@ export function createWorkflow<
     InferSchemaOutput<TStateSchema>,
     InferPublicSchema<TInputSchema>,
     InferPublicSchema<TOutputSchema>,
-    InferPublicSchema<TInputSchema>
+    InferPublicSchema<TInputSchema>,
+    TStorageVersion
   >({
     ...(params as any),
     executionEngine,
@@ -1760,8 +1772,9 @@ export class EventedWorkflow<
   TInput = unknown,
   TOutput = unknown,
   TPrevSchema = TInput,
-> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+  TStorageVersion extends 1 | 2 = any,
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, unknown, TStorageVersion> {
+  constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, unknown, TStorageVersion>) {
     super(params);
     this.engineType = 'evented';
   }
@@ -1775,7 +1788,7 @@ export class EventedWorkflow<
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
-  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -1890,7 +1903,7 @@ export class EventedWorkflow<
     }
 
     // Return a new Run instance with object parameters
-    const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
+    const run: Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion> =
       cachedRun ??
       new EventedRun({
         workflowId: this.id,
@@ -1954,7 +1967,8 @@ export class EventedRun<
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
-> extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
+  TStorageVersion extends 1 | 2 = any,
+> extends Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion> {
   constructor(params: {
     workflowId: string;
     runId: string;
@@ -2063,7 +2077,7 @@ export class EventedRun<
     };
     tracingContext?: TracingContext;
     actor?: ActorSignal;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
       throw new Error(
@@ -2143,9 +2157,13 @@ export class EventedRun<
       this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
 
-    let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
     try {
-      result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      result = await this.executionEngine.execute<
+        TState,
+        TInput,
+        WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
+      >({
         workflowId: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
@@ -2310,7 +2328,7 @@ export class EventedRun<
         includeResumeLabels?: boolean;
       };
       actor?: ActorSignal;
-    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
     }
@@ -2370,7 +2388,7 @@ export class EventedRun<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -2407,7 +2425,7 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
-  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     this.closeStreamAction = async () => {};
 
     const self = this;
@@ -2465,7 +2483,7 @@ export class EventedRun<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -2522,7 +2540,7 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const fgaProvider = this.mastra?.getServer()?.fga;
     if (fgaProvider && !this.isInternalWorkflow) {
       await requireFGA({
@@ -2748,7 +2766,7 @@ export class EventedRun<
 
     const resumePubsub = this.mastra.pubsub;
     const executionResultPromise = this.executionEngine
-      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
         workflowId: this.workflowId,
         runId: this.runId,
         parentWorkflow: this.parentWorkflow,

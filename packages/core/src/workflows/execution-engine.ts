@@ -18,6 +18,7 @@ import type {
   WorkflowErrorCallbackInfo,
   WorkflowStartCallbackInfo,
   WorkflowStateTracingContext,
+  WorkflowStepResults,
 } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
@@ -156,7 +157,7 @@ export abstract class ExecutionEngine extends MastraBase {
     status: WorkflowRunStatus;
     result?: any;
     error?: any;
-    steps: Record<string, StepResult<any, any, any, any>>;
+    steps: WorkflowStepResults<Record<string, StepResult<any, any, any, any>>, 1 | 2>;
     tripwire?: any;
     runId: string;
     workflowId: string;

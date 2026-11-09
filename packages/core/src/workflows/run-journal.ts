@@ -847,6 +847,18 @@ export function loadedStepResults(
   );
 }
 
+/**
+ * The `steps()` of a storage v2 result that already holds every step result, so it reads none
+ * from storage: an evented run's, whose finish event carries them all.
+ *
+ * @internal
+ */
+export function residentStepResultsLoader(stepResults: StepResults): () => Promise<StepResults> {
+  const steps = () => Promise.resolve(stepResults);
+  residentResults.set(steps, stepResults);
+  return steps;
+}
+
 function storedStepResults(
   {
     store,

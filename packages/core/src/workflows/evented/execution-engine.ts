@@ -9,6 +9,7 @@ import { executionFailureTermination } from '../../observability/execution-outco
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
 import { workflowTermination } from '../execution-outcome';
+import { residentStepResultsLoader } from '../run-journal';
 import type {
   SerializedStepFlowEntry,
   StepResult,
@@ -16,6 +17,7 @@ import type {
   RestartExecutionParams,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  WorkflowStepResults,
   NestedWorkflowParent,
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
@@ -396,13 +398,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
       }
       cleanStepResults[stepId] = cleanStepResult(stepResult);
     }
+    // On storage v2 the result's steps are a loader, as on the default engine. The finish event
+    // carries every step result, so the loader holds them all and reads none from storage.
+    const steps = params.storageVersion === 2 ? residentStepResultsLoader(cleanStepResults) : cleanStepResults;
 
     // Build the callback argument with proper typing for invokeLifecycleCallbacks
     let callbackArg: {
       status: WorkflowRunStatus;
       result?: any;
       error?: any;
-      steps: Record<string, StepResult<any, any, any, any>>;
+      steps: WorkflowStepResults<Record<string, StepResult<any, any, any, any>>, 1 | 2>;
       state?: Record<string, any>;
       tripwire?: StepTripwireInfo;
     };
@@ -420,7 +425,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       if (tripwireData && typeof tripwireData === 'object' && 'reason' in tripwireData) {
         callbackArg = {
           status: 'tripwire',
-          steps: cleanStepResults,
+          steps,
           state: finalState,
           tripwire: tripwireData,
         };
@@ -428,27 +433,27 @@ export class EventedExecutionEngine extends ExecutionEngine {
         callbackArg = {
           status: 'failed',
           error: resultData.prevResult.error,
-          steps: cleanStepResults,
+          steps,
           state: finalState,
         };
       }
     } else if (resultData.prevResult.status === 'suspended') {
       callbackArg = {
         status: 'suspended',
-        steps: cleanStepResults,
+        steps,
         state: finalState,
       };
     } else if (resultData.prevResult.status === 'paused' || params.perStep) {
       callbackArg = {
         status: 'paused',
-        steps: cleanStepResults,
+        steps,
         state: finalState,
       };
     } else {
       callbackArg = {
         status: resultData.prevResult.status,
         result: resultData.prevResult?.output,
-        steps: cleanStepResults,
+        steps,
         state: finalState,
       };
     }

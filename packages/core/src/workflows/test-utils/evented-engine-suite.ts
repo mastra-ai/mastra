@@ -15,6 +15,7 @@ import { Mastra } from '../../mastra';
 import type { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
 import { createStep, createWorkflow } from '../evented';
+import { withLoadedSteps } from './default-engine-suite';
 
 /**
  * Runs the shared workflow test suite on the evented engine, with every workflow on
@@ -166,7 +167,7 @@ export function createEventedEngineTestSuite({
 
         const result = await streamResult.result;
 
-        return result as WorkflowResult;
+        return withLoadedSteps(result);
       } finally {
         // Always stop the event engine
         await mastra.stopWorkers();
@@ -197,7 +198,7 @@ export function createEventedEngineTestSuite({
           forEachIndex: options.forEachIndex,
         } as any);
 
-        return result as WorkflowResult;
+        return withLoadedSteps(result);
       } finally {
         // Always stop the event engine
         await mastra.stopWorkers();
@@ -228,7 +229,7 @@ export function createEventedEngineTestSuite({
           resumeData: options.resumeData as any,
         });
 
-        return result as WorkflowResult;
+        return withLoadedSteps(result);
       } finally {
         // Always stop the event engine
         await mastra.stopWorkers();
@@ -265,7 +266,7 @@ export function createEventedEngineTestSuite({
           }
 
           const result = await getWorkflowState();
-          return { events, result: result as WorkflowResult };
+          return { events, result: await withLoadedSteps(result) };
         }
         const streamResult = run.stream({
           inputData,
@@ -280,7 +281,7 @@ export function createEventedEngineTestSuite({
         }
 
         const result = await streamResult.result;
-        return { events, result: result as WorkflowResult };
+        return { events, result: await withLoadedSteps(result) };
       } finally {
         await mastra.stopWorkers();
       }
@@ -310,7 +311,7 @@ export function createEventedEngineTestSuite({
         }
 
         const result = await streamResult.result;
-        return { events, result: result as WorkflowResult };
+        return { events, result: await withLoadedSteps(result) };
       } finally {
         await mastra.stopWorkers();
       }

@@ -13,4 +13,11 @@ const workflow = createEventedWorkflow({
 });
 ```
 
+As on the default engine, `steps` on a version 2 run's result is an async function, which `onFinish` and `onError` receive too:
+
+```ts
+const result = await run.start({ inputData });
+const steps = await result.steps();
+```
+
 On both storage versions, a nested run's messages no longer carry a copy of the parent run's step graph. On version 1, this took the same agent run from 120 MB to 86 MB of published messages.
