@@ -16,7 +16,7 @@ describe('ToolMockMatcher', () => {
 
     expect(res).toEqual({ kind: 'serve', output: { temp: 52 } });
     const report = matcher.report();
-    expect(report.served).toEqual([{ mockIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } }]);
+    expect(report.served).toEqual([{ mockIndex: 0, callIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } }]);
     expect(report.unconsumed).toEqual([]);
     expect(report.failure).toBeUndefined();
   });
