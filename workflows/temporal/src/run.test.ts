@@ -132,9 +132,12 @@ describe('TemporalRun', () => {
     expect(getHandle).not.toHaveBeenCalled();
   });
 
-  it('rejects time travel while the source execution is semantically running', async () => {
+  it('rejects time travel while the Temporal source execution is running', async () => {
     const query = vi.fn().mockResolvedValue({ status: 'running', input: { value: 1 }, state: {}, steps: {} });
-    const describe = vi.fn().mockResolvedValue({ runId: 'temporal-run-1' });
+    const describe = vi.fn().mockResolvedValue({
+      runId: 'temporal-run-1',
+      status: { name: 'RUNNING' },
+    });
     const start = vi.fn();
     const getHandle = vi.fn().mockReturnValue({ query, describe });
     const workflow = createWorkflow(
@@ -148,11 +151,63 @@ describe('TemporalRun', () => {
     expect(start).not.toHaveBeenCalled();
   });
 
+  it('uses the closed Temporal execution status when the Mastra snapshot is stale after cancellation', async () => {
+    const schema = z.object({ value: z.number() });
+    const target = createStep({
+      id: 'target',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+    const sourceStatus = {
+      status: 'running',
+      input: { value: 1 },
+      state: {},
+      steps: {},
+    };
+    const sourceHandle = {
+      describe: vi.fn().mockResolvedValue({
+        runId: 'temporal-run-1',
+        status: { name: 'CANCELLED' },
+      }),
+      query: vi.fn().mockResolvedValue(sourceStatus),
+    };
+    const replacementHandle = {
+      result: vi.fn().mockResolvedValue({
+        status: 'success',
+        input: { value: 1 },
+        state: {},
+        steps: {},
+        result: { value: 2 },
+      }),
+      query: vi.fn(),
+    };
+    const signalWithStart = vi.fn().mockImplementation(async (_workflowType, options) => {
+      replacementHandle.query.mockResolvedValue({ operation: 'timeTravel', token: options.signalArgs[0].token });
+      return replacementHandle;
+    });
+    const getHandle = vi.fn().mockReturnValue(sourceHandle);
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { getHandle, signalWithStart } } as unknown as Client, taskQueue: 'test-queue' },
+    )
+      .then(target)
+      .commit();
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.timeTravel({ step: 'target' })).resolves.toMatchObject({
+      status: 'success',
+      result: { value: 2 },
+    });
+    expect(signalWithStart).toHaveBeenCalledOnce();
+  });
+
   it('surfaces source status query failures without starting a replacement', async () => {
     const queryError = new Error('Temporal service unavailable');
     const query = vi.fn().mockRejectedValue(queryError);
+    const describe = vi.fn().mockResolvedValue({ runId: 'temporal-run-1', status: { name: 'COMPLETED' } });
     const start = vi.fn();
-    const getHandle = vi.fn().mockReturnValue({ query });
+    const getHandle = vi.fn().mockReturnValue({ query, describe });
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
       { client: { workflow: { getHandle, start } } as unknown as Client, taskQueue: 'test-queue' },

@@ -493,8 +493,10 @@ export class TemporalRun<
     }
 
     const sourceHandle = this.client.workflow.getHandle(this.runId);
+    let sourceDescription: Awaited<ReturnType<typeof sourceHandle.describe>>;
     let sourceStatus: unknown;
     try {
+      sourceDescription = await sourceHandle.describe();
       sourceStatus = await sourceHandle.query('mastra.status');
     } catch (error) {
       throw new TemporalWorkflowStatusUnknownError(this.runId, error);
@@ -503,7 +505,10 @@ export class TemporalRun<
       throw new Error(`Temporal workflow status for run "${this.runId}" is invalid.`);
     }
     const status = sourceStatus as Record<string, any>;
-    if (status.status === 'running') {
+    const sourceExecutionIsOpen = sourceDescription.status?.name
+      ? sourceDescription.status.name === 'RUNNING'
+      : status.status === 'running' || status.status === 'suspended';
+    if (sourceExecutionIsOpen && status.status === 'running') {
       throw new Error('This workflow run is still running, cannot time travel');
     }
 
@@ -585,10 +590,12 @@ export class TemporalRun<
     await this._validateRequestContext(requestContext as RequestContext<unknown>);
 
     const claimToken =
-      status.status === 'suspended' ? await this.claimExecution(sourceHandle, 'timeTravel') : undefined;
+      sourceExecutionIsOpen && status.status === 'suspended'
+        ? await this.claimExecution(sourceHandle, 'timeTravel')
+        : undefined;
 
     try {
-      const previousTemporalRunId = (await sourceHandle.describe()).runId;
+      const previousTemporalRunId = sourceDescription.runId;
       const workflowArgs = {
         inputData: status.input,
         initialState: timeTravel.state,
