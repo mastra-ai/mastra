@@ -348,8 +348,11 @@ export function createMapResultsStep<OUTPUT = undefined>({
         // without a Memory instance or a thread option.
         beforeDeadlineSave: async () => {
           const memoryContext = parseMemoryRequestContext(requestContext);
+          // A read-only run saves nothing at the deadline. MessageHistory only reads the request
+          // context's config, so a per-run readOnly has to stop the pass here.
+          if (memoryConfig?.readOnly || memoryContext?.memoryConfig?.readOnly) return false;
           const threadId = memoryContext?.thread?.id ?? memoryData.thread?.id ?? result.threadId;
-          if (threadId && !memoryConfig?.readOnly && !memoryContext?.memoryConfig?.readOnly) {
+          if (threadId) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
           }
         },

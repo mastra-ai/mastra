@@ -466,6 +466,60 @@ describe('Agent FGA checks', () => {
           .mock.calls.some(([, input]) => input.permission === 'memory:write' && input.resource.id === 'thread-ctx'),
       ).toBe(true);
     });
+
+    it('does not save a read-only run at the total deadline when history has no Memory', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      vi.mocked(fgaProvider.require).mockImplementation(async (_user, input) => {
+        if (input.permission === 'memory:write') {
+          throw new FGADeniedError({ id: 'user-1' }, input.resource, input.permission);
+        }
+      });
+      const store = new InMemoryStore();
+      const storage = (await store.getStore('memory'))!;
+      const saveMessages = vi.spyOn(storage, 'saveMessages');
+      const hang = createTool({
+        id: 'hang',
+        description: 'never finishes',
+        inputSchema: z.object({}),
+        execute: (_input, { abortSignal }) =>
+          new Promise(resolve => abortSignal?.addEventListener('abort', () => resolve({ done: true }))),
+      });
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [
+            { type: 'tool-call', toolCallType: 'function', toolCallId: 'call_hang', toolName: 'hang', input: '{}' },
+          ],
+        }),
+      });
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model,
+        tools: { hang },
+        outputProcessors: [new MessageHistory({ storage })],
+      });
+      new Mastra({ agents: { testAgent: agent }, logger: false, storage: store, server: { fga: fgaProvider } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await expect(
+        agent.generate('test', {
+          requestContext: requestContext as any,
+          memory: { thread: 'thread-ro', resource: 'resource-1', options: { readOnly: true } },
+          modelSettings: { timeout: { totalMs: 300 } },
+        } as any),
+      ).rejects.toThrow();
+
+      // Give a save that slipped through time to land.
+      await new Promise(resolve => setTimeout(resolve, 1_500));
+      expect(saveMessages).not.toHaveBeenCalled();
+      expect(await storage.getThreadById({ threadId: 'thread-ro' })).toBeNull();
+    });
   });
 
   describe('stream()', () => {

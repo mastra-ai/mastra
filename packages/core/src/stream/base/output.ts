@@ -2141,7 +2141,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const turn = self.messageList.cloneWithCompletedSteps(self.#bufferedByStep.text);
                 const deadlinePass = (async () => {
                   try {
-                    await beforeDeadlineSave();
+                    if ((await beforeDeadlineSave()) === false) return;
                   } catch (authError) {
                     self.logger?.warn('Memory write denied at the total deadline, the turn is not saved', {
                       error: authError,
