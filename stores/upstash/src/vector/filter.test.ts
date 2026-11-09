@@ -403,6 +403,20 @@ describe('UpstashFilterTranslator', () => {
       expect(translator.translate({ $not: { tags: [] } })).toBe('(HAS FIELD empty OR HAS NOT FIELD empty)');
       expect(translator.translate({ $not: { meta: { x: 1, y: { $gt: 2 } } } })).toBe('(meta.x != 1 OR meta.y <= 2)');
     });
+
+    it('negates $all as an OR of NOT CONTAINS', () => {
+      expect(translator.translate({ $not: { a: { $all: ['x', 'y'] } } })).toBe(
+        "(a NOT CONTAINS 'x' OR a NOT CONTAINS 'y')",
+      );
+      expect(translator.translate({ a: { $not: { $all: ['x'] } } })).toBe("a NOT CONTAINS 'x'");
+      expect(translator.translate({ a: { $not: { $all: [] } } })).toBe('(HAS FIELD empty AND HAS NOT FIELD empty)');
+    });
+
+    it('throws for operators it cannot negate instead of emitting a != comparison', () => {
+      expect(() => translator.translate({ $not: { a: { $not: { $eq: 1 } } } } as any)).toThrow(
+        'Unsupported operator in NOT: $not',
+      );
+    });
   });
 
   describe('array access', () => {

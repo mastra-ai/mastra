@@ -171,6 +171,12 @@ export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorF
     if (op === '$in') return `${path} NOT IN (${this.formatArray(val as any[])})`;
     if (op === '$nin') return `${path} IN (${this.formatArray(val as any[])})`;
     if (op === '$exists') return val ? `HAS NOT FIELD ${path}` : `HAS FIELD ${path}`;
+    if (op === '$all') {
+      // Positive $all is an AND of CONTAINS (always true when empty), so its negation is an OR of NOT CONTAINS
+      if (!Array.isArray(val) || val.length === 0) return '(HAS FIELD empty AND HAS NOT FIELD empty)';
+      const negated = val.map(item => `${path} NOT CONTAINS ${this.formatValue(item)}`);
+      return negated.length > 1 ? `(${negated.join(' OR ')})` : negated[0]!;
+    }
 
     // Transform NOT(AND) into OR(NOT) and NOT(OR) into AND(NOT), negating each condition as a whole
     if (op === '$and' || op === '$or') {
@@ -184,7 +190,7 @@ export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorF
       return this.translateOperator('$or', val, '');
     }
 
-    return `${path} != ${this.formatValue(val)}`;
+    throw new Error(`Unsupported operator in NOT: ${op}`);
   }
 
   private formatValue(value: any): string {
