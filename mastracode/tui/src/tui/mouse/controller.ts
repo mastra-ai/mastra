@@ -64,6 +64,8 @@ export class MouseController {
         timer: ReturnType<typeof setTimeout>;
         /** The dialog on top when the event arrived; the event is dropped if another replaces it. */
         overlay: Component | undefined;
+        /** Where pi-tui expected the cursor when the query went out; the reply describes that frame. */
+        expectedCursorRow: number;
       }
     | undefined;
   private lastHoverCell: string | undefined;
@@ -322,7 +324,13 @@ export class MouseController {
       // Without a reply, modals fall back to assuming the frame is bottom-aligned with the screen.
       if (timedOut) this.resolvePointer(timedOut, undefined);
     }, CURSOR_POSITION_TIMEOUT_MS);
-    this.pendingPointer = { event, action, timer, overlay: this.topOverlayComponent() };
+    this.pendingPointer = {
+      event,
+      action,
+      timer,
+      overlay: this.topOverlayComponent(),
+      expectedCursorRow: this.expectedCursorRow(),
+    };
     this.outstandingCursorQueries++;
     this.ui.terminal.write(REQUEST_CURSOR_POSITION);
   }
@@ -332,7 +340,8 @@ export class MouseController {
       event,
       action,
       overlay: origin,
-    }: { event: TerminalMouseEvent; action: MouseAction; overlay: Component | undefined },
+      expectedCursorRow,
+    }: { event: TerminalMouseEvent; action: MouseAction; overlay: Component | undefined; expectedCursorRow: number },
     cursorRow: number | undefined,
   ): void {
     // Keys aren't held up by the cursor query, so a dialog can close or open while it's in flight
@@ -347,7 +356,7 @@ export class MouseController {
     }
     const overlay = this.dialogOverlay();
     if (overlay) {
-      const shifted = { ...event, row: event.row - (cursorRow === undefined ? 0 : this.overlayRowShift(cursorRow)) };
+      const shifted = { ...event, row: event.row - (cursorRow === undefined ? 0 : cursorRow - expectedCursorRow) };
       // Pointer events outside the modal are ignored; the modal stays in control.
       if (action === 'click') {
         const target = this.locateInOverlay(overlay, shifted)?.target;
@@ -392,14 +401,14 @@ export class MouseController {
   }
 
   /**
-   * How far the real screen is offset from where TUI.compositeOverlays places
-   * overlays (it assumes the last frame line is the bottom screen row).
+   * The screen row pi-tui believes the cursor is on, assuming the last frame line is the
+   * bottom screen row as TUI.compositeOverlays does. A cursor reply minus this is how far the
+   * real screen is offset from where overlays are drawn.
    */
-  private overlayRowShift(cursorRow: number): number {
+  private expectedCursorRow(): number {
     const internals = tuiInternals(this.ui);
     const viewportStart = Math.max(0, internals.previousLines.length - this.ui.terminal.rows);
-    const expectedCursorRow = internals.hardwareCursorRow - viewportStart + 1;
-    return cursorRow - expectedCursorRow;
+    return internals.hardwareCursorRow - viewportStart + 1;
   }
 
   /**

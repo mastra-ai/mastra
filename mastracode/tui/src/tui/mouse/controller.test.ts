@@ -204,9 +204,29 @@ describe('MouseController on the real pi-tui renderer', () => {
     first.handle.hide();
     const second = modalWithList(harness.ui, 3);
     await harness.render();
-    await new Promise(resolve => setTimeout(resolve, 250));
+    harness.send(`\x1b[${harness.screen.buffer.active.cursorY + 1};1R`);
+    await harness.render();
     expect(first.selected).toEqual([]);
     expect(second.selected).toEqual([]);
+  });
+
+  it('maps a click by the frame its cursor reply describes, even if the frame redraws while it waits', async () => {
+    harness = createHarness({ answerCursorQueries: false });
+    const { selected } = modalWithList(harness.ui, 5);
+    harness.ui.children.unshift(new Text(Array.from({ length: 20 }, (_, i) => `seed ${i}`).join('\n'), 0, 0));
+    await harness.render();
+    const item = harness.find('item-1');
+    const replyRow = harness.screen.buffer.active.cursorY + 1;
+    await harness.click(item.row, item.col);
+
+    // Streamed output grows the frame before the terminal answers; the dialog stays put.
+    harness.ui.children.unshift(new Text(Array.from({ length: 6 }, (_, i) => `out ${i}`).join('\n'), 0, 0));
+    await harness.render();
+    expect(harness.find('item-1')).toEqual(item);
+
+    harness.send(`\x1b[${replyRow};1R`);
+    await harness.render();
+    expect(selected).toEqual(['item-1']);
   });
 
   it('swallows a cursor position reply that arrives after the query timed out', async () => {
