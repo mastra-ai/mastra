@@ -17,5 +17,9 @@ Use `toolMockMatchMode: 'lookup'` with `unmockedToolPolicy: 'deny'` on other exp
 `toolResult` on `ToolCallStep`, `McpToolCallStep`, and `ProviderToolCallStep` is now typed `unknown` instead of `Record<string, unknown>` because recorded tool outputs can be any JSON value. Narrow it before reading properties:
 
 ```ts
-const status = typeof step.toolResult === 'object' && step.toolResult !== null ? (step.toolResult as { status?: string }).status : undefined;
+const result = step.toolResult;
+const status =
+  typeof result === 'object' && result !== null && typeof (result as { status?: unknown }).status === 'string'
+    ? (result as { status: string }).status
+    : undefined;
 ```
