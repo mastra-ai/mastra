@@ -64,9 +64,11 @@ class TemporalExecutionEngine {
     });
     setHandler(resumeSignal, payload => {
       const claim = this.executionClaim;
-      if (claim?.operation !== 'resume' || claim.token !== payload?.claimToken) return;
+      const claimedResume = claim?.operation === 'resume' && claim.token === payload?.claimToken;
+      const tokenlessResume = claim === undefined && payload?.claimToken === undefined;
+      if (!claimedResume && !tokenlessResume) return;
       const id = this.resumeTarget(payload);
-      if (id !== claim.stepId || this.resumePayloads.has(id)) return;
+      if (claimedResume && id !== claim.stepId || this.resumePayloads.has(id)) return;
       this.resumePayloads.set(id, payload);
     });
     const updateExecutionClaim = ({
@@ -144,7 +146,8 @@ class TemporalExecutionEngine {
       }
       startIndex = targetIndex;
       for (const [id, stepResult] of Object.entries(timeTravel.stepResults ?? {})) {
-        stepResults[id] = id === 'input' || stepResult?.__temporalStepResult === true ? stepResult : {
+        if (id === 'input') continue;
+        stepResults[id] = stepResult?.__temporalStepResult === true ? stepResult : {
           __temporalStepResult: true,
           ...stepResult
         };

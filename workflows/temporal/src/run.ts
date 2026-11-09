@@ -604,7 +604,20 @@ export class TemporalRun<
       };
       let handle: WorkflowHandle;
       if (claimToken) {
-        handle = await this.startWorkflow(workflowArgs, { workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' });
+        try {
+          handle = await this.startWorkflow(workflowArgs, {
+            workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+            workflowIdConflictPolicy: 'TERMINATE_EXISTING',
+          });
+        } catch (error) {
+          if (
+            !(error instanceof WorkflowExecutionAlreadyStartedError) &&
+            (!(error instanceof Error) || error.name !== 'WorkflowExecutionAlreadyStartedError')
+          ) {
+            throw error;
+          }
+          handle = await this.startWorkflow(workflowArgs, { workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' });
+        }
       } else {
         const replacementClaimToken = randomUUID();
         handle = await this.client.workflow.signalWithStart(toWorkflowType(this.workflowId), {

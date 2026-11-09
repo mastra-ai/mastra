@@ -173,7 +173,6 @@ describe('temporal workflow runtime helper module', () => {
       result: { value: 22 },
       state: { preserved: true },
       steps: {
-        input: { value: 1 },
         first: seededFirst,
         second: succeeded({ value: 21 }),
         third: succeeded({ value: 22 }),
@@ -181,7 +180,7 @@ describe('temporal workflow runtime helper module', () => {
     });
   });
 
-  it('allows a seeded time-travel replacement to suspend and resume', async () => {
+  it('accepts a tokenless resume when no execution claim is held', async () => {
     const first = vi.fn();
     const approval = vi
       .fn()
@@ -228,7 +227,7 @@ describe('temporal workflow runtime helper module', () => {
       },
     });
 
-    resumeWorkflow({ step: 'approval' }, { approved: true });
+    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
     await expect(run).resolves.toMatchObject({
       status: 'success',
       result: { approved: true },

@@ -444,7 +444,14 @@ describe('TemporalRun', () => {
       result: vi.fn().mockResolvedValue({ status: 'success', input: { value: 1 }, state: {}, steps: {}, result: {} }),
       query: vi.fn(),
     };
-    const start = vi.fn().mockResolvedValue(replacementHandle);
+    const start = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Workflow execution already started'), {
+          name: 'WorkflowExecutionAlreadyStartedError',
+        }),
+      )
+      .mockResolvedValue(replacementHandle);
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
       {
@@ -465,7 +472,20 @@ describe('TemporalRun', () => {
       }),
     ]);
     expect(signal).toHaveBeenCalledTimes(2);
-    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenNthCalledWith(
+      1,
+      'testWorkflow',
+      expect.objectContaining({
+        workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+        workflowIdConflictPolicy: 'TERMINATE_EXISTING',
+      }),
+    );
+    expect(start).toHaveBeenNthCalledWith(
+      2,
+      'testWorkflow',
+      expect.objectContaining({ workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' }),
+    );
   });
 
   it('allows only one concurrent time-travel replacement of a completed run', async () => {
