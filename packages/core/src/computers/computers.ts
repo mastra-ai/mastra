@@ -380,19 +380,19 @@ export class Computers implements MastraComputers {
     return undefined;
   }
 
-  /** Runs `fn` on the computer attached to this thread, in call order. Takes the slot synchronously. */
-  #hands<T>(context: Context, fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>) {
+  /** Runs `fn` on the computer attached to this thread, in call order. */
+  async #hands<T>(context: Context, fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>) {
     const scope = this.#scope(context);
-    if (!scope) return Promise.resolve(MISSING_IDENTITY);
-    const id = this.#attachments.get(scope.key);
-    const entry = id ? this.#computers.get(id) : undefined;
-    if (!entry || entry.ownerResourceId !== scope.resourceId) return Promise.resolve(NOT_ATTACHED);
+    if (!scope) return MISSING_IDENTITY;
+    const entry = await this.#attachedEntry(scope);
+    const sandbox = entry?.sandbox ?? (await entry?.ready);
+    if (!entry || !sandbox || entry.ownerResourceId !== scope.resourceId) return NOT_ATTACHED;
     const refusal = this.#controlRefusal(entry);
-    if (refusal) return Promise.resolve(refusal);
+    if (refusal) return refusal;
     // Re-checked when the action runs: a take while earlier actions are in flight refuses the rest.
     const run = entry.queue.then((): T | string | Promise<T> => {
       const queuedRefusal = this.#controlRefusal(entry);
-      return queuedRefusal ?? fn(entry.sandbox!, entry.sandbox!.computer!, entry);
+      return queuedRefusal ?? fn(sandbox, sandbox.computer!, entry);
     });
     entry.queue = run.catch(() => {});
     return run;

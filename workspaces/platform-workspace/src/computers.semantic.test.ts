@@ -5,7 +5,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
-import { MastraCompositeStore } from '@mastra/core/storage';
+import { InMemoryComputersStorage, InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
 import { WORKSPACE_TOOLS, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlatformComputers } from './computers.js';
@@ -348,6 +348,23 @@ describe('semantic tools over the daemon socket', () => {
     expect(await call(computers, 'mastra_workspace_computer_semantic_type', { text: 'yo' })).toBe('typed');
     expect(daemon.requests.map(r => r.method)).toEqual(['typeText']);
     expect(machine.actions).toEqual(['boot', 'xdotool-type']);
+  });
+
+  it('recovers semantic hands after process restart without an explicit attach', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = make();
+    new Mastra({ logger: false, storage, computers: first });
+    await call(first, 'mastra_workspace_computer_create', { persist: true });
+
+    const restarted = make();
+    new Mastra({ logger: false, storage, computers: restarted });
+    machine.actions.length = 0;
+
+    await expect(call(restarted, 'mastra_workspace_computer_semantic_type', { text: 'after restart' })).resolves.toBe(
+      'typed',
+    );
+    expect(machine.actions).toEqual(['xdotool-type']);
   });
 
   it('returns an element crop as media', async () => {
