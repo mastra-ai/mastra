@@ -153,6 +153,29 @@ describe('aborting a parked durable run across servers', () => {
     expect(await res.json()).toEqual({ aborted: true });
   }
 
+  async function observe(peer: { post: (path: string, body: unknown) => Promise<Response> }, runId: string) {
+    const res = await peer.post('observe', { runId });
+    expect(res.status).toBe(200);
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let frames = '';
+    const closed = (async () => {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return true;
+        frames += decoder.decode(value, { stream: true });
+      }
+    })();
+    return {
+      async end() {
+        const timeout = new Promise<false>(resolve => setTimeout(() => resolve(false), 2_000));
+        const ended = await Promise.race([closed, timeout]);
+        if (!ended) await reader.cancel();
+        return { ended, aborts: frames.match(/"type":"abort"/g)?.length ?? 0 };
+      },
+    };
+  }
+
   it('runs the tool when another server approves a run that was not aborted', async () => {
     const { other, runId, toolRuns } = await setup();
     const approved = await other.post('approve-tool-call', { runId, toolCallId: 'call-fetch-1' });
@@ -168,12 +191,18 @@ describe('aborting a parked durable run across servers', () => {
   ] as const)('refuses the approval when %s aborted it and %s approves', async (_a, _b, abortOn, approveOn) => {
     const setupResult = await setup();
     const { runId, toolRuns } = setupResult;
+    const observers = [await observe(setupResult.executor, runId), await observe(setupResult.other, runId)];
     await abort(setupResult[abortOn], runId);
 
     const approved = await setupResult[approveOn].post('approve-tool-call', { runId, toolCallId: 'call-fetch-1' });
     const text = await approved.text();
     expect({ status: approved.status, toolRuns: toolRuns() }).toEqual({ status: 409, toolRuns: 0 });
     expect(JSON.parse(text)).toMatchObject({ error: expect.stringContaining(`cannot resume aborted run "${runId}"`) });
+    // Observers on both servers close with one abort, whichever server aborted or refused.
+    expect(await Promise.all(observers.map(o => o.end()))).toEqual([
+      { ended: true, aborts: 1 },
+      { ended: true, aborts: 1 },
+    ]);
   });
 
   it('closes an observer of the aborted run once when its approval is refused', async () => {
@@ -229,8 +258,9 @@ describe('aborting a parked durable run across servers', () => {
       for (;;) if ((await reader.read()).done) return true;
     })();
 
-    await abort(executor, runId);
+    // The abort's own publish fails; the cancel is stored anyway and the refusal retries it.
     faults.failNextAbort = true;
+    await abort(executor, runId);
     for (let attempt = 0; attempt < 2; attempt++) {
       const approved = await executor.post('approve-tool-call', { runId, toolCallId: 'call-fetch-1' });
       await approved.text();

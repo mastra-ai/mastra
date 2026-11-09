@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
 import { EventEmitterPubSub } from '@mastra/core/events';
@@ -10,7 +12,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { LanceStorage } from './index';
 
-const dbPath = 'lance-parked-run-abort';
+const dbPath = await fs.mkdtemp(path.join(os.tmpdir(), 'lance-parked-run-abort-'));
 
 function chunks(parts: any[]) {
   return new ReadableStream({

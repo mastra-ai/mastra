@@ -2844,11 +2844,12 @@ export class DurableAgent<
     }
     if (super.abortRunStream(runId)) {
       this.#abortDurableRun(runId);
-      await this.#cancelParkedRun(runId);
+      if (await this.#cancelParkedRun(runId)) await this.#announceCanceledRun(runId);
       return true;
     }
     try {
       const canceled = await this.#cancelParkedRun(runId);
+      if (canceled) await this.#announceCanceledRun(runId);
       return (await requestAcknowledgedAbort(this.pubsub, runId)) || canceled;
     } finally {
       this.#abortLocalController(runId);
@@ -2894,6 +2895,40 @@ export class DurableAgent<
     return written !== false;
   }
 
+  /**
+   * Publish the abort terminal for a parked run this call just canceled. The bus is
+   * shared, so observers on every server close now, whichever server later refuses
+   * the approval. Only the call that won the cancel publishes. A failed publish does
+   * not undo the abort: the cancel is already stored, and a refused resume on this
+   * server retries the publish.
+   */
+  async #announceCanceledRun(runId: string): Promise<void> {
+    try {
+      await this.#publishCanceledRunTerminal(runId);
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn?.(`Failed to publish the abort of canceled run ${runId}`, { runId, error });
+    }
+  }
+
+  /**
+   * Publish the abort terminal of a canceled run once per process. Reserved before the
+   * publish, so concurrent callers publish once; released if the publish fails, so the
+   * next caller retries it.
+   */
+  async #publishCanceledRunTerminal(runId: string): Promise<void> {
+    if (this.#canceledRunTerminals.has(runId)) return;
+    this.#canceledRunTerminals.add(runId);
+    if (this.#canceledRunTerminals.size > 1000) {
+      this.#canceledRunTerminals.delete(this.#canceledRunTerminals.values().next().value!);
+    }
+    try {
+      await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
+    } catch (error) {
+      this.#canceledRunTerminals.delete(runId);
+      throw error;
+    }
+  }
+
   async #isRunCanceledInStorage(runId: string): Promise<boolean> {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     const status = await workflowsStore?.loadWorkflowRunStatus({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
@@ -2918,7 +2953,8 @@ export class DurableAgent<
    * Done here rather than at abort time: a run still executing in this process unwinds
    * through its own abort path, which reads the snapshot.
    * A run the abort already marked `canceled` keeps its row, since that row is what
-   * stops other servers from resuming it; it still gets the abort terminal, once.
+   * stops other servers from resuming it; its abort terminal was published by the
+   * abort, and is published here only if that publish failed.
    */
   async #deleteFencedSuspendedRun(runId: string): Promise<void> {
     try {
@@ -2929,19 +2965,7 @@ export class DurableAgent<
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted?.snapshot;
       if (snapshot?.status === 'canceled') {
-        // Reserved before the publish, so concurrent rejections publish once; released
-        // if the publish fails, so the next rejection retries it.
-        if (this.#canceledRunTerminals.has(runId)) return;
-        this.#canceledRunTerminals.add(runId);
-        if (this.#canceledRunTerminals.size > 1000) {
-          this.#canceledRunTerminals.delete(this.#canceledRunTerminals.values().next().value!);
-        }
-        try {
-          await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
-        } catch (error) {
-          this.#canceledRunTerminals.delete(runId);
-          throw error;
-        }
+        await this.#publishCanceledRunTerminal(runId);
         return;
       }
       if (snapshot?.status !== 'suspended') return;
