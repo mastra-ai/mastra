@@ -379,14 +379,16 @@ export async function buildMessageEmbeddingRows({
   const rows: MessageEmbeddingRows = { ids: [], metadata: [], embeddedEntries: [] };
   if (pending.length === 0) return rows;
 
-  const allChunks = pending.flatMap(entry => entry.chunks);
   if (embedder) {
-    const embedded = await embedTexts(embedder, allChunks, embedderOptions);
-    rows.vectors = embedded.embeddings;
-    rows.dimension = embedded.dimension;
-    rows.usage = embedded.usage;
+    // One embedder call per message, as both writers made before, so a request never carries
+    // more than one message's chunks.
+    const embedded = await Promise.all(pending.map(entry => embedTexts(embedder, entry.chunks, embedderOptions)));
+    rows.vectors = embedded.flatMap(result => result.embeddings);
+    rows.dimension = rows.vectors[0]?.length;
+    const tokens = embedded.reduce((sum, result) => sum + (result.usage?.tokens ?? 0), 0);
+    if (tokens > 0) rows.usage = { tokens };
   } else {
-    rows.documents = allChunks;
+    rows.documents = pending.flatMap(entry => entry.chunks);
   }
 
   for (const { message, text, textHash, chunks } of pending) {

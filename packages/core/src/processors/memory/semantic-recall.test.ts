@@ -41,6 +41,7 @@ describe('SemanticRecall', () => {
     // Mock storage
     mockStorage = {
       listMessages: vi.fn(),
+      getThreadById: vi.fn().mockResolvedValue(null),
     } as any;
 
     // Mock vector store
@@ -53,6 +54,8 @@ describe('SemanticRecall', () => {
 
     // Mock embedder
     mockEmbedder = {
+      specificationVersion: 'v2',
+      provider: 'openai',
       doEmbed: vi.fn(),
       modelId: 'text-embedding-3-small',
     } as any;
@@ -146,9 +149,11 @@ describe('SemanticRecall', () => {
       expect(resultMessages[2].id).toBe('msg-new');
 
       // Verify embedder was called with user query
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['How do I use the API?'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: ['How do I use the API?'],
+        }),
+      );
 
       // Verify vector query was called
       expect(mockVector.query).toHaveBeenCalledWith({
@@ -563,9 +568,11 @@ describe('SemanticRecall', () => {
       });
 
       // Should combine text parts
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Part 1 Part 2'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: ['Part 1 Part 2'],
+        }),
+      );
     });
 
     it('should avoid duplicate message IDs', async () => {
@@ -1017,10 +1024,13 @@ describe('SemanticRecall', () => {
     it('should create embeddings for both user and assistant messages', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi
           .fn()
@@ -1083,12 +1093,8 @@ describe('SemanticRecall', () => {
       expect(result).toBe(messageList);
 
       // Should create embeddings for both messages (called separately)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['What is the weather?'],
-      });
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['The weather is sunny.'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['What is the weather?'] }));
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['The weather is sunny.'] }));
 
       // Should upsert embeddings to vector store
       expect(mockVector.upsert).toHaveBeenCalledWith({
@@ -1122,10 +1128,13 @@ describe('SemanticRecall', () => {
     it('should skip system messages when creating embeddings', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi
           .fn()
@@ -1189,9 +1198,7 @@ describe('SemanticRecall', () => {
       });
 
       // Should only create embedding for user message, not system
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Hello'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['Hello'] }));
 
       expect(mockVector.upsert).toHaveBeenCalledWith({
         vectors: [[0.1, 0.2, 0.3]],
@@ -1213,10 +1220,13 @@ describe('SemanticRecall', () => {
     it('should handle messages with no text content', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi.fn().mockResolvedValue({
           embeddings: [[0.1, 0.2, 0.3]],
@@ -1275,9 +1285,7 @@ describe('SemanticRecall', () => {
       });
 
       // Should only create embedding for message with content
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Hello'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['Hello'] }));
 
       expect(mockVector.upsert).toHaveBeenCalledWith({
         vectors: [[0.1, 0.2, 0.3]],
@@ -1294,10 +1302,13 @@ describe('SemanticRecall', () => {
     it('should create vector index if it does not exist', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi.fn().mockResolvedValue({
           embeddings: [[0.1, 0.2, 0.3]],
@@ -1355,10 +1366,13 @@ describe('SemanticRecall', () => {
     it('should use custom index name if provided', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi.fn().mockResolvedValue({
           embeddings: [[0.1, 0.2, 0.3]],
@@ -1423,10 +1437,13 @@ describe('SemanticRecall', () => {
     it('should return original messages when no threadId', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi.fn(),
       };
@@ -1479,10 +1496,13 @@ describe('SemanticRecall', () => {
     it('should skip embedding messages when memoryConfig.readOnly is true', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi.fn(),
       };
@@ -1537,10 +1557,13 @@ describe('SemanticRecall', () => {
     it('should handle embedding errors gracefully', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi.fn().mockRejectedValue(new Error('Embedding service unavailable')),
       };
@@ -1597,10 +1620,13 @@ describe('SemanticRecall', () => {
       // (as is the case in runOutputProcessors), it still embeds user messages from the messageList
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi
           .fn()
@@ -1666,12 +1692,8 @@ describe('SemanticRecall', () => {
 
       // Should create embeddings for BOTH user and assistant messages
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['The weather is sunny.'],
-      });
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['What is the weather?'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['The weather is sunny.'] }));
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['What is the weather?'] }));
 
       // Should upsert embeddings for both messages
       expect(mockVector.upsert).toHaveBeenCalledWith({
@@ -1697,10 +1719,13 @@ describe('SemanticRecall', () => {
     it('should handle vector store errors gracefully', async () => {
       const mockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const mockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-model',
         doEmbed: vi.fn().mockResolvedValue({
           embeddings: [[0.1, 0.2, 0.3]],
@@ -1824,9 +1849,7 @@ describe('SemanticRecall', () => {
       });
 
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Hello world'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['Hello world'] }));
 
       const messageList2 = new MessageList();
       messageList2.add([message2], 'input');
@@ -1855,9 +1878,7 @@ describe('SemanticRecall', () => {
 
       // Should now be 2 calls (new content)
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
-      expect(mockEmbedder.doEmbed).toHaveBeenLastCalledWith({
-        values: ['Different content'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenLastCalledWith(expect.objectContaining({ values: ['Different content'] }));
     });
 
     it('should cache embeddings for processInput queries', async () => {
@@ -1967,15 +1988,17 @@ describe('SemanticRecall', () => {
       });
 
       // Verify embedder was called with providerOptions
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Test query'],
-        providerOptions: {
-          google: {
-            outputDimensionality: 384,
-            taskType: 'RETRIEVAL_DOCUMENT',
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: ['Test query'],
+          providerOptions: {
+            google: {
+              outputDimensionality: 384,
+              taskType: 'RETRIEVAL_DOCUMENT',
+            },
           },
-        },
-      });
+        }),
+      );
     });
 
     it('should pass embedderOptions during output processing (embedding generation)', async () => {
@@ -1989,10 +2012,13 @@ describe('SemanticRecall', () => {
 
       const localMockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const localMockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'google',
         modelId: 'gemini-embedding-001',
         doEmbed: vi.fn().mockResolvedValue({
           embeddings: [[0.1, 0.2, 0.3]],
@@ -2041,14 +2067,16 @@ describe('SemanticRecall', () => {
       });
 
       // Verify embedder was called with providerOptions
-      expect(localMockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Hello'],
-        providerOptions: {
-          google: {
-            outputDimensionality: 768,
+      expect(localMockEmbedder.doEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: ['Hello'],
+          providerOptions: {
+            google: {
+              outputDimensionality: 768,
+            },
           },
-        },
-      });
+        }),
+      );
     });
 
     it('should work without embedderOptions (backwards compatibility)', async () => {
@@ -2089,9 +2117,7 @@ describe('SemanticRecall', () => {
       });
 
       // Verify embedder was called with only values (no extra options)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Test query'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['Test query'] }));
     });
 
     it('should pass non-providerOptions embedderOptions (like maxRetries)', async () => {
@@ -2135,12 +2161,9 @@ describe('SemanticRecall', () => {
         requestContext,
       });
 
-      // Verify embedder was called with maxRetries and maxParallelCalls
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Test query'],
-        maxRetries: 5,
-        maxParallelCalls: 2,
-      });
+      // The AI SDK applies maxRetries and maxParallelCalls itself, so they never reach doEmbed.
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(mockEmbedder.doEmbed).mock.calls[0]![0]).not.toHaveProperty('maxRetries');
     });
 
     it('should handle empty embedderOptions object', async () => {
@@ -2180,18 +2203,19 @@ describe('SemanticRecall', () => {
       });
 
       // Verify embedder was called (empty object spread is fine)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Test query'],
-      });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['Test query'] }));
     });
 
     it('should handle embedding errors gracefully when embedderOptions are configured', async () => {
       const localMockStorage = {
         listMessages: vi.fn(),
+        getThreadById: vi.fn().mockResolvedValue(null),
         saveMessages: vi.fn(),
       };
 
       const localMockEmbedder = {
+        specificationVersion: 'v2',
+        provider: 'google',
         modelId: 'gemini-embedding-001',
         doEmbed: vi.fn().mockRejectedValue(new Error('Invalid outputDimensionality value')),
       };
@@ -2247,14 +2271,16 @@ describe('SemanticRecall', () => {
       // Should return messageList (no transformation, just side effect embedding)
       expect(result).toBe(messageList);
       // Embedder should have been called with the providerOptions
-      expect(localMockEmbedder.doEmbed).toHaveBeenCalledWith({
-        values: ['Hello'],
-        providerOptions: {
-          google: {
-            outputDimensionality: -1,
+      expect(localMockEmbedder.doEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: ['Hello'],
+          providerOptions: {
+            google: {
+              outputDimensionality: -1,
+            },
           },
-        },
-      });
+        }),
+      );
       // Vector upsert should not be called since embedding failed
       expect(localMockVector.upsert).not.toHaveBeenCalled();
     });
@@ -2326,6 +2352,7 @@ describe('SemanticRecall', () => {
           perPage: false,
           hasMore: false,
         }),
+        getThreadById: vi.fn().mockResolvedValue(null),
       } as any;
 
       const requestContext = new RequestContext();
@@ -2339,6 +2366,8 @@ describe('SemanticRecall', () => {
         doEmbed: vi.fn().mockResolvedValue({
           embeddings: [Array(384).fill(0.1)],
         }),
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'fastembed-base',
       } as any;
 
@@ -2379,6 +2408,8 @@ describe('SemanticRecall', () => {
         doEmbed: vi.fn().mockResolvedValue({
           embeddings: [Array(1536).fill(0.1)],
         }),
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'text-embedding-3-small',
       } as any;
 
@@ -2467,12 +2498,15 @@ describe('SemanticRecall', () => {
           perPage: false,
           hasMore: false,
         }),
+        getThreadById: vi.fn().mockResolvedValue(null),
       } as any;
 
       const embedder = {
         doEmbed: vi.fn().mockResolvedValue({
           embeddings: [Array(384).fill(0.1)],
         }),
+        specificationVersion: 'v2',
+        provider: 'test',
         modelId: 'test-embedder',
       } as any;
 
@@ -2620,7 +2654,7 @@ describe('SemanticRecall', () => {
 
       await runProcessor(messageList);
 
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({ values: [USER_TEXT] });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: [USER_TEXT] }));
       expect(mockVector.query).toHaveBeenCalledTimes(1);
 
       const block = recalledBlock(messageList);
@@ -2644,7 +2678,7 @@ describe('SemanticRecall', () => {
 
       await runProcessor(messageList);
 
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({ values: [USER_TEXT] });
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: [USER_TEXT] }));
       expect(mockVector.query).toHaveBeenCalledTimes(1);
 
       const block = recalledBlock(messageList);
