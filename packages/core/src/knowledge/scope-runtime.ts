@@ -28,6 +28,15 @@ export interface KnowledgeAccessExplanation {
   reason?: 'missing' | 'hidden' | 'no-rule';
 }
 
+type ScopeMatch = NonNullable<ReturnType<CompiledKnowledgeScopes['match']>>;
+type HeldPrincipals = Map<string, Array<{ principal: string; params: ScopeMatch['params'] }>>;
+/** Scope pages a write-run start has looked up or written, and the addresses it wrote. */
+type KnownScopes = { byAddress: Map<string, KnowledgePage>; byId: Map<string, KnowledgePage>; written: Set<string> };
+type MaterializeRun = { held: HeldPrincipals; known?: KnownScopes };
+
+/** Most scope addresses one write-run start lookup query carries. */
+export const KNOWLEDGE_SCOPE_LOOKUP_CHUNK = 1000;
+
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
   readonly compiled: CompiledKnowledgeScopes;
@@ -202,19 +211,146 @@ export class KnowledgeScopeRuntime {
     address: string,
     principals: readonly string[],
     provenance: KnowledgeProvenance,
-    ancestors: readonly string[] = [],
   ): Promise<KnowledgePage> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
+    return this.#materialize(address, principals, provenance, [], { held: this.#held(principals) });
+  }
+
+  /**
+   * {@link materializeScope} for each address in turn (a write-run start's principals), deciding from
+   * one scope lookup which need a store call. A scope that exists, has its template children, and
+   * needs no new `belongsTo` link only gets the warnings the store path would give. Declarations with
+   * template pages take the store path until written once in this call, which restores missing pages.
+   */
+  async materializeScopes(
+    addresses: readonly string[],
+    principals: readonly string[],
+    provenance: KnowledgeProvenance,
+  ): Promise<void> {
+    this.validatePrincipals(principals);
+    await this.checkDeclarations();
+    const storage = await this.getStorage();
+    const wanted = new Set<string>();
+    for (const address of addresses) {
+      wanted.add(address);
+      const match = this.compiled.match(address);
+      if (match?.compiled.child) wanted.add(address.slice(0, address.lastIndexOf('/')));
+      else for (const child of match?.compiled.children ?? []) wanted.add(`${address}/${child.child!.name}`);
+    }
+    const known: KnownScopes = { byAddress: new Map(), byId: new Map(), written: new Set() };
+    const lookup = [...wanted];
+    // One query per chunk, in turn, so a large principal set neither grows one query nor holds several connections.
+    for (let i = 0; i < lookup.length; i += KNOWLEDGE_SCOPE_LOOKUP_CHUNK) {
+      for (const row of await storage.getScopesByAddress(lookup.slice(i, i + KNOWLEDGE_SCOPE_LOOKUP_CHUNK))) {
+        known.byAddress.set(row.address!, row);
+        known.byId.set(row.id, row);
+      }
+    }
+    const run = { held: this.#held(principals), known };
+    for (const address of addresses) await this.#materialize(address, principals, provenance, [], run);
+  }
+
+  /**
+   * The known scope page when materializing `address` would make no store call, after firing the
+   * warnings that call would. `known` holds the start's lookup plus every scope written since, so a
+   * scope's own row is current; template children created by a parent's write aren't in it, which
+   * only sends them down the store path.
+   */
+  async #placed(
+    address: string,
+    match: ScopeMatch,
+    ancestors: readonly string[],
+    run: MaterializeRun & { known: KnownScopes },
+  ): Promise<KnowledgePage | undefined> {
+    const { byAddress, byId, written } = run.known;
+    if (match.compiled.child) {
+      const child = byAddress.get(address);
+      const parentAddress = address.slice(0, address.lastIndexOf('/'));
+      const parentMatch = this.compiled.match(parentAddress);
+      if (!child || !parentMatch || ancestors.includes(parentAddress)) return undefined;
+      return (await this.#placed(parentAddress, parentMatch, [...ancestors, address], run)) && child;
+    }
+    const existing = byAddress.get(address);
+    if (!existing) return undefined;
+    if (!written.has(address)) {
+      if (match.compiled.declaration.pages?.length) return undefined;
+      if (match.compiled.children.some(child => !byAddress.has(`${address}/${child.child!.name}`))) return undefined;
+    }
+    if (!match.compiled.belongsTo) return existing;
+    const candidates = this.#belongsToCandidates(match, run.held);
+    if (candidates.length > 1) {
+      this.warn(
+        `Knowledge scope "${address}" has ambiguous belongsTo placement: ${candidates.join(', ')}. Keeping its existing placement.`,
+      );
+    } else if (candidates[0]) {
+      if (existing.parentId) {
+        let parent = byId.get(existing.parentId) ?? null;
+        if (!parent) {
+          parent = await (await this.getStorage()).getPage({ id: existing.parentId, read: 'all' });
+          if (parent) byId.set(parent.id, parent);
+        }
+        if (parent?.address !== candidates[0]) {
+          this.warn(
+            `Knowledge scope "${address}" already belongs to "${parent?.address}"; ignoring requested parent "${candidates[0]}".`,
+          );
+        }
+      } else if (!ancestors.includes(candidates[0]) && candidates[0] !== address) {
+        // Unlinked with a held parent: the store path links it.
+        return undefined;
+      } else {
+        this.warn(
+          `Knowledge scope "${address}" cannot be placed under "${candidates[0]}" because that would form a cycle.`,
+        );
+      }
+    }
+    return existing;
+  }
+
+  /** The run's distinct principals grouped by declaration key, matched once. */
+  #held(principals: readonly string[]): HeldPrincipals {
+    const held: HeldPrincipals = new Map();
+    for (const principal of new Set(principals)) {
+      const match = this.compiled.match(principal);
+      if (!match) continue;
+      const group = held.get(match.compiled.key) ?? [];
+      group.push({ principal, params: match.params });
+      held.set(match.compiled.key, group);
+    }
+    return held;
+  }
+
+  #belongsToCandidates(match: ScopeMatch, held: HeldPrincipals): string[] {
+    const belongsTo = match.compiled.belongsTo!;
+    return (held.get(belongsTo.key) ?? [])
+      .filter(candidate =>
+        belongsTo.params.every(
+          param => match.params[param] === undefined || candidate.params[param] === match.params[param],
+        ),
+      )
+      .map(candidate => candidate.principal);
+  }
+
+  async #materialize(
+    address: string,
+    principals: readonly string[],
+    provenance: KnowledgeProvenance,
+    ancestors: readonly string[],
+    run: MaterializeRun,
+  ): Promise<KnowledgePage> {
     const match = this.compiled.match(address);
     if (!match)
       throw new KnowledgeDeclarationError(`Knowledge scope "${address}" does not match a declared scope type.`);
     if (ancestors.includes(address))
       throw new KnowledgeDeclarationError(`Knowledge scope placement cycle at "${address}".`);
+    if (run.known) {
+      const placed = await this.#placed(address, match, ancestors, { ...run, known: run.known });
+      if (placed) return placed;
+    }
     const storage = await this.getStorage();
     if (match.compiled.child) {
       const parentAddress = address.slice(0, address.lastIndexOf('/'));
-      await this.materializeScope(parentAddress, principals, provenance, [...ancestors, address]);
+      await this.#materialize(parentAddress, principals, provenance, [...ancestors, address], run);
       const [child] = await storage.getScopesByAddress([address]);
       if (!child) throw new Error(`Knowledge template child "${address}" was not materialized.`);
       return child;
@@ -224,13 +360,7 @@ export class KnowledgeScopeRuntime {
     let parentId = existing?.parentId;
     const belongsTo = match.compiled.belongsTo;
     if (belongsTo) {
-      const candidates = [...new Set(principals)].filter(principal => {
-        const candidate = this.compiled.match(principal);
-        if (!candidate || candidate.compiled.key !== belongsTo.key) return false;
-        return belongsTo.params.every(
-          param => match.params[param] === undefined || candidate.params[param] === match.params[param],
-        );
-      });
+      const candidates = this.#belongsToCandidates(match, run.held);
       if (candidates.length > 1) {
         this.warn(
           `Knowledge scope "${address}" has ambiguous belongsTo placement: ${candidates.join(', ')}. Keeping its existing placement.`,
@@ -244,7 +374,7 @@ export class KnowledgeScopeRuntime {
             );
           }
         } else if (!ancestors.includes(candidates[0]) && candidates[0] !== address) {
-          parentId = (await this.materializeScope(candidates[0], principals, provenance, [...ancestors, address])).id;
+          parentId = (await this.#materialize(candidates[0], principals, provenance, [...ancestors, address], run)).id;
         } else {
           this.warn(
             `Knowledge scope "${address}" cannot be placed under "${candidates[0]}" because that would form a cycle.`,
@@ -276,6 +406,11 @@ export class KnowledgeScopeRuntime {
     }
     if (result.parentConflict) {
       this.warn(`Knowledge scope "${address}" was already linked by another run; keeping its persisted parent.`);
+    }
+    if (run.known) {
+      run.known.byAddress.set(address, result.scope);
+      run.known.byId.set(result.scope.id, result.scope);
+      run.known.written.add(address);
     }
     return result.scope;
   }
