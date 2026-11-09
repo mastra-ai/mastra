@@ -146,10 +146,12 @@ export async function fireClientToolOutputHooks({
  * building reads these same part objects, and messages saved to memory carry
  * the enrichment so memory reloads restore it without recomputing.
  *
- * Mapping markers found on wire-delivered results of client-mapped tools are
- * NOT trusted: a client could forge `mastra.modelOutput` to inject arbitrary
- * prompt content, so they are stripped and the mapping is recomputed from the
- * raw result.
+ * Mapping markers found on any wire-delivered tool result are NOT trusted: a
+ * client could forge `mastra.modelOutput` to inject arbitrary prompt content,
+ * so they are stripped and the mapping is recomputed from the raw result by
+ * the agent's own tool. That covers server tools too: their execution-time
+ * mapping comes back in returned history (e.g. `response.messages`) carrying
+ * the raw result, so recomputing it gives the same output.
  */
 export async function applyClientToolModelOutput({
   messageList,
@@ -160,10 +162,6 @@ export async function applyClientToolModelOutput({
   tools?: Record<string, CoreTool>;
   logger?: Pick<IMastraLogger, 'error'>;
 }): Promise<void> {
-  const isClientTool = (tool: CoreTool) => !tool.execute && tool.type !== 'provider-defined';
-  if (!tools) return;
-  if (!Object.values(tools).some(isClientTool)) return;
-
   for (const message of messageList.get.input.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
 
@@ -171,13 +169,7 @@ export async function applyClientToolModelOutput({
       if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
 
       const { toolName, toolCallId } = part.toolInvocation;
-      const tool = tools[toolName];
-      // Client-side tools only: tools WITH execute get toModelOutput applied at
-      // execution time by the tool-call step, and provider-executed tools are
-      // mapped by the provider round trip, not by us. Their stored mapping is
-      // left alone: it cannot be recomputed here, and conversation history
-      // passed back as input (e.g. `response.messages`) relies on it.
-      if (!tool || !isClientTool(tool)) continue;
+      const tool = tools?.[toolName];
 
       // Trust boundary: `mastra.modelOutput` / `modelOutputComputed` are
       // server-computed markers. A client could forge them on its input to
@@ -204,7 +196,10 @@ export async function applyClientToolModelOutput({
         }
       }
 
-      // The server never stores a mapping for a client tool without one.
+      // Provider-executed results are never mapped by the server, and a tool this
+      // agent doesn't define (or defines without a mapping) can't be vetted, so
+      // those keep the raw result.
+      if (!tool || tool.type === 'provider-defined' || part.providerExecuted) continue;
       const toModelOutput = tool.toModelOutput;
       if (typeof toModelOutput !== 'function') continue;
 

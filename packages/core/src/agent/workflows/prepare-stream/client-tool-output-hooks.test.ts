@@ -761,7 +761,7 @@ describe('applyClientToolModelOutput', () => {
     });
   });
 
-  it('leaves tools with a server-side execute untouched (execution path owns their mapping)', async () => {
+  it("recomputes a server tool's mapping from the raw result in returned history", async () => {
     const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
     const tools = await buildAgentTools({
       serverTools: {
@@ -780,7 +780,8 @@ describe('applyClientToolModelOutput', () => {
 
     await applyClientToolModelOutput({ messageList, tools });
 
-    expect(toModelOutput).not.toHaveBeenCalled();
+    expect(toModelOutput).toHaveBeenCalledWith('x');
+    await expect(toolResultPromptOutput(messageList, 'call-1')).resolves.toEqual({ type: 'text', value: 'mapped' });
   });
 
   it('unwraps the AI SDK v5 `{ type, value }` envelope before mapping', async () => {
@@ -1064,10 +1065,9 @@ describe('applyClientToolModelOutput', () => {
     expect(JSON.stringify(await toolResultPromptOutput(messageList, 'call-1'))).not.toContain('FORGED');
   });
 
-  it('keeps the execution-time mapping on a server-executed tool result', async () => {
-    // Server tools get toModelOutput applied when they execute; history passed
-    // back as input (e.g. `response.messages`) carries that mapping, and this
-    // function cannot recompute it, so it must leave the markers alone.
+  it('strips a mapping sent on a server tool that has no toModelOutput', async () => {
+    // The server never maps this tool, so a mapping on its returned history came
+    // from the client and must not replace the raw result.
     const serverTool = createTool({
       id: 'serverTool',
       description: 'runs on the server',
@@ -1113,11 +1113,8 @@ describe('applyClientToolModelOutput', () => {
     await applyClientToolModelOutput({ messageList, tools });
 
     const part = findResultPart(messageList);
-    expect(part.providerMetadata?.mastra?.modelOutput).toEqual(executionMapping);
-    await expect(toolResultPromptOutput(messageList, 'call-2')).resolves.toMatchObject({
-      type: 'content',
-      value: [{ type: 'text', text: 'picture file' }, { type: 'media' }],
-    });
+    expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+    expect(JSON.stringify(await toolResultPromptOutput(messageList, 'call-2'))).not.toContain('aW1hZ2U=');
   });
 
   it('a forged modelOutput on a non-assistant message does not reach the prompt', async () => {
