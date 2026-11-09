@@ -24,7 +24,9 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
 };
 
 /** Label left, control right; stacked below `sm`. The card around the row gives it its spacing. */
-const rowClassName = 'min-w-0 gap-3 sm:justify-between sm:gap-6';
+const rowClassName = 'min-w-0 gap-3';
+/** Side by side: label left, control pushed right. A control below its label fills the row instead. */
+const sideRowClassName = 'sm:justify-between sm:gap-6';
 const headingClassName = 'flex min-w-0 flex-col gap-px';
 /**
  * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
@@ -67,7 +69,7 @@ export function SettingsRow({
       invalid={Boolean(errorMsg)}
       disabled={disabled || viewOnly}
       data-slot="settings-row"
-      className={cn(rowClassName, className)}
+      className={cn(rowClassName, !controlBelow && sideRowClassName, className)}
       {...props}
     >
       <div className={headingClassName}>
@@ -125,7 +127,12 @@ export function SettingsFieldsetRow({
     <Fieldset
       data-slot="settings-row"
       aria-describedby={description == null ? undefined : descriptionId}
-      className={cn('flex flex-col', rowClassName, !controlBelow && 'sm:flex-row sm:items-center', className)}
+      className={cn(
+        'flex flex-col',
+        rowClassName,
+        !controlBelow && ['sm:flex-row sm:items-center', sideRowClassName],
+        className,
+      )}
       {...props}
     >
       <div className={headingClassName}>

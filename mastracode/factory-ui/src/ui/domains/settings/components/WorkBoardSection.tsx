@@ -294,7 +294,6 @@ function PhaseEditor({
             errorMsg={instructions.length > MAX_INSTRUCTIONS ? `Keep it to ${MAX_INSTRUCTIONS} characters.` : undefined}
             controlPlacement="below"
             // The row's `sm:justify-between` would shrink the grid's one column to the textarea's own width.
-            className="sm:justify-normal"
           >
             <Textarea
               value={instructions}
