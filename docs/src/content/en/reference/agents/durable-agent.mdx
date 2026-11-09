@@ -407,7 +407,9 @@ const { runId } = await durableAgent.stream('Summarize the document')
 durableAgent.abortRunStream(runId)
 ```
 
-Publishing the abort request over PubSub requires a shared backend in a multi-process deployment, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams). The default `EventEmitterPubSub` only reaches runs in the same process. `InngestAgent` doesn't implement this method. Cancel an Inngest run with the `abort()` returned by its `stream()`.
+Publishing the abort request over PubSub requires a shared backend in a multi-process deployment, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams). The default `EventEmitterPubSub` only reaches runs in the same process. A run parked on a tool approval is cancelled only in this process: another process sharing the storage can still approve it. To cancel a parked run on every server, call the server's `POST /agents/:agentId/runs/:runId/abort` route, which records the cancellation in storage so a later approval or resume is refused with `409 Conflict` (`AGENT_RESUME_ABORTED_RUN`).
+
+`InngestAgent` doesn't implement this method. Cancel an Inngest run with the `abort()` returned by its `stream()`.
 
 Stopping a durable run through `abortRunStream()` or `abortThreadStream()` requires `@mastra/core@1.62.0` or later. Earlier versions record the abort without stopping the run.
 

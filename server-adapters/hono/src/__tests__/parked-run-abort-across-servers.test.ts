@@ -117,7 +117,7 @@ describe('aborting a parked durable run across servers', () => {
           headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
           body: JSON.stringify(body),
         });
-      return { post };
+      return { mastra, post };
     }
 
     const executor = await startPeer();
@@ -307,6 +307,27 @@ describe('aborting a parked durable run across servers', () => {
 
     const res = await other.post(`runs/${runId}/abort`, {});
     expect(res.status).toBe(200);
+    expect(await workflows.loadWorkflowRunStatus({ workflowName, runId })).toBe('running');
+  });
+
+  it('leaves a run that a resume claims while the abort is being written to that resume', async () => {
+    const { executor, other, runId, storage } = await setup();
+    // The executor is gone, so only the stored cancel can make the abort report success.
+    await executor.mastra.shutdown();
+    const workflows = (await storage.getStore('workflows'))!;
+    const workflowName = 'durable-agentic-loop';
+    const updateWorkflowState = workflows.updateWorkflowState.bind(workflows);
+    // A resume on another server claims the run after the abort read it as suspended
+    // and before the abort's guarded write lands.
+    workflows.updateWorkflowState = async args => {
+      if (args.opts.status === 'canceled') {
+        await updateWorkflowState({ workflowName, runId, opts: { status: 'running', expectedStatus: 'suspended' } });
+      }
+      return updateWorkflowState(args);
+    };
+
+    const res = await other.post(`runs/${runId}/abort`, {});
+    expect({ status: res.status, body: await res.json() }).toEqual({ status: 200, body: { aborted: false } });
     expect(await workflows.loadWorkflowRunStatus({ workflowName, runId })).toBe('running');
   });
 });
