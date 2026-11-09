@@ -584,9 +584,14 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain('Then move the card to PR review (`stage: "pr-review"`)');
     expect(build).toContain('**Before moving to Done:**');
     // A push to an open change request sends the card back to PR review so it is reviewed again.
-    expect(build).toContain('push to its branch, then move the card to PR review');
+    expect(build).toContain('push to that branch, then move the card to PR review');
+    // Only this session's change request: another author's on the same card is never pushed to.
+    expect(build).toContain('belongs to someone else: never push to it');
     // PR review takes the card only once the change request is attached: self-review retries.
-    expect(await read('factory-self-review')).toContain('wait briefly (`sleep 20`)');
+    const selfReview = await read('factory-self-review');
+    expect(selfReview).toContain('wait briefly (`sleep 20`)');
+    // A change request that never attaches is reviewed on its own card.
+    expect(selfReview).toContain('say it is reviewed on its own card, and leave this card where it is');
 
     const review = await read('factory-review');
     expect(review).toContain('Verdict: approve');
