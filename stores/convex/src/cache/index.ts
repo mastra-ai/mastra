@@ -126,7 +126,7 @@ export class ConvexServerCache extends MastraServerCache {
         this.indexedPushUnsupported = true;
         this.logger.warn(
           '[ConvexServerCache] The deployed Convex cache handler does not support listPushIndexed; falling back to ' +
-            'increment + listPush, which is not atomic. Redeploy your Convex functions to fix this.',
+            'increment + listPush, which is not atomic. Redeploy your Convex functions, then restart this process.',
         );
         return super.listPushIndexed(listKey, counterKey, value, ttlMs);
       }
