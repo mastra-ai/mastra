@@ -224,7 +224,7 @@ describe('Knowledge write-run start scope lookup', () => {
 });
 
 describe('Knowledge write-run start with changed declarations', () => {
-  it('sends a scope whose declared description changed to the store, which checks its bounds', async () => {
+  it('leaves existing scopes alone after a description edit and sends only new scopes to the store', async () => {
     const store = (await new InMemoryStore().getStore('knowledge'))!;
     await store.init();
     const runtime = (description: string) =>
@@ -235,9 +235,10 @@ describe('Knowledge write-run start with changed declarations', () => {
       );
     await runtime('Teams').materializeScopes(['team:t1'], ['team:t1'], provenance);
     const calls = counted(store);
-    await runtime('Teams').materializeScopes(['team:t1'], ['team:t1'], provenance);
-    expect(calls.materialize).toEqual([]);
-    await runtime('Every team').materializeScopes(['team:t1'], ['team:t1'], provenance);
-    expect(calls.materialize).toEqual(['team:t1']);
+    // The store checks an edited description's bound only when it creates a scope with it.
+    await runtime('Every team').materializeScopes(['team:t1', 'team:t2'], ['team:t1', 'team:t2'], provenance);
+    expect(calls.materialize).toEqual(['team:t2']);
+    const [t1, t2] = await store.getScopesByAddress(['team:t1', 'team:t2']);
+    expect([t1?.description, t2?.description]).toEqual(['Teams', 'Every team']);
   });
 });
