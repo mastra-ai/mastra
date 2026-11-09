@@ -1111,12 +1111,18 @@ export class Mastra<
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
                 const isOwnedHere = (guarded = false) =>
-                  self.#ownsWorkflowRun(wfId, rId, data?.parentWorkflow as WorkflowRunAncestor | undefined, topic, guarded);
+                  self.#ownsWorkflowRun(
+                    wfId,
+                    rId,
+                    data?.parentWorkflow as WorkflowRunAncestor | undefined,
+                    topic,
+                    guarded,
+                  );
                 if (isOwnedHere()) {
                   if (topic === 'workflows' && !isOwnedHere(true)) {
-                    return self
-                      .#unguardedWorkflowEventsStayLocal()
-                      .then(localOnly => target.publish(topic, event, { localOnly }));
+                    return self.#unguardedWorkflowEventsStayLocal().then(localOnly =>
+                      target.publish(topic, event, { localOnly }),
+                    );
                   }
                   // A local-only start in a process that consumes no workflow
                   // events (e.g. `MASTRA_WORKERS=false`) is dropped by the

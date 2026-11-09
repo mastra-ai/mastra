@@ -7,6 +7,7 @@
  * Events are streamed via pubsub as the workflow executes.
  */
 
+import { InMemoryServerCache } from '../../cache/inmemory';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { createObservabilityContext } from '../../observability';
 import type { ShouldPersistSnapshotFn } from '../../workflows/types';
@@ -108,6 +109,7 @@ export class EventedAgent<
   }
 
   #warnedUnfencedSharedExecution = false;
+  #warnedUnnumberedSharedSteps = false;
 
   /**
    * The evented engine stores runs only as version 1, and a hostless
@@ -168,6 +170,26 @@ export class EventedAgent<
     return false;
   }
 
+  /**
+   * With step-guard storage, workers in other processes can claim this agent's
+   * steps, and a process-local cache cannot number their frames, so offset
+   * resume cannot skip them (#28324).
+   */
+  async #warnIfStepFramesCannotBeNumbered(): Promise<void> {
+    if (this.#warnedUnnumberedSharedSteps) return;
+    const mastra = this.getMastraInstance();
+    if (!(mastra?.serverCache instanceof InMemoryServerCache)) return;
+    const store = await mastra.getStorage()?.getStore('workflows');
+    if (!store?.supportsWorkflowStepGuards()) return;
+    this.#warnedUnnumberedSharedSteps = true;
+    this.guardrailLogger?.warn(
+      `EventedAgent '${this.id}': steps can run in other processes through the shared PubSub, but the ` +
+        'in-memory server cache is process-local and cannot number their stream events, so ' +
+        'observe(runId, { offset }) may replay events from before the offset. Configure a shared server cache ' +
+        '(e.g. RedisServerCache) on Mastra.',
+    );
+  }
+
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     // Captured now: a later resume() replaces the registry's fence before this
     // segment's background promise settles.
@@ -189,6 +211,7 @@ export class EventedAgent<
             'to keep workers running independently of the API process.',
         );
       }
+      if (sharedTransport) await this.#warnIfStepFramesCannotBeNumbered();
       const workflow = this.getWorkflow();
       // The evented engine executes via pubsub events consumed by in-process
       // workers — without them `run.start()` never resolves (it waits on the
