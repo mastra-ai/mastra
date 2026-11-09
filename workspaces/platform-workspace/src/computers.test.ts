@@ -802,6 +802,7 @@ describe('control lease', () => {
       reason: 'log in please',
       revision: 1,
       control: 'human',
+      enforced: true,
       message: 'Stop using the computer and end your turn. You will be notified when the user hands it back.',
     });
     expect(events).toEqual([
