@@ -49,6 +49,7 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/evented-workflow-agent-step-restart.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-workflow-agent-suspend-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-workflow-sleep-restart.test.ts', // reset-modules
+  'src/agent/durable/__tests__/execution-ownership-guard.test.ts', // timers
   'src/agent/durable/__tests__/execution-ownership-wrapper.test.ts', // timers
   'src/agent/durable/__tests__/recover-processor-agent.test.ts', // reset-modules
   'src/agent/durable/__tests__/recover-task-completion-repro.test.ts', // reset-modules
@@ -129,6 +130,7 @@ export const isolatedTestFiles = [
   'src/worker/strategies/in-process-strategy.test.ts', // env
   'src/workflows/__tests__/declarative-step-entries.test.ts', // env
   'src/workflows/__tests__/lazy-step-writer.test.ts', // vi.mock
+  'src/workflows/__tests__/snapshot-write-amplification.test.ts', // vi.mock
   'src/workflows/__tests__/step-output-type-preservation.test.ts', // env
   'src/workflows/create.test.ts', // env
   'src/workflows/evented/restart-completed-boundary.test.ts', // reset-modules
