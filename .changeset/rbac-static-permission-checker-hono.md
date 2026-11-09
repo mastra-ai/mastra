@@ -2,4 +2,4 @@
 '@mastra/hono': patch
 ---
 
-Import the RBAC permission checker statically so a route permission check is never skipped.
+Simplified how the adapter loads the RBAC permission checker. Permission checks are unchanged for supported `@mastra/core` versions.
