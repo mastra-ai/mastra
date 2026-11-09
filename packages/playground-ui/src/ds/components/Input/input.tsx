@@ -33,6 +33,8 @@ const inputVariants = cva(
     // type="search": drop WebKit's native clear button so the DS owns the search chrome.
     // Compose an <InputGroup> with an InputGroupButton to add a clear control.
     '[&::-webkit-search-cancel-button]:appearance-none',
+    // Native glyphs (the time and date picker icons) follow color-scheme, not `color`.
+    'dark:scheme-dark',
   ),
   {
     variants: {
