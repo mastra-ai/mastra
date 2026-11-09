@@ -33,6 +33,7 @@ import {
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
+import { deepEqual } from '../../../utils/deep-equal';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -92,6 +93,8 @@ export type ProcessorArgs = {
   parentContext?: {
     workflowId: string;
     input: any;
+    stepResults?: Record<string, any>;
+    state?: Record<string, any>;
   };
   retryCount?: number;
   perStep?: boolean;
@@ -120,6 +123,12 @@ export type ParentWorkflow = {
   executionPath: number[];
   resume: boolean;
   stepResults: Record<string, StepResult<any, any, any, any>>;
+  /**
+   * The parent's resolved state when the nested run was dispatched. A nested run
+   * completing as a parallel/conditional branch diffs its final state against it to
+   * hand the parent a mergeable state delta (#29732).
+   */
+  state?: Record<string, any>;
   parentWorkflow?: ParentWorkflow;
   timeTravel?: TimeTravelExecutionParams;
   restart?: RestartExecutionParams;
@@ -2741,6 +2750,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
+              state: currentState,
               input: prevResult,
               parentWorkflow,
               activeStepsPath,
@@ -2814,6 +2824,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
+              state: currentState,
               input: prevResult,
               parentWorkflow,
               activeStepsPath,
@@ -2869,6 +2880,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
+              state: currentState,
               timeTravel,
               input: prevResult,
               parentWorkflow,
@@ -2933,6 +2945,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 executionPath,
                 resumeSteps: [leafId, ...nestedResumeSteps],
                 stepResults,
+                state: currentState,
                 input: prevResult,
                 parentWorkflow,
                 activeStepsPath,
@@ -2978,6 +2991,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
+              state: currentState,
               restart,
               input: prevResult,
               parentWorkflow,
@@ -3050,6 +3064,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
+              state: currentState,
               input: prevResult,
               parentWorkflow,
               activeStepsPath,
@@ -3635,6 +3650,23 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
+  /**
+   * A nested workflow completing as a parallel/conditional branch hands the parent its
+   * full final state rather than a setState() delta. Diff it against the parent state the
+   * nested run started from so its updates merge with siblings' instead of being lost to
+   * whichever branch finishes last (#29732).
+   */
+  private nestedBranchStateDelta(
+    finalState: Record<string, any>,
+    parentContext: NonNullable<ProcessorArgs['parentContext']>,
+  ): Record<string, any> | undefined {
+    const startState = parentContext.state ?? resolveCurrentState({ stepResults: parentContext.stepResults });
+    const delta = Object.fromEntries(
+      Object.entries(finalState).filter(([key, value]) => !deepEqual(value, startState[key])),
+    );
+    return Object.keys(delta).length > 0 ? delta : undefined;
+  }
+
   protected async processWorkflowStepEnd({
     workflow,
     workflowId,
@@ -3674,7 +3706,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     // For all other steps the delta is redundant with __state and is dropped.
     const isParallelBranch =
       (rawStep?.type === 'parallel' || rawStep?.type === 'conditional') && executionPath.length > 1;
-    const branchStateDelta = isParallelBranch ? (extractedStateDelta as Record<string, any> | undefined) : undefined;
+    const branchStateDelta = isParallelBranch
+      ? ((extractedStateDelta as Record<string, any> | undefined) ??
+        (parentContext ? this.nestedBranchStateDelta(currentState, parentContext) : undefined))
+      : undefined;
     prevResult = cleanPrevResult as typeof prevResult;
 
     // The just-finished entry. Keep it raw (declarative agent / tool / mapping
