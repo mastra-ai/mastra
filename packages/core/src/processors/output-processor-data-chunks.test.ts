@@ -815,6 +815,45 @@ describe('data parts survive returned replacement messages (#29822)', () => {
     expect(dataParts(assistantParts)).toMatchObject([{ type: 'data-probe', data: { phase: 'tool-result' } }]);
   });
 
+  it.each([
+    ['string', 'same'],
+    ['number', 42],
+    ['undefined', undefined],
+  ])('keeps a part with %s data on every turn when the same value repeats', async (_label, data) => {
+    const memory = new MockMemory();
+    const processor: Processor = {
+      id: 'copy-then-write-primitive',
+      async processOutputResult({ messages, writer }) {
+        const copies = structuredClone(messages);
+        await writer?.custom({ type: 'data-probe', data } as any);
+        return copies;
+      },
+    };
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent',
+      model: createTextModel() as any,
+      memory,
+      outputProcessors: [processor],
+    });
+
+    for (const prompt of ['first', 'second']) {
+      const stream = await agent.stream(prompt, {
+        memory: { thread: 'repeat-primitive', resource: 'repeat-resource' },
+      });
+      for await (const _chunk of stream.fullStream) {
+        // drain
+      }
+    }
+
+    const { messages } = await memory.recall({ threadId: 'repeat-primitive', resourceId: 'repeat-resource' });
+    const probesPerAssistant = messages
+      .filter(message => message.role === 'assistant')
+      .map(message => message.content.parts.filter(part => part.type === 'data-probe').length);
+    expect(probesPerAssistant).toEqual([1, 1]);
+  });
+
   it('does not duplicate a part the returned copy already contains', async () => {
     const processor: Processor = {
       id: 'write-then-copy',

@@ -34,7 +34,7 @@ export function persistProcessorDataChunk(
 
 type PersistedDataChunk = { type: `data-${string}`; data?: unknown };
 
-// Matches the exact part the writer merged, so an equal part from an earlier turn is not mistaken for it.
+// Matches the part the writer merged by reference; for object data this rules out equal parts from earlier turns.
 function holdsDataPart(message: MastraDBMessage, chunk: PersistedDataChunk): boolean {
   return message.content.parts.some(
     part => part.type === chunk.type && (part as { data?: unknown }).data === chunk.data,
@@ -79,7 +79,9 @@ export function trackProcessorDataWrites(writer: ProcessorStreamWriter | undefin
       const messages = messageList.get.all.db();
       holders = [];
       for (const chunk of written) {
-        const holder = messages.find(message => holdsDataPart(message, chunk));
+        // Newest first: the writer merges into the current response message, and primitive
+        // data (strings, numbers, undefined) can also match an equal part from an earlier turn.
+        const holder = messages.findLast(message => holdsDataPart(message, chunk));
         if (holder) holders.push({ chunk, messageId: holder.id });
       }
     },
