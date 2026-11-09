@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../boards/index.js';
 import { ProjectBoardCache } from '../../boards/project-boards.js';
+import { workSeedWithSelfReview } from '../../boards/work-migrations.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { createFactoryTransitionTools } from '../../rules/tools.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -60,8 +61,34 @@ const shipBoard: StoredBoardInput = {
 };
 
 /** The same parts of the loop on each board, by that board's own keys. */
-const BOARDS = {
-  ship: {
+interface Loop {
+  name: string;
+  board: string;
+  rest: string;
+  toBuild: readonly string[];
+  build: string;
+  /** The board's self-review phase; Work has none. */
+  selfReview?: string;
+  review: string;
+  completed: string;
+  canceled: string;
+  /** The project's Work row was stored while Work still had its self-review phase. */
+  storedWithSelfReview?: true;
+}
+
+const work = {
+  board: 'work',
+  rest: 'intake',
+  toBuild: ['planning', 'execute'],
+  build: 'execute',
+  review: 'pr-review',
+  completed: 'done',
+  canceled: 'canceled',
+} as const;
+
+const LOOPS: readonly Loop[] = [
+  {
+    name: 'a custom board with its own self-review phase',
     board: 'ship',
     rest: 'inbox',
     toBuild: ['make'],
@@ -71,18 +98,14 @@ const BOARDS = {
     completed: 'shipped',
     canceled: 'dropped',
   },
-  work: {
-    board: 'work',
-    rest: 'intake',
-    toBuild: ['planning', 'execute'],
-    build: 'execute',
+  { name: "a new project's Work board, which has no self-review phase", ...work },
+  {
+    name: 'a Work board stored while Work still had its self-review phase',
+    ...work,
     selfReview: 'review',
-    review: 'pr-review',
-    completed: 'done',
-    canceled: 'canceled',
+    storedWithSelfReview: true,
   },
-} as const;
-type Loop = (typeof BOARDS)[keyof typeof BOARDS];
+];
 
 const SHA = 'abc1234def000000000000000000000000000000';
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -133,7 +156,7 @@ async function harness(backend: string, loop: Loop) {
   const storage: FactoryStorage =
     backend === 'postgres'
       ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
-      : new LibSQLFactoryStorage({ id: `any-board-pr-loop-${loop.board}`, url: ':memory:' });
+      : new LibSQLFactoryStorage({ id: `any-board-pr-loop-${loop.board}-${loop.selfReview}`, url: ':memory:' });
   const seeded = await createFactoryStorageForTests(storage);
   const workItems = seeded.workItems;
   const sourceControl = seeded.sourceControl.forIntegration('github');
@@ -168,6 +191,10 @@ async function harness(backend: string, loop: Loop) {
     sandboxWorkdir: '/workspace',
   });
 
+  if (loop.storedWithSelfReview) {
+    // The project's Work row as Factory stored it back then: its row is its board from then on.
+    await seeded.boards.insertIfMissing(scope, workSeedWithSelfReview(), 'factory');
+  }
   if (loop.board === 'ship') {
     // The board goes in through the same write path the API and the UI use, and the
     // project's routes send its issues and pull requests there, ahead of Work's defaults.
@@ -309,11 +336,12 @@ async function harness(backend: string, loop: Loop) {
       status: 'active',
       data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId },
     });
-  return { deliver, card, cards, runs, move, agent, authored };
+  const phases = async () => (await seeded.boards.get(scope, loop.board))!.phases.map(phase => phase.key);
+  return { deliver, card, cards, runs, move, agent, authored, phases };
 }
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull request loop on %s', backend => {
-  describe.each(Object.values(BOARDS))('on the $board board', loop => {
+  describe.each(LOOPS)('on $name', loop => {
     async function cardInBuild(h: Awaited<ReturnType<typeof harness>>) {
       await h.deliver(issueOpened());
       const [issue, ...rest] = await h.cards();
@@ -325,20 +353,26 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull reques
       return issue!.id;
     }
 
-    it('self-reviews the build, attaches the pull request it opens, reviews it, re-reviews a push and finishes on merge', async () => {
+    it('builds (self-reviewing where the board has a self-review phase), attaches the pull request it opens, reviews it, re-reviews a push and finishes on merge', async () => {
       const h = await harness(backend, loop);
       const id = await cardInBuild(h);
 
-      // Self-review: the reviewer's requested changes send the card back to its build phase.
-      await h.move(id, loop.selfReview);
-      const selfReviewer = await h.agent(id, 'review');
-      await expect(selfReviewer.verdict({ verdict: 'request changes', findings: 'Missing test.' })).resolves.toMatchObject(
-        { status: 'recorded', verdict: 'request changes' },
-      );
-      expect(await h.card(id)).toMatchObject({
-        stages: [loop.build],
-        metadata: expect.objectContaining({ selfReviewVerdict: 'request changes', selfReviewRounds: 1 }),
-      });
+      if (loop.selfReview) {
+        // Self-review: the reviewer's requested changes send the card back to its build phase.
+        await h.move(id, loop.selfReview);
+        const selfReviewer = await h.agent(id, 'review');
+        await expect(
+          selfReviewer.verdict({ verdict: 'request changes', findings: 'Missing test.' }),
+        ).resolves.toMatchObject({ status: 'recorded', verdict: 'request changes' });
+        expect(await h.card(id)).toMatchObject({
+          stages: [loop.build],
+          metadata: expect.objectContaining({ selfReviewVerdict: 'request changes', selfReviewRounds: 1 }),
+        });
+      } else {
+        // No phase to self-review in: the builder opens the change request itself.
+        expect(await h.phases()).not.toContain('review');
+        await expect(h.move(id, 'review')).resolves.toMatchObject({ status: 'rejected' });
+      }
 
       // The builder opens the pull request: it joins the card, which goes out for review.
       await h.authored(id);

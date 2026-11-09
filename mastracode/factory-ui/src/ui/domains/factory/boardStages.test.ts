@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { currentItemStageLabel, itemAppearsInStage, itemStageOptions, pullRequestMayEnter } from './boardStages';
 import type { WorkItem, WorkItemSource } from './services/workItems';
-import { shipBoard, workBoardInfo as work } from '../../../../e2e/ui/board-catalog';
+import { selfReviewWorkBoardInfo, shipBoard, workBoardInfo as work } from '../../../../e2e/ui/board-catalog';
 import { BOARD_STAGES } from './stages';
 
 function workItem(source: WorkItemSource, stages: string[]): WorkItem {
@@ -57,8 +57,18 @@ function source(sourceType: string, externalId: string, metadata: Record<string,
 }
 
 describe('board stages', () => {
-  it('draws every Work lane in the canonical stage order', () => {
-    expect(BOARD_STAGES.map(stage => stage.id)).toEqual(Object.keys(workBoard.phases));
+  it('draws every Work lane in the canonical stage order, plus the self-review lane older projects hold', () => {
+    expect(BOARD_STAGES.map(stage => stage.id).filter(id => id !== 'review')).toEqual(Object.keys(workBoard.phases));
+    expect(BOARD_STAGES.map(stage => stage.label)).toEqual([
+      'Intake',
+      'Triage',
+      'Planning',
+      'Building',
+      'Self-review',
+      'Review',
+      'Done',
+      'Canceled',
+    ]);
   });
 });
 
@@ -69,9 +79,9 @@ describe('currentItemStageLabel', () => {
 
   it('ignores stages absent from the item board, which the board itself does not draw', () => {
     expect(currentItemStageLabel(workItem('manual', ['execute', 'obsolete']), work)).toBe('Building');
-    // A pull request's own card never sits in the build lanes, so only PR review counts.
-    expect(currentItemStageLabel(workItem('github-pr', ['execute', 'pr-review']), work)).toBe('PR review');
-    expect(currentItemStageLabel(workItem('gitlab-pr', ['execute', 'pr-review']), work)).toBe('PR review');
+    // A pull request's own card never sits in the build lanes, so only Review counts.
+    expect(currentItemStageLabel(workItem('github-pr', ['execute', 'pr-review']), work)).toBe('Review');
+    expect(currentItemStageLabel(workItem('gitlab-pr', ['execute', 'pr-review']), work)).toBe('Review');
   });
 
   it('falls back to Intake when no stage belongs to the item board', () => {
@@ -94,10 +104,10 @@ describe('pull request cards on the Work board', () => {
   it.each(['github-pr', 'gitlab-pr'] as const)('moves a %s card only through the lanes that review it', source => {
     const card = { ...workItem(source, ['intake']), board: 'work' };
     expect(itemStageOptions(card, work).map(stage => stage.id)).toEqual(['intake', 'pr-review', 'done', 'canceled']);
-    expect(itemStageOptions(card, work).find(stage => stage.id === 'pr-review')?.label).toBe('PR review');
-    // Review is the builder's self-review: a pull request card never enters it.
-    for (const stage of ['triage', 'planning', 'execute', 'review'])
-      expect(pullRequestMayEnter(work, card, stage)).toBe(false);
+    expect(itemStageOptions(card, work).find(stage => stage.id === 'pr-review')?.label).toBe('Review');
+    for (const stage of ['triage', 'planning', 'execute']) expect(pullRequestMayEnter(work, card, stage)).toBe(false);
+    // An older project's Work still has its self-review phase, which a pull request card never enters.
+    expect(pullRequestMayEnter(selfReviewWorkBoardInfo, card, 'review')).toBe(false);
     for (const stage of ['intake', 'pr-review', 'done', 'canceled']) {
       expect(pullRequestMayEnter(work, card, stage)).toBe(true);
     }
@@ -107,10 +117,10 @@ describe('pull request cards on the Work board', () => {
     const issueLanes = itemStageOptions({ ...workItem('github-issue', ['intake']), board: 'work' }, work).map(
       stage => stage.id,
     );
-    expect(issueLanes).toEqual(BOARD_STAGES.flatMap(stage => (stage.id === 'pr-review' ? [] : [stage.id])));
+    expect(issueLanes).toEqual(Object.keys(workBoard.phases).filter(id => id !== 'pr-review'));
     const issue = workItem('github-issue', ['intake']);
     expect(pullRequestMayEnter(work, issue, 'execute')).toBe(true);
-    // An issue card with no pull request is self-reviewed in Review instead.
+    // An issue card enters Review only once it carries a pull request.
     expect(pullRequestMayEnter(work, issue, 'pr-review')).toBe(false);
     expect(pullRequestMayEnter(undefined, workItem('github-pr', ['intake']), 'execute')).toBe(true);
   });

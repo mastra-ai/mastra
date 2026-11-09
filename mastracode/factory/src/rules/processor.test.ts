@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
-import { createToolRuleTestRegistry } from '../boards/test-utils.js';
+import { createToolRuleTestRegistry, selfReviewWorkBoard } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
@@ -1417,16 +1417,16 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(reasoningChanged?.contents).toContain('Runtime: model=openai/gpt-5.6-sol, reasoning-setting=xhigh');
   });
 
-  it('gives a pull request card reviewed on the Work board the review runtime, but not an issue card in Review', async () => {
+  it("gives a pull request card reviewed on the Work board the review runtime, but not an issue card in an older Work's self-review", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepare(storage, 'review', 'pull-request', { id: 'work', stage: 'review' });
+    await prepare(storage, 'review', 'pull-request', { id: 'work', stage: 'pr-review' });
     const boards = createBoardRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
 
     const signal = await processor.computeStateSignal(stateArgs(requestContext({ modelId: 'openai/gpt-5.5' })));
 
     expect(signal).toMatchObject({
-      attributes: { status: 'active', board: 'work', stage: 'review', role: 'review', modelId: 'openai/gpt-5.5' },
+      attributes: { status: 'active', board: 'work', stage: 'pr-review', role: 'review', modelId: 'openai/gpt-5.5' },
     });
     expect(signal?.contents).toContain('Runtime: model=openai/gpt-5.5');
 
@@ -1434,7 +1434,7 @@ describe('FactoryPhaseStateProcessor', () => {
     await prepare(issueStorage, 'review', 'issue', { id: 'work', stage: 'review' });
     const issueSignal = await new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards,
+      boards: new Map([['work', selfReviewWorkBoard]]),
       storage: issueStorage,
     }).computeStateSignal(stateArgs(requestContext({ modelId: 'openai/gpt-5.5' })));
     expect(issueSignal?.attributes).not.toHaveProperty('modelId');
@@ -1542,7 +1542,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const building = await processor.computeStateSignal(stateArgs(context));
     expect(building?.contents).not.toContain('Your part is done');
 
-    await storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    await storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages: ['pr-review'] } });
     const moved = await processor.computeStateSignal(stateArgs(context));
     expect(moved?.contents).toContain(
       'This card is now in Review, which runs in the review context in another session. Your part is done',

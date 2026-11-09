@@ -592,8 +592,8 @@ describe('bundled Factory skill assets', () => {
     // One instruction for an approved plan: report, then move (no "report and stop").
     expect(plan).not.toContain('report the plan headline and stop');
 
-    // Building runs as a goal: it may ask a person, but only through ask_user, and hands off by
-    // the project's self-review setting.
+    // Building runs as a goal: it may ask a person, but only through ask_user. It opens the change
+    // request itself, unless the card's board has a self-review phase the project turned on.
     const build = await read('factory-build');
     expect(build).toContain('only with `ask_user`');
     expect(build).toContain('do not open a pull or merge request. Move the card to its `self-review` phase');
@@ -609,6 +609,7 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain(
       '- **Neither review phase is in `Next phases`:** open no change request and move nothing. Ask the person with `ask_user`',
     );
+    expect(build).toContain('**Open the change request** (the usual path, and the only one on the default Work board');
     expect(build).toContain('Then move the card to its `pull request review` phase');
     expect(build).toContain('`Board phases by part:` line names each phase');
     expect(build).not.toMatch(/stage: "(review|pr-review|planning)"/);
@@ -626,9 +627,7 @@ describe('bundled Factory skill assets', () => {
     // A manual card's change request is not under Sources: look it up by branch first.
     expect(build).toContain('look for a change request already open from your branch');
     // A change request is opened only where the phase may then move the card to pull request review.
-    expect(build).toContain(
-      '- **The `pull request review` phase is in `Next phases`, and the path above does not apply:** open the change request',
-    );
+    expect(build).toContain('it needs the `pull request review` phase in `Next phases`');
     // The review phase takes the card only once the change request is attached: self-review retries.
     const selfReview = await read('factory-self-review');
     expect(selfReview).toContain('wait briefly (`sleep 20`)');

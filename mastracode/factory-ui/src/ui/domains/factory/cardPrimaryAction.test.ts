@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { releaseBoard, shipBoard, workBoardInfo as work } from '../../../../e2e/ui/board-catalog';
+import {
+  releaseBoard,
+  selfReviewWorkBoardInfo as selfReviewWork,
+  shipBoard,
+  workBoardInfo as work,
+} from '../../../../e2e/ui/board-catalog';
 import { boardCardState } from './boardCardState';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
@@ -158,10 +163,10 @@ describe('cardMoves', () => {
   it('re-reviews an open pull request sitting in Done, and reviews it in a working lane', () => {
     const pullRequest = { source: 'github-pr' as const, metadata: { state: 'open' }, stages: ['done'] };
     expect(cardMoves(pullRequest, 'done', work)).toEqual([{ label: 'Re-review', role: 'review', stage: 'pr-review' }]);
-    expect(cardMoves(pullRequest, 'review', work)).toEqual([review]);
+    expect(cardMoves(pullRequest, 'review', selfReviewWork)).toEqual([review]);
     const mergeRequest = { ...pullRequest, source: 'gitlab-pr' as const };
     expect(cardMoves(mergeRequest, 'done', work)).toEqual([{ label: 'Re-review', role: 'review', stage: 'pr-review' }]);
-    expect(cardMoves(mergeRequest, 'review', work)).toEqual([review]);
+    expect(cardMoves(mergeRequest, 'review', selfReviewWork)).toEqual([review]);
   });
 
   it.each(['github-pr', 'gitlab-pr'] as const)(
@@ -229,7 +234,7 @@ describe('cardMoves', () => {
 
     it('offers Review in PR review and self-review, like a pull request card', () => {
       expect(cardMoves(carrying('open'), 'pr-review', work)).toEqual([review]);
-      expect(cardMoves(carrying('open'), 'review', work)).toEqual([review]);
+      expect(cardMoves(carrying('open'), 'review', selfReviewWork)).toEqual([review]);
     });
 
     it("offers Re-review in Done while the pull request's own source is open, and nothing once it merged", () => {
@@ -240,9 +245,9 @@ describe('cardMoves', () => {
     });
   });
 
-  it('offers a Work card in Review no lane, so its session is the action', () => {
-    expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review', work)).toEqual([]);
-    expect(cardMoves({ source: 'linear-issue', metadata: {} }, 'review', work)).toEqual([]);
+  it("offers a card in an older project's Work self-review no lane, so its session is the action", () => {
+    expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review', selfReviewWork)).toEqual([]);
+    expect(cardMoves({ source: 'linear-issue', metadata: {} }, 'review', selfReviewWork)).toEqual([]);
   });
 
   it('offers a finished card no lane, so its session is the action', () => {

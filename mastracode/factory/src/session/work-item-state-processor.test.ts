@@ -10,6 +10,8 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
+import { ProjectBoardCache } from '../boards/project-boards.js';
+import { workSeedWithSelfReview } from '../boards/work-migrations.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
 import { FactoryWorkItemStateProcessor } from './work-item-state-processor.js';
@@ -72,14 +74,22 @@ function stateArgs(context: RequestContext, overrides: Record<string, unknown> =
 }
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-item signal on %s', backend => {
-  async function setup(options: { trusted: boolean; selfReviewEnabled?: boolean }) {
+  /** `storedWithSelfReview`: the project's Work row was stored while Work still had its self-review phase. */
+  async function setup(options: { trusted: boolean; selfReviewEnabled?: boolean; storedWithSelfReview?: boolean }) {
     const storage =
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: `work-item-signal-${randomUUID()}`, url: ':memory:' });
     if (backend === 'libsql') onTestFinished(() => storage.close());
-    const { workItems, projects, comments } = await createFactoryStorageForTests(storage);
+    const { workItems, projects, comments, boards } = await createFactoryStorageForTests(storage);
     const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Acme' } });
+    if (options.storedWithSelfReview) {
+      await boards.insertIfMissing(
+        { orgId: 'org-1', factoryProjectId: project.id },
+        workSeedWithSelfReview(),
+        'factory',
+      );
+    }
     if (options.selfReviewEnabled !== undefined) {
       await projects.update({
         orgId: 'org-1',
@@ -140,14 +150,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     });
     const processor = new FactoryWorkItemStateProcessor({
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: new ProjectBoardCache({ codeRegistry: createBoardRegistry(), storage: boards, recheckMs: 0 }),
       projects,
     });
     return { processor, workItems, projects, project, item, binding, context: requestContext(project.id) };
   }
 
   it("renders the bound card's board position, sources and Factory state", async () => {
-    const { processor, context, item } = await setup({ trusted: true, selfReviewEnabled: true });
+    const { processor, context, item } = await setup({
+      trusted: true,
+      selfReviewEnabled: true,
+      storedWithSelfReview: true,
+    });
 
     const signal = await processor.computeStateSignal(stateArgs(context));
 
@@ -193,7 +207,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     expect(contents).not.toContain('evil');
     expect(contents).not.toContain('curl');
     expect(contents).not.toContain('A comment thread the signal must not carry.');
-    expect(contents).toContain('Self-review: off');
+  });
+
+  it("says whether self-review is on only where the card's board has a self-review phase", async () => {
+    const stored = await setup({ trusted: true, selfReviewEnabled: false, storedWithSelfReview: true });
+    expect((await stored.processor.computeStateSignal(stateArgs(stored.context)))!.contents).toContain(
+      'Self-review: off',
+    );
+
+    // A new project's Work has no self-review phase: the setting means nothing to its cards.
+    const fresh = await setup({ trusted: true, selfReviewEnabled: true });
+    const contents = (await fresh.processor.computeStateSignal(stateArgs(fresh.context)))!.contents;
+    expect(contents).not.toContain('Self-review:');
+    expect(contents).toContain('Next phases: Review (pr-review)');
   });
 
   it('keeps its cache key while the card is unchanged and re-renders after a revision bump', async () => {

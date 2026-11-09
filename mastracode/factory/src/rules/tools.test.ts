@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardTransitionPolicy } from '../boards/index.js';
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
-import { createPolicyTestRegistry } from '../boards/test-utils.js';
+import { createPolicyTestRegistry, selfReviewWorkBoard } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactoryTransitionTools } from './tools.js';
@@ -607,6 +607,9 @@ describe('factory_transition_work_item', () => {
   });
 
   describe('factory_record_review_verdict', () => {
+    // Work's seed has no self-review phase; a project stored before still holds one.
+    const olderWork = new Map([['work', selfReviewWorkBoard]]);
+
     async function selfReviewingItem(storage: WorkItemsStorage, metadata: Record<string, unknown> = {}) {
       const prepared = await prepareBoundItem(storage, 'github-issue', 'review');
       await storage.update({
@@ -627,6 +630,7 @@ describe('factory_transition_work_item', () => {
         requestContext: context,
         storage,
         transitionService: { transition } as never,
+        boards: olderWork,
       });
 
       await expect(
@@ -651,6 +655,7 @@ describe('factory_transition_work_item', () => {
         requestContext: context,
         storage,
         transitionService: { transition } as never,
+        boards: olderWork,
       });
 
       await expect(

@@ -1,11 +1,12 @@
 import type {
+  StoredBoardInput,
   StoredBoardMigration,
   StoredBoardRecord,
   StoredPhaseInput,
   StoredPhaseRecord,
 } from '../storage/domains/boards/base.js';
 import { boardDefinitionOf } from './stored-board.js';
-import { workBoard } from './work.js';
+import { OWN_CARD_HAND_OFF, workBoard } from './work.js';
 
 const MIGRATED_FIELDS = ['runner', 'exitTool', 'tools', 'autoStart', 'autoStartWhen', 'nextPhases'] as const;
 type MigratedField = (typeof MIGRATED_FIELDS)[number];
@@ -51,6 +52,48 @@ const OLD_WORK_SEED: Readonly<Record<string, Readonly<Record<MigratedField, read
     ],
   },
 };
+
+/** Building's goal while Work still had its self-review phase. */
+const SELF_REVIEW_BUILD_OBJECTIVE =
+  'Build the plan approved in Planning for this work item. Done when every step of that plan is implemented on ' +
+  "the work branch; the plan's verification gates (the tests, typecheck and lint it names, else the narrowest " +
+  'relevant ones) were run on the final head and passed; the branch is pushed; and the card was moved on with ' +
+  "factory_transition_work_item out of Building (to Review or PR review as the builder's hand-off says, or back to " +
+  "Planning if the plan proved wrong); the builder's latest message names the move and the pushed head. " +
+  OWN_CARD_HAND_OFF +
+  ' Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot ' +
+  'answer from the repository.';
+
+/**
+ * The Work seed this migration fills from: Work as it was while it had its self-review phase.
+ * Only projects stored before then hold the old defaults it replaces, and their rows still have
+ * that phase, so they get its runner rather than today's seed, which has no such phase.
+ */
+export function workSeedWithSelfReview(): StoredBoardInput {
+  const seed = boardDefinitionOf(workBoard);
+  const phases = seed.phases.flatMap((phase): StoredPhaseInput[] => {
+    if (phase.key !== 'execute') return [phase];
+    const goal = phase.runner?.goal && { ...phase.runner.goal, objective: SELF_REVIEW_BUILD_OBJECTIVE };
+    return [
+      {
+        ...phase,
+        runner: { ...phase.runner, ...(goal ? { goal } : {}) },
+        nextPhases: ['review', 'pr-review', 'planning', 'done', 'canceled'],
+      },
+      {
+        key: 'review',
+        name: 'Review',
+        kind: 'working',
+        runner: { skill: 'factory-self-review', context: 'review' },
+        autoStart: true,
+        autoStartWhen: { operator: 'AND', conditions: [{ field: 'item.pullRequest', operator: 'not_exists' }] },
+        tools: ['factory_record_review_verdict'],
+        nextPhases: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
+      },
+    ];
+  });
+  return { ...seed, phases };
+}
 
 /** Stable JSON with sorted keys; an unset field, `null`, `false` and no tools all read the same. */
 function canonical(field: MigratedField, value: unknown): string {
@@ -124,7 +167,7 @@ function migrateRunner(
 
 export function migrateWorkPhaseRunners(
   board: StoredBoardRecord,
-  seed = boardDefinitionOf(workBoard),
+  seed = workSeedWithSelfReview(),
 ): { board: { name: string; description: string | null; phases: StoredPhaseInput[] }; filled: string[] } | undefined {
   const phaseKeys = new Set(board.phases.map(phase => phase.key));
   const filled: string[] = [];

@@ -1,4 +1,7 @@
 import { boardFlow, workBoard as workBoardDefinition } from '@mastra/factory/boards';
+import type { InstalledBoard } from '@mastra/factory/boards';
+import { compileStoredBoard } from '@mastra/factory/boards/stored-board';
+import { workSeedWithSelfReview } from '@mastra/factory/boards/work-migrations';
 
 import type { BoardCatalogResponse, InstalledBoardInfo } from '../../src/api/types';
 
@@ -66,28 +69,37 @@ export const shipBoard: InstalledBoardInfo = {
   ],
 };
 
+/** An installed board as the catalog route sends it. */
+function catalogInfo(board: InstalledBoard, extra: Partial<InstalledBoardInfo> = {}): InstalledBoardInfo {
+  return {
+    id: board.id,
+    name: board.name,
+    title: board.name,
+    initialPhase: board.initialPhase,
+    flow: catalogFlow(boardFlow(board)),
+    phases: Object.entries(board.phases).map(([id, phase]) => ({
+      id,
+      name: phase.name,
+      title: phase.name,
+      kind: phase.kind,
+      nextPhases: [...phase.nextPhases],
+      ...(phase.kind === 'working' ? { context: phase.runner.context, role: phase.runner.context } : {}),
+      transitions: (board.transitions[id] ?? []).map(({ outcome, to }) => ({ outcome, to })),
+    })),
+    ...extra,
+  };
+}
+
 /** The built-in Work board as the catalog route sends it, read off the real declaration. */
-export const workBoardInfo: InstalledBoardInfo = {
-  id: workBoardDefinition.id,
-  name: workBoardDefinition.name,
-  title: workBoardDefinition.name,
-  initialPhase: workBoardDefinition.initialPhase,
-  flow: catalogFlow(boardFlow(workBoardDefinition)),
-  phases: Object.entries(workBoardDefinition.phases).map(([id, phase]) => ({
-    id,
-    name: phase.name,
-    title: phase.name,
-    kind: phase.kind,
-    nextPhases: [...phase.nextPhases],
-    ...(phase.kind === 'working' ? { context: phase.runner.context, role: phase.runner.context } : {}),
-    transitions: (workBoardDefinition.transitions[id as keyof typeof workBoardDefinition.phases] ?? []).map(
-      ({ outcome, to }) => ({
-        outcome,
-        to,
-      }),
-    ),
-  })),
-};
+export const workBoardInfo: InstalledBoardInfo = catalogInfo(workBoardDefinition);
+
+/**
+ * Work as a project stored before Work dropped its self-review phase holds it: its row is its
+ * board, so it keeps `review` between Building and PR review.
+ */
+export const selfReviewWorkBoardInfo: InstalledBoardInfo = catalogInfo(
+  compileStoredBoard(workSeedWithSelfReview(), workBoardDefinition),
+);
 
 function catalogFlow(flow: ReturnType<typeof boardFlow>): NonNullable<InstalledBoardInfo['flow']> {
   return {

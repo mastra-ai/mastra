@@ -59,7 +59,7 @@ Submit the plan with a single `submit_plan` call carrying the plan file. Plannin
 
 When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item` to the board's build phase (the `build` phase in the `factory-phase` signal's `Board phases by part:` line; Building, `execute`, on the default board), using the revision the `factory-phase` signal shows. Report the plan headline, then make that move: it ends your run. If the plan is rejected or comes back with feedback, address it and submit again; do not move the card.
 
-The builder implements the plan and pushes the branch, then opens the pull or merge request directly or sends the branch to self-review first, depending on the project's self-review setting; do not plan a PR-opening step.
+The builder implements the plan and pushes the branch, then opens the pull or merge request, or sends the branch to self-review first on a board that has a self-review phase and a project that turned it on; do not plan a PR-opening step.
 
 ## Behavior Rules
 

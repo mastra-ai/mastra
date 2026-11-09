@@ -3,6 +3,7 @@ import { defineBoard } from '../boards/define-board.js';
 import { phaseRunDecision } from '../boards/phase-runner.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import { boardFlow, intakeTarget, rulePhaseField, withBoardClosure, withBoardFlow } from '../boards/semantics.js';
+import { selfReviewWorkBoard } from '../boards/test-utils.js';
 import { BUILD_OBJECTIVE, workBoard } from '../boards/work.js';
 import { defaultGithubRules } from '../integrations/github/default-rules.js';
 import { defaultGitLabRules } from '../integrations/gitlab/default-rules.js';
@@ -549,8 +550,8 @@ describe('built-in board and integration handlers', () => {
       },
     );
 
-    it('starts factory-self-review in the review session', () => {
-      expect(phaseRunDecision(workBoard, 'review', entering('review', 'execute'))).toMatchObject({
+    it("starts factory-self-review in the review session in an older project's Work", () => {
+      expect(phaseRunDecision(selfReviewWorkBoard, 'review', entering('review', 'execute'))).toMatchObject({
         role: 'review',
         skillName: 'factory-self-review',
         idempotencyKey: 'delivery-1:review:factory-self-review',

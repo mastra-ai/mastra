@@ -3,10 +3,11 @@ import { validateFactoryRuleDecisions } from '../rules/validation.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { defineBoard } from './define-board.js';
 import type { BoardDefinition, BoardPhaseDefinition, BoardPhaseRunner } from './define-board.js';
-import type { BoardRegistry } from './registry.js';
+import type { BoardRegistry, InstalledBoard } from './registry.js';
+import { compileStoredBoard } from './stored-board.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
+import { workSeedWithSelfReview } from './work-migrations.js';
 import { workBoard } from './work.js';
-import type { WorkBoardPhase } from './work.js';
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
 // Production installation still reserves built-in IDs and has no override API.
@@ -24,12 +25,19 @@ export function createPolicyTestRegistry(transitionPolicy: BoardTransitionPolicy
 }
 
 /**
- * Work with every phase allowed to move to every other, and the given phases' stored fields
- * overridden (a runner, …). Lifecycle tests jump straight to the phase they
- * exercise; the Work board's own topology is tested against workBoard itself.
+ * Work as projects stored it while Work still had its `review` self-review phase. Work's seed
+ * dropped that phase, but a project's stored row keeps it, and other boards may declare one.
+ */
+export const selfReviewWorkBoard: InstalledBoard = compileStoredBoard(workSeedWithSelfReview(), workBoard);
+
+/**
+ * Work (with its self-review phase, {@link selfReviewWorkBoard}) with every phase allowed to move
+ * to every other, and the given phases' stored fields overridden (a runner, …). Lifecycle tests
+ * jump straight to the phase they exercise; the Work board's own topology is tested against
+ * workBoard itself.
  */
 export function createLifecycleTestRegistry(
-  overrides: Partial<Record<WorkBoardPhase, { runner?: BoardPhaseRunner }>> = {},
+  overrides: Partial<Record<string, { runner?: BoardPhaseRunner }>> = {},
 ): BoardRegistry {
   const board = defineBoard({
     id: 'work',
@@ -37,13 +45,13 @@ export function createLifecycleTestRegistry(
     initialPhase: 'intake',
     sourceClosed: workBoard.sourceClosed,
     phases: Object.fromEntries(
-      Object.entries(workBoard.phases).map(([stage, phase]) => {
+      Object.entries(selfReviewWorkBoard.phases).map(([stage, phase]) => {
         return [
           stage,
           {
             ...phase,
-            nextPhases: Object.keys(workBoard.phases).filter(other => other !== stage),
-            ...overrides[stage as WorkBoardPhase],
+            nextPhases: Object.keys(selfReviewWorkBoard.phases).filter(other => other !== stage),
+            ...overrides[stage],
           } as BoardPhaseDefinition<string>,
         ];
       }),

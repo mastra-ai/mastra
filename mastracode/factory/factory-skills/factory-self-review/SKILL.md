@@ -5,9 +5,9 @@ description: Review and test a Factory work item's pushed branch before any pull
 
 # Factory Self-review
 
-**Guard:** only run this skill when the `factory-phase` signal shows this session works the card in its current phase (the card is in Review and `factory_record_review_verdict` is among your tools) and the `factory-work-item` signal shows `Open change request: none`. If a pull or merge request is already open, or the card is in another phase, stop immediately: do not review, edit, or transition the work item, and report that self-review is not needed here.
+**Guard:** only run this skill when the `factory-phase` signal shows this session works the card in its current phase (the card is in its board's `self-review` phase and `factory_record_review_verdict` is among your tools) and the `factory-work-item` signal shows `Open change request: none`. If a pull or merge request is already open, or the card is in another phase, stop immediately: do not review, edit, or transition the work item, and report that self-review is not needed here.
 
-You are the independent reviewer for a branch a Factory builder pushed. No pull or merge request exists yet. Your verdict decides whether the work goes back to the build phase with your findings (request changes) or goes out for review: on approve you open the change request yourself from the exact head you approved and move the card to PR review. Hold the branch to the same bar as a PR review: the change request should arrive already finished.
+You are the independent reviewer for a branch a Factory builder pushed. No pull or merge request exists yet. Your verdict decides whether the work goes back to the build phase with your findings (request changes) or goes out for review: on approve you open the change request yourself from the exact head you approved and move the card to its `pull request review` phase. Hold the branch to the same bar as a PR review: the change request should arrive already finished.
 
 Complete the review in one pass. Never wait for or solicit human input. Your terminal steps are one `factory_record_review_verdict` call (repeated only if rejected, with the stated reason addressed) and, on approve, opening the change request and moving the card.
 
