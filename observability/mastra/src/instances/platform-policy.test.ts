@@ -1,3 +1,4 @@
+import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import type { InitExporterOptions, TracingEvent } from '@mastra/core/observability';
@@ -348,5 +349,24 @@ describe('Platform policy compatibility', () => {
     instance.registerExporter(otherCopy);
     expect(instance.getExporters()).toEqual([modern]);
     expect(instance.getObservabilityBus().getExporters()).toEqual([modern]);
+  });
+  it('reports a constructor-skipped exporter through the application logger exactly once', async () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
+    const output = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logger = new ConsoleLogger({ name: 'customer-app', level: LogLevel.WARN });
+    const observability = new Observability({
+      configs: { default: { serviceName: 'customer-app', exporters: [new MastraStorageExporter()] } },
+    });
+    const mastra = new Mastra({ logger, observability });
+    try {
+      const warnings = () =>
+        output.mock.calls.filter(call => JSON.stringify(call).includes('Storage exporter skipped'));
+      expect(warnings()).toHaveLength(1);
+      observability.setLogger({ logger });
+      expect(warnings()).toHaveLength(1);
+    } finally {
+      output.mockRestore();
+      await mastra.shutdown();
+    }
   });
 });

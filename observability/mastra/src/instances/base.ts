@@ -105,6 +105,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   #mastraEnvironment?: string;
 
+  // Construction happens before Mastra installs the application logger.
+  #pendingStorageExporterWarnings = new Set<ObservabilityExporter>();
+  #hasApplicationLogger = false;
+
   /**
    * For excluded MODEL_GENERATION spans whose constructor clears `attributes`,
    * we stash the lightweight provider/model from creation options so
@@ -172,6 +176,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   __setLogger(logger: IMastraLogger) {
     super.__setLogger(logger);
+    this.#hasApplicationLogger = true;
+    for (const exporter of this.#pendingStorageExporterWarnings) {
+      this.warnStorageExporterSkipped(exporter);
+    }
+    this.#pendingStorageExporterWarnings.clear();
 
     // Propagate logger to all exporters that support it
     this.exporters.forEach(exporter => {
@@ -467,6 +476,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   private warnStorageExporterSkipped(exporter: ObservabilityExporter): void {
+    if (!this.#hasApplicationLogger) {
+      this.#pendingStorageExporterWarnings.add(exporter);
+      return;
+    }
     this.logger.warn(
       isMastraDeprecatedStorageExporter(exporter)
         ? 'Deprecated DefaultExporter skipped on Mastra Platform. Use MastraStorageExporter with retainStorageExporterOnPlatform: true for remote storage export.'
