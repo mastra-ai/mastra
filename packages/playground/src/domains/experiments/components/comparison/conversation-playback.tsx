@@ -56,9 +56,14 @@ export function ConversationPlayback({
         <Button variant="ghost" onClick={() => onInspect(playback.turnIndex)}>
           Inspect turn
         </Button>
-        <Txt variant="meta" tone="muted" role="status" className="sm:ml-auto">
-          Turn {playback.turnIndex + 1} of {count} · {status}
-        </Txt>
+        <div role="status" className="flex items-center gap-2 sm:ml-auto">
+          <Txt variant="meta" tone="muted">
+            Turn {playback.turnIndex + 1} of {count}
+          </Txt>
+          <Txt variant="meta" tone="muted">
+            {status}
+          </Txt>
+        </div>
       </div>
       <nav aria-label="Playback turns" className="flex shrink-0 gap-1 overflow-x-auto px-5 py-2">
         {Array.from({ length: count }, (_, index) => (

@@ -71,7 +71,7 @@ export function ConversationReplayResult({
                 selectTurn(index);
               }}
             >
-              Turn {index + 1} · {status}
+              Turn {index + 1}: {status}
             </Button>
           );
         })}
@@ -93,15 +93,17 @@ export function ConversationReplayResult({
         <ComparisonSection title="Turn scores" framed>
           <div className="grid gap-2 p-3">
             {scores.map((score, index) => (
-              <Txt key={index}>
-                {typeof score.scorerName === 'string' ? score.scorerName : 'Scorer'}:{' '}
-                {typeof score.score === 'number'
-                  ? score.score
-                  : typeof score.error === 'string'
-                    ? score.error
-                    : 'Unscored'}
-                {typeof score.reason === 'string' && ` — ${score.reason}`}
-              </Txt>
+              <div key={index} className="grid gap-0.5">
+                <Txt>
+                  {typeof score.scorerName === 'string' ? score.scorerName : 'Scorer'}:{' '}
+                  {typeof score.score === 'number'
+                    ? score.score
+                    : typeof score.error === 'string'
+                      ? score.error
+                      : 'Unscored'}
+                </Txt>
+                {typeof score.reason === 'string' && <Txt tone="muted">{score.reason}</Txt>}
+              </div>
             ))}
           </div>
         </ComparisonSection>

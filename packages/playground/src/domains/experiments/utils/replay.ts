@@ -27,7 +27,7 @@ export function replayLabel(output: unknown) {
   const replay = replayContext(output);
   if (!replay) return undefined;
   return replay.mode === 'conversation'
-    ? `Conversation · ${replay.turnCount} turns`
+    ? `Conversation (${replay.turnCount} turns)`
     : `Turn ${replay.turnIndex + 1} of ${replay.turnCount}`;
 }
 
