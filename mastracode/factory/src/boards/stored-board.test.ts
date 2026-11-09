@@ -18,6 +18,7 @@ import {
   mergeCodeBehaviour,
   storedBoardInputSchema,
 } from './stored-board.js';
+import { workSeedWithSelfReview } from './work-migrations.js';
 import { workBoard } from './work.js';
 
 const GO = {
@@ -808,11 +809,24 @@ describe('the reviewer seat on an edited Work board', () => {
     skillName: 'factory-self-review',
   } as const;
 
-  it('waits for a person once an edit stops Review starting on its own', () => {
-    // The default Review phase starts self-review on its own for a card with no pull request yet.
-    expect(startsInAutoPhase(createBoardRegistry(), card('work', 'review'), review)).toBe(true);
+  it("waits for a person once an edit stops an older Work's self-review starting on its own", () => {
+    // An older project's self-review phase starts on its own for a card with no pull request yet.
+    const older = compileStoredBoard(workSeedWithSelfReview(), workBoard);
+    expect(
+      startsInAutoPhase(
+        createBoardRegistry({ boards: [older], includeDefaultBoards: false }),
+        card('work', 'review'),
+        review,
+      ),
+    ).toBe(true);
+    const seed = workSeedWithSelfReview();
     const edited = compileStoredBoard(
-      editWork('review', phase => ({ ...phase, autoStart: false, autoStartWhen: undefined })),
+      {
+        ...seed,
+        phases: seed.phases.map(phase =>
+          phase.key === 'review' ? { ...phase, autoStart: false, autoStartWhen: undefined } : phase,
+        ),
+      },
       workBoard,
     );
     expect(

@@ -11,7 +11,12 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
-import { commitDecisions, createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
+import {
+  commitDecisions,
+  createLifecycleTestRegistry,
+  createTestBoard,
+  selfReviewWorkBoard,
+} from '../boards/test-utils.js';
 import { BUILD_OBJECTIVE } from '../boards/work.js';
 import { publishReviewStatus } from '../integrations/github/review-status.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
@@ -3327,11 +3332,8 @@ describe('FactoryDecisionDispatcher', () => {
   it('delivers a kickoff whose own rule batch moved the card', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
-    const transitionService = new FactoryTransitionService({
-      storage,
-      configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry(),
-    });
+    const boards = createLifecycleTestRegistry();
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
     // One batch that both moves the card on and starts a run, as an event rule may return.
     const moved = await commitDecisions(storage, {
       factoryProjectId: PROJECT_ID,
@@ -3377,6 +3379,7 @@ describe('FactoryDecisionDispatcher', () => {
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
+      boards,
       ownerId: 'worker-1',
     });
 
@@ -3653,17 +3656,15 @@ describe('FactoryDecisionDispatcher', () => {
           metadata: { authorTrusted: true, factoryAuthored: true },
         },
       });
-      // Review waits for approval here: the shipped Review starts self-review on its own, which
-      // would hide whether the Factory-authored exemption covers an issue card.
-      const { autoStartWhen: _autoStartWhen, ...review } = workBoard.phases.review as typeof workBoard.phases.review & {
-        autoStartWhen?: unknown;
-      };
+      // An older project's Work, whose self-review waits for approval here: the seeded self-review
+      // starts on its own, which would hide whether the Factory-authored exemption covers an issue card.
+      const { autoStartWhen: _autoStartWhen, ...review } = selfReviewWorkBoard.phases.review!;
       const board = defineBoard({
         id: 'work',
         name: 'Work',
         initialPhase: 'intake',
         sourceClosed: workBoard.sourceClosed,
-        phases: { ...workBoard.phases, review: { ...review, autoStart: false } },
+        phases: { ...selfReviewWorkBoard.phases, review: { ...review, autoStart: false } },
       });
       const boards: BoardRegistry = new Map([[board.id, board]]);
       const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage, boards });
@@ -7968,7 +7969,8 @@ describe('review status comment lifecycle', () => {
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
     expect(reportReviewStatus).not.toHaveBeenCalled();
 
-    // A builder checking its own work reviews no pull request, even on a card that carries one.
+    // A builder checking its own work reviews no pull request, even on a card that carries one. The
+    // card sits on an older project's Work, the board that still has a self-review phase.
     const selfReview = await (async () => {
       const store = (await createFactoryStorageForTests()).workItems;
       const queued = await queueDecision(store, {
@@ -7985,6 +7987,7 @@ describe('review status comment lifecycle', () => {
       controller: createSession(undefined, { agentEndReason: 'complete' }).controller as never,
       transitionService: selfReview.queued.transitionService,
       storage: selfReview.store,
+      boards: new Map([['work', selfReviewWorkBoard]]),
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
       reportReviewStatus: selfReviewStatus,

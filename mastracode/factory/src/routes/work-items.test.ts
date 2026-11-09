@@ -233,7 +233,6 @@ describe('installed board catalog', () => {
       flow: {
         triage: 'triage',
         build: 'execute',
-        selfReview: 'review',
         pullRequestReview: 'pr-review',
         completed: 'done',
         canceled: 'canceled',

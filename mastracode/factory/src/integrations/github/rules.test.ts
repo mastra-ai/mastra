@@ -3,7 +3,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { reviewBoard } from '../../boards/review.js';
-import { createTestBoard } from '../../boards/test-utils.js';
+import { createTestBoard, selfReviewWorkBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -274,6 +274,9 @@ function pullRequest(
     },
   };
 }
+
+/** Work as a project stored it while Work still had its `review` self-review phase. */
+const olderWork = () => new Map([['work', selfReviewWorkBoard]]);
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -3178,6 +3181,7 @@ describe('GithubRules', () => {
 
   it('answers a pull request opening for the pull request card and the item it was authored from', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
+      // The rule places the authoring card in an older project's Work self-review phase.
       pullRequestOpened: context => {
         // The arrival files the pull request's own card; the item the pull
         // request was authored from is placed in review instead.
@@ -3226,7 +3230,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: olderWork(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3290,7 +3294,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: olderWork(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3298,10 +3302,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: olderWork(),
       }),
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: olderWork(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });

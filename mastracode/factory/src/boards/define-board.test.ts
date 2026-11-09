@@ -231,8 +231,7 @@ describe('defineBoard', () => {
       intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
       triage: ['intake', 'planning', 'done', 'canceled'],
       planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
-      execute: ['review', 'pr-review', 'planning', 'done', 'canceled'],
-      review: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
+      execute: ['pr-review', 'planning', 'done', 'canceled'],
       'pr-review': ['intake', 'planning', 'execute', 'done', 'canceled'],
       done: ['pr-review'],
       canceled: ['intake', 'pr-review'],
@@ -255,7 +254,6 @@ describe('defineBoard', () => {
       triage: 'factory-triage',
       planning: 'factory-plan',
       execute: 'factory-build',
-      review: 'factory-self-review',
       'pr-review': 'factory-review',
       done: null,
       canceled: null,
@@ -264,8 +262,7 @@ describe('defineBoard', () => {
     expect(workBoard.roleForPhase('triage')).toBe('triage');
     expect(workBoard.roleForPhase('planning')).toBe('work');
     expect(workBoard.roleForPhase('execute')).toBe('work');
-    // The independent reviewer works the card in Review and PR review.
-    expect(workBoard.roleForPhase('review')).toBe('review');
+    // The independent reviewer works the card in Review.
     expect(workBoard.roleForPhase('pr-review')).toBe('review');
     // The first phase of the `work` context; a run started on a resting Work card uses its role's lane instead.
     expect(workBoard.phaseForRole('work')).toBe('planning');
@@ -274,7 +271,7 @@ describe('defineBoard', () => {
   });
 
   it('declares a working lane for each Work role, and Planning in the work context', () => {
-    expect(['triage', 'planning', 'execute', 'review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
+    expect(['triage', 'planning', 'execute', 'pr-review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
       'triage',
       'work',
       'work',

@@ -126,7 +126,7 @@ describe('rulePhaseContext', () => {
       kind: 'working',
       context: 'work',
       role: 'work',
-      nextPhases: expect.arrayContaining(['review', 'done', 'canceled']),
+      nextPhases: expect.arrayContaining(['pr-review', 'done', 'canceled']),
     });
   });
 

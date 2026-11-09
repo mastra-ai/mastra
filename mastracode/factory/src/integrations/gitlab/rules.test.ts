@@ -1619,7 +1619,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           input: {
             board: 'work',
             title: 'Tidy the release notes',
-            stages: ['review'],
+            stages: ['pr-review'],
             sessions: {
               work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/item-manual-1', startedBy: 'user-1' },
             },
@@ -1708,7 +1708,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             board: 'work',
             externalSource: { integrationId: 'linear', type: 'issue', externalId: 'ENG-7' },
             title: 'ENG-7',
-            stages: ['review'],
+            stages: ['execute'],
             sessions: {},
             metadata: { authorTrusted: true },
           },
