@@ -49,7 +49,7 @@ Run the plan's full set of gates on the final head; every gate passes before you
 
 ## Hand-off
 
-Move the card with `factory_transition_work_item`, using the `expectedRevision` from the latest `factory-phase` signal and a one- or two-sentence rationale:
+Move the card with `factory_transition_work_item`, using the `expectedRevision` from the latest `factory-phase` signal and a one- or two-sentence rationale. Before choosing, look for a change request already open from your branch (`gh pr list --head <your branch> --state open`, or `glab mr list --source-branch <your branch>`): on a manual card it is tracked on its own card and is not listed under Sources. Treat one you find like a listed one.
 
 - **Self-review on:** do not open a pull or merge request. Move the card to Review (`stage: "review"`). An independent reviewer tests the branch there and opens the change request once it approves.
 - **Self-review off:** open the change request from the pushed head with `source_control_create_change_request` (head: the work branch; base: the default branch). Title it after the work item, summarize the change and its verification in the body, and link the source issue (`Fixes #<n>` on GitHub, `Closes #<n>` on GitLab). Then move the card to PR review (`stage: "pr-review"`).
