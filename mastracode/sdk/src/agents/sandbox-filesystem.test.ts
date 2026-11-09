@@ -84,6 +84,18 @@ describe('SandboxFilesystem', () => {
     );
   });
 
+  it('explains the miss from stat, which view calls before readFile', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return { exitCode: 20, stdout: '', stderr: '' };
+      if (script === `test -e '/tmp/x/a.ts'`) return { exitCode: 0, stdout: '', stderr: '' };
+      return { exitCode: 1, stdout: '', stderr: '' };
+    });
+    const error = await fs.stat('/tmp/x/a.ts').catch(e => e);
+    expect(error).toBeInstanceOf(FileNotFoundError);
+    expect(error.message).toContain(`resolved to ${WORKDIR}/tmp/x/a.ts`);
+    expect(error.message).toContain(`Put scratch worktrees under ${WORKDIR}/.worktrees/.`);
+  });
+
   it('keeps the plain not-found error when the path exists nowhere', async () => {
     const { fs } = makeFs(script => ({ exitCode: script.startsWith('test -e') ? 1 : 20, stdout: '', stderr: '' }));
     for (const path of ['/src/missing.ts', '/tmp/nope.ts']) {
@@ -1040,6 +1052,19 @@ describe('with a native sandbox filesystem', () => {
     const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
     const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
     const error = await fs.readFile('/tmp/x/a.ts').catch(e => e);
+    expect(error).toBeInstanceOf(FileNotFoundError);
+    expect(error.message).toContain(`resolved to ${WORKDIR}/tmp/x/a.ts`);
+    expect(sandbox.calls).toEqual([`test -e '/tmp/x/a.ts'`]);
+  });
+
+  it('explains a native stat miss on an absolute path that exists outside the workdir', async () => {
+    const { native } = makeNative();
+    native.stat = async () => {
+      throw new FileNotFoundError(`${WORKDIR}/tmp/x/a.ts`);
+    };
+    const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
+    const error = await fs.stat('/tmp/x/a.ts').catch(e => e);
     expect(error).toBeInstanceOf(FileNotFoundError);
     expect(error.message).toContain(`resolved to ${WORKDIR}/tmp/x/a.ts`);
     expect(sandbox.calls).toEqual([`test -e '/tmp/x/a.ts'`]);

@@ -1080,7 +1080,13 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const native = this.sandbox.filesystem;
     if (native) {
       await this.verifyNative('target', abs, path);
-      const info = await native.stat(abs);
+      let info: Awaited<ReturnType<typeof native.stat>>;
+      try {
+        info = await native.stat(abs);
+      } catch (error) {
+        const isNotFound = error instanceof FileNotFoundError || (error as { code?: unknown })?.code === 'ENOENT';
+        throw (isNotFound && (await this.outsideWorkdirNotFound(path, abs))) || error;
+      }
       return {
         ...info,
         name: posixPath.basename(abs),
@@ -1098,7 +1104,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       `stat -L -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -L -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
     );
     if (result.exitCode !== 0) {
-      throw new FileNotFoundError(path);
+      throw (await this.outsideWorkdirNotFound(path, abs)) ?? new FileNotFoundError(path);
     }
     const [kind, sizeStr, mtimeStr, ctimeStr] = result.stdout.trim().split('|');
     const type = kind && kind.toLowerCase().includes('directory') ? 'directory' : 'file';
