@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { splitBlocks } from './blocks';
+import { splitBlocks, splitList } from './blocks';
 
 describe('splitBlocks', () => {
   it('cuts a reply at its blank lines', () => {
@@ -74,4 +74,43 @@ describe('splitBlocks', () => {
   ])('rejoins to the reply it was given', markdown => {
     expect(splitBlocks(markdown).join('')).toBe(markdown);
   });
+});
+
+describe('splitList', () => {
+  it('cuts a list at its items, each keeping what is nested under it', () => {
+    expect(splitList('1. one\n   more\n   - sub\n2. two\n')).toEqual({
+      ordered: true,
+      start: 1,
+      loose: false,
+      tasks: false,
+      items: ['1. one\n   more\n   - sub\n', '2. two\n'],
+    });
+  });
+
+  it('reads the list from its lines: where it starts, whether it is spaced, whether it holds tasks', () => {
+    expect(splitList('7) a\n\n8) b')).toMatchObject({ ordered: true, start: 7, loose: true, tasks: false });
+    expect(splitList('- [ ] a\n- b')).toMatchObject({ ordered: false, loose: false, tasks: true });
+  });
+
+  it.each([
+    ['a single item', '- only'],
+    ['a paragraph', 'Text\n- item'],
+    ['a blank line inside an item of an unspaced list', '- one\n\n  still one\n- two'],
+    ['a lazy continuation line', '- a\nlazy\n- b'],
+    ['a change of marker', '- a\n* b'],
+    ['a thematic break', '* a\n* * *\n* b'],
+    ['an empty item', '- a\n-\n- c'],
+    ['an item opening on indented code', '-     code\n- b'],
+    ['tab indentation', '-\ta\n-\tb'],
+    ['a checkbox the stream has half written', '- a\n- ['],
+  ])('leaves %s whole', (_, markdown) => {
+    expect(splitList(markdown)).toBeUndefined();
+  });
+
+  it.each(['- a\n- b\n\n', '1. one\n\n   still one\n\n2. two', '- a\n  - a1\n- b'])(
+    'rejoins to the list it was given',
+    list => {
+      expect(splitList(list)?.items.join('')).toBe(list);
+    },
+  );
 });

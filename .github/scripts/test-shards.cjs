@@ -1,5 +1,5 @@
-// Shard math for the affected unit tests, shared by prebuild.yml (how many shards) and
-// scripts/vitest-timing-sequencer.ts (which files each `vitest --shard=k/N` run takes).
+// Shard math for the affected unit tests, shared by select-affected-tests.cjs (how many shards)
+// and scripts/vitest-timing-sequencer.ts (which files each `vitest --shard=k/N` run takes).
 //
 // Vitest's own --shard sorts files by a hash of their path and gives each shard the same number
 // of files, so a shard that draws the slow files finishes minutes after the others. Here every
@@ -73,33 +73,3 @@ function assignShards({ files, timings, count, groupOf = () => undefined }) {
 }
 
 module.exports = { shardCount, assignShards, FILE_OVERHEAD_MS, UNKNOWN_FILE_MS };
-
-// CLI: node test-shards.cjs <file-list> [timings.json]
-// Prints the shard numbers for the matrix as a JSON array, e.g. [1,2,3].
-if (require.main === module) {
-  const { readFileSync, existsSync } = require('node:fs');
-  const [listPath, timingsPath] = process.argv.slice(2);
-  if (!listPath) {
-    console.error('Usage: node test-shards.cjs <file-list> [timings.json]');
-    process.exit(2);
-  }
-  const files = readFileSync(listPath, 'utf8').split(/\r?\n/).filter(Boolean);
-  let timings = {};
-  if (timingsPath && existsSync(timingsPath)) {
-    try {
-      timings = JSON.parse(readFileSync(timingsPath, 'utf8'));
-    } catch {
-      console.error(`Could not read ${timingsPath}; planning without timings.`);
-    }
-  }
-  const env = name => (process.env[name] ? Number(process.env[name]) : undefined);
-  const count = shardCount({
-    files,
-    timings,
-    maxShards: env('TEST_SHARDS_MAX'),
-    targetShardMs: env('TEST_SHARDS_TARGET_MS'),
-    workers: env('TEST_SHARDS_WORKERS'),
-  });
-  console.error(`${files.length} test files: ${count} shard(s).`);
-  process.stdout.write(JSON.stringify(Array.from({ length: Math.max(1, count) }, (_, i) => i + 1)));
-}

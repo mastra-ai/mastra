@@ -306,7 +306,7 @@ jobs:
           exit $status
 
   # Merges the shards' reports into one summary. On a full-suite run it also records how long
-  # each test file took, which "Plan unit test shards" in prebuild.yml balances shards with.
+  # each test file took, which the affected unit test shards are planned and balanced by.
   # Only runs on main (the alpha cron) can seed it: a PR's cache is visible to that PR alone.
   test-report:
     name: Test Report
