@@ -222,7 +222,7 @@ const step1 = createStep({
     console.log(state.counter)
 
     // Update state for subsequent steps
-    setState({ ...state, counter: state.counter + 1 })
+    await setState({ counter: state.counter + 1 })
 
     return { formatted: inputData.message.toUpperCase() }
   },

@@ -340,9 +340,9 @@ A classifier without constructor-configured questions can't be used as a workflo
           },
           {
             name: 'setState',
-            type: '(state: z.infer<TState>) => void',
+            type: '(state: Partial<z.infer<TState>>) => Promise<void>',
             description:
-              "Function to set the state of the workflow. Inject via reducer-like pattern, such as `setState({ ...(await getState()), ...newState })`. In a run stored with `storageVersion: 2`, `setState` merges the top-level keys it's given into the state, so pass only the keys that changed.",
+              "Merges the top-level keys it's given into the workflow state. Pass only the keys that changed: spreading a state you read earlier can overwrite changes that parallel steps made. Await it, so the update is applied before the step returns and a validation error fails the step.",
           },
           {
             name: 'runId',

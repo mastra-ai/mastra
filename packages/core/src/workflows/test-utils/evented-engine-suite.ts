@@ -128,6 +128,8 @@ export function createEventedEngineTestSuite({
       //persistWorkflowSnapshot error-handling tests are skipped because it's not used in evented-engine
       errorPersistWithoutStack: true,
       errorPersistMastraError: true,
+      // Evented setState doesn't validate against stateSchema
+      stateValidation: true,
       ...skipTests,
     },
 

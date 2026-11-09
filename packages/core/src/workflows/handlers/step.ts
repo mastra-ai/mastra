@@ -549,12 +549,13 @@ export async function executeStep(
         if (stateValidationError) {
           throw stateValidationError;
         }
-        const delta = { ...contextMutations.stateDelta };
+        const delta = { ...(journal ? contextMutations.stateDelta : contextMutations.stateUpdate) };
         for (const [key, value] of Object.entries(changes)) {
           if (value === undefined) delta[key] = undefined;
           else if (Object.prototype.hasOwnProperty.call(stateData, key)) delta[key] = stateData[key];
         }
-        contextMutations.stateDelta = delta;
+        if (journal) contextMutations.stateDelta = delta;
+        else contextMutations.stateUpdate = delta;
       };
 
       const stepParams = {
@@ -570,7 +571,7 @@ export async function executeStep(
         inputData,
         state: executionContext.state,
         // A nested workflow hands back its state through the internal path, as on v1.
-        setState: (state: any) => (journal && !isNestedWorkflow ? mergeState(state) : handBackState(state)),
+        setState: (state: any) => (isNestedWorkflow ? handBackState(state) : mergeState(state)),
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,

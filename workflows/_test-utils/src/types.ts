@@ -417,6 +417,8 @@ export type WorkflowTestDomain =
 export type SkippableTest =
   // State-related tests (evented engine WIP)
   | 'state'
+  // setState rejecting updates that break stateSchema (the evented engine never validates setState)
+  | 'stateValidation'
   // Error identity preservation (some engines serialize errors)
   | 'errorIdentity'
   // Schema validation throwing errors

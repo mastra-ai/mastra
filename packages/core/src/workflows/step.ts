@@ -44,7 +44,7 @@ export type ExecuteFunctionParams<
   getState<K extends (unknown extends TState ? string : keyof TState & string)>(
     keys: readonly K[],
   ): Promise<unknown extends TState ? Record<string, any> : Pick<TState, K & keyof TState>>;
-  setState(state: TState): Promise<void>;
+  setState(state: Partial<TState>): Promise<void>;
   resumeData?: TResume;
   suspendData?: TSuspend;
   retryCount: number;
