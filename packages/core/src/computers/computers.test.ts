@@ -398,6 +398,47 @@ describe('Computers', () => {
     expect(writer.custom).not.toHaveBeenCalled();
   });
 
+  it('returns not found when destroy removes the catalog record before attachment persistence', async () => {
+    const storage = new InMemoryStore();
+    const computerStorage = new InMemoryComputersStorage();
+    storage.stores.computers = computerStorage;
+    const computers = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers });
+    const previous = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    const otherContext = { agent: { resourceId: 'resource', threadId: 'other-thread' } } as any;
+    const next = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, otherContext);
+    const getComputer = computerStorage.getComputer.bind(computerStorage);
+    let releaseRead!: () => void;
+    let blocked = false;
+    const readStarted = new Promise<void>(resolve => {
+      computerStorage.getComputer = vi.fn(async id => {
+        if (id === next.computer.id && !blocked) {
+          blocked = true;
+          resolve();
+          await new Promise<void>(release => (releaseRead = release));
+        }
+        return getComputer(id);
+      });
+    });
+    const setComputer = vi.spyOn(computerStorage, 'setComputer');
+    const writer = { custom: vi.fn(async () => {}) };
+
+    const attaching = (computers.tools().mastra_workspace_computer_attach as any).execute(
+      { id: next.computer.id },
+      { ...context, writer },
+    );
+    await readStarted;
+    await (computers.tools().mastra_workspace_computer_destroy as any).execute({ id: next.computer.id }, otherContext);
+    releaseRead();
+
+    await expect(attaching).resolves.toBe('computer not found');
+    await expect(
+      computers.viewer(previous.computer.id, { resourceId: 'resource', threadId: 'thread' }),
+    ).resolves.toMatchObject({ url: 'https://viewer.test/sandbox-1' });
+    expect(setComputer).not.toHaveBeenCalledWith(expect.objectContaining({ id: previous.computer.id }));
+    expect(writer.custom).not.toHaveBeenCalled();
+  });
+
   it('does not publish an attachment destroyed while its durable pointer is saving', async () => {
     const storage = new InMemoryStore();
     storage.stores.computers = new InMemoryComputersStorage();

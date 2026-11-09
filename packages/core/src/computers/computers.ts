@@ -187,6 +187,23 @@ export class Computers implements MastraComputers {
     };
   }
 
+  async #persistAttachmentPointer(scope: Scope, entry: Entry): Promise<void> {
+    if (!entry.persistent) return;
+    const { threadState } = await this.#stores();
+    if (!threadState) throw new Error('persistent computers require computers and thread-state storage');
+    const value: StoredAttachment = {
+      schemaVersion: 1,
+      computerId: entry.id,
+      control: {
+        holder: entry.control.holder,
+        ...(entry.control.reason ? { reason: entry.control.reason } : {}),
+        revision: entry.control.revision,
+        enforcedRevision: entry.control.enforcedRevision,
+      },
+    };
+    await threadState.setState({ threadId: scope.threadId, type: `${ATTACHMENT_TYPE}:${scope.resourceId}`, value });
+  }
+
   async #persistAttachment(scope: Scope, entry: Entry): Promise<void> {
     if (!entry.persistent) return;
     const { computers, threadState } = await this.#stores();
@@ -202,17 +219,7 @@ export class Computers implements MastraComputers {
         enforcedRevision: entry.control.enforcedRevision,
       },
     });
-    const value: StoredAttachment = {
-      schemaVersion: 1,
-      computerId: entry.id,
-      control: {
-        holder: entry.control.holder,
-        ...(entry.control.reason ? { reason: entry.control.reason } : {}),
-        revision: entry.control.revision,
-        enforcedRevision: entry.control.enforcedRevision,
-      },
-    };
-    await threadState.setState({ threadId: scope.threadId, type: `${ATTACHMENT_TYPE}:${scope.resourceId}`, value });
+    await this.#persistAttachmentPointer(scope, entry);
   }
 
   async #deleteAttachment(scope: Scope): Promise<void> {
@@ -582,9 +589,18 @@ export class Computers implements MastraComputers {
       if (entry.destroyed) return NOT_FOUND;
       const previousId = this.#attachments.get(scope.key);
       const previous = previousId ? this.#computers.get(previousId) : undefined;
-      await this.#persistAttachment(scope, entry);
+      try {
+        await this.#persistAttachment(scope, entry);
+      } catch (error) {
+        const { computers } = await this.#stores();
+        const record = await computers?.getComputer(entry.id);
+        if (!entry.destroyed && record) throw error;
+        if (previous) await this.#persistAttachmentPointer(scope, previous);
+        else await this.#deleteAttachment(scope);
+        return NOT_FOUND;
+      }
       if (entry.destroyed) {
-        if (previous) await this.#persistAttachment(scope, previous);
+        if (previous) await this.#persistAttachmentPointer(scope, previous);
         else await this.#deleteAttachment(scope);
         return NOT_FOUND;
       }
