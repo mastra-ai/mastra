@@ -952,7 +952,24 @@ export const useChat = ({
 
     const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
+    // Stop (or a newer send) aborts this controller on purpose; that ends the send, it doesn't fail it.
+    // A caller-supplied signal keeps normal fetch semantics and still rejects.
+    const stoppedHere = (error: unknown) => isAbortError(error) && internalAbort.signal.aborted && !signal?.aborted;
+    const settleStopped = () => {
+      // A newer send owns the running state once it has replaced this controller.
+      if (!_streamAbortRef.current || _streamAbortRef.current === internalAbort) setIsRunning(false);
+    };
+
     const streamWithLegacyRoute = async () => {
+      try {
+        await runLegacyRoute();
+      } catch (error) {
+        if (!stoppedHere(error)) throw error;
+        settleStopped();
+      }
+    };
+
+    const runLegacyRoute = async () => {
       const runId = uuid();
       _currentRunId.current = runId;
       const response = await agent.stream(coreUserMessages, {
@@ -1092,6 +1109,10 @@ export const useChat = ({
         setIsRunning(false);
       }
     } catch (error) {
+      if (stoppedHere(error)) {
+        settleStopped();
+        return;
+      }
       if (isThreadSignalUnsupportedError(error)) {
         try {
           await agent.sendSignal({
