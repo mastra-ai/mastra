@@ -66,6 +66,9 @@ export function useThinkingLevelStop<T extends string>({
     shownStop,
     shownOption: options[shownStop],
     isPending: pendingStop !== undefined,
+    /** Shows a stop the way a drag would, without writing it until `commitOnRelease`. */
+    previewStop: setDraggedStop,
+    commitOnRelease,
     rangeInputProps: {
       type: 'range',
       min: 0,

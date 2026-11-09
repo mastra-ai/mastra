@@ -1,3 +1,7 @@
+import { useRef, useState } from 'react';
+import type { PointerEvent } from 'react';
+
+import { ThinkingLevelBrain } from './thinking-level-brain';
 import { useThinkingLevelStop, invisibleRangeInputClassName } from './use-thinking-level-stop';
 import type { ThinkingLevelOption } from './use-thinking-level-stop';
 import { ButtonLabel, buttonVariants } from '@/ds/components/Button/Button';
@@ -6,23 +10,34 @@ import { cn } from '@/lib/utils';
 
 export interface ThinkingLevelRampProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];
-  /** Undefined while no level can be picked: the ramp keeps its size, with empty bars and a disabled slider. */
+  /** Undefined while no level can be picked: the ramp keeps its size, with no pill and a disabled slider. */
   value: T | undefined;
   label: string;
-  /** Pulses the empty bars while the level loads. */
+  /** Pulses the track while the level loads. */
   loading?: boolean;
-  /** Why no level can be picked, shown where the level would be. */
+  /** Why no level can be picked, shown beside the label above the track. */
   unavailableReason?: string;
-  /** A text button at the end of the header, e.g. a way back to an inherited level. */
+  /** A text button at the end of the label row, e.g. a way back to an inherited level. */
   reset?: { label: string; onClick: () => void };
   /** Returning the write lets the ramp hold the dropped stop until it lands. */
   onChange: (value: T) => void | Promise<unknown>;
 }
 
-function filledBarColor(option: ThinkingLevelOption) {
-  return option.emphasis === 'warning' ? 'bg-warning-foreground' : 'bg-foreground';
-}
+/** How many plain cells the picked cell spans once it widens to fit its name. */
+const PICKED_GROW = 3.4;
+/** How far the pill leans toward a hovered level. */
+const LEAN_PX = 6;
 
+const settle = 'ease-out-custom motion-reduce:transition-none';
+
+/**
+ * One brain per level, filled to its depth. The picked level widens into a raised pill that
+ * carries its name. When it moves, the leading edge leaves first and the trailing edge follows,
+ * so the pill stretches across and settles; hovering another level leans the pill toward it.
+ *
+ * A hidden range input is the control for keyboard and assistive tech. Pointers land on the
+ * cells instead, which are not evenly sized, and a drag only writes the level it ends on.
+ */
 export function ThinkingLevelRamp<T extends string>({
   options,
   value,
@@ -32,25 +47,90 @@ export function ThinkingLevelRamp<T extends string>({
   reset,
   onChange,
 }: ThinkingLevelRampProps<T>) {
-  const { shownStop, shownOption, rangeInputProps } = useThinkingLevelStop({ options, value, onChange });
-  const lastStop = Math.max(options.length - 1, 1);
+  const { shownStop, shownOption, rangeInputProps, previewStop, commitOnRelease } = useThinkingLevelStop({
+    options,
+    value,
+    onChange,
+  });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  const [hoveredStop, setHoveredStop] = useState<number>();
+  const [motion, setMotion] = useState({ stop: shownStop, forward: true });
+  if (motion.stop !== shownStop) setMotion({ stop: shownStop, forward: shownStop > motion.stop });
+
+  const disabled = value === undefined;
+  const lastStop = Math.max(options.length - 1, 0);
+  const picked = shownStop >= 0;
+  const warning = shownOption?.emphasis === 'warning';
+  const lean =
+    hoveredStop === undefined || !picked || hoveredStop === shownStop
+      ? 0
+      : hoveredStop > shownStop
+        ? LEAN_PX
+        : -LEAN_PX;
+
+  // Each plain cell is one unit, the picked one PICKED_GROW units, inside the track's 4px padding.
+  const units = (cells: number) => `calc((100% - 8px) * ${cells / (lastStop + PICKED_GROW)} + 4px)`;
+  // At either end the pill reaches past the track by the 3px it stands proud above and below,
+  // so its cap wraps the track's cap instead of leaving a sliver of track beside it.
+  const edge = (cells: number) => (cells === 0 ? '-3px' : units(cells));
+
+  const stopAt = (clientX: number) => {
+    const cells = trackRef.current?.querySelectorAll<HTMLElement>('[data-stop]') ?? [];
+    let nearest: number | undefined;
+    let nearestDistance = Infinity;
+    for (const cell of cells) {
+      const { left, right } = cell.getBoundingClientRect();
+      const distance = clientX < left ? left - clientX : clientX > right ? clientX - right : 0;
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = Number(cell.dataset.stop);
+      }
+    }
+    return nearest;
+  };
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (disabled || event.button !== 0) return;
+    const stop = stopAt(event.clientX);
+    if (stop === undefined) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragging.current = true;
+    setHoveredStop(undefined);
+    inputRef.current?.focus({ preventScroll: true });
+    previewStop(stop);
+  };
+
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    const stop = stopAt(event.clientX);
+    if (dragging.current) {
+      if (stop !== undefined) previewStop(stop);
+    } else if (event.pointerType === 'mouse') {
+      setHoveredStop(stop);
+    }
+  };
+
+  const onPointerEnd = () => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    commitOnRelease();
+  };
 
   return (
-    <div className="flex flex-col gap-3" aria-busy={loading || undefined}>
+    <div className="flex flex-col gap-2" aria-busy={loading || undefined}>
       <div className="flex items-baseline justify-between gap-2">
-        <Txt as="p" variant="label" tone="ink" className="shrink-0">
+        <Txt as="p" variant="caption" tone="muted" className="shrink-0">
           {label}
         </Txt>
         <div className="flex min-w-0 items-baseline gap-2">
-          <Txt
-            as="span"
-            variant="caption"
-            tone="muted"
-            className="truncate"
-            title={shownOption ? undefined : unavailableReason}
-          >
-            {shownOption ? shownOption.label : unavailableReason}
-          </Txt>
+          {disabled && unavailableReason ? (
+            <Txt as="span" variant="caption" tone="muted" className="truncate" title={unavailableReason}>
+              {unavailableReason}
+            </Txt>
+          ) : null}
           {reset ? (
             <button
               type="button"
@@ -62,45 +142,91 @@ export function ThinkingLevelRamp<T extends string>({
           ) : null}
         </div>
       </div>
-      <div className="flex flex-col gap-2">
-        <div
-          className={cn(
-            'relative flex h-10 items-end gap-1 max-sm:h-11',
-            loading && 'motion-safe:animate-pulse motion-reduce:animate-none',
-          )}
-        >
-          {options.map((option, stop) => (
+      <div
+        ref={trackRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onLostPointerCapture={onPointerEnd}
+        onPointerLeave={() => setHoveredStop(undefined)}
+        className={cn(
+          'relative flex h-8 touch-pan-y rounded-full bg-fill p-1 select-none max-sm:h-10',
+          !disabled && 'cursor-pointer',
+          loading && 'motion-safe:animate-pulse motion-reduce:animate-none',
+        )}
+      >
+        {picked ? (
+          <span
+            aria-hidden
+            data-pill
+            className={cn('absolute -inset-y-0.75 rounded-full bg-card shadow-raised transition-[left,right]', settle)}
+            style={{
+              left: `calc(${edge(shownStop)} + ${Math.min(lean, 0)}px)`,
+              right: `calc(${edge(lastStop - shownStop)} - ${Math.max(lean, 0)}px)`,
+              // The leading edge moves first and fast; the trailing edge waits a beat, then follows.
+              transitionDuration: motion.forward
+                ? 'var(--duration-normal), var(--duration-slow)'
+                : 'var(--duration-slow), var(--duration-normal)',
+              transitionDelay: motion.forward ? '50ms, 0ms' : '0ms, 50ms',
+            }}
+          />
+        ) : null}
+        {options.map((option, stop) => {
+          const isPicked = stop === shownStop;
+          return (
             <span
               key={option.value}
               aria-hidden
+              data-stop={stop}
+              data-picked={isPicked || undefined}
               className={cn(
-                'flex-1 rounded-sm transition-colors',
-                stop <= shownStop ? filledBarColor(option) : 'bg-fill',
+                'relative flex min-w-0 basis-0 items-center justify-center transition-[flex-grow,color] duration-slow',
+                settle,
+                isPicked
+                  ? cn('grow-[3.4]', warning ? 'text-warning-foreground' : 'text-foreground')
+                  : cn(
+                      'grow',
+                      disabled
+                        ? 'text-muted-foreground/45'
+                        : hoveredStop === stop
+                          ? 'text-foreground'
+                          : stop < shownStop
+                            ? 'text-foreground/55'
+                            : 'text-muted-foreground/45',
+                    ),
               )}
-              style={{ height: `${20 + (80 * stop) / lastStop}%` }}
-            />
-          ))}
-          <input
-            {...rangeInputProps}
-            aria-label={label}
-            aria-valuetext={shownOption?.label ?? unavailableReason}
-            disabled={value === undefined}
-            className={cn('absolute inset-0 size-full rounded-sm', invisibleRangeInputClassName)}
-          />
-        </div>
-        <div className="flex justify-between">
-          {options.map((option, stop) => (
-            <Txt
-              key={option.value}
-              as="span"
-              variant="meta"
-              tone={stop === shownStop ? 'ink' : 'faint'}
-              className="flex-1 text-center"
             >
-              {option.label}
-            </Txt>
-          ))}
-        </div>
+              <ThinkingLevelBrain
+                fill={lastStop === 0 ? 1 : stop / lastStop}
+                className={cn(
+                  'transition-[scale] duration-fast',
+                  settle,
+                  !isPicked && hoveredStop === stop && 'scale-110',
+                )}
+              />
+              <Txt
+                as="span"
+                variant="card-title-tight"
+                className={cn(
+                  'overflow-hidden whitespace-nowrap antialiased transition-[max-width,margin,opacity,filter] duration-slow',
+                  settle,
+                  isPicked ? 'ml-1.5 max-w-24 opacity-100 blur-none delay-75' : 'ml-0 max-w-0 opacity-0 blur-sm',
+                )}
+              >
+                {option.label}
+              </Txt>
+            </span>
+          );
+        })}
+        <input
+          {...rangeInputProps}
+          ref={inputRef}
+          aria-label={label}
+          aria-valuetext={shownOption?.label ?? unavailableReason}
+          disabled={disabled}
+          className={cn('pointer-events-none absolute inset-0 size-full rounded-full', invisibleRangeInputClassName)}
+        />
       </div>
     </div>
   );
