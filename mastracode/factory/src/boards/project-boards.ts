@@ -19,6 +19,27 @@ const DEFAULT_RECHECK_MS = 1000;
 /** A row under the retired Review board's key is never served: the key is the Review board's alone. */
 const RESERVED_REVIEW_ROW = `Stored board "${LEGACY_REVIEW_BOARD}" isn't served: the key is reserved for the retired Review board.`;
 const PRELOAD_CONCURRENCY = 8;
+/** The phases every release seeded the Review board with; only runners and tools changed between them. */
+const REVIEW_SEED_PHASES = boardDefinitionOf(reviewBoard).phases.map(({ key, name, kind }) => ({ key, name, kind }));
+
+/**
+ * Whether `row` is the Review board as Factory seeded it: written once by Factory, never
+ * revised, and shaped like the seed. The actor alone is not proof, as any caller can pass it.
+ */
+function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
+  if (row.revision !== 1 || row.createdBy !== DEFAULT_INTAKE_ROUTE_ACTOR) return false;
+  if (row.updatedBy !== DEFAULT_INTAKE_ROUTE_ACTOR || row.name !== reviewBoard.name) return false;
+  const phases = [...row.phases].sort((a, b) => a.position - b.position);
+  return (
+    phases.length === REVIEW_SEED_PHASES.length &&
+    phases.every(
+      (phase, index) =>
+        phase.key === REVIEW_SEED_PHASES[index]!.key &&
+        phase.name === REVIEW_SEED_PHASES[index]!.name &&
+        phase.kind === REVIEW_SEED_PHASES[index]!.kind,
+    )
+  );
+}
 const SNAPSHOT_ATTEMPTS = 3;
 
 /** Where a board in a project's catalog came from. */
@@ -342,7 +363,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
       if (row.key === LEGACY_REVIEW_BOARD) {
         // Factory seeded this row while Review was a built-in board and nobody edited it since:
         // there is nothing in it to lose, so it is no problem. A person's edits are reported.
-        if (row.updatedBy === DEFAULT_INTAKE_ROUTE_ACTOR) continue;
+        if (isUntouchedReviewSeed(row)) continue;
         report(row, [
           reviewInUse
             ? `Stored board "${row.key}" is hidden by the code board with the same key.`

@@ -201,12 +201,24 @@ export function useBoardIntake({
 
   // Whether the project has any issue source connected at all. A board's own feed may still be
   // empty: the project's intake routes file cards onto any board, whatever feeds it browses.
+  // Provider sources are shared across factories, so one counts only once it is bound to one
+  // of this project's boards; until bindings load (or when they fail) the setup prompt waits.
+  const boundToProject = (integrationId: string, sourceIds: readonly string[] | null | undefined) =>
+    bindingsPending ||
+    bindingsFailed ||
+    (bindingsQuery.data ?? []).some(
+      binding =>
+        binding.integrationId === integrationId &&
+        binding.factoryProjectId === factoryProjectId &&
+        Boolean(binding.board) &&
+        (sourceIds?.includes(binding.sourceId) ?? false),
+    );
   const connected =
     (!gitlabRepository && githubEnabled && githubSelected) ||
-    gitlabEligible ||
-    linearEligible ||
-    jiraEligible ||
-    incidentioEligible;
+    (gitlabEligible && boundToProject('gitlab', config?.gitlab.sourceIds)) ||
+    (linearEligible && boundToProject('linear', config?.linear.sourceIds)) ||
+    (jiraEligible && boundToProject('jira', config?.jira.sourceIds)) ||
+    (incidentioEligible && boundToProject('incidentio', config?.incidentio?.sourceIds));
   const githubIntakeActive =
     !gitlabRepository && (defaultBoard || routedHere || routesFailed) && githubEnabled && githubSelected;
   const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
