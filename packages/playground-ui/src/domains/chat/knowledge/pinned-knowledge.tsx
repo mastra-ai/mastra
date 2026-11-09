@@ -18,6 +18,22 @@ function summary({ mode, rows }: PinnedKnowledge): string {
     .join(' ');
 }
 
+/** Pages a listing names: its `- ` entries plus the count in its closing "…and N more" line. */
+function listedPageCount(text: string): number {
+  const lines = text.split('\n');
+  const listed = lines.filter(line => line.trimStart().startsWith('- ')).length;
+  const more = lines.map(line => /^…and (\d+) more/.exec(line.trim())?.[1]).find(Boolean);
+  return listed + (more ? Number(more) : 0);
+}
+
+function toggleLabel(row: PinnedRow, open: boolean): string {
+  if (!row.listOf) return open ? 'Hide text' : 'Text';
+  if (open) return 'Hide pages';
+  const count = listedPageCount(row.text ?? '');
+  if (count === 0) return 'Show pages';
+  return count === 1 ? 'Show 1 page' : `Show ${count} pages`;
+}
+
 function PinnedRowItem({ row }: { row: PinnedRow }) {
   const [open, setOpen] = useState(false);
   const removed = row.change === 'remove';
@@ -51,7 +67,8 @@ function PinnedRowItem({ row }: { row: PinnedRow }) {
             onClick={() => setOpen(value => !value)}
           >
             <Txt as="span" variant="meta">
-              {open ? (row.listOf ? 'Hide pages' : 'Hide text') : row.listOf ? 'Pages' : 'Text'}
+              {toggleLabel(row, open)}
+              {row.listOf ? <span aria-hidden>{open ? ' ▴' : ' ▾'}</span> : null}
             </Txt>
           </button>
         ) : null}

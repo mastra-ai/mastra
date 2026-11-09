@@ -188,8 +188,22 @@ describe('pinned Knowledge in chat', () => {
       expect(within(card).getAllByText('Listing')).toHaveLength(1);
       expect(within(listing).queryByText(/docs:acme#guides\/setup — Setup/)).toBeNull();
 
-      fireEvent.click(within(listing).getByRole('button', { name: 'Pages' }));
+      fireEvent.click(within(listing).getByRole('button', { name: 'Show 6 pages' }));
       expect(within(listing).getByTestId('pinned-knowledge-listing').textContent).toBe(listingText);
+      expect(within(listing).getByRole('button', { name: 'Hide pages' }).getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('counts the listed pages, including the ones it says follow, in a collapsed toggle', () => {
+      render(withLinks(<SignalBadge signal={withListing} defaultOpen />));
+
+      const [, listing] = within(screen.getByTestId('pinned-knowledge')).getAllByTestId('pinned-knowledge-row') as [
+        HTMLElement,
+        HTMLElement,
+      ];
+      const toggle = within(listing).getByRole('button', { name: 'Show 6 pages' });
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(toggle.textContent).toBe('Show 6 pages ▾');
+      expect(within(listing).queryByTestId('pinned-knowledge-listing')).toBeNull();
     });
 
     it('shows a changed or removed listing against the page it lists', () => {
