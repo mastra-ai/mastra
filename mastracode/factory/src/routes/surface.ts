@@ -842,6 +842,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sessionFs: {
         auth: deps.auth,
         sessions: sourceControlSessions,
+        controller: deps.controller,
+        ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
       },
     }),
     ...new ConfigRoutes({
