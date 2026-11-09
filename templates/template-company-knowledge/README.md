@@ -1,6 +1,6 @@
 # Company Knowledge Agent
 
-Indexes your Linear issues and Notion pages into [pgvector](https://github.com/pgvector/pgvector) (on [Neon](https://neon.tech)) and exposes a single agent that answers questions over them. The agent searches the indexed corpus first, falls back to live Linear/Notion lookups through [Mastra Connect](https://mastra.ai/docs/mastra-platform/overview), and uses provider-native web search through Mastra's Gateway as a last resort.
+Indexes your Linear issues and Notion pages into [pgvector](https://github.com/pgvector/pgvector) (on [Neon](https://neon.tech)) and exposes a single agent that answers questions over them. The agent searches the indexed corpus first, falls back to live Linear/Notion lookups through [Mastra Connect](https://mastra.ai/docs/mastra-platform/overview), and uses Gateway-backed web search as a last resort.
 
 A scheduled workflow (`index-knowledge`) re-indexes every 6 hours automatically. Input is normalized with `UnicodeNormalizer`, and `PIIDetector` redacts emails, phone numbers, SSNs, credit card numbers, and API keys from responses before they reach the user.
 
@@ -39,7 +39,7 @@ The agent's instructions force this order:
 
 1. `search-knowledge` — semantic search over the indexed corpus.
 2. Live Linear / Notion tools (via Mastra Connect) — when fresh data is needed.
-3. Provider-native `web_search` — for public information. Only available when the agent runs on an OpenAI model.
+3. Gateway-backed `web_search` — for public information. Search uses a separate model through the Gateway, so it remains available regardless of the agent's `AGENT_MODEL`.
 
 Sources (URLs) are always cited in the response.
 
