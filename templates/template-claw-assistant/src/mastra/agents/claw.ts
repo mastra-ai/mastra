@@ -1,13 +1,12 @@
 import path from 'node:path';
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { AgentBrowser } from '@mastra/agent-browser';
 import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import 'playwright';
+import { webSearchTool } from '../tools/web-search';
 
 const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5.4';
-const usesOpenAI = /^(mastra\/)?openai\//.test(agentModel);
 
 const headless = process.env.BROWSER_HEADLESS !== 'false';
 
@@ -109,5 +108,7 @@ export const claw = new Agent({
     headless,
     ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' as const } : {}),
   }),
-  tools: usesOpenAI ? { web_search: openai.tools.webSearch({}) } : {},
+  tools: {
+    web_search: webSearchTool,
+  },
 });
