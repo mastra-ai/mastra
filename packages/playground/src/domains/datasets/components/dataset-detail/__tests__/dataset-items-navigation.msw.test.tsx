@@ -144,6 +144,17 @@ describe('dataset items navigation', () => {
     });
   });
 
+  describe('when arriving with ?run=true (e.g. from the replay panel)', () => {
+    it('opens the experiment dialog once and drops the param from the URL', async () => {
+      const { router } = renderDatasetRoute(`/datasets/${DATASET_ID}?run=true`);
+
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog.textContent).toMatch(/experiment/i);
+      await waitFor(() => expect(router.state.location.search).toBe(''));
+      expect(router.state.location.pathname).toBe(`/datasets/${DATASET_ID}`);
+    });
+  });
+
   describe('when visiting the item URL directly', () => {
     it('renders the items list with the panel open', async () => {
       renderDatasetRoute(`/datasets/${DATASET_ID}/items/item-b`);

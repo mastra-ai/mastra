@@ -10,7 +10,7 @@ import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from 
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ArrowLeft, Braces, Copy, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import {
@@ -48,7 +48,22 @@ function DatasetPage() {
   const crumbs: CrumbDef[] = [...shellCrumbs, datasetVersionCrumb];
 
   // Dialog states
-  const [experimentDialogOpen, setExperimentDialogOpen] = useState(() => searchParams.get('run') === 'true');
+  const runRequested = searchParams.get('run') === 'true';
+  const [experimentDialogOpen, setExperimentDialogOpen] = useState(runRequested);
+  // `?run=true` is a one-shot request (e.g. from the replay panel): open the dialog, then drop the
+  // param so a reload or back navigation does not reopen it. Also honors a later change while mounted.
+  useEffect(() => {
+    if (!runRequested) return;
+    setExperimentDialogOpen(true);
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('run');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [runRequested, setSearchParams]);
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
