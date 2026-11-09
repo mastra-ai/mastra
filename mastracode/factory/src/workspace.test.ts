@@ -159,6 +159,7 @@ import {
   rescanFactorySkills,
   resolveLocalFactorySkillsPath,
 } from './workspace.js';
+import type { CreateWorkspaceFactoryOptions } from './workspace.js';
 
 const tempDirs: string[] = [];
 
@@ -3624,6 +3625,7 @@ describe('factory environment sandbox context', () => {
     }>;
     project?: Record<string, unknown>;
     workspaceRegistry?: FactoryWorkspaceRegistry;
+    sandboxEnvs?: CreateWorkspaceFactoryOptions['sandboxEnvs'];
   }) {
     const github = fakeGithubIntegration();
     const repositories = new Map(
@@ -3660,6 +3662,7 @@ describe('factory environment sandbox context', () => {
       github: github as any,
       projects: projects as any,
       workspaceRegistry: options.workspaceRegistry,
+      ...(options.sandboxEnvs ? { sandboxEnvs: options.sandboxEnvs } : {}),
     });
     return { resolver, projects, sandbox, github };
   }
@@ -3925,6 +3928,49 @@ describe('factory environment sandbox context', () => {
       await workspace.sandbox.getInfo();
       return { workspace, exec: sandbox.executeCommand };
     }
+
+    it('hands Build variables to the template context and setup commands, never the runtime env', async () => {
+      const { sandboxEnvs } = await createFactoryStorageForTests();
+      await sandboxEnvs.set('org-1', 'factory-1', { name: 'PROOF_BUILD', value: 'build-1', appliesTo: 'build' }, 'u');
+      await sandboxEnvs.set('org-1', 'factory-1', { name: 'PROOF_RUNTIME', value: 'run-1', appliesTo: 'runtime' }, 'u');
+      const revisions = await sandboxEnvs.revisions('org-1', 'factory-1');
+      const { resolver, sandbox } = environmentFixture({ links: twoLinks, sandboxEnvs });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      await boot(resolver);
+
+      expect(sandbox.calls[0]!.ctx).toMatchObject({
+        buildEnv: { PROOF_BUILD: 'build-1' },
+        buildEnvRevision: revisions!.buildRevision,
+      });
+      // Every Factory-run setup command gets the Build variables as its own env.
+      expect(mocks.runSetupCommand.mock.calls.map(call => [call[2], call[3]])).toEqual([
+        ['pnpm i', { PROOF_BUILD: 'build-1' }],
+        ['touch .workspace-ready', { PROOF_BUILD: 'build-1' }],
+      ]);
+      // The runtime overlay only ever gets the Runtime variables.
+      let overlay: Record<string, string | undefined> = {};
+      for (const [update] of mocks.setEnv.mock.calls as Array<[(env: typeof overlay) => typeof overlay]>) {
+        overlay = update(overlay);
+      }
+      expect(overlay).toMatchObject({ PROOF_RUNTIME: 'run-1' });
+      expect(overlay).not.toHaveProperty('PROOF_BUILD');
+    });
+
+    it('leaves the build fields out of the context when the Factory has no Build variables', async () => {
+      const { sandboxEnvs } = await createFactoryStorageForTests();
+      await sandboxEnvs.set('org-1', 'factory-1', { name: 'PROOF_RUNTIME', value: 'run-1', appliesTo: 'runtime' }, 'u');
+      const { resolver, sandbox } = environmentFixture({ links: twoLinks, sandboxEnvs });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      await boot(resolver);
+
+      expect(sandbox.calls[0]!.ctx).not.toHaveProperty('buildEnv');
+      expect(sandbox.calls[0]!.ctx).not.toHaveProperty('buildEnvRevision');
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[3])).toEqual([{}, {}]);
+    });
 
     it('materializes every repository beneath the root, syncs the others with their own token and sets up once', async () => {
       const { resolver } = environmentFixture({ links: twoLinks });

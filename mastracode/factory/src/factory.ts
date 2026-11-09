@@ -1326,6 +1326,7 @@ export class MastraFactory {
           {
             sandbox: this.#sandbox,
             projects: factoryProjectsStorage,
+            sandboxEnvs: sandboxEnvsStorage,
             sourceControl: githubIntegration?.versionControl
               ? {
                   storage: sourceControlStorage.forIntegration(githubIntegration.id),
@@ -1603,6 +1604,7 @@ export class MastraFactory {
               : [],
           ),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
+          sandboxEnvs: sandboxEnvsStorage,
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
         }),

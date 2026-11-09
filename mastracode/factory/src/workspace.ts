@@ -42,6 +42,12 @@ import {
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
+  attachSandboxEnvRefresh,
+  cachedSandboxEnvRevision,
+  resolveSandboxEnv,
+  sandboxBuildContext,
+} from './sandbox/sandbox-env.js';
+import {
   createEnvironmentSetupHook,
   createSessionSetupHook,
   evictSessionSandbox,
@@ -59,6 +65,7 @@ import {
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SandboxEnvStore } from './storage/domains/sandbox-envs/base.js';
 import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -461,6 +468,8 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
+  /** The Factory's sandbox environment variables, applied to each session sandbox. */
+  sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
   /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
@@ -671,7 +680,7 @@ export function environmentSandboxContext(
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides, sandboxEnvs } = options;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??
     (github
@@ -772,6 +781,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // a factory session, list form or single repository.
     const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
     const sandboxSettings = resolvedEnvironment?.settings ?? {};
+    // The Factory's variables, read before construction (which is synchronous).
+    const envScope =
+      sandboxEnvs && session.factoryProjectId
+        ? { orgId: session.orgId, projectId: session.factoryProjectId }
+        : undefined;
+    const sandboxEnv = envScope ? await resolveSandboxEnv(sandboxEnvs!, envScope) : undefined;
+    // Re-read when setup actually runs, which can be long after this request.
+    const setupBuildEnv = async () => (envScope ? (await resolveSandboxEnv(sandboxEnvs!, envScope)).build : undefined);
     // The session's own link must be part of the environment: it is the
     // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
     // whose link left the environment keeps its single-repository sandbox.
@@ -944,6 +961,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 // original VM instead of provisioning a replacement.
                 sandboxId: session.sandboxId ?? undefined,
                 repoFullName,
+                ...sandboxBuildContext(sandboxEnv),
                 ...(environment
                   ? environmentSandboxContext(environment, {
                       orgId: session.orgId,
@@ -966,6 +984,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
+          // Before Factory's own GH_TOKEN, so a host env key is remembered before Factory writes it.
+          if (envScope && sandboxEnv) {
+            attachSandboxEnvRefresh(sandbox, {
+              initial: sandboxEnv,
+              revision: () => cachedSandboxEnvRevision(sandboxEnvs!, envScope),
+              load: () => resolveSandboxEnv(sandboxEnvs!, envScope),
+            });
+          }
           // Attached inside the construction closure, so exactly once per
           // instance: `constructSessionEntry` runs on every open and would
           // stack a wrapper per call. Factory's setup runs first: a hook the
@@ -1429,7 +1455,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return;
         }
         try {
-          await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
+          await timedPhase('workspace.setup', async () =>
+            runSetupCommand(target, workdir, projectRepository.setupCommand!, await setupBuildEnv()),
+          );
           await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
@@ -1577,8 +1605,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             continue;
           }
           try {
-            await timedPhase(`workspace.setup(${repo.slug})`, () =>
-              runSetupCommand(target, entry.dir, repo.setupCommand!),
+            await timedPhase(`workspace.setup(${repo.slug})`, async () =>
+              runSetupCommand(target, entry.dir, repo.setupCommand!, await setupBuildEnv()),
             );
             await entry.gate.markSetupDone();
           } catch (error) {
@@ -1607,8 +1635,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
           } else {
             try {
-              await timedPhase('workspace.setup(workspace)', () =>
-                runSetupCommand(target, gate.root, workspaceCommand),
+              await timedPhase('workspace.setup(workspace)', async () =>
+                runSetupCommand(target, gate.root, workspaceCommand, await setupBuildEnv()),
               );
               await gate.workspace.markSetupDone();
             } catch (error) {

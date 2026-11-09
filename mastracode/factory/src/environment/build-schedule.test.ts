@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { FactorySandbox } from '@mastra/core/workspace';
-import type { FactorySandboxBuild, FactorySandboxBuilds } from '@mastra/core/workspace';
+import type { FactorySandboxBuild, FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -128,6 +128,41 @@ describe('factory-environment-build workflow', () => {
     expect(stored?.activeTemplateHeads).toEqual({ 'acme/api': SHA_A });
     expect(stored?.lastBuildId).toBe('build-1');
     expect(sandbox.gets).toEqual(['build-1', 'build-1']);
+  });
+
+  it('hands start, poll and status reads the same Build variables and revision', async () => {
+    const project = await seedProject(seed);
+    await seed.sandboxEnvs.set('org-1', project.id, { name: 'PROOF_BUILD', value: 'b1', appliesTo: 'build' }, 'u');
+    await seed.sandboxEnvs.set('org-1', project.id, { name: 'RUNTIME_ONLY', value: 'r1', appliesTo: 'runtime' }, 'u');
+    const { buildRevision } = (await seed.sandboxEnvs.revisions('org-1', project.id))!;
+    const seen: Array<{ path: string; buildEnv: unknown; buildEnvRevision: unknown }> = [];
+    const record = (path: string, ctx: FactorySandboxContext) =>
+      seen.push({ path, buildEnv: ctx.buildEnv, buildEnvRevision: ctx.buildEnvRevision });
+    const sandbox = new BuildingSandbox();
+    const { start, get } = sandbox.builds;
+    Object.assign(sandbox, {
+      builds: {
+        start: (ctx, settings) => (record('start', ctx), start(ctx, settings)),
+        get: (ctx, settings, buildId) => (record('poll', ctx), get(ctx, settings, buildId)),
+      } satisfies FactorySandboxBuilds<Settings>,
+    });
+    let mastra: Mastra | undefined;
+    const runner = new EnvironmentBuildRunner(
+      { ...depsFor(seed, sandbox), sandboxEnvs: seed.sandboxEnvs },
+      { getMastra: () => mastra, sleep: async () => {} },
+    );
+    mastra = bootMastra(runner);
+
+    await runner.start(project.id, 'manual');
+    await vi.waitFor(async () => {
+      expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBe('tpl-1');
+    });
+    record('read', (await runner.readContext(project.id))!.ctx);
+
+    expect(seen.map(entry => entry.path)).toEqual(expect.arrayContaining(['start', 'poll', 'read']));
+    for (const entry of seen) {
+      expect(entry).toMatchObject({ buildEnv: { PROOF_BUILD: 'b1' }, buildEnvRevision: buildRevision });
+    }
   });
 
   it('does not let an older run that finishes late overwrite a newer build', async () => {

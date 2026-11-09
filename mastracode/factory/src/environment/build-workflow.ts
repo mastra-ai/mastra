@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { resolveProjectEnvironment } from '../workspace.js';
 import {
   ENVIRONMENT_BUILD_TRIGGERS,
-  environmentBuildContext,
+  environmentBuildContextWithEnv,
   errorReason,
   redactCredentials,
   runEnvironmentBuild,
@@ -87,7 +87,13 @@ export function createEnvironmentBuildWorkflow(
       const project = await deps.projects.getById({ id: projectId });
       if (!builds || !deps.sourceControl || !project) return { ...result, status: 'unknown' };
       const environment = await resolveProjectEnvironment(deps.sourceControl.storage, project);
-      const ctx = environmentBuildContext(project, environment, heads, deps.sourceControl.versionControl);
+      const { ctx } = await environmentBuildContextWithEnv(
+        project,
+        environment,
+        heads,
+        deps.sourceControl.versionControl,
+        deps.sandboxEnvs,
+      );
       const startedAt = now().getTime();
       try {
         for (;;) {

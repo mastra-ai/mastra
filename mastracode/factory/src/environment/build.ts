@@ -11,7 +11,9 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type { FactorySandbox, FactorySandboxContext } from '@mastra/core/workspace';
 import type { VersionControl } from '../capabilities/version-control.js';
+import { resolveSandboxEnv, sandboxBuildContext } from '../sandbox/sandbox-env.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { SandboxEnvStore } from '../storage/domains/sandbox-envs/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { environmentSandboxContext, resolveProjectEnvironment } from '../workspace.js';
 import type { SessionEnvironment } from '../workspace.js';
@@ -35,6 +37,8 @@ export interface EnvironmentBuildDeps {
   >;
   /** Absent when the factory has no source-control integration to resolve heads with. */
   sourceControl: EnvironmentBuildSourceControl | undefined;
+  /** The Factory's sandbox environment variables; Build ones reach the template build. */
+  sandboxEnvs?: Pick<SandboxEnvStore, 'resolve'>;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void };
   now?: () => Date;
   /** How often a run renews its build-start lease; a third of `BUILD_START_LEASE_MS` by default. */
@@ -96,12 +100,35 @@ export function environmentBuildContext(
 }
 
 /**
+ * {@link environmentBuildContext} with the Factory's Build variables, plus the
+ * build revision for {@link environmentBuildInputs}. Every build path (start,
+ * status read, poll) goes through this so all of them name the same template.
+ */
+export async function environmentBuildContextWithEnv(
+  project: Pick<FactoryProject, 'id' | 'orgId' | 'name'>,
+  environment: SessionEnvironment,
+  heads: EnvironmentHeads,
+  versionControl: Pick<VersionControl, 'getRepositoryAccess'>,
+  sandboxEnvs: Pick<SandboxEnvStore, 'resolve'> | undefined,
+): Promise<{ ctx: FactorySandboxContext; buildEnvRevision: string | undefined }> {
+  const env = sandboxEnvs
+    ? await resolveSandboxEnv(sandboxEnvs, { orgId: project.orgId, projectId: project.id })
+    : undefined;
+  const build = sandboxBuildContext(env);
+  return {
+    ctx: { ...environmentBuildContext(project, environment, heads, versionControl), ...build },
+    buildEnvRevision: build.buildEnvRevision,
+  };
+}
+
+/**
  * Fingerprint of everything a build bakes into the template besides the
  * repository heads: provider settings, the repositories and their order,
  * their setup commands, the workspace setup command and the working
- * directory. A schedule or push skips a ready build only while this matches.
+ * directory, and the Build variables' revision (a random id, never a value).
+ * A schedule or push skips a ready build only while this matches.
  */
-export function environmentBuildInputs(environment: SessionEnvironment): string {
+export function environmentBuildInputs(environment: SessionEnvironment, buildEnvRevision?: string): string {
   const inputs = {
     settings: environment.settings,
     workspaceSetupCommand: environment.workspaceSetupCommand ?? null,
@@ -111,6 +138,8 @@ export function environmentBuildInputs(environment: SessionEnvironment): string 
       templateBranch: repo.templateBranch,
       setupCommand: repo.setupCommand ?? null,
     })),
+    // Only when set, so fingerprints recorded before Build variables existed still match.
+    ...(buildEnvRevision ? { buildEnvRevision } : {}),
   };
   return createHash('sha256').update(JSON.stringify(inputs)).digest('hex');
 }
@@ -237,8 +266,15 @@ export async function runEnvironmentBuild(
         return { outcome: 'skipped', reason: 'no_environment' };
       }
       heads = await resolveEnvironmentHeads(sourceControl, project, environment);
-      ctx = environmentBuildContext(project, environment, heads, sourceControl.versionControl);
-      buildInputs = environmentBuildInputs(environment);
+      const built = await environmentBuildContextWithEnv(
+        project,
+        environment,
+        heads,
+        sourceControl.versionControl,
+        deps.sandboxEnvs,
+      );
+      ctx = built.ctx;
+      buildInputs = environmentBuildInputs(environment, built.buildEnvRevision);
 
       if (claim.uncertain) {
         // A run whose lease lapsed may have reached the provider before it
