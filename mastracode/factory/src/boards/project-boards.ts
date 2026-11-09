@@ -7,6 +7,7 @@ import type {
   StoredBoardScope,
   StoredBoardsStorage,
 } from '../storage/domains/boards/base.js';
+import { DEFAULT_INTAKE_ROUTE_ACTOR } from '../storage/domains/boards/base.js';
 import { LEGACY_REVIEW_BOARD } from '../storage/domains/work-items/legacy-review.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
@@ -339,6 +340,9 @@ export class ProjectBoardCache implements ProjectBoardSource {
     for (const row of rows) {
       if (this.codeRegistry.has(row.key)) continue;
       if (row.key === LEGACY_REVIEW_BOARD) {
+        // Factory seeded this row while Review was a built-in board and nobody edited it since:
+        // there is nothing in it to lose, so it is no problem. A person's edits are reported.
+        if (row.updatedBy === DEFAULT_INTAKE_ROUTE_ACTOR) continue;
         report(row, [
           reviewInUse
             ? `Stored board "${row.key}" is hidden by the code board with the same key.`

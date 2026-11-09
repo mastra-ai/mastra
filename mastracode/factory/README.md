@@ -435,6 +435,10 @@ A pull request's own card only enters Intake, Review, Done and Canceled, and onl
 
 **Triage.** The triage agent sends a confirmed bug to Planning, an open non-bug back to Intake, and closures to Done or Canceled. A person moving the card on from Intake is the approval; Factory records no classification or acceptance, and that move removes the `status: needs approval` label from the GitHub issue. On boot, Factory moves any card left in Triage by the old classify-and-accept rule back to Intake, once.
 
+**A board without an approval wait.** A board that should start work on its own says so in its triage phase's `runner.instructions` (for example `This board needs no approval before work starts.`). factory-triage then sends an open feature request, docs or maintenance item from a trusted author, that the repository would take on, to the phase a confirmed bug goes to (Planning on Work) instead of back to rest, and adds no `status: needs approval` label. Untrusted authors, questions and anything to close still rest or close as before. The agent's move starts the planning run without a person, whether or not that phase has `autoStart`: an agent's move consents to the runs it queues. Work's triage phase has no instructions, so Work keeps its approval wait.
+
+**Labels on a new repository.** factory-triage and factory-build create each GitHub label they add (`status: needs triage`, `status: auto-triaged`, `status: needs approval`, `status: pending-close`, `effort:*`, `impact:*`, `severity:*`) when the repository doesn't have it, and add one label per call, so a missing label never costs the others.
+
 **Migration:** `transitionPolicy` on `defineBoard()` is deprecated. It still runs for boards that set it, and `defineBoard()` logs one warning per board. Its context no longer carries a requested classification, and `triageType` and `accept` on an `allow` are ignored. Express the flow with each phase's `nextPhases` and `exitTool` instead:
 
 ```typescript
@@ -522,6 +526,8 @@ New projects get no Review board; Work's Review phase (`pr-review`) does its job
 
 - **Still in use**: the project has at least one card stored on `review` that isn't in Done or Canceled. It keeps the Review board exactly as before: the board is served (read-only), its cards stay on it in their phases, Review and Re-review start the reviewer in its Reviewing phase, and merging or closing a pull request moves its card to Done or Canceled there. No card can be created on it. `/factories/:id/review` opens it.
 - **Redundant**: every card stored on `review` is in Done or Canceled, or there are none. The board isn't served. Those cards read as Work cards (Intake, Done and Canceled are unchanged; `review` reads as `pr-review`), and the next normal write stores them on `work`. `/factories/:id/review` opens Work filtered to cards with a pull request. Once a project's last open Review card finishes, the board goes away; it never comes back.
+
+A project that ran an earlier release may also hold a stored `review` board row from when Review was seeded. It is never served either way. When Factory wrote it and nobody edited it since, the board catalog ignores it; a row a person edited is listed under the catalog's `problems`, because its edits are not served.
 
 Either way, new pull requests follow the project's intake routes, and the default `pull-requests` route files them on Work › Review, so nothing new lands on Review unless one of the project's own routes targets it. In a project whose Review board is redundant, a route that targets `review` stops matching and arrivals fall through to the next route. A board config or skill override for `review` is ignored, and `review` is reserved: a custom board can't use that ID. For an existing install:
 

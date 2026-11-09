@@ -199,6 +199,14 @@ export function useBoardIntake({
   const routesFailed = !gitlabRepository && labelRoutesQuery.isError;
   const routesSettled = gitlabRepository || labelRoutesQuery.isSuccess;
 
+  // Whether the project has any issue source connected at all. A board's own feed may still be
+  // empty: the project's intake routes file cards onto any board, whatever feeds it browses.
+  const connected =
+    (!gitlabRepository && githubEnabled && githubSelected) ||
+    gitlabEligible ||
+    linearEligible ||
+    jiraEligible ||
+    incidentioEligible;
   const githubIntakeActive =
     !gitlabRepository && (defaultBoard || routedHere || routesFailed) && githubEnabled && githubSelected;
   const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
@@ -336,6 +344,7 @@ export function useBoardIntake({
   return {
     active: failedSource ?? browsedSources[0],
     available,
+    connected,
     candidates,
     alreadyMaterialized,
     participantCandidates,

@@ -376,6 +376,26 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect((await a.boards.get(scope, 'release'))!).toMatchObject({ name: 'Stored release', revision: 1 });
   });
 
+  it.each([false, true])(
+    'reports no problem for the Review row Factory seeded and nobody edited (Review in use: %s)',
+    async reviewInUse => {
+      const { a, scope } = await setup();
+      // What Factory stored while Review was still a seeded board.
+      await a.boards.insertIfMissing(scope, { ...bugsBoard(), key: 'review', name: 'Review' }, 'factory');
+
+      const described = await new ProjectBoardCache({
+        codeRegistry: createBoardRegistry({ boards: [appBoard('release')] }),
+        storage: a.boards,
+        recheckMs: RECHECK_MS,
+        reviewBoardInUse: async () => reviewInUse,
+      }).describe(scope);
+
+      expect(described.problems).toEqual([]);
+      expect(described.registry.get('review')?.name).toBe(reviewInUse ? 'Review' : undefined);
+      expect((await a.boards.get(scope, 'review'))!.revision).toBe(1);
+    },
+  );
+
   it('skips a stored board that no longer compiles and still loads the code boards and the other stored boards', async () => {
     const { a, scope } = await setup();
     await a.boards.create(scope, bugsBoard(), 'user-1');
