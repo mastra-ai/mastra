@@ -12,14 +12,18 @@ const config: StudioConfig = {
   apiPrefix: '/mastra',
 };
 
-function renderSettings(setConfig = vi.fn<StudioConfigContextType['setConfig']>()) {
-  render(
-    <StudioConfigContext.Provider value={{ ...config, isLoading: false, setConfig }}>
+function Settings({ value }: { value: StudioConfigContextType }) {
+  return (
+    <StudioConfigContext.Provider value={value}>
       <TooltipProvider>
         <StudioConnectionSettings />
       </TooltipProvider>
-    </StudioConfigContext.Provider>,
+    </StudioConfigContext.Provider>
   );
+}
+
+function renderSettings(setConfig = vi.fn<StudioConfigContextType['setConfig']>()) {
+  render(<Settings value={{ ...config, isLoading: false, setConfig }} />);
   return setConfig;
 }
 
@@ -50,7 +54,7 @@ describe('StudioConnectionSettings', () => {
     type('Value of X-Team', 'design');
 
     expect(setConfig).not.toHaveBeenCalled();
-    fireEvent.click(saveButton()!);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(setConfig).toHaveBeenCalledOnce();
     expect(setConfig).toHaveBeenCalledWith({
@@ -66,7 +70,7 @@ describe('StudioConnectionSettings', () => {
 
     type('API prefix', '  ');
     fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
-    fireEvent.click(saveButton()!);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(setConfig).toHaveBeenCalledWith({ ...config, apiPrefix: undefined });
   });
@@ -75,7 +79,7 @@ describe('StudioConnectionSettings', () => {
     const setConfig = renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove Authorization' }));
-    fireEvent.click(saveButton()!);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(setConfig).toHaveBeenCalledWith({ ...config, headers: {} });
   });
@@ -91,11 +95,22 @@ describe('StudioConnectionSettings', () => {
     expect(setConfig).not.toHaveBeenCalled();
   });
 
+  it('shows the stored connection once it loads', () => {
+    const setConfig = vi.fn<StudioConfigContextType['setConfig']>();
+    const { rerender } = render(<Settings value={{ baseUrl: '', headers: {}, isLoading: true, setConfig }} />);
+
+    rerender(<Settings value={{ ...config, isLoading: false, setConfig }} />);
+
+    expect(screen.getByRole('textbox', { name: 'Mastra instance URL' })).toHaveProperty('value', config.baseUrl);
+    expect(screen.getByRole('textbox', { name: 'Header name' })).toHaveProperty('value', 'Authorization');
+    expect(saveButton()).toBeNull();
+  });
+
   it('asks for a URL instead of saving an empty one', () => {
     const setConfig = renderSettings();
 
     type('Mastra instance URL', '');
-    fireEvent.click(saveButton()!);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(screen.getByText('Enter the server URL')).toBeTruthy();
     expect(setConfig).not.toHaveBeenCalled();
