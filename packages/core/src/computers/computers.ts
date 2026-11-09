@@ -607,9 +607,9 @@ export class Computers implements MastraComputers {
   async #requestHuman(input: { reason: string }, context: Context) {
     const scope = this.#scope(context);
     if (!scope) return MISSING_IDENTITY;
-    const id = this.#attachments.get(scope.key);
-    const entry = id ? this.#computers.get(id) : undefined;
-    if (!entry || entry.ownerResourceId !== scope.resourceId || !entry.sandbox || entry.destroyed) return NOT_ATTACHED;
+    const entry = await this.#attachedEntry(scope);
+    const sandbox = entry?.sandbox ?? (await entry?.ready);
+    if (!entry || !sandbox || entry.ownerResourceId !== scope.resourceId || entry.destroyed) return NOT_ATTACHED;
     const reason = input.reason.trim();
     const run = entry.queue.then(async () => {
       let enforced = entry.control.enforcedRevision >= entry.control.revision;

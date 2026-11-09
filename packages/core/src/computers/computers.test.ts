@@ -148,6 +148,20 @@ describe('Computers', () => {
     disposeSecond();
   });
 
+  it('requests human control after process restart without an explicit attach', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: first });
+    const created = await (first.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+
+    const second = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: second });
+    await expect(
+      (second.tools().mastra_workspace_computer_request_human as any).execute({ reason: 'sign in' }, context),
+    ).resolves.toMatchObject({ computerId: created.computer.id, control: 'human', revision: 1, enforced: true });
+  });
+
   it('snapshots a persistent attachment after process restart without an explicit attach', async () => {
     const storage = new InMemoryStore();
     storage.stores.computers = new InMemoryComputersStorage();
