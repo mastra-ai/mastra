@@ -415,7 +415,14 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(Object.keys(body).sort()).toEqual(
-        ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
+        [
+          'calculatorTool',
+          'lodashTool',
+          'hello-world',
+          'generate-password',
+          'compare-password',
+          'wait-for-abort',
+        ].sort(),
       );
     });
 
