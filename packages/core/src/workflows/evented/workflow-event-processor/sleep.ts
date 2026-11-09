@@ -143,6 +143,7 @@ export async function processWorkflowSleep(
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
     actor,
+    parentWorkflow,
   });
 
   setTimeout(
@@ -270,6 +271,7 @@ export async function processWorkflowSleepUntil(
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
     actor,
+    parentWorkflow,
   });
 
   if (emitStepEvents) {

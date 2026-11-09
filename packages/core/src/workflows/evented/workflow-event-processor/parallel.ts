@@ -145,6 +145,7 @@ export async function processWorkflowConditional(
       actor,
       input: prevResult?.status === 'success' ? prevResult.output : undefined,
       resumeData,
+      parentWorkflow,
     }));
 
   const truthyIdxs: Record<number, boolean> = {};
