@@ -495,23 +495,17 @@ describe('FactoryPhaseStateProcessor', () => {
     const stageOf = async (storage: WorkItemsStorage, id: string) =>
       (await storage.get({ orgId: 'org-1', id }))?.stages;
 
-    it('fires Work’s submit_plan rule only for the planner of a planning card', async () => {
+    it('holds a Work planning card until its planner’s plan is approved, then lets the planner move it', async () => {
       const cases = [
-        { role: 'plan', message: approved(), stages: ['execute'] },
-        { role: 'work', message: approved(), stages: ['execute'] },
-        { role: 'triage', message: approved(), stages: ['planning'] },
-        { role: 'plan', message: toolMessage({ result: { content: 'Plan rejected.' } }), stages: ['planning'] },
-        { role: 'plan', message: toolMessage({ state: 'error', result: 'boom' }), stages: ['planning'] },
-        { role: 'plan', message: approved(), stages: ['triage'], from: 'triage' },
+        { role: 'plan', message: approved(), released: true },
+        { role: 'work', message: approved(), released: true },
+        { role: 'triage', message: approved(), released: false },
+        { role: 'plan', message: toolMessage({ result: { content: 'Plan rejected.' } }), released: false },
+        { role: 'plan', message: toolMessage({ state: 'error', result: 'boom' }), released: false },
       ] as const;
       for (const c of cases) {
         const storage = (await createFactoryStorageForTests()).workItems;
-        const prepared = await prepare(
-          storage,
-          c.role,
-          'issue',
-          'from' in c ? { id: 'work', stage: c.from } : undefined,
-        );
+        const prepared = await prepare(storage, c.role);
         const boards = createBoardRegistry();
         const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
         const processor = new FactoryPhaseStateProcessor({
@@ -521,8 +515,128 @@ describe('FactoryPhaseStateProcessor', () => {
           transitionService,
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
-        expect(await stageOf(storage, prepared.item.id)).toEqual(c.stages);
+        // The tool's result never moves the card by itself.
+        const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+        expect(card?.stages).toEqual(['planning']);
+        const moved = await transitionService.transition({
+          orgId: 'org-1',
+          factoryProjectId: PROJECT_ID,
+          workItemId: prepared.item.id,
+          board: 'work',
+          stage: 'execute',
+          expectedRevision: card!.revision,
+          actor: { type: 'agent', bindingId: prepared.binding.id, role: c.role },
+          ingress: { type: 'agent', identity: `planner-moves-${c.role}` },
+          cause: 'test',
+        });
+        if (c.released) {
+          expect(moved).toMatchObject({ status: 'accepted' });
+          expect(card?.metadata).toMatchObject({ planApprovedAt: expect.any(String) });
+        } else {
+          expect(moved).toMatchObject({ status: 'rejected' });
+          expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
+        }
       }
+    });
+
+    it('reads an approved plan from the in-run submit_plan result, whose plan fields may be undefined', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepare(storage, 'work');
+      const boards = createBoardRegistry();
+      const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
+      await processor.processInputStep(
+        inputArgs(requestContext(), [
+          toolMessage({
+            result: {
+              content: 'Plan approved. Proceed with implementation.',
+              submittedPlan: { title: undefined, path: undefined, action: 'approved' },
+            },
+          }),
+        ]),
+      );
+      const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+      expect(card?.metadata).toMatchObject({ phaseExit: { phase: 'planning', tool: 'submit_plan' } });
+    });
+
+    it('reads an approved plan from the latest message when a continued run’s steps carry no tool results', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepare(storage, 'work');
+      const boards = createBoardRegistry();
+      const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
+      // A run continued after submit_plan's approval: its steps hold the tool call without its result.
+      const signal = { id: 'signal-1', role: 'signal', createdAt: new Date(), content: { format: 2, parts: [] } };
+      await processor.processInputStep({
+        ...(inputArgs(requestContext(), [approved(), signal]) as object),
+        steps: [{ content: [{ type: 'tool-call', toolCallId: 'tool-call-1' }] }],
+      } as never);
+      const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+      expect(card?.metadata).toMatchObject({
+        phaseExit: { phase: 'planning', tool: 'submit_plan', toolCallId: 'tool-call-1' },
+      });
+    });
+
+    it('does not release a card that came back to Planning on the plan approved in its earlier visit', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepare(storage, 'work');
+      const boards = createBoardRegistry();
+      const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+      const processor = new FactoryPhaseStateProcessor({
+        configVersion: 'rules-v1',
+        boards,
+        storage,
+        transitionService,
+      });
+      await processor.processInputStep(inputArgs(requestContext(), [approved()]));
+      // A person sends the card to Building and back; the old result is read again from the thread.
+      for (const stage of ['execute', 'planning']) {
+        const current = (await storage.get({ orgId: 'org-1', id: prepared.item.id }))!;
+        await expect(
+          transitionService.transition({
+            orgId: 'org-1',
+            factoryProjectId: PROJECT_ID,
+            workItemId: prepared.item.id,
+            board: 'work',
+            stage,
+            expectedRevision: current.revision,
+            actor: { type: 'human', userId: 'user-1' },
+            ingress: { type: 'human', identity: `person-${stage}` },
+            cause: 'test',
+          }),
+        ).resolves.toMatchObject({ status: 'accepted' });
+      }
+      await processor.processInputStep(inputArgs(requestContext(), [approved()]));
+      const returned = (await storage.get({ orgId: 'org-1', id: prepared.item.id }))!;
+      await expect(
+        transitionService.transition({
+          orgId: 'org-1',
+          factoryProjectId: PROJECT_ID,
+          workItemId: prepared.item.id,
+          board: 'work',
+          stage: 'execute',
+          expectedRevision: returned.revision,
+          actor: { type: 'agent', bindingId: prepared.binding.id, role: 'work' },
+          ingress: { type: 'agent', identity: 'planner-moves-again' },
+          cause: 'test',
+        }),
+      ).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
+    });
+
+    it('records no approved plan for a card that is not in its exit tool’s phase', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'triage' });
+      const boards = createBoardRegistry();
+      const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+      const processor = new FactoryPhaseStateProcessor({
+        configVersion: 'rules-v1',
+        boards,
+        storage,
+        transitionService,
+      });
+      await processor.processInputStep(inputArgs(requestContext(), [approved()]));
+      const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+      expect(card?.stages).toEqual(['triage']);
+      expect(card?.metadata).not.toHaveProperty('planApprovedAt');
+      expect(card?.metadata).not.toHaveProperty('phaseExit');
     });
 
     it('gives PR review and custom boards none of Work’s submit_plan behaviour', async () => {
@@ -556,44 +670,34 @@ describe('FactoryPhaseStateProcessor', () => {
       }
     });
 
-    it('moves the card to the exit tool’s next phase only on that tool’s approved result', async () => {
-      const release = (next?: string) =>
-        defineBoard({
-          id: 'release',
-          name: 'Release',
-          initialPhase: 'intake',
-          phases: {
-            intake: { name: 'Intake', kind: 'resting', nextPhases: ['planning'] },
-            planning: {
-              name: 'Planning',
-              kind: 'working',
-              runner: { context: 'work' },
-              exitTool: { id: 'submit_plan', ...(next ? { next } : {}) },
-              nextPhases: ['building', 'intake'],
-            },
-            building: { name: 'Building', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
-            shipped: { name: 'Shipped', kind: 'terminal' },
+    it('lets the agent leave an exit tool’s phase only after that tool’s approved result, and never moves the card itself', async () => {
+      const release = defineBoard({
+        id: 'release',
+        name: 'Release',
+        initialPhase: 'intake',
+        phases: {
+          intake: { name: 'Intake', kind: 'resting', nextPhases: ['planning'] },
+          planning: {
+            name: 'Planning',
+            kind: 'working',
+            runner: { context: 'work' },
+            exitTool: { id: 'submit_plan' },
+            nextPhases: ['building', 'intake'],
           },
-        });
+          building: { name: 'Building', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
+          shipped: { name: 'Shipped', kind: 'terminal' },
+        },
+      });
       const cases = [
-        { board: release('building'), message: approved(), stages: ['building'] },
-        {
-          board: release('building'),
-          message: toolMessage({ result: { content: 'Plan rejected.' } }),
-          stages: ['planning'],
-        },
-        { board: release('building'), message: toolMessage({ state: 'error', result: 'boom' }), stages: ['planning'] },
-        {
-          board: release('building'),
-          message: toolMessage({ toolName: 'ship_it', result: { content: 'Plan approved.' } }),
-          stages: ['planning'],
-        },
-        { board: release(), message: approved(), stages: ['planning'] },
+        { message: approved(), released: true },
+        { message: toolMessage({ result: { content: 'Plan rejected.' } }), released: false },
+        { message: toolMessage({ state: 'error', result: 'boom' }), released: false },
+        { message: toolMessage({ toolName: 'ship_it', result: { content: 'Plan approved.' } }), released: false },
       ];
       for (const c of cases) {
         const storage = (await createFactoryStorageForTests()).workItems;
         const prepared = await prepare(storage, 'work', 'issue', { id: 'release', stage: 'planning' });
-        const boards = createBoardRegistry({ boards: [c.board] });
+        const boards = createBoardRegistry({ boards: [release] });
         const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
         const processor = new FactoryPhaseStateProcessor({
           configVersion: 'rules-v1',
@@ -603,8 +707,21 @@ describe('FactoryPhaseStateProcessor', () => {
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
-        expect(card?.stages).toEqual(c.stages);
-        if (c.stages[0] === 'building') expect(card?.metadata).toMatchObject({ planApprovedAt: expect.any(String) });
+        expect(card?.stages).toEqual(['planning']);
+        const moved = await transitionService.transition({
+          orgId: 'org-1',
+          factoryProjectId: PROJECT_ID,
+          workItemId: prepared.item.id,
+          board: 'release',
+          stage: 'building',
+          expectedRevision: card!.revision,
+          actor: { type: 'agent', bindingId: prepared.binding.id, role: 'work' },
+          ingress: { type: 'agent', identity: 'agent-leaves-planning' },
+          cause: 'test',
+        });
+        expect(moved).toMatchObject(
+          c.released ? { status: 'accepted' } : { status: 'rejected', code: 'approval_required' },
+        );
       }
     });
 
@@ -721,7 +838,7 @@ describe('FactoryPhaseStateProcessor', () => {
     });
   });
 
-  it('moves an approved plan to Building before emitting the next phase signal', async () => {
+  it('records an approved plan on the card and keeps it in Planning for the next phase signal', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage, 'plan');
     const boards = createBoardRegistry();
@@ -734,18 +851,18 @@ describe('FactoryPhaseStateProcessor', () => {
       ]),
     );
 
-    // The approval stamp (planApprovedAt) and the move each bump the card's revision.
+    // The approval stamp bumps the revision; the planner moves the card itself.
     await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
-      revision: 3,
-      stages: ['execute'],
-      metadata: { planApprovedAt: expect.any(String) },
+      revision: 2,
+      stages: ['planning'],
+      metadata: { planApprovedAt: expect.any(String), phaseExit: { phase: 'planning', tool: 'submit_plan' } },
     });
     const signal = await processor.computeStateSignal(stateArgs(requestContext()));
     expect(signal).toMatchObject({
-      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 3 },
+      attributes: { board: 'work', stage: 'planning', role: 'plan', revision: 2 },
     });
-    expect(signal?.contents).toContain('Factory work phase: Building (execute)');
-    expect(signal?.contents).toContain('Config: rules-v1');
+    expect(signal?.contents).toContain('Factory work phase: Planning (planning)');
+    expect(signal?.contents).toContain('Then move the card with factory_transition_work_item to one of:');
   });
 
   it('emits the persisted custom board and phase in the state signal', async () => {
@@ -1244,7 +1361,7 @@ describe('FactoryPhaseStateProcessor', () => {
     );
   });
 
-  it('tells the planner an approved plan moves the card, and it may move it only when plans are auto-approved', async () => {
+  it('tells the planner Planning holds the card until the plan is approved, and then to move it', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'planning' });
     const boards = createBoardRegistry();
@@ -1254,12 +1371,9 @@ describe('FactoryPhaseStateProcessor', () => {
       storage,
     }).computeStateSignal(stateArgs(requestContext()));
     expect(signal?.contents).toContain(
-      'This phase ends when submit_plan succeeds and is approved; that moves the card on to Building.',
+      'This phase ends when submit_plan succeeds with an approved plan; until then the card stays here. Then move the card with factory_transition_work_item to one of: execute, triage, intake, done, canceled.',
     );
-    expect(signal?.contents).toContain(
-      'You can move it on to a working phase yourself with factory_transition_work_item only when submit_plan is auto-approved for this card; otherwise a person approves the handoff.',
-    );
-    expect(signal?.contents).not.toContain('Then move the card with factory_transition_work_item');
+    expect(signal?.contents).not.toContain('Its result moves the card on.');
   });
 
   it('emits, suppresses, re-emits after compaction, and retracts a revoked phase snapshot', async () => {

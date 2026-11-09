@@ -8,7 +8,6 @@ import type { BoardRegistry } from '../boards/index.js';
 import { INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import { INTAKE_ROUTE_ACTOR_ID } from '../rules/types.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { CreateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -222,7 +221,7 @@ export async function createFactoryWorkItem({
       board: boardId,
       stage: placement.phase,
       // The route moves the card, not the person: a run it starts still needs their consent.
-      actor: { type: 'system', id: INTAKE_ROUTE_ACTOR_ID },
+      actor: { type: 'system', id: 'factory-intake-route' },
       ingress: { type: 'rule', identity: `work-item:${id}:intake-route` },
       cause: 'work_item_created',
     });

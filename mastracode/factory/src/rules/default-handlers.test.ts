@@ -576,9 +576,9 @@ describe('built-in board and integration handlers', () => {
       expect(phaseRunDecision(workBoard, 'canceled', entering('canceled', 'planning'))).toBeUndefined();
     });
 
-    it('moves an approved plan on through the Planning exit tool, not a board tool rule', () => {
+    it('holds a card in Planning through its exit tool, with no board tool rule moving it', () => {
       expect(workBoard.tools).toEqual({});
-      expect(workBoard.phases.planning.exitTool).toEqual({ id: 'submit_plan', autoApprove: false, next: 'execute' });
+      expect(workBoard.phases.planning.exitTool).toEqual({ id: 'submit_plan', autoApprove: false });
     });
   });
 

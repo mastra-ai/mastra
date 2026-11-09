@@ -71,8 +71,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       // Planning and Building share one session, so the builder keeps the plan's context.
       runner: { skill: 'factory-plan', context: 'work' },
       nextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'],
-      // An approved plan moves the card into Building; an agent cannot move it there itself.
-      exitTool: { id: 'submit_plan', autoApprove: false, next: 'execute' },
+      // The card stays in Planning until submit_plan comes back approved; then factory-plan moves it.
+      exitTool: { id: 'submit_plan', autoApprove: false },
     },
     execute: {
       name: 'Building',

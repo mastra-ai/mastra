@@ -628,7 +628,6 @@ describe('serving a stored row that fell out of step with code', () => {
     // move a card from Planning into Building without an approved plan.
     expect(board.phases.planning.kind === 'working' && board.phases.planning.exitTool).toMatchObject({
       id: 'submit_plan',
-      next: 'execute',
     });
     expect(board.phases).not.toHaveProperty('testing');
     expect(board.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });

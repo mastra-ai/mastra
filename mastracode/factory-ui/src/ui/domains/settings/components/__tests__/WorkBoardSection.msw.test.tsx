@@ -127,7 +127,7 @@ describe('WorkBoardSection', () => {
     expect(within(alert).getByText(/must stay terminal/)).toBeInTheDocument();
   });
 
-  it("saves each phase's runner skill, goal, exit-tool next phase, Factory tools and people-only entry, and shows the goal it stored", async () => {
+  it("saves each phase's runner skill, goal and Factory tools, and shows the goal it stored", async () => {
     let stored = storedWorkBoard();
     serve(() => stored);
     const saved = vi.fn<(body: ReplaceBoardBody) => void>();
@@ -148,19 +148,18 @@ describe('WorkBoardSection', () => {
       storedWorkBoard().board.phases.find(p => p.key === 'execute')!.runner!.goal!.objective,
     );
     expect(phase('PR review').getByRole('checkbox', { name: 'PR review: Record a review verdict' })).toBeChecked();
-    expect(phase('Intake').queryByRole('switch', { name: /only people move cards here/ })).not.toBeInTheDocument();
+    // The agent or a tool moves the card after the exit tool; nothing is set per phase for it.
+    expect(phase('Planning').queryByRole('combobox', { name: 'Planning: after submit_plan' })).not.toBeInTheDocument();
+    expect(phase('Planning').queryByRole('switch', { name: /only people move cards here/ })).not.toBeInTheDocument();
 
     await user.click(phase('Triage').getByRole('combobox', { name: 'Triage skill' }));
     await user.click(await screen.findByRole('option', { name: 'release-notes' }));
     await user.click(phase('Triage').getByLabelText('Goal'));
     await user.paste('Done when the card is labelled.');
     await user.type(phase('Triage').getByLabelText('Goal runs'), '3');
-    await user.click(phase('Planning').getByRole('combobox', { name: 'Planning: after submit_plan' }));
-    await user.click(await screen.findByRole('option', { name: 'Triage' }));
     await user.click(
       phase('PR review').getByRole('checkbox', { name: 'PR review: Review the source of a change request' }),
     );
-    await user.click(phase('Planning').getByRole('switch', { name: 'Planning: only people move cards here' }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
@@ -170,42 +169,12 @@ describe('WorkBoardSection', () => {
       context: 'triage',
       goal: { objective: 'Done when the card is labelled.', maxRuns: 3 },
     });
-    expect(phases.find(p => p.key === 'planning')).toMatchObject({
-      exitTool: { id: 'submit_plan', autoApprove: false, next: 'triage' },
-      manualEntry: true,
-    });
+    expect(phases.find(p => p.key === 'planning')?.exitTool).toEqual({ id: 'submit_plan', autoApprove: false });
     expect(phases.find(p => p.key === 'pr-review')?.tools).toEqual(['factory_record_review_verdict']);
     // What the server stored comes back into the form.
     expect(await screen.findByText('Revision 2')).toBeInTheDocument();
     expect(phase('Triage').getByLabelText('Goal')).toHaveValue('Done when the card is labelled.');
     expect(phase('Triage').getByLabelText('Goal runs')).toHaveValue(3);
-  });
-
-  it("drops the exit tool's next phase when the phase stops moving cards there", async () => {
-    // A board whose code makes none of its moves, so each next phase can be unchecked.
-    serve(storedWorkBoard({ codeBehaviour: {} }));
-    const saved = vi.fn<(body: ReplaceBoardBody) => void>();
-    server.use(
-      http.patch(BOARD_URL, async ({ request }) => {
-        const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
-        saved(body);
-        return HttpResponse.json(storedWorkBoard({ phases: body.phases, revision: 2 }));
-      }),
-    );
-    const user = userEvent.setup();
-    renderWithProviders(<WorkBoardSection factoryId="fp-1" />);
-
-    await screen.findByRole('region', { name: 'Building phase' });
-    await user.type(phase('Building').getByLabelText('Exit tool'), 'finish_build');
-    await user.click(phase('Building').getByRole('combobox', { name: 'Building: after finish_build' }));
-    await user.click(await screen.findByRole('option', { name: 'Planning' }));
-    await user.click(phase('Building').getByRole('checkbox', { name: 'Building moves to Planning' }));
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
-    const building = saved.mock.calls[0][0].phases.find(p => p.key === 'execute')!;
-    expect(building.nextPhases).not.toContain('planning');
-    expect(building.exitTool).toEqual({ id: 'finish_build' });
   });
 
   it('lets a board be saved after JSON that never parsed is dropped for the rule builder', async () => {

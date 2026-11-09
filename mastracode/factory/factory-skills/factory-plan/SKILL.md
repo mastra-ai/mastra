@@ -1,11 +1,11 @@
 ---
 name: factory-plan
-description: Produce a phased implementation plan for a Factory work item and submit it for approval, which moves the card to Building
+description: Produce a phased implementation plan for a Factory work item submit it for approval, and move the card to Building once it is approved
 ---
 
 # Factory Plan
 
-Produce a phased, verifiable implementation plan for this Factory work item, then submit it with `submit_plan`. Once the plan is approved, Factory moves the card to Building (`execute`) on its own; the approved plan is the builder's handoff.
+Produce a phased, verifiable implementation plan for this Factory work item, then submit it with `submit_plan`. Once the plan is approved, you move the card on to Building; the approved plan is the builder's handoff.
 
 You are working in a bound Factory session. The `factory-work-item` signal describes the card: its sources, labels, author and whether that author is trusted, the provider tool to fetch the issue with, and the card's Factory state. Complete the full planning pass in one run, then make `submit_plan` your terminal step. Never wait for or solicit human input mid-run; every design decision is yours to resolve.
 
@@ -55,7 +55,9 @@ The plan must be executable by someone with no access to this conversation beyon
 
 ## Phase 4: Submit the Plan
 
-End the run with a single `submit_plan` call carrying the plan file. Do not move the card with `factory_transition_work_item`: the `factory-phase` signal says Planning ends when `submit_plan` is approved, and the approval moves the card to Building. A person approves the plan unless the card's Planning phase auto-approves it; while it waits, the run is parked and the plan shows in Factory's attention list.
+Submit the plan with a single `submit_plan` call carrying the plan file. Planning holds the card until `submit_plan` comes back with an approved plan: a person approves it unless the card's Planning phase auto-approves it, and while it waits the run is parked and the plan shows in Factory's attention list. Moving the card before then is refused.
+
+When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item` to the next working phase listed under "Next phases" in the `factory-work-item` signal (Building, `execute`, on the Work board), using the revision the `factory-phase` signal shows. That move ends your run. If the plan is rejected or comes back with feedback, address it and submit again; do not move the card.
 
 The builder implements the plan and pushes the branch, then opens the pull or merge request directly or sends the branch to self-review first, depending on the project's self-review setting; do not plan a PR-opening step.
 
@@ -67,4 +69,4 @@ If the plan is rejected or comes back with feedback, address it, rework the plan
 - **Decide and record.** Every design fork gets the best-supported choice plus an assumption entry — never an open thread.
 - **Follow the codebase's grain.** History and existing patterns outrank novel design.
 - **Plans are handoffs.** Write for an executor who has only the plan message — concrete files, tests, and verification commands.
-- **One terminal call.** A single `submit_plan` ends the pass; the only permitted repeat is after feedback or a rejection, with it addressed first.
+- **One submission.** A single `submit_plan` ends the planning pass, followed only by the move to the next working phase once it is approved; the only permitted repeat is after feedback or a rejection, with it addressed first.

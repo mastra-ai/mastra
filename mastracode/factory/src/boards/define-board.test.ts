@@ -332,11 +332,9 @@ describe('defineBoard tool-result rules', () => {
     expect(() => define({ ship_it: () => undefined })).toThrow(BoardDefinitionError);
   });
 
-  it('declares no tool rules on Work: Planning’s exit tool names the phase it moves to', () => {
+  it('declares no tool rules on Work: Planning holds the card until its exit tool approves the plan', () => {
     expect(workBoard.tools).toEqual({});
-    expect(workBoard.phases.planning).toMatchObject({
-      exitTool: { id: 'submit_plan', autoApprove: false, next: 'execute' },
-    });
+    expect(workBoard.phases.planning).toMatchObject({ exitTool: { id: 'submit_plan', autoApprove: false } });
   });
 });
 
