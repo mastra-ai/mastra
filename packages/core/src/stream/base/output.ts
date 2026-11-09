@@ -1598,6 +1598,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#emitChunk(chunk);
               // Pass the tripwire chunk through
               controller.enqueue(chunk);
+
+              // The flush that normally runs onFinish never runs after terminate(), so run it here.
+              // Do it after the tripwire chunk is out: #streamFinished is already set, so a
+              // subscriber that attaches while onFinish is pending only sees buffered chunks.
+              if (!self.#finishCallbackSent) {
+                self.#finishCallbackSent = true;
+                await options?.onFinish?.(self.#createTripwireOnFinishPayload());
+              }
               // Emit finish event for EventEmitter streams (since flush won't be called on terminate)
               self.#emitter.emit('finish');
               // Terminate the stream
@@ -2940,6 +2948,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       ...(this.#generationReportedUsage && { generationReportedUsage: this.#generationReportedUsage }),
       object: undefined as OUTPUT,
     };
+  }
+
+  #createTripwireOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
+    return {
+      ...this.#createAbortedOnFinishPayload(),
+      finishReason: 'other',
+      steps: this.#bufferedSteps,
+      tripwire: this.#tripwire,
+    } as MastraOnFinishCallbackArgs<OUTPUT>;
   }
 
   #createSuspendedOnFinishPayload(
