@@ -447,6 +447,9 @@ export type SemanticRecall = {
    * the embedder declares `maxInputTokens` (as `@mastra/fastembed` models do), the limit is
    * derived from that instead.
    *
+   * Only read from the options passed to the `Memory` constructor. Memory options given per
+   * request (for example through `agent.stream(..., { memory: { options } })`) don't change it.
+   *
    * @default 16384
    * @example
    * ```typescript

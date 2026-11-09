@@ -601,9 +601,7 @@ export class Memory extends MastraMemory {
     this.threadConfig = mergedConfig;
 
     // Fail at construction rather than on the first save.
-    if (typeof mergedConfig.semanticRecall === 'object') {
-      resolveMaxChunkChars({ maxChunkChars: mergedConfig.semanticRecall.maxChunkChars });
-    }
+    resolveMaxChunkChars({ maxChunkChars: this.configuredMaxChunkChars });
 
     // Validate retrieval vector config at construction time
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
@@ -1587,11 +1585,9 @@ ${workingMemory}`;
    */
   private async buildMessageVectorRows({
     items,
-    config,
     embeddedMessages,
   }: {
     items: MessageEmbeddingItem[];
-    config?: MemoryConfigInternal;
     embeddedMessages?: Map<string, string>;
   }): Promise<MessageEmbeddingRows> {
     if (items.length === 0) return { ids: [], metadata: [], embeddedEntries: [] };
@@ -1599,14 +1595,12 @@ ${workingMemory}`;
       throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
     }
 
-    const merged = this.getMergedThreadConfig(config);
-    const semanticRecall = typeof merged.semanticRecall === 'object' ? merged.semanticRecall : undefined;
     return buildMessageEmbeddingRows({
       items,
       // No content cache here: within a run the embedded-messages record already stops a second
       // embedding of the same message, and across runs a message is saved once.
       embed: this.isSelfEmbedding ? undefined : chunks => this.embedValues(chunks),
-      maxChunkChars: resolveMaxChunkChars({ maxChunkChars: semanticRecall?.maxChunkChars, embedder: this.embedder }),
+      maxChunkChars: resolveMaxChunkChars({ maxChunkChars: this.configuredMaxChunkChars, embedder: this.embedder }),
       loadThreadMetadata: threadIds => this.loadThreadMetadata(threadIds),
       embeddedMessages,
       // The run's record is kept per index; only agent runs pass one, and by then the dimension
@@ -2990,7 +2984,7 @@ Notes:
         }
 
         // Embed before deleting, so a failed embedding call leaves the old rows searchable.
-        const rows = await this.buildMessageVectorRows({ items, config });
+        const rows = await this.buildMessageVectorRows({ items });
 
         if (messageIdsNeedingDeletion.size > 0) {
           try {
@@ -3391,7 +3385,7 @@ Notes:
       try {
         const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
         // Embed before deleting, so a failed embedding call leaves the old rows searchable.
-        const rows = await this.buildMessageVectorRows({ items: messages.map(message => ({ message })), config });
+        const rows = await this.buildMessageVectorRows({ items: messages.map(message => ({ message })) });
         const messageIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
         await Promise.all(
           messageIndexes.map(async indexName => {

@@ -195,7 +195,7 @@ describe('Memory message rows', () => {
       createdAt: new Date(),
       content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
     });
-    return { memory, vector, writes, embedder, message };
+    return { memory, storage, vector, writes, embedder, message };
   }
 
   it('writes one row per chunk and replaces them when the message is saved again', async () => {
@@ -235,6 +235,44 @@ describe('Memory message rows', () => {
     expect(await readRows(vector)).toHaveLength(4);
     expect(embedder.embedded).toHaveLength(4);
     expect(embedder.embedded.every(chunk => chunk.length <= 1536)).toBe(true);
+  });
+
+  it('ignores maxChunkChars passed per request, so API callers cannot force one row per character', async () => {
+    const { memory, vector, message } = await setup();
+
+    await memory.saveMessages({
+      messages: [message('the code word is ZEBRA-7731')],
+      memoryConfig: { semanticRecall: { topK: 1, messageRange: 0, maxChunkChars: 1 } },
+    });
+
+    expect(await readRows(vector)).toHaveLength(1);
+  });
+
+  it('ignores maxChunkChars passed in an agent request', async () => {
+    const { memory, storage, vector } = await setup();
+    const agent = new Agent({
+      id: randomUUID(),
+      name: 'Recall',
+      instructions: 'Answer briefly.',
+      memory,
+      model: createOpenAI({ apiKey: 'test-key', baseURL: `${llm.url}/v1` }).chat('gpt-4o'),
+    });
+    const mastra = new Mastra({ agents: { agent }, storage, logger: false });
+    llm.clearFixtures();
+    llm.on({ endpoint: 'chat' }, { content: 'noted' });
+
+    const result = await agent.stream('the code word is ZEBRA-7731', {
+      memory: {
+        thread: randomUUID(),
+        resource: randomUUID(),
+        options: { semanticRecall: { topK: 1, messageRange: 0, maxChunkChars: 1 } },
+      },
+    });
+    await result.consumeStream();
+    await mastra.shutdown?.({ drainTimeout: 1000 });
+
+    // One row for the user message and one for the reply, not one per character.
+    expect(await readRows(vector)).toHaveLength(2);
   });
 
   it('leaves one row when an edit shortens a long message', async () => {

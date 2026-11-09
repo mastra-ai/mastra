@@ -384,6 +384,17 @@ https://mastra.ai/en/docs/memory/overview`,
     return !this.embedder && this.vector?.isSelfEmbedding === true;
   }
 
+  /**
+   * `semanticRecall.maxChunkChars` from this instance's own options. Per-request memory options
+   * can't change it: they arrive from API callers, and a tiny value would cost one embedding and
+   * one vector row per character. Chunk boundaries also decide row ids, so they must stay fixed
+   * for an index.
+   */
+  protected get configuredMaxChunkChars(): number | undefined {
+    const semanticRecall = this.threadConfig.semanticRecall;
+    return typeof semanticRecall === 'object' ? semanticRecall.maxChunkChars : undefined;
+  }
+
   protected getEmbeddingIndexName(dimensions?: number): string {
     const separator = this.vector?.indexSeparator ?? '_';
     // A self-embedding store picks its own dimension, so this name is keyed on the mode.
@@ -974,6 +985,7 @@ https://mastra.ai/en/docs/memory/overview`,
             embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }
@@ -1117,6 +1129,7 @@ https://mastra.ai/en/docs/memory/overview`,
             embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticRecallConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }
