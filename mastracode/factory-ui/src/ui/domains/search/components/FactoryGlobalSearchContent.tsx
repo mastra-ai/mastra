@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../factory/boardCardState';
-import { itemStageLabel } from '../../factory/boardStages';
+import { currentItemStage, itemStageLabel } from '../../factory/boardStages';
 import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
@@ -156,8 +156,9 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   toast.error(BUSY_CARD_MOVE_REFUSAL);
                   return;
                 }
-                // Moves read from the phase the card sits in, which need not be its board's first.
-                const [move] = definition ? cardMoves(item, item.stages[0] ?? definition.initialPhase, definition) : [];
+                // Moves read from the phase the card sits in (its furthest, as its label shows), not its board's first.
+                const stage = currentItemStage(item, definition);
+                const [move] = definition && stage !== undefined ? cardMoves(item, stage, definition) : [];
                 if (move) {
                   closeSearch();
                   board.move(item.id, move.stage);
