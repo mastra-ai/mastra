@@ -528,6 +528,9 @@ export const createTimeTravelExecutionParams = (params: {
         ? defaultStepStatus
         : (stepContext?.status ?? defaultStepStatus);
       const isCompleteStatus = ['success', 'failed', 'canceled'].includes(status);
+      // Carry a loop body's iteration count so a time-travelled loop continues counting instead of restarting at 1.
+      const iterationCount =
+        context?.[stepId]?.metadata?.iterationCount ?? snapshotContext[stepId]?.metadata?.iterationCount;
       result = {
         status,
         payload: context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {},
@@ -541,6 +544,7 @@ export const createTimeTravelExecutionParams = (params: {
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
+        metadata: iterationCount !== undefined ? { iterationCount } : undefined,
       };
       const execPathLengthToUse = perStep ? executionPath.length : currentExecPathLength;
       if (

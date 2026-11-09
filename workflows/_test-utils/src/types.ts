@@ -554,6 +554,7 @@ export type SkippableTest =
   | 'timeTravelSuspended'
   | 'timeTravelNested'
   | 'timeTravelLoop'
+  | 'timeTravelLoopIterationCount'
   | 'timeTravelParallel'
   | 'timeTravelPerStep'
   | 'timeTravelConditional'

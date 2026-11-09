@@ -2,6 +2,7 @@
  * Time travel tests for workflows (sleep steps and timeTravel API)
  */
 
+import { randomUUID } from 'node:crypto';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
@@ -849,6 +850,63 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: time travel to a failed loop iteration continues the loop's iterationCount
+  for (const loopType of ['dountil', 'dowhile'] as const) {
+    const inputs: number[] = [];
+    const counts: number[] = [];
+    let failures = 0;
+
+    const call = createStep({
+      id: 'call',
+      inputSchema: z.object({ n: z.number() }),
+      outputSchema: z.object({ n: z.number() }),
+      execute: async ({ inputData }) => {
+        inputs.push(inputData.n);
+        if (inputData.n === 1 && failures++ === 0) {
+          throw new Error('transient failure');
+        }
+        return { n: inputData.n + 1 };
+      },
+    });
+
+    const id = `timetravel-loop-iteration-${loopType}-workflow`;
+    const workflow = createWorkflow({
+      id,
+      inputSchema: z.object({ n: z.number() }),
+      outputSchema: z.object({ n: z.number() }),
+      steps: [call],
+    });
+
+    if (loopType === 'dountil') {
+      workflow
+        .dountil(call, async ({ iterationCount }) => {
+          counts.push(iterationCount);
+          return iterationCount >= 3;
+        })
+        .commit();
+    } else {
+      workflow
+        .dowhile(call, async ({ iterationCount }) => {
+          counts.push(iterationCount);
+          return iterationCount < 3;
+        })
+        .commit();
+    }
+
+    workflows[id] = {
+      workflow,
+      call,
+      mocks: {},
+      resetMocks: () => {
+        inputs.length = 0;
+        counts.length = 0;
+        failures = 0;
+      },
+      getInputs: () => [...inputs],
+      getCounts: () => [...counts],
+    };
+  }
+
   // Test: should throw error if trying to timetravel a workflow execution that is still running
   {
     mockRegistry.register('timetravel-error-running:step1', () => vi.fn().mockResolvedValue({ step1Result: 2 }));
@@ -1483,6 +1541,25 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         // The final step should have been called
         expect(mocks.finalStep).toHaveBeenCalled();
         expect(result.result).toEqual({ final: 3 });
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelLoopIterationCount || !timeTravel).each(['dountil', 'dowhile'] as const)(
+      'should continue a %s loop iterationCount when time travelling to a failed iteration',
+      async loopType => {
+        const entry = registry![`timetravel-loop-iteration-${loopType}-workflow`]!;
+        entry.resetMocks?.();
+        const runId = randomUUID();
+
+        const failed = await execute(entry.workflow, { n: 0 }, { runId });
+        expect(failed.status).toBe('failed');
+
+        const recovered = await timeTravel!(entry.workflow, { step: 'call', runId });
+
+        expect(recovered.status).toBe('success');
+        expect(recovered.result).toEqual({ n: 3 });
+        expect(entry.getInputs()).toEqual([0, 1, 1, 2]);
+        expect(entry.getCounts()).toEqual([1, 2, 3]);
       },
     );
 
