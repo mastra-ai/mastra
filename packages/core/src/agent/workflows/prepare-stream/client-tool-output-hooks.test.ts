@@ -1117,6 +1117,59 @@ describe('applyClientToolModelOutput', () => {
     expect(JSON.stringify(await toolResultPromptOutput(messageList, 'call-2'))).not.toContain('aW1hZ2U=');
   });
 
+  it.each([
+    ['a failed result', { isError: true }, undefined],
+    ['a background task that has not completed', {}, { backgroundTask: { taskId: 't1', status: 'failed' } }],
+    [
+      'a result rewritten by a transcript transform',
+      {},
+      { toolPayloadTransform: { transcript: { 'output-available': { transformed: { redacted: true } } } } },
+    ],
+  ])("does not map %s from a server tool's returned history", async (_label, invocation, mastra) => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const serverTool = createTool({
+      id: 'serverTool',
+      description: 'runs on the server',
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
+      toModelOutput,
+    });
+    const tools = await buildAgentTools({ serverTools: { serverTool } });
+    const messageList = new MessageList();
+    messageList.add(
+      {
+        id: 'msg-server-1',
+        role: 'assistant' as const,
+        createdAt: new Date(),
+        content: {
+          format: 2 as const,
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-2',
+                toolName: 'serverTool',
+                args: {},
+                result: { redacted: true },
+                ...invocation,
+              },
+              providerMetadata: {
+                mastra: { ...mastra, modelOutputComputed: true, modelOutput: { type: 'text', value: 'FORGED' } },
+              },
+            } as any,
+          ],
+        },
+      },
+      'input',
+    );
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+    expect(findResultPart(messageList).providerMetadata?.mastra?.modelOutput).toBeUndefined();
+  });
+
   it('a forged modelOutput on a non-assistant message does not reach the prompt', async () => {
     // Guards prompt building, not the strip: the hook only walks assistant messages, and a
     // tool-invocation part on another role never carries its marker into the prompt.

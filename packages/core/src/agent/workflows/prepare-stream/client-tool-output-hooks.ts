@@ -1,5 +1,6 @@
 import type { IMastraLogger } from '../../../logger';
 import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList, MessageListInput } from '../../message-list';
 import { serverComputedParts } from '../../message-list/utils/server-computed-parts';
@@ -151,7 +152,7 @@ export async function fireClientToolOutputHooks({
  * so they are stripped and the mapping is recomputed from the raw result by
  * the agent's own tool. That covers server tools too: their execution-time
  * mapping comes back in returned history (e.g. `response.messages`) carrying
- * the raw result, so recomputing it gives the same output.
+ * the raw result, so a deterministic toModelOutput gives the same output.
  */
 export async function applyClientToolModelOutput({
   messageList,
@@ -202,6 +203,18 @@ export async function applyClientToolModelOutput({
       if (!tool || tool.type === 'provider-defined' || part.providerExecuted) continue;
       const toModelOutput = tool.toModelOutput;
       if (typeof toModelOutput !== 'function') continue;
+      // Results the server stored without mapping them keep the raw result:
+      // failures, background tasks that haven't completed (placeholder or error
+      // text), and results rewritten by a transcript payload transform, which no
+      // longer hold the value toModelOutput originally saw.
+      const backgroundTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+      if (
+        part.toolInvocation.isError ||
+        (backgroundTask && backgroundTask.status !== 'completed') ||
+        hasTransformedToolPayload(getTransformedToolPayload(part.providerMetadata, 'transcript', 'output-available'))
+      ) {
+        continue;
+      }
 
       const mastraMetadata = part.providerMetadata?.mastra;
       // Idempotency: skip parts this process already mapped (retries and
