@@ -17,6 +17,8 @@ export interface PlatformClientOptions {
    */
   threadId?: string;
   fetch?: typeof fetch;
+  /** Base URL for authenticated Platform API calls. */
+  platformApiUrl?: string;
 }
 
 export interface PlatformRequestOptions extends RequestInit {
@@ -78,6 +80,10 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     actingUserId: options.actingUserId?.trim() || undefined,
     proxyUrl: resolveProxyUrl().replace(/\/$/, ''),
+    platformApiUrl: (options.platformApiUrl ?? process.env.MASTRA_SHARED_API_URL ?? 'https://platform.mastra.ai/v1').replace(
+      /\/$/,
+      '',
+    ),
     sandboxProvider: resolveSandboxProvider(configuredSandboxProvider),
     sessionId: options.sessionId,
     threadId: options.threadId,
@@ -138,6 +144,7 @@ export class PlatformClient {
   readonly projectId: string;
   readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
+  readonly platformApiUrl: string;
   readonly sandboxProvider: SandboxProvider;
   /** Advisory session correlation id — see {@link PlatformClientOptions.sessionId}. */
   readonly sessionId: string | undefined;
@@ -151,6 +158,7 @@ export class PlatformClient {
     this.projectId = resolved.projectId;
     this.actingUserId = resolved.actingUserId;
     this.proxyUrl = resolved.proxyUrl;
+    this.platformApiUrl = resolved.platformApiUrl;
     this.sandboxProvider = resolved.sandboxProvider;
     this.sessionId = resolved.sessionId;
     this.threadId = resolved.threadId;
@@ -165,8 +173,18 @@ export class PlatformClient {
     return this.requestAtPath(`/${this.sandboxProvider}`, path, options);
   }
 
+  async requestPlatform(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
+    return this.requestUrl(new URL(`${this.platformApiUrl}${path}`), options);
+  }
+
   private async requestAtPath(providerPath: string, path: string, options: PlatformRequestOptions): Promise<Response> {
-    const url = new URL(`${this.proxyUrl}/v1${providerPath}/projects/${encodeURIComponent(this.projectId)}${path}`);
+    return this.requestUrl(
+      new URL(`${this.proxyUrl}/v1${providerPath}/projects/${encodeURIComponent(this.projectId)}${path}`),
+      options,
+    );
+  }
+
+  private async requestUrl(url: URL, options: PlatformRequestOptions): Promise<Response> {
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }

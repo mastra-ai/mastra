@@ -4048,6 +4048,7 @@ describe('PlatformSandbox networking', () => {
       accessToken: 'sk_test',
       projectId: 'proj_123',
       environmentId: 'env_123',
+      platformApiUrl: 'https://platform.test/v1',
       fetch: fetchMock,
     });
     return { sandbox, fetchMock };
@@ -4108,9 +4109,9 @@ describe('PlatformSandbox networking', () => {
     await sandbox.setComputerEmbedMode('control', new AbortController().signal);
 
     expect(fetchMock.mock.calls.slice(1).map(([url]) => String(url))).toEqual([
-      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/embed-tokens',
-      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/embed-tokens',
-      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/embed-tokens/mode',
+      'https://platform.test/v1/server/sandboxes/sbx_1/embed-tokens',
+      'https://platform.test/v1/server/sandboxes/sbx_1/embed-tokens',
+      'https://platform.test/v1/server/sandboxes/sbx_1/embed-tokens/mode',
     ]);
     expect(fetchMock.mock.calls.slice(1).map(([, init]) => JSON.parse(init.body))).toEqual([
       {

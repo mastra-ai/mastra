@@ -606,7 +606,9 @@ export class PlatformSandbox extends MastraSandbox {
     const sandboxId = this.sandboxId;
     if (!sandboxId) return null;
     try {
-      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/embed-tokens`, {
+      const response = await this._client.requestPlatform(
+        `/server/sandboxes/${encodeURIComponent(sandboxId)}/embed-tokens`,
+        {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -628,7 +630,7 @@ export class PlatformSandbox extends MastraSandbox {
   async setComputerEmbedMode(mode: 'view' | 'control', signal: AbortSignal): Promise<void> {
     const sandboxId = this.sandboxId;
     if (!sandboxId) throw new Error('platform computer sandbox is not running');
-    await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/embed-tokens/mode`, {
+    await this._client.requestPlatform(`/server/sandboxes/${encodeURIComponent(sandboxId)}/embed-tokens/mode`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ mode }),
