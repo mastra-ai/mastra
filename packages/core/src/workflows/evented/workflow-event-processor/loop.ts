@@ -111,7 +111,17 @@ export async function processWorkflowLoop(
     if (currentStorageVersion() === 2) {
       await runStorage.writeStepResult({
         stepId: getEntryId(step.step),
-        result: countedBody as StepResult<any, any, any, any>,
+        // Unguarded stores have no committed body result here; record the next iteration as
+        // started with its input, so a restart re-runs it instead of a body with no input.
+        result:
+          savedCondition === undefined
+            ? {
+                status: 'running',
+                payload: stepResult.status === 'success' ? stepResult.output : undefined,
+                startedAt: Date.now(),
+                metadata: countedBody.metadata,
+              }
+            : (countedBody as StepResult<any, any, any, any>),
         requestContext: withoutAuthToken(requestContext),
       });
     }
