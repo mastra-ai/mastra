@@ -809,9 +809,8 @@ const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 // Mirrors BackgroundTaskManager's grace period and the deployer's
 // `server.drainTimeout` default.
 const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
-// A thread run still executing at shutdown is aborted and gets at least this long to stop before its thread is
-// handed back, even when the drain budget is already spent, so its tools aren't still running once another process
-// can take the thread.
+// A thread run still executing at shutdown is aborted and gets at least this long to wind down before its thread is
+// handed back, even when the drain budget is already spent. A tool call already executing may still finish after.
 const SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS = 500;
 // Spreads re-checks of durable-agent runs other instances still drove at boot,
 // so replicas that skipped the same run don't all try it at the same instant.

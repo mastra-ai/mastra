@@ -1295,8 +1295,9 @@ export class AgentThreadStreamRuntime {
    * A run still executing here is aborted and gets up to `abortGraceMs` to stop. A run parked on a suspension is
    * announced as `run-suspended`, so it stays resumable; any other run as an unpersisted `run-completed`. Each lease
    * is released only after that event is published, so no observer finds the thread free while the run still looks
-   * live there. A run that didn't stop within the grace keeps its lease until it expires, and its remaining tool
-   * calls fail, so its tools aren't still running once another process can take the thread. Every lease renewal
+   * live there. Aborting stops the run from starting further steps, but a tool call already executing may still
+   * finish after the thread is handed back. A run whose output doesn't finish within the grace keeps its lease
+   * until it expires, and its remaining tool calls fail. Every lease renewal
    * of the owner's runs stops, whether or not the run still held its thread. A run `executesElsewhere` reports as
    * executed by another process is left to that process, lease included.
    */
@@ -1323,7 +1324,11 @@ export class AgentThreadStreamRuntime {
         this.#stopLeaseRenewal(resolved, runId);
         return;
       }
-      const preparedRun = this.#isParkedRun(state, runId) ? undefined : state.preparedRunsById.get(runId);
+      // A partially resumed run is still parked on its sibling suspensions while its resumed segment executes.
+      const preparedRun =
+        this.#isParkedRun(state, runId) && !this.#isActivelyRunning(record)
+          ? undefined
+          : state.preparedRunsById.get(runId);
       if (!state.leaseRenewalTimers.has(runId) || record.registeredElsewhere || record.lateRetakeHandoff) {
         // Another execution has the thread; it ends the run and releases the thread.
         preparedRun?.abortController.abort();
@@ -1365,8 +1370,8 @@ export class AgentThreadStreamRuntime {
       await this.#publishAndWait(resolved, key, event).catch(() => {});
       this.#stopLeaseRenewal(resolved, runId);
       if (!stopped) {
-        // The run ignored the abort and may still call tools or write: fail its remaining tool calls and leave the
-        // lease to expire, so no other process takes the thread while it still runs.
+        // The run's output didn't finish after the abort, so it may still call tools or write: fail its remaining
+        // tool calls and leave the lease to expire instead of handing the thread over now.
         const handedBack = async () => {
           throw new AgentThreadLeaseLostError(runId);
         };
