@@ -79,6 +79,7 @@ const OM_HEAD_SORT = { generationCount: -1, createdAt: 1, id: 1 } as const;
 const OM_MAX_HEAD_HOPS = 3;
 /** Max read-decide-conditional-update rounds before giving up on a contended record. */
 const OM_MAX_CONDITIONAL_ATTEMPTS = 3;
+const WM_MAX_CAS_ATTEMPTS = 50;
 
 /** Document `_id` of a key's generation-0 record; see `initializeObservationalMemory`. */
 function getGeneration0DocumentId(lookupKey: string): string {
@@ -188,6 +189,7 @@ function omNoLiveHead(id: string): MastraError {
 
 export class MemoryStorageMongoDB extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
+  override readonly supportsAtomicWorkingMemoryMerge = true;
   readonly supportsObservationalMemory = true;
   readonly supportsObservationalMemoryHistorySearch = true;
 
@@ -1243,6 +1245,96 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'UPDATE_RESOURCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Compare-and-swap: read the stored working memory, compute `merge`, and write only if the
+   * stored value is still the one read; otherwise re-read and retry. Single-document conditional
+   * writes are atomic in MongoDB, so this works across processes on standalone servers as well as
+   * replica sets. A missing resource is created with an upsert that only inserts, and the unique
+   * index on `id` turns concurrent first writes into conflicts instead of duplicates.
+   */
+  override async mergeResourceWorkingMemory({
+    resourceId,
+    merge,
+  }: {
+    resourceId: string;
+    merge: (existing: string | undefined) => string;
+  }): Promise<StorageResourceType> {
+    const check = this.#runFenceCheck(undefined, 'mergeResourceWorkingMemory');
+    const callbackError: { error?: unknown } = {};
+    try {
+      const collection = await this.getCollection(TABLE_RESOURCES);
+      for (let i = 0; i < WM_MAX_CAS_ATTEMPTS; i++) {
+        const stored = await collection.findOne<any>({ id: resourceId });
+        const storedWorkingMemory: string | null = stored?.workingMemory ?? null;
+
+        let workingMemory: string;
+        try {
+          workingMemory = merge(storedWorkingMemory ?? undefined);
+        } catch (error) {
+          callbackError.error = error;
+          throw error;
+        }
+
+        const now = new Date();
+        const written = await withRunFence(this.#connector, check, async session => {
+          if (stored) {
+            const result = await collection.updateOne(
+              { id: resourceId, workingMemory: storedWorkingMemory },
+              { $set: { workingMemory, updatedAt: now } },
+              { session },
+            );
+            return result.matchedCount > 0;
+          }
+          const result = await collection.updateOne(
+            { id: resourceId },
+            { $setOnInsert: { id: resourceId, workingMemory, metadata: {}, createdAt: now, updatedAt: now } },
+            { upsert: true, session },
+          );
+          return result.upsertedCount > 0;
+        }).catch(error => {
+          // A concurrent first write won the unique index on `id`. Caught outside the fence's
+          // transaction, which the error has already aborted.
+          if (isDuplicateKeyError(error)) return false;
+          throw error;
+        });
+
+        if (written) {
+          return {
+            id: resourceId,
+            workingMemory,
+            metadata: stored
+              ? typeof stored.metadata === 'string'
+                ? safelyParseJSON(stored.metadata)
+                : stored.metadata
+              : {},
+            createdAt: stored ? formatDateForMongoDB(stored.createdAt) : now,
+            updatedAt: now,
+          };
+        }
+      }
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', 'MERGE_RESOURCE_WORKING_MEMORY', 'CONFLICT'),
+        text: `Working memory merge kept conflicting with concurrent writers (${WM_MAX_CAS_ATTEMPTS} attempts)`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { resourceId },
+      });
+    } catch (error) {
+      if (error === callbackError.error || error instanceof MastraError || isRunFenceConflictError(error)) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'MERGE_RESOURCE_WORKING_MEMORY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },

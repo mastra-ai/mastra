@@ -13,6 +13,10 @@ import type { MemoryStorage } from '@mastra/core/storage';
  *
  * The child constructs `new (await import(modulePath))[exportName](options)`, awaits `init()`,
  * and serves its methods over IPC (`serialization: 'advanced'`, so Dates survive).
+ *
+ * Functions in a call's arguments (top level, or properties of a top-level object, e.g.
+ * `mergeResourceWorkingMemory`'s `merge`) are sent as source and rebuilt in the child, so they
+ * must be self-contained: no closures over the caller's variables.
  */
 export async function createChildProcessMemoryStorage({
   modulePath,
@@ -98,7 +102,7 @@ export async function createChildProcessMemoryStorage({
           new Promise((resolve, reject) => {
             const id = nextId++;
             pending.set(id, { resolve, reject });
-            child.send({ id, method, args: callArgs });
+            child.send({ id, method, args: callArgs.map(encodeFunctions) });
           });
       },
     },
@@ -123,11 +127,32 @@ export async function serveMemoryStorageInChildProcess(createStorage: () => Prom
     try {
       const fn = (storage as unknown as Record<string, (...args: unknown[]) => unknown>)[message.method];
       if (typeof fn !== 'function') throw new Error(`Unknown storage method: ${message.method}`);
-      const result = await fn.apply(storage, message.args);
+      const result = await fn.apply(storage, message.args.map(decodeFunctions));
       process.send!({ id: message.id, result });
     } catch (error) {
       process.send!({ id: message.id, error: error instanceof Error ? error.message : String(error) });
     }
   });
   process.send!({ type: 'ready' });
+}
+
+type EncodedFunction = { __childProcessFunction: string };
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype;
+
+function encodeFunctions(arg: unknown): unknown {
+  const encode = (value: unknown) =>
+    typeof value === 'function' ? ({ __childProcessFunction: value.toString() } satisfies EncodedFunction) : value;
+  if (!isPlainObject(arg)) return encode(arg);
+  return Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, encode(value)]));
+}
+
+function decodeFunctions(arg: unknown): unknown {
+  const decode = (value: unknown) =>
+    isPlainObject(value) && typeof value.__childProcessFunction === 'string'
+      ? new Function(`return (${value.__childProcessFunction});`)()
+      : value;
+  if (!isPlainObject(arg) || typeof arg.__childProcessFunction === 'string') return decode(arg);
+  return Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, decode(value)]));
 }
