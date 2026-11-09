@@ -258,47 +258,19 @@ describe('defineBoard phase fields', () => {
     ).toThrow('Phase "one" exitTool.autoApproveWhen needs autoApprove.');
   });
 
-  it('names where an exit tool moves the card, only among the phase’s next phases', () => {
-    const board = release({
-      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
-      planning: {
-        name: 'Planning',
-        kind: 'working',
-        exitTool: { id: 'submit_plan', next: 'building' },
-        nextPhases: ['building', 'backlog'],
-      },
-      building: { name: 'Building', kind: 'working', nextPhases: ['backlog'] },
-    });
-    expect(board.phases.planning!.exitTool).toEqual({ id: 'submit_plan', autoApprove: false, next: 'building' });
-
+  it('refuses an exit tool that names a next phase: the agent or a tool moves the card', () => {
     expect(() =>
       release({
         backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
         planning: {
           name: 'Planning',
           kind: 'working',
-          exitTool: { id: 'submit_plan', next: 'done' },
-          nextPhases: ['backlog'],
+          exitTool: { id: 'submit_plan', next: 'building' },
+          nextPhases: ['building', 'backlog'],
         },
-        done: { name: 'Done', kind: 'terminal' },
+        building: { name: 'Building', kind: 'working', nextPhases: ['backlog'] },
       }),
-    ).toThrow('Phase "planning" exitTool.next must be one of the phase\'s nextPhases.');
-  });
-
-  it('lets any phase but the first be people-only', () => {
-    const board = release({
-      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
-      planning: { name: 'Planning', kind: 'working', manualEntry: true, nextPhases: ['backlog'] },
-    });
-    expect(board.phases.planning).toMatchObject({ manualEntry: true });
-    expect(board.phases.backlog).not.toHaveProperty('manualEntry');
-
-    expect(() =>
-      release({
-        backlog: { name: 'Backlog', kind: 'resting', manualEntry: true, nextPhases: ['planning'] },
-        planning: { name: 'Planning', kind: 'working', nextPhases: ['backlog'] },
-      }),
-    ).toThrow('cannot be people-only');
+    ).toThrow('Phase "planning" exitTool must be a tool name or { id, autoApprove, autoApproveWhen }.');
   });
 
   it('lets a working phase grant Factory tools, and only Factory phase tools', () => {

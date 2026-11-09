@@ -25,7 +25,6 @@ const MAX_INSTRUCTIONS = 1000;
 const MAX_OBJECTIVE = 2000;
 const MAX_GOAL_RUNS = 50;
 const NO_SKILL = '__none__';
-const NO_NEXT = '__none__';
 
 type CardRule = NonNullable<StoredPhaseInfo['autoStartWhen']>;
 type CodeBehaviour = NonNullable<StoredBoardInfo['codeBehaviour']>[string];
@@ -205,7 +204,6 @@ function RuleEditor({
 function PhaseEditor({
   phase,
   phases,
-  initial,
   code,
   skills,
   disabled,
@@ -214,7 +212,6 @@ function PhaseEditor({
 }: {
   phase: StoredPhaseInfo;
   phases: StoredPhaseInfo[];
-  initial: boolean;
   code: CodeBehaviour | undefined;
   skills: string[];
   disabled: boolean;
@@ -449,40 +446,6 @@ function PhaseEditor({
                 }}
               />
             )}
-            {exitToolId !== '' && (
-              <Field>
-                <FieldLabel htmlFor={`${id}-exit-next`}>When {exitToolId} succeeds, move to</FieldLabel>
-                <FieldDescription>
-                  Factory moves the card there once the tool succeeds (and is approved). With none, the agent moves it.
-                </FieldDescription>
-                <Select
-                  value={phase.exitTool?.next ?? NO_NEXT}
-                  disabled={disabled}
-                  onValueChange={value => {
-                    const { next: _next, ...exitTool } = { ...phase.exitTool, id: exitToolId };
-                    onChange({
-                      ...phase,
-                      exitTool: value === NO_NEXT ? exitTool : { ...exitTool, next: String(value) },
-                    });
-                  }}
-                >
-                  <SelectTrigger id={`${id}-exit-next`} size="sm" aria-label={`${phase.name}: after ${exitToolId}`}>
-                    {phases.find(other => other.key === phase.exitTool?.next)?.name ?? 'None'}
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_NEXT}>None</SelectItem>
-                    {phases
-                      .filter(other => next.includes(other.key))
-                      .map(other => (
-                        <SelectItem key={other.key} value={other.key}>
-                          {other.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
               <legend>
                 <Txt as="span" variant="caption" tone="ink">
@@ -516,24 +479,6 @@ function PhaseEditor({
           </>
         )}
 
-        {!initial && (
-          <Field orientation="horizontal" className="items-start gap-4">
-            <div className="flex flex-1 flex-col gap-1">
-              <FieldLabel htmlFor={`${id}-manual-entry`}>Only people move cards here</FieldLabel>
-              <FieldDescription>
-                Agents and rules can&apos;t move a card into this phase; people and provider events can.
-              </FieldDescription>
-            </div>
-            <Switch
-              id={`${id}-manual-entry`}
-              aria-label={`${phase.name}: only people move cards here`}
-              checked={phase.manualEntry ?? false}
-              disabled={disabled}
-              onCheckedChange={checked => onChange({ ...phase, manualEntry: checked })}
-            />
-          </Field>
-        )}
-
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
           <legend>
             <Txt as="span" variant="caption" tone="ink">
@@ -549,18 +494,14 @@ function PhaseEditor({
                     aria-label={`${phase.name} moves to ${other.name}`}
                     checked={next.includes(other.key)}
                     disabled={disabled || required.has(other.key)}
-                    onCheckedChange={checked => {
-                      // The exit tool can only move cards to one of the phase's next phases.
-                      const dropsExitNext = !checked && phase.exitTool?.next === other.key;
-                      const { next: _next, ...exitTool } = phase.exitTool ?? { id: '' };
+                    onCheckedChange={checked =>
                       onChange({
                         ...phase,
                         nextPhases: checked
                           ? phases.filter(p => p.key === other.key || next.includes(p.key)).map(p => p.key)
                           : next.filter(key => key !== other.key),
-                        ...(dropsExitNext ? { exitTool } : {}),
-                      });
-                    }}
+                      })
+                    }
                   />
                   <Txt as="span" variant="caption">
                     {other.name}
@@ -641,12 +582,11 @@ function BoardEditor({
         </Txt>
       </div>
       <div className="flex flex-col gap-3">
-        {draft.phases.map((phase, index) => (
+        {draft.phases.map(phase => (
           <PhaseEditor
             key={phase.key}
             phase={phase}
             phases={draft.phases}
-            initial={index === 0}
             code={board.codeBehaviour?.[phase.key]}
             skills={skills}
             disabled={readOnly || pending}
@@ -711,8 +651,7 @@ function instructionsTooLong(draft: Draft): boolean {
 
 /**
  * The project's Work board as stored: each phase's name, runner (skill, context, instructions,
- * goal), automation, exit tool and its next phase, Factory tools, who may move cards in, and
- * next phases. Organization admins edit it or reset it to Factory's default; the moves the
+ * goal), automation, exit tool, Factory tools and next phases. Organization admins edit it or reset it to Factory's default; the moves the
  * board's code makes stay checked.
  */
 export function WorkBoardSection({ factoryId }: { factoryId?: string }) {

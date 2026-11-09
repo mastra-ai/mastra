@@ -66,7 +66,7 @@ describe('the Work board seed', () => {
       },
       planning: {
         runner: { agentId: 'code-agent', skill: 'factory-plan', context: 'work' },
-        exitTool: { id: 'submit_plan', autoApprove: false, next: 'execute' },
+        exitTool: { id: 'submit_plan', autoApprove: false },
         tools: undefined,
         autoStart: undefined,
         autoStartWhen: undefined,

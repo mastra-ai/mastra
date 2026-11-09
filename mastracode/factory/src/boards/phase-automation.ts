@@ -5,6 +5,26 @@ import { cardRuleFacts } from './card-facts.js';
 import type { BoardRegistry } from './registry.js';
 import { boardForWorkItem } from './semantics.js';
 
+/** Card metadata recording the last phase an exit tool finished: `{ phase, tool, at }`. */
+export const PHASE_EXIT_METADATA_KEY = 'phaseExit';
+
+/**
+ * Whether the exit tool of `stage` succeeded (for `submit_plan`, with an approved plan) since the
+ * card last entered it. Until then the card stays in the phase, except when a person moves it.
+ */
+export function exitToolSucceeded(
+  item: Pick<Card, 'metadata' | 'stageHistory'>,
+  stage: string,
+  toolId: string,
+): boolean {
+  const exit: unknown = item.metadata?.[PHASE_EXIT_METADATA_KEY];
+  if (!exit || typeof exit !== 'object' || Array.isArray(exit)) return false;
+  const { phase, tool, at } = exit as Record<string, unknown>;
+  if (phase !== stage || tool !== toolId || typeof at !== 'string') return false;
+  const entered = item.stageHistory.findLast(entry => entry.stage === stage && entry.exitedAt === undefined);
+  return entered !== undefined && Date.parse(at) >= Date.parse(entered.enteredAt);
+}
+
 type PhaseCard = Pick<Card, 'board' | 'externalSource' | 'stages' | 'title' | 'metadata' | 'workItem'>;
 
 /**

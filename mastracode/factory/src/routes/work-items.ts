@@ -354,7 +354,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 ...(phase.description !== undefined ? { description: phase.description } : {}),
                 kind: phase.kind,
                 nextPhases: [...phase.nextPhases],
-                ...(phase.manualEntry ? { manualEntry: true } : {}),
                 ...(phase.kind === 'working'
                   ? {
                       role: phase.runner.context,
@@ -371,7 +370,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                               ...(phase.exitTool.autoApproveWhen
                                 ? { autoApproveWhen: phase.exitTool.autoApproveWhen }
                                 : {}),
-                              ...(phase.exitTool.next ? { next: phase.exitTool.next } : {}),
                             },
                           }
                         : {}),

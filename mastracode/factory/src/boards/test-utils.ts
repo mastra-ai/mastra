@@ -25,11 +25,11 @@ export function createPolicyTestRegistry(transitionPolicy: BoardTransitionPolicy
 
 /**
  * Work with every phase allowed to move to every other, and the given phases' stored fields
- * overridden (a runner, manualEntry, …). Lifecycle tests jump straight to the phase they
+ * overridden (a runner, …). Lifecycle tests jump straight to the phase they
  * exercise; the Work board's own topology is tested against workBoard itself.
  */
 export function createLifecycleTestRegistry(
-  overrides: Partial<Record<WorkBoardPhase, { runner?: BoardPhaseRunner; manualEntry?: boolean }>> = {},
+  overrides: Partial<Record<WorkBoardPhase, { runner?: BoardPhaseRunner }>> = {},
 ): BoardRegistry {
   const board = defineBoard({
     id: 'work',
@@ -52,25 +52,13 @@ export function createLifecycleTestRegistry(
   return new Map<string, BoardDefinition<string, string>>([[board.id, board]]);
 }
 
-/**
- * Work board with the given tool-result rules, for exercising the processor's tool ingress. An
- * exit tool a rule is given for no longer moves the card itself, so the rule decides instead.
- */
+/** Work board with the given tool-result rules, for exercising the processor's tool ingress. */
 export function createToolRuleTestRegistry(tools: BoardDefinition<string, string>['tools']): BoardRegistry {
-  const phases = Object.fromEntries(
-    Object.entries(workBoard.phases).map(([stage, phase]) => {
-      if (phase.kind !== 'working' || !phase.exitTool || !Object.hasOwn(tools, phase.exitTool.id)) {
-        return [stage, phase];
-      }
-      const { next: _next, ...exitTool } = phase.exitTool;
-      return [stage, { ...phase, exitTool }];
-    }),
-  );
   const board = defineBoard({
     id: 'work',
     title: 'Work tool-rule fixture',
     initialPhase: 'intake',
-    phases,
+    phases: workBoard.phases,
     transitionPolicy: workBoard.transitionPolicy,
     sourceClosed: workBoard.sourceClosed,
     tools: { ...tools },

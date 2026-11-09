@@ -95,7 +95,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       name: 'Build',
       description: 'Builds it.',
       kind: 'working',
-      manualEntry: false,
       tools: null,
       runner: { skill: 'ship-it', context: 'work', instructions: 'Be careful.' },
       nextPhases: ['intake', 'done'],
@@ -119,28 +118,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       exitTool: null,
     });
     expect(await boards.list(scope)).toEqual([created]);
-  });
-
-  it('reads back a people-only phase and the phase its exit tool moves the card to', async () => {
-    const { boards, scope } = await setup();
-    const input = board('release');
-    input.phases = [
-      input.phases[0]!,
-      {
-        ...input.phases[1]!,
-        manualEntry: true,
-        exitTool: { id: 'submit_release', autoApprove: false, next: 'done' },
-      },
-      input.phases[2]!,
-    ];
-
-    const created = await boards.create(scope, input, 'user-1');
-
-    expect(created.phases[1]).toMatchObject({
-      manualEntry: true,
-      exitTool: { id: 'submit_release', autoApprove: false, next: 'done' },
-    });
-    expect((await boards.list(scope))[0]!.phases[1]).toEqual(created.phases[1]);
   });
 
   it("reads back the goal a phase's runner pursues", async () => {

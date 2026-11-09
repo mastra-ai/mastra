@@ -566,9 +566,12 @@ describe('bundled Factory skill assets', () => {
 
     const plan = await read('factory-plan');
     expect(plan).toContain('if this conversation already contains a triage/understanding pass');
-    // Planning ends on submit_plan; its approval, not the planner, moves the card to Building.
+    // Planning holds the card until submit_plan comes back approved; then the planner moves it.
     expect(plan).toContain('make `submit_plan` your terminal step');
-    expect(plan).toContain('Do not move the card with `factory_transition_work_item`');
+    expect(plan).toContain('Moving the card before then is refused.');
+    expect(plan).toContain(
+      'When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item`',
+    );
 
     // Building runs as a goal: it may ask a person, but only through ask_user, and hands off by
     // the project's self-review setting.

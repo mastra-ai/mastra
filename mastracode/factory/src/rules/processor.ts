@@ -14,6 +14,7 @@ import type {
 import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { workStageCarries } from '../boards/legacy-plan-role.js';
+import { exitToolSucceeded, PHASE_EXIT_METADATA_KEY } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -76,35 +77,29 @@ function isApprovedPlanResult(result: CompletedToolResult): boolean {
 }
 
 /**
- * The move a phase's exit tool makes when it names a `next` phase: a successful call (for
- * `submit_plan`, an approved plan) by the card's session moves the card there. Undefined when
- * the tool isn't the exit tool of the card's phase or the phase names no `next`.
+ * The phase this result finishes: the card's phase whose exit tool succeeded (for `submit_plan`,
+ * with an approved plan) in the session that works the card there. Undefined otherwise.
  */
-function exitToolRule(
+function finishedPhase(
   boards: BoardRegistry,
   board: string,
   item: Card,
   role: string,
   toolResult: CompletedToolResult,
-): ((context: FactoryToolResultRuleContext) => FactoryRuleDecision | undefined) | undefined {
+): string | undefined {
   const stage = item.stages.length === 1 ? item.stages[0]! : undefined;
   const definition = boards.get(board);
   const phase = stage === undefined ? undefined : definition?.phases[stage];
-  if (phase?.kind !== 'working') return undefined;
-  const exitTool = phase.exitTool;
-  if (!exitTool?.next || exitTool.id !== toolResult.toolName) return undefined;
+  if (phase?.kind !== 'working' || phase.exitTool?.id !== toolResult.toolName) return undefined;
+  if (toolResult.status !== 'success') return undefined;
+  if (toolResult.toolName === 'submit_plan' && !isApprovedPlanResult(toolResult)) return undefined;
   // Only the session that works the card in this phase finishes it: one in another context that
-  // still holds the card (a triage session, say) calling the same tool leaves the card where it is.
+  // still holds the card (a triage session, say) calling the same tool leaves the phase unfinished.
   // A Work card planned before Planning ran in the `work` context still holds its `plan` session.
   if (role !== phase.runner.context && workStageCarries(definition, stage!, role, undefined) !== true) {
     return undefined;
   }
-  const next = exitTool.next;
-  return context => {
-    if (toolResult.status !== 'success') return undefined;
-    if (toolResult.toolName === 'submit_plan' && !isApprovedPlanResult(toolResult)) return undefined;
-    return { type: 'transition', idempotencyKey: `${context.ingress.id}:exit-tool`, board, stage: next };
-  };
+  return stage;
 }
 
 type RuntimeSnapshot = {
@@ -160,7 +155,9 @@ function boundedError(value: unknown): FactoryRuleJsonValue {
 
 function boundedResult(value: unknown): FactoryRuleJsonValue {
   try {
-    return normalizeFactoryRuleJsonValue(value);
+    // A result read during the run is the tool's in-memory value (submit_plan's holds undefined
+    // fields); read it as the JSON the thread stores, so it means the same now as after the run.
+    return normalizeFactoryRuleJsonValue(value === undefined ? null : JSON.parse(JSON.stringify(value)));
   } catch {
     return { message: 'Tool result was not serializable.' };
   }
@@ -224,6 +221,20 @@ function currentCompletedToolMessage(
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
     if (completedToolResults(message).some(result => toolCallIds.has(result.toolCallId))) return message;
+  }
+  return undefined;
+}
+
+/**
+ * The tool results the step about to run follows: the latest assistant message, past any signals
+ * after it. A run continued after a tool call (such as submit_plan's approval) carries steps
+ * without their tool results, so the step ids alone can miss the result the agent acts on next.
+ */
+function latestToolResultMessage(messages: MastraDBMessage[]): MastraDBMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if ((message.role as string) === 'signal') continue;
+    return message.role === 'assistant' && completedToolResults(message).length > 0 ? message : undefined;
   }
   return undefined;
 }
@@ -370,7 +381,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
     if (completedMessage) {
       await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
+      return;
     }
+    const latest = latestToolResultMessage(args.messages);
+    if (latest) await this.ingestMessages(binding, [latest]);
   }
 
   /**
@@ -494,20 +508,18 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ? `Next phases: ${
           phase.nextPhases.length
             ? phase.nextPhases
-                .map(key => {
-                  const target = definition?.phases[key];
-                  const name = `${escapeText(target?.name ?? key)} (${escapeText(key)})`;
-                  return target?.manualEntry ? `${name}, people only` : name;
-                })
+                .map(key => `${escapeText(definition?.phases[key]?.name ?? key)} (${escapeText(key)})`)
                 .join('; ')
             : 'none'
         }\n`
       : '';
     const exitText =
       phase?.kind === 'working' && phase.exitTool
-        ? phase.exitTool.next || definition?.tools[phase.exitTool.id]
-          ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' and is approved' : ''}; that moves the card on${phase.exitTool.next ? ` to ${escapeText(definition?.phases[phase.exitTool.next]?.name ?? phase.exitTool.next)}` : ''}. Next phases: ${phase.nextPhases.map(escapeText).join(', ')}. You can move it on to a working phase yourself with factory_transition_work_item only when ${escapeText(phase.exitTool.id)} is auto-approved for this card; otherwise a person approves the handoff.\n`
-          : `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
+        ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' with an approved plan' : ''}; until then the card stays here. ${
+            definition?.tools[phase.exitTool.id]
+              ? 'Its result moves the card on.'
+              : `Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.`
+          }\n`
         : '';
     // The card moved to a phase another context works; this session's tools for it are gone.
     const handedOnText =
@@ -625,14 +637,48 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
 
   private async ingestToolResult(
     binding: FactoryRunBindingRecord,
-    item: Card,
+    loaded: Card,
     toolResult: CompletedToolResult,
   ): Promise<void> {
+    let item = loaded;
     const board = boardForWorkItem(item);
     const boards = await this.boards.load(binding);
-    const rule =
-      exitToolRule(boards, board, item, binding.role, toolResult) ??
-      resolveBoardToolRule(boards, board, toolResult.toolName);
+    const finished = finishedPhase(boards, board, item, binding.role, toolResult);
+    // The exit tool finished the phase: the card may now leave it (the agent moves it). A result
+    // read again later (the step, then the thread) stamps once: the stamp names its tool call.
+    const at = new Date().toISOString();
+    const stampedCall = (item.metadata?.[PHASE_EXIT_METADATA_KEY] as { toolCallId?: unknown } | undefined)?.toolCallId;
+    if (
+      finished !== undefined &&
+      stampedCall !== toolResult.toolCallId &&
+      !exitToolSucceeded(item, finished, toolResult.toolName)
+    ) {
+      try {
+        const stamped = await this.options.storage.update({
+          orgId: binding.orgId,
+          id: item.id,
+          userId: `agent:${binding.id}`,
+          patch: {
+            metadata: {
+              [PHASE_EXIT_METADATA_KEY]: {
+                phase: finished,
+                tool: toolResult.toolName,
+                toolCallId: toolResult.toolCallId,
+                at,
+              },
+              ...(toolResult.toolName === 'submit_plan' ? { planApprovedAt: at } : {}),
+            },
+          },
+          expectedRevision: item.revision,
+        });
+        if (stamped) item = stamped.item;
+      } catch (error) {
+        // The card moved on meanwhile; it no longer needs the phase finished.
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+        return;
+      }
+    }
+    const rule = resolveBoardToolRule(boards, board, toolResult.toolName);
     if (!rule) return;
     const ingressId = JSON.stringify([
       binding.id,
@@ -714,22 +760,6 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       consentedBy: `agent:${binding.id}`,
     });
     if (committed.status !== 'committed' || !this.options.transitionService) return;
-    let revision = item.revision;
-    if (isApprovedPlanResult(toolResult)) {
-      try {
-        const stamped = await this.options.storage.update({
-          orgId: binding.orgId,
-          id: item.id,
-          userId: `agent:${binding.id}`,
-          patch: { metadata: { planApprovedAt: new Date().toISOString() } },
-          expectedRevision: revision,
-        });
-        if (stamped) revision = stamped.item.revision;
-      } catch (error) {
-        // The card moved on meanwhile; its move below fails on the stale revision as it would have.
-        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-      }
-    }
     for (const entry of decisions) {
       if (entry.type !== 'transition') continue;
       await this.options.transitionService.transition({
@@ -739,7 +769,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         board: entry.board,
         stage: entry.stage,
         ...(entry.reenter ? { reenter: true } : {}),
-        expectedRevision: revision,
+        expectedRevision: item.revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
         ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
         cause: 'tool_result_rule',

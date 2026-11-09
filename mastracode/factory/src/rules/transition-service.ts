@@ -1,5 +1,5 @@
 import type { BoardRegistry } from '../boards/index.js';
-import { autoApprovedExitTool } from '../boards/phase-automation.js';
+import { autoApprovedExitTool, exitToolSucceeded } from '../boards/phase-automation.js';
 import { phaseRunDecision } from '../boards/phase-runner.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -20,7 +20,7 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import { factoryRuleSourceForWorkItem, INTAKE_ROUTE_ACTOR_ID, isFactoryRuleStage, workItemSource } from './types.js';
+import { factoryRuleSourceForWorkItem, isFactoryRuleStage, workItemSource } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   assertFactoryDecisionTarget,
@@ -452,22 +452,6 @@ export class FactoryTransitionService {
       );
     }
 
-    // A people-only phase: agents and rules can't move cards in, nor file a new card straight into
-    // it; people, provider event routes and intake routes placing a new card can.
-    const placedByPerson =
-      request.actor.type === 'human' ||
-      request.eventRoute !== undefined ||
-      (request.actor.type === 'system' && request.actor.id === INTAKE_ROUTE_ACTOR_ID);
-    const enters = fromStage !== request.stage || request.initialEntry === true;
-    if (enters && board.phases[request.stage]?.manualEntry && !placedByPerson) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'approval_required',
-        `Only people move cards into ${board.phases[request.stage]!.name}. Ask a person to move it from the Factory board or a chat they are signed in to.`,
-      );
-    }
-
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
     // The board, not the phase name, says whether a seat is engaged on either side of this move.
@@ -510,30 +494,28 @@ export class FactoryTransitionService {
         (async () => {
           // Plans are approved without a person only where the card's phase auto-approves submit_plan.
           const plansAutoApproved = autoApprovedExitTool(boards, item) === 'submit_plan';
-          // When the exit tool's success moves the card (its `next`, or the board's own rule for the
-          // tool), that result is the handoff to the next working phase (for submit_plan, only an
-          // approved plan). Anyone but a person needs it, unless the tool is auto-approved for this card.
+          // A phase with an exit tool holds the card until the tool succeeds (for submit_plan, with
+          // an approved plan; autoApprove only decides whether it approves itself). Then the agent,
+          // or the board's own rule for the tool, moves the card. A person can move it any time.
           const fromPhase = board.phases[fromStage];
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
             request.actor.type !== 'human' &&
             !request.eventRoute &&
             exitTool &&
-            (exitTool.next !== undefined || board.tools[exitTool.id]) &&
             fromStage !== request.stage &&
             entersWorking &&
-            !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id)
+            !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id) &&
+            !exitToolSucceeded(item, fromStage, exitTool.id)
           ) {
-            if (autoApprovedExitTool(boards, item) !== exitTool.id) {
-              return {
-                outcome: 'rejected' as const,
-                code: 'approval_required',
-                reason:
-                  exitTool.id === 'submit_plan'
-                    ? `A person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
-                    : `${fromPhase!.name} ends when ${exitTool.id} succeeds, and that moves the card. A person can also move it from the Factory board or a chat they are signed in to.`,
-              };
-            }
+            return {
+              outcome: 'rejected' as const,
+              code: 'approval_required',
+              reason:
+                exitTool.id === 'submit_plan'
+                  ? `${fromPhase!.name} ends when submit_plan comes back with an approved plan; until then the card stays here. Call submit_plan and wait for a person to approve the plan (or for it to be approved automatically), then move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
+                  : `${fromPhase!.name} ends when ${exitTool.id} succeeds; until then the card stays here. A person can also move it from the Factory board or a chat they are signed in to.`,
+            };
           }
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(

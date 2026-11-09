@@ -41,8 +41,6 @@ export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 
 /** Request-changes rounds from self-review before the card parks in Intake for a person. */
 export const SELF_REVIEW_ROUND_LIMIT = 3;
-/** The system actor an intake route places a new card as. */
-export const INTAKE_ROUTE_ACTOR_ID = 'factory-intake-route';
 export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 
 // The label only holds a card at rest: once a person moves it into a working lane, the

@@ -170,7 +170,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     const planning = await phase(boards, scope, 'planning');
     expect(planning.name).toBe('Plan it');
     expect(fieldsOf(planning)).toEqual(fieldsOf(seedPhase('planning')));
-    expect(planning.exitTool).toEqual({ id: 'submit_plan', autoApprove: false, next: 'execute' });
+    expect(planning.exitTool).toEqual({ id: 'submit_plan', autoApprove: false });
   });
 
   it("keeps a Review runner context a person changed, and leaves the tools and automatic start that serve the seed's skill", async () => {
@@ -253,7 +253,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     expect((await boards.get(scope, 'work'))!.revision).toBe(2);
   });
 
-  it("leaves Planning's exit tool when a person took Building out of Planning's moves", async () => {
+  it("keeps Planning's moves a person narrowed, and still starts the planning skill", async () => {
     const { boards, scope } = await setup(board =>
       editPhase(board, 'planning', { nextPhases: ['triage', 'intake', 'done', 'canceled'] }),
     );

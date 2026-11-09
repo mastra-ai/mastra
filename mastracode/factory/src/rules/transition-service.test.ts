@@ -1381,9 +1381,9 @@ describe('FactoryTransitionService', () => {
     expect(result).toMatchObject({ status: 'accepted' });
   });
 
-  it('lets the planner move to Building when its phase auto-approves submit_plan for the card', async () => {
-    // A board that keeps Work's plan handoff and ends Planning with an auto-approved
-    // submit_plan: the plan needs no person, so the agent's own move must stand.
+  it('holds an auto-approving Planning card until submit_plan succeeded in this visit, then lets the planner move it', async () => {
+    // autoApprove/autoApproveWhen only decide whether submit_plan approves itself; the card
+    // still stays in Planning until the tool came back approved during this visit.
     const planned = defineBoard({
       id: 'planned',
       name: 'Planned',
@@ -1394,7 +1394,6 @@ describe('FactoryTransitionService', () => {
           ...workBoard.phases.planning,
           exitTool: {
             id: 'submit_plan',
-            next: 'execute',
             autoApprove: true,
             autoApproveWhen: {
               operator: 'AND',
@@ -1417,22 +1416,35 @@ describe('FactoryTransitionService', () => {
         ingress: { type: 'agent', identity },
         cause: 'plan written',
       });
+    // What the processor writes when submit_plan comes back approved in the planner's session.
+    const finishPlanning = async (id: string, revision: number, at = new Date().toISOString()) =>
+      (await storage.update({
+        orgId: 'org-1',
+        id,
+        userId: 'agent:binding-1',
+        patch: { metadata: { phaseExit: { phase: 'planning', tool: 'submit_plan', at }, planApprovedAt: at } },
+        expectedRevision: revision,
+      }))!.item;
 
     const low = await createItem(storage, {
       board: 'planned',
       stages: ['planning'],
       metadata: { labels: ['effort:low'] },
     });
-    expect(await move(low, 'low')).toMatchObject({ status: 'accepted' });
+    expect(await move(low, 'low-early')).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    const finished = await finishPlanning(low.id, low.revision);
+    expect(await move(finished, 'low')).toMatchObject({ status: 'accepted' });
     expect((await storage.get({ orgId: 'org-1', id: low.id }))?.stages).toEqual(['execute']);
 
-    const high = await createItem(storage, {
+    // A plan approved before the card last entered Planning does not release it again.
+    const returned = await createItem(storage, {
       board: 'planned',
       sourceKey: '2',
       stages: ['planning'],
-      metadata: { labels: ['effort:high'] },
+      metadata: { labels: ['effort:low'] },
     });
-    expect(await move(high, 'high')).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    const stale = await finishPlanning(returned.id, returned.revision, '2000-01-01T00:00:00.000Z');
+    expect(await move(stale, 'stale')).toMatchObject({ status: 'rejected', code: 'approval_required' });
   });
 
   it('still hands the next seat its run when an agent moves the card past its own stage', async () => {
@@ -2090,7 +2102,7 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['planning'] });
   });
 
-  it('lets the plan agent advance only where the board auto-approves submit_plan, never on Work itself', async () => {
+  it('keeps the plan agent in Planning until submit_plan succeeded, even where the board auto-approves it', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
@@ -2110,11 +2122,12 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
       metadata: { authorTrusted: true },
     });
 
-    const result = await service.transition(planAgentToExecute(item, 'plan-execute'));
-
-    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
-    assert(result.status === 'accepted');
-    expect(result.decisions).toContainEqual(expect.objectContaining({ type: 'invokeSkill', role: 'work' }));
+    // Auto-approval only lets submit_plan approve itself; the agent cannot skip the tool.
+    expect(await service.transition(planAgentToExecute(item, 'plan-execute'))).toMatchObject({
+      status: 'rejected',
+      code: 'approval_required',
+    });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['planning'] });
   });
 
   it('keeps a plan agent in Planning on stock Work whoever started the run', async () => {
@@ -2795,22 +2808,23 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
 );
 
 describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))(
-  'people-only phases on %s',
+  'a phase exit tool holds the card on %s',
   backend => {
     const release = defineBoard({
       id: 'release',
       name: 'Release',
       initialPhase: 'intake',
       phases: {
-        intake: { name: 'Intake', kind: 'resting', nextPhases: ['triage', 'planning'] },
-        triage: { name: 'Triage', kind: 'working', runner: { context: 'triage' }, nextPhases: ['planning'] },
+        intake: { name: 'Intake', kind: 'resting', nextPhases: ['planning'] },
         planning: {
           name: 'Planning',
           kind: 'working',
           runner: { context: 'work' },
-          manualEntry: true,
-          nextPhases: ['intake'],
+          exitTool: { id: 'submit_plan' },
+          nextPhases: ['building', 'intake'],
         },
+        building: { name: 'Building', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
+        shipped: { name: 'Shipped', kind: 'terminal' },
       },
     });
 
@@ -2821,7 +2835,7 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
         orgId,
         sourceKey: orgId,
         board: 'release',
-        stages: ['triage'],
+        stages: ['planning'],
         metadata: { authorTrusted: true },
       });
       const service = new FactoryTransitionService({
@@ -2829,47 +2843,45 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
         storage,
         boards: createBoardRegistry({ boards: [release] }),
       });
-      return { orgId, item, service };
+      const agentMove = (current: { id: string; revision: number }, identity: string) =>
+        service.transition({
+          ...request(current, { orgId, board: 'release', stage: 'building' }),
+          actor: { type: 'agent', bindingId: 'work-binding', role: 'work' },
+          ingress: { type: 'agent', identity },
+        });
+      return { orgId, item, storage, service, agentMove };
     }
 
-    it('refuses agents and board rules moving a card in', async () => {
-      for (const mover of [
-        {
-          actor: { type: 'agent' as const, bindingId: 'triage-binding', role: 'triage' },
-          ingress: { type: 'agent' as const, identity: 'agent-move' },
-        },
-        {
-          actor: { type: 'system' as const, id: 'factory-rule-dispatcher' },
-          ingress: { type: 'rule' as const, identity: 'rule-move' },
-        },
-      ]) {
-        const { orgId, item, service } = await card();
-        const result = await service.transition({
-          ...request(item, { orgId, board: 'release', stage: 'planning' }),
-          ...mover,
-        });
-        expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
-        expect(result.status === 'rejected' && result.reason).toContain('Only people move cards into Planning');
-      }
+    it('refuses the agent while submit_plan waits, and lets it move the card once the plan came back approved', async () => {
+      const { orgId, item, storage, agentMove } = await card();
+      const waiting = await agentMove(item, 'early');
+      expect(waiting).toMatchObject({ status: 'rejected', code: 'approval_required' });
+      expect(waiting.status === 'rejected' && waiting.reason).toContain(
+        'Planning ends when submit_plan comes back with an approved plan; until then the card stays here.',
+      );
+      expect((await storage.get({ orgId, id: item.id }))?.stages).toEqual(['planning']);
+
+      const at = new Date().toISOString();
+      const stamped = (await storage.update({
+        orgId,
+        id: item.id,
+        userId: 'agent:work-binding',
+        patch: { metadata: { phaseExit: { phase: 'planning', tool: 'submit_plan', at }, planApprovedAt: at } },
+        expectedRevision: item.revision,
+      }))!.item;
+      // The stamp alone moves nothing; the agent's own move does.
+      expect(stamped.stages).toEqual(['planning']);
+      await expect(agentMove(stamped, 'after-approval')).resolves.toMatchObject({
+        status: 'accepted',
+        stage: 'building',
+      });
     });
 
-    it('lets a person or a provider event route move a card in', async () => {
-      const byPerson = await card();
+    it('lets a person move the card on while the exit tool waits', async () => {
+      const { orgId, item, service } = await card();
       await expect(
-        byPerson.service.transition(
-          request(byPerson.item, { orgId: byPerson.orgId, board: 'release', stage: 'planning' }),
-        ),
-      ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
-
-      const byRoute = await card();
-      await expect(
-        byRoute.service.transition({
-          ...request(byRoute.item, { orgId: byRoute.orgId, board: 'release', stage: 'planning' }),
-          actor: { type: 'system', id: 'factory-event-route' },
-          ingress: { type: 'rule', identity: 'event-route-move' },
-          eventRoute: { routeId: 'reopened', allowWorkingPhase: true },
-        }),
-      ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
+        service.transition(request(item, { orgId, board: 'release', stage: 'building' })),
+      ).resolves.toMatchObject({ status: 'accepted', stage: 'building' });
     });
   },
 );

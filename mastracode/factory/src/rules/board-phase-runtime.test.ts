@@ -333,7 +333,7 @@ describe('board phase fields at runtime', () => {
       const publishRequest = requests.find(text => text.includes(PUBLISH) && text.includes('quick fix'));
       expect(publishRequest).toContain('Keep it short.');
       expect(publishRequest).toContain(
-        'This phase ends when factory_list_work_items succeeds. Then move the card with factory_transition_work_item to one of: done, backlog.',
+        'This phase ends when factory_list_work_items succeeds; until then the card stays here. Then move the card with factory_transition_work_item to one of: done, backlog.',
       );
 
       // The high-effort card reaches Build too, but its run waits for a person: nothing ran.

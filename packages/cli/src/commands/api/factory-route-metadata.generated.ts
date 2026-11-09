@@ -1393,18 +1393,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         },
                         "autoApproveWhen": {
                           "$ref": "#/$defs/__schema0"
-                        },
-                        "next": {
-                          "type": "string"
                         }
                       },
                       "required": [
                         "id",
                         "autoApprove"
                       ]
-                    },
-                    "manualEntry": {
-                      "type": "boolean"
                     },
                     "tools": {
                       "type": "array",
@@ -1770,9 +1764,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           },
                           "autoApproveWhen": {
                             "$ref": "#/$defs/__schema0"
-                          },
-                          "next": {
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -1784,9 +1775,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
-                  },
-                  "manualEntry": {
-                    "type": "boolean"
                   },
                   "tools": {
                     "anyOf": [
@@ -3622,9 +3610,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     },
                     "autoApproveWhen": {
                       "$ref": "#/$defs/__schema1"
-                    },
-                    "next": {
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -3636,9 +3621,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
-            },
-            "manualEntry": {
-              "type": "boolean"
             },
             "tools": {
               "anyOf": [
@@ -3952,9 +3934,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           },
                           "autoApproveWhen": {
                             "$ref": "#/$defs/__schema0"
-                          },
-                          "next": {
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -3966,9 +3945,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
-                  },
-                  "manualEntry": {
-                    "type": "boolean"
                   },
                   "tools": {
                     "anyOf": [
@@ -5964,9 +5940,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     },
                     "autoApproveWhen": {
                       "$ref": "#/$defs/__schema5"
-                    },
-                    "next": {
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -5978,9 +5951,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
-            },
-            "manualEntry": {
-              "type": "boolean"
             },
             "tools": {
               "anyOf": [
@@ -6294,9 +6264,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           },
                           "autoApproveWhen": {
                             "$ref": "#/$defs/__schema0"
-                          },
-                          "next": {
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -6308,9 +6275,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
-                  },
-                  "manualEntry": {
-                    "type": "boolean"
                   },
                   "tools": {
                     "anyOf": [
@@ -6736,9 +6700,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           },
                           "autoApproveWhen": {
                             "$ref": "#/$defs/__schema0"
-                          },
-                          "next": {
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -6750,9 +6711,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
-                  },
-                  "manualEntry": {
-                    "type": "boolean"
                   },
                   "tools": {
                     "anyOf": [

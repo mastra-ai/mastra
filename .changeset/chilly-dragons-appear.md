@@ -11,9 +11,7 @@ A board phase now does exactly what its stored fields say, so an admin who edits
 
 **New phase fields:**
 
-- `exitTool.next`: where the exit tool moves the card when it succeeds. Planning's `submit_plan` moves an approved plan to Building.
 - `tools`: the Factory tools a phase gives the session working in it (`factory_record_review_verdict`, `factory_review_source`). Tools follow the card's phase, not the session's role.
-- `manualEntry`: only people and provider events may move cards into the phase.
 - The `item.pullRequest` rule fact. Work's Review starts on its own only while the card has no open pull request.
 
 ```ts
@@ -30,9 +28,11 @@ A board phase now does exactly what its stored fields say, so an admin who edits
 }
 ```
 
+**An exit tool holds the card until it succeeds.** A working phase with an `exitTool` keeps the card until that tool succeeds in the session working the card there (for `submit_plan`, with an approved plan). Until then an agent's or rule's move on to another working phase is refused. `autoApprove` and `autoApproveWhen` only decide whether the tool approves itself or waits for a person; they no longer let an agent skip the tool. The tool's success never moves the card by itself: the agent moves it with `factory_transition_work_item`, as `factory-plan` now does after an approved plan.
+
 **Self-review off (the default) goes straight to PR review.** The builder opens the change request and moves the card to PR review. With self-review on, an approving self-review opens the change request and moves the card to PR review.
 
-**Existing projects are updated once, keeping your edits.** On its first load after the upgrade, each project's stored Work board gets the new runner, exit-tool, tools and auto-start fields. Only fields that still hold the old default are filled; anything you edited stays as it is. Factory logs the fields it filled.
+**Existing projects are updated once, keeping your edits.** On its first load after the upgrade, each project's stored Work board gets the new runner, tools and auto-start fields. Only fields that still hold the old default are filled; anything you edited stays as it is. Factory logs the fields it filled.
 
 **Runner fields are no longer locked.** On Work and app boards, `422 code_behaviour` now covers only the phases, kinds and moves Factory's code relies on. The boards API's `codeBehaviour` reports only `requiredNextPhases` per phase.
 

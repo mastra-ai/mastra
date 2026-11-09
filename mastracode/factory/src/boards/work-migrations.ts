@@ -74,7 +74,7 @@ function toInput({ position: _position, ...phase }: StoredPhaseRecord): StoredPh
   return phase;
 }
 
-/** Whether Factory may write `next` over the stored value: the stored one is still an old default. */
+/** Whether Factory may write the new value over the stored one: the stored one is still an old default. */
 function stillOldDefault(phaseKey: string, field: MigratedField, stored: unknown): boolean {
   const old = OLD_WORK_SEED[phaseKey]?.[field] ?? [];
   const current = canonical(field, stored);
@@ -82,8 +82,8 @@ function stillOldDefault(phaseKey: string, field: MigratedField, stored: unknown
 }
 
 /**
- * Gives a project's stored Work board the phase runners, goal, exit-tool next phase and phase
- * tools of Factory's Work seed, field by field: only a field that still holds the value Factory
+ * Gives a project's stored Work board the phase runners, goal, automatic starts and phase tools
+ * of Factory's Work seed, field by field: only a field that still holds the value Factory
  * stored before is filled, so every field a person edited stays as they left it. A phase the
  * row lacks, or holds as another kind, is left alone, as is a move to a phase the row lacks.
  */
@@ -106,13 +106,7 @@ export function migrateWorkPhaseRunners(
       Object.assign(next, { [field]: value });
       filled.push(`${phase.key}.${field}`);
     }
-    // An exit tool's next phase must be one the phase moves to; keep the stored exit tool otherwise.
-    const exitNext = next.exitTool?.next;
     const moves = next.nextPhases ?? [...phaseKeys].filter(key => key !== phase.key);
-    if (exitNext !== undefined && next.exitTool !== phase.exitTool && !moves.includes(exitNext)) {
-      next.exitTool = phase.exitTool;
-      filled.splice(filled.indexOf(`${phase.key}.exitTool`), 1);
-    }
     const revert = (field: MigratedField) => {
       if (!filled.includes(`${phase.key}.${field}`)) return;
       Object.assign(next, { [field]: phase[field] });
