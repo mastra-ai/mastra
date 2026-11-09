@@ -580,7 +580,6 @@ describe('bundled Factory skill assets', () => {
     const build = await read('factory-build');
     expect(build).toContain('only with `ask_user`');
     expect(build).toContain('do not open a pull or merge request. Move the card to its `self-review` phase');
-    expect(build).toContain('**Self-review off:** open the change request');
     expect(build).toContain('Then move the card to its `pull request review` phase');
     expect(build).toContain('`Board phases by part:` line names each phase');
     expect(build).not.toMatch(/stage: "(review|pr-review|planning)"/);
@@ -597,6 +596,8 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain('belongs to someone else: never push to it');
     // A manual card's change request is not under Sources: look it up by branch first.
     expect(build).toContain('look for a change request already open from your branch');
+    // A board without a self-review phase opens the change request whatever the setting says.
+    expect(build).toContain('**Self-review off, or no `self-review` phase on the board:** open the change request');
     // The review phase takes the card only once the change request is attached: self-review retries.
     const selfReview = await read('factory-self-review');
     expect(selfReview).toContain('wait briefly (`sleep 20`)');
