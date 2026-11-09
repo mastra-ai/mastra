@@ -162,9 +162,9 @@ describe('AppLayout', () => {
           problems: [
             {
               code: 'secret_key_mismatch',
-              title: "Factory can't unlock your secrets",
-              message: 'The encryption key changed. Your secrets are safe.',
-              fix: 'Redeploy with your `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.',
+              title: 'Factory needs its encryption key',
+              message: 'This deployment is using a different one than before.',
+              fix: 'Set `FACTORY_CREDENTIAL_ENCRYPTION_KEY` and redeploy.',
               docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
             },
           ],
@@ -174,8 +174,8 @@ describe('AppLayout', () => {
     renderApp();
 
     const alert = await screen.findByRole('alert');
-    expect(within(alert).getByRole('heading', { name: "Factory can't unlock your secrets" })).toBeInTheDocument();
-    expect(within(alert).getByText('The encryption key changed. Your secrets are safe.')).toBeInTheDocument();
+    expect(within(alert).getByRole('heading', { name: 'Factory needs its encryption key' })).toBeInTheDocument();
+    expect(within(alert).getByText('This deployment is using a different one than before.')).toBeInTheDocument();
     expect(within(alert).getByText('FACTORY_CREDENTIAL_ENCRYPTION_KEY').tagName).toBe('CODE');
     expect(within(alert).getByRole('button', { name: 'Copy FACTORY_CREDENTIAL_ENCRYPTION_KEY' })).toBeInTheDocument();
     expect(within(alert).getByRole('link', { name: 'Read the docs' })).toHaveAttribute(
@@ -200,14 +200,14 @@ describe('AppLayout', () => {
         calls += 1;
         if (calls === 1) return HttpResponse.json({ error: 'internal' }, { status: 500 });
         return HttpResponse.json({
-          problems: [{ code: 'secret_key_mismatch', title: "Factory can't unlock your secrets", message: 'm' }],
+          problems: [{ code: 'secret_key_mismatch', title: 'Factory needs its encryption key', message: 'm' }],
         });
       }),
     );
     renderApp();
 
     expect(
-      await screen.findByRole('heading', { name: "Factory can't unlock your secrets" }, { timeout: 5000 }),
+      await screen.findByRole('heading', { name: 'Factory needs its encryption key' }, { timeout: 5000 }),
     ).toBeInTheDocument();
     expect(calls).toBe(2);
   });
@@ -233,15 +233,15 @@ describe('AppLayout', () => {
     problems = [
       {
         code: 'secret_key_mismatch',
-        title: "Factory can't unlock your secrets",
-        message: 'The encryption key changed. Your secrets are safe.',
+        title: 'Factory needs its encryption key',
+        message: 'This deployment is using a different one than before.',
       },
     ];
     try {
       focusManager.setFocused(false);
       focusManager.setFocused(true);
 
-      expect(await screen.findByRole('heading', { name: "Factory can't unlock your secrets" })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Factory needs its encryption key' })).toBeInTheDocument();
     } finally {
       focusManager.setFocused(undefined);
     }

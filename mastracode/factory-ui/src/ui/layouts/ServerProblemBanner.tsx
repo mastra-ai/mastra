@@ -32,7 +32,7 @@ export function ServerProblemBanner({ problem }: { problem: ServerStatusProblem 
   return (
     <div
       role="alert"
-      className="border-surface-rim bg-destructive-subtle text-destructive-indicator flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 border-b px-4 py-3"
+      className="border-surface-rim bg-warning-subtle text-warning-subtle-foreground flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 border-b px-4 py-3"
     >
       <div className="flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-0">
         <TriangleAlertIcon className="size-icon-md shrink-0" aria-hidden />
