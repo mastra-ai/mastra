@@ -179,15 +179,19 @@ export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorF
     }
 
     // Transform NOT(AND) into OR(NOT) and NOT(OR) into AND(NOT), negating each condition as a whole
+    // and keeping the field path when the NOT is applied to a field
     if (op === '$and' || op === '$or') {
       const newOp = op === '$and' ? '$or' : '$and';
-      const conditions = (val as any[]).map((condition: any) => ({ $not: condition }));
+      const conditions = (val as any[]).map((condition: any) =>
+        path ? { [path]: { $not: condition } } : { $not: condition },
+      );
       return this.translateOperator(newOp, conditions, '');
     }
 
     // NOT(NOR) is equivalent to OR
     if (op === '$nor') {
-      return this.translateOperator('$or', val, '');
+      const conditions = (val as any[]).map((condition: any) => (path ? { [path]: condition } : condition));
+      return this.translateOperator('$or', conditions, '');
     }
 
     throw new Error(`Unsupported operator in NOT: ${op}`);

@@ -411,6 +411,18 @@ describe('UpstashFilterTranslator', () => {
       expect(translator.translate({ a: { $not: { b: { $gt: 1 } } } })).toBe('a.b <= 1');
     });
 
+    it('keeps the outer field path for $and, $or and $nor inside a field-level $not', () => {
+      expect(translator.translate({ price: { $not: { $gt: 10, $and: [{ $lt: 20 }, { $gt: 5 }] } } })).toBe(
+        '(price <= 10 OR (price >= 20 OR price <= 5))',
+      );
+      expect(translator.translate({ price: { $not: { $or: [{ $lt: 5 }, { $gt: 20 }] } } })).toBe(
+        '(price >= 5 AND price <= 20)',
+      );
+      expect(translator.translate({ price: { $not: { $nor: [{ $lt: 5 }, { $gt: 20 }] } } })).toBe(
+        '(price < 5 OR price > 20)',
+      );
+    });
+
     it('negates $all as an OR of NOT CONTAINS', () => {
       expect(translator.translate({ $not: { a: { $all: ['x', 'y'] } } })).toBe(
         "(a NOT CONTAINS 'x' OR a NOT CONTAINS 'y')",
