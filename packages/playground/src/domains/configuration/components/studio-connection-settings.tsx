@@ -57,6 +57,17 @@ export function StudioConnectionSettings() {
   const [urlError, setUrlError] = useState<string>();
   const changed = !sameConnection(draft, saved);
 
+  // Follow the stored config when it changes (it loads after the first render, and saving writes it back), keeping
+  // unsaved edits.
+  const configKey = JSON.stringify([baseUrl, apiPrefix ?? '', headers]);
+  const [syncedKey, setSyncedKey] = useState(configKey);
+  if (syncedKey !== configKey) {
+    const next = fromConfig();
+    setSyncedKey(configKey);
+    setSaved(next);
+    if (!changed) setDraft(next);
+  }
+
   const updateHeader = (id: number, patch: Partial<HeaderRow>) =>
     setDraft(current => ({
       ...current,
