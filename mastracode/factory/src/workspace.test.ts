@@ -601,6 +601,10 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain(
       '- **The `pull request review` phase is not in `Next phases`, but a `self-review` phase is:** take the self-review path whatever the setting says',
     );
+    // A push to an open change request with no move to pull request review asks a person; self-review stops on an open one.
+    expect(build).toContain(
+      'If the `pull request review` phase is not in `Next phases`, move nothing and ask the person with `ask_user`',
+    );
     // With no review move at all, the builder asks a person, which parks the run as Waiting.
     expect(build).toContain(
       '- **Neither review phase is in `Next phases`:** open no change request and move nothing. Ask the person with `ask_user`',
@@ -610,7 +614,7 @@ describe('bundled Factory skill assets', () => {
     expect(build).not.toMatch(/stage: "(review|pr-review|planning)"/);
     expect(build).toContain('**Before moving to the completed phase:**');
     // A push to an open change request sends the card back to its review phase so it is reviewed again.
-    expect(build).toContain('push to that branch, then move the card to its `pull request review` phase');
+    expect(build).toContain('Otherwise move the card to its `pull request review` phase so it is reviewed again.');
     // Both hand-offs that leave the card in Building say it the way Building's goal counts as done.
     expect(
       build.match(
