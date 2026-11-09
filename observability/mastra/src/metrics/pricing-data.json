@@ -30827,9 +30827,9 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.019,
-          "output": 0.07,
-          "cache_read": 0.017
+          "input": 0.015,
+          "output": 0.057,
+          "cache_read": 0.014
         }
       },
       "openai/gpt-oss-20b": {
@@ -31229,15 +31229,6 @@
           "input": 0.25,
           "output": 1,
           "cache_read": 0.05
-        }
-      },
-      "reflection/beam-free": {
-        "cost": {
-          "input": 0,
-          "output": 0,
-          "reasoning": 0,
-          "cache_read": 0,
-          "cache_write": 0
         }
       },
       "rekaai/reka-edge": {
@@ -31769,7 +31760,7 @@
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
           "input": 0.0434,
-          "output": 0.28,
+          "output": 0.3,
           "cache_read": 0.035
         }
       },
@@ -31793,9 +31784,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.1605,
+          "input": 0.1824,
           "output": 9.3388,
-          "cache_read": 0.16
+          "cache_read": 0.18
         }
       },
       "~openai/gpt-astra-latest": {
@@ -42682,9 +42673,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.065,
-          "output": 0.196,
-          "cache_read": 0.033
+          "input": 0.037,
+          "output": 0.11,
+          "cache_read": 0.018
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42696,9 +42687,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.065,
-          "output": 0.196,
-          "cache_read": 0.033
+          "input": 0.037,
+          "output": 0.11,
+          "cache_read": 0.018
         }
       },
       "google/gemma-4-31b-it": {
@@ -43891,7 +43882,7 @@
       "openai/gpt-oss-20b": {
         "cost": {
           "input": 0.004,
-          "output": 0.018,
+          "output": 0.017,
           "cache_read": 0.003
         }
       },
@@ -52116,7 +52107,7 @@
       "deepseek/deepseek-v4-flash-0731": {
         "cost": {
           "input": 0.0434,
-          "output": 0.28,
+          "output": 0.3,
           "cache_read": 0.035
         }
       },
@@ -53786,9 +53777,9 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.021,
-          "output": 0.078,
-          "cache_read": 0.019
+          "input": 0.015,
+          "output": 0.057,
+          "cache_read": 0.014
         }
       },
       "openai/gpt-oss-20b": {
@@ -54967,7 +54958,7 @@
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
           "input": 0.0434,
-          "output": 0.28,
+          "output": 0.3,
           "cache_read": 0.035
         }
       },
@@ -55009,9 +55000,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.1605,
+          "input": 0.1824,
           "output": 9.3388,
-          "cache_read": 0.16
+          "cache_read": 0.18
         }
       },
       "~openai/gpt-astra-latest": {

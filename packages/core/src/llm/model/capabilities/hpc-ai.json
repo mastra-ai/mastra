@@ -28,21 +28,15 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
+    "moonshotai/kimi-k2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
     "anthropic/claude-opus-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "zai-org/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/glm-5.1": [
-      {
-        "type": "toggle"
       }
     ],
     "deepseek/deepseek-v4-flash": [
@@ -57,7 +51,13 @@
         "values": ["high", "max"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "zai-org/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/glm-5.1": [
       {
         "type": "toggle"
       }

@@ -15,9 +15,19 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "google/gemma-4-31B-it": [
+    "zai-org/GLM-5.3-Flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       },
       {
         "type": "budget_tokens"
@@ -35,15 +45,6 @@
         "type": "budget_tokens"
       }
     ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "zai-org/GLM-5.1": [
       {
         "type": "toggle"
@@ -52,10 +53,9 @@
         "type": "budget_tokens"
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "google/gemma-4-31B-it": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       },
       {
         "type": "budget_tokens"
