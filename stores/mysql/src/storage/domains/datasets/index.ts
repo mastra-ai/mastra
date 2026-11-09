@@ -807,9 +807,11 @@ export class DatasetsMySQL extends DatasetsStorage {
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks ?? existing.toolMocks;
-      const mergedMemorySeed = args.memorySeed ?? existing.memorySeed;
+      // `null` clears these; only an omitted (undefined) value keeps the stored one.
+      const mergedMemorySeed = args.memorySeed !== undefined ? args.memorySeed : existing.memorySeed;
       const mergedUnmockedToolPolicy = args.unmockedToolPolicy ?? existing.unmockedToolPolicy;
-      const mergedToolMockMatchMode = args.toolMockMatchMode ?? existing.toolMockMatchMode;
+      const mergedToolMockMatchMode =
+        args.toolMockMatchMode !== undefined ? args.toolMockMatchMode : existing.toolMockMatchMode;
       const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
       const mergedRequestContext = args.requestContext ?? existing.requestContext;
       const mergedMetadata = args.metadata ?? existing.metadata;
