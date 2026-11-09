@@ -18,6 +18,9 @@ export const createComputerSessionResponseSchema = z.discriminatedUnion('state',
   z.object({ state: z.literal('not-running') }),
 ]);
 
+/** Authorization failures are HTTP errors, not success-state variants. */
+export const computerSessionForbiddenResponseSchema = z.object({ error: z.string() });
+
 export const getComputerControlQuerySchema = computerScopeSchema;
 
 export const computerControlSchema = z.object({

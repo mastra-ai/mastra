@@ -1,6 +1,7 @@
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 import { configureComputerServer, InMemoryComputerTicketStore } from '../computer-stream';
+import { computerSessionForbiddenResponseSchema, createComputerSessionResponseSchema } from '../schemas/computers';
 import {
   CHANGE_COMPUTER_CONTROL_ROUTE,
   CREATE_COMPUTER_SESSION_ROUTE,
@@ -35,6 +36,15 @@ describe('computer server routes', () => {
     expect(CREATE_COMPUTER_SESSION_ROUTE.requiresAuth).toBe(true);
     expect(GET_COMPUTER_CONTROL_ROUTE.requiresAuth).toBe(true);
     expect(CHANGE_COMPUTER_CONTROL_ROUTE.requiresAuth).toBe(true);
+  });
+
+  it('documents forbidden sessions as HTTP errors instead of success states', () => {
+    expect(createComputerSessionResponseSchema.safeParse({ state: 'forbidden' }).success).toBe(false);
+    expect(computerSessionForbiddenResponseSchema.safeParse({ error: 'Forbidden' }).success).toBe(true);
+    expect(CREATE_COMPUTER_SESSION_ROUTE.openapi?.responses[403]).toEqual({
+      description: 'The authenticated caller cannot access the requested computer thread.',
+      content: { 'application/json': { schema: computerSessionForbiddenResponseSchema } },
+    });
   });
 
   it('mints an origin-bound single-use viewer ticket without exposing viewer headers', async () => {

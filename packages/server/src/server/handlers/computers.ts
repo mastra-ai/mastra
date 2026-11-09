@@ -7,6 +7,7 @@ import {
   changeComputerControlResponseSchema,
   computerControlSchema,
   computerIdPathParams,
+  computerSessionForbiddenResponseSchema,
   createComputerSessionBodySchema,
   createComputerSessionResponseSchema,
   getComputerControlQuerySchema,
@@ -110,6 +111,11 @@ export const CREATE_COMPUTER_SESSION_ROUTE = createRoute({
     };
   },
 });
+
+CREATE_COMPUTER_SESSION_ROUTE.openapi!.responses[403] = {
+  description: 'The authenticated caller cannot access the requested computer thread.',
+  content: { 'application/json': { schema: computerSessionForbiddenResponseSchema } },
+};
 
 export const GET_COMPUTER_CONTROL_ROUTE = createRoute({
   method: 'GET',
