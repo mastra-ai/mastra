@@ -39,10 +39,10 @@ afterEach(() => {
 
 describe('StudioSettingsPage', () => {
   describe('when the settings page is visited', () => {
-    it('exposes the settings breadcrumb and settings controls inside the main landmark', async () => {
+    it('shows the settings title and controls inside the main landmark', async () => {
       await renderSettingsPage();
 
-      expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByText('Settings')).toBeDefined();
+      expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeDefined();
       const main = within(screen.getByRole('main'));
       expect(
         within(main.getByRole('radiogroup', { name: 'Theme' }))

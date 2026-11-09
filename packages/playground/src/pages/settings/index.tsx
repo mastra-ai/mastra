@@ -7,17 +7,12 @@ import {
   SettingsRow,
   SettingsTitle,
 } from '@mastra/playground-ui/new/settings';
-import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { StudioConnectionSettings } from '@/domains/configuration/components/studio-connection-settings';
-import { navCrumb } from '@/domains/navigation/crumbs';
-
-const crumbs = [navCrumb('/settings')];
 
 export const StudioSettingsPage = () => {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <h1 className="sr-only">Settings</h1>
-      <SettingsLayout>
+    <PageLayout>
+      <SettingsLayout title="Settings">
         <SettingsGroup>
           <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
           <SettingsContainer>
