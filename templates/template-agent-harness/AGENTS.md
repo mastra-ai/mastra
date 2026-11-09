@@ -1,14 +1,6 @@
-# AGENTS.md
+# This is NOT the Mastra you know
 
-## CRITICAL: Load `mastra` skill first
+Mastra changes fast. Its APIs, conventions, and file structure have likely changed since your training data, so don't write Mastra code from memory. Load the `mastra` skill first if it's available. Then check the bundled docs in `node_modules/@mastra/*/dist/docs/` or https://mastra.ai/llms.txt before you write code. Follow deprecation notices.
 
-Load the `mastra` skill BEFORE any Mastra work. Never rely on cached knowledge — APIs change between versions.
-
-## Rules
-
-- Register all agents, tools, workflows, and scorers in `src/mastra/index.ts`
-- Use the `dev` and `build` scripts from `package.json` instead of running `mastra dev` / `mastra build` directly
-
-## Resources
-
-- [Mastra Documentation](https://mastra.ai/llms.txt)
+Register agents, tools, workflows, and scorers in `src/mastra/index.ts`.
+Use the `dev` and `build` scripts in `package.json`, not `mastra dev` or `mastra build` directly.
