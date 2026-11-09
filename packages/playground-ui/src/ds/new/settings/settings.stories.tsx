@@ -10,6 +10,7 @@ import {
   SettingsLayout,
   SettingsListHeader,
   SettingsRow,
+  SettingsSkeleton,
   SettingsTitle,
 } from './index';
 import { Avatar } from '@/ds/components/Avatar';
@@ -171,6 +172,27 @@ export const Controls: Story = {
               <Switch aria-label="System" />
             </div>
           </SettingsFieldsetRow>
+        </SettingsContainer>
+      </SettingsGroup>
+    </SettingsLayout>
+  ),
+};
+
+/** Loading states: `SettingsSkeleton` in place of rows (`row`) or list items (`item`), inside the same card. */
+export const Loading: Story = {
+  args: { children: null },
+  render: () => (
+    <SettingsLayout title="General">
+      <SettingsGroup>
+        <SettingsTitle>Organization</SettingsTitle>
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading organization" rows={3} />
+        </SettingsContainer>
+      </SettingsGroup>
+      <SettingsGroup>
+        <SettingsTitle>Members</SettingsTitle>
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading members" variant="item" rows={3} />
         </SettingsContainer>
       </SettingsGroup>
     </SettingsLayout>

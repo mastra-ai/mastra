@@ -13,6 +13,7 @@ import {
   SettingsGroup,
   SettingsHeader,
   SettingsRow,
+  SettingsSkeleton,
   SettingsTitle,
 } from './index';
 import { Form } from '@/ds/components/Form';
@@ -301,6 +302,20 @@ describe('Settings', () => {
       expect(container?.contains(screen.getByText('Couldn’t load accounts'))).toBe(true);
       expect(container?.contains(screen.getByRole('button', { name: 'Refresh' }))).toBe(true);
       expect(screen.getByTestId('empty-notices').childNodes).toHaveLength(0);
+    });
+  });
+
+  describe('SettingsSkeleton', () => {
+    it('announces one loading status with the requested number of hidden placeholder rows', () => {
+      render(
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading members" variant="item" rows={3} />
+        </SettingsContainer>,
+      );
+
+      const status = screen.getByRole('status', { name: 'Loading members' });
+      expect(status.children).toHaveLength(3);
+      for (const row of status.children) expect(row.getAttribute('aria-hidden')).toBe('true');
     });
   });
 });

@@ -9,6 +9,7 @@ One settings layout for Studio, Factory and Platform, from `@mastra/playground-u
 - `SettingsContainer` is a borderless card that owns its rows' spacing (14px padding, hairlines between rows that stop at it), so rows carry no padding of their own. Rows with nothing in them take no space.
 - `SettingsRow` keeps the label and description on the left and the control on the right. Text fields share one 13.75rem width; selects hug their value up to that width; switches and buttons keep their size. `controlPlacement="below"` puts a control under its label at full width.
 - Lists: `SettingsListHeader` puts a count and the list's action at the top of its card, `SettingsEmptyRow` holds the empty text and that same action in one row, and `SettingsItem` (with `SettingsItemIcon` for logos and icons, the same size as `Avatar size="md"`) is one thing in a list. `SettingsNoticeRow` keeps a list's errors inside its card.
+- `SettingsSkeleton` is the one loading state for settings: placeholder rows (`variant="row"`) or list items (`variant="item"`) built from the real rows, inside the same card.
 - `CopyInput` (`@mastra/playground-ui/components/CopyInput`) shows a read-only value, like an ID, with a copy button.
 
 Breaking changes in `@mastra/playground-ui/new/settings`:
