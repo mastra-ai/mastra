@@ -110,7 +110,6 @@ export interface GenUIController {
   readSpecCall(call: NormalizedToolCall): { spec?: Spec; error?: string };
   /** Fires when the chat's spec and edit tool calls change, so edits can resolve their targets. */
   subscribeSpecs(listener: () => void): () => void;
-  specsVersion(): number;
   /** Register the live json-render state of a rendered spec, which edits of it start from. */
   trackStore(toolCallId: string, store: StateStore): () => void;
   /** The message whose spec a json-render `data-spec` part renders; only the first such part of a message has one. */
@@ -234,7 +233,6 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   };
 
   // ---- spec and edit calls ---------------------------------------------------------------------
-  let specVersion = 0;
   const specListeners = new Set<() => void>();
   const stores = new Map<string, StateStore>();
   const resolver = createSpecResolver({
@@ -309,10 +307,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       if (syncedThread && syncedThread.id !== chat.threadId) reset();
       syncedThread = { id: chat.threadId };
       updateToolMeta(messages);
-      if (resolver.update(messages)) {
-        specVersion++;
-        specListeners.forEach(listener => listener());
-      }
+      if (resolver.update(messages)) specListeners.forEach(listener => listener());
       const next = chat.running ?? false;
       if (next !== running) {
         running = next;
@@ -351,7 +346,6 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       specListeners.add(listener);
       return () => specListeners.delete(listener);
     },
-    specsVersion: () => specVersion,
     trackStore(toolCallId, store) {
       stores.set(toolCallId, store);
       return () => {

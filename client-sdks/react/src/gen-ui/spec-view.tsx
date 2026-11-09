@@ -149,11 +149,6 @@ function specRegistry(registry: GenUIRegistry): ComponentRegistry {
   return result;
 }
 
-function useRunning() {
-  const controller = useGenUIController();
-  return useSyncExternalStore(controller.subscribe, controller.isRunning, controller.isRunning);
-}
-
 /**
  * Keep the spec's json-render state in step with the agent's: values the agent changes are written to the
  * store, every other path keeps what the user set. The store outlives the streamed arguments, so state the
@@ -254,6 +249,30 @@ function SpecFrame({ id, status, statusError, spec: read, error: readError, clas
   );
 }
 
+const sameRead = (a: unknown, b: unknown) =>
+  Object.is(a, b) ||
+  (typeof a === 'object' &&
+    typeof b === 'object' &&
+    a !== null &&
+    b !== null &&
+    Object.keys(a).length === Object.keys(b).length &&
+    Object.entries(a).every(([key, value]) => Object.is(value, (b as Record<string, unknown>)[key])));
+
+/**
+ * Subscribes a view to just what it reads, so a change elsewhere in the conversation (another spec, the run
+ * starting or ending) re-renders only the views whose read changed. Reads are compared field by field because
+ * some are built fresh each time: a status, or an edit read the resolver does not cache because a cycle cut it short.
+ */
+function useRead<T>(subscribe: (listener: () => void) => () => void, read: () => T): T {
+  const last = useRef<T>(undefined as T);
+  const snapshot = () => {
+    const next = read();
+    if (!sameRead(last.current, next)) last.current = next;
+    return last.current;
+  };
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
 /**
  * The json-render spec of one spec or edit tool call, drawn where the call appears in the message. It renders
  * progressively while the model writes it; its state and actions are local to this call. An edit renders its
@@ -263,10 +282,8 @@ function SpecFrame({ id, status, statusError, spec: read, error: readError, clas
  */
 export function GenUISpecView({ call, className }: GenUISpecViewProps) {
   const controller = useGenUIController();
-  const running = useRunning();
-  const { status, error: statusError } = specStatus(call, running);
-  useSyncExternalStore(controller.subscribeSpecs, controller.specsVersion, controller.specsVersion);
-  const { spec, error } = controller.readSpecCall(call);
+  const { status, error: statusError } = useRead(controller.subscribe, () => specStatus(call, controller.isRunning()));
+  const { spec, error } = useRead(controller.subscribeSpecs, () => controller.readSpecCall(call));
   return (
     <SpecFrame
       id={call.toolCallId}
@@ -295,11 +312,9 @@ export interface GenUIDataSpecViewProps {
  */
 export function GenUIDataSpecView({ part, className }: GenUIDataSpecViewProps) {
   const controller = useGenUIController();
-  const running = useRunning();
-  useSyncExternalStore(controller.subscribeSpecs, controller.specsVersion, controller.specsVersion);
-  const messageId = controller.dataSpecOf(part);
-  const read = messageId ? controller.readDataSpec(messageId) : undefined;
-  const streaming = running && !!read?.live;
+  const messageId = useRead(controller.subscribeSpecs, () => controller.dataSpecOf(part));
+  const read = useRead(controller.subscribeSpecs, () => (messageId ? controller.readDataSpec(messageId) : undefined));
+  const streaming = useRead(controller.subscribe, () => controller.isRunning() && !!read?.live);
   const problem = useMemo(
     () => (read?.spec && !streaming && !read.error ? controller.checkSpec(read.spec) : undefined),
     [controller, read, streaming],

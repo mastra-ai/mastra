@@ -799,6 +799,62 @@ describe('useGenUIChat — spec tool', () => {
     expect(specView('c1')?.getAttribute('data-genui-status')).toBe('ready');
     expect(specView('c2')?.getAttribute('data-genui-status')).toBe('ready');
   });
+
+  it('a new spec arriving does not redraw an earlier one that did not change', async () => {
+    let requests = 0;
+    server.use(
+      http.post(STREAM_URL, () => {
+        requests++;
+        if (requests === 1) return sseResponse(specCall('c2', weatherSpec));
+        return sseResponse([
+          chunk('text-start', { id: 't2' }),
+          chunk('text-delta', { id: 't2', text: 'Done.' }),
+          chunk('text-end', { id: 't2' }),
+          finish('stop'),
+        ]);
+      }),
+    );
+    // The earlier spec was rejected, so its view draws the app's own fallback, which counts its renders.
+    let fallbackRenders = 0;
+    const genUI = weatherUI({
+      specTool: true,
+      fallbacks: {
+        Fallback: ({ reason }) => {
+          fallbackRenders++;
+          return <div role="note">{reason}</div>;
+        },
+      },
+    });
+    const renderers = { Text: (part: { text: string }) => <span>{part.text}</span> };
+    const history = [assistantWith([specInvocation('c1', weatherSpec, { ok: false, error: 'too wide' })])];
+    function App() {
+      const chat = useGenUIChat({
+        agentId: 'agent-1',
+        threadId: 'thread-1',
+        genUI,
+        initialMessages: history,
+        renderers,
+      });
+      current = chat;
+      return (
+        <>
+          {chat.messages.map(message => (
+            <MessageFactory key={message.id} message={message} {...chat.genUI.renderers} />
+          ))}
+        </>
+      );
+    }
+    renderWithProviders(<App />);
+    expect(screen.getByRole('note').textContent).toContain('too wide');
+    const before = fallbackRenders;
+
+    await send('Try again');
+    expect(await screen.findByText('Done.')).toBeTruthy();
+    expect(screen.getByTestId('weather').textContent).toBe('Rome: 30°');
+    expect(specView('c2')?.getAttribute('data-genui-status')).toBe('ready');
+
+    expect(fallbackRenders).toBe(before);
+  });
 });
 
 describe('useGenUIChat — actions and context', () => {
