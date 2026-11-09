@@ -27,7 +27,7 @@ export const knowledgeSettingsScenario: McE2eScenario = {
 
     terminal.submit('/settings');
     await selectMenuRow(terminal, /Experimental Knowledge/i);
-    await runtime.waitForScreenText(/Add knowledge_search, knowledge_read/i, terminal);
+    await runtime.waitForScreenText(/Add knowledge_list, knowledge_search, knowledge_read/i, terminal);
     terminal.write('\x1b[A');
     terminal.write('\r');
     await runtime.waitForScreenText(/Experimental Knowledge\s+On/i, terminal);

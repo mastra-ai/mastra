@@ -3,6 +3,7 @@ import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeReadScope, KnowledgeStorage } from '../storage/domains/knowledge';
+import type { KnowledgeNote, KnowledgePage } from '../storage/domains/knowledge/pages';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { knowledgeAccessGrants } from './access';
@@ -10,11 +11,30 @@ import { emitKnowledgeChanges } from './changes';
 import type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 import type { KnowledgeConfig } from './config';
 import { KnowledgeDeclarationError, strongerKnowledgeRole } from './declarations';
-import type { KnowledgeRole, KnowledgeScopeDeclarationInfo } from './declarations';
+import type {
+  KnowledgeRole,
+  KnowledgeScopeDeclaration as ScopeDeclaration,
+  KnowledgeScopeDeclarationInfo,
+} from './declarations';
+import {
+  addKnowledgeNote,
+  removeKnowledgeNote,
+  removeKnowledgePage,
+  updateKnowledgeNote,
+  upsertKnowledgePage,
+} from './host-writes';
+import type {
+  KnowledgeAddNoteInput,
+  KnowledgeRemovePageInput,
+  KnowledgeUpdateNoteInput,
+  KnowledgeUpsertPageInput,
+  KnowledgeUpsertPageResult,
+} from './host-writes';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
+import { reindexKnowledgeLinks } from './links';
 import { buildKnowledgePageTools } from './page-tools';
-import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins, MAX_PINNED_MAX_TOKENS } from './pinned';
+import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins } from './pinned';
 import type { PinBudget, PinEntry } from './pinned';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
 import { KnowledgeRun, knowledgeRunPrincipals } from './run';
@@ -25,11 +45,10 @@ import type { KnowledgeAccessExplanation } from './scope-runtime';
 function resolvePins(pins: KnowledgeConfig['pinnedContext']): false | PinBudget {
   if (!pins) return false;
   const options = pins === true ? {} : pins;
-  const maxTokens = options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS;
-  if (maxTokens > MAX_PINNED_MAX_TOKENS) {
-    throw new Error(`Knowledge pinnedContext.maxTokens is at most ${MAX_PINNED_MAX_TOKENS}.`);
-  }
-  return { maxPins: options.maxPins ?? DEFAULT_MAX_PINS, maxTokens };
+  return {
+    maxPins: options.maxPins ?? DEFAULT_MAX_PINS,
+    maxTokens: options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS,
+  };
 }
 
 /** Below this share of the pin budget each, config pins are too cut down to be useful. */
@@ -49,7 +68,7 @@ export class Knowledge extends MastraBase {
   #storageSource?: MastraCompositeStore;
   #storagePromise?: Promise<KnowledgeStorage>;
   #runtime: KnowledgeScopeRuntime;
-  #tools: { read: boolean; write: boolean };
+  #tools: { read: boolean; write: boolean; maxTokens?: number };
   #pins: false | PinBudget;
   #instructions?: KnowledgeInstructionsOption;
   #semantic?: KnowledgeSemanticIndex;
@@ -58,12 +77,12 @@ export class Knowledge extends MastraBase {
   /** Config pins are never dropped, so a scope with more of them than the budget holds is a setup mistake. */
   #warnOnPinOvercommit(budget: PinBudget) {
     const { declarations, concrete } = this.#runtime.compiled;
-    const entries: Array<[string, string[] | undefined]> = [
+    const entries: Array<[string, ScopeDeclaration['pinnedContext']]> = [
       ...[...declarations.values()].map(
-        compiled => [compiled.key, compiled.declaration.pinnedContext] as [string, string[] | undefined],
+        compiled => [compiled.key, compiled.declaration.pinnedContext] as [string, ScopeDeclaration['pinnedContext']],
       ),
       ...[...concrete].map(
-        ([address, entry]) => [address, entry.declaration.pinnedContext] as [string, string[] | undefined],
+        ([address, entry]) => [address, entry.declaration.pinnedContext] as [string, ScopeDeclaration['pinnedContext']],
       ),
     ];
     for (const [key, pins] of entries) {
@@ -89,8 +108,16 @@ export class Knowledge extends MastraBase {
     const tools = config.tools;
     this.#tools =
       typeof tools === 'object'
-        ? { read: Boolean(tools.read), write: Boolean(tools.write) }
+        ? {
+            read: Boolean(tools.read),
+            write: Boolean(tools.write),
+            maxTokens: typeof tools.read === 'object' ? tools.read.maxTokens : undefined,
+          }
         : { read: Boolean(tools), write: Boolean(tools) };
+    const maxTokens = this.#tools.maxTokens;
+    if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens < 100)) {
+      throw new Error(`Knowledge \`tools.read.maxTokens\` must be a whole number of at least 100; got ${maxTokens}.`);
+    }
     this.#pins = resolvePins(config.pinnedContext);
     this.#instructions = config.instructions;
     if (Boolean(config.vector) !== Boolean(config.embedder)) {
@@ -188,6 +215,7 @@ export class Knowledge extends MastraBase {
         getStorage: () => this.getStorage(),
         semantic: this.#semantic,
         warn: message => this.logger.warn(message),
+        maxTokens: this.#tools.maxTokens,
       },
       this.#groups(options),
       // A pin write changes what the pins lane shows; drop the turn's memoized read.
@@ -199,12 +227,82 @@ export class Knowledge extends MastraBase {
   }
 
   /**
-   * Re-embeds every live page and note into the vector store, for content written outside the tools
-   * or after a failed embed. Returns how many were indexed; throws without `vector` and `embedder`.
+   * Creates or updates the page at `scope#path`, for apps that sync content in from outside an agent
+   * run (a docs site, a CMS). The path is the page's identity, so running a sync again updates the
+   * same pages; an unchanged page is not written. Notes on the page are kept. The page is embedded
+   * when Knowledge has `vector` and `embedder`, and change listeners are told.
+   *
+   * **Host-only.** No run scopes and no access rules are checked; who reads the page is decided by
+   * the scope's access rules as usual (`explainAccess` explains run access, not host writes). Never
+   * expose it through an agent tool, or through a server route without admin-level auth. A scope
+   * first created here gets its `belongsTo` parent when a run holding that parent first uses it.
+   *
+   * @experimental
    */
-  async reindex(): Promise<number> {
-    if (!this.#semantic) throw new Error('Knowledge has no `vector` and `embedder` to reindex into.');
-    return this.#semantic.reindex(await this.getStorage());
+  upsertPage(input: KnowledgeUpsertPageInput): Promise<KnowledgeUpsertPageResult> {
+    return upsertKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Deletes the page at `scope#path`; `null` when there is none. Refuses a page with child pages
+   * and a page declared in config. Host-only, like {@link Knowledge.upsertPage}. Not retried: a
+   * concurrent write to the same page between the read and the delete throws, so remove from one
+   * sync worker or retry the call.
+   *
+   * @experimental
+   */
+  removePage(input: KnowledgeRemovePageInput): Promise<KnowledgePage | null> {
+    return removeKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Adds a note to the page at `scope#path`; throws when there is no page there. Readers of the
+   * `stamps` scopes (default: the page's scope) see it. Keep the returned id to edit or remove it.
+   * Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  addNote(input: KnowledgeAddNoteInput): Promise<KnowledgeNote> {
+    return addKnowledgeNote(this.#hostWriter(), input);
+  }
+
+  /**
+   * Replaces a note's text. Notes are immutable, so this adds the new note and then removes the old
+   * one: the result has a **new id**. If removing the old note fails after the add, both exist;
+   * call `removeNote` with the old id. Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  updateNote(input: KnowledgeUpdateNoteInput): Promise<KnowledgeNote> {
+    return updateKnowledgeNote(this.#hostWriter(), input);
+  }
+
+  /**
+   * Removes a note; `null` when it is already gone. Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  removeNote(input: { id: string; author?: string }): Promise<KnowledgeNote | null> {
+    return removeKnowledgeNote(this.#hostWriter(), input);
+  }
+
+  #hostWriter() {
+    return {
+      runtime: this.#runtime,
+      getStorage: () => this.getStorage(),
+      semantic: this.#semantic,
+      warn: (message: string) => this.logger.warn(message),
+    };
+  }
+
+  /**
+   * Rebuilds the page link index from every page body, for pages written before the index existed
+   * or straight to the store. Needs no vector store. Returns how many pages were indexed.
+   *
+   * @experimental
+   */
+  async reindexLinks(): Promise<number> {
+    return reindexKnowledgeLinks(await this.getStorage());
   }
 
   /** The usage block that goes with `createTools(options)`. */
@@ -370,7 +468,11 @@ export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './i
 export {
   DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS,
   listKnowledgeTreeChildren,
+  MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS,
+  MAX_KNOWLEDGE_LINK_COUNT_PAGES,
   readKnowledgePage,
+  readKnowledgePageLinkCounts,
+  readKnowledgePageLinks,
   readKnowledgePageActivity,
   readKnowledgePageGraph,
   readKnowledgeScopeGrants,
@@ -381,13 +483,16 @@ export type {
   KnowledgePageGraph,
   KnowledgePageGraphEdge,
   KnowledgePageGraphLimits,
+  KnowledgePageLinks,
   KnowledgePageView,
   KnowledgeTreeChildren,
+  KnowledgeTreePage,
 } from './explorer-pages';
 export type { KnowledgeConfig } from './config';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
 export type {
   KnowledgePageTemplate,
+  KnowledgePinnedList,
   KnowledgeScopeDeclaration,
   KnowledgeScopeDeclarationInfo,
   KnowledgeScopeDeclarations,
@@ -405,3 +510,10 @@ export interface KnowledgeScopeGrant {
   role: KnowledgeRole;
 }
 export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
+export type {
+  KnowledgeAddNoteInput,
+  KnowledgeRemovePageInput,
+  KnowledgeUpdateNoteInput,
+  KnowledgeUpsertPageInput,
+  KnowledgeUpsertPageResult,
+} from './host-writes';

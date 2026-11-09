@@ -1,5 +1,21 @@
 # create-mastra
 
+## 1.39.0-alpha.2
+
+## 1.39.0-alpha.1
+
+## 1.39.0-alpha.0
+
+### Patch Changes
+
+- Fixed new projects getting an organization (v2) Gateway key, which broke Studio threads with `Gateway API error 404`. New projects now get a Gateway project key, so Studio memory and threads work again. ([#29369](https://github.com/mastra-ai/mastra/pull/29369))
+
+## 1.38.0
+
+## 1.38.0-alpha.3
+
+## 1.38.0-alpha.2
+
 ## 1.38.0-alpha.1
 
 ## 1.38.0-alpha.0

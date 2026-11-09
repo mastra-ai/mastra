@@ -185,7 +185,33 @@ describe('QUERY_THREADS', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
-        message: 'Context identifier predicates are not supported by the configured observability store',
+        message: 'Context field predicates are not supported by the configured observability store',
+      });
+      expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
+    }
+  });
+
+  it('returns 501 before calling a store that predates request, service and experiment predicates', async () => {
+    const requests = [
+      {
+        traces: {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-1' } },
+        },
+      },
+      {
+        traces: { timeRange: TIME_RANGE },
+        where: { traces: { some: { spans: { some: { op: 'exists', path: 'serviceName' } } } } },
+      },
+    ];
+    for (const request of requests) {
+      const { mastra, observabilityStore } = createHarness(['thread-query', 'trace-query-context-ids']);
+      const error = await captureHttpException(QUERY_THREADS.handler(params(mastra, request)));
+
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Context field predicates are not supported by the configured observability store',
       });
       expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
     }

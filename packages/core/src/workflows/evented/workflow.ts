@@ -94,10 +94,10 @@ import type {
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
+import { resolveLegacyAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
-import { createStepFromClassifier } from '../step-factories';
+import { createStepFromClassifier, createStepFromTool } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
@@ -305,7 +305,12 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+  toolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
+    actor?: ActorSignal;
+  },
 ): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /** Creates a workflow step from a configured Classifier. */
@@ -597,7 +602,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
-      const agent = resolveRegisteredAgent(params, mastra);
+      const agent = params;
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,
@@ -706,69 +711,6 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       }
     },
     component: 'AGENT',
-  };
-}
-
-function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
-  params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
-  agentOrToolOptions?: Record<string, unknown>,
-): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
-  const toolOpts = agentOrToolOptions as
-    | { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata }
-    | undefined;
-  if (!params.inputSchema || !params.outputSchema) {
-    throw new Error('Tool must have input and output schemas defined');
-  }
-
-  return {
-    id: params.id,
-    description: params.description,
-    inputSchema: params.inputSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
-    retries: toolOpts?.retries,
-    scorers: toolOpts?.scorers,
-    metadata: toolOpts?.metadata,
-    execute: async ({
-      inputData,
-      mastra,
-      requestContext,
-      suspend,
-      resumeData,
-      runId,
-      workflowId,
-      state,
-      setState,
-      abortSignal,
-      ...obsFields
-    }) => {
-      const observabilityContext = resolveObservabilityContext(obsFields);
-      // Tools receive (input, context) - just call the tool's execute
-      if (!params.execute) {
-        throw new Error(`Tool ${params.id} does not have an execute function`);
-      }
-
-      // Build context matching ToolExecutionContext structure
-      const context = {
-        mastra,
-        requestContext,
-        ...observabilityContext,
-        abortSignal,
-        workflow: {
-          runId,
-          workflowId,
-          state,
-          setState,
-          suspend,
-          resumeData,
-        },
-      };
-
-      // Tool.execute already handles the v1.0 signature properly
-      return params.execute(inputData, context) as TStepOutput;
-    },
-    component: 'TOOL',
   };
 }
 
@@ -2019,12 +1961,15 @@ export class EventedRun<
     if (this.#cancelPublished) return;
     this.#cancelPublished = true;
     try {
+      const store = await this.mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await store?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
       await this.mastra?.pubsub.publish('workflows', {
         type: 'workflow.cancel',
         runId: this.runId,
         data: {
           workflowId: this.workflowId,
           runId: this.runId,
+          requestContext: snapshot?.requestContext,
         },
       });
     } catch (err) {
@@ -2885,7 +2830,9 @@ export class EventedRun<
   }
 
   async cancel() {
-    if (await this.hasReachedTerminalStatus()) return;
+    if (await this.hasReachedTerminalStatus()) {
+      return this.cancelSuspendedNestedRuns();
+    }
 
     // Publish directly instead of relying on the abort handler: a handle created on another
     // instance (or via startAsync) never registered one, so abort() alone would reach no processor.
@@ -2918,5 +2865,7 @@ export class EventedRun<
       stopReasonContext: null,
       attributes: { status: 'canceled' },
     });
+
+    await this.cancelSuspendedNestedRuns();
   }
 }

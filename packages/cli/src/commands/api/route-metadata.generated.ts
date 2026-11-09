@@ -2383,6 +2383,7 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "contextMode",
       "score"
     ],
     "hasQuery": false,
@@ -2548,12 +2549,27 @@ export const API_ROUTE_METADATA = {
       "paginationProperty": "pagination"
     }
   },
+  "GET /observability/feedback/:feedbackId": {
+    "method": "GET",
+    "path": "/observability/feedback/:feedbackId",
+    "pathParams": [
+      "feedbackId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /observability/feedback": {
     "method": "POST",
     "path": "/observability/feedback",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "contextMode",
       "feedback"
     ],
     "hasQuery": false,
@@ -3128,6 +3144,39 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/link-counts": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/link-counts",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "pageId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/pages/:pageId/links": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/pages/:pageId/links",
+    "pathParams": [
+      "knowledgeKey",
+      "pageId"
+    ],
+    "queryParams": [
+      "direction"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /knowledge/:knowledgeKey/search": {
@@ -3880,6 +3929,7 @@ export const API_ROUTE_METADATA = {
       "mcpClients",
       "memory",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -3917,6 +3967,7 @@ export const API_ROUTE_METADATA = {
       "mcpClients",
       "memory",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -3971,6 +4022,7 @@ export const API_ROUTE_METADATA = {
       "memory",
       "metadata",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -4011,6 +4063,7 @@ export const API_ROUTE_METADATA = {
       "memory",
       "metadata",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -6129,6 +6182,23 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [],
     "hasQuery": false,
     "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /background-tasks/:backgroundTaskId/resume": {
+    "method": "POST",
+    "path": "/background-tasks/:backgroundTaskId/resume",
+    "pathParams": [
+      "backgroundTaskId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resumeData",
+      "suspendedAt"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
     "responseShape": {
       "kind": "single"
     }

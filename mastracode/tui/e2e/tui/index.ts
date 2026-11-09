@@ -75,6 +75,7 @@ import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-re
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { firstRunOnboardingScenario } from './first-run-onboarding.js';
+import { gatewayWebSearchScenario } from './gateway-web-search.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
 import { githubSignalsIncrementalScenario } from './github-signals-incremental.js';
 import { githubSignalsLegacyUpgradeScenario } from './github-signals-legacy-upgrade.js';
@@ -494,6 +495,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'update-command-prompt': updateCommandPromptScenario,
   'update-startup-prompt': updateStartupPromptScenario,
   'web-search-rendering': webSearchRenderingScenario,
+  'gateway-web-search': gatewayWebSearchScenario,
   'workspace-commands': workspaceCommandsScenario,
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,

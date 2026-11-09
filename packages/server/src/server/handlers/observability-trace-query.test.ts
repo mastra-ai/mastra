@@ -333,6 +333,7 @@ describe('QUERY_TRACES', () => {
       'trace-query-root-duration',
       'trace-query-tenant-scope',
       'trace-query-context-ids',
+      'trace-query-context-fields',
       'trace-query-time-to-first-chunk',
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
@@ -734,7 +735,7 @@ describe('QUERY_TRACES', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
-        message: 'Context identifier predicates are not supported by the configured observability store',
+        message: 'Context field predicates are not supported by the configured observability store',
       });
       expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
     }
@@ -757,6 +758,60 @@ describe('QUERY_TRACES', () => {
           collection: 'spans',
           quantifier: 'some',
           predicate: { type: 'comparison', field: 'runId', operator: 'eq', value: 'run-42' },
+        },
+      }),
+    );
+  });
+
+  it('returns 501 before calling a store that predates request, service and experiment predicates', async () => {
+    const wheres = [
+      { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-1' } },
+      { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'checkout' } } } },
+      { op: 'not', arg: { spans: { none: { op: 'in', value: { path: 'experimentId' }, set: ['exp-1'] } } } },
+    ];
+    for (const where of wheres) {
+      const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-context-ids']);
+      const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, where })));
+
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Context field predicates are not supported by the configured observability store',
+      });
+      expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes request, service and experiment predicates to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-context-fields']);
+
+    await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-1' } },
+            { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'checkout' } } } },
+          ],
+        },
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          type: 'boolean',
+          operator: 'and',
+          args: [
+            { type: 'comparison', field: 'requestId', operator: 'eq', value: 'request-1' },
+            {
+              type: 'relation',
+              collection: 'spans',
+              quantifier: 'some',
+              predicate: { type: 'comparison', field: 'serviceName', operator: 'eq', value: 'checkout' },
+            },
+          ],
         },
       }),
     );
@@ -1259,23 +1314,43 @@ describe('trace-query discovery routes', () => {
 
       const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
 
-      for (const path of ['runId', 'sessionId', 'userId', 'organizationId']) {
+      for (const path of [
+        'runId',
+        'sessionId',
+        'userId',
+        'organizationId',
+        'requestId',
+        'serviceName',
+        'experimentId',
+      ]) {
         expect(response.canonicalFields).not.toContainEqual(expect.objectContaining({ path }));
       }
     }
   });
 
-  it('discovers context identifiers for stores that advertise the capability', async () => {
-    const { mastra } = createHarness(['trace-query', 'trace-query-discovery', 'trace-query-context-ids']);
-    const request = getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'spans' });
+  it('discovers each context identifier only when the store advertises its feature', async () => {
+    const discover = async (features: string[]) => {
+      const { mastra } = createHarness(['trace-query', 'trace-query-discovery', ...features]);
+      const request = getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'spans' });
+      const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
+      return response.canonicalFields;
+    };
+    const contextIds = ['runId', 'sessionId', 'userId', 'organizationId'];
+    const contextFields = ['requestId', 'serviceName', 'experimentId'];
 
-    const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
+    const idsOnly = await discover(['trace-query-context-ids']);
+    for (const path of contextIds) {
+      expect(idsOnly).toContainEqual(expect.objectContaining({ path, valueKind: 'string', valueSuggestions: false }));
+    }
+    for (const path of contextFields) expect(idsOnly).not.toContainEqual(expect.objectContaining({ path }));
 
-    for (const path of ['runId', 'sessionId', 'userId', 'organizationId']) {
-      expect(response.canonicalFields).toContainEqual(
+    const fieldsOnly = await discover(['trace-query-context-fields']);
+    for (const path of contextFields) {
+      expect(fieldsOnly).toContainEqual(
         expect.objectContaining({ path, valueKind: 'string', valueSuggestions: false }),
       );
     }
+    for (const path of contextIds) expect(fieldsOnly).not.toContainEqual(expect.objectContaining({ path }));
   });
 
   it.each(TIMING_FIELDS)('hides $field discovery from stores without the capability', async ({ field }) => {

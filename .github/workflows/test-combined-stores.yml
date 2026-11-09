@@ -33,6 +33,7 @@ jobs:
       contents: read
     outputs:
       stores: ${{ steps.set-stores.outputs.stores }}
+      light_stores: ${{ steps.set-stores.outputs.light_stores }}
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
@@ -67,7 +68,16 @@ jobs:
             STORES=$(echo "$STORES" | jq -c '[.[] | select(. != "vectorize")]')
           fi
 
+          # Stores whose tests need no container, no secrets and no network run together in
+          # one job (test-light) instead of one runner each: their tests take seconds, less
+          # than each runner's checkout, setup and build. A store not listed here keeps its own job.
+          # libsql is deliberately not listed: its cross-process tests are load-sensitive.
+          LIGHT='["azure-ai-search","convex","dsql","duckdb","lance","oracledb","s3vectors","spanner","turbopuffer","turso"]'
+          LIGHT_STORES=$(jq -c -n --argjson all "$STORES" --argjson light "$LIGHT" '[$all[] | select(. as $s | $light | index($s))]')
+          STORES=$(jq -c -n --argjson all "$STORES" --argjson light "$LIGHT" '[$all[] | select(. as $s | $light | index($s) | not)]')
+
           echo "stores=$STORES" >> $GITHUB_OUTPUT
+          echo "light_stores=$LIGHT_STORES" >> $GITHUB_OUTPUT
 
   test:
     needs: setup
@@ -111,3 +121,45 @@ jobs:
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
+
+  test-light:
+    name: test (light stores)
+    needs: setup
+    if: ${{ github.repository == 'mastra-ai/mastra' && needs.setup.outputs.light_stores != '[]' }}
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Select light stores
+        id: filters
+        env:
+          LIGHT_STORES: ${{ needs.setup.outputs.light_stores }}
+        run: echo "args=$(jq -r 'map("--filter @mastra/" + .) | join(" ")' <<< "$LIGHT_STORES")" >> "$GITHUB_OUTPUT"
+
+      - name: Build light storage packages
+        run: pnpm turbo build ${{ steps.filters.outputs.args }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # Each store runs its own `test` script and vitest config, four at a time.
+      # --no-bail runs every store; the summary at the end names any that failed.
+      - name: Run light store tests
+        run: pnpm -r --workspace-concurrency=4 --no-bail --no-sort ${{ steps.filters.outputs.args }} run test
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'

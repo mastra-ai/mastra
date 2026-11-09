@@ -15,6 +15,7 @@ import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js
 import type { SessionLayout, SessionLayoutRepository } from '../sandbox/session-sandbox.js';
 import { peekSessionEnvironment } from '../session/environment-state-processor.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
 
 /**
@@ -213,11 +214,6 @@ exit "\${status:-1}"
 `;
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
 const APPROVED_RENDERED_ROOTS = new Set(['.artifacts']);
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {

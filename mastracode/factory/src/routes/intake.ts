@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 
 import type { BoardRegistry } from '../boards/index.js';
+import { placedByIntakeRoute } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { cardLabels, moveCardToBoard } from '../boards/relocate.js';
@@ -22,9 +23,9 @@ import type {
   IntakeStorage,
 } from '../storage/domains/intake/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 export interface IntakeIntegration {
   id: string;
@@ -139,6 +140,11 @@ async function relocateSourceCards({
   for (const item of items) {
     const source = item.externalSource;
     if (!source || source.integrationId !== integration.id || !sourceKeys.has(source.externalId)) continue;
+    // An intake route chose this card's board; a rebind doesn't override it.
+    if (placedByIntakeRoute(item)) {
+      skipped += 1;
+      continue;
+    }
     const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
     if (outcome === 'moved') moved += 1;
     else if (outcome === 'skipped') skipped += 1;
@@ -186,6 +192,11 @@ async function relocateLabeledCards({
     if (!source || source.integrationId !== integrationId || source.type !== 'issue') continue;
     const labels = cardLabels(item);
     if (!labels.some(candidate => normalizeIntakeLabel(candidate) === changed)) continue;
+    // An intake route chose this card's board; a label route change doesn't override it.
+    if (placedByIntakeRoute(item)) {
+      skipped += 1;
+      continue;
+    }
     const targetBoard =
       resolveIntakeLabelRoute(routes, labels)?.board ??
       repositoryBoards.find(candidate => cardInRepository(item, candidate))?.board ??
@@ -234,11 +245,8 @@ async function githubRepositoryBoards({
   return boards;
 }
 
-function cardInRepository(
-  item: { metadata?: Record<string, unknown> | null; externalSource?: { url?: string } | null },
-  repository: GithubRepositoryBoard,
-): boolean {
-  const repositoryId = item.metadata?.githubRepositoryId;
+function cardInRepository(item: Card, repository: GithubRepositoryBoard): boolean {
+  const repositoryId = item.workItem.metadata?.githubRepositoryId;
   if (
     repository.externalId !== undefined &&
     repositoryId !== undefined &&
@@ -367,10 +375,6 @@ type ParsedLabelRoute = z.output<typeof labelRouteBodySchema>;
 export function parseIntakeLabelRoute(body: unknown): ParsedLabelRoute | null {
   const parsed = labelRouteBodySchema.safeParse(body);
   return parsed.success ? parsed.data : null;
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 function sanitizeIdList(value: unknown): string[] | null | undefined {
@@ -836,11 +840,14 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
+          const requested = c.req.query('integrationId');
           const { pages, failures } = await settleByIntegration(
-            integrations.map(integration => ({
-              integrationId: integration.id,
-              read: () => integration.intake.listSources(tenant),
-            })),
+            (requested ? integrations.filter(integration => integration.id === requested) : integrations).map(
+              integration => ({
+                integrationId: integration.id,
+                read: () => integration.intake.listSources(tenant),
+              }),
+            ),
           );
           return c.json({
             sources: pages.flatMap(({ integrationId, value }) => value.map(source => ({ integrationId, ...source }))),

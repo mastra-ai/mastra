@@ -7,6 +7,7 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
@@ -521,7 +522,10 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const forwardRequest = await createForwardRequest(request);
       const { req, res } = toReqRes(forwardRequest);
 
-      const options = { ...this.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+      // `toReqRes` builds a fresh IncomingMessage, so bridge the principal auth resolved.
+      await applyMcpRequestAuth({ req, requestContext: request.requestContext, setRequestAuth });
 
       // Do NOT await startHTTP — let it run in the background so SSE
       // notifications stream to the client as they are written.
@@ -557,6 +561,12 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const request = response as any; // Elysia context
       const forwardRequest = await createForwardRequest(request);
       const { req, res } = toReqRes(forwardRequest);
+
+      await applyMcpRequestAuth({
+        req,
+        requestContext: request.requestContext,
+        setRequestAuth: this.mcpOptions?.setRequestAuth,
+      });
 
       server
         .startSSE({

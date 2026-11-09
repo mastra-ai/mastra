@@ -1,10 +1,11 @@
 import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardState';
 import type { DragPayload } from '../boardDrag';
-import { sourceCreatedAt, workItemKey } from '../boardItems';
+import { sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditActorProfile } from '../services/audit';
@@ -13,6 +14,7 @@ import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import {
   CardActions,
+  CardKey,
   CardStatus,
   CommentCount,
   MetadataLabels,
@@ -21,7 +23,8 @@ import {
 } from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { WorkItemActivity } from './WorkItemActivity';
-import { columnReviewVerdict, ReviewVerdictBadge } from './WorkItemCardRows';
+import type { ReworkReason } from '../reworkReason';
+import { columnReviewVerdict, ReviewVerdictBadge, ReworkLine } from './WorkItemCardRows';
 
 export function WorkItemListRow({
   item,
@@ -39,6 +42,7 @@ export function WorkItemListRow({
   status,
   actions,
   menu,
+  rework,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -55,6 +59,7 @@ export function WorkItemListRow({
   status: BoardCardStatus;
   actions: CardAction[];
   menu: ReactNode;
+  rework?: ReworkReason;
 }) {
   const verdict = columnReviewVerdict(item, columnStage);
   return (
@@ -71,10 +76,10 @@ export function WorkItemListRow({
       highlighted={highlighted}
       activityStatus={activityStatus}
       menu={menu}
-      createdAt={sourceCreatedAt(item.metadata) ?? item.createdAt}
+      createdAt={sourceCreatedAt(sourceMetadata(item)) ?? item.createdAt}
       cells={{
         icon: <WorkItemSourceIcon item={item} />,
-        key: workItemKey(item),
+        key: <CardKey item={item} />,
         title: (
           <Txt as="span" variant="label" tone="ink" className="truncate font-[550] tracking-tight">
             <SourceTitle source={item.source} title={item.title} />
@@ -84,13 +89,24 @@ export function WorkItemListRow({
         labels: (
           <span className="flex items-center gap-2">
             <CommentCount count={item.commentCount} />
-            <MetadataLabels metadata={item.metadata} />
+            {item.workItem?.author && (
+              <Txt as="span" variant="meta" tone="faint">
+                {item.workItem.author}
+              </Txt>
+            )}
+            {item.workItem?.provider !== 'factory' && item.workItem?.state && (
+              <Badge size="xs" variant="neutral" aria-label={`Source state: ${item.workItem.state}`}>
+                {item.workItem.state}
+              </Badge>
+            )}
+            <MetadataLabels metadata={sourceMetadata(item)} />
           </span>
         ),
-        status: (status.kind !== 'idle' || verdict) && (
+        status: (status.kind !== 'idle' || verdict || rework) && (
           <span className="flex min-w-0 items-center gap-2">
             <CardStatus status={status} compact />
             {verdict && <ReviewVerdictBadge verdict={verdict} />}
+            {rework && <ReworkLine rework={rework} />}
           </span>
         ),
         action: <CardActions actions={actions} />,

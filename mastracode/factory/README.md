@@ -29,6 +29,53 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
+### Work items and board items
+
+Factory stores provider facts separately from board activity:
+
+- A **work item** stores provider-independent identity, title, and parent linkage in `factory_work_items`.
+- A **source** stores provider identity, key, URL, state, labels, and author in `factory_work_item_sources`. A work item can have several sources; Factory-native work items have none.
+- A **board item** tracks Factory's board, stages, sessions, revision, and process metadata in `factory_board_items`. Trust stamps such as `authorTrusted` and `factoryAuthored` stay here, not on the source.
+
+Storage returns a `Card` that joins these records. Read sources from `card.workItem.sources`; read Factory process state from placement fields such as `card.acceptedAt`, `card.plansPreapprovedAt`, and `card.metadata`. A provider-only refresh updates the source's revision without changing the board item's revision, so it doesn't invalidate a pending stage move. Changes to any of these records invalidate the board list cache.
+
+```typescript
+import type { Card } from '@mastra/factory';
+
+function summarizeCard(card: Card) {
+  return {
+    id: card.id,
+    key: card.workItem.key,
+    title: card.workItem.title,
+    state: card.workItem.state,
+    labels: card.workItem.labels,
+    author: card.workItem.author,
+    board: card.board,
+    stages: card.stages,
+  };
+}
+```
+
+Each work item has one board item. Factory's card-to-card parent link is `parentBoardItemId`. Provider sub-issue ancestry is not populated into `card.workItem.parentWorkItemId`; migrated work items leave that field null. Existing card IDs, comments, subscriptions, run bindings, and `/work-items/:id` URLs stay unchanged. The work item gets its own ID. For one release, work-item API responses also retain the legacy top-level title, external source, and merged metadata fields.
+
+#### Migration and dry run
+
+Factory keeps the legacy `work_items` table and copies each card into the new tables. Before it starts serving, it copies only open cards. Done and canceled cards are copied in the background afterwards and appear on the board shortly after startup. While that runs, opening a card, or receiving a Linear, Jira, GitHub, GitLab, or incident.io event for it, copies that card on demand, so a reopened issue keeps its original card. Board lists, such as the Done column, fill in as the background copy progresses.
+
+Once the background copy finishes, Factory records it, and later startups skip the copy. A card that an older Factory version changes in the legacy table afterwards is recopied at the next startup. Unchanged legacy rows are no-ops. Deleted board items have tombstones so a later startup doesn't resurrect them. A legacy row whose source conflicts with another card ID, or that was edited on both sides, is skipped rather than preventing startup; the copy still counts as finished.
+
+Each copy pass logs one summary line with its counts and up to ten skipped card IDs with their reasons, for example `[factory] work item split (background pass): 9,837 cards checked, 0 copied, 106 recopied, 9,581 unchanged, 0 deferred, 150 skipped — <id> (Split board item changed after migration); … and 140 more`. A pass that runs longer than ten seconds also logs a progress line every ten seconds. When startup completes, Factory writes `[factory:timing] boot <n>ms` to stderr, regardless of the log level. Reconcile skipped card IDs before retiring the legacy data; comments and subscriptions linked to a skipped ID won't have a visible card until the conflict is resolved.
+
+For a database that has not cut over yet, inspect the migration without switching storage by setting this environment variable before starting Factory:
+
+```bash
+MASTRA_FACTORY_WORK_ITEM_SPLIT=dry-run
+```
+
+Dry-run mode is only for pre-cutover databases. Once any split board items exist, startup fails in dry-run mode rather than serving stale legacy rows. Before cutover, dry-run mode logs the planned copies and keeps reads and writes on the legacy table. Remove the variable and restart to perform the migration and switch to the new tables. Normal operation doesn't write back to the legacy table, so rolling back to an older Factory version hides cards and changes created after cutover.
+
+During mixed-version deployments, a changed legacy row is recopied only while its split records still match the migration baseline. Conflicting split-side edits are skipped and logged rather than overwritten. Legacy claim values remain inert and are not copied into split storage. Avoid simultaneous writes from old and new versions during the cutover.
+
 ### Product telemetry
 
 Factory records `factory_web_activity` in Mastra's existing PostHog project for users signed in through the default `mastra-studio` auth provider. The browser sends only a known page category and an activity type to the authenticated `/web/telemetry/activity` endpoint. The server adds the verified account and deployment context.
@@ -55,20 +102,67 @@ MASTRA_TELEMETRY_DISABLED=true
 
 `1`, `true`, and `yes` are accepted, ignoring case and surrounding whitespace. Older servers without the explicit capability do not receive browser telemetry requests. Custom auth providers are outside this initial measurement scope until they have a stable identity namespace. No names, emails, tokens, prompts, input values, raw URLs, session replay, or anonymous browser identity are collected by this event. Account IDs are identifiable account data, not anonymous data.
 
+### Work items, sources and board placements
+
+Factory separates the work (`factory_work_items`) from external facts (`factory_work_item_sources`) and placement/process state (`factory_board_items`). A work item can have several sources; current intake still creates separate work items for an issue and its pull request. Native cards have no external source. Sources are deduplicated per organization, project, provider and external ID, not claimed across projects. Board placements do not acquire, adopt, look up or release claims.
+
+The split migration preserves legacy card IDs for comments, subscriptions, runs and URLs. It never rewrites the legacy `work_items` table. Board placements store `triage_type`, `accepted_at`, `autonomy_armed_at` and `plans_preapproved_at`; the existing consent and plan-grant rules apply to them unchanged. The unused `claim_key` column stays only in legacy storage and is never copied into the new tables. A deterministic legacy fingerprint detects changes even when an older replica does not update `updated_at`; conflicting newer split-side changes are reported rather than overwritten.
+
+Board placements store `comment_count`, maintained by the comments domain's recount after creates, edits and soft deletes. Card reads, transitions and session cleanup do not load comment rows. Recounts invalidate the board-list cache without changing the placement revision or `updated_at`. The migration copies the legacy count; its first recount can correct that baseline. `feed_activity_at` remains an internal stale-recount guard and is not returned on `Card`.
+
+There is no dual-write rollback: an older Factory version sees the legacy snapshot, not cards created or changed after cutover. Operators must inspect migration reports for skipped IDs before retiring old replicas.
+
 ### Stored boards
 
-Each project has two kinds of boards:
+Each project's boards live in its database, and the stored row is the board.
 
-- **Code boards**: the built-in Work and Review boards and the boards you pass to `new MastraFactory({ boards })`. Factory serves them to every project exactly as your code defines them. They are never written to the database and are read-only in the boards API.
-- **Stored boards**: boards an admin created for one project through the boards API. They live in that project's database.
+- **Factory's boards**: the built-in Work board and the boards you pass to `new MastraFactory({ boards })` (app boards). Factory stores each in a project once: when the project is created, and in existing projects the first time a process loads them, which includes the preload at startup. The project keeps a key's board from then on. A Factory release or an app change never rewrites it, and a board the project deleted is not stored again. A key you add later is stored once in every project that hasn't had it. The legacy Review board is never stored and stays read-only.
+- **The project's own boards**: boards an admin created through the boards API, or that an app wrote with [`factory.upsertBoard()`](#writing-a-board-into-projects).
 
-A project's boards are its code boards followed by its stored boards. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. When a stored board has the same key as a code board, the code board wins: the stored board is hidden and the catalog reports `Stored board "<key>" is hidden by the code board with the same key.` Existing apps need no change, and Factory writes nothing to the database at startup.
+A project's boards are the Work and app boards in code order, followed by the others. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. Existing apps need no change.
 
-**Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases`. The first phase is the initial phase and must be `resting`. Saved boards pass the same checks `defineBoard()` applies, with the same messages. A stored board has no code behaviors: no handlers, transition policy, `sourceClosed`, or tool and event rules. Its working phases start their `runner` on entry.
+**Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases` on any phase. The first phase is the initial phase and must be `resting`. Saved boards pass the same checks `defineBoard()` applies, with the same messages. A board under a key no code board uses has no code behaviors: no handlers, transition policy, `sourceClosed`, or tool and event rules. Its working phases start their `runner` on entry.
 
 `nextPhases` on a stored board: leaving it out (or `null`) on a resting or working phase allows moves to every other phase, `[]` allows none, and a terminal phase allows none unless it lists some.
 
-**Code boards are read-only.** The catalog and `GET …/boards/:boardKey` report each board's `source` (`builtin`, `app` or `stored`) and `editable` (`false` for code boards). Creating a board with a code board's key, or editing or deleting a code board, is refused with `409 code_board`. Change a code board in code; every project picks up the change when Factory restarts.
+**Editing the Work board and app boards.** The catalog and `GET …/boards/:boardKey` report each board's `source` (`builtin`, `app` or `stored`) and `editable` (`false` only for the legacy Review board). `PATCH` replaces the project's board. Factory serves the stored fields with the code behaviour of the board and of each phase key still attached: entry and exit handlers, outcomes, tool and event rules, `sourceClosed` and the transition policy. A runner's instructions reach the runs the code handlers start.
+
+What code behaviour depends on stays fixed, and an edit that changes it is refused with `422 code_behaviour`, listing every conflict:
+
+- Every phase the code declares stays, with the same `kind`, and the code's initial phase stays first.
+- On a phase whose work runs in code handlers (Triage, Planning, Building, Review and PR review on Work), `runner.context` stays as declared and `runner.skill` stays unset: the handlers choose the skill.
+- A declared exit tool (`submit_plan` on Planning) keeps its `id`. Its `autoApprove` and `autoApproveWhen` are yours. A phase whose code handlers move cards on without an exit tool can't get one: it would hold those moves back.
+- Every move the code board allows from a phase stays in its `nextPhases`. Code makes those moves itself: an approved plan moves Planning to Building, a merged or closed pull request moves its card to Done or Canceled, and integration rules move cards between phases. You can add moves.
+
+Everything else can change: names and descriptions, added `nextPhases`, `autoStart` and `autoStartWhen`, exit-tool approval, runner instructions, the runner of working phases without code handlers, the order of phases after the first, and new phases (which behave like stored-board phases).
+
+**When Factory's definition changes.** A project keeps the board it stored, so a newer Work default or a changed app board doesn't reach it on its own. `POST …/boards/:boardKey/reset` with `expectedRevision` rewrites the board to Factory's current definition for its key (Work or an app board) at the next revision; revisions never go back, so a client holding an older revision is refused.
+
+**Boards that no longer fit the code.** A Work or app board is served even when it has fallen out of step with a newer release's code, with the code behaviour that still fits it. A phase the code declares keeps its handlers only while it is on the board with the same `kind`, `runner.context`, `runner.skill` and exit tool; an outcome is dropped when its target phase is gone or the board no longer allows the move; the board's tool rules always stay (they hold exit-tool approvals, such as Planning's `submit_plan`), and its event rules and transition policy need every phase the code declares, and `sourceClosed` needs both its phases, still terminal. A move Factory's code makes that the board's `nextPhases` don't allow is reported too; when code makes it, the move is refused (and retried until its attempts run out), and the card stays where it is. Each dropped behaviour is reported in the board's `problems`, for example `Phase "testing" isn't on stored board "release", so its code behaviour doesn't run.` or `Phase "triage" runs without its code behaviour: <conflict>`. A board stored under an app board's key that the app stopped defining is served as one of the project's own boards.
+
+Creating a board under a built-in or app board's key is refused with `409 code_board`, and so is deleting the Work board, whose code handlers run by its key; reset it instead. App boards can be deleted like the project's own; Factory doesn't store them again, and `factory.upsertBoard()` brings one back. A stored `review` board stays hidden by the Review board.
+
+**When a board isn't stored.** If storing Factory's boards in a project fails, the boards it couldn't store aren't served, the catalog reports `Board "<key>" isn't stored in this project yet; Factory stores it on the next load.`, and `GET …/boards/:boardKey` answers `404 board_not_found`; the project's next load tries again. Factory serves code boards itself only for the legacy Review board, for every project when the boards storage could not start, and on a replica that has not loaded a project yet, until its first load.
+
+#### Writing a board into projects
+
+`factory.upsertBoard()` writes a board definition into projects after `prepare()`: each named project (or all of them) that has no board under its key gets it, and each one that has it, edited or not, has it replaced at the next revision. Factory doesn't run it for you, so projects created later don't get the board until you run it again; run it from an admin script, or after `prepare()` when you want every project to have the definition you ship. The board is checked once, as the boards API checks it, each replacement passes the checks an edit does (cards in a removed phase refuse it with `phase_in_use` there), and each write is audited as `factory.board.created` or `factory.board.updated` by `system:factory`. It returns the projects it stored the board in, the ones it replaced it in, and the ones that already had it unchanged. A refused board throws `BoardWriteError`, whose `code` is the boards API's error code (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use`, `project_not_found`, or `code_board` for the legacy Review board's key). A board under a new key has no code behaviour; an app board's key keeps the app board's, so it also brings back an app board a project deleted.
+
+```ts
+const bugs = {
+  key: 'bugs',
+  name: 'Bugs',
+  phases: [
+    { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+    { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: ['fixed'] },
+    { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+  ],
+} satisfies StoredBoardInput;
+
+const factory = new MastraFactory({ storage });
+await factory.prepare();
+const { inserted, updated, unchanged } = await factory.upsertBoard(bugs, { projects: 'all' });
+```
 
 **Editing rules for stored boards.**
 
@@ -78,17 +172,18 @@ A project's boards are its code boards followed by its stored boards. The catalo
 
 **Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project.
 
-**Integrations.** Integration event rules, reconcilers and the code that files new cards from integrations read only the code boards. Intake bindings and label routes can target only code boards. Every card move goes through the transition service, which checks it against the project's boards.
+**Integrations.** Integration event rules and reconcilers read only the code boards, which edits can't break: the initial phase and every phase with code behaviour are kept. Integration messages use the code names of phases. Intake bindings and label routes can target only code boards. A project's [intake routes](#intake-routes) can also send new cards to its stored boards. Every card move goes through the transition service, which checks it against the project's boards.
 
-**Routes.** All need project membership; changes need an organization admin when auth is enabled, and are recorded in the audit log as `factory.board.created`, `updated` and `deleted`.
+**Routes.** All need project membership; changes need an organization admin when auth is enabled, and are recorded in the audit log as `factory.board.created`, `updated`, `deleted` and `reset`.
 
-| Method   | Path                                                            | Body                                                    | Result                                                                                                 |
-| -------- | --------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `GET`    | `/web/factory/projects/:id/boards`                              | —                                                       | The catalog, with each board's `source`, `editable` and `problems`.                                    |
-| `GET`    | `/web/factory/projects/:id/boards/:boardKey`                    | —                                                       | The definition, `revision` (`null` for code boards), `source`, `editable` and `problems`.              |
-| `POST`   | `/web/factory/projects/:id/boards`                              | The board, with `key`.                                  | `201` and the board. `409 code_board` for a code board's key, `409 board_exists` for a stored board's. |
-| `PATCH`  | `/web/factory/projects/:id/boards/:boardKey`                    | The whole board without `key`, plus `expectedRevision`. | The board. Replaces every field. `409 code_board` for a code board.                                    |
-| `DELETE` | `/web/factory/projects/:id/boards/:boardKey?expectedRevision=n` | —                                                       | `204`. `409 code_board` for a code board.                                                              |
+| Method   | Path                                                            | Body                                                    | Result                                                                                                                                                                                                                                         |
+| -------- | --------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/web/factory/projects/:id/boards`                              | —                                                       | The catalog, with each board's `source`, `editable` and `problems`.                                                                                                                                                                            |
+| `GET`    | `/web/factory/projects/:id/boards/:boardKey`                    | —                                                       | The definition, `revision` (`null` for the Review board), `source`, `editable`, `problems`, `codeBehaviour` (per phase: whether code handlers run it, its fixed exit tool and required next phases) and `canEdit` (whether you may change it). |
+| `POST`   | `/web/factory/projects/:id/boards`                              | The board, with `key`.                                  | `201` and the board. `409 code_board` for a code board's key, `409 board_exists` for a stored board's.                                                                                                                                         |
+| `PATCH`  | `/web/factory/projects/:id/boards/:boardKey`                    | The whole board without `key`, plus `expectedRevision`. | The board. Replaces every field. `422 code_behaviour` for an edit code behaviour can't honour, `409 code_board` for the Review board.                                                                                                          |
+| `POST`   | `/web/factory/projects/:id/boards/:boardKey/reset`              | `{ expectedRevision }`                                  | The board, rewritten to Factory's current definition at the next revision. `409 not_code_board` for the project's own boards, `409 code_board` for the Review board.                                                                           |
+| `DELETE` | `/web/factory/projects/:id/boards/:boardKey?expectedRevision=n` | —                                                       | `204`. `409 code_board` for the Work and Review boards.                                                                                                                                                                                        |
 
 A stale `expectedRevision` is refused with `409 revision_mismatch`; reload the board and try again.
 
@@ -108,23 +203,40 @@ curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards" -H 'content-typ
 curl "$FACTORY_URL/web/factory/projects/$PROJECT/boards/bugs" > bugs.json
 jq '.board | { name, description, phases: (.phases | map(if .key == "fixing" then .name = "Patching" else . end)), expectedRevision: .revision }' bugs.json \
   | curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/boards/bugs" -H 'content-type: application/json' -d @-
+
+# Let Work's Planning start, and approve its plan, on its own for cards labelled effort:low.
+curl "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work" > work.json
+jq '.board | { name, description, expectedRevision: .revision, phases: (.phases | map(if .key == "planning" then
+  .autoStart = true
+  | .autoStartWhen = { operator: "AND", conditions: [{ field: "item.labels", operator: "contains", value: "effort:low" }] }
+  | .exitTool = { id: "submit_plan", autoApprove: true, autoApproveWhen: .autoStartWhen }
+  else . end)) }' work.json \
+  | curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work" -H 'content-type: application/json' -d @-
+
+# Put Work back to Factory's default.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work/reset" -H 'content-type: application/json' \
+  -d "{\"expectedRevision\": $(curl -s "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work" | jq .board.revision)}"
 ```
+
+Admins can make the same edits in the Factory UI under **Settings → Work board**.
 
 ### Migrating from `defineBoard()`
 
-`defineBoard()`, and the `boards` and `includeDefaultBoards` options of `MastraFactory`, are deprecated. Nothing breaks: the boards you pass keep working as read-only code boards, they are not stored, and Factory logs once per process:
+`defineBoard()` and the `boards` option of `MastraFactory` are deprecated: write board definitions into projects with [`factory.upsertBoard()`](#writing-a-board-into-projects), or manage them through the boards API. Nothing breaks: each project stores the boards you pass once, Factory serves them from its rows with the code behaviour the board declares, and a later code change reaches a project only through reset. Factory logs once per process:
 
 ```text
-[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and these definitions are served read-only next to the boards each project stores. Manage boards through the boards API; see the README "Stored boards" section.
+[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Write board definitions into projects with factory.upsertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.
 ```
 
-Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no handlers, policies or rules, can move off code: create it in each project with `POST /web/factory/projects/:id/boards` under a new key, move its cards, then stop passing the code board. Keep passing a board while integrations file cards onto it, intake bindings or label routes target it, or it needs code behaviors.
+`includeDefaultBoards` decides whether projects get the built-in Work board (and the legacy Review board).
 
-Removing `defineBoard()` needs, among other things, a one-time copy of the code boards into each project's database, so built-in and app boards become editable stored boards. That work is tracked in [mastra-ai/mastra#28920](https://github.com/mastra-ai/mastra/issues/28920).
+Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no handlers, policies or rules, can move off code: write its definition under a new key into projects with `factory.upsertBoard()`, move its cards, then stop passing the code board. Keep passing a board while integrations file cards onto it, intake bindings or label routes target it, or it needs code behaviors.
+
+Removing `defineBoard()` still needs code behaviour that stored boards can reference by name, and integrations that read each project's boards. That work is tracked in [mastra-ai/mastra#28920](https://github.com/mastra-ai/mastra/issues/28920).
 
 ### Board lifecycle rules
 
-Code boards own phase entry and exit handlers; stored boards have none (see [Stored boards](#stored-boards)). Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`, which is deprecated but still works:
+Code boards own phase entry and exit handlers; stored boards have none, and a project's copy of a code board keeps its code's handlers (see [Stored boards](#stored-boards)). Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`, which is deprecated but still works:
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
@@ -152,7 +264,7 @@ export function createFactory(storage: MastraFactoryConfig['storage']) {
 }
 ```
 
-Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To replace Work or Review, disable both default boards and install a board with the same ID. You can reinstall the exported `workBoard` and `reviewBoard` definitions unchanged, or use their phases as the starting point for a customized definition:
+Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To replace Work or Review, disable both default boards and install a board with the same ID. Projects created after that store your board. Existing projects keep the Work board they already stored until an admin resets it or you write yours into them with `factory.upsertBoard()`. You can reinstall the exported `workBoard` and `reviewBoard` definitions unchanged, or use their phases as the starting point for a customized definition:
 
 ```typescript
 import { MastraFactory, workBoard } from '@mastra/factory';
@@ -184,7 +296,7 @@ const intakeRule = context =>
 
 **Migration:** Remove former global `rules.work` and `rules.review` configuration. To customize Work or Review, set `includeDefaultBoards: false` and install a same-ID replacement, following the compatibility guidance above. Define lifecycle handlers on the replacement board's phases. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate handler to the installed board.
 
-There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, tool-result rules, and how their cards react to integration events; integrations own their default event handlers. The runtime only executes rules.
+There is no global rules object. Every rule has one owner: boards own lifecycle handlers, topology (`nextPhases`), phase semantics, tool-result rules, and how their cards react to integration events; integrations own their default event handlers. The runtime only executes rules.
 
 ### Closing cards when their source closes
 
@@ -204,7 +316,7 @@ const releaseBoard = defineBoard({
 });
 ```
 
-Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`.
+Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`. When a project [intake route](#status-events-move-existing-cards) on the card's board handles `work_item.closed`, as the default close routes do on Work, the routes decide the move instead and `sourceClosed` is only the fallback.
 
 ### Board tool-result rules
 
@@ -272,7 +384,7 @@ const deliveryBoard = defineBoard({
 });
 ```
 
-A board handler runs only for events bound to a card on that board. Events without a card yet — issue intake and filing a pull request's own Review card — always use the integration's handlers.
+A board handler runs only for events bound to a card on that board. Events without a card yet — issue intake and filing a pull request's own card — always use the integration's handlers.
 
 For each event, Factory picks the handler in this order:
 
@@ -305,42 +417,43 @@ new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., to
 
 Contexts that carried `ruleSetVersion` now carry `configVersion`. To add a tool-result rule to Work, declare it under `tools` on the installed replacement `work` board.
 
-### Board transition policy
+### Where cards can move
 
-Boards own three separate concerns: topology declares which moves exist, `transitionPolicy` restricts those moves, and lifecycle handlers return entry/exit effects. The transition service uses the policy on the item's persisted, installed board, with no fallback to Work policy.
+Boards own two separate concerns: topology (`nextPhases`) declares which moves exist, and lifecycle handlers return entry/exit effects. `nextPhases` binds everyone: people dragging cards on the Factory board, agents calling `factory_transition_work_item`, and board rules. A move it does not list is rejected with `invalid_transition`. Staying in the same phase is always allowed.
 
-Work automatically supplies its classification requirement, non-bug human-approval gate, and acceptance decision. Classified non-bug items without recorded acceptance require a human transition into Planning or Execute, regardless of their previous phase. Passing through Review does not grant approval. Historical items without an acceptance stamp also require this human transition; once acceptance is recorded, agents can continue the work. Review has no additional transition policy. Custom boards without a policy do not inherit Work's classification requirements or acceptance stamping, even if they use Work phase names or an agent role named `triage`.
+The built-in Work board lists these moves:
+
+| From      | To                                          | Why                                                                                                                                                                                    |
+| --------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Intake    | Triage, Planning, PR review, Done, Canceled | Never straight to Building or Review: a plan comes first, and Review is self-review of a build. PR review takes a pull request's own card; Done is where a completed source closes it. |
+| Triage    | Intake, Planning, Done, Canceled            | A confirmed bug goes to Planning; any other open issue waits in Intake for a person.                                                                                                   |
+| Planning  | Building, Intake, Done, Canceled            | Into Building only through the approved plan (see `exitTool` below).                                                                                                                   |
+| Building  | Review, Planning, Done, Canceled            | Planning again when the build shows the plan was wrong.                                                                                                                                |
+| Review    | Building, Intake, Done, Canceled            | Self-review of the build: only Building leads here. It sends the card back to Building, or parks it in Intake at its round limit; a parked card resumes through Planning.              |
+| PR review | Intake, Done, Canceled                      | A pull request's own card: merged, closed, or set aside in Intake. It never reaches the builder's lanes.                                                                               |
+| Done      | PR review                                   | A review request on a finished pull request reopens its review.                                                                                                                        |
+| Canceled  | Intake, PR review                           | A canceled card is reopened in Intake; a reopened pull request goes back to PR review.                                                                                                 |
+
+A pull request card only enters Intake, PR review, Done and Canceled, and only a pull request card enters PR review, for people too; Intake leads to both Triage and PR review and which one fits depends on the card, so this one rule stays in code (`workPullRequestCardRejection`). Planning ends with `submit_plan`, its exit tool: a plan waits for a person to approve it, and the approved plan moves the card to Building. Whether work is finished (no open pull request, no review asking for changes, an approving self-review) is not checked by the board: the build and self-review instructions tell the agent when to move a card to Done. Intake is resting, so nothing runs on a card parked there; an agent in another session could still move it.
+
+The Review board's `done` follows the same topology. Its review instructions keep Done for the merge: a reviewer records its verdict and leaves the card in Reviewing, and the merge event moves it to Done.
+
+**Triage.** The triage agent sends a confirmed bug to Planning, an open non-bug back to Intake, and closures to Done or Canceled. A person moving the card on from Intake is the approval; Factory records no classification or acceptance, and that move removes the `status: needs approval` label from the GitHub issue. On boot, Factory moves any card left in Triage by the old classify-and-accept rule back to Intake, once.
+
+**Migration:** `transitionPolicy` on `defineBoard()` is deprecated. It still runs for boards that set it, and `defineBoard()` logs one warning per board. Its context no longer carries a requested classification, and `triageType` and `accept` on an `allow` are ignored. Express the flow with each phase's `nextPhases` and `exitTool` instead:
 
 ```typescript
-import { defineBoard } from '@mastra/factory/boards';
-import type { BoardTransitionPolicy } from '@mastra/factory/boards';
-
-const releasePolicy: BoardTransitionPolicy = context => {
-  if (context.toStage === 'build' && !context.isHumanTransition) {
-    return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
+// before
+transitionPolicy: context => {
+  if (context.fromStage === 'backlog' && context.toStage === 'done') {
+    return { type: 'reject', code: 'invalid_transition', reason: 'Build before closing.' };
   }
-};
-
-const releaseBoard = defineBoard({
-  id: 'release',
-  name: 'Release',
-  initialPhase: 'approval',
-  transitionPolicy: releasePolicy,
-  phases: {
-    approval: { name: 'Approval', kind: 'resting', nextPhases: ['build'] },
-    build: { name: 'Build', kind: 'working', runner: { context: 'release' } },
-  },
-});
-// Install through new MastraFactory({ storage, boards: [releaseBoard] }).
+},
+// after, on the backlog phase
+nextPhases: ['build'],
 ```
 
-A policy receives a deeply readonly snapshot of the item and transition, including actor, ingress, source, revision, persisted classification and acceptance, requested classification, and initial-entry/reentry flags. Dates are ISO strings. `isHumanTransition` requires both a human actor and human ingress; a deferred rule with a human actor is not a human transition.
-
-Return `undefined` for no additional restriction, `{ type: 'allow' }` with optional `triageType` and `accept: true` intents, or `{ type: 'reject', code, reason }`. Policies cannot return lifecycle effects or arbitrary patches. Classification intents must come from the existing triage-agent path and match its requested verdict; acceptance intents require a human transition. Runtime validates these intents and applies them only in the revision-checked transaction after all lifecycle handlers allow the move.
-
-Policies must be side-effect-free. They run on initial entry, reentry, and same-stage requests, but completed replays use the stored result. Concurrent attempts can evaluate more than once. Policy and lifecycle evaluation share one timeout budget; a timeout does not cancel arbitrary work started by a callback.
-
-A policy cannot bypass topology, ingress authorization, board ownership, external-author safety, revision checks, decision validation, replay handling, or atomic persistence. Returning `allow` is not an authorization override.
+Rule contexts still carry `acceptedAt`, deprecated: it is the stamp on older cards and `null` for cards since.
 
 ### Board phase semantics
 
@@ -365,9 +478,11 @@ const releaseBoard = defineBoard({
 
 Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with contexts `triage`, `work`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with context `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
+New pull requests and merge requests get their own card in Work Intake. The card's Review action moves it into Work's PR review phase (`pr-review`), where an independent reviewer runs `factory-review` (`factory-gitlab-review` for GitLab) in the card's own `review` session, or the re-review skill once a verdict is recorded. Work's Review phase is the builder's self-review of its own work, so a pull request card never enters it, and only pull request cards enter PR review. A pull request card only enters Intake, PR review, Done, and Canceled; merging moves it to Done and closing it unmerged to Canceled. Cards filed on the Review board before pull requests moved to Work stay there and keep working as before.
+
 Planning and Building on Work share the `work` session, so the builder keeps the planner's reasoning, branch and sandbox. Self-review still runs in its own `review` session. When the planner moves the card to Building, the build prompt is queued onto its own run, and the planner's run binding ends at that point: Factory tools it calls later in the same turn are rejected. When the builder moves a card back from Building to Planning, no new planning run starts; the builder keeps working in its run. When a person moves it back, Planning starts again, in the same `work` session. The old `plan` role still names Planning: a run requested or queued for `plan` starts Planning in a `plan` session, and the build then continues in that session. Cards planned before this change do the same.
 
-Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the project's board; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+Consent, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the project's board; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
 
 Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, and a rule-started run from rest with no lane for its role is rejected.
 
@@ -390,10 +505,12 @@ phases: {
 Boards and phases take `name` and an optional `description`. A phase lists the phases a card may move to in `nextPhases`. A working phase can also declare:
 
 - `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. When the agent moves its own card into another phase of its context, that phase's `skill` still starts: its prompt is queued onto the agent's run. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. It names a built-in Factory skill or one of your app's skills (see [Skills for custom boards](#skills-for-custom-boards)). `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
-- `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. Cards from outside the write-access circle still wait for a person.
-- `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`, that ends the phase. The factory-phase signal tells the agent the phase ends when that tool succeeds and lists `nextPhases`; the agent then moves the card itself with `factory_transition_work_item`, so it picks where the card goes. The phase needs at least one next phase. `autoApprove` answers the person's approval the tool waits for, for every card or only cards matching `autoApproveWhen`. Factory sessions already run tools without asking, so today this matters for `submit_plan`: an auto-approved plan is accepted without a person. `defineBoard()` accepts `autoApprove` on any exit tool, and the catalog reports it, but on other tools it has no effect yet.
+- `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. To start only trusted authors' cards, add `author.trusted equals true` to `autoStartWhen`; by default, [intake routes](#intake-routes) file GitHub and GitLab cards from outside the write-access circle in Work › Intake, where nothing starts on its own.
+- `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`, that ends the phase. The factory-phase signal tells the agent the phase ends when that tool succeeds and lists `nextPhases`; the agent then moves the card itself with `factory_transition_work_item`, so it picks where the card goes. When the board also has a tool rule for the exit tool (`tools`), the tool's success moves the card instead, and only a person can otherwise move it on to another working phase: an agent or board rule asking for that is rejected with `approval_required` unless the tool is auto-approved for the card. The phase needs at least one next phase. `autoApprove` answers the person's approval the tool waits for, for every card or only cards matching `autoApproveWhen`; it is the only way plans are approved without a person. Factory sessions already run tools without asking, so for `submit_plan` this means an auto-approved plan is accepted without a person. On other exit tools with a tool rule, `autoApprove` decides whether an agent may move the card on to another working phase without the tool. Work's Planning declares `{ id: 'submit_plan', autoApprove: false }`: every plan waits for a person, who moves the card or approves `submit_plan` in a signed-in chat.
 
-Rules test a card's facts: `item.labels`, `item.title`, `item.author`, `source.kind` and `source.integration`.
+Rules test a card's facts: `item.labels`, `item.title`, `item.author`, `author.trusted`, `source.kind` and `source.integration`.
+
+The example below is a custom board, not Work's behavior: it auto-starts and auto-approves planning only for cards labelled `effort:low`.
 
 ```typescript
 const LOW_EFFORT = {
@@ -413,7 +530,7 @@ const releaseBoard = defineBoard({
       runner: { context: 'build', skill: 'factory-plan' },
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
-      exitTool: { id: 'submit_plan', autoApprove: true },
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
       nextPhases: ['build', 'canceled'],
     },
     build: { name: 'Build', kind: 'working', runner: { context: 'build' }, nextPhases: ['done'] },
@@ -512,15 +629,6 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
   id: 'release',
   name: 'Release',
   initialPhase: 'backlog',
-  transitionPolicy: context => {
-    if (context.fromStage === 'backlog' && context.toStage === 'preparing' && !context.isHumanTransition) {
-      return {
-        type: 'reject',
-        code: 'approval_required',
-        reason: 'A person must start the release rehearsal.',
-      };
-    }
-  },
   phases: {
     backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['preparing'] },
     preparing: {
@@ -584,7 +692,7 @@ export function createFactory(config: Omit<MastraFactoryConfig, 'boards' | 'incl
 
 Use the host's normal `prepare()`, `new Mastra(...)`, and `finalize()` sequence. Change the hardcoded `includeDefaultBoards: true` in `createFactory` to `false` to run without Work or Review. Working roles name bindings on the shared Code Agent; they do not register separate agents. Factory has no per-role agent configuration option. The board's kickoff prompts supply the role-specific instructions.
 
-Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `backlog`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The human transition satisfies this board's policy and starts the preparer. Its bound tool advances to `build`; the publisher's completed check produces a deferred transition to `done`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
+Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `backlog`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The move starts the preparer. Its bound tool advances to `build`; the publisher's completed check produces a deferred transition to `done`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
 
 Lifecycle, tool-result, and integration handlers may return `upsertLinkedWorkItem` targeting a different installed board. Linked cards enter that board's declared initial phase before moving to the requested phase. Existing cards cannot be reassigned to another board through either decision type. Targets are validated against their own installed board before acceptance and again before uncommitted deferred effects execute; a phase declared only on another board is not valid. Committed replay retains its recorded result and original `configVersion`.
 
@@ -608,6 +716,147 @@ Intake bindings are explicit. A Linear project, Jira project, or GitHub reposito
 - **Jira:** each connected-site project binding selects one installed board. One Jira project can feed several Factory projects: each binding takes either all issues or only issues carrying its labels (Settings › Intake › Jira routing, or `labels` on `PUT /web/intake/bindings`). Each label belongs to one binding per Jira project, and only one binding per project can take all issues. Label bindings win over the all-issues binding; an issue carrying labels of two label bindings goes to the binding created first. The split happens in the JQL each Factory sends, so every issue is filed in exactly one Factory. Labels only decide placement when an issue is first filed: relabelling an issue, or editing a binding's labels, does not move existing cards. Remove one Factory's binding with `DELETE /web/intake/bindings?integrationId=jira&sourceId=…&factoryProjectId=…`. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
 - **GitHub:** Settings › Intake › GitHub routing maps a label to a board per Factory project (`GET`/`PUT /web/intake/label-routes`). Labels match case-insensitively; unrouted issues go to Work. Saving a route relocates matching cards the same way, and `issues.labeled` / `issues.unlabeled` webhooks move a card between its routed board and Work while refreshing its label metadata. Routes apply to every repository linked to the project; label input is free text (no repository label autocomplete yet).
 
+A project's [intake routes](#intake-routes) are checked before these bindings and label routes. The bindings and label routes apply only to cards no intake route places.
+
+### Intake routes
+
+Each project has an ordered list of intake routes, managed through the API (there is no UI yet). A route names the board events it handles in `on`. A route on `work_item.created`, the default, decides where a new card lands: the first enabled route whose `when` matches the card names its board and phase. A route on `work_item.closed` or `work_item.reopened` decides where an existing card moves when its source closes or reopens (see [Status events](#status-events-move-existing-cards)).
+
+**The default routes.** Every project starts with five routes: two that place new cards, and three that move cards when their issue closes or reopens. The first, `Outside authors wait in Intake`:
+
+```json
+{
+  "when": {
+    "operator": "AND",
+    "conditions": [
+      { "field": "source.integration", "operator": "in", "value": ["github", "gitlab"] },
+      { "field": "author.trusted", "operator": "equals", "value": false }
+    ]
+  },
+  "target": { "boardKey": "work", "phaseKey": "intake" }
+}
+```
+
+It files GitHub and GitLab issues and pull requests from authors outside the write-access circle in Work › Intake, ahead of any label route or binding. Intake is a resting phase, so nothing starts there on its own. Any session, a person's or an agent's, can move the card on, and that move starts the next phase's run. Pushes to a pull request resting in Intake don't re-review it, and comments and edits on an issue never re-run Triage (see GitHub event rules). Trusted authors' cards, and Linear, Jira and incident.io cards (which carry no trust stamp), land where they did before. The second, `Pull requests go to PR review`, sends every other pull request and merge request (`source.kind equals pull_request`) to Work › PR review, where the reviewer runs once a person or the project's auto-run lets it start. Because it comes second, an outside author's pull request still waits in Intake. A pull request Factory opened for one of its own cards is filed by that card's rule, which no route re-places: it waits in Intake while the authoring card goes out for review.
+
+The other three move Work cards when their issue's status changes:
+
+| Route                                         | `on`                     | `when`                          | Target          |
+| --------------------------------------------- | ------------------------ | ------------------------------- | --------------- |
+| `Closed issues go to Done`                    | `["work_item.closed"]`   | `event.reason equals completed` | Work › Done     |
+| `Issues closed as not planned go to Canceled` | `["work_item.closed"]`   | `event.reason equals canceled`  | Work › Canceled |
+| `Reopened issues go back to Intake`           | `["work_item.reopened"]` | none                            | Work › Intake   |
+
+They replace the close handlers each integration used to apply on its own, so a closed GitHub, GitLab, Linear, Jira or incident.io issue lands where it did before, but you can now edit or disable that move. To stop closes from moving Work cards, disable both close routes. Deleting them does not stop the move: with no route left that handles closes, Work's `sourceClosed` mapping moves closed cards to Done or Canceled again.
+
+The default routes are stored routes like any other: list them, edit them, disable them, reorder them or delete them through the API. Factory adds each one once, the first time the project's routes are read or written, appending it after the project's existing routes, and doesn't add it back after an admin deletes it. Deleting a default is permanent: recreate it by hand to get it back. A project set up before the pull request route or the close and reopen routes existed gets them this way too.
+
+**Trust only decides where a card arrives.** Once a card is moved out of Intake, later input on it runs like on any card: a maintainer's push re-reviews an outside author's pull request. A phase that should only auto-start for trusted authors says so in its `autoStartWhen` (`author.trusted equals true`). Runs on untrusted cards still use their own isolated memory.
+
+**Route shape.**
+
+| Field               | Meaning                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`              | Up to 120 characters.                                                                                                                                                                                                                                                                                                                                                                              |
+| `enabled`           | Defaults to `true`. Disabled routes are skipped.                                                                                                                                                                                                                                                                                                                                                   |
+| `on`                | The board events the route handles: `work_item.created` (the default), `work_item.closed` and `work_item.reopened`. Each at most once. `work_item.commented` and `work_item.edited` are activity, which never moves a card, so a route can't name them.                                                                                                                                            |
+| `when`              | A rule over the card's facts (the same format as `autoStartWhen`). `null`, the default, matches every card. A route that handles more than `work_item.created` can also test `event.type` and `event.reason`.                                                                                                                                                                                      |
+| `target`            | Required. `{ boardKey, phaseKey? }` sets where matching cards land; without `phaseKey` they land in the board's first phase. The board must be installed in the project (code or stored). For a route on `work_item.created`, the phase can't be terminal and must be reachable from the board's first phase; a route that only moves existing cards can target any phase, terminal ones included. |
+| `allowWorkingPhase` | Defaults to `false`. A status move into a working phase (one that starts runs, such as Triage) is refused unless this is `true`, so a reopened card doesn't re-run Triage by accident.                                                                                                                                                                                                             |
+
+Routes are evaluated in `position` order (0 first). Rules can test these card facts: `item.labels`, `item.title`, `item.author`, `source.kind` (`issue`, `pull_request`, …), `source.integration` (`github`, `gitlab`, `linear`, `jira`, `incidentio`, …) and `author.trusted`. `author.trusted` is `true` when the card carries an `authorTrusted: true` or `factoryAuthored: true` stamp. GitHub and GitLab stamp `authorTrusted` from the author's repository permission, and a stamp that is missing counts as untrusted.
+
+**Placement.** When an integration files a new card, or a card is created without naming a board (the `factory_create_work_item` tool, or `POST /web/factory/projects/:id/work-items` without `board`), the first enabled route that matches the card and whose board can take it decides where the card lands. On the built-in boards, a pull request lands on Work only in Intake or PR review, PR review takes only pull requests, and Review takes only pull requests; a route a card can't take is skipped and the next one is tried. If the route's phase no longer exists, or can no longer be reached from the first phase, the card lands in the first phase. A card routed to a later phase enters the first phase and then moves on through the transition service as a system move, recorded in the card's history. The route makes this move, not a person, so it gives no consent to start work; a run the phase asks for still needs a person or the project's auto-run. A board whose transition policy refuses system moves refuses the route, and the card is not filed. If no route places a card, the integration's binding, label route or default decides.
+
+A card a route placed records the route's id in its `intakeRouteId` metadata and stays on that board afterwards: a GitHub label change, a reconcile that replays a known issue, a label route change, and rebinding the card's source all leave it there (its labels still update). An edited route moves no existing card. If filing a card stopped partway (it entered the board's first phase but the move to the route's phase failed), the retry keeps the card on that board: it moves to the phase the route names now, or stays in the first phase when the route was deleted, disabled or pointed at another board. Cards no route placed keep following label routes and bindings as before. An explicit placement wins over routes, for example:
+
+- a maintainer's review request that files a pull request directly in PR review;
+- a custom rule with `skipRules`;
+- a child card a board's own rule files;
+- a board named when the card is created. The board's **New card** button always names its board, so routes never place cards made there.
+
+Not covered: a pull request routed to a board other than Work or Review no longer gets Factory review, because review requests and pushes only act on pull request cards on those boards.
+
+#### Status events move existing cards
+
+Every integration reports issue status changes with the same names: `work_item.created` when an issue is first seen, `work_item.closed` when it closes, and `work_item.reopened` when it reopens (GitHub and GitLab; Linear, Jira and incident.io report opens and closes only). A close carries `event.reason`: `canceled` for GitHub's "not planned" and "duplicate" and for Linear, Jira and incident.io canceled states, `completed` otherwise (GitLab closes are always `completed`).
+
+When one of these arrives for a card that already exists, the first enabled route on the card's board whose `on` names the event and whose `when` matches the card and the event moves the card to the route's phase:
+
+- The move is a system move made by the route, recorded in the card's history (`by: intake-route:<routeId>`) and in the audit log (`factory.work_item.stage_moved` with `cause: event_route`, made by actor `intake-route:<routeId>`).
+- The move clears the card's armed autonomy. A provider event is not a person's go-ahead, so a reopened card waits for a person or the project's auto-run before a phase run starts.
+- It skips the board's `nextPhases`, so a reopened card can leave Done. It still checks that the phase exists and that the board's card lanes take the card (an issue never lands in PR review).
+- It is refused with `approval_required` when the target is a working phase and the route doesn't set `allowWorkingPhase`.
+- A move into a working or resting phase waits for a run in flight on the card to end, then moves the card. While it waits it goes back to the queue, so it never holds a dispatch slot.
+- The source's last status wins. When an issue is closed and reopened before Factory applies the close, the close is dropped and the card stays where it was.
+- A move into a terminal phase doesn't wait: it runs terminal cleanup like any other, so a session still running on the card is aborted at once, as a close always has.
+- A close moves only an unfinished card, and a reopen only a finished one. Redelivered or reconciled webhooks move the card once.
+
+Only routes targeting the card's own board apply; a route naming another board is skipped. A route on the card's board that names the event owns it even when it is disabled or its `when` doesn't match: the card stays put. Only on a board where no route names the event does the board's `sourceClosed` mapping apply, so custom boards keep closing as before. To stop closes from moving Work cards, disable both close routes: deleting them hands closes back to Work's `sourceClosed` mapping, which moves the card to Done or Canceled.
+
+A deployment that answers an event itself keeps routes out of it: a handler or `null` set explicitly on the integration's `rules` for `issueClosed`, `issueReopened`, `issueCommentCreated` and so on, or `null` on the card's board handlers. An override that moves nothing really moves nothing. A board handler that wraps or returns the stock close move is different: that move still goes to the routes, as the stock handler's own would.
+
+#### Activity reaches the card's session
+
+A new comment on a card's GitHub or GitLab issue, or an edit to its title or description, tells the session working the card, with pointers only:
+
+```text
+New comment by @alice on acme/repo#42: https://github.com/acme/repo/issues/42#issuecomment-100
+acme/repo#42 was edited by @bob (untrusted author): https://github.com/acme/repo/issues/42
+```
+
+The message never carries the comment's body or the issue's title: the session follows the link to read it. Authors without write access are marked `(untrusted author)`. Factory's own GitHub comments are skipped, and so are edits to an existing GitLab comment. An idle session is woken by GitHub activity from a trusted author. Activity from an untrusted author never wakes a session, and neither does GitLab activity: GitLab deliveries don't say whether Factory wrote a comment, so a session could otherwise wake itself with its own comments. That activity is sent as a `low` priority notification, which never starts a run: it waits in the session's notifications, and the session's next run is told it is there. Otherwise, activity while it is busy waits as one notification per card and kind of activity, counting how many arrived. A card nobody is working drops the message. Nothing starts: Triage still runs once. The card's feed shows the comment either way.
+
+**Routes.** Reading needs a signed-in user of the project's organization. Changes need an organization admin when auth is enabled. Deleting or reordering routes renumbers the routes after it and bumps their `revision`, so an update sent with an older `expectedRevision` is refused with 409 and must be retried with the current one. Changes are recorded in the audit log as `factory.intake_route.created`, `updated`, `deleted` and `reordered`.
+
+| Method   | Path                                                                  | Body                                                       | Result                                                                                                                                                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/web/factory/projects/:id/intake-routes`                             | —                                                          | `intakeRoutes` in order.                                                                                                                                                                                                                                                                            |
+| `GET`    | `/web/factory/projects/:id/intake-routes/:routeId`                    | —                                                          | The route.                                                                                                                                                                                                                                                                                          |
+| `POST`   | `/web/factory/projects/:id/intake-routes`                             | The route.                                                 | `201` and the route, added at the end. `422 unknown_board`, `unknown_phase`, `terminal_phase` or `unreachable_phase` for a target cards can't land on; `422 invalid_intake_route` for a bad `on` or a `when` testing `event.*` on a placement-only route. `409 intake_route_limit` past 100 routes. |
+| `PATCH`  | `/web/factory/projects/:id/intake-routes/:routeId`                    | The fields to change, plus `expectedRevision`.             | The route.                                                                                                                                                                                                                                                                                          |
+| `DELETE` | `/web/factory/projects/:id/intake-routes/:routeId?expectedRevision=n` | —                                                          | `204`.                                                                                                                                                                                                                                                                                              |
+| `POST`   | `/web/factory/projects/:id/intake-routes/reorder`                     | `{ "ids": [...] }`: every route of the project, once each. | The routes in their new order. `409 intake_route_set_mismatch` if the list differs from the project's routes.                                                                                                                                                                                       |
+
+A stale `expectedRevision` is refused with `409 revision_mismatch`. Each route reports `problems`, for example when its board has since been deleted. Such a route places no cards.
+
+```bash
+# Send issues from trusted authors straight to Triage.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+  "name": "Trusted issues to Triage",
+  "when": { "operator": "AND", "conditions": [
+    { "field": "author.trusted", "operator": "equals", "value": true },
+    { "field": "source.kind", "operator": "equals", "value": "issue" }
+  ] },
+  "target": { "boardKey": "work", "phaseKey": "triage" }
+}'
+
+# Send issues closed as not planned to Done, too, instead of Canceled.
+curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$CLOSED_CANCELED_ROUTE" -H 'content-type: application/json' -d '{
+  "target": { "boardKey": "work", "phaseKey": "done" },
+  "expectedRevision": 1
+}'
+
+# Send reopened bugs back to Triage to run again. A new route is added at the end, after the
+# default reopen route that matches every reopen, so then move it ahead of that one with
+# POST .../intake-routes/reorder.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+  "name": "Reopened bugs re-run Triage",
+  "on": ["work_item.reopened"],
+  "when": { "operator": "AND", "conditions": [
+    { "field": "item.labels", "operator": "contains", "value": "bug" }
+  ] },
+  "target": { "boardKey": "work", "phaseKey": "triage" },
+  "allowWorkingPhase": true
+}'
+
+# Let outside authors' issues go where label routes send them, instead of Intake.
+curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$DEFAULT_ROUTE" -H 'content-type: application/json' -d '{
+  "enabled": false,
+  "expectedRevision": 1
+}'
+```
+
 ### GitHub event rules
 
 Both `GithubIntegration` and `PlatformGithubIntegration` own their GitHub event handlers. Existing installations retain the defaults without additional configuration.
@@ -627,7 +876,7 @@ const github = new PlatformGithubIntegration({
 });
 ```
 
-Pass the integration in `MastraFactory`'s `integrations` array. The direct `GithubIntegration` accepts the same `rules` option alongside its GitHub App credentials. A function replaces one default handler without composing with it. `null` disables that event's handler, not authentication, webhook ingestion, or reconciliation bookkeeping. Omitted events and `undefined` retain their defaults. Each instance copies and freezes its resolved handler map; unknown event names and invalid handler values are rejected during construction.
+Pass the integration in `MastraFactory`'s `integrations` array. The direct `GithubIntegration` accepts the same `rules` option alongside its GitHub App credentials. A function replaces one default handler without composing with it. `null` disables that event's handler, not authentication, webhook ingestion, or reconciliation bookkeeping. Omitted events and `undefined` retain their defaults. Triage runs once per card: the default `issueEdited`, `issueCommentCreated`, `issueCommentEdited` and `issueCommentDeleted` handlers are `null` (as are GitLab's `issueUpdated` and `issueCommented`), so a person moves the card into Triage or starts the run to triage again. Supply a function for one of those events to re-run Triage on it. Each instance copies and freezes its resolved handler map; unknown event names and invalid handler values are rejected during construction.
 
 When Platform credentials are present, `MastraFactory` installs a `PlatformGithubIntegration` itself, so a deploy can change its handlers without constructing one. Pass the same options under `platform.github` and they are forwarded to that integration's constructor:
 
@@ -675,7 +924,7 @@ const overrides = { github: { issueCommentCreated: { onEvent: null } } };
 const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Board definitions own lifecycle, transition-policy, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
+Board definitions own lifecycle, topology, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
@@ -713,7 +962,7 @@ A decision _without_ the flag that reaches a card which already exists keeps the
 
 Reconciliation re-applies label-derived placement. The issue sweep replays an open issue through the rules ingress whenever the issue's live labels differ from the card's stored ones — the `labeled`/`unlabeled` webhook may never have arrived (Factory was down, or the label was applied by something else). The deployment rule decides placement, exactly as at arrival, and the context carries the existing card on `item`, so one handler answers for both: a card still resting on the board's initial phase is landed the normal way, and a card that has already left it is re-placed with `skipRules` and no phase rule run. Cards parked by hand are untouched while an issue's labels are unchanged.
 
-A delivery that concerns two cards is evaluated once per card, each under its own ingress identity: every decision is committed against one card, at that card's revision. A merged pull request is the standard case — its Review card closes, and the built-in `pullRequestMerged` rule moves the Work item that wrote the code to Done. If that Work item has another pull request open, it stays where it is and its session is told which pull request is still out. An opening pull request is evaluated the same way. Its own Review card is filed by the arrival, the evaluation flagged `pullRequestIntake`, which is committed against the Work item that authored the pull request when provenance or a matching session branch names one; that binding is what links the new card to its item. The authoring item is then answered in a second evaluation of its own (`pullRequestIntake` unset), which is where a handler places the item that is now out for review. The built-in `pullRequestOpened` files the card only on the arrival and returns nothing for the authoring item.
+A delivery that concerns two cards is evaluated once per card, each under its own ingress identity: every decision is committed against one card, at that card's revision. A merged pull request is the standard case — its own card closes, and the built-in `pullRequestMerged` rule moves the Work item that wrote the code to Done. If that Work item has another pull request open, it stays where it is and its session is told which pull request is still out. An opening pull request is evaluated the same way. Its own card is filed in Work Intake by the arrival, the evaluation flagged `pullRequestIntake`, which is committed against the Work item that authored the pull request when provenance or a matching session branch names one; that binding is what links the new card to its item. The authoring item is then answered in a second evaluation of its own (`pullRequestIntake` unset), which is where a handler places the item that is now out for review. The built-in `pullRequestOpened` files the pull request's card on the arrival. On the authoring item's evaluation it moves that Work item from Building to Review when the pull request is open and comes from a trusted author or from Factory; otherwise it returns nothing.
 
 ### GitHub CLI authentication in Factory sessions
 
@@ -781,6 +1030,12 @@ const incidentio = new PlatformIncidentioIntegration(); // Reads Platform creden
 
 Both integrations expose incidents and incident follow-ups as separate Intake sources. Their provider-neutral Intake items can be imported onto any installed board, including custom boards. A reconciliation worker polls imported incidents and follow-ups every five minutes by default to refresh their provider state and metadata. Set `MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED=false` to disable it or `MASTRACODE_INCIDENT_IO_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence. Follow-up state updates map Factory completion and cancellation to incident.io's `completed` and `not_doing` statuses. incident.io does not expose Intake comments through these adapters.
 
+### Linear workspace connections
+
+For Platform-managed Linear connections, **Settings → Work Intake** connects and repairs workspaces in place. A disconnected workspace with saved sources shows **Reconnect** on the Linear card; healthy ones need no action. A disconnected workspace without saved sources has nothing paused, so it has no Reconnect; authorize it again with **Connect**. To add another workspace, choose **Connect** next to Linear under **Add a source**. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
+
+Work Intake keeps disconnected workspaces' saved sources and routing. Their issues remain paused until access is restored. A request failure shows a retry action and does not mark the workspace disconnected. Sources and polling from healthy workspaces remain available when another workspace's source request fails.
+
 ### Linear event rules
 
 Both `LinearIntegration` and `PlatformLinearIntegration` automatically install the built-in `issueObserved` and `issueClosed` handlers. No default-rule imports or configuration are needed, including for `new PlatformLinearIntegration()` or direct construction with credentials only.
@@ -824,7 +1079,7 @@ A repository maintainer with write or admin access can start a Factory review fr
 @<factory-app> review
 ```
 
-`@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first Review pass for a missing or Intake card, restarts a completed card with `factory-rereview`, and is a no-op while the card is already Reviewing. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
+`@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first review pass for a missing or Intake card (new cards are filed on Work), restarts a completed card with `factory-rereview`, and is a no-op while a Reviewing card has no recorded verdict, because a pass is pending or running. Once a verdict is recorded, the card rests in Reviewing and the command re-enters it to start another pass with `factory-rereview`. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
 
 ### Factory tools in user sessions
 
@@ -836,7 +1091,7 @@ A person's own Factory session (a user session) gets tools to find, file and man
 | `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                    |
 | `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                       |
 | `factory_create_work_item`      | `title`, `brief`, optional `repository` (`owner/name`, one this Factory links)                                                                  |
-| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach), `plansPreapproved: true`                                  |
+| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach)                                                            |
 | `factory_subscribe_work_item`   | `workItem`                                                                                                                                      |
 | `factory_unsubscribe_work_item` | `workItem`                                                                                                                                      |
 | `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                             |
@@ -853,7 +1108,7 @@ Read tools and `factory_message_origin` are available on every turn. The other t
 
 `factory_switch_session_model` changes the model of a side, work item or review session you own in the same Factory, without recreating it. It refuses a model this server can't run. A running session switches right away; a stopped one uses the model on its next run.
 
-`factory_create_work_item` files the card as the caller in its board's first phase, exactly like **New card**, posts the brief as its first comment, and subscribes the session. Name the `repository` when the Factory links more than one: a run can't start on a card that doesn't say which. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the parent item and plan pre-approval. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
+`factory_create_work_item` files the card as the caller where the project's [intake routes](#intake-routes) send it, or in the Work board's first phase when no route matches, posts the brief as its first comment, and subscribes the session. Name the `repository` when the Factory links more than one: a run can't start on a card that doesn't say which. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the parent item and plan pre-approval. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
 
 #### Messaging between sessions
 
@@ -905,6 +1160,54 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
+### Mastra Connect and your own tools in sessions
+
+With Platform credentials and `MASTRA_PROJECT_ID`, every Factory session gets the [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools of each connection attached to the Platform project. Attach and remove connections in Mastra Platform, on the project's **Connect** page. The organization's other connections reach sessions only once they're attached, and a new project has none. **Settings → Tools** lists what sessions get, read from the same Platform list. Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Attach Linear, and a Slack thread, a web chat or a work item can ask about its issues.
+
+Sessions run these tools without asking while automatic approval is on, so only attach accounts whose actions sessions may take. When a person turns approval off, the tools follow the `mcp` permission category, except in Slack with `adapterOptions.toolDisplay: 'text'`, where every tool call is approved automatically. Tools with `delete` or `archive` anywhere in their name, in any case, are left out. That check goes by name only, so it can't catch every destructive action, such as a SQL tool running a `DROP`. GitHub and GitLab Connect tools are left out too: Factory's own source-control tools enforce repository scope and self-review, and Connect's would skip both. Every user and organization on the Factory shares the project's connections, and a connection attached for another app on the same project reaches Factory sessions too. `GET /web/integrations/platform/connect-tools` backs the settings page.
+
+Connect caches the connection list for 30 seconds. When a later refresh fails, sessions keep the last list it got, including a connection removed since, until a refresh succeeds. A run with no list yet waits at most 15 seconds for one, then goes on without Connect tools, and Factory logs why. If the Platform stalls instead of failing, later runs also go without them until that listing answers or fails.
+
+`tools` replaces that default with the tools you choose: a record of tools, such as an MCP server's, or a function that returns them for each run from its `requestContext`. `tools: {}` offers none. Factory doesn't filter the tools you pass: the example below includes `linear_delete_issue`, so narrow it with Connect's `allowTools` or `disallowTools`.
+
+```typescript
+import { tools as connectTools } from '@mastra/connect';
+import { MastraFactory } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  // ...
+  tools: connectTools({ providers: ['linear'] }),
+});
+```
+
+A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools you pass throws, the run fails with that error.
+
+Factory doesn't read MCP servers from the host's `mcp.json` files, and logs a warning at startup when `~/.mastracode/mcp.json` exists. Pass MCP tools through `tools` instead:
+
+```typescript
+import { MCPClient } from '@mastra/mcp';
+
+const mcp = new MCPClient({ servers: { tickets: { url: new URL('https://tickets.example.com/mcp') } } });
+
+const factory = new MastraFactory({
+  // ...
+  tools: await mcp.listTools(),
+});
+```
+
+### Voice input
+
+The composer mic first asks `POST /web/voice/live-session`. When the chosen model has a realtime model (Mistral Voxtral), the server mints a short-lived Mistral `rt_` token with the selected key and the browser streams 16 kHz PCM to Mistral's realtime socket, so words appear in the draft while you speak. Every other provider answers `{ mode: 'batch' }`, and so does Mistral when it won't mint a token for a key that can still transcribe (for example one without the `create_client_session` permission): the browser records a clip and posts it to `POST /web/voice/transcribe`, where the server transcribes it with a provider from the Mastra Code speech-to-text registry (`@mastra/code-sdk/voice/stt-registry`). A rejected or out-of-credit Mistral key answers 502 before anything is recorded; other providers report a bad key only when the clip is transcribed. API keys never reach the browser. Each member can start 20 live sessions or transcriptions a minute on each server process (the counters are in memory); past that both routes answer 429 `voice_rate_limited` with `Retry-After`, before anything is recorded. Only a minted live session or a transcription counts, so when Mistral won't mint a token and the browser records a clip instead, that dictation counts once.
+
+Voice input resolves its model and key the way an interactive chat in the same Factory does:
+
+- `factory` model scope: the Factory's voice model with organization keys. Only organization admins change the model.
+- `user` or `hybrid` model scope: each member's own voice model with personal keys. Organization keys are never used.
+
+Either side starts on auto, the first registry provider with a key. OAuth subscriptions are never used. With sign-in enabled, keys come only from stored credentials; in local mode the provider env var applies before a stored key. `GET`/`PUT /web/voice/settings` back **Settings → Models → Voice input**.
+
+Voice clips recorded in Slack and sent to a Factory session (a mention, a DM, or a thread the bot is in) are transcribed the same way under the thread's Factory, with the sender as the member, before the agent sees the message. A thread with no Factory session uses the sender's own voice model and key. The transcript replaces the clip. A clip that can't be transcribed is dropped from the message and the sender gets a card only they can see, with the reason and, for a missing, rejected or out-of-credit key, an **Open voice settings** button; when nothing but mentions is left in the message, the agent doesn't run. Uploaded audio files stay attachments.
+
 ### MCP server (Claude, ChatGPT and other MCP clients)
 
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
@@ -913,7 +1216,7 @@ A Factory with an auth provider and an OAuth authorization server serves an MCP 
 https://<your-factory>/web/factory/projects/<projectId>/mcp
 ```
 
-Copy it from **Settings → Connections → MCP clients** in the Factory UI. The card only appears when the endpoint is served (`/web/config/features` reports `mcp: true`).
+The Factory UI does not show this URL while the MCP endpoint is being reworked. Build it from your Factory URL and project id as shown above.
 
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 

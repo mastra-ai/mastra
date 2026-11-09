@@ -1,6 +1,12 @@
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
-import { changeRequestNumberForItem, externalLinkLabel, pullRequestStatusForItem } from '../../factory/boardItems';
+import {
+  changeRequestNumberForItem,
+  contextLabel,
+  externalLinkLabel,
+  pullRequestStatusForItem,
+  sourceMetadata,
+} from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
@@ -73,6 +79,10 @@ export interface SessionListRow {
   ownedByViewer: boolean;
   canRegenerateTitle: boolean;
   item?: WorkItem;
+  /** The card this session belongs to, set with `contextLabel` for a card's own sessions. */
+  itemId?: string;
+  /** The context the card runs this session in, named for the sidebar (`Triage`, `Work`). */
+  contextLabel?: string;
   threadId?: string;
   pullRequest?: SessionPullRequest;
   pinned: boolean;
@@ -151,7 +161,7 @@ function sessionPullRequest(pullRequest: WorkItem | undefined): SessionPullReque
   return {
     number: changeRequestNumberForItem(pullRequest),
     provider: pullRequest.source === 'gitlab-pr' ? 'gitlab' : 'github',
-    knownMerged: pullRequest.metadata.merged === true,
+    knownMerged: sourceMetadata(pullRequest).merged === true || sourceMetadata(pullRequest).state === 'merged',
   };
 }
 
@@ -159,6 +169,8 @@ export interface FactorySessionRowInput {
   session: FactoryUserSession;
   item: WorkItem | undefined;
   boards: readonly InstalledBoardInfo[] | undefined;
+  /** The context the card filed the session under. */
+  context?: string;
   threadId: string | undefined;
   pullRequest: WorkItem | undefined;
   factoryId: string;
@@ -173,6 +185,7 @@ export function buildFactorySessionRow({
   session,
   item,
   boards,
+  context,
   threadId,
   pullRequest,
   factoryId,
@@ -182,6 +195,7 @@ export function buildFactorySessionRow({
   pinned,
   viewer,
 }: FactorySessionRowInput): SessionListRow {
+  const phases = item && boards?.find(board => board.id === itemBoard(item))?.phases;
   const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
   const ownedByViewer = isOwnedByViewer(session, viewer);
   return {
@@ -204,6 +218,7 @@ export function buildFactorySessionRow({
     ownedByViewer,
     canRegenerateTitle: ownedByViewer && session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX),
     item,
+    ...(item && context !== undefined ? { itemId: item.id, contextLabel: contextLabel(context, phases) } : {}),
     threadId,
     pullRequest: sessionPullRequest(pullRequest),
     pinned,

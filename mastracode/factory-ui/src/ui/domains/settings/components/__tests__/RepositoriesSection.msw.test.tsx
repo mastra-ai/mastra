@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { RepositoriesSection } from '../RepositoriesSection';
@@ -11,6 +12,11 @@ import { environmentPayload, environmentRepository } from './fixtures/environmen
 
 const FACTORY_ID = 'fp-1';
 const PRIMARY_PROJECT = 'rhys-group1/factory-validation-rhys-20260916/factory-gitlab-primary';
+const primaryRepository = listedRepository('repo-1', PRIMARY_PROJECT, {
+  integrationId: 'gitlab',
+  branch: 'main',
+  sandboxWorkdir: '~/factory-gitlab-primary',
+});
 
 function repositoryEnvironment() {
   return environmentPayload({
@@ -19,7 +25,7 @@ function repositoryEnvironment() {
 }
 
 function renderRepositoriesSettings() {
-  renderWithProviders(
+  return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/repositories`]}>
       <Routes>
         <Route path="/factories/:factoryId/settings/repositories" element={<RepositoriesSection />} />
@@ -35,29 +41,12 @@ describe('Repositories settings', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] }),
+        HttpResponse.json({
+          projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary', repositories: [primaryRepository] }],
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
         HttpResponse.json({ environment: repositoryEnvironment() }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({
-          connections: [
-            {
-              id: 'conn-1',
-              integrationId: 'gitlab',
-              installationId: 'inst-1',
-              repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '~/factory-gitlab-primary',
-                  repository: { slug: PRIMARY_PROJECT, defaultBranch: 'main' },
-                },
-              ],
-            },
-          ],
-        }),
       ),
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({
@@ -122,10 +111,6 @@ describe('Repositories settings', () => {
     expect(screen.getByRole('switch', { name: `Clone ${PRIMARY_PROJECT} into every session` })).toBeChecked();
     await user.keyboard(' ');
     expect(await screen.findByRole('dialog', { name: 'Add repository' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage connections' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/settings/connections`,
-    );
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(addRepository).toHaveFocus());
     await user.click(addRepository);
@@ -168,16 +153,28 @@ describe('Repositories settings', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              integrationId: 'github',
-              installationId: 'inst-1',
-              repositories: linked ? [repository] : [],
+              id: FACTORY_ID,
+              name: 'factory-gitlab-primary',
+              repositories: linked
+                ? [
+                    listedRepository('repo-2', 'acme/widget', {
+                      externalId: '42',
+                      branch: 'main',
+                      sandboxWorkdir: '~/widget',
+                    }),
+                  ]
+                : [],
             },
           ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [{ id: 'conn-1', integrationId: 'github', installationId: 'inst-1', repositories: [] }],
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
@@ -317,18 +314,17 @@ describe('Repositories settings', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
         HttpResponse.json({ environment }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              integrationId: 'gitlab',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'factory-gitlab-primary',
               repositories: [
                 ...(linked
-                  ? [{ id: 'repo-1', branch: 'main', repository: { slug: PRIMARY_PROJECT, defaultBranch: 'main' } }]
+                  ? [listedRepository('repo-1', PRIMARY_PROJECT, { integrationId: 'gitlab', branch: 'main' })]
                   : []),
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository('repo-2', 'acme/other', { integrationId: 'gitlab', branch: 'main' }),
               ],
             },
           ],
@@ -401,7 +397,9 @@ describe('Repositories settings', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
         factoryRequests++;
         return factoryRequests === 1
-          ? HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] })
+          ? HttpResponse.json({
+              projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary', repositories: [primaryRepository] }],
+            })
           : HttpResponse.json({ error: 'Factories unavailable' }, { status: 503 });
       }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
@@ -434,8 +432,8 @@ describe('Repositories settings', () => {
     });
     let fail = true;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary', repositories: [] }] }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, async () => {
         await environmentPending;
@@ -472,32 +470,21 @@ describe('Repositories settings', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'personal-factory' }] }),
+        HttpResponse.json({
+          projects: [
+            {
+              id: FACTORY_ID,
+              name: 'personal-factory',
+              repositories: [listedRepository('repo-1', 'octo/agent', { branch: 'main', sandboxWorkdir: '~/agent' })],
+            },
+          ],
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
         HttpResponse.json({
           environment: environmentPayload({
             repositories: [environmentRepository({ projectRepositoryId: 'repo-1', slug: 'octo/agent' })],
           }),
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({
-          connections: [
-            {
-              id: 'conn-1',
-              integrationId: 'github',
-              installationId: 'inst-1',
-              repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '~/agent',
-                  repository: { slug: 'octo/agent', defaultBranch: 'main' },
-                },
-              ],
-            },
-          ],
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/github/status`, async () => {
@@ -567,5 +554,64 @@ describe('Repositories settings', () => {
     expect(
       await screen.findByText('GitHub is disabled on the server. Missing env vars: GITHUB_APP_ID.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows GitHub CLI tokens only once GitHub matters, and keeps a failed token draft for retry', async () => {
+    let configured = false;
+    let rejectSave = true;
+    const saved: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/pat`, () => HttpResponse.json({ configured, reviewerConfigured: false })),
+      http.post(`${TEST_BASE_URL}/web/github/pat`, async ({ request }) => {
+        saved.push(await request.json());
+        if (rejectSave) return HttpResponse.json({ error: 'Token rejected' }, { status: 400 });
+        configured = true;
+        return HttpResponse.json({ ok: true });
+      }),
+      http.delete(`${TEST_BASE_URL}/web/github/pat`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get('kind')).toBe('default');
+        configured = false;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const { unmount } = renderRepositoriesSettings();
+    expect(await screen.findByText(PRIMARY_PROJECT)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'GitHub CLI tokens' })).not.toBeInTheDocument();
+    unmount();
+
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: true,
+          installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }],
+          reason: 'ready',
+        }),
+      ),
+    );
+    renderRepositoriesSettings();
+    const tokens = await screen.findByRole('region', { name: 'GitHub CLI tokens' });
+    const workerRow = (await within(tokens).findByText('Worker token')).closest<HTMLElement>(
+      '[data-slot="settings-row"]',
+    );
+    if (!workerRow) throw new Error('Worker token row is missing');
+    expect(within(workerRow).getByText('Not set')).toBeInTheDocument();
+    await userEvent.click(within(workerRow).getByRole('button', { name: 'Add token' }));
+    const input = screen.getByLabelText('Worker token GitHub Personal Access Token');
+    await userEvent.type(input, 'worker-secret');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Token rejected')).toBeInTheDocument();
+    expect(input).toHaveValue('worker-secret');
+    rejectSave = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const updateToken = await screen.findByRole('button', { name: 'Update token' });
+    expect(within(tokens).getByText('Configured')).toBeInTheDocument();
+    await waitFor(() => expect(updateToken).toHaveFocus());
+    expect(saved).toEqual([
+      { token: 'worker-secret', kind: 'default' },
+      { token: 'worker-secret', kind: 'default' },
+    ]);
+    await userEvent.click(within(tokens).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(within(tokens).getAllByRole('button', { name: 'Add token' })).toHaveLength(2));
   });
 });

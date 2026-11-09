@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MastraEditor } from '../index';
 import { computeInlineWorkspaceIdentity } from './workspace-identity';
@@ -237,7 +238,7 @@ describe('EditorAgentNamespace.update', () => {
     expect(versionTwo?.skillsFormat).toBe('markdown');
   });
 
-  it('persists durable on the version snapshot and hydrates a durable agent', async () => {
+  it('persists durable on the version snapshot and hydrates resumable streams without durable execution', async () => {
     const { editor, mastra, agentsStore } = await createEditorWithStore();
 
     const created = await editor.agent.create({
@@ -249,16 +250,51 @@ describe('EditorAgentNamespace.update', () => {
     });
 
     expect(created.toRawConfig()?.durable).toBe(true);
-    // `Mastra.addAgent` wraps agents whose `durable` is truthy; the wrapper
-    // points at the underlying agent instead of itself.
-    const registered = mastra.getAgentById('durable-agent') as unknown as { agent?: unknown };
-    expect(registered).toBeDefined();
-    expect(registered.agent).not.toBe(registered);
+    const registered = mastra.getAgentById('durable-agent');
+    expect(registered).toBe(created);
+    expect(registered.hasResumableStreams()).toBe(true);
+    await expect(registered.recover('stored-run')).rejects.toThrow('createDurableAgent');
 
     const versionOne = (await agentsStore.listVersions({ agentId: 'durable-agent' })).versions.find(
       version => version.versionNumber === 1,
     );
     expect(versionOne?.durable).toBe(true);
+  });
+
+  it.each([
+    true,
+    false,
+    { maxSteps: 25, cleanupTimeoutMs: 0 },
+    { id: 'old', name: 'Old', shouldPersistSnapshot: true },
+  ])('loads an existing persisted durable config %j without silent execution migration', async durable => {
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
+    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+    try {
+      await agentsStore.create({
+        agent: {
+          id: 'legacy-durable-agent',
+          name: 'Legacy Durable Agent',
+          instructions: 'ONE',
+          model: { provider: 'openai', name: 'gpt-4' },
+          durable,
+        },
+      });
+      const agent = await editor.agent.getById('legacy-durable-agent', { status: 'draft' });
+      expect(agent).toBe(mastra.getAgentById('legacy-durable-agent'));
+      expect(agent?.hasResumableStreams()).toBe(durable !== false);
+      expect(agent?.durable).toEqual(durable);
+      await expect(agent!.recover('existing-checkpoint')).rejects.toThrow('createDurableAgent');
+      const migrationWarnings = warn.mock.calls.filter(([message]) => message.includes('createDurableAgent'));
+      expect(migrationWarnings).toHaveLength(typeof durable === 'object' ? 1 : 0);
+      if (typeof durable === 'object') {
+        expect(migrationWarnings[0]![0]).toContain('legacy-durable-agent');
+        for (const key of Object.keys(durable).filter(key => key !== 'cleanupTimeoutMs')) {
+          expect(migrationWarnings[0]![0]).toContain(key);
+        }
+      }
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('creates a version when SDK updates durable', async () => {
@@ -274,16 +310,16 @@ describe('EditorAgentNamespace.update', () => {
 
     const updated = await editor.agent.update({
       id: 'durable-update-agent',
-      durable: { maxSteps: 10 },
+      durable: { cleanupTimeoutMs: 10 },
     });
 
-    expect(updated.toRawConfig()?.durable).toEqual({ maxSteps: 10 });
+    expect(updated.toRawConfig()?.durable).toEqual({ cleanupTimeoutMs: 10 });
 
     const versions = await agentsStore.listVersions({ agentId: 'durable-update-agent' });
     expect(versions.versions).toHaveLength(2);
     const versionTwo = versions.versions.find(version => version.versionNumber === 2);
     expect(versionTwo?.changedFields).toEqual(['durable']);
-    expect(versionTwo?.durable).toEqual({ maxSteps: 10 });
+    expect(versionTwo?.durable).toEqual({ cleanupTimeoutMs: 10 });
   });
 
   it('persists inline workspaces before creating a version from an SDK update', async () => {

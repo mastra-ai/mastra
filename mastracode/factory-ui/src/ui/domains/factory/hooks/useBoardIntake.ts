@@ -35,9 +35,9 @@ import type { BoardStageId } from '../stages';
  * The Intake swimlane's feeds and the candidates left once anything already
  * on the board is dropped.
  *
- * Work Intake gates GitHub issues org-wide; the Review pull-request feed is
- * always enabled. Provider issues only appear on boards explicitly routed
- * to them, together on the board's initial phase.
+ * Work Intake gates GitHub issues org-wide; the pull-request feed is always
+ * enabled on Work and Review. Provider issues only appear on boards explicitly
+ * routed to them, together on the board's initial phase.
  */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 const NO_REPOSITORIES: readonly string[] = [];
@@ -121,6 +121,9 @@ export function useBoardIntake({
 }) {
   const kind = definition.id;
   const review = kind === 'review';
+  // Pull requests are reviewed on Work; Review keeps its feed for the cards
+  // still filed there.
+  const browsesPullRequests = review || kind === 'work';
   const initialPhase = definition.initialPhase;
   const repository = repositories[0];
   const projectRepositoryId = repository?.projectRepositoryId;
@@ -201,13 +204,11 @@ export function useBoardIntake({
   const routesFailed = !review && !gitlabRepository && labelRoutesQuery.isError;
   const routesSettled = review || gitlabRepository || labelRoutesQuery.isSuccess;
 
-  // Work intake owns issues; Review intake owns pull requests. Keeping the
-  // feeds on separate routes prevents review-producing PR work from being
-  // confused with the Work board's review-receiving lane.
   const githubIntakeActive =
     !gitlabRepository && (kind === 'work' || routedHere || routesFailed) && githubEnabled && githubSelected;
+  const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
   const available: IntakeSource[] = review
-    ? [gitlabRepository ? 'gitlab-prs' : 'github-prs']
+    ? [pullRequestSource]
     : [
         ...(githubIntakeActive ? (['github'] as const) : []),
         ...(gitlabReady ? (['gitlab'] as const) : []),
@@ -215,8 +216,12 @@ export function useBoardIntake({
         ...(jiraReady ? (['jira'] as const) : []),
         ...(incidentioReady ? (['incidentio'] as const) : []),
       ];
+  // Work also lists the pull requests of its linked repositories, but they are
+  // not an issue source: a Work board without one still asks to connect one.
+  const feedSources: IntakeSource[] =
+    !review && browsesPullRequests && repository ? [...available, pullRequestSource] : available;
   const pickedSources = sourceFilters ? pickedBoardSources(sourceFilters) : new Set<string>();
-  const browsedSources = available.filter(
+  const browsedSources = feedSources.filter(
     source => pickedSources.size === 0 || pickedSources.has(source.split('-')[0]),
   );
   const browsesGithub = browsedSources.includes('github');
@@ -237,10 +242,12 @@ export function useBoardIntake({
     return routedBoard === kind;
   });
   const projectBindings = (bindingsQuery.data ?? []).filter(binding => binding.factoryProjectId === factoryProjectId);
-  const pulls = useProjectPullRequestsQuery(review && !gitlabRepository ? reviewRepositoryIds : NO_REPOSITORIES);
+  const pulls = useProjectPullRequestsQuery(
+    browsesPullRequests && !gitlabRepository ? reviewRepositoryIds : NO_REPOSITORIES,
+  );
   const mergeRequests = useGitLabMergeRequestsQuery(
-    review && gitlabRepository ? factoryProjectId : undefined,
-    review && gitlabRepository ? projectRepositoryId : undefined,
+    browsesPullRequests && gitlabRepository ? factoryProjectId : undefined,
+    browsesPullRequests && gitlabRepository ? projectRepositoryId : undefined,
   );
   const gitlabIssues = useGitLabIssuesQuery(
     !review && gitlabReady ? factoryProjectId : undefined,
@@ -279,6 +286,7 @@ export function useBoardIntake({
     ...boardLinearIssues.map(linearCandidate),
     ...boardJiraIssues.map(jiraCandidate),
     ...boardIncidentioIssues.map(incidentioCandidate),
+    ...(browsesPullRequests ? reviewCandidates : []),
   ];
   const participantCandidates = review ? reviewCandidates : workCandidates;
   const browsedCandidates = browsedSources.flatMap(source => {

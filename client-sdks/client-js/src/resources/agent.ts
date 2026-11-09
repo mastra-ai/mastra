@@ -2676,7 +2676,7 @@ export class Agent extends BaseResource {
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   input: toolCall.args,
-                  result,
+                  output: { type: 'json', value: result as JSONValue },
                   ...(modelOutput != null
                     ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
                     : {}),
@@ -3414,20 +3414,27 @@ export class Agent extends BaseResource {
    * Use this to resume receiving events after a disconnection.
    *
    * @param params.runId - The run ID to observe
-   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @param params.offset - Run-log position to resume from. Chunks from `observe()`, and from `stream()` on
+   *   durable and evented agents, carry an `index`; pass the `index + 1` of the last chunk that has one. Chunks without an `index`
+   *   (`abort` and structured-output `object` chunks) are skipped when choosing the offset. If omitted,
+   *   replays the chunks still cached for the run, or only live chunks if the server's transport can't replay.
    * @returns Promise containing a streaming Response
    *
    * @example
    * ```typescript
-   * // Reconnect to a stream from a specific position
-   * const response = await client.agents('my-agent').observe({
-   *   runId: 'run-123',
-   *   offset: 42, // Resume from event 42
-   * });
+   * const agent = client.getAgent('my-agent');
+   * let offset = 0;
+   * const trackOffset = async (chunk: { index?: number }) => {
+   *   if (chunk.index === undefined) return;
+   *   offset = chunk.index + 1;
+   * };
    *
-   * await response.processDataStream({
-   *   onChunk: (chunk) => console.log('Received:', chunk),
-   * });
+   * const stream = await agent.stream(messages, { runId: 'run-123' });
+   * await stream.processDataStream({ onChunk: trackOffset });
+   *
+   * // After a dropped connection, resume where the last indexed chunk left off
+   * const response = await agent.observe({ runId: 'run-123', offset });
+   * await response.processDataStream({ onChunk: trackOffset });
    * ```
    */
   async observe(params: { runId: string; offset?: number }): Promise<

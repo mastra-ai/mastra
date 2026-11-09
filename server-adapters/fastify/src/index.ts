@@ -7,6 +7,7 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
@@ -483,7 +484,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+        await applyMcpRequestAuth({ req: rawReq, requestContext: request.requestContext, setRequestAuth });
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
@@ -525,6 +528,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         if (request.body !== undefined) {
           rawReq.body = request.body;
         }
+
+        await applyMcpRequestAuth({
+          req: rawReq,
+          requestContext: request.requestContext,
+          setRequestAuth: this.mcpOptions?.setRequestAuth,
+        });
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),

@@ -14,6 +14,7 @@ import {
   strongerKnowledgeRole,
 } from './declarations';
 import type { CompiledKnowledgeScopes, KnowledgeRole, KnowledgeScopeDeclarations } from './declarations';
+import { refreshKnowledgeLinksTo, updateKnowledgeLinks } from './links';
 
 /** Why a run can or can't reach a scope or page. See {@link Knowledge.explainAccess}. @experimental */
 export interface KnowledgeAccessExplanation {
@@ -267,6 +268,12 @@ export class KnowledgeScopeRuntime {
       pages: declaration.pages,
       provenance,
     });
+    if (result.created) {
+      // A new scope (and its config pages) can resolve body links written before it existed.
+      await updateKnowledgeLinks(this.warn, () =>
+        refreshKnowledgeLinksTo(storage, [result.scope], { withDescendants: true }),
+      );
+    }
     if (result.parentConflict) {
       this.warn(`Knowledge scope "${address}" was already linked by another run; keeping its persisted parent.`);
     }

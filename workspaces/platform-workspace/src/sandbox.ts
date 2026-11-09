@@ -12,6 +12,7 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxNetworking,
   SandboxStartResult,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
@@ -298,6 +299,22 @@ export type CaptureCheckpointResult =
   | { status: 'coalesced'; checkpointName: string }
   | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
 
+/** E2B's sandbox control port (envd). Never a preview. */
+const E2B_CONTROL_PORT = 49983;
+
+/** A cookie that signs a browser in to a sandbox port, in the shape browsers like Playwright accept. */
+export interface SandboxPortAuthCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  /** Unix time in seconds. */
+  expires: number;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'Lax';
+}
+
 /**
  * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
  * (Railway destroy, quota reclamation, etc.). The client cannot recover from
@@ -532,6 +549,61 @@ export class PlatformSandbox extends MastraSandbox {
     return this.status === 'running' ? this._sandboxId : undefined;
   }
 
+  /**
+   * Port URLs for a running sandbox. Ports are private by default: anyone
+   * in the sandbox's organization can open a port's URL in a browser after
+   * signing in to the platform, and anyone else is turned away. The URL
+   * doesn't expire, so it's the one to share.
+   *
+   * Absent on sandboxes whose ports can't be opened, so `supportsNetworking()`
+   * reports them correctly.
+   */
+  declare readonly networking?: SandboxNetworking;
+
+  private readonly _networking: SandboxNetworking = {
+    getPortUrl: async (port: number): Promise<string | null> => (await this._previewGrant(port))?.url ?? null,
+  };
+
+  /**
+   * A cookie that signs a browser you control, such as an agent's own
+   * browser, in to a port for an hour, so it opens the port's URL without
+   * signing in. Never share it.
+   *
+   * `null` in the same cases as `networking.getPortUrl()`.
+   */
+  async getPortAuthCookie(port: number): Promise<SandboxPortAuthCookie | null> {
+    return (await this._previewGrant(port))?.cookie ?? null;
+  }
+
+  private async _previewGrant(port: number): Promise<{ url: string; cookie: SandboxPortAuthCookie } | null> {
+    if (!Number.isInteger(port) || port < 1 || port > 65_535 || port === E2B_CONTROL_PORT) return null;
+    // Only E2B-backed sandboxes serve their ports.
+    if (this._client.sandboxProvider !== 'e2b') return null;
+    const sandboxId = this.sandboxId;
+    if (!sandboxId) return null;
+    try {
+      // The proxy builds the address for the sandbox's region. The one-time
+      // sign-in link it comes with isn't needed here: it's single-use and
+      // expires after a minute, so dropping it costs nothing.
+      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/preview-grants`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ port }),
+      });
+      const { url, cookie } = (await response.json()) as { url: string; cookie: SandboxPortAuthCookie };
+      return { url: `${new URL(url).origin}/`, cookie };
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.status === 410) {
+        // Destroyed upstream: stop pointing at it, unless a new sandbox replaced it meanwhile.
+        if (this._sandboxId === sandboxId) this._clearDestroyedState(sandboxId);
+        return null;
+      }
+      // A platform that doesn't serve previews yet.
+      if (error instanceof PlatformApiError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   private readonly _client: PlatformClient;
   private readonly _usesProviderRoutes: boolean;
   private readonly _environmentId: string;
@@ -638,6 +710,8 @@ export class PlatformSandbox extends MastraSandbox {
     this._hasRecoveryKey = options.id !== undefined;
     this.id = options.id ?? this.generateId();
     this._client = new PlatformClient(options);
+    // Only E2B-backed sandboxes serve their ports.
+    if (this._client.sandboxProvider === 'e2b') this.networking = this._networking;
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;

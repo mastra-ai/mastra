@@ -3,12 +3,8 @@ title: "Custom adapters | Server"
 description: "Implement a custom Mastra server adapter for unsupported web frameworks by mapping routes, middleware, request parameters, responses, and streams."
 packages:
   - "@mastra/core"
-  - "@mastra/express"
-  - "@mastra/hono"
   - "@mastra/server"
   - "@mastra/server-adapters-test-suite"
-  - "@mastra/fastify"
-  - "@mastra/koa"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -349,6 +345,10 @@ constructor(options: {
   bodyLimitOptions?: BodyLimitOptions;
   streamOptions?: StreamOptions;
   customRouteAuthConfig?: Map<string, boolean>;
+  tools?: ToolsInput;
+  taskStore?: InMemoryTaskStore;
+  customApiRoutes?: ApiRoute[];
+  mcpOptions?: MCPOptions;
 }) {
   super(options);
 }

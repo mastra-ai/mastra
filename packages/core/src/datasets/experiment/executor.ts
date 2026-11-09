@@ -12,6 +12,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { TargetType } from '../../storage/types';
 import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
+import { loadStepResults } from '../../workflows/run-journal';
 import { conversationItemSchema, isConversationInput } from '../replay/conversation';
 import { agentModelLabel } from './agent-model';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
@@ -209,7 +210,7 @@ export async function executeTarget(
         );
         break;
       case 'workflow':
-        executionPromise = executeWorkflow(target as Workflow, item, options?.requestContext);
+        executionPromise = executeWorkflow(target as Workflow, item, options?.requestContext, options?.experimentId);
         break;
       case 'scorer':
         executionPromise = executeScorer(target as MastraScorer<any, any, any, any>, item);
@@ -835,17 +836,22 @@ async function executeWorkflow(
     resumeData?: unknown;
   },
   requestContext?: Record<string, unknown>,
+  experimentId?: string,
 ): Promise<ExecutionResult> {
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
   const observabilityContext = resolveObservabilityContext({});
+  // Root workflow span metadata is inherited by child spans and metrics, so
+  // tagging start and every resume ties the whole run to the experiment.
+  const tracingOptions = experimentId ? { tracingOptions: { metadata: { experimentId } } } : {};
 
   const run = await workflow.createRun({ disableScorers: true });
   let result = await run.start({
     inputData: item.input,
     ...(reqCtx ? { requestContext: reqCtx } : {}),
     ...observabilityContext,
+    ...tracingOptions,
   });
 
   // Auto-resume loop: if the workflow suspends and resume data is provided,
@@ -885,11 +891,12 @@ async function executeWorkflow(
         step: stepToResume,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
         ...observabilityContext,
+        ...tracingOptions,
       });
     }
   }
 
-  return handleWorkflowResult(result);
+  return handleWorkflowResult({ ...result, steps: await loadStepResults(result.steps) });
 }
 
 /**

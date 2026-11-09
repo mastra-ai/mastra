@@ -9,6 +9,7 @@ import {
   MetaSchemaCompatLayer,
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
+  isZodType,
   jsonSchema,
 } from '@mastra/schema-compat';
 import type { SchemaCompatLayer } from '@mastra/schema-compat';
@@ -60,6 +61,7 @@ import type {
 } from '../types';
 import {
   createStandardSchemaIssuesError,
+  getValidationIssuePaths,
   isValidationError,
   registerToolOutputValidationSchema,
   validateToolInput,
@@ -271,6 +273,23 @@ function buildJsonOverrideSchema(
       jsonSchema: fallback['~standard'].jsonSchema,
     },
   } as StandardSchemaWithJSON;
+}
+
+/**
+ * A remote MCP tool's error text is written by the server and can echo the submitted arguments
+ * (Issue #29318). The model still receives it; the tracked exception records only its id.
+ * Covers every MCPClient tool failure (execution, task failure, cancellation, polling).
+ */
+function trackableToolError(mastraError: MastraError, err: unknown, model: string): MastraError {
+  const id = (err as { id?: unknown } | null)?.id;
+  if (typeof id !== 'string' || !id.startsWith('MCP_CLIENT_TOOL_')) return mastraError;
+  return new MastraError({
+    id: mastraError.id,
+    domain: mastraError.domain as ErrorDomain,
+    category: mastraError.category as ErrorCategory,
+    text: `Remote tool failed (${id})`,
+    details: { errorMessage: id, model },
+  });
 }
 
 export class CoreToolBuilder extends MastraBase {
@@ -863,7 +882,10 @@ export class CoreToolBuilder extends MastraBase {
           if (resumeData != null) {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
-              logger?.warn(resumeValidation.error.message);
+              logger?.warn('Tool resume data validation failed', {
+                ...logData,
+                issuePaths: getValidationIssuePaths(resumeValidation.error, resumeSchema),
+              });
               toolSpan?.end({
                 output: resumeValidation.error,
                 ...executionFailureTermination(resumeValidation.error),
@@ -895,7 +917,10 @@ export class CoreToolBuilder extends MastraBase {
           const suspendSchema = this.getSuspendSchema();
           const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
-            logger?.warn(suspendValidation.error.message);
+            logger?.warn('Tool suspend data validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(suspendValidation.error, suspendSchema),
+            });
             toolSpan?.end({
               output: suspendValidation.error,
               ...executionFailureTermination(suspendValidation.error),
@@ -925,7 +950,10 @@ export class CoreToolBuilder extends MastraBase {
           const outputSchema = this.getOutputSchema();
           const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
           if (outputValidation.error) {
-            logger?.warn(outputValidation.error.message);
+            logger?.warn('Tool output validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(outputValidation.error, outputSchema, 'output'),
+            });
             toolSpan?.end({
               output: outputValidation.error,
               ...executionFailureTermination(outputValidation.error),
@@ -1028,7 +1056,10 @@ export class CoreToolBuilder extends MastraBase {
           const suspendedToolRunIdErrToIgnore =
             error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
           if (error && !suspendedToolRunIdErrToIgnore) {
-            logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
+            logger.warn('Tool input validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(error, parameters),
+            });
             toolSpan?.end({ output: error, ...executionFailureTermination(error), attributes: { success: false } });
             return error;
           }
@@ -1068,7 +1099,11 @@ export class CoreToolBuilder extends MastraBase {
           ...executionFailureTermination(mastraError),
           attributes: { success: false },
         });
-        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject });
+        logger.trackException(trackableToolError(mastraError, err, model?.modelId ?? ''), {
+          ...logData,
+          ...rest,
+          model: logModelObject,
+        });
         throw mastraError;
       }
     };
@@ -1147,7 +1182,13 @@ export class CoreToolBuilder extends MastraBase {
       );
     }
 
-    const originalSchema = this.getParameters();
+    const parameters = this.getParameters();
+    // JSON Schema (client tools, AI SDK `jsonSchema()`) must not round-trip through Zod: that
+    // conversion turns unions into intersections the compat layers collapse to `{}`.
+    const originalSchema =
+      parameters && !isZodType(parameters) && !isStandardSchemaWithJSON(parameters)
+        ? toStandardSchema(parameters)
+        : parameters;
     const inputValidationSchema = this.buildCompatValidationSchema(originalSchema, schemaCompatLayers);
     let processedInputSchema: Schema | undefined;
 

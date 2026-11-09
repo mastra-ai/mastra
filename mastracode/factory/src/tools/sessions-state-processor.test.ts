@@ -1,6 +1,6 @@
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
@@ -75,7 +75,12 @@ async function setup() {
         orgId: 'org-1',
         userId: 'someone',
         factoryProjectId: project.id,
-        input: { title: `Item ${number}`, stages, metadata: { number } },
+        input: {
+          title: `Item ${number}`,
+          stages,
+          metadata: { number },
+          externalSource: { integrationId: 'github', type: 'issue', externalId: String(number) },
+        },
       })
     ).item;
   const follow = (workItemId: string, sessionId = 'parent', threadId = 'parent-thread') =>
@@ -294,6 +299,24 @@ describe('FactorySessionsStateProcessor', () => {
     });
     await expect(env.step()).resolves.toBeUndefined();
     await expect(env.step()).resolves.toBeUndefined();
+  });
+
+  it('reads the same number of queries per step following one item as following many', async () => {
+    const queriesPerStep = async (followed: number) => {
+      const env = await setup();
+      for (let n = 1; n <= followed; n += 1) {
+        const item = await env.fileItem(n);
+        await env.follow(item.id);
+        await env.bind(item.id, `worker-${n}`);
+      }
+      const findMany = vi.spyOn(env.seed.storage.ops, 'findMany');
+      const findOne = vi.spyOn(env.seed.storage.ops, 'findOne');
+      const signal = await env.step();
+      expect(signal!.contents.match(/work session worker-\d+ idle/g)).toHaveLength(followed);
+      return findMany.mock.calls.length + findOne.mock.calls.length;
+    };
+
+    expect(await queriesPerStep(5)).toBe(await queriesPerStep(1));
   });
 
   it('caps the rows at 20, active first, with "+N more"', async () => {

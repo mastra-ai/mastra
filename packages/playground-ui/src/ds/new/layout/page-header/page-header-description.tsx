@@ -14,7 +14,7 @@ export function PageHeaderDescription({ children, className, isLoading, ...props
       tone="muted"
       data-slot="page-header-description"
       className={cn(
-        'flex max-w-140 flex-wrap gap-x-4 gap-y-1',
+        'flex max-w-140 flex-wrap gap-x-4 gap-y-1 text-pretty',
         isLoading && 'w-160 max-w-4/5 animate-pulse rounded-md bg-muted',
         className,
       )}

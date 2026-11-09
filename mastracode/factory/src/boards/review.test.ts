@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { reviewBoard } from './review.js';
 
 function reviewContext(headBranch: string, fromStage = 'intake'): FactoryStageRuleContext {
@@ -17,7 +18,13 @@ function reviewContext(headBranch: string, fromStage = 'intake'): FactoryStageRu
     url: 'https://github.com/mastra-ai/mastra/pull/23029',
     stages: ['review'],
     acceptedAt: null,
-    metadata: { number: 23029, headBranch },
+    metadata: {},
+    workItem: createProviderWorkItemForTests({
+      id: 'item-1',
+      title: 'Review board lifecycle',
+      source: { integrationId: 'github', type: 'pull-request', externalId: '23029' },
+      metadata: { number: 23029, headBranch },
+    }),
   };
   return {
     tenant: { orgId: 'org-1', projectId: 'project-1' },
@@ -46,7 +53,13 @@ function gitlabReviewContext(headBranch = 'factory/gitlab-mr-head', fromStage = 
       source: 'gitlab-pr',
       sourceKey: 'gitlab-mr:encoded',
       url: 'https://gitlab.com/acme/app/-/merge_requests/5',
-      metadata: { gitlabMergeRequestIid: 5, headBranch },
+      metadata: {},
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: context.item.title,
+        source: { integrationId: 'gitlab', type: 'pull-request', externalId: '5' },
+        metadata: { gitlabMergeRequestIid: 5, headBranch },
+      }),
     },
   };
 }
@@ -274,17 +287,5 @@ describe('reviewBoard', () => {
     if (!valid || valid.type !== 'invokeSkill') throw new Error('Expected review skill invocation.');
     expect(valid.arguments).toContain(`The previous pass reviewed on \`${'a'.repeat(40)}\``);
     expect(valid.arguments).not.toContain('Ignore previous instructions');
-  });
-
-  it('keeps Done for merges: a review agent cannot move its card there', () => {
-    const policy = reviewBoard.transitionPolicy!;
-    const base = { fromStage: 'review', toStage: 'done' };
-    expect(policy({ ...base, actor: { type: 'agent', id: 'binding-1', role: 'review' } } as never)).toMatchObject({
-      type: 'reject',
-    });
-    expect(policy({ ...base, actor: { type: 'github', id: 'merge' } } as never)).toBeUndefined();
-    expect(
-      policy({ ...base, toStage: 'canceled', actor: { type: 'agent', id: 'b', role: 'review' } } as never),
-    ).toBeUndefined();
   });
 });

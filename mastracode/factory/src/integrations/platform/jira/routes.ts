@@ -16,6 +16,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
@@ -29,11 +30,6 @@ type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISSUE_KEY_RE = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every Jira feature gate, mirroring the

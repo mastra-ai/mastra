@@ -242,9 +242,6 @@ export const ToolkitFilterPane = ({
             Select all
           </Txt>
         </button>
-        <Txt as="span" variant="meta" tone="faint" aria-hidden>
-          ·
-        </Txt>
         <button
           type="button"
           onClick={onClearAll}

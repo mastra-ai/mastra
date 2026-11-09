@@ -7,7 +7,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 
 import type { WorkItemCommentRow } from '../../storage/domains/comments/base.js';
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
-import type { ExternalWorkItemSource, WorkItemRow } from '../../storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource, Card } from '../../storage/domains/work-items/base.js';
 
 /** Slack rejects a `markdown_text` block over this; comments allow 16k. */
 const MAX_SLACK_MARKDOWN_CHARS = 12_000;
@@ -23,7 +23,7 @@ export class SlackFeedPublisher implements WorkItemFeedPublisher {
 
   async publish(
     comment: WorkItemCommentRow,
-    workItem: WorkItemRow,
+    workItem: Card,
   ): Promise<{ source: ExternalWorkItemSource } | null> {
     const source = workItem.externalSource;
     if (source?.integrationId !== this.id || source.type !== 'slack-thread') return null;

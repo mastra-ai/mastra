@@ -101,6 +101,7 @@ import type {
 import type { DuckDBConnection } from '../../db/index';
 import {
   aggregateTimeToFirstFeatures,
+  contextFieldFeatures,
   outcomeFeatures,
   spanAggregateFeatures,
   spanQueryFeatures,
@@ -285,6 +286,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...contextFieldFeatures,
         ...timingFeatures,
         ...outcomeFeatures,
         'trace-query-root-span-fields',
@@ -314,6 +316,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...contextFieldFeatures,
       ...timingFeatures,
       ...outcomeFeatures,
       'trace-query-root-span-fields',
@@ -463,6 +466,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return scoreOps.getScoreById(this.db, scoreId);
+  }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return feedbackOps.getFeedbackById(this.db, feedbackId);
   }
   async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return scoreOps.getScoreAggregate(this.db, args);
