@@ -343,7 +343,16 @@ export async function persistStepUpdate(
       const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
       const guardedWrites = !!workflowsStore?.supportsGuardedSnapshotWrites?.();
       const atomicGuard = guardCancellation && guardedWrites;
-      if (guardCancellation && !atomicGuard && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
+      // Stores without guarded writes get a status read first; a narrower race remains on them.
+      if (repeatedSuspension && !guardedWrites) {
+        const status = await Promise.resolve()
+          .then(() => workflowsStore?.loadWorkflowRunStatus({ workflowName: workflowId, runId }))
+          .catch(() => 'suspended' as const);
+        if (status && status !== 'suspended') {
+          if (status === 'canceled') engine.setLastPersistedStatus(runId, 'canceled');
+          return;
+        }
+      } else if (guardCancellation && !atomicGuard && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
         engine.setLastPersistedStatus(runId, 'canceled');
         return;
       }

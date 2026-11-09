@@ -363,9 +363,17 @@ describe('onStepExecutionStart — durable operation skipping (#24731)', () => {
 });
 
 describe('persistStepUpdate — repeated suspension writes (#29643)', () => {
-  async function setup() {
+  async function setup({ guardedWrites = true }: { guardedWrites?: boolean } = {}) {
     const storage = new InMemoryStore();
     const workflows = (await storage.getStore('workflows'))!;
+    if (!guardedWrites) {
+      // Model a store that upserts snapshots without honoring expectedStatus.
+      vi.spyOn(workflows, 'supportsGuardedSnapshotWrites').mockReturnValue(false);
+      const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+      vi.spyOn(workflows, 'persistWorkflowSnapshot').mockImplementation(({ expectedStatus: _ignored, ...args }) =>
+        persist(args),
+      );
+    }
     const engine = new DefaultExecutionEngine({
       mastra: { getStorage: () => storage } as any,
       options: { validateInputs: false, shouldPersistSnapshot: () => true },
@@ -395,29 +403,35 @@ describe('persistStepUpdate — repeated suspension writes (#29643)', () => {
     expect((await load())!.timestamp).toBe(first);
   });
 
-  it('does not reset a suspension a resume has claimed', async () => {
-    const { engine, workflows, write, load } = await setup();
-    await write('suspended');
-    await workflows.updateWorkflowState({
-      workflowName: 'wf',
-      runId: 'run-1',
-      opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() },
-    });
-    await write('suspended');
+  it.each([true, false])(
+    'does not reset a suspension a resume has claimed (guarded writes: %s)',
+    async guardedWrites => {
+      const { engine, workflows, write, load } = await setup({ guardedWrites });
+      await write('suspended');
+      await workflows.updateWorkflowState({
+        workflowName: 'wf',
+        runId: 'run-1',
+        opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() },
+      });
+      await write('suspended');
 
-    expect((await load())!.status).toBe('pending');
-    expect(engine.getLastPersistedStatus('run-1')).toBe('suspended');
-  });
+      expect((await load())!.status).toBe('pending');
+      expect(engine.getLastPersistedStatus('run-1')).toBe('suspended');
+    },
+  );
 
-  it('marks the run canceled when a repeated write is refused by a cancellation', async () => {
-    const { engine, workflows, write, load } = await setup();
-    await write('suspended');
-    await workflows.updateWorkflowState({ workflowName: 'wf', runId: 'run-1', opts: { status: 'canceled' } });
-    await write('suspended');
+  it.each([true, false])(
+    'marks the run canceled when a repeated write is refused by a cancellation (guarded writes: %s)',
+    async guardedWrites => {
+      const { engine, workflows, write, load } = await setup({ guardedWrites });
+      await write('suspended');
+      await workflows.updateWorkflowState({ workflowName: 'wf', runId: 'run-1', opts: { status: 'canceled' } });
+      await write('suspended');
 
-    expect((await load())!.status).toBe('canceled');
-    expect(engine.getLastPersistedStatus('run-1')).toBe('canceled');
-  });
+      expect((await load())!.status).toBe('canceled');
+      expect(engine.getLastPersistedStatus('run-1')).toBe('canceled');
+    },
+  );
 
   it('writes a new timestamp for a different suspension', async () => {
     const { write, load } = await setup();
