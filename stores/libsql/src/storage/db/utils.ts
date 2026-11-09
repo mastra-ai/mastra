@@ -161,6 +161,11 @@ export function isTransientNetworkError(error: unknown): boolean {
   return false;
 }
 
+// Diagnostic values must stay finite and bounded even when retry configuration is invalid.
+// Operational retry values below remain unchanged.
+const diagnosticCount = (value: number) =>
+  Number.isFinite(value) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(value))) : 0;
+
 export function createExecuteWriteOperationWithRetry({
   logger,
   maxRetries,
@@ -183,31 +188,36 @@ export function createExecuteWriteOperationWithRetry({
       } catch (error: any) {
         // A superseded run's write: expected after a takeover, and never retryable.
         if (isRunFenceConflictError(error)) throw error;
-        logger.debug(`LibSQLStore: Error caught in retry loop for ${operationDescription}`, {
-          errorType: error.constructor.name,
-          errorCode: error.code,
-          errorMessage: error.message,
-          attempts,
-          maxRetries,
+        logger.debug('LibSQLStore: Write operation failed.', {
+          category: 'write-failure',
+          attempts: diagnosticCount(attempts),
+          maxRetries: diagnosticCount(maxRetries),
         });
 
         if (isLockError(error)) {
           attempts++;
           if (attempts >= maxRetries) {
-            logger.error(
-              `LibSQLStore: Operation failed after ${maxRetries} attempts due to database lock: ${error.message}`,
-              { error, attempts, maxRetries },
-            );
+            logger.error('LibSQLStore: Locked write retry limit reached.', {
+              category: 'write-lock-exhausted',
+              attempts: diagnosticCount(attempts),
+              maxRetries: diagnosticCount(maxRetries),
+            });
             throw error;
           }
-          logger.warn(
-            `LibSQLStore: Attempt ${attempts} failed due to database lock during ${operationDescription}. Retrying in ${backoff}ms...`,
-            { errorMessage: error.message, attempts, backoff, maxRetries },
-          );
+          logger.warn('LibSQLStore: Retrying locked write operation.', {
+            category: 'write-lock-retry',
+            attempts: diagnosticCount(attempts),
+            backoff: diagnosticCount(backoff),
+            maxRetries: diagnosticCount(maxRetries),
+          });
           await new Promise(resolve => setTimeout(resolve, backoff));
           backoff *= 2;
         } else {
-          logger.error(`LibSQLStore: Non-lock error during ${operationDescription}, not retrying`, { error });
+          logger.error('LibSQLStore: Write operation failed without retry.', {
+            category: 'write-non-lock-failure',
+            attempts: diagnosticCount(attempts),
+            maxRetries: diagnosticCount(maxRetries),
+          });
           throw error;
         }
       }
