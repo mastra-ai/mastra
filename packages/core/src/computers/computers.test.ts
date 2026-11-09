@@ -323,6 +323,43 @@ describe('Computers', () => {
     }
   });
 
+  it('handles notification rejection after the acceptance deadline', async () => {
+    vi.useFakeTimers();
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      let rejectAccepted!: (error: Error) => void;
+      const accepted = new Promise<never>((_, reject) => {
+        rejectAccepted = reject;
+      });
+      const agent = {
+        sendNotificationSignal: vi.fn(async () => ({ accepted })),
+      };
+      const mastra = { getAgentById: vi.fn(() => agent), getLogger: vi.fn(() => ({ warn: vi.fn() })) };
+      const agentContext = {
+        agent: { resourceId: 'resource', threadId: 'thread', agentId: 'agent-1' },
+        mastra,
+      } as any;
+      const computers = new Computers({ provider: provider(), secret: 'secret' });
+      const created = await (computers.tools().mastra_workspace_computer_create as any).execute({}, agentContext);
+      const change = computers.control(
+        created.computer.id,
+        { resourceId: 'resource', threadId: 'thread' },
+        { action: 'take' },
+      );
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(change).resolves.toEqual({ holder: 'human', revision: 1, notified: false, reason: 'not-delivered' });
+      rejectAccepted(new Error('late delivery failure'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+      vi.useRealTimers();
+    }
+  });
+
   it('persists request_human control across restart and refuses agent pixel actions', async () => {
     const storage = new InMemoryStore();
     storage.stores.computers = new InMemoryComputersStorage();

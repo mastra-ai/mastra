@@ -300,12 +300,19 @@ describe('websocket proxy', () => {
     const keyDown = Buffer.from([4, 1, 0, 0, 0, 0, 0, 1]);
     const chunk = Buffer.concat(Array.from({ length: 76_800 }, () => keyDown));
     const closed = nextClose(control.ws!);
+    (control.ws! as any)._socket.pause();
 
     control.ws!.send(chunk);
     control.ws!.send(chunk);
     await waitFor(() => resolvers.length === 1);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    resolvers[0]!({ holder: 'human' });
+    await new Promise(resolve => setTimeout(resolve, 20));
 
-    await expect(Promise.race([closed, new Promise<number>(resolve => setTimeout(() => resolve(-1), 50))])).resolves.toBe(1009);
+    expect(upstream.upstreamMessages).toEqual([]);
+    expect(upstream.upstreamSockets.size).toBe(0);
+    (control.ws! as any)._socket.resume();
+    await expect(closed).resolves.toBe(1009);
   });
 
   it('drops serialized relay input that remains queued after the client closes', async () => {

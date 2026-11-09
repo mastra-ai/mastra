@@ -281,6 +281,16 @@ export async function setupComputerStream(
       });
       let clientChain = Promise.resolve();
       let queuedClientBytes = 0;
+      const closeClient = (
+        ws: { close: (code?: number, reason?: string) => void },
+        code?: number,
+        reason?: string,
+      ) => {
+        if (clientClosed) return;
+        clientClosed = true;
+        live.upstream?.terminate();
+        ws.close(code, reason);
+      };
 
       const forwardClient = async (
         payload: Buffer,
@@ -298,7 +308,7 @@ export async function setupComputerStream(
           }
           pendingBytes += frame.byteLength;
           if (pendingBytes > MAX_PENDING_CLIENT_BYTES) {
-            ws.close(1009, 'Message too big');
+            closeClient(ws, 1009, 'Message too big');
             return;
           }
           pending.push(frame);
@@ -309,14 +319,15 @@ export async function setupComputerStream(
         queuedClientBytes += payload.byteLength;
         if (queuedClientBytes > MAX_PENDING_CLIENT_BYTES) {
           queuedClientBytes -= payload.byteLength;
-          ws.close(1009, 'Message too big');
+          closeClient(ws, 1009, 'Message too big');
           return;
         }
         const queued = clientChain.then(() => forwardClient(payload, ws)).finally(() => {
           queuedClientBytes -= payload.byteLength;
         });
         clientChain = queued.catch(error => {
-          ws.close(
+          closeClient(
+            ws,
             error instanceof RfbTooLargeError ? 1009 : error instanceof RfbProtocolError ? 1002 : 1011,
             'invalid RFB input',
           );

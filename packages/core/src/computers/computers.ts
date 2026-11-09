@@ -1140,11 +1140,11 @@ export class Computers implements MastraComputers {
         );
         return result.accepted;
       })();
-      let timeout: number | undefined;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const accepted = await Promise.race([
         delivery,
         new Promise<undefined>(resolve => {
-          timeout = setTimeout(resolve, CONTROL_NOTIFICATION_TIMEOUT_MS);
+          timeout = setTimeout(resolve, CONTROL_NOTIFICATION_TIMEOUT_MS) as unknown as ReturnType<typeof setTimeout>;
         }),
       ]).finally(() => clearTimeout(timeout));
       if (accepted?.action === 'wake' || accepted?.action === 'deliver') return { notified: true };
