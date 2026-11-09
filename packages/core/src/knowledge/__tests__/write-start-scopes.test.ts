@@ -222,3 +222,22 @@ describe('Knowledge write-run start scope lookup', () => {
     expect(calls).toEqual({ lookups: 1, materialize: [] });
   });
 });
+
+describe('Knowledge write-run start with changed declarations', () => {
+  it('sends a scope whose declared description changed to the store, which checks its bounds', async () => {
+    const store = (await new InMemoryStore().getStore('knowledge'))!;
+    await store.init();
+    const runtime = (description: string) =>
+      new KnowledgeScopeRuntime(
+        { 'team:$teamId': { description, children: [{ name: 'internal', description }] } },
+        async () => store,
+        () => {},
+      );
+    await runtime('Teams').materializeScopes(['team:t1'], ['team:t1'], provenance);
+    const calls = counted(store);
+    await runtime('Teams').materializeScopes(['team:t1'], ['team:t1'], provenance);
+    expect(calls.materialize).toEqual([]);
+    await runtime('Every team').materializeScopes(['team:t1'], ['team:t1'], provenance);
+    expect(calls.materialize).toEqual(['team:t1']);
+  });
+});

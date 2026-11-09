@@ -268,7 +268,14 @@ export class KnowledgeScopeRuntime {
     if (!existing) return undefined;
     if (!written.has(address)) {
       if (match.compiled.declaration.pages?.length) return undefined;
-      if (match.compiled.children.some(child => !byAddress.has(`${address}/${child.child!.name}`))) return undefined;
+      // A changed declared description goes to the store, which checks its bounds as it did before.
+      const description = match.concrete?.description ?? match.compiled.declaration.description;
+      if ((existing.description ?? undefined) !== description) return undefined;
+      const stale = match.compiled.children.some(child => {
+        const row = byAddress.get(`${address}/${child.child!.name}`);
+        return !row || (row.description ?? undefined) !== child.declaration.description;
+      });
+      if (stale) return undefined;
     }
     if (!match.compiled.belongsTo) return existing;
     const candidates = this.#belongsToCandidates(match, run.held);
