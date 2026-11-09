@@ -30,6 +30,31 @@ export async function resolveSandboxEnv(
   return { runtime, build, revision, buildRevision };
 }
 
+function warnRefreshFailed(message: string, error: unknown) {
+  console.warn(`[Mastra Factory] ${message}`, {
+    // Storage and decryption errors name no values.
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+/**
+ * `resolveSandboxEnv` for session boot and setup: a failed read (a storage
+ * blip, a value encrypted with a removed key) is logged and yields no Factory
+ * variables, so it can't stop a session from starting. Its empty revision
+ * makes the first command's refresh try again.
+ */
+export async function resolveSandboxEnvOrEmpty(
+  store: Pick<SandboxEnvStore, 'resolve'>,
+  scope: { orgId: string; projectId: string },
+): Promise<SandboxEnv> {
+  try {
+    return await resolveSandboxEnv(store, scope);
+  } catch (error) {
+    warnRefreshFailed('Could not read sandbox environment variables; starting without them', error);
+    return { runtime: {}, build: {}, revision: '', buildRevision: '' };
+  }
+}
+
 /**
  * The template-build fields of a sandbox context. Omitted when the Factory has
  * no Build variables, so the template identity matches one built without them.
@@ -137,11 +162,7 @@ export function attachSandboxEnvRefresh(
     inFlight ??= refresh()
       .catch(error => {
         if (options.onError) options.onError(error);
-        else
-          console.warn('[Mastra Factory] Could not refresh sandbox environment variables; using the last applied', {
-            // Storage and decryption errors name no values.
-            error: error instanceof Error ? error.message : String(error),
-          });
+        else warnRefreshFailed('Could not refresh sandbox environment variables; using the last applied', error);
       })
       .finally(() => {
         inFlight = undefined;

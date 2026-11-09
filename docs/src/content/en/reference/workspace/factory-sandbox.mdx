@@ -258,7 +258,7 @@ Everything Factory knows about the session, passed to `create`, `template` and t
     name: 'buildEnv',
     type: 'Record<string, string>',
     description:
-      "Environment for template builds and setup steps only, never for runtime commands. Keep it out of the template identity and the image. A provider whose builder can't do that may ignore it. Factory sets it from the factory's Build variables.",
+      "Environment for template builds and setup steps only, never for runtime commands. Keep it out of the template identity and the image. A provider whose builder can't do that may ignore it. If you spread the context into a repository template, take this field out of the spread so it doesn't reach the template's own `buildEnv`. Factory sets it from the factory's Build variables.",
     isOptional: true,
   },
   {

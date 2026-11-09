@@ -45,6 +45,7 @@ import {
   attachSandboxEnvRefresh,
   cachedSandboxEnvRevision,
   resolveSandboxEnv,
+  resolveSandboxEnvOrEmpty,
   sandboxBuildContext,
 } from './sandbox/sandbox-env.js';
 import {
@@ -786,9 +787,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       sandboxEnvs && session.factoryProjectId
         ? { orgId: session.orgId, projectId: session.factoryProjectId }
         : undefined;
-    const sandboxEnv = envScope ? await resolveSandboxEnv(sandboxEnvs!, envScope) : undefined;
+    const sandboxEnv = envScope ? await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope) : undefined;
     // Re-read when setup actually runs, which can be long after this request.
-    const setupBuildEnv = async () => (envScope ? (await resolveSandboxEnv(sandboxEnvs!, envScope)).build : undefined);
+    const setupBuildEnv = async () =>
+      envScope ? (await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope)).build : undefined;
     // The session's own link must be part of the environment: it is the
     // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
     // whose link left the environment keeps its single-repository sandbox.

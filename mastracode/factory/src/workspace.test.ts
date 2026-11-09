@@ -3972,6 +3972,27 @@ describe('factory environment sandbox context', () => {
       expect(mocks.runSetupCommand.mock.calls.map(call => call[3])).toEqual([{}, {}]);
     });
 
+    it('still starts the session when the variables cannot be read', async () => {
+      const { sandboxEnvs } = await createFactoryStorageForTests();
+      await sandboxEnvs.set('org-1', 'factory-1', { name: 'PROOF_BUILD', value: 'build-1', appliesTo: 'build' }, 'u');
+      const failing: typeof sandboxEnvs = Object.create(sandboxEnvs);
+      failing.resolve = async () => {
+        throw new Error('Unknown key id: old');
+      };
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { resolver, sandbox } = environmentFixture({ links: twoLinks, sandboxEnvs: failing });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      await boot(resolver);
+
+      expect(sandbox.calls[0]!.ctx).not.toHaveProperty('buildEnv');
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[3])).toEqual([{}, {}]);
+      expect(JSON.stringify(warn.mock.calls)).toContain('Unknown key id');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('build-1');
+      warn.mockRestore();
+    });
+
     it('materializes every repository beneath the root, syncs the others with their own token and sets up once', async () => {
       const { resolver } = environmentFixture({ links: twoLinks });
       addProject({ setupCommand: 'pnpm i' });
