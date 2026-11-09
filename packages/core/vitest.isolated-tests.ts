@@ -46,6 +46,8 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/durable-agent-parallel-tool-restart.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-step-budget-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-usage-detail-counters.test.ts', // reset-modules
+  'src/agent/durable/__tests__/evented-background-tools-redelivery.test.ts', // timers
+  'src/agent/durable/__tests__/evented-tool-approval-redelivery.test.ts', // timers
   'src/agent/durable/__tests__/evented-tool-roundtrip-redelivery.test.ts', // timers
   'src/agent/durable/__tests__/evented-workflow-agent-step-restart.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-workflow-agent-suspend-recovery.test.ts', // reset-modules
@@ -78,6 +80,7 @@ export const isolatedTestFiles = [
   'src/auth/ee/__tests__/capabilities-rbac-binding.test.ts', // env
   'src/auth/ee/__tests__/ee-telemetry.test.ts', // vi.mock,env
   'src/background-tasks/library-mode.test.ts', // env
+  'src/classifier/index.test.ts', // timers
   'src/datasets/__tests__/caller-driven-experiments.test.ts', // vi.mock
   'src/datasets/experiment/__tests__/executor.test.ts', // vi.mock
   'src/datasets/experiment/__tests__/p0-regression.test.ts', // vi.mock
@@ -135,7 +138,10 @@ export const isolatedTestFiles = [
   'src/workflows/__tests__/snapshot-write-amplification.test.ts', // vi.mock
   'src/workflows/__tests__/step-output-type-preservation.test.ts', // env
   'src/workflows/create.test.ts', // env
+  'src/workflows/evented/nested-suspend-loop-redelivery.test.ts', // timers
+  'src/workflows/evented/parallel-suspend-redelivery.test.ts', // timers
   'src/workflows/evented/restart-completed-boundary.test.ts', // reset-modules
+  'src/workflows/evented/test-utils/redelivery-contract.test.ts', // timers
   'src/workflows/fetch-import.test.ts', // global
   'src/workflows/on-start.test.ts', // vi.mock
   'src/workflows/schedule-declaration.test.ts', // env
