@@ -756,9 +756,12 @@ export class Computers implements MastraComputers {
   async runComputerAction<T>(input: ComputerActionInput, fn: () => Promise<T>): Promise<T> {
     if (input.action === 'read') return fn();
     const scope = this.#scope(input.context);
-    if (!scope) return fn();
+    if (!scope) throw new Error(MISSING_IDENTITY);
     const entry = await this.#attachedEntry(scope);
-    if (!entry || entry.ownerResourceId !== scope.resourceId || (entry.sandbox ?? (await entry.ready)).sandboxId !== input.sandboxId) return fn();
+    const sandbox = entry?.sandbox ?? (await entry?.ready);
+    if (!entry || !sandbox || entry.ownerResourceId !== scope.resourceId || sandbox.sandboxId !== input.sandboxId) {
+      throw new Error(NOT_ATTACHED);
+    }
     const run = entry.queue.then(async () => {
       if (input.signal?.aborted) throw input.signal.reason ?? new Error('computer action aborted');
       if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
@@ -778,6 +781,7 @@ export class Computers implements MastraComputers {
       const sandbox = entry?.sandbox ?? (await entry?.ready);
       if (!sandbox || entry?.ownerResourceId !== scope.resourceId) throw new Error(NOT_ATTACHED);
       if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
+      if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
       const workspaceSandbox = sandbox as unknown as WorkspaceSandbox;
       if (!workspaceSandbox.computer) return workspaceSandbox;
       const computer = new Proxy(workspaceSandbox.computer, {
@@ -786,13 +790,16 @@ export class Computers implements MastraComputers {
           if (typeof value !== 'function') return value;
           return (...args: unknown[]) => {
             if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
+            if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
             return Reflect.apply(value, target, args);
           };
         },
       });
       return new Proxy(workspaceSandbox, {
         get(target, property, receiver) {
-          return property === 'computer' ? computer : Reflect.get(target, property, receiver);
+          if (property === 'computer') return computer;
+          if (property === 'id') return sandbox.sandboxId;
+          return Reflect.get(target, property, receiver);
         },
       });
     };

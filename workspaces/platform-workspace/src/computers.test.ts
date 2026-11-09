@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { CONTROL_NOT_ENFORCED } from '@mastra/core/computers';
 import { Mastra } from '@mastra/core/mastra';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryComputersStorage, InMemoryStore } from '@mastra/core/storage';
@@ -866,6 +867,25 @@ describe('control lease', () => {
     screenshotGate.open();
     await expect(inFlight).resolves.toMatchObject({ __workspaceMedia: true, mediaType: 'image/png' });
     expect(backend.actions).toEqual(['screenshot']);
+  });
+
+  it('fails Workspace pixel mutations closed when provider sandbox ids differ and enforcement is pending', async () => {
+    const computers = make();
+    const created = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    computers.registerControlSubscriber({
+      id: 'pending-relay',
+      required: true,
+      async enforce() {
+        return { status: 'retryable', error: 'relay pending' };
+      },
+    });
+    await computers.control(created.computer.id, scope, { action: 'take' });
+    await computers.control(created.computer.id, scope, { action: 'release' });
+
+    await expect(call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).rejects.toThrow(
+      CONTROL_NOT_ENFORCED,
+    );
+    expect(backend.actions).toEqual([]);
   });
 
   it('refuses every hand and lifecycle tool with the exact text without touching the driver', async () => {
