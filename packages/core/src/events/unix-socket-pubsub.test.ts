@@ -1616,6 +1616,22 @@ describe('UnixSocketPubSub', () => {
       expect(release).toMatchObject({ status: 'rejected', reason: new Error('UnixSocketPubSub is closed') });
     });
 
+    it('keeps a live lease after a temp cleaner deletes the process marker', async () => {
+      const pubsub = new UnixSocketPubSub(await socketPath('first.sock'));
+      pubsubs.push(pubsub);
+      await pubsub.acquireLease('thread-key', 'owner', 10_000);
+
+      // macOS removes /tmp files left unmodified for days, under a process that has run that long.
+      const processDirectory = join(tempDir!, 'leases', 'processes');
+      await rm(processDirectory, { recursive: true });
+
+      await expect(pubsub.renewLease('thread-key', 'owner', 10_000)).resolves.toBe(true);
+      await expect(pubsub.getLeaseOwner('thread-key')).resolves.toBe('owner');
+      await expect(readFile(join(processDirectory, `${process.pid}.json`), 'utf8')).resolves.toContain(
+        `"pid":${process.pid}`,
+      );
+    });
+
     it('renews, transfers, and owner-guards release without an unowned gap', async () => {
       const first = new UnixSocketPubSub(await socketPath('first.sock'));
       const second = new UnixSocketPubSub(await socketPath('second.sock'));

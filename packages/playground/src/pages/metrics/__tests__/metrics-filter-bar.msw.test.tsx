@@ -249,9 +249,11 @@ describe('Metrics page filter bar', () => {
       await renderSettledPage('/metrics?period=custom&dateFrom=2026-01-01T12:00:00Z&dateTo=2026-01-06T12:00:00Z');
 
       fireEvent.click(within(getTimeRange()).getByRole('button', { name: /\u2013/ }));
+      fireEvent.change(await screen.findByLabelText('Start time'), { target: { value: '00:00' } });
+      fireEvent.change(screen.getByLabelText('End time'), { target: { value: '23:59' } });
       fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
 
-      // The editor applies its default 12:00 AM – 11:59 PM times to the picked days.
+      // The editor applies the explicitly selected times to the picked days.
       await waitFor(() => expect(new Date(getUrlParams().get('dateTo') ?? '').getHours()).toBe(23));
       const from = new Date(getUrlParams().get('dateFrom') ?? '');
       const to = new Date(getUrlParams().get('dateTo') ?? '');

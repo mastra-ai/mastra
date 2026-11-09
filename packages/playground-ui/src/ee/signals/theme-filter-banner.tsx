@@ -1,15 +1,11 @@
-import type { SignalCatalogEntry } from '@mastra/client-js';
 import { X, Eye } from 'lucide-react';
 import { getSignalColor } from './signal-colors';
 import { signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
-
-function selectionLabel(catalog: readonly SignalCatalogEntry[], selection: ThemeSelection) {
-  return `${signalLabel(catalog, selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;
-}
 
 function filterSummary({
   selections,
@@ -67,13 +63,15 @@ export function ThemeFilterBanner({
     >
       {selections.map((selection, index) => {
         const color = colors[index];
+        const signalTitle = signalLabel(signalCatalog, selection.signalName);
+        const selectionName = selection.kind === 'theme' ? selection.label : 'Noise';
         return (
           <button
             key={selection.signalName}
             aria-label={
               selections.length === 1
                 ? `Clear ${selection.kind} filter`
-                : `Clear filter ${selectionLabel(signalCatalog, selection)}`
+                : `Clear filter ${signalTitle}: ${selectionName}`
             }
             onClick={() => onRemove(selection.signalName)}
             type="button"
@@ -81,7 +79,10 @@ export function ThemeFilterBanner({
           >
             <span aria-hidden="true" style={{ backgroundColor: color }} className="rounded-0.5 size-2" />
             <Txt as="span" variant="column" className="block">
-              {selectionLabel(signalCatalog, selection)}
+              <Metadata>
+                <Metadata.Item>{signalTitle}</Metadata.Item>
+                <Metadata.Item>{selectionName}</Metadata.Item>
+              </Metadata>
             </Txt>
             <X aria-hidden="true" className="size-3.5" />
           </button>

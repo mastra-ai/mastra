@@ -112,6 +112,7 @@ describe('schema 4 core loader', () => {
       MAX_KNOWLEDGE_MOVE_PAGES: 500,
       MAX_KNOWLEDGE_PAGE_DEPTH: 10,
       MAX_KNOWLEDGE_PAGE_LIST_LIMIT: 100,
+      MAX_KNOWLEDGE_PAGE_LINKS: 10_000,
       KnowledgeMoveTooLargeError: Error,
       KnowledgePageDepthError: DepthError,
       KnowledgePageHasChildrenError: Error,
@@ -131,6 +132,6 @@ describe('schema 4 core loader', () => {
       assertKnowledgePageDescriptionWithinBound: () => {},
       assertKnowledgeNoteTextWithinBound: () => {},
     }));
-    await expect(load()).rejects.toThrow(/missing canonicalKnowledgeName,.*MAX_KNOWLEDGE_PAGE_LIST_LIMIT/);
+    await expect(load()).rejects.toThrow(/missing canonicalKnowledgeName,.*MAX_KNOWLEDGE_PAGE_LINKS/);
   });
 });

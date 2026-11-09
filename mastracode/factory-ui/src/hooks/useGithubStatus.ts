@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -11,11 +11,11 @@ import { fetchGithubStatus } from '../ui/domains/workspaces/services/github';
  * consumers read `data`, never `error`. Pass `enabled: false` to gate the
  * request (e.g. until web auth has resolved).
  */
+export function githubStatusQueryOptions(baseUrl: string) {
+  return queryOptions({ queryKey: queryKeys.githubStatus(), queryFn: () => fetchGithubStatus(baseUrl) });
+}
+
 export function useGithubStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.githubStatus(),
-    queryFn: () => fetchGithubStatus(baseUrl),
-    enabled,
-  });
+  return useQuery({ ...githubStatusQueryOptions(baseUrl), enabled });
 }

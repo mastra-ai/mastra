@@ -38,18 +38,15 @@ function AutomationSwitch({
 export function BoardAutomationSettings({
   factoryProjectId,
   autoRunEnabled,
-  autoApprovePlans,
   reviewTestChecksEnabled,
   selfReviewEnabled,
 }: {
   factoryProjectId: string;
   autoRunEnabled: boolean;
-  autoApprovePlans: boolean;
   reviewTestChecksEnabled: boolean;
   selfReviewEnabled: boolean;
 }) {
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
-  const autoApprove = useSetFactoryAutomationMutation(factoryProjectId, 'autoApprovePlans');
   const testChecks = useSetFactoryAutomationMutation(factoryProjectId, 'reviewTestChecksEnabled');
   const selfReview = useSetFactoryAutomationMutation(factoryProjectId, 'selfReviewEnabled');
 
@@ -73,12 +70,6 @@ export function BoardAutomationSettings({
             enabled={autoRunEnabled}
             mutation={autoRun}
             description="Start incoming work automatically."
-          />
-          <AutomationSwitch
-            label="Auto-approve plans"
-            enabled={autoApprovePlans}
-            mutation={autoApprove}
-            description="Continue without waiting for approval."
           />
           <AutomationSwitch
             label="Self-review before pull requests"

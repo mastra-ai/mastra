@@ -105,6 +105,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "zai-org/GLM-5.3": [
       {
         "type": "effort",
@@ -116,21 +122,10 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "zai-org/GLM-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.1-Terminus": [
-      {
-        "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-R1": [
@@ -140,10 +135,9 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
+    "deepseek-ai/DeepSeek-V3.1-Terminus": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-V3.2": [
@@ -157,17 +151,13 @@
         "values": ["high", "max"]
       }
     ],
-    "tencent/Hunyuan-A13B-Instruct": [
+    "deepseek-ai/DeepSeek-V4-Flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "Pro/zai-org/GLM-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
       {
         "type": "toggle"
       }
@@ -179,73 +169,19 @@
         "max": 32768
       }
     ],
+    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
+      {
+        "type": "toggle"
+      }
+    ],
     "Pro/deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.5-9B": [
+    "tencent/Hunyuan-A13B-Instruct": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-32B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.5-4B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.6-27B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-32B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.5-122B-A10B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
       }
     ],
     "Qwen/Qwen3-14B": [
@@ -272,10 +208,27 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-27B": [
+    "Qwen/Qwen3.5-9B": [
       {
         "type": "toggle"
       },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-32B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-32B-Thinking": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -293,6 +246,53 @@
       }
     ],
     "Qwen/Qwen3.5-35B-A3B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-4B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-122B-A10B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.6-27B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-27B": [
       {
         "type": "toggle"
       },

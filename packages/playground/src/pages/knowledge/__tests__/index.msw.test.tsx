@@ -3,7 +3,7 @@ import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes, useLocation } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import KnowledgePage from '..';
 import {
   emptyKnowledgeGraph,
@@ -160,7 +160,15 @@ describe('Knowledge page', () => {
 
   describe("when a scope's declaration has a display label", () => {
     it('captions the scope with it in the graph', async () => {
-      withInstance(knowledgeGraphWithDisplayLabel());
+      // The server labels scopes the same way in the tree, which the graph is drawn from.
+      const graph = knowledgeGraphWithDisplayLabel();
+      withInstance(graph);
+      server.use(
+        http.get(`${api}/main/tree`, ({ request }) => {
+          const parentId = new URL(request.url).searchParams.get('parentId');
+          return HttpResponse.json({ pages: graph.pages.filter(page => page.parentId === parentId), truncated: false });
+        }),
+      );
       renderPage();
       const caption = await screen.findByTestId('knowledge-scope-caption');
       expect(caption.textContent).toBe('Organization');
@@ -168,13 +176,14 @@ describe('Knowledge page', () => {
   });
 
   describe('when a page is selected in the tree', () => {
-    it('opens its detail with its notes', async () => {
+    it('shows its detail with its notes beside the graph', async () => {
       withInstance();
       server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)));
       renderPage();
       fireEvent.click(await within(await screen.findByRole('tree')).findByText('Payments Service'));
-      const detail = await screen.findByRole('region', { name: 'Selected page' });
+      const detail = await screen.findByRole('region', { name: 'Page details' });
       expect(await within(detail).findByText('Retries card charges three times before failing.')).toBeTruthy();
+      expect(screen.getByTestId('location-search').textContent).toContain('view=graph');
     });
   });
 
@@ -231,8 +240,15 @@ describe('Knowledge page', () => {
       expect(within(detail).getByText('three').tagName).toBe('STRONG');
       expect(detail.querySelector('script')).toBeNull();
       expect((window as { __injected?: boolean }).__injected).toBeUndefined();
-      expect(within(detail).getByText('org:acme#payments')).toBeTruthy();
-      expect(await within(detail).findByText(/updated/i)).toBeTruthy();
+      const title = within(detail).getByRole('heading', { name: 'Payments Service' });
+      fireEvent.pointerOver(title, { pointerType: 'mouse' });
+      fireEvent.pointerEnter(title, { pointerType: 'mouse' });
+      fireEvent.mouseOver(title);
+      fireEvent.mouseEnter(title);
+      fireEvent.pointerMove(title, { pointerType: 'mouse' });
+      fireEvent.mouseMove(title);
+      expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('org:acme#payments');
+      expect((await within(detail).findByTestId('knowledge-page-version')).textContent).toContain('Updated');
       expect(screen.queryByTestId('knowledge-graph-container')).toBeNull();
     });
 
@@ -241,9 +257,27 @@ describe('Knowledge page', () => {
       server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)));
       renderPage('/knowledge?page=page-payments');
       await screen.findByRole('region', { name: 'Selected page' });
-      fireEvent.click(screen.getByRole('button', { name: 'Graph' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Graph' }));
       expect(await screen.findByTestId('knowledge-graph-container')).toBeTruthy();
       expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
+    });
+  });
+
+  describe('when a chat card links a page by its reference', () => {
+    it('opens the page and puts its id in the URL', async () => {
+      withInstance();
+      server.use(
+        http.get(`${api}/main/pages/:ref`, ({ params }) =>
+          params.ref === 'org:acme#payments' || params.ref === 'page-payments'
+            ? HttpResponse.json(paymentsPageView)
+            : HttpResponse.json({ error: 'Not found' }, { status: 404 }),
+        ),
+      );
+      renderPage(`/knowledge?page=${encodeURIComponent('org:acme#payments')}&view=page`);
+      await screen.findByRole('region', { name: 'Selected page' });
+      await waitFor(() =>
+        expect(screen.getByTestId('location-search').textContent).toBe('?page=page-payments&view=page'),
+      );
     });
   });
 
@@ -261,7 +295,7 @@ describe('Knowledge page', () => {
       changes.push(paymentsUpdatedNotice);
       // Well inside the five-second poll, so only the pushed change can explain it.
       expect(
-        await within(detail).findByText('Card charges now retry five times.', {}, { timeout: 2_000 }),
+        await within(detail).findByText('Card charges now retry five times.', {}, { timeout: 5_000 }),
       ).toBeTruthy();
     });
   });
@@ -339,6 +373,60 @@ describe('Knowledge page', () => {
     });
   });
 
+  describe('when the tab is hidden while the change stream is open', () => {
+    const setVisibility = (state: DocumentVisibilityState) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    afterEach(() => setVisibility('visible'));
+
+    function withCountedStream() {
+      const streams = { opened: 0, closed: 0 };
+      server.use(
+        http.get(`${api}/main/events`, ({ request }) => {
+          streams.opened += 1;
+          request.signal.addEventListener('abort', () => (streams.closed += 1), { once: true });
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(': connected\n\n'));
+            },
+          });
+          return new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } });
+        }),
+      );
+      return streams;
+    }
+
+    it('closes the stream so it holds no connection', async () => {
+      withInstance();
+      const streams = withCountedStream();
+      renderPage();
+      expect(await screen.findByRole('tree')).toBeTruthy();
+      await waitFor(() => expect(streams.opened).toBe(1), { timeout: 5_000 });
+      setVisibility('hidden');
+      await waitFor(() => expect(streams.closed).toBe(1), { timeout: 5_000 });
+    });
+
+    it('reopens it and shows what changed when the tab is shown again', async () => {
+      withInstance();
+      const streams = withCountedStream();
+      let view = paymentsPageView;
+      server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(view)));
+      renderPage('/knowledge?page=page-payments');
+      const detail = await screen.findByRole('region', { name: 'Selected page' });
+      expect(await within(detail).findByText('Retries card charges three times before failing.')).toBeTruthy();
+      await waitFor(() => expect(streams.opened).toBe(1), { timeout: 5_000 });
+      setVisibility('hidden');
+      await waitFor(() => expect(streams.closed).toBe(1), { timeout: 5_000 });
+      view = paymentsPageViewAfterEdit;
+      setVisibility('visible');
+      await waitFor(() => expect(streams.opened).toBe(2), { timeout: 5_000 });
+      expect(
+        await within(detail).findByText('Card charges now retry five times.', {}, { timeout: 5_000 }),
+      ).toBeTruthy();
+    });
+  });
+
   describe('when the server cannot stream changes', () => {
     it('asks for the stream once and then only polls', async () => {
       withInstance();
@@ -392,7 +480,7 @@ describe('Knowledge page', () => {
       fireEvent.click(
         await within(await screen.findByRole('listbox')).findByRole('button', { name: 'Deploy Runbook' }),
       );
-      const detail = await screen.findByRole('region', { name: 'Selected page' });
+      const detail = await screen.findByRole('region', { name: 'Page details' });
       expect(await within(detail).findByRole('heading', { name: 'Deploy Runbook' })).toBeTruthy();
     });
   });

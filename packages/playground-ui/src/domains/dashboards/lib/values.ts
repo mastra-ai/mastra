@@ -79,6 +79,9 @@ export const valueExprSchema: z.ZodType<ValueExpr> = z.union([
   coalesceSchema,
 ]);
 
+/** A number a view shows, under the name it shows it by: what a Create alert button lists. */
+export type LabelledValue = { label: string; value: ValueExpr };
+
 export const VALUE_FORMATS = ['count', 'usd', 'duration', 'percent', 'score'] as const;
 export const formatSchema = z.enum(VALUE_FORMATS);
 export type ValueFormat = z.infer<typeof formatSchema>;

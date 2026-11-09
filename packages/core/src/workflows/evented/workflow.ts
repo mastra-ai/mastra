@@ -94,7 +94,7 @@ import type {
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
+import { resolveLegacyAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
 import { createStepFromClassifier, createStepFromTool } from '../step-factories';
@@ -272,7 +272,7 @@ export function createStep<
 export function createStep<TStepId extends string, TStepOutput>(
   agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
-    structuredOutput: { schema: TStepOutput };
+    structuredOutput: { schema: PublicSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -602,7 +602,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
-      const agent = resolveRegisteredAgent(params, mastra);
+      const agent = params;
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,
@@ -1961,12 +1961,15 @@ export class EventedRun<
     if (this.#cancelPublished) return;
     this.#cancelPublished = true;
     try {
+      const store = await this.mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await store?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
       await this.mastra?.pubsub.publish('workflows', {
         type: 'workflow.cancel',
         runId: this.runId,
         data: {
           workflowId: this.workflowId,
           runId: this.runId,
+          requestContext: snapshot?.requestContext,
         },
       });
     } catch (err) {

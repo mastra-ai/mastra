@@ -94,6 +94,13 @@ packages:
 - `description`: A short description of the page's content. Used in the HTML `<meta name="description">` tag for SEO purposes.
 - `packages`: An array of npm packages that are relevant to the content on the page. Enables embedded docs, see [EMBEDDED_DOCS.md](../scripts/EMBEDDED_DOCS.md) for more details.
 
+Every listed package ships its own copy of the page, so list only the packages whose users need the page:
+
+- List the package that owns the documented API. Don't add `@mastra/core` when a dedicated package such as `@mastra/mcp` or `@mastra/evals` owns the API.
+- Add `@mastra/core` to broader framework guides, because every Mastra project installs it.
+- On overview pages that compare several adapters, list the shared interface package, not every adapter. Each adapter's own page lists the adapter package.
+- Keep the list to four packages or fewer. `pnpm validate` warns above that.
+
 ### Headings
 
 Headings should be nested by their rank. Headings with an equal or higher rank start a new section, headings with a lower rank start new subsections that are part of the higher-ranked section.

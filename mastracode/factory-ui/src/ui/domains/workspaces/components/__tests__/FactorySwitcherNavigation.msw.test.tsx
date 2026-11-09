@@ -13,9 +13,6 @@ import { factorySwitcherProjects } from './fixtures/factorySwitcher';
 beforeEach(() => {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: factorySwitcherProjects })),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
-      HttpResponse.json({ connections: [] }),
-    ),
   );
 });
 

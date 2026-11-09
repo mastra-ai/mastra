@@ -349,6 +349,43 @@ describe('CachingPubSub', () => {
     });
   });
 
+  describe('publish failures', () => {
+    class RejectingPubSub extends EventEmitterPubSub {
+      override async publish(): Promise<void> {
+        throw new Error('Pubsub transport unavailable');
+      }
+    }
+
+    it('keeps the cached frame, records its index, and rethrows when the transport rejects the publish', async () => {
+      const pubsub = new CachingPubSub(new RejectingPubSub(), cache);
+      const topic = 'rejected-publish';
+
+      await expect(pubsub.publish(topic, { type: 'start', runId: 'run-1', data: {} })).rejects.toThrow(
+        'Pubsub transport unavailable',
+      );
+
+      // The frame stays in the run's log so late subscribers still replay it.
+      const history = await pubsub.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0].index).toBe(0);
+      expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([0]);
+    });
+
+    it('drops recorded indices when the topic is cleared', async () => {
+      const pubsub = new CachingPubSub(new RejectingPubSub(), cache);
+      const topic = 'rejected-publish-clear';
+
+      await expect(pubsub.publish(topic, { type: 'start', runId: 'run-1', data: {} })).rejects.toThrow(
+        'Pubsub transport unavailable',
+      );
+      expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([0]);
+
+      await pubsub.clearTopic(topic);
+
+      expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([]);
+    });
+  });
+
   describe('subscribe', () => {
     it('should subscribe to live events without replay', async () => {
       const topic = 'test-topic';
@@ -841,6 +878,9 @@ describe('CachingPubSub', () => {
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
       expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
+      // No index means the failed append never numbered the frame, so the
+      // transport-rejection set must stay empty.
+      expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([]);
     });
 
     it('numbers and caches frames through a cache that only has the default append', async () => {

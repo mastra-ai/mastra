@@ -577,7 +577,8 @@ describeForAllEngines('Support agent output stream processors', engine => {
       .join('');
     expect(streamed).not.toContain('4111');
     expect((chunks ?? []).some(c => c.type === 'error')).toBe(true);
-    expect(JSON.stringify((await memory.recall(THREAD)).messages)).not.toContain('4111');
+    // The card's digit groups, since a bare '4111' can occur in a saved message's random UUID.
+    expect(JSON.stringify((await memory.recall(THREAD)).messages)).not.toContain('4111 1111');
   });
 
   // Technical: after a processor crash the saved assistant message holds only the error, so

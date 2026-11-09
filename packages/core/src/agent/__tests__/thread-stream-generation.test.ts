@@ -80,7 +80,13 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       await original.registerRun(agent, a.output, options, pubsub, { strict: true, generation: 1 });
       expect(await original.isRunHoldingThreadLease(pubsub, runId, 'generation-thread', 'generation-user')).toBe(true);
       await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
-      expect(await pubsub.getLeaseOwner(key)).toBe(`mastra:thread-lease:${JSON.stringify([runId, 'generation', 2])}`);
+      const successorOwner = await pubsub.getLeaseOwner(key);
+      expect(successorOwner).toBe(`mastra:thread-lease:${JSON.stringify([runId, 'generation', 2])}`);
+      await original.releaseDurableThreadLease(pubsub, runId, 'generation-thread', 'generation-user', 1);
+      expect(await pubsub.getLeaseOwner(key)).toBe(successorOwner);
+      expect(await recovering.renewDurableThreadLease(pubsub, runId, 'generation-thread', 'generation-user', 2)).toBe(
+        true,
+      );
       b.push(start);
       b.push(text('Recovered answer'));
       await vi.waitFor(() => expect(read.some(part => part.type === 'text-delta')).toBe(true));

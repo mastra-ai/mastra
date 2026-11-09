@@ -342,6 +342,13 @@ export interface MastraCodeConfig {
    */
   disableBuiltinTools?: BuiltinToolId[];
   /**
+   * Workspace-relative directory agents write plan files into, overriding the
+   * per-session default (`.mastracode/plans`, or `.artifacts/plans` for Factory
+   * project sessions). Prompts and the plan-mode write guard of the default
+   * workspace use it; a custom `workspace` must apply its own guard.
+   */
+  plansDir?: string;
+  /**
    * Custom storage config instead of auto-detected default, or a pre-built
    * store instance. An instance is used as-is: no connection test and no
    * LibSQL fallback — if the injected store fails, that's a hard error.
@@ -1324,6 +1331,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   };
 
+  const resolveTenantSessionModel = withCredentialTenantPreparation(async (ctx: { requestContext: RequestContext }) => {
+    // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
+    const controller = ctx.requestContext.get('controller') as
+      | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+      | undefined;
+    const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+    return getDynamicModel(ctx, config?.settingsPath, {
+      modeless,
+      defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
+    });
+  });
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -1357,21 +1375,20 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         coAuthor: config?.coAuthor,
         hasSubagents: subagents.length > 0,
         disabledBuiltinTools: config?.disableBuiltinTools,
+        plansDir: config?.plansDir,
+        disabledTools: config?.disabledTools,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: withCredentialTenantPreparation(async ctx => {
-      // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
-      const controller = ctx.requestContext.get('controller') as
-        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
-        | undefined;
-      const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
-      return getDynamicModel(ctx, config?.settingsPath, {
-        modeless,
-        defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
-      });
-    }),
+    // Without a controller session there is no model selection, so getDynamicModel
+    // throws "No model available" before reading any credential. Skip the tenant
+    // check (and its error log) and the host thinking lookup on that path, e.g.
+    // a host reading the agent's model at startup with an empty request context.
+    model: async ctx =>
+      ctx.requestContext.get('controller')
+        ? resolveTenantSessionModel(ctx)
+        : getDynamicModel(ctx, config?.settingsPath, { modeless }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1748,6 +1765,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  // Used when the host passes no `workspace`. Its plan-mode write guard must
+  // allow the same plans directory the prompts tell the agent to write to.
+  const defaultWorkspace = (args: { requestContext: RequestContext; mastra?: Mastra }) =>
+    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir });
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -1797,7 +1818,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ? modelId
         : resolveModel(modelId, { requestContext }),
     gateways: [amazonBedrockGateway, googleVertexGateway, githubCopilotGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
+    workspace: config?.workspace ?? defaultWorkspace,
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
@@ -1922,6 +1943,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         hostScopes: knowledgeHostScopes,
       }),
     observability,
+    // Without local tracing or Mastra Code cloud credentials every exporter above
+    // is disabled, so this Observability records spans but sends them nowhere.
+    observabilityExports: Boolean(observabilityDomain || cloudObservabilityConfig),
     memory,
     knowledge,
     knowledgeKey,
@@ -2276,7 +2300,9 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
-    observability: base.observability,
+    // Only hand over an Observability that exports somewhere. A disabled one would
+    // stop the host from wiring its own, e.g. the platform deploy's exporter.
+    ...(base.observabilityExports ? { observability: base.observability } : {}),
     ...(backgroundToolsEnabled
       ? {
           backgroundTasks: {

@@ -529,6 +529,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getScoreById(...args);
   }
 
+  async getFeedbackById(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackById']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackById']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackById(...args);
+  }
+
   async getScoreAggregate(
     ...args: Parameters<ObservabilityStoreImpl['getScoreAggregate']>
   ): ReturnType<ObservabilityStoreImpl['getScoreAggregate']> {

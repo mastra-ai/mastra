@@ -1,5 +1,6 @@
 import { tableIssues, tableOptionsSchema } from '../../lib/table';
 import { defineWidgetKind } from '../../widget-kind';
+import { tableDiscover, tableRequests } from './table-plan';
 import { TableWidget } from './table-widget';
 
 export { tableColumnOptionsSchema, tableOptionsSchema } from '../../lib/table';
@@ -10,5 +11,8 @@ export const tableKind = defineWidgetKind({
   kind: 'table',
   optionsSchema: tableOptionsSchema,
   issues: view => tableIssues(view.columns, view.options, view.queries),
+  partial: true,
+  discover: tableDiscover,
+  requests: tableRequests,
   component: TableWidget,
 });

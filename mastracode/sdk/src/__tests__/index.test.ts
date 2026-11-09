@@ -618,12 +618,14 @@ describe('createMastraCode', () => {
       await createMastraCodeAgentController();
       const agentConfig = agentConstructorMock.mock.calls[0]![0];
       const memory = controllerConstructorMock.mock.calls[0]![0].memory;
-      for (const [callback, resolve] of [
-        [agentConfig.model, getDynamicModel],
-        [agentConfig.goal.judge, getGoalJudgeModel],
-        [memory, memoryResolve],
+      for (const [callback, resolve, needsController] of [
+        [agentConfig.model, getDynamicModel, true],
+        [agentConfig.goal.judge, getGoalJudgeModel, false],
+        [memory, memoryResolve, false],
       ]) {
         const requestContext = new RequestContext();
+        // The main model only runs tenant preparation for a controller session.
+        if (needsController) requestContext.set('controller', { state: {} });
         await callback({ requestContext });
         expect(resolveTenantFromRequestContext(requestContext)).toEqual(tenant);
         expect(resolve).toHaveBeenCalledOnce();
@@ -652,9 +654,33 @@ describe('createMastraCode', () => {
     expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
     expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: undefined });
 
-    await agentConfig.model({ requestContext: new RequestContext() });
+    const withoutSessionLevel = new RequestContext();
+    withoutSessionLevel.set('controller', { state: {} });
+    await agentConfig.model({ requestContext: withoutSessionLevel });
     expect(resolveDefaultThinkingLevel).toHaveBeenCalledOnce();
     expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: 'high' });
+  });
+
+  it('skips tenant preparation and the host thinking default for a model read without a controller session', async () => {
+    const { setCredentialStoreProvider } = await import('../agents/credential-resolver.js');
+    const { getDynamicModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const lookup = vi.fn(async () => undefined);
+    const resolveDefaultThinkingLevel = vi.fn(async () => 'high' as const);
+    vi.mocked(getDynamicModel).mockClear();
+    setCredentialStoreProvider(() => undefined, lookup);
+    try {
+      await createMastraCodeAgentController({ resolveDefaultThinkingLevel });
+      const agentConfig = agentConstructorMock.mock.calls.at(-1)![0];
+
+      await agentConfig.model({ requestContext: new RequestContext() });
+      expect(lookup).not.toHaveBeenCalled();
+      expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
+      expect(getDynamicModel).toHaveBeenCalledOnce();
+      expect(vi.mocked(getDynamicModel).mock.calls[0]![2]).toEqual({ modeless: false });
+    } finally {
+      setCredentialStoreProvider(undefined);
+    }
   });
 
   it.each([
@@ -714,12 +740,29 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toContain('background-work-signals');
   });
 
-  it('forwards observability to the server-owned Mastra', async () => {
+  it('forwards observability to the server-owned Mastra when it exports somewhere', async () => {
     const { prepareAgentControllerMount } = await import('../index.js');
+    vi.stubEnv('MASTRACODE_CLOUD_ACCESS_TOKEN', 'mastracode-token');
 
-    const prepared = await prepareAgentControllerMount();
+    try {
+      const prepared = await prepareAgentControllerMount();
+      expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 
-    expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+  it('leaves observability to the host when Mastra Code has nowhere to export', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+    vi.stubEnv('MASTRACODE_CLOUD_ACCESS_TOKEN', '');
+
+    try {
+      const prepared = await prepareAgentControllerMount();
+      expect(prepared.base.observabilityExports).toBe(false);
+      expect(prepared.mastraArgs).not.toHaveProperty('observability');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('configures server-owned background tasks only when enabled', async () => {
@@ -770,6 +813,29 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.gateways?.[3]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
+
+  it('forwards plansDir to the instruction and default workspace callbacks', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ plansDir: '.artifacts/plans' });
+
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(
+        ([config]) =>
+          config as {
+            instructions?: (ctx: { requestContext: { get(key: string): unknown } }) => Promise<string>;
+            workspace?: (ctx: { requestContext: { get(key: string): unknown } }) => unknown;
+          },
+      )
+      .find(config => typeof config.instructions === 'function');
+    if (!agentConfig?.instructions) throw new Error('Expected code agent instructions');
+    const requestContext = { get: () => undefined };
+    await agentConfig.instructions({ requestContext });
+    expect(getDynamicInstructionsMock).toHaveBeenCalledWith(expect.objectContaining({ plansDir: '.artifacts/plans' }));
+
+    const workspace = controllerConstructorMock.mock.calls[0]![0].workspace as (ctx: unknown) => unknown;
+    await workspace({ requestContext });
+    expect(getDynamicWorkspaceMock).toHaveBeenCalledWith(expect.objectContaining({ plansDir: '.artifacts/plans' }));
+  });
 
   it('passes configured co-author identity into the agent instruction callback', async () => {
     const { createMastraCode } = await import('../index.js');

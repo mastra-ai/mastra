@@ -9,7 +9,9 @@ import {
   DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
+  emitAbortEvent,
   emitChunkEvent,
+  emitErrorEvent,
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
@@ -34,16 +36,22 @@ import type {
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
+import type { Mastra } from '@mastra/core/mastra';
 import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
+import type { RunFence } from '@mastra/core/storage';
 import { ChunkFrom } from '@mastra/core/stream';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
+import { RESUME_CLAIM_DISPATCH_LEASE_MS } from '../durable-event-payload';
 import { init } from '../index';
 import { agentLoopTermination, generationUsage } from '../observability-compat';
+import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
+import type { InngestWorkflow } from '../workflow';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
 // persisted so a finished run's snapshot replaces its stale suspended one and
@@ -102,6 +110,8 @@ export interface InngestDurableAgenticWorkflowOptions {
  * Iteration state schema - extends base with observability fields.
  */
 const iterationStateSchema = baseIterationStateSchema.extend({
+  // This loop threads step records through the iteration payload
+  accumulatedSteps: z.array(z.any()),
   // Fallback model list; the shared base state update does not carry it
   modelList: z.array(modelListEntrySchema).optional(),
   // Observability - exported span data for agent run
@@ -143,7 +153,87 @@ export const InngestDurableStepIds = {
   AGENTIC_LOOP: `${INNGEST_ENGINE_PREFIX}:${DurableStepIds.AGENTIC_LOOP}`,
 } as const;
 
+/** Run ownership key of the claim an InngestAgent resume holds on the loop run. */
+export const resumeClaimKey = (runId: string) => `${InngestDurableStepIds.AGENTIC_LOOP}:resume-claim:${runId}`;
+
+/**
+ * The store a resume claim lives in. A claim needs an atomic status change and a lease, so a
+ * claim whose resume died can be taken over; without both, resumes are not claimed at all.
+ */
+export async function resumeClaimStore(mastra: Mastra | undefined) {
+  const store = await mastra?.getStorage()?.getStore('workflows');
+  if (!store?.supportsConcurrentUpdates?.()) return undefined;
+  const fencing = await Promise.resolve()
+    .then(() => store.supportsRunFencing())
+    .catch(() => false);
+  return fencing ? store : undefined;
+}
+
+export const setLoopStatus = (
+  store: NonNullable<Awaited<ReturnType<typeof resumeClaimStore>>>,
+  runId: string,
+  status: WorkflowRunState['status'],
+  expectedStatus: WorkflowRunState['status'],
+) =>
+  store.updateWorkflowState({
+    workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+    runId,
+    opts: { status, expectedStatus },
+  });
+
+/**
+ * Ends a resumed segment Inngest failed or cancelled, which never reaches the finalize step that
+ * would: marks the run failed or canceled, ends its stream and releases its claim. The run is not
+ * parked again, since a nested segment Inngest did not cancel can still be running its tools.
+ */
+function createResumeClaimReleaseFunction(inngest: Inngest, workflow: InngestWorkflow) {
+  const loopEvent = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
+  return inngest.createFunction(
+    {
+      id: `${loopEvent}.resume-claim-release`,
+      triggers: [
+        { event: 'inngest/function.failed', if: `event.data.event.name == '${loopEvent}'` },
+        { event: 'inngest/function.cancelled', if: `event.data.event.name == '${loopEvent}'` },
+      ],
+    },
+    async ({ event }) => {
+      const original = (event.data as { event?: { data?: Record<string, any> } }).event?.data;
+      const claim: RunFence | undefined = original?.resume?.claim;
+      const mastra = workflow.mastra;
+      const store = await resumeClaimStore(mastra);
+      if (!original?.runId || !claim || !store) return;
+      // Fails once finalize released the claim or a later resume took it over. A renewed claim also
+      // keeps a takeover out until this release is done.
+      const held = await store.renewRunOwnership({ ...claim, leaseMs: RESUME_CLAIM_DISPATCH_LEASE_MS });
+      if (!held.renewed) return;
+      const cancelled = event.name === 'inngest/function.cancelled';
+      await setLoopStatus(store, original.runId, cancelled ? 'canceled' : 'failed', 'running');
+      const defaultPubsub = new InngestPubSub(inngest, workflow.id, mastra?.getLogger?.());
+      const pubsub = workflow.__getPubsubFactory()?.(defaultPubsub) ?? defaultPubsub;
+      try {
+        if (cancelled) {
+          await emitAbortEvent(pubsub, original.runId, { steps: [], text: '' });
+        } else {
+          const message = (event.data as { error?: { message?: string } }).error?.message;
+          await emitErrorEvent(pubsub, original.runId, new Error(message ?? 'The resumed agent run failed.'));
+        }
+      } catch (error) {
+        mastra?.getLogger?.()?.warn?.(`[InngestAgent] run ${original.runId} failed to publish its end`, error);
+      }
+      await store.releaseRunOwnership(claim);
+    },
+  );
+}
+
 export function createInngestDurableAgenticWorkflow(options: InngestDurableAgenticWorkflowOptions) {
+  const workflow = createAgenticLoopWorkflow(options);
+  // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
+  const inngestWorkflow = workflow as unknown as InngestWorkflow;
+  inngestWorkflow.__addHostFunctions([createResumeClaimReleaseFunction(options.inngest, inngestWorkflow)]);
+  return workflow;
+}
+
+function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions) {
   const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS, retries } = options;
   const { createWorkflow } = init(inngest);
 
@@ -394,9 +484,15 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // bail() from a delegation hook is a hard stop. The flag travels on
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
+        // The stop cause travels on the state, so the final step classifies the run on a worker
+        // that never held this registry entry. The registry copy is the final step's fallback.
+        const recordStopCause = (cause: NonNullable<IterationState['tracingStopCause']>) => {
+          state.tracingStopCause = cause;
+          if (tracingRegistry) tracingRegistry.tracingStopCause = cause;
+        };
+
         if (state.delegationBailed) {
-          if (tracingRegistry)
-            tracingRegistry.tracingStopCause = state.lastStepResult?.isContinued ? 'delegation' : 'model_finished';
+          recordStopCause(state.lastStepResult?.isContinued ? 'delegation' : 'model_finished');
           await emitStepFinish(false);
           return false;
         }
@@ -408,9 +504,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
-          if (tracingRegistry) {
-            tracingRegistry.tracingStopCause = shouldContinue ? 'max_steps' : 'model_finished';
-          }
+          recordStopCause(shouldContinue ? 'max_steps' : 'model_finished');
           await emitStepFinish(false);
           return false;
         }
@@ -453,7 +547,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return conditions.some(Boolean);
         });
 
-        if (stopped && tracingRegistry) tracingRegistry.tracingStopCause = 'stop_condition';
+        if (stopped) recordStopCause('stop_condition');
         await emitStepFinish(!stopped);
         return !stopped;
       })
@@ -486,6 +580,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             requestContext,
             tracingContext,
             logger: mastra?.getLogger?.(),
+            messageId: state.messageId,
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,
@@ -499,6 +594,16 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           }
 
           const tripwire = finishResult.tripwire;
+          if (pubsub && !tripwire) {
+            for (const chunk of finishResult.structuredOutputChunks ?? []) {
+              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+            }
+          }
+          if (pubsub) {
+            for (const chunk of finishResult.outputResultChunks ?? []) {
+              await emitChunkEvent(pubsub, state.runId, chunk, true);
+            }
+          }
           if (tripwire && pubsub) {
             await emitChunkEvent(pubsub, state.runId, {
               type: 'tripwire',
@@ -506,11 +611,6 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               from: ChunkFrom.AGENT,
               payload: tripwire,
             });
-          }
-          if (pubsub && !tripwire) {
-            for (const chunk of finishResult.structuredOutputChunks ?? []) {
-              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
-            }
           }
 
           // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a
@@ -562,6 +662,28 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             ...(completionClock ? { completionStartTime: new Date(completionClock) } : {}),
             ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
           };
+          // The state carries the facts across workers; the registry is the fallback for
+          // runs whose snapshots predate those fields.
+          const finishReason = finalOutput.stepResult?.reason;
+          const stopCause = state.tracingStopCause ?? registry?.tracingStopCause;
+          const recordedTermination = state.tracingTermination ?? registry?.tracingTermination;
+          if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
+            mastra
+              ?.getLogger?.()
+              ?.warn?.(
+                `[InngestDurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
+              );
+          }
+          const termination =
+            ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
+              ? recordedTermination
+              : agentLoopTermination({
+                  stopCause,
+                  delegationFailure: state.tracingDelegationFailure ?? registry?.tracingDelegationFailure,
+                  finishReason,
+                  tripwire: tripwire ?? state.lastStepResult?.tripwire,
+                  maxSteps: state.options?.maxSteps ?? maxSteps,
+                });
           if (state.modelSpanData) {
             const modelSpan =
               registry?.resumeModelSpan ??
@@ -578,15 +700,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             );
             const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
             modelSpan?.createTracker()?.endGeneration({
-              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
-                ? registry.tracingTermination
-                : agentLoopTermination({
-                    stopCause: registry?.tracingStopCause,
-                    delegationFailure: registry?.tracingDelegationFailure,
-                    finishReason: finalOutput.stepResult?.reason,
-                    tripwire,
-                    maxSteps: state.options?.maxSteps ?? maxSteps,
-                  })),
+              ...termination,
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
@@ -606,15 +720,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               registry?.agentSpan ??
               observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
-              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
-                ? registry.tracingTermination
-                : agentLoopTermination({
-                    stopCause: registry?.tracingStopCause,
-                    delegationFailure: registry?.tracingDelegationFailure,
-                    finishReason: finalOutput.stepResult?.reason,
-                    tripwire,
-                    maxSteps: state.options?.maxSteps ?? maxSteps,
-                  })),
+              ...termination,
               output: { text: finalText },
               ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
             });

@@ -1,5 +1,512 @@
 # mastra
 
+## 1.39.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/deployer@1.83.0-alpha.2
+  - @mastra/core@1.83.0-alpha.2
+
+## 1.39.0-alpha.1
+
+### Patch Changes
+
+- Added the Factory board reset route (`POST /web/factory/projects/:id/boards/:boardKey/reset`) to `mastra api`. ([#29317](https://github.com/mastra-ai/mastra/pull/29317))
+
+- Improved `mastra auth login` in agents, CI, and other non-interactive shells. It now explains right away how to authenticate there (sign in once in your own terminal, or set `MASTRA_API_TOKEN` and `MASTRA_ORG_ID`), and exits with an error instead of reporting success when browser sign-in doesn't complete. If `MASTRA_API_TOKEN` is already set there, it skips browser sign-in, and exits with an error if the token can't be verified or no organization is selected. ([#29585](https://github.com/mastra-ai/mastra/pull/29585))
+
+- Factory sidebar groups with many sessions now reveal 20 more at a time instead of rendering every hidden session at once, so expanding a long group no longer stalls the page. "Show less" stays available while more sessions remain hidden, and the open session stays visible. ([#29613](https://github.com/mastra-ai/mastra/pull/29613))
+
+- Fixed `mastra api` commands exiting with code 1 after a successful request when the output was piped to a command that exits early, such as `mastra api tool execute ... | head`. The exit code now reflects whether the request succeeded, so scripts and agents no longer treat successful calls as failures. ([#29579](https://github.com/mastra-ai/mastra/pull/29579))
+
+- Added `on` and `allowWorkingPhase` to `mastra api factory intake-route create` and `update`, and allowed `event.type` and `event.reason` in route conditions. Both are fields of the JSON body: ([#29353](https://github.com/mastra-ai/mastra/pull/29353))
+
+  ```bash
+  # Send reopened issues to Triage by editing the default reopen route.
+  PROJECT_ID=your-project-id
+  ROUTE_ID=your-reopen-route-id
+  mastra api factory intake-route update "$PROJECT_ID" "$ROUTE_ID" '{"target":{"boardKey":"work","phaseKey":"triage"},"allowWorkingPhase":true,"expectedRevision":1}'
+  ```
+
+- Factory opens faster. When you open a page, the web UI now starts what it needs at the same time as the sign-in check: your Factories, the sidebar's sessions, boards and work items, the board's intake settings and connection status, and the page's own code. It no longer waits for each step to finish before starting the next. ([#29434](https://github.com/mastra-ai/mastra/pull/29434))
+
+- Improved session opening: the composer appears immediately and keeps typed drafts while history loads. The workspace panel opens on wide screens with inline skeletons, and the loading animation stays within the conversation. If a session fails to load, Retry appears inside the conversation and the draft is kept. ([#29593](https://github.com/mastra-ai/mastra/pull/29593))
+
+- Added `GET /observability/feedback/:feedbackId`. The endpoint returns `{ feedback: record | null }` and uses the existing observability authorization. Registered the route in the generated API CLI metadata. ([#29529](https://github.com/mastra-ai/mastra/pull/29529))
+
+  Single-feedback reads include the same optional author details as the list endpoint. Author lookup failures do not prevent reading feedback. Older Core stores without single-feedback reads return HTTP 501.
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`d076f44`](https://github.com/mastra-ai/mastra/commit/d076f44bd73688f85b4f9a94500feabeaef378b0), [`d076f44`](https://github.com/mastra-ai/mastra/commit/d076f44bd73688f85b4f9a94500feabeaef378b0), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`da7549b`](https://github.com/mastra-ai/mastra/commit/da7549b7418f516626ec5b792273254bf721f874), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`90e981b`](https://github.com/mastra-ai/mastra/commit/90e981b6e27fd877206a657572f0424fa0d32dfe), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+  - @mastra/deployer@1.83.0-alpha.1
+
+## 1.39.0-alpha.0
+
+### Minor Changes
+
+- Include the required traceId in the score-create CLI help example. ([#29287](https://github.com/mastra-ai/mastra/pull/29287))
+
+- Added the optional `contextMode` argument to score creation. ([#29289](https://github.com/mastra-ai/mastra/pull/29289))
+
+  ```bash
+  mastra api score create '{"contextMode":"resolve","score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}'
+  ```
+
+### Patch Changes
+
+- Fixed Studio dictation replacing your edits: text typed into the chat composer after dictating no longer snaps back to the dictated text. ([#29310](https://github.com/mastra-ai/mastra/pull/29310))
+
+- Studio shows metadata such as dataset versions, experiment details, trace rows, and connection details as separate fields instead of joining them with `·` or `—` separators. Tooltips and status messages read as plain sentences. ([#29312](https://github.com/mastra-ai/mastra/pull/29312))
+
+- Added annotations to Studio and Factory chat, so you can point the agent at parts of a reply and comment on them. ([#29310](https://github.com/mastra-ai/mastra/pull/29310))
+
+  - Select text in a message and choose **Add to chat**, or press Tab to reach it from the keyboard.
+  - The passage gets a numbered bubble that stays with the text as you scroll. Select the bubble to comment on the passage or remove it.
+  - The composer counts what you added, for example **2 annotations**. Open the count to jump to a passage.
+  - When you send, the agent receives a numbered list of the passages, each quoted with its comment, ahead of what you typed. You can send annotations without typing anything.
+  - If a message fails to send, its annotations come back.
+
+- Fixed new projects getting an organization (v2) Gateway key, which broke Studio threads with `Gateway API error 404`. New projects now get a Gateway project key, so Studio memory and threads work again. ([#29369](https://github.com/mastra-ai/mastra/pull/29369))
+
+- Fixed CLI sign-in when the terminal runs on another machine (SSH, containers, cloud dev boxes). The CLI now always prints the sign-in link, and if the browser can't reach the CLI after you sign in, you can paste the page's URL into the terminal to finish. ([#29182](https://github.com/mastra-ai/mastra/pull/29182))
+
+- MCP Apps in Studio chat can now hand context to the agent. Studio keeps the latest context from each app and adds it to your next message only, as a clearly marked block of untrusted app data. The context never reaches the agent's instructions, so an app cannot give the model orders with system-level authority, and you can see what the app shared in the chat. For example, a dashboard drilldown passes the exact filters you clicked and posts a short message. If the message fails to send, the context is kept for the retry. ([#29321](https://github.com/mastra-ai/mastra/pull/29321))
+
+- Factory chats now show how a tool call failed and what it reported: ([#29314](https://github.com/mastra-ai/mastra/pull/29314))
+
+  - A failed command's row shows how it ended: `exit N`, `killed`, `timed out`, or `error` when the sandbox could not run it. Its output keeps everything it printed and ends with the exit code, plus the full error when the command could not run. Before, a command that printed something before failing showed only that output.
+  - Failed results are shown in red, and results are no longer cut off at 800 characters.
+  - A successful file edit shows what the edit reported, such as diagnostics, next to the change.
+  - While a command runs, you can scroll up through its output without it jumping back to the latest line on every update.
+
+- Updated the Factory API metadata so `mastra api` describes the linked repositories that the Factory project list now returns with each project. ([#29322](https://github.com/mastra-ai/mastra/pull/29322))
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`eaa3b5c`](https://github.com/mastra-ai/mastra/commit/eaa3b5ce1ea71e484666eb096a0db8b96bfd2c0b), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`52af646`](https://github.com/mastra-ai/mastra/commit/52af6465245b1d09c520be19fff88ba34a12e0e4), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`742b37d`](https://github.com/mastra-ai/mastra/commit/742b37dc32d863a116821acf92c07a26d2b926fc), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6)]:
+  - @mastra/core@1.83.0-alpha.0
+  - @mastra/deployer@1.83.0-alpha.0
+
+## 1.38.0
+
+### Minor Changes
+
+- Added `mastra api factory intake-route` commands to list, get, create, update, delete and reorder a Factory project's intake routes. ([#29109](https://github.com/mastra-ai/mastra/pull/29109))
+
+  ```sh
+  mastra api factory intake-route create <project-id> '{"name":"Trusted to Triage","when":{"operator":"AND","conditions":[{"field":"author.trusted","operator":"equals","value":true}]},"target":{"boardKey":"work","phaseKey":"triage"}}'
+  mastra api factory intake-route reorder <project-id> '{"ids":["<route-id>","<route-id>"]}'
+  ```
+
+- Added `mastra api factory skills` to list Factory skills, plus `mastra api factory skill update` and `mastra api factory skill revert` to save or remove a Factory project's edit to a skill. Only organization admins can edit skills. ([#29042](https://github.com/mastra-ai/mastra/pull/29042))
+
+  ```sh
+  mastra api factory skills '{"projectId":"<project-id>"}'
+  mastra api factory skill update <project-id> factory-plan '{"content":"---\nname: factory-plan\ndescription: Our planning rules\n---\n\n# Plan\n"}'
+  mastra api factory skill revert <project-id> factory-plan
+  ```
+
+- Added a Knowledge page to Mastra Studio that browses a Knowledge instance registered on the server. It shows every scope and page as a tree beside either a graph of the pages or a full page view: the page's markdown body, path, version, child pages, the pages that mention it, its notes and recent activity. The tree loads each level as it is opened, so every page is reachable. It searches pages and notes, and `?page=` links open a page directly. It follows the server's change stream, so pages and edits agents write show up as they happen; against a server that can't stream changes it refreshes every few seconds instead. On narrow screens the same toggle also offers the tree. ([#29069](https://github.com/mastra-ai/mastra/pull/29069))
+
+  The page needs the Knowledge routes, which are not served by default. Register them on your Mastra instance:
+
+  ```ts
+  import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
+
+  new Mastra({
+    server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
+  });
+  ```
+
+  Until then the page explains how to enable them.
+
+### Patch Changes
+
+- `mastra deploy`, `mastra studio deploy`, and `mastra server deploy` now preselect "Create new project" in the project picker unless exactly one existing project matches your project name or slug. Before, the picker preselected the first existing project, so pressing Enter on a new project deployed over an unrelated one. When exactly one project matches, that project is still preselected. ([#29220](https://github.com/mastra-ai/mastra/pull/29220))
+
+- Fixed `mastra dev --root <dir>` failing with `ENOENT ... .mastra/.build/entry-0.mjs` when the current directory has no `.mastra` folder. Dev pre-bundle output now goes to `<dir>/.mastra/.build` instead of the current working directory, so dev servers started with different `--root` values no longer overwrite each other's files. ([#29156](https://github.com/mastra-ai/mastra/pull/29156))
+
+- The Knowledge page works again on the page store. It shows the project's Knowledge as a page tree beside either the graph or a full page view (markdown body, child pages, mentions, notes and activity), the same explorer Studio uses. Scope circles are captioned with their declaration's `displayLabel` when one is set, with the address's parameters filled in (`"$orgId policy"` shows as "acme policy"). The tree loads each level as it is opened, so every page is reachable, not just the graph's first 200. The graph also draws access grants between scopes (for example from a role scope to the policy scope it can read), naming the role on hover, for the principal scopes the member can read. Edits agents make show up without a reload: the page follows a new change stream (`GET /web/factory/projects/:id/knowledge/events`) and refreshes as writes land, falling back to a refresh every few seconds when the stream is unavailable. Members see their organization's and the project's pages, never another project's or a session's. The deploying app's Knowledge must declare `project:$projectId` scopes (as Factory session runs already need); without them the page reports a configuration error instead of guessing what to show. ([#28362](https://github.com/mastra-ai/mastra/pull/28362))
+
+- The Knowledge explorer now turns `[[links]]` in page bodies into links. A link such as `[[docs:mastra#workflows/suspend-and-resume]]` shows the target page's name and opens that page when clicked; a link to a page that isn't loaded shows as quiet, unlinked text. Links inside code are left as written. ([#29214](https://github.com/mastra-ai/mastra/pull/29214))
+
+  The graph also draws these body links as thin green lines between pages, with a "Linked in page body" legend row, so you can see how pages reference each other alongside parent → child lines and note mentions.
+
+  `MarkdownRenderer` accepts optional `remarkPlugins` and `components` props, added after its built-in ones, so a host can render custom syntax without losing the renderer's escaping.
+
+  A host supplies the span: `remarkKnowledgeLinks` marks each `[[ref]]` as a span carrying the ref under `KNOWLEDGE_REF_PROPERTY`, and `knowledgePageRefIndex(pages)` resolves it against the pages the host has loaded.
+
+  ```tsx
+  import { knowledgePageRefIndex } from '@mastra/playground-ui/domains/knowledge/lib/pageRefs';
+  import {
+    KNOWLEDGE_REF_PROPERTY,
+    remarkKnowledgeLinks,
+  } from '@mastra/playground-ui/domains/knowledge/lib/remarkKnowledgeLinks';
+
+  const index = knowledgePageRefIndex(pages);
+  const RefSpan = ({ node, children }) => {
+    const ref = node?.properties?.[KNOWLEDGE_REF_PROPERTY];
+    const target = typeof ref === 'string' ? index.resolve(ref) : undefined;
+    return target ? <a href={`#${target.id}`}>{target.name}</a> : <span>{children}</span>;
+  };
+
+  <MarkdownRenderer remarkPlugins={[remarkKnowledgeLinks]} components={{ span: RefSpan }}>
+    {page.body}
+  </MarkdownRenderer>;
+  ```
+
+- Knowledge page references in Studio chat (`[[ref]]` and addresses like `docs:mastra#guides/memory`) are now links, and hovering one shows the page's name, address and child count. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Pinned Knowledge now shows in chat as a card instead of raw `{id: …}` text. A snapshot reads "Pinned knowledge · N pages" and lists each pinned page by name and scope, with the text the agent was given behind a toggle. A delta lists the pages added (+), changed (~) and removed (−) since. A `[[Page Name]]` in a Knowledge note links to that page; a name that no longer resolves shows as plain text. ([#28942](https://github.com/mastra-ai/mastra/pull/28942))
+
+  Knowledge page links go to Studio's Knowledge page by default. A host with its own Knowledge route wraps chat in `KnowledgeLinksProvider` to point them there:
+
+  ```tsx
+  import { KnowledgeLinksProvider } from '@mastra/playground-ui/domains/chat/knowledge';
+
+  <KnowledgeLinksProvider pageHref={pageId => `/my-app/knowledge?page=${encodeURIComponent(pageId)}`}>
+    <Chat />
+  </KnowledgeLinksProvider>;
+  ```
+
+- The Knowledge explorer no longer lays its graph out again each time it re-renders: pages built from the tree's query results are kept while they hold the same pages. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws every child of the focused page as a labelled circle again, up to 48, and staggers them over a few rows so they all sit within reach of the centre at a readable zoom. When the graph is too big to fit, the view stays centred on the focused page and crops the edge. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's Back button is now a floating icon button in the graph's top right corner, with a solid background, a pointer cursor and a hover state, and shows disabled when there is nothing to go back to. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge explorer has a Back button that returns to the page you focused before, one step at a time through the pages you clicked. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph dots are larger (20px, 28px with a link count) and have an 8px hover and click margin around them, so far pages are easier to see and hit. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph circles now fit their text: smaller type and two lines in a crowded circle, words are never broken mid-way (a word too wide for the circle ends in an ellipsis, and the full name stays in the tooltip), circles at one level share a size, the kind label stays on one line beside its icon ("Parent" in full), and the link and child-count badges sit outside the circle instead of covering the label. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- A "Link counts" toggle in the Knowledge explorer writes each graph dot's total links in and out inside it. It is off by default. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Pages linked to the focused Knowledge page draw as the legend's "Page in another branch" grey, grown into a named circle, with no "Page" caption and a name that reads on the fill. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend lists "Page in another branch" whenever a page is drawn in that grey, including the link-end circles around a focused page, not only far dots. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph view now loads its children into the graph, linked to it, including children the initial graph didn't load. Up to 24 are added for each focused page. The rest are counted in a "+N more pages … not drawn" line. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now draws every page the focused page links to, and every page whose notes mention it, even when those pages aren't loaded yet. They are fetched by id or `[[ref]]` (up to 20 each way) and drawn as dots close around the focus with the green and orange link lines; only links past that cap are counted as "more". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The focused page in the Knowledge graph is drawn larger with a heavier border and a halo, and the legend explains it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Pointing at a page in the Knowledge graph no longer rebuilds every circle and line: fading the pages that aren't connected to it is a CSS rule driven by one attribute on the graph and a mark on the few neighbours. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Hovering a page in the Knowledge graph now draws its own content links and notes, fades everything it isn't connected to, and, for a dot, shows its kind, address and how many links go in and out. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Hovering a page in a large Knowledge graph no longer lays the whole graph out again: links fetched for a hover are drawn but not counted, and a page's links are found through an index built once. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- With nothing selected, the Knowledge graph now draws its first root scope exactly like a focused scope: every child is a labelled circle (up to 48, shrinking when crowded) with its own children as dots around it, a "+N more" circle past the cap, and the other root scopes beside it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's first view now fits every drawn page, outer ring included, with a margin and clear of the legend, and never zooms in past what fits. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge graph legend now explains every line style on screen (including hover and direction lines and the faint line to a child dot) and hides the rest; link badges read `→4 14→` (links in, links out) with a spoken label; with link counts on, only dots that have a count grow. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend now names what each dot colour means: the circle the dot hangs under. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph scopes and the pages above the focus stay drawn as labelled circles (at most ten far ones), marked with a layers or up-arrow icon that the legend explains. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws the pages the focused page links to, and the pages that link to it, as named circles like its children instead of bare numbered dots. They sit on a ring close around the focus, kept clear of the lines to its parent and children, with the first ring moved out to make room; links past the cap are still counted as "more". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- On the Knowledge graph, pages in other branches that the focused page links to now sit on a ring beyond its children and their dots, as smaller named circles, instead of crowding in next to the focus. A focused page with no children keeps them close around it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph can show exact link counts from the store for every visible page, and hovering a page fetches its real links, saying how many go to pages that aren't drawn. Hosts without the link routes keep the counts taken from loaded pages. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Clicking a "+N more" circle in the Knowledge graph now draws the next batch of that page's children, counting down until every child is drawn. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now loads the children of the pages it draws as circles, so their children show as small dots around them instead of dashed placeholders (up to 12 circles; the rest keep the placeholders). ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Refocusing a page in the Knowledge graph no longer moves the view. The pan and zoom stay where you left them, and the view only moves, by just enough, when the page would land off screen. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Knowledge graph tooltips and count badges now have a solid background so they read against the graph, and each tooltip has a tail pointing at its dot. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph keeps the other root pages one link from the centre when the first root's parent is not loaded. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now makes the focused page's parent obvious: its circle is labelled "Parent" with the up icon, a solid cyan line joins it to the focus, and the legend has a row for it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now opens at a zoom where circle names can be read. It draws up to 16 children as full-size circles and counts the rest in a "+N more" circle, and framing never zooms out past 0.7. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now loads like the tree instead of drawing the first 250 pages at once. It starts from the scopes and their first level, lays pages out in rings around the focused page, and draws pages more than one step away as small dots you can hover to name and click to focus. Parents show how many children they have ("281", "1000+") and dots standing in for unloaded children load them on hover or click, with a "+N more" line when not all fit. Runs of three or more memory scopes of the same kind (such as thread scopes) collapse into one dot until clicked. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  Lines between pages from notes and page bodies are off by default: the focused page shows its own links, out and in drawn differently, and each circle counts its hidden links ("↓3 ↑5"). An "All links" button draws every link between the pages shown.
+
+- Focusing a page in the Knowledge graph keeps the current layout while the pages it needs load (with a "Loading pages…" note after 150ms), then moves to the new layout once, so the transition shows instead of animating on stale data. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's view transition now takes 700ms on an ease-in-out curve so the move can be followed (still off under reduced motion), and "Link counts" is on by default. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph hands React Flow the same event handlers on every render, so pointing at a page no longer re-renders every node and line wrapper because of a new function identity. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge graph tooltip now steers clear of neighbouring dots as well as circles, so it no longer covers the pages around the one you hover. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph tooltips now open on the side of the dot that covers the least: not the focused page, the highlighted lines, the legend or the Back button, and always inside the graph. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph tooltips stay readable when the graph is zoomed out, the legend names at most four dot branches, and Back no longer swallows the next selection if the host ignores it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws the pages around a childless focus, and the first children of each root scope when nothing is focused, as labelled circles with their own children as dots, instead of a ring of bare dots. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now glides between views: pages in both the old and new view move and resize into place over 300ms, pages leaving fade out and new ones fade in. People who prefer reduced motion get an instant change. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- In the Knowledge graph view, clicking a page in the sidebar now focuses it in the graph first. Clicking the same page again opens it, the same way clicking a graph node does. The other views still open the page on the first click. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend now reads "Under parent page" or "Under parent scope" for each dot colour, instead of naming the parent; hovering the row names it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Each entry in the `knowledge_list` chat card now links to its page in Studio's Knowledge view, like the `knowledge_search` card does. Scope roots open their scope page, and nested pages open at any depth. Hosts that open pages only by id can leave out the new `refHref` on `KnowledgeLinksProvider`, and the entries stay plain text. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Added `KnowledgePageExplorer`, a Knowledge browser any host can use: search, a page tree, a graph of scopes and pages, and a page view, all on one selection. ([#28361](https://github.com/mastra-ai/mastra/pull/28361))
+
+  - **Graph:** shows parent → child links, mentions between pages, pinned pages and, when the host passes `grants`, which scopes can reach which (role named on hover). The first click selects a page; a second click opens it. A click on empty canvas clears the selection, and dragging the canvas doesn't. Pages already on screen stay put when data refreshes.
+  - **Page view:** the body as markdown (raw HTML is escaped), notes with links for resolved `[[mentions]]`, child pages, the notes that mention the page, and recent activity.
+  - **Tree:** clicking a scope narrows the tree and graph to it; a page selected elsewhere opens its path.
+
+  The host owns the selection and view state and reads through its own routes:
+
+  ```tsx
+  import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+
+  <KnowledgePageExplorer
+    graph={graph} // { pages, edges, pinnedIds, truncated, grants? }
+    source={{ usePage, useSearch, useTreeLevels, useActivity }}
+    selectedPageId={pageId}
+    onSelect={id => setPageId(id)} // null when the selection is cleared
+    view={view}
+    onViewChange={setView}
+  />;
+  ```
+
+  `KnowledgePageTree`, `KnowledgePageDetail` and `KnowledgePageGraph` are exported for hosts that lay these out themselves.
+
+- Fixed Studio's Knowledge page getting stuck on "Loading knowledge…" when Studio was open in other tabs. Each tab kept the Knowledge change stream open, and browsers allow only about six connections per host, so a new tab's requests could wait forever. A tab in the background now closes its stream, and reconnects and refreshes when you come back to it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge tree child counts now say when they were capped. If a scope has more child scopes than the 1,000 the tree looks through for each level, the page gets `childCountCapped: true` and its `childCount` is a lower bound. The Knowledge explorer then shows the count as "1000+" in the tree and in the graph's "pages under" line, instead of a number that's too low. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- A parent in the Knowledge tree now stays collapsed when you collapse it over the selected page. It used to spring back open on the next refresh, so there was no way to close it. Selecting another page under it still opens the path to that page. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge explorer tree is easier to use on large knowledge bases: ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  - Each page with children shows how many sit under it, and only those pages show an expand arrow. Pages with no children no longer show an arrow that vanishes when clicked.
+  - Clicking a page with children opens it, loading its children, and highlights it.
+  - Clicking a page the graph didn't load opens it as a page, instead of selecting it in a graph that can't show it.
+
+- When the Knowledge graph focuses a deep page, the page tree keeps scrolling to its row as the levels above it finish loading, so the row ends up in view instead of below the fold. Scrolling the tree yourself stops it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- When the Knowledge tree follows a page focused in the graph, the row now lands a third of the way down the sidebar instead of against its bottom edge. A row already comfortably in view stays put. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph now scrolls the page tree to its row (opening its ancestors first), instead of leaving the highlighted row out of sight. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge tree's follow-the-focus scroll now checks the element that actually scrolls, so a deep page's row ends up in view once its levels have loaded. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Placeholders in Studio and Factory now read the same everywhere: sentence case with no trailing ellipsis ("Search agents", "Filter traces"). Added a `playground-ui/placeholder-text` lint rule to `@mastra/playground-ui/oxlint` that keeps placeholders this way; it is part of the `recommended` preset. ([#29188](https://github.com/mastra-ai/mastra/pull/29188))
+
+- Updated Factory CLI API response metadata and the bundled board UI to read normalized provider facts while retaining native-card labels and stable card IDs. ([#28961](https://github.com/mastra-ai/mastra/pull/28961))
+
+- Added normalized source facts to Factory cards and the API so boards show provider keys, titles, states, labels, and authors without extra provider lookups. Read source facts from `card.workItem`: provider labels, author, state, and key are no longer on `card.metadata`. ([#28961](https://github.com/mastra-ai/mastra/pull/28961))
+
+  ```ts
+  // Before
+  card.metadata.labels;
+  card.metadata.author;
+
+  // After
+  card.workItem.labels;
+  card.workItem.author;
+  card.workItem.state;
+  card.workItem.key;
+  ```
+
+- Knowledge tool calls in chat now draw as readable cards instead of raw JSON. `knowledge_search` lists its hits, `knowledge_read` shows the page with its markdown body, notes, child pages and the notes that mention it, `knowledge_page` says whether it created, updated, moved or merged a page and shows the new body and version, `knowledge_note` shows the note it added, and `knowledge_pin` names the audience. Each page name links to that page in Studio's Knowledge viewer (`/knowledge?page=<id>&view=page`). Running and failed calls keep the plain tool badge. ([#28931](https://github.com/mastra-ai/mastra/pull/28931))
+
+- Studio chat shows a pinned Knowledge listing (the `list:<pageId>` entry) as a Listing row that links to the page it lists, with its lines on demand, in snapshots and in added, changed and removed updates. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`7c242c5`](https://github.com/mastra-ai/mastra/commit/7c242c55c565e9c447ab74a6f529612f0030f061), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`0b5c4e9`](https://github.com/mastra-ai/mastra/commit/0b5c4e919e34dd9e4ac6975b068cf4688c59ccab), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`1b40564`](https://github.com/mastra-ai/mastra/commit/1b40564c17f019b984070fac52358ff5588c1fff), [`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`c0fba5e`](https://github.com/mastra-ai/mastra/commit/c0fba5ea4d19aad4acc974b101df8cd85b50d7a9), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`501f010`](https://github.com/mastra-ai/mastra/commit/501f010c0c3f21a2f9e6f0c243d6abed220ecfe9), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0
+  - @mastra/deployer@1.82.0
+
+## 1.38.0-alpha.3
+
+### Patch Changes
+
+- The Knowledge explorer now turns `[[links]]` in page bodies into links. A link such as `[[docs:mastra#workflows/suspend-and-resume]]` shows the target page's name and opens that page when clicked; a link to a page that isn't loaded shows as quiet, unlinked text. Links inside code are left as written. ([#29214](https://github.com/mastra-ai/mastra/pull/29214))
+
+  The graph also draws these body links as thin green lines between pages, with a "Linked in page body" legend row, so you can see how pages reference each other alongside parent → child lines and note mentions.
+
+  `MarkdownRenderer` accepts optional `remarkPlugins` and `components` props, added after its built-in ones, so a host can render custom syntax without losing the renderer's escaping.
+
+  A host supplies the span: `remarkKnowledgeLinks` marks each `[[ref]]` as a span carrying the ref under `KNOWLEDGE_REF_PROPERTY`, and `knowledgePageRefIndex(pages)` resolves it against the pages the host has loaded.
+
+  ```tsx
+  import { knowledgePageRefIndex } from '@mastra/playground-ui/domains/knowledge/lib/pageRefs';
+  import {
+    KNOWLEDGE_REF_PROPERTY,
+    remarkKnowledgeLinks,
+  } from '@mastra/playground-ui/domains/knowledge/lib/remarkKnowledgeLinks';
+
+  const index = knowledgePageRefIndex(pages);
+  const RefSpan = ({ node, children }) => {
+    const ref = node?.properties?.[KNOWLEDGE_REF_PROPERTY];
+    const target = typeof ref === 'string' ? index.resolve(ref) : undefined;
+    return target ? <a href={`#${target.id}`}>{target.name}</a> : <span>{children}</span>;
+  };
+
+  <MarkdownRenderer remarkPlugins={[remarkKnowledgeLinks]} components={{ span: RefSpan }}>
+    {page.body}
+  </MarkdownRenderer>;
+  ```
+
+- Knowledge page references in Studio chat (`[[ref]]` and addresses like `docs:mastra#guides/memory`) are now links, and hovering one shows the page's name, address and child count. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge explorer no longer lays its graph out again each time it re-renders: pages built from the tree's query results are kept while they hold the same pages. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws every child of the focused page as a labelled circle again, up to 48, and staggers them over a few rows so they all sit within reach of the centre at a readable zoom. When the graph is too big to fit, the view stays centred on the focused page and crops the edge. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's Back button is now a floating icon button in the graph's top right corner, with a solid background, a pointer cursor and a hover state, and shows disabled when there is nothing to go back to. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge explorer has a Back button that returns to the page you focused before, one step at a time through the pages you clicked. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph dots are larger (20px, 28px with a link count) and have an 8px hover and click margin around them, so far pages are easier to see and hit. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph circles now fit their text: smaller type and two lines in a crowded circle, words are never broken mid-way (a word too wide for the circle ends in an ellipsis, and the full name stays in the tooltip), circles at one level share a size, the kind label stays on one line beside its icon ("Parent" in full), and the link and child-count badges sit outside the circle instead of covering the label. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- A "Link counts" toggle in the Knowledge explorer writes each graph dot's total links in and out inside it. It is off by default. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Pages linked to the focused Knowledge page draw as the legend's "Page in another branch" grey, grown into a named circle, with no "Page" caption and a name that reads on the fill. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend lists "Page in another branch" whenever a page is drawn in that grey, including the link-end circles around a focused page, not only far dots. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph view now loads its children into the graph, linked to it, including children the initial graph didn't load. Up to 24 are added for each focused page. The rest are counted in a "+N more pages … not drawn" line. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now draws every page the focused page links to, and every page whose notes mention it, even when those pages aren't loaded yet. They are fetched by id or `[[ref]]` (up to 20 each way) and drawn as dots close around the focus with the green and orange link lines; only links past that cap are counted as "more". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The focused page in the Knowledge graph is drawn larger with a heavier border and a halo, and the legend explains it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Pointing at a page in the Knowledge graph no longer rebuilds every circle and line: fading the pages that aren't connected to it is a CSS rule driven by one attribute on the graph and a mark on the few neighbours. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Hovering a page in the Knowledge graph now draws its own content links and notes, fades everything it isn't connected to, and, for a dot, shows its kind, address and how many links go in and out. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Hovering a page in a large Knowledge graph no longer lays the whole graph out again: links fetched for a hover are drawn but not counted, and a page's links are found through an index built once. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- With nothing selected, the Knowledge graph now draws its first root scope exactly like a focused scope: every child is a labelled circle (up to 48, shrinking when crowded) with its own children as dots around it, a "+N more" circle past the cap, and the other root scopes beside it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's first view now fits every drawn page, outer ring included, with a margin and clear of the legend, and never zooms in past what fits. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge graph legend now explains every line style on screen (including hover and direction lines and the faint line to a child dot) and hides the rest; link badges read `→4 14→` (links in, links out) with a spoken label; with link counts on, only dots that have a count grow. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend now names what each dot colour means: the circle the dot hangs under. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph scopes and the pages above the focus stay drawn as labelled circles (at most ten far ones), marked with a layers or up-arrow icon that the legend explains. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws the pages the focused page links to, and the pages that link to it, as named circles like its children instead of bare numbered dots. They sit on a ring close around the focus, kept clear of the lines to its parent and children, with the first ring moved out to make room; links past the cap are still counted as "more". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- On the Knowledge graph, pages in other branches that the focused page links to now sit on a ring beyond its children and their dots, as smaller named circles, instead of crowding in next to the focus. A focused page with no children keeps them close around it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph can show exact link counts from the store for every visible page, and hovering a page fetches its real links, saying how many go to pages that aren't drawn. Hosts without the link routes keep the counts taken from loaded pages. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Clicking a "+N more" circle in the Knowledge graph now draws the next batch of that page's children, counting down until every child is drawn. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now loads the children of the pages it draws as circles, so their children show as small dots around them instead of dashed placeholders (up to 12 circles; the rest keep the placeholders). ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Refocusing a page in the Knowledge graph no longer moves the view. The pan and zoom stay where you left them, and the view only moves, by just enough, when the page would land off screen. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Knowledge graph tooltips and count badges now have a solid background so they read against the graph, and each tooltip has a tail pointing at its dot. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph keeps the other root pages one link from the centre when the first root's parent is not loaded. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now makes the focused page's parent obvious: its circle is labelled "Parent" with the up icon, a solid cyan line joins it to the focus, and the legend has a row for it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now opens at a zoom where circle names can be read. It draws up to 16 children as full-size circles and counts the rest in a "+N more" circle, and framing never zooms out past 0.7. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now loads like the tree instead of drawing the first 250 pages at once. It starts from the scopes and their first level, lays pages out in rings around the focused page, and draws pages more than one step away as small dots you can hover to name and click to focus. Parents show how many children they have ("281", "1000+") and dots standing in for unloaded children load them on hover or click, with a "+N more" line when not all fit. Runs of three or more memory scopes of the same kind (such as thread scopes) collapse into one dot until clicked. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  Lines between pages from notes and page bodies are off by default: the focused page shows its own links, out and in drawn differently, and each circle counts its hidden links ("↓3 ↑5"). An "All links" button draws every link between the pages shown.
+
+- Focusing a page in the Knowledge graph keeps the current layout while the pages it needs load (with a "Loading pages…" note after 150ms), then moves to the new layout once, so the transition shows instead of animating on stale data. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's view transition now takes 700ms on an ease-in-out curve so the move can be followed (still off under reduced motion), and "Link counts" is on by default. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph hands React Flow the same event handlers on every render, so pointing at a page no longer re-renders every node and line wrapper because of a new function identity. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge graph tooltip now steers clear of neighbouring dots as well as circles, so it no longer covers the pages around the one you hover. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph tooltips now open on the side of the dot that covers the least: not the focused page, the highlighted lines, the legend or the Back button, and always inside the graph. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph tooltips stay readable when the graph is zoomed out, the legend names at most four dot branches, and Back no longer swallows the next selection if the host ignores it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws the pages around a childless focus, and the first children of each root scope when nothing is focused, as labelled circles with their own children as dots, instead of a ring of bare dots. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now glides between views: pages in both the old and new view move and resize into place over 300ms, pages leaving fade out and new ones fade in. People who prefer reduced motion get an instant change. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- In the Knowledge graph view, clicking a page in the sidebar now focuses it in the graph first. Clicking the same page again opens it, the same way clicking a graph node does. The other views still open the page on the first click. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend now reads "Under parent page" or "Under parent scope" for each dot colour, instead of naming the parent; hovering the row names it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Each entry in the `knowledge_list` chat card now links to its page in Studio's Knowledge view, like the `knowledge_search` card does. Scope roots open their scope page, and nested pages open at any depth. Hosts that open pages only by id can leave out the new `refHref` on `KnowledgeLinksProvider`, and the entries stay plain text. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Fixed Studio's Knowledge page getting stuck on "Loading knowledge…" when Studio was open in other tabs. Each tab kept the Knowledge change stream open, and browsers allow only about six connections per host, so a new tab's requests could wait forever. A tab in the background now closes its stream, and reconnects and refreshes when you come back to it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge tree child counts now say when they were capped. If a scope has more child scopes than the 1,000 the tree looks through for each level, the page gets `childCountCapped: true` and its `childCount` is a lower bound. The Knowledge explorer then shows the count as "1000+" in the tree and in the graph's "pages under" line, instead of a number that's too low. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- A parent in the Knowledge tree now stays collapsed when you collapse it over the selected page. It used to spring back open on the next refresh, so there was no way to close it. Selecting another page under it still opens the path to that page. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge explorer tree is easier to use on large knowledge bases: ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  - Each page with children shows how many sit under it, and only those pages show an expand arrow. Pages with no children no longer show an arrow that vanishes when clicked.
+  - Clicking a page with children opens it, loading its children, and highlights it.
+  - Clicking a page the graph didn't load opens it as a page, instead of selecting it in a graph that can't show it.
+
+- When the Knowledge graph focuses a deep page, the page tree keeps scrolling to its row as the levels above it finish loading, so the row ends up in view instead of below the fold. Scrolling the tree yourself stops it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- When the Knowledge tree follows a page focused in the graph, the row now lands a third of the way down the sidebar instead of against its bottom edge. A row already comfortably in view stays put. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph now scrolls the page tree to its row (opening its ancestors first), instead of leaving the highlighted row out of sight. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge tree's follow-the-focus scroll now checks the element that actually scrolls, so a deep page's row ends up in view once its levels have loaded. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Updated Factory CLI API response metadata and the bundled board UI to read normalized provider facts while retaining native-card labels and stable card IDs. ([#28961](https://github.com/mastra-ai/mastra/pull/28961))
+
+- Added normalized source facts to Factory cards and the API so boards show provider keys, titles, states, labels, and authors without extra provider lookups. Read source facts from `card.workItem`: provider labels, author, state, and key are no longer on `card.metadata`. ([#28961](https://github.com/mastra-ai/mastra/pull/28961))
+
+  ```ts
+  // Before
+  card.metadata.labels;
+  card.metadata.author;
+
+  // After
+  card.workItem.labels;
+  card.workItem.author;
+  card.workItem.state;
+  card.workItem.key;
+  ```
+
+- Studio chat shows a pinned Knowledge listing (the `list:<pageId>` entry) as a Listing row that links to the page it lists, with its lines on demand, in snapshots and in added, changed and removed updates. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`c0fba5e`](https://github.com/mastra-ai/mastra/commit/c0fba5ea4d19aad4acc974b101df8cd85b50d7a9), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0-alpha.3
+  - @mastra/deployer@1.82.0-alpha.3
+
+## 1.38.0-alpha.2
+
+### Minor Changes
+
+- Added `mastra api factory intake-route` commands to list, get, create, update, delete and reorder a Factory project's intake routes. ([#29109](https://github.com/mastra-ai/mastra/pull/29109))
+
+  ```sh
+  mastra api factory intake-route create <project-id> '{"name":"Trusted to Triage","when":{"operator":"AND","conditions":[{"field":"author.trusted","operator":"equals","value":true}]},"target":{"boardKey":"work","phaseKey":"triage"}}'
+  mastra api factory intake-route reorder <project-id> '{"ids":["<route-id>","<route-id>"]}'
+  ```
+
+### Patch Changes
+
+- `mastra deploy`, `mastra studio deploy`, and `mastra server deploy` now preselect "Create new project" in the project picker unless exactly one existing project matches your project name or slug. Before, the picker preselected the first existing project, so pressing Enter on a new project deployed over an unrelated one. When exactly one project matches, that project is still preselected. ([#29220](https://github.com/mastra-ai/mastra/pull/29220))
+
+- Fixed `mastra dev --root <dir>` failing with `ENOENT ... .mastra/.build/entry-0.mjs` when the current directory has no `.mastra` folder. Dev pre-bundle output now goes to `<dir>/.mastra/.build` instead of the current working directory, so dev servers started with different `--root` values no longer overwrite each other's files. ([#29156](https://github.com/mastra-ai/mastra/pull/29156))
+
+- Placeholders in Studio and Factory now read the same everywhere: sentence case with no trailing ellipsis ("Search agents", "Filter traces"). Added a `playground-ui/placeholder-text` lint rule to `@mastra/playground-ui/oxlint` that keeps placeholders this way; it is part of the `recommended` preset. ([#29188](https://github.com/mastra-ai/mastra/pull/29188))
+
+- Updated dependencies [[`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`1b40564`](https://github.com/mastra-ai/mastra/commit/1b40564c17f019b984070fac52358ff5588c1fff), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`501f010`](https://github.com/mastra-ai/mastra/commit/501f010c0c3f21a2f9e6f0c243d6abed220ecfe9), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6)]:
+  - @mastra/core@1.82.0-alpha.2
+  - @mastra/deployer@1.82.0-alpha.2
+
 ## 1.38.0-alpha.1
 
 ### Patch Changes

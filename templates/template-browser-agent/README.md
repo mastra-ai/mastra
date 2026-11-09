@@ -30,7 +30,11 @@ Ask things like:
 
 ## How it works
 
+In `src/mastra/agents/browser-agent.ts`, the agent registers a Gateway-backed search tool independently of its chat model:
+
 ```ts
+import { webSearchTool } from '../tools/web-search';
+
 const browser = new AgentBrowser({
   headless: true,
   ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' } : {}),
@@ -39,7 +43,7 @@ const browser = new AgentBrowser({
 export const browserAgent = new Agent({
   // …
   browser,
-  tools: { web_search: openai.tools.webSearch({}) },
+  tools: { web_search: webSearchTool },
 });
 ```
 

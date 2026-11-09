@@ -26,14 +26,13 @@ import type {
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
 import type { CustomProviderRecord, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type {
   MemorySettingsPatch,
   MemorySettingsRecord,
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -46,14 +45,9 @@ import {
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
 import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
-
-/** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /**
  * Server-side configuration routes for the web app.
@@ -721,7 +715,7 @@ async function resolveMemorySettingsContext({
   if (memorySettings) {
     try {
       await memorySettings.ensureReady();
-      const factoryUserId = factoryProjectId ? factoryMemorySettingsUserId(factoryProjectId) : undefined;
+      const factoryUserId = factoryProjectId ? factoryProjectSettingsUserId(factoryProjectId) : undefined;
       return tenant
         ? { storage: memorySettings, orgId: tenantOrgId(tenant), userId: factoryUserId ?? tenant.userId }
         : { storage: memorySettings, orgId: 'local', userId: factoryUserId ?? 'local' };

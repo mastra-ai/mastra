@@ -149,7 +149,7 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 Fill the placeholders as follows:
 
 - Write the summary for a maintainer skimming their notifications. Say what breaks for the user, not how the code breaks; no file names, function names, or internal ids — those go under Root cause.
-- `<Type>` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other, capitalized for display; pass the lowercase value as `triageType`. `<Severity>` and `<level>` are the lowercase ratings from the guides below. `<Route>` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
+- `<Type>` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other, capitalized for display. `<Severity>` and `<level>` are the lowercase ratings from the guides below. `<Route>` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
 - `<dots>` shows the rating at a glance. Severity uses four dots: `●○○○` low, `●●○○` medium, `●●●○` high, `●●●●` critical. Confidence, effort, and impact use three: `●○○` low, `●●○` medium, `●●●` high. Always follow the dots with the word.
 - Each rating reason is at most 12 words.
 - Keep the collapsed sections collapsed. Only the ratings table, the summary, the next step, and open questions stay visible.
@@ -213,9 +213,9 @@ For non-GitHub sources, use the same structured handoff without attempting GitHu
 
 Post the same handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
-- When the current stage is **Intake** or **Triage**, make the terminal `factory_transition_work_item` call with `triageType` set to the exact `Type` from the handoff.
+- When the current stage is **Intake** or **Triage**, make the terminal `factory_transition_work_item` call and start its `rationale` with the exact `Type` from the handoff. Factory does not record a classification; never pass a `triageType` argument.
 - Confirmed bugs with `Route: Plan fix` request `stage: "planning"`. Issues that should be closed request `stage: "done"` with the close rationale.
-- Features and every other non-bug classification use `Route: Await approval` and request their current Intake/Triage stage. This records the classification without advancing; stop until a maintainer moves the card or starts the next run from the Factory UI.
+- Features and every other open non-bug classification use `Route: Await approval` and request `stage: "intake"`. The card rests in Intake until a maintainer moves it on; that move is the approval. Stop after the transition.
 - When the item is already in **Planning** or a later stage, this is a webhook-driven refresh: use `Route: No transition / refresh`, update the source-specific handoff, but do **not** request a stage transition. Report the updated verdict and stop.
 
 `rationale` (max 1000 chars) — the triage verdict and headline understanding in a few sentences (e.g. "Genuine regression from <commit>; root cause understood; ready to plan a fix").

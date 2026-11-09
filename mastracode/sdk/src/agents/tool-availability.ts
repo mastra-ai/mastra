@@ -17,8 +17,8 @@ function getRequestContextValue(requestContext: unknown, key: string): unknown {
 }
 
 /**
- * Subset of the real `HarnessRequestContext` shape (see
- * packages/core/src/harness/types.ts). The mode is a string property
+ * Subset of the `AgentControllerRequestContext` the controller sets under the
+ * `controller` request-context key. The mode is a string property
  * (`session.modeId`) and live state is read via `session.state.get()`.
  */
 interface PlanModeGuardHarness {
@@ -30,7 +30,7 @@ interface PlanModeGuardHarness {
 
 function getHarnessContext(context: unknown): PlanModeGuardHarness | undefined {
   const requestContext = (context as { requestContext?: unknown } | undefined)?.requestContext;
-  const harness = getRequestContextValue(requestContext, 'harness');
+  const harness = getRequestContextValue(requestContext, 'controller');
   return harness && typeof harness === 'object' ? (harness as PlanModeGuardHarness) : undefined;
 }
 
@@ -59,14 +59,21 @@ function getToolInputPath(input: unknown): string | undefined {
   return typeof toolPath === 'string' ? toolPath : undefined;
 }
 
-export function guardPlanModePlanFileWrites({ workspaceToolName, input, context }: WorkspaceToolHookContext) {
+/** Plan-mode write guard; `plansDir` is the host-configured plans directory, if any. */
+export function createPlanModePlanFileWriteGuard(plansDir?: string) {
+  return (hookContext: WorkspaceToolHookContext) => guardPlanFileWrite(hookContext, plansDir);
+}
+
+export const guardPlanModePlanFileWrites = createPlanModePlanFileWriteGuard();
+
+function guardPlanFileWrite({ workspaceToolName, input, context }: WorkspaceToolHookContext, plansDir?: string) {
   if (!PLAN_MODE_WRITE_TOOL_NAMES.has(workspaceToolName)) return;
 
   const harness = getHarnessContext(context);
   if (getHarnessModeId(harness) !== 'plan') return;
 
   const factoryProjectId = getHarnessFactoryProjectId(harness);
-  const planOptions = { factoryProjectId };
+  const planOptions = { factoryProjectId, plansDir };
   const planDirHint = `${getLocalPlansRelativeDir(planOptions)}/`;
   const projectPath = getHarnessProjectPath(harness);
   const inputPath = getToolInputPath(input);
@@ -89,7 +96,10 @@ export function guardPlanModePlanFileWrites({ workspaceToolName, input, context 
 
 const BACKGROUND_TOOL_CONFIG = { enabled: true, defaultDisposition: 'foreground' } as const;
 
-export function createMastraCodeWorkspaceTools(backgroundToolsEnabled = false): WorkspaceToolsConfig {
+export function createMastraCodeWorkspaceTools(
+  backgroundToolsEnabled = false,
+  plansDir?: string,
+): WorkspaceToolsConfig {
   const background = backgroundToolsEnabled ? BACKGROUND_TOOL_CONFIG : undefined;
   return {
     ...TOOL_NAME_OVERRIDES,
@@ -119,7 +129,7 @@ export function createMastraCodeWorkspaceTools(backgroundToolsEnabled = false): 
       ...(background ? { background } : {}),
     },
     hooks: {
-      beforeToolCall: guardPlanModePlanFileWrites,
+      beforeToolCall: createPlanModePlanFileWriteGuard(plansDir),
     },
   };
 }

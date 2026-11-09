@@ -13,7 +13,8 @@ import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import { boardCardState } from '../boardCardState';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
-import { itemThreadSession } from '../boardItems';
+import { cardContextSessions, cardThreadSession, itemThreadSession } from '../boardItems';
+import { reworkReason } from '../reworkReason';
 import type { BoardLayout } from '../boardLayout';
 import { itemBoard } from '../boardStages';
 import {
@@ -107,7 +108,9 @@ export function WorkItemCard({
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
   const primaryMove = primaryCardMove(moves, columnStage, { sessions, stageHistory: item.stageHistory });
-  const threadSession = itemThreadSession(sessions);
+  const threadSession = cardThreadSession(item, definition?.phases, columnStage);
+  const contextSessions = cardContextSessions(item, definition?.phases, columnStage);
+  const rework = definition ? reworkReason(item, definition.phases, activityPage?.events) : undefined;
   const nextPhase = nextBoardPhase(definition, columnStage);
   const sessionHref =
     threadSession === undefined
@@ -125,7 +128,7 @@ export function WorkItemCard({
     decision,
     transitionReason,
     sessionStatus,
-    heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
+    held: awaitsTriageDecision(item, columnStage),
   });
   const { status, owner, wick } = state;
   const lockedByYou = owner.kind === 'you';
@@ -138,7 +141,9 @@ export function WorkItemCard({
     item,
     columnStage,
     move: primaryMove,
-    resumeStage: custom ? undefined : resumeStage(columnStage, { sessions, stageHistory: item.stageHistory }),
+    resumeStage: custom
+      ? undefined
+      : resumeStage(columnStage, { board: boardId, sessions, stageHistory: item.stageHistory }),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
@@ -218,6 +223,8 @@ export function WorkItemCard({
       columnStage={columnStage}
       projectRepositoryId={projectRepositoryId}
       activityPage={activityPage}
+      contextSessions={contextSessions}
+      rework={rework}
       morph={morph}
       relatedLinks={relatedLinks}
       status={status}
@@ -246,6 +253,7 @@ export function WorkItemCard({
           status={status}
           actions={actions}
           menu={<WorkItemMenuItems {...menu} />}
+          rework={rework}
         />
         {detailsPanel}
       </>
@@ -293,6 +301,7 @@ export function WorkItemCard({
           status={status}
           actions={actions}
           open={false}
+          rework={rework}
           controls={
             <>
               <CardDetailsHint onOpen={morph.openDetails} />
