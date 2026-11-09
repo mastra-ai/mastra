@@ -1,5 +1,140 @@
 # @mastra/mcp-apps-components
 
+## 0.1.0-alpha.2
+
+### Minor Changes
+
+- The observability app now draws a whole dashboard instead of a single widget, with rows of KPIs, time series, tables and scores. The app applies the dashboard's default date range and filters. ([#29645](https://github.com/mastra-ai/mastra/pull/29645))
+
+  The model writes each widget, read and column under a key that names it, and each number holds the read it comes from, such as `{ timeseries: { series: [{ value: { metricTimeSeries: { … } } }] } }`. Nothing points at a query, series or column by id, so a dashboard can't reference something it lacks. A widget with a single view puts it directly on the widget; tabs go in `tabs`. `toObservabilityDashboard` turns this into a regular `dashboardDefinitionSchema` definition, gathering the reads into queries.
+
+  **Why:** with a single fixed widget, the model could only show a handful of hard-coded charts. Now it can write its own dashboard against real data, checked against each widget kind's options.
+
+  **New helpers**
+
+  - `observabilityDashboardInputSchema` lists every widget kind's options, so the model gets clear errors when a widget is wrong. It also names the metrics Mastra records, such as `mastra_agent_duration_ms` and `mastra_model_total_input_tokens`, so the model doesn't guess names that read as zero.
+  - `createObservabilityDashboardInputSchema({ metricNames })` builds the same schema with the project's metric names as the only allowed values, so a dashboard can't name a metric without data. Rebuild the tool when the names change.
+  - `toObservabilityDashboard(input)` gives each widget without an id a fresh UUID, makes a widget without a `span` full width, and checks the result.
+  - `OBSERVABILITY_READ_ACTIONS` lists every `MastraClient` read the app sends to `queryObservability`, from `aggregateTraces` to `listScores`. Allow exactly these with `z.enum(OBSERVABILITY_READ_ACTIONS)`, so no widget fails for a missing action.
+
+  **Renamed:** `observabilityWidgetApp` is now `observabilityDashboardApp`, named `Observability dashboard`.
+
+  **Before**
+
+  ```ts
+  outputSchema: z.object({ widget: z.unknown(), datePreset: z.string().optional() }),
+  execute: async ({ widget, datePreset }) => ({ widget: WIDGETS[widget], datePreset }),
+  ```
+
+  **After**
+
+  ```ts
+  import {
+    observabilityDashboardInputSchema,
+    observabilityDashboardOutputSchema,
+    toObservabilityDashboard,
+  } from '@mastra/mcp-apps-components';
+
+  createTool({
+    id: 'showObservabilityDashboard',
+    inputSchema: observabilityDashboardInputSchema,
+    outputSchema: observabilityDashboardOutputSchema,
+    execute: async input => toObservabilityDashboard(input),
+  });
+  ```
+
+  Pins now also carry the dashboard's default filters as `filters`. `@mastra/core` and `zod` are now peer dependencies.
+
+## 0.1.0-alpha.1
+
+### Minor Changes
+
+- Added pinning to `observabilityWidgetApp`. When the chat host supports it, the widget shows a pin button, and the host decides what stays pinned. Hosts built on `@mastra/playground-ui` can use `observabilityWidgetPins` from the new `@mastra/mcp-apps-components/host` entry: ([#29557](https://github.com/mastra-ai/mastra/pull/29557))
+
+  ```tsx
+  import { McpAppHostProvider } from '@mastra/playground-ui/domains/mcps';
+  import { observabilityWidgetPins } from '@mastra/mcp-apps-components/host';
+
+  const host = observabilityWidgetPins({
+    resourceUri: 'ui://mastra/observability-widget',
+    pinnedIds,
+    onPin: ({ widget, datePreset }) => savePin(widget, datePreset),
+    onUnpin: widgetId => removePin(widgetId),
+  });
+
+  <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
+  ```
+
+- `@mastra/mcp-apps-components` now ships MCP Apps that use only messages from the MCP Apps spec. The first one is `greetingApp`, exported from the package root. To use it, register it as an app resource on an `MCPServer` and write its two tools as regular Mastra tools. The model calls one tool to open the app. The app calls the other, an app-only tool (`visibility: ['app']`), to get its data. ([#29510](https://github.com/mastra-ai/mastra/pull/29510))
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { MCPServer } from '@mastra/mcp';
+  import { greetingApp } from '@mastra/mcp-apps-components';
+  import { z } from 'zod';
+
+  const uri = 'ui://mastra/greeting';
+
+  new MCPServer({
+    id: 'greeting',
+    name: 'Greeting',
+    version: '1.0.0',
+    appResources: { [uri]: greetingApp },
+    tools: {
+      showGreeting: createTool({
+        id: 'showGreeting',
+        description: 'Shows a greeting card for someone',
+        inputSchema: z.object({ name: z.string() }),
+        mcp: { _meta: { ui: { resourceUri: uri } } },
+        execute: async ({ name }) => ({ name }),
+      }),
+      getGreeting: createTool({
+        id: 'getGreeting',
+        description: 'Returns the greeting for a name',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ greeting: z.string() }),
+        mcp: { _meta: { ui: { resourceUri: uri, visibility: ['app'] } } },
+        execute: async ({ name }) => ({ greeting: `Hello, ${name}!` }),
+      }),
+    },
+  });
+  ```
+
+  **Breaking:** the dashboard app is removed. The `./dashboard-renderer` (`dashboardRendererApp`) and `./observability-tools` (`observabilityAppTools`) entry points no longer exist. The package also has no peer dependencies anymore, so `@mastra/server` is no longer required.
+
+- Added `observabilityWidgetApp`, an MCP App that draws one observability dashboard widget (KPIs, time series, table or scores) with the same components as Studio. The model opens it with a tool whose result is `{ widget, datePreset }`. The app then reads its data through an app-only `queryObservability` tool (`QUERY_OBSERVABILITY_TOOL`) that you write, so you choose which Mastra server it reads from and how it authenticates. ([#29557](https://github.com/mastra-ai/mastra/pull/29557))
+
+  ```ts
+  import { MCPServer } from '@mastra/mcp';
+  import { QUERY_OBSERVABILITY_TOOL, observabilityWidgetApp } from '@mastra/mcp-apps-components';
+
+  new MCPServer({
+    id: 'observability',
+    name: 'Observability',
+    version: '1.0.0',
+    appResources: { 'ui://mastra/observability-widget': observabilityWidgetApp },
+    tools: { showObservabilityWidget, [QUERY_OBSERVABILITY_TOOL]: queryObservability },
+  });
+  ```
+
+  The tool receives `{ action, args }`, where `action` is a `MastraClient` observability method such as `getMetricAggregate`, and returns `{ data }`, that method's result. See the package README for a full example.
+
+### Patch Changes
+
+- `StatelessWidget` now passes the widget definition to `pin.onPin`, the same way `DashboardRenderer` does, so a host can save which chart or widget was pinned or unpinned. ([#29587](https://github.com/mastra-ai/mastra/pull/29587))
+
+  ```tsx
+  <StatelessWidget
+    prepared={prepared}
+    pin={{
+      name: 'Agent runs',
+      isPinned,
+      onPin: (widget, isPinned) => savePin(widget, isPinned),
+    }}
+    {...props}
+  />
+  ```
+
 ## 0.1.0-alpha.0
 
 ### Minor Changes

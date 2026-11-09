@@ -16,11 +16,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
     "DeepSeek-V3.1": [
       {
         "type": "toggle"
@@ -32,6 +27,11 @@
       }
     ],
     "gemma-4-31B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V3.2": [
       {
         "type": "toggle"
       }

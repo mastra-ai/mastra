@@ -1,5 +1,11 @@
+import type { DashboardWidget } from '@mastra/core/storage/dashboards';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   BUILT_IN_WIDGET_KINDS,
+  DashboardGrid,
+  DashboardGridCell,
+  DashboardGridRow,
   StatelessWidget,
   WidgetError,
   planWidget,
@@ -10,7 +16,9 @@ import { applyDocumentTheme } from '@modelcontextprotocol/ext-apps';
 import type { App, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { InfoIcon, OctagonAlertIcon } from 'lucide-react';
+import { Component, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { readOpened } from './opened';
 import type { Opened } from './opened';
 import { usePin } from './use-pin';
@@ -25,19 +33,67 @@ function applyTheme(theme: McpUiTheme | undefined) {
   document.documentElement.classList.toggle('light', theme === 'light');
 }
 
+type ReadyOpened = Extract<Opened, { status: 'ready' }>;
+
+/**
+ * A whole-app state drawn straight on the host's frame: no surface or border of its own, and at
+ * least the 100px the host gives the frame, so the content sits centred instead of leaving a gap.
+ */
+function AppState({ children, ...props }: { children: ReactNode; role?: 'alert' | 'status'; 'aria-label'?: string }) {
+  return (
+    <div {...props} className="flex min-h-25 items-center px-4 py-3">
+      {children}
+    </div>
+  );
+}
+
+function AppMessage({ tone, title, children }: { tone: 'error' | 'info'; title: string; children: ReactNode }) {
+  const Icon = tone === 'error' ? OctagonAlertIcon : InfoIcon;
+  return (
+    <AppState role="alert">
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon
+          aria-hidden
+          className={`mt-0.5 size-4 shrink-0 ${tone === 'error' ? 'text-destructive-indicator' : 'text-info-indicator'}`}
+        />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <Txt variant="subheading">{title}</Txt>
+          <Txt variant="body-sm" tone="muted" className="wrap-anywhere">
+            {children}
+          </Txt>
+        </div>
+      </div>
+    </AppState>
+  );
+}
+
+/** Keeps a widget that throws while rendering to its own card, so the rest of the dashboard still draws. */
+class WidgetBoundary extends Component<{ widget: DashboardWidget; children: ReactNode }, { error?: Error }> {
+  state: { error?: Error } = {};
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    const { error } = this.state;
+    return error ? <WidgetError widget={this.props.widget} message={error.message} /> : this.props.children;
+  }
+}
+
 /** Plans the widget's requests, sends them through the server's tool, and draws the answers. */
 function Widget({
   app,
   opened,
+  widget,
   prepared,
 }: {
   app: App;
-  opened: Extract<Opened, { status: 'ready' }>;
+  opened: ReadyOpened;
+  widget: DashboardWidget;
   prepared: ReadyPreparedWidget;
 }) {
   const { env } = opened;
   const [state, setState] = useState<WidgetState>({});
-  const pin = usePin(app, opened.widget, opened.datePreset);
+  const pin = usePin(app, widget, opened.datePreset, opened.dashboard.defaults?.filters);
   const first = planWidget(prepared, env, state);
   const discovered = useToolResults(app, first.status === 'ready' ? first.discover : []);
   // Planned again with the discover answers so far; both lists go out in the same render.
@@ -61,20 +117,48 @@ function Widget({
   );
 }
 
-function OpenedWidget({ app, opened }: { app: App; opened: Extract<Opened, { status: 'ready' }> }) {
-  const prepared = prepareWidget(opened.widget, REGISTRY, 'project');
-  const heading = {
-    id: opened.widget.id,
-    title: typeof opened.widget.title === 'string' ? opened.widget.title : undefined,
-  };
-  if (prepared.ok === 'hidden') return <p role="alert">This widget isn't shown for a project.</p>;
-  if (!prepared.ok) return <WidgetError widget={heading} message={prepared.message} />;
-  return <Widget app={app} opened={opened} prepared={prepared} />;
+/**
+ * Lays the dashboard's rows out on Studio's 12-column grid. Each widget is checked and drawn on its
+ * own: one that fails to parse, query or render shows its own error and the rest still draw. Rows
+ * whose widgets are all hidden for a project leave no gap.
+ */
+function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
+  const rows = opened.dashboard.rows
+    .map(row => row.widgets.map(widget => ({ widget, prepared: prepareWidget(widget, REGISTRY, 'project') })))
+    .map(cells => cells.filter(cell => cell.prepared.ok !== 'hidden'))
+    .filter(cells => cells.length > 0);
+  if (rows.length === 0) {
+    return (
+      <AppMessage tone="info" title="Nothing to show">
+        None of this dashboard's widgets are shown for a project.
+      </AppMessage>
+    );
+  }
+
+  return (
+    <DashboardGrid>
+      {rows.map(cells => (
+        <DashboardGridRow key={cells[0]!.widget.id}>
+          {cells.map(({ widget, prepared }) => (
+            <DashboardGridCell key={widget.id} id={widget.id} span={widget.span}>
+              <WidgetBoundary widget={widget}>
+                {prepared.ok === true ? (
+                  <Widget app={app} opened={opened} widget={widget} prepared={prepared} />
+                ) : (
+                  <WidgetError widget={widget} message={prepared.ok === false ? prepared.message : ''} />
+                )}
+              </WidgetBoundary>
+            </DashboardGridCell>
+          ))}
+        </DashboardGridRow>
+      ))}
+    </DashboardGrid>
+  );
 }
 
 /**
- * Draws the one dashboard widget the opening tool returned (`ui/notifications/tool-result`), over
- * the window its `datePreset` names. Every read goes through the server's app-only
+ * Draws the dashboard the opening tool returned (`ui/notifications/tool-result`), over the window its
+ * `datePreset` names and under its `defaults.filters`. Every read goes through the server's app-only
  * `queryObservability` tool, so the server decides where the data comes from.
  */
 export function ObservabilityWidget() {
@@ -93,13 +177,31 @@ export function ObservabilityWidget() {
   });
   useEffect(() => applyTheme(app?.getHostContext()?.theme), [app]);
 
-  if (error) return <p role="alert">Couldn't connect to the host: {error.message}</p>;
-  if (!app || !opened) return <p>Loading the widget…</p>;
-  if (opened.status === 'error') return <p role="alert">{opened.message}</p>;
+  if (error) {
+    return (
+      <AppMessage tone="error" title="Couldn't connect to the host">
+        {error.message}
+      </AppMessage>
+    );
+  }
+  if (!app || !opened) {
+    return (
+      <AppState>
+        <Spinner size="sm" aria-label="Loading the dashboard" className="mx-auto" />
+      </AppState>
+    );
+  }
+  if (opened.status === 'error') {
+    return (
+      <AppMessage tone="error" title="Couldn't draw the dashboard">
+        {opened.message}
+      </AppMessage>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
-      <OpenedWidget key={opened.widget.id + opened.env.window.end.getTime()} app={app} opened={opened} />
+      <OpenedDashboard key={opened.env.window.end.getTime()} app={app} opened={opened} />
     </QueryClientProvider>
   );
 }
