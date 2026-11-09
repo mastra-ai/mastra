@@ -7,9 +7,8 @@ import { getAllServerRoutes } from '../src/server/server-adapter/routes/index.js
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const outputPath = resolve(rootDir, join('packages', 'cli', 'src', 'commands', 'api', 'route-metadata.generated.ts'));
 
-// Covers the opt-in routes too: the CLI describes what the package can serve, and a route
-// that is not mounted simply 404s when called.
-const apiSchemaManifest = buildApiSchemaManifest(getAllServerRoutes({ includeExperimentalComputers: true }));
+// Covers opt-in routes because hosts may mount them deliberately. Experimental routes stay hidden.
+const apiSchemaManifest = buildApiSchemaManifest(getAllServerRoutes({ includeExperimentalComputers: false }));
 
 const metadata = Object.fromEntries(
   apiSchemaManifest.routes.map(route => [

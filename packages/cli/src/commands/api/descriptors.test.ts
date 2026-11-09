@@ -73,6 +73,10 @@ describe('api command descriptors', () => {
     }
   });
 
+  it('does not expose experimental Computer routes in generated metadata', () => {
+    expect(Object.keys(CLI_ROUTE_METADATA).filter(key => key.includes(' /computers/'))).toEqual([]);
+  });
+
   it('keeps every descriptor internally consistent with generated route metadata', () => {
     const keys = Object.keys(API_COMMANDS);
     const names = Object.values(API_COMMANDS).map(descriptor => descriptor.name);
