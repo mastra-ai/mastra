@@ -1,7 +1,7 @@
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 import { configureComputerServer, InMemoryComputerTicketStore } from '../computer-stream';
-import { computerSessionForbiddenResponseSchema, createComputerSessionResponseSchema } from '../schemas/computers';
+import { computerSessionNotFoundResponseSchema, createComputerSessionResponseSchema } from '../schemas/computers';
 import {
   CHANGE_COMPUTER_CONTROL_ROUTE,
   CREATE_COMPUTER_SESSION_ROUTE,
@@ -38,13 +38,14 @@ describe('computer server routes', () => {
     expect(CHANGE_COMPUTER_CONTROL_ROUTE.requiresAuth).toBe(true);
   });
 
-  it('documents forbidden sessions as HTTP errors instead of success states', () => {
+  it('documents concealed sessions as 404 errors instead of success states', () => {
     expect(createComputerSessionResponseSchema.safeParse({ state: 'forbidden' }).success).toBe(false);
-    expect(computerSessionForbiddenResponseSchema.safeParse({ error: 'Forbidden' }).success).toBe(true);
-    expect(CREATE_COMPUTER_SESSION_ROUTE.openapi?.responses[403]).toEqual({
-      description: 'The authenticated caller cannot access the requested computer thread.',
-      content: { 'application/json': { schema: computerSessionForbiddenResponseSchema } },
+    expect(computerSessionNotFoundResponseSchema.safeParse({ error: 'Computer not found' }).success).toBe(true);
+    expect(CREATE_COMPUTER_SESSION_ROUTE.openapi?.responses[404]).toEqual({
+      description: 'The computer is missing, unattached, or concealed from the authenticated caller.',
+      content: { 'application/json': { schema: computerSessionNotFoundResponseSchema } },
     });
+    expect(CREATE_COMPUTER_SESSION_ROUTE.openapi?.responses[403]).toBeUndefined();
   });
 
   it('mints an origin-bound single-use viewer ticket without exposing viewer headers', async () => {

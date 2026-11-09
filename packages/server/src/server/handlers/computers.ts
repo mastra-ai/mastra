@@ -7,7 +7,7 @@ import {
   changeComputerControlResponseSchema,
   computerControlSchema,
   computerIdPathParams,
-  computerSessionForbiddenResponseSchema,
+  computerSessionNotFoundResponseSchema,
   createComputerSessionBodySchema,
   createComputerSessionResponseSchema,
   getComputerControlQuerySchema,
@@ -112,9 +112,9 @@ export const CREATE_COMPUTER_SESSION_ROUTE = createRoute({
   },
 });
 
-CREATE_COMPUTER_SESSION_ROUTE.openapi!.responses[403] = {
-  description: 'The authenticated caller cannot access the requested computer thread.',
-  content: { 'application/json': { schema: computerSessionForbiddenResponseSchema } },
+CREATE_COMPUTER_SESSION_ROUTE.openapi!.responses[404] = {
+  description: 'The computer is missing, unattached, or concealed from the authenticated caller.',
+  content: { 'application/json': { schema: computerSessionNotFoundResponseSchema } },
 };
 
 export const GET_COMPUTER_CONTROL_ROUTE = createRoute({
