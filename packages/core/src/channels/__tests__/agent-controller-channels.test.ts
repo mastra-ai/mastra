@@ -819,6 +819,53 @@ describe('AgentControllerChannels', () => {
       30_000,
     );
 
+    it('refuses an approval from a principal that can read but not execute, leaving the gate armed', async () => {
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel(),
+        tools: { deployTool: createDeployTool().tool },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-read-only');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'deploy'),
+        mastra,
+        new RequestContext(),
+      );
+      const session = (await controller.getSession('channel:chan-1:t-read-only'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+      const respondSpy = vi.spyOn(session, 'respondToToolApproval');
+
+      // Allows READ (and everything else) but denies EXECUTE.
+      const provider: IFGAProvider = {
+        check: vi.fn(async (_user: any, { permission }: any) => permission !== 'agent-controller:execute'),
+        require: vi.fn(async (_user: any, { permission }: any) => {
+          if (permission === 'agent-controller:execute') {
+            throw new FGADeniedError({ id: 'user-1' }, { type: 'agent-controller', id: 'ctrl-1' }, permission);
+          }
+        }),
+        filterAccessible: vi.fn(async (_user: any, resources: any) => resources),
+      };
+      controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await expect(
+        (channels as any).dispatchApproval({
+          runId: 'run-live',
+          toolCallId: session.approval.getToolCallIds()[0]!,
+          requestContext,
+          memory: { thread: session.thread.getId()!, resource: session.identity.getResourceId() },
+        }),
+      ).rejects.toBeInstanceOf(FGADeniedError);
+
+      expect(vi.mocked(provider.require).mock.calls.map(([, auth]: any) => auth.permission)).toContain(
+        'agent-controller:execute',
+      );
+      expect(respondSpy).not.toHaveBeenCalled();
+      expect(session.approval.isArmed()).toBe(true);
+    }, 30_000);
+
     it('does not fire when the gate matches the action', async () => {
       const stale: any[] = [];
       const { adapter, controller, mastra, channels } = await createSetup({
