@@ -91,50 +91,54 @@ function buildWorkingMemoryInstructions(details: Awaited<ReturnType<typeof getWo
 
 export class WorkingMemoryExtractor extends Extractor<string | Record<string, unknown> | null> {
   constructor() {
-    super({
-      name: 'Working Memory',
-      includePreviousExtraction: false,
-      metadataKeyPath: false,
-      retryStructuredExtractionOnEmptyObject: true,
-      required: true,
-      instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
-      schema: async context => {
-        const details = await getWorkingMemoryDetails(context);
-        return details.usesSchema ? z.union([z.record(z.string(), z.unknown()), z.null()]) : undefined;
-      },
-      onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
-        const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
-        const config = memory!.getMergedThreadConfig(memoryConfig ?? {});
-        const configuredSchema = config.workingMemory?.schema;
+    super(
+      {
+        name: 'Working Memory',
+        includePreviousExtraction: false,
+        metadataKeyPath: false,
+        retryStructuredExtractionOnEmptyObject: true,
+        instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
+        schema: async context => {
+          const details = await getWorkingMemoryDetails(context);
+          return details.usesSchema ? z.union([z.record(z.string(), z.unknown()), z.null()]) : undefined;
+        },
+        onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
+          const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
+          const config = memory!.getMergedThreadConfig(memoryConfig ?? {});
+          const configuredSchema = config.workingMemory?.schema;
 
-        let document: unknown = current;
-        if (configuredSchema) {
-          // An empty object carries no update (some providers, e.g. Gemini, can only emit `{}` for the generic
-          // record schema), and storing it would wipe the existing working memory.
-          if (current === null || isEmptyPlainObject(current)) {
+          let document: unknown = current;
+          if (configuredSchema) {
+            // An empty object carries no update (some providers, e.g. Gemini, can only emit `{}` for the generic
+            // record schema), and storing it would wipe the existing working memory.
+            if (current === null || isEmptyPlainObject(current)) {
+              return undefined;
+            }
+            document = await validateAgainstConfiguredSchema(configuredSchema, current);
+            // Validation drops nulls in optional fields, so `{"name": null}` can become `{}`.
+            if (document === null || isEmptyPlainObject(document)) {
+              return undefined;
+            }
+          }
+
+          const workingMemory = typeof document === 'string' ? document : (JSON.stringify(document) ?? '');
+          if (!workingMemory.trim()) {
             return undefined;
           }
-          document = await validateAgainstConfiguredSchema(configuredSchema, current);
-          // Validation drops nulls in optional fields, so `{"name": null}` can become `{}`.
-          if (document === null || isEmptyPlainObject(document)) {
-            return undefined;
-          }
-        }
 
-        const workingMemory = typeof document === 'string' ? document : (JSON.stringify(document) ?? '');
-        if (!workingMemory.trim()) {
-          return undefined;
-        }
+          await memory!.updateWorkingMemory({
+            threadId,
+            resourceId,
+            workingMemory,
+            memoryConfig,
+          });
 
-        await memory!.updateWorkingMemory({
-          threadId,
-          resourceId,
-          workingMemory,
-          memoryConfig,
-        });
-
-        return document as Record<string, unknown> | string;
+          return document as Record<string, unknown> | string;
+        },
       },
-    });
+      false,
+      // Markdown working memory must always be written back, or a change the Observer noticed is lost (#25350).
+      true,
+    );
   }
 }

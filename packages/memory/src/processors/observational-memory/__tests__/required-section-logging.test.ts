@@ -99,7 +99,7 @@ describe('observer logs required sections it could not extract', () => {
   it('warns with the slug of a required section the observer left out', async () => {
     const { model } = createScriptedModel([{ text: REPLY, finishReason: 'stop' }]);
     const warn = vi.fn();
-    const mood = new Extractor({ name: 'Mood', instructions: 'Describe the mood.', required: true });
+    const mood = new Extractor({ name: 'Mood', instructions: 'Describe the mood.' }, false, true);
     const topic = new Extractor({ name: 'Topic', instructions: 'Name the topic.' });
 
     const result = await createRunner(model, [mood, topic], warn).call(undefined, [createMessage('Hi', 'user')]);
@@ -114,7 +114,7 @@ describe('observer logs required sections it could not extract', () => {
   it('does not warn when the required section is present', async () => {
     const { model } = createScriptedModel([{ text: `${REPLY}\n<mood>UNCHANGED</mood>`, finishReason: 'stop' }]);
     const warn = vi.fn();
-    const mood = new Extractor({ name: 'Mood', instructions: 'Describe the mood.', required: true });
+    const mood = new Extractor({ name: 'Mood', instructions: 'Describe the mood.' }, false, true);
 
     await createRunner(model, [mood], warn).call(undefined, [createMessage('Hi', 'user')]);
 

@@ -60,11 +60,6 @@ export interface ExtractorConfig<T = unknown> {
   onExtracted?: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
   /** Retry with JSON prompt injection when native structured output returns an empty object. */
   retryStructuredExtractionOnEmptyObject?: boolean;
-  /**
-   * Require this inline section in single-thread observer and reflector calls. A missing section is recorded as an
-   * extraction failure, and `UNCHANGED` is skipped rather than stored. Batched multi-thread observer calls treat it as optional.
-   */
-  required?: boolean;
 }
 
 /** Sentinel a required inline section uses to signal that no update is needed. */
@@ -151,13 +146,17 @@ export class Extractor<T = unknown> {
   readonly metadataKeyPath: string | false;
   readonly onExtracted?: ExtractorConfig<T>['onExtracted'];
   readonly retryStructuredExtractionOnEmptyObject: boolean;
+  /**
+   * @internal Require this inline section in single-thread observer calls. A missing section is recorded as an
+   * extraction failure, and `UNCHANGED` is skipped rather than stored. Batched multi-thread calls treat it as optional.
+   */
   readonly required: boolean;
   /** @internal */
   readonly internal: boolean;
   private readonly instructionsConfig: ExtractorConfigValue<string>;
   private readonly schemaConfig?: ExtractorConfigValue<z.ZodType<T> | undefined>;
 
-  constructor(config: ExtractorConfig<T>, internal = false) {
+  constructor(config: ExtractorConfig<T>, internal = false, required = false) {
     const name = config.name.trim();
     const instructions = typeof config.instructions === 'string' ? config.instructions.trim() : undefined;
     const slug = slugifyExtractorName(name);
@@ -196,7 +195,7 @@ export class Extractor<T = unknown> {
     this.metadataKeyPath = isHook ? false : (config.metadataKeyPath ?? `extracted.${slug}`);
     this.onExtracted = config.onExtracted;
     this.retryStructuredExtractionOnEmptyObject = config.retryStructuredExtractionOnEmptyObject ?? false;
-    this.required = config.required ?? false;
+    this.required = required;
     this.internal = internal;
   }
 
@@ -223,9 +222,9 @@ export class Extractor<T = unknown> {
         metadataKeyPath: this.metadataKeyPath,
         onExtracted: this.onExtracted,
         retryStructuredExtractionOnEmptyObject: this.retryStructuredExtractionOnEmptyObject,
-        required: this.required,
       },
       this.internal,
+      this.required,
     );
   }
 }
@@ -321,6 +320,7 @@ export function parseExtractedValues(output: string, extractors: readonly Extrac
   const values: Record<string, unknown> = {};
   const failures: Array<{ slug: string; error: string }> = [];
   const inlineExtractors = extractors.filter(extractor => extractor.mode === 'inline');
+  const unchangedSlugs = new Set<string>();
 
   const regex = new RegExp(`<${EXTRACTED_VALUES_TAG}>([\\s\\S]*?)<\\/${EXTRACTED_VALUES_TAG}>`, 'gi');
   const matches = [...output.matchAll(regex)];
@@ -339,6 +339,10 @@ export function parseExtractedValues(output: string, extractors: readonly Extrac
         if (rawValue === undefined || rawValue === null || rawValue === '') {
           continue;
         }
+        if (extractor.required && typeof rawValue === 'string' && UNCHANGED_PATTERN.test(rawValue)) {
+          unchangedSlugs.add(extractor.slug);
+          continue;
+        }
         const parsed = extractor.schema.safeParse(rawValue);
         if (parsed.success) {
           values[extractor.slug] = parsed.data;
@@ -352,7 +356,7 @@ export function parseExtractedValues(output: string, extractors: readonly Extrac
   }
 
   for (const extractor of inlineExtractors) {
-    if (Object.prototype.hasOwnProperty.call(values, extractor.slug)) {
+    if (Object.prototype.hasOwnProperty.call(values, extractor.slug) || unchangedSlugs.has(extractor.slug)) {
       continue;
     }
     const tagRegex = new RegExp(`<${extractor.slug}>([\\s\\S]*?)<\\/${extractor.slug}>`, 'gi');

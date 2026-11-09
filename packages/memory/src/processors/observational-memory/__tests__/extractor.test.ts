@@ -340,6 +340,14 @@ describe('Extractor', () => {
       expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
     });
 
+    it('does not store UNCHANGED from the combined <extracted-values> JSON form', async () => {
+      const resolved = await resolveMarkdown(markdownMemory());
+      const parsed = parseExtractedValues('<extracted-values>{"working-memory":"UNCHANGED"}</extracted-values>', [
+        resolved,
+      ]);
+      expect(parsed).toEqual({ values: {}, failures: [] });
+    });
+
     it('does not call the sections optional when one is required', async () => {
       const sections = buildExtractorOutputSections([await resolveMarkdown(markdownMemory())]);
       expect(sections).not.toContain('optional');

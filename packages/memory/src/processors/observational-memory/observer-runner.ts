@@ -923,6 +923,11 @@ function assertRecognizedObserverOutput<T extends { text: string }>(
 function hasSingleThreadObserverContent(text: string, extractors: readonly Extractor<any>[]): boolean {
   if (/^[ \t]*<observations>/im.test(text)) return true;
   const parsed = parseObserverOutput(text, extractors);
+  // Every reply without a required section records a failure for it, so a refusal would
+  // otherwise count as content and skip the retry.
+  const requiredSlugs = new Set(
+    extractors.filter(extractor => extractor.mode === 'inline' && extractor.required).map(extractor => extractor.slug),
+  );
   return Boolean(
     parsed.degenerate ||
     parsed.observations ||
@@ -930,7 +935,7 @@ function hasSingleThreadObserverContent(text: string, extractors: readonly Extra
     parsed.suggestedContinuation ||
     parsed.threadTitle ||
     Object.keys(parsed.extractedValues ?? {}).length ||
-    parsed.extractionFailures?.length,
+    parsed.extractionFailures?.some(failure => !requiredSlugs.has(failure.slug)),
   );
 }
 
