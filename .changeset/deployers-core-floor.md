@@ -9,4 +9,4 @@
 '@mastra/temporal': patch
 ---
 
-Raised the `@mastra/core` peer dependency floor to 1.82.0. These packages depend on `@mastra/server` (directly or through `@mastra/deployer`), which now requires `@mastra/core` 1.82.0 or later. Upgrade `@mastra/core` together with these packages.
+Raised the `@mastra/core` peer dependency floor to 1.83.0. These packages depend on `@mastra/server` (directly or through `@mastra/deployer`), which now requires `@mastra/core` 1.83.0 or later. Upgrade `@mastra/core` together with these packages.
