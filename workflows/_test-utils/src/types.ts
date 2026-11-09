@@ -469,6 +469,8 @@ export type SkippableTest =
   | 'requestContextPropagation'
   // getInitData helper (some engines have memoization issues with getInitData across steps)
   | 'getInitData'
+  // Deprecated sync getStepResult (throws on storageVersion: 2 runs)
+  | 'getStepResultSync'
   // Error cause chain preservation (some engines have memoization issues with error cause chains)
   | 'errorCauseChain'
   // Variable resolution error handling (Inngest has race condition with snapshot persistence)
@@ -582,6 +584,8 @@ export type SkippableTest =
   // Clone tests
   | 'cloneWorkflows'
   | 'specResultVariables'
+  // Direct nested child resume is not implemented by every workflow engine
+  | 'directNestedChildResume'
   // Advanced variable resolution tests
   | 'mapRequestContextPath'
   | 'mapDynamicFn'

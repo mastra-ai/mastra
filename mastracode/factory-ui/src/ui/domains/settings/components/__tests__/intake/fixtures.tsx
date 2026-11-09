@@ -1,14 +1,14 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { expect } from 'vitest';
 
+import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
 import type { GitLabProject, GitLabStatus } from '../../../../factory/services/gitlab';
-import type { IntakeConfig, IntakeSourceBinding } from '../../../../factory/services/intake';
+import type { IntakeConfig, IntakeSelection, IntakeSourceBinding } from '../../../../factory/services/intake';
 import type { JiraProject, JiraStatus } from '../../../../factory/services/jira';
 import type { LinearProject, LinearStatus } from '../../../../factory/services/linear';
 import type { GithubStatus } from '../../../../workspaces/services/github';
@@ -75,23 +75,8 @@ export const linearTeams = [engTeam, designTeam];
 export function seedGithubProject() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-fp-1',
-            repositories: [
-              {
-                id: 'ghp-1',
-                branch: null,
-                sandboxWorkdir: null,
-                repository: { slug: 'mastra', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
+        projects: [{ id: 'fp-1', name: 'mastra', repositories: [listedRepository('ghp-1', 'mastra')] }],
       }),
     ),
   );
@@ -106,13 +91,15 @@ export function useIntakeHandlers({
   status?: LinearStatus;
   githubStatus?: GithubStatus;
 } = {}) {
-  const saved: IntakeConfig[] = [];
+  let stored = config;
+  const saved: Array<Record<string, IntakeSelection>> = [];
   server.use(
-    http.get(CONFIG_URL, () => HttpResponse.json({ config })),
-    http.put<Record<string, never>, IntakeConfig>(CONFIG_URL, async ({ request }) => {
-      const next = await request.json();
-      saved.push(next);
-      return HttpResponse.json({ config: next });
+    http.get(CONFIG_URL, () => HttpResponse.json({ config: stored })),
+    http.put<Record<string, never>, Record<string, IntakeSelection>>(CONFIG_URL, async ({ request }) => {
+      const body = await request.json();
+      saved.push(body);
+      stored = { ...stored, ...body };
+      return HttpResponse.json({ config: stored });
     }),
     http.get(GITHUB_STATUS_URL, () => HttpResponse.json(githubStatus)),
     http.get(LINEAR_STATUS_URL, () => HttpResponse.json(status)),
@@ -275,7 +262,7 @@ export function useGitLabHandlers(config: IntakeConfig, status: GitLabStatus = g
     http.get(GITLAB_STATUS_URL, () => HttpResponse.json(status)),
     http.get(GITLAB_PROJECTS_URL, () => HttpResponse.json({ projects: gitlabProjects })),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web' }] }),
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web', repositories: [] }] }),
     ),
     http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: savedBindings })),
     http.put<Record<string, never>, BindingUpdate>(BINDINGS_URL, async ({ request }) => {
@@ -301,17 +288,17 @@ export function seedFactories() {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: FACTORY_A, name: 'Acme Web' },
-          { id: FACTORY_B, name: 'Acme API' },
+          { id: FACTORY_A, name: 'Acme Web', repositories: [] },
+          { id: FACTORY_B, name: 'Acme API', repositories: [] },
         ],
       }),
     ),
   );
 }
 
-export function renderIntakeSection() {
+export function renderIntakeSection(path = '/factories/fp-1/settings/intake') {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/intake']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/factories/:factoryId/settings/intake" element={<IntakeSection />} />
       </Routes>
@@ -325,7 +312,21 @@ export async function openSourcePicker(label: string) {
 }
 
 export async function closeSourcePicker() {
-  const done = screen.getByRole('button', { name: 'Done' });
-  await waitFor(() => expect(done).toBeEnabled());
-  await userEvent.click(done);
+  await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+}
+
+export function holdFirstPut(url: string) {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  let held = false;
+  server.use(
+    http.put(url, async () => {
+      if (held) return;
+      held = true;
+      await gate;
+    }),
+  );
+  return release;
 }

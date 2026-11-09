@@ -131,7 +131,7 @@ export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatPro
         disabled={isRunning}
         isRunning={isRunning}
         canSubmit={trimmed.length > 0 && !isRunning}
-        placeholder="Message your agent…"
+        placeholder="Message your agent"
         inputTestId="agent-builder-agent-chat-input"
         submitTestId="agent-builder-agent-chat-submit"
         containerTestId="agent-builder-agent-chat-composer"

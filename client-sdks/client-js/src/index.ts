@@ -21,6 +21,8 @@ export type {
   KnowledgeChangeNotice,
   KnowledgeGraphResponse,
   KnowledgeInstanceSummary,
+  KnowledgeLinkCountsResponse,
+  KnowledgePageLinksResponse,
   KnowledgePageResponse,
   KnowledgeSearchResponse,
   KnowledgeTreeResponse,
@@ -108,3 +110,12 @@ export type {
   RouteResponseType,
   RouteTypes,
 } from './route-types.generated.js';
+
+export type { SignalWriteOptions } from './resources/signal-writes';
+export type {
+  CreateFeedbackBody,
+  CreateFeedbackResponse,
+  CreateScoreBody,
+  CreateScoreResponse,
+  ReplaceFeedbackBody,
+} from './resources/observability-route-types';

@@ -631,6 +631,42 @@ describe('Datasets Handlers', () => {
       expect(listed.results).toHaveLength(2);
     });
 
+    it('rejects updating a result through a dataset the experiment does not belong to', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const other = await mastra.datasets.create({ name: 'Other DS' });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      const submitted = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+
+      await expect(
+        UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: other.id,
+          experimentId: created.experimentId,
+          resultId: submitted.id,
+          tags: ['forged'],
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].tags ?? []).not.toContain('forged');
+    });
+
     it('attaches the experiment targetType to returned results', async () => {
       const { dataset, item1 } = await setupDatasetWithItems();
       const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({

@@ -321,7 +321,9 @@ export class AgentControllerChannels extends AgentChannels {
       // rejects after the next tick and the message vanishes with no trace,
       // no log, and no reply. Rejecting here reaches handleChatMessage's
       // error boundary, which tells the sender.
-      { requestContext, requireDelivery: true },
+      // Keep the run open until background tasks finish: it carries the channel's render
+      // context, so it's the run that posts their results to the chat.
+      { requestContext, requireDelivery: true, untilIdle: true },
     );
     await result.accepted;
   }

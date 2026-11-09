@@ -54,7 +54,7 @@ describe('getInputPreview', () => {
       { role: 'user', content: 'Second question' },
     ];
 
-    expect(getInputPreview(input)).toBe('First question | Second question');
+    expect(getInputPreview(input)).toBe('First question; Second question');
   });
 
   it('unwraps the legacy { messages } envelope of agent_run spans', () => {
@@ -132,7 +132,8 @@ describe('isTokenLimitExceeded', () => {
     expect(isTokenLimitExceeded(spanWith({}))).toBe(false);
     expect(isTokenLimitExceeded(undefined)).toBeFalsy();
     // A span may arrive with no attributes at all.
-    expect(isTokenLimitExceeded({} as SpanRecord)).toBeFalsy();
+    const spanWithoutAttributes = {} as SpanRecord;
+    expect(isTokenLimitExceeded(spanWithoutAttributes)).toBeFalsy();
   });
 });
 

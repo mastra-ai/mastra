@@ -1,6 +1,7 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
 import type { IntegrationContext } from '../base.js';
 import {
+  githubItemSources,
   githubRulesOptions,
   reconcilableIssueNumber,
   reconciledIssueClosedEvent,
@@ -80,7 +81,7 @@ export function createGithubIssueReconciler(
         if (projects.length === 0) continue;
 
         // Collect issue cards: number -> items (skip terminal stages)
-        const itemsByNumber = new Map<number, import('../../storage/domains/work-items/base.js').WorkItemRow[]>();
+        const itemsByNumber = new Map<number, import('../../storage/domains/work-items/base.js').Card[]>();
         // Every issue with any card, terminal included: a finished card must
         // not be re-minted by missed-open discovery.
         const carded = new Set<number>();
@@ -114,6 +115,25 @@ export function createGithubIssueReconciler(
             installationId: repository.installationId,
             repository: repository.fullName,
           });
+          // A finished card may still be only in the legacy table; copy it so it counts.
+          const uncarded = openIssues.filter(issue => !carded.has(issue.number));
+          if (uncarded.length && options.storage.legacyBackfillPending) {
+            for (const project of projects) {
+              await options.storage.copyLegacyCards({
+                orgId: project.orgId,
+                factoryProjectId: project.factoryProjectId,
+                sources: uncarded.flatMap(issue => githubItemSources(repository.id, 'issue', issue.number)),
+              });
+              const items = await options.storage.list({
+                orgId: project.orgId,
+                factoryProjectId: project.factoryProjectId,
+              });
+              for (const item of items) {
+                const issueNumber = reconcilableIssueNumber(item, repository);
+                if (issueNumber) carded.add(issueNumber);
+              }
+            }
+          }
           for (const issue of openIssues) {
             if (carded.has(issue.number)) continue;
             const createdAt = issue.createdAt ? Date.parse(issue.createdAt) : Number.NaN;
@@ -173,7 +193,7 @@ export function createGithubIssueReconciler(
             if (
               state.labels !== undefined &&
               items.some(
-                item => Array.isArray(item.metadata?.labels) && !sameStrings(item.metadata.labels, state.labels),
+                item => Array.isArray(item.workItem.metadata?.labels) && !sameStrings(item.workItem.labels, state.labels),
               )
             ) {
               await rules.ingest(reconciledIssueRelabeledEvent(repository, issueNumber, state));
@@ -181,7 +201,7 @@ export function createGithubIssueReconciler(
             }
 
             for (const item of items) {
-              const current = item.metadata ?? {};
+              const current = { ...item.workItem.metadata, ...item.metadata };
               const trustStale = authorTrusted !== undefined && current.authorTrusted !== authorTrusted;
               const metadataChanged =
                 trustStale ||
@@ -194,11 +214,11 @@ export function createGithubIssueReconciler(
 
               if (!metadataChanged) continue;
 
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: item.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: { ...current, ...desiredMetadata, ...(trustStale ? { authorTrusted } : {}) } },
+                patch: { metadata: { ...desiredMetadata, ...(trustStale ? { authorTrusted } : {}) } },
               });
               summary.updated += 1;
             }

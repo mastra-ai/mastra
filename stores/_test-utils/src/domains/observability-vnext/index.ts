@@ -46,7 +46,7 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
 import type { TraceAggregateFixtureData } from './trace-aggregate';
-import type { TraceQueryFixtureData } from './trace-query';
+import type { ThreadQueryConformanceCase, TraceQueryConformanceCase, TraceQueryFixtureData } from './trace-query';
 import { createOutcomeFieldTests } from './outcome-fields';
 import { TIMING_FIELDS, timingValue } from './timing-fields';
 
@@ -214,6 +214,8 @@ export async function writeTraceQueryFixture(
       rootEntityName: span.rootEntityName ?? null,
       model: span.model ?? null,
       provider: span.provider ?? null,
+      timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+      timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
@@ -343,6 +345,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await storage.dangerouslyClearAll();
       }
     });
+
+    const runsConformanceCase = (testCase: TraceQueryConformanceCase | ThreadQueryConformanceCase) =>
+      !(testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) &&
+      (testCase.requiresFeature === undefined || storage.getFeatures()?.includes(testCase.requiresFeature) === true);
 
     it('reports observability strategy preference', () => {
       expect(storage.observabilityStrategy?.preferred).toBe(capabilities.preferredStrategy);
@@ -546,9 +552,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         coreFeatures.add(feature);
         try {
           const cases = TRACE_QUERY_CONFORMANCE_CASES.filter(
-            testCase =>
-              !testCase.request.group &&
-              !(testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false),
+            testCase => !testCase.request.group && runsConformanceCase(testCase),
           );
           const requests = await Promise.all(
             cases.map(async testCase => {
@@ -707,9 +711,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
         for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
-          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
-            continue;
-          }
+          if (!runsConformanceCase(testCase)) continue;
           const plan = planTraceQuery(parseTraceQueryRequest(testCase.request), { scope: testCase.scope });
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
@@ -927,9 +929,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await writeTraceQueryFixture(storage, THREAD_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
         for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
-          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
-            continue;
-          }
+          if (!runsConformanceCase(testCase)) continue;
           const plan = planThreadQuery(parseQueryThreadsInput(testCase.request), { scope: testCase.scope });
           const response = await storage.queryThreads(plan);
           expect(response.threads, testCase.name).toEqual(testCase.expected);
@@ -4983,6 +4983,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           // Compare against the input so a lossy read mapper cannot hide missing fields.
           const before = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
           expect(before.feedback).toMatchObject([feedback]);
+          expect(await storage.getFeedbackById(feedback.feedbackId)).toMatchObject(feedback);
 
           const updated = await storage.updateFeedbackReviewStatus({
             feedbackId: feedback.feedbackId,
@@ -4990,6 +4991,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           });
           const expected = { ...feedback, reviewStatus: 'reviewed' };
           expect(updated).toMatchObject(expected);
+          expect(await storage.getFeedbackById(feedback.feedbackId)).toMatchObject(expected);
 
           // Append-only stores (ClickHouse) implement the update as a replacement
           // row; the read side must still expose a single, latest version.
@@ -4998,6 +5000,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           expect(result.pagination?.total).toBe(1);
         },
       );
+
+      it('returns null when retrieving a missing feedback record', async () => {
+        expect(await storage.getFeedbackById('feedback-does-not-exist')).toBeNull();
+      });
 
       it('throws when updating reviewStatus of a missing feedback record', async () => {
         await expect(
@@ -5361,6 +5367,35 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
         expect(result.scores).toHaveLength(1);
         expect(result.scores[0]!.scoreId).toBe('score-retry-1');
+      });
+
+      it.each(['single', 'batch'])('keeps span user separate from feedback author in %s writes', async method => {
+        for (const feedbackUserId of ['reviewer', null]) {
+          const feedback = {
+            feedbackId: `identity-${feedbackUserId}`,
+            traceId: 'identity-trace',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            feedbackType: 'thumbs',
+            value: 1,
+            userId: 'span-user',
+            feedbackUserId,
+            metadata: { userId: 'metadata-user' },
+          };
+          if (method === 'single') await storage.createFeedback({ feedback });
+          else await storage.batchCreateFeedback({ feedbacks: [feedback] });
+        }
+        const { feedback } = await storage.listFeedback({ filters: { traceId: 'identity-trace' } });
+        expect(feedback).toHaveLength(2);
+        expect(feedback).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              feedbackId: 'identity-reviewer',
+              userId: 'span-user',
+              feedbackUserId: 'reviewer',
+            }),
+            expect.objectContaining({ feedbackId: 'identity-null', userId: 'span-user', feedbackUserId: null }),
+          ]),
+        );
       });
 
       it('re-inserting the same feedbackId does not throw or duplicate', async () => {

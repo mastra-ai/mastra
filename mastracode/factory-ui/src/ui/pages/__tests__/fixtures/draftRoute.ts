@@ -1,11 +1,13 @@
 import { http, HttpResponse } from 'msw';
 
+import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../../domains/workspaces/services/user-sessions';
 
 export const FACTORY_ID = 'factory-draft-handoff';
 export const DRAFT_SESSION_ID = '30000000-0000-4000-8000-000000000001';
+export const OTHER_DRAFT_SESSION_ID = '30000000-0000-4000-8000-000000000002';
 const REPOSITORY_ID = 'repository-draft-handoff';
 const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 
@@ -31,11 +33,18 @@ export interface DraftRoute {
   posted: string[];
   bindings: string[];
   bindingsBeforePrompt: string[];
+  modelSwitchRequests: number;
   finishWorkspace: () => void;
 }
 
 interface DraftRouteOptions {
   modelDefaultsGate?: Promise<void>;
+  /** Holds the session create response until it settles. */
+  createGate?: Promise<void>;
+  /** Answers this many session creates with a server error before accepting one. */
+  failedCreates?: number;
+  /** Holds each session model switch response until it settles. */
+  modelSwitchGate?: Promise<void>;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
@@ -50,6 +59,9 @@ function readSentMessage(body: unknown): string {
 
 export function stubDraftRoute({
   modelDefaultsGate,
+  createGate,
+  failedCreates = 0,
+  modelSwitchGate,
   defaultModelId = null,
   persistedMessages = [],
   workItems = [],
@@ -69,6 +81,7 @@ export function stubDraftRoute({
     posted: [],
     bindings: [],
     bindingsBeforePrompt: [],
+    modelSwitchRequests: 0,
     finishWorkspace: () => releaseWorkspace(),
   };
 
@@ -81,7 +94,17 @@ export function stubDraftRoute({
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [
+              listedRepository(REPOSITORY_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/workspace/acme' }),
+            ],
+          },
+        ],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, async () => {
       await modelDefaultsGate;
@@ -95,24 +118,6 @@ export function stubDraftRoute({
         },
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'connection-1',
-            installationId: 'installation-1',
-            repositories: [
-              {
-                id: REPOSITORY_ID,
-                branch: 'main',
-                sandboxWorkdir: '/workspace/acme',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
@@ -123,13 +128,20 @@ export function stubDraftRoute({
     }),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
-        models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
+        models: [
+          { id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true },
+          { id: 'openai/gpt-5.4-mini', provider: 'openai', modelName: 'gpt-5.4-mini', hasApiKey: true },
+        ],
         fallbackModelId: 'openai/gpt-4o-mini',
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, async ({ request }) => {
       route.createBodies.push(await request.json());
+      await createGate;
+      if (route.createBodies.length <= failedCreates) {
+        return HttpResponse.json({ message: 'Database unavailable' }, { status: 500 });
+      }
       return HttpResponse.json({ session: createdSession });
     }),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
@@ -174,6 +186,8 @@ export function stubDraftRoute({
       const body = await request.json();
       const thinkingLevel = readBody(body, 'thinkingLevel');
       const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
+      route.modelSwitchRequests += 1;
+      await modelSwitchGate;
       route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
       return HttpResponse.json({ ok: true });
     }),

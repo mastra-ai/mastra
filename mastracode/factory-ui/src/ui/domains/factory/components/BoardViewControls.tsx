@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { SavedViewEditor, SavedViewTabs } from '@mastra/playground-ui/components/SavedViews';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
@@ -21,7 +22,10 @@ const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List
 function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
   return (
     <Txt as="span" variant="caption" tone="muted">
-      {LAYOUT_LABELS[settings.layout]} · {BOARD_SORT_LABELS[settings.sort]}
+      <Metadata>
+        <Metadata.Item>{LAYOUT_LABELS[settings.layout]}</Metadata.Item>
+        <Metadata.Item>{BOARD_SORT_LABELS[settings.sort]}</Metadata.Item>
+      </Metadata>
     </Txt>
   );
 }
@@ -83,7 +87,7 @@ export function BoardViewControls({
       search={
         <SearchInput
           label="Search cards"
-          placeholder={savedViews.applied ? 'Search this view…' : 'Search cards…'}
+          placeholder={savedViews.applied ? 'Search this view' : 'Search cards'}
           value={view.search}
           onValueChange={view.setSearch}
           size="sm"

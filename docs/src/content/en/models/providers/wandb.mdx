@@ -7,7 +7,7 @@ description: "Browse CoreWeave model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/wandb.svg" alt="CoreWeave logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CoreWeave
 
-Access 23 CoreWeave models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
+Access 24 CoreWeave models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
 
 Learn more in the [CoreWeave documentation](https://docs.wandb.ai).
 
@@ -54,8 +54,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 161000,
     "maxOutput": 161000,
-    "inputCost": 0.55,
-    "outputCost": 1.65
+    "inputCost": 0.5,
+    "outputCost": 1.5
   },
   {
     "model": "wandb/deepseek-ai/DeepSeek-V4-Flash-0731",
@@ -67,7 +67,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 262144,
     "maxOutput": 262144,
     "inputCost": 0.13,
-    "outputCost": 0.28
+    "outputCost": 0.27
   },
   {
     "model": "wandb/deepseek-ai/DeepSeek-V4-Pro-0813",
@@ -92,6 +92,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 0.13,
     "outputCost": 0.65
+  },
+  {
+    "model": "wandb/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "wandb/google/gemma-4-26B-A4B-it",
@@ -259,7 +271,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 262144,
     "maxOutput": 262144,
     "inputCost": 0.1,
-    "outputCost": 0.95
+    "outputCost": 0.89
   },
   {
     "model": "wandb/Qwen/Qwen3.8-27B",
@@ -306,8 +318,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 1.2,
-    "outputCost": 4
+    "inputCost": 0.75,
+    "outputCost": 3
   },
   {
     "model": "wandb/zai-org/GLM-5.3-Flash",

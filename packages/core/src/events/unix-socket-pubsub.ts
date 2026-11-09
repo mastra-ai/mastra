@@ -631,8 +631,24 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  /** Creates the shared lease directories and records this process incarnation. */
+  /**
+   * Creates the shared lease directories and records this process incarnation.
+   * The marker is rewritten whenever it has gone missing: temp-directory cleaners
+   * (macOS deletes `/tmp` files left unmodified for days) remove it under a
+   * long-lived process, and without it every process, this one included, reads
+   * this process's leases and mutation locks as abandoned.
+   */
   async #ensureLeaseDirectories(): Promise<void> {
+    await this.#ensureLeaseDirectoriesOnce();
+    const marker = await this.#readJson<FileLeaseProcessMarker>(
+      join(this.#leaseProcessDirectory, `${process.pid}.json`),
+    );
+    if (marker?.processNonce === PROCESS_NONCE) return;
+    this.#leaseDirectoriesReady = undefined;
+    await this.#ensureLeaseDirectoriesOnce();
+  }
+
+  async #ensureLeaseDirectoriesOnce(): Promise<void> {
     if (!this.#leaseDirectoriesReady) {
       this.#leaseDirectoriesReady = (async () => {
         await Promise.all([

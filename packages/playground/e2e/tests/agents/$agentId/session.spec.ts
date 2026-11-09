@@ -25,7 +25,7 @@ test.describe('Agent session page', () => {
       await expect(page.locator('header').locator('text=Mastra Studio')).toBeVisible();
 
       // ASSERT: Chat composer is visible (the message input area)
-      await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
+      await expect(page.getByPlaceholder('Enter your message')).toBeVisible();
 
       // ASSERT: Left sidebar (thread list with "New Thread" button) is NOT present
       await expect(page.locator('a:has-text("New Thread")')).not.toBeVisible();

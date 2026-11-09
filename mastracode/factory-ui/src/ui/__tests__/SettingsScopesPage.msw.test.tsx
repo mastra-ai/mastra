@@ -42,7 +42,9 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [settingsFactory] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ ...settingsFactory, repositories: [] }] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project: settingsFactory })),
     http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions`, () => HttpResponse.json(settingsSession)),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1`, () => HttpResponse.json(settingsSession)),

@@ -244,6 +244,14 @@ export class BackgroundTaskManager {
         }
         return;
       }
+      if (event.type === 'task.cancelled') {
+        try {
+          await this.handleRemoteCancel(event.data.taskId);
+        } finally {
+          await ack?.();
+        }
+        return;
+      }
       await ack?.();
     };
 
@@ -590,6 +598,9 @@ export class BackgroundTaskManager {
             ?.getLogger?.()
             ?.warn(`background-task cancellation callback failed for ${taskId}:`, error as any);
         }
+        // Cancelling answers nothing, but the open request on the tool call
+        // must go so a client doesn't offer to answer a dead task.
+        if (previousStatus === 'suspended') await this.runLocalExecutionHook(cancelledTask);
       }
       this.deregisterTaskContext(taskId);
 
@@ -632,6 +643,9 @@ export class BackgroundTaskManager {
     }
     if (task.status !== 'suspended') {
       throw new Error(`Cannot resume task in status '${task.status}' (expected 'suspended')`);
+    }
+    if (options?.suspendedAt !== undefined && new Date(options.suspendedAt).getTime() !== suspensionToken(task)) {
+      throw new Error(`Cannot resume task "${taskId}": its suspension has changed since it was read`);
     }
 
     const isProcessAffine = this.taskContexts.has(taskId);
@@ -1597,6 +1611,9 @@ export class BackgroundTaskManager {
     const resumedTask = await storage.getTask(taskId);
     if (resumedTask) {
       await this.publishLifecycleEvent('task.resumed', resumedTask);
+      // The suspension is answered: let the caller drop its open request from
+      // the tool call before the run can suspend again.
+      await this.runLocalExecutionHook(resumedTask);
     }
 
     if (!this.#mastra) {
@@ -1821,10 +1838,10 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Per-task suspend hooks. Fires `ctx.onResult({ status: 'suspended', ... })`
-   * so the message list / memory pick up the suspension as the tool's
-   * current invocation state. Does NOT deregister the task context — resume
-   * needs the executor closure intact.
+   * Per-task suspend hooks. Fires `ctx.onExecution({ suspendedAt, suspendPayload, ... })`
+   * so the message list / memory record the open suspension on the tool
+   * call. Does NOT deregister the task context — resume needs the executor
+   * closure intact.
    *
    * @internal — called by the workflow-engine step bodies in workflow.ts
    */
@@ -1841,6 +1858,7 @@ export class BackgroundTaskManager {
       resourceId: task.resourceId,
       startedAt: task.startedAt!,
       suspendedAt: task.suspendedAt,
+      suspendPayload: task.suspendPayload,
     });
   }
 
@@ -1863,6 +1881,19 @@ export class BackgroundTaskManager {
     } catch {
       //fail silently
     }
+  }
+
+  /**
+   * Another process cancelled a task this one dispatched. Run its execution
+   * hook, so the dispatcher drops an open request it recorded for the task,
+   * and release the task's context. A cancel made here has already done both.
+   */
+  private async handleRemoteCancel(taskId: string): Promise<void> {
+    if (!this.taskContexts.has(taskId)) return;
+    const task = await (await this.getStorage()).getTask(taskId);
+    if (task?.status !== 'cancelled') return;
+    await this.runLocalExecutionHook(task);
+    this.deregisterTaskContext(taskId);
   }
 
   private async handleResult(event: Event): Promise<void> {

@@ -1,3 +1,4 @@
+import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -5,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { releaseBoard } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
@@ -17,8 +19,8 @@ import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { createAppRoutes } from '../../../router';
 import {
   ACTIVE_FACTORY_ID,
-  factoryConnections,
   factoryProjects,
+  factoryRepositories,
   FIRST_REPOSITORY_ID,
   intakeIssues,
   intakePullRequests,
@@ -71,6 +73,25 @@ function resourceIdFromRequestBody(body: unknown): string {
   return body.resourceId;
 }
 
+function projectListResponse(repositories: Record<string, ProjectListRepository[]>) {
+  return HttpResponse.json({
+    projects: factoryProjects.map(project => ({ ...project, repositories: repositories[project.id] ?? [] })),
+  });
+}
+
+function activeFactoryRepositories(options: StubSearchOptions): ProjectListRepository[] {
+  if (options.activeFactoryHasRepositories === false) return [];
+  if (!options.activeRepositories) return factoryRepositories[ACTIVE_FACTORY_ID];
+  return options.activeRepositories.map(repository =>
+    listedRepository(repository.projectRepositoryId, repository.slug, {
+      integrationId: repository.provider ?? 'github',
+      externalId: repository.externalId ?? null,
+      branch: 'main',
+      sandboxWorkdir: '/repo',
+    }),
+  );
+}
+
 function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
@@ -91,35 +112,14 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         user: { userId: 'user-search', email: 'search@example.com' },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: factoryProjects })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      projectListResponse({ ...factoryRepositories, [ACTIVE_FACTORY_ID]: activeFactoryRepositories(options) }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId`, ({ params }) => {
       const project = factoryProjects.find(candidate => candidate.id === String(params.factoryProjectId));
       return project
         ? HttpResponse.json({ project })
         : HttpResponse.json({ error: 'Factory not found' }, { status: 404 });
-    }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, ({ params }) => {
-      const factoryProjectId = String(params.factoryProjectId);
-      if (factoryProjectId === ACTIVE_FACTORY_ID) {
-        const connections =
-          options.activeRepositories?.map(repository => ({
-            id: `connection-${repository.projectRepositoryId}`,
-            installationId: `installation-${repository.projectRepositoryId}`,
-            integrationId: repository.provider ?? 'github',
-            repositories: [
-              {
-                id: repository.projectRepositoryId,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { externalId: repository.externalId, slug: repository.slug, defaultBranch: 'main' },
-              },
-            ],
-          })) ?? factoryConnections[ACTIVE_FACTORY_ID];
-        return HttpResponse.json({
-          connections: options.activeFactoryHasRepositories === false ? [] : connections,
-        });
-      }
-      return HttpResponse.json({ connections: factoryConnections[OTHER_FACTORY_ID] });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params }) => {
       state.workItemRequests += 1;
@@ -303,8 +303,8 @@ function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/setti
 
 async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryClient>) {
   await Promise.all([
-    client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
-    client.prefetchQuery({
+    client.query(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
+    client.query({
       queryKey: queryKeys.workItems(ACTIVE_FACTORY_ID),
       queryFn: ({ signal }) => listWorkItems(TEST_BASE_URL, ACTIVE_FACTORY_ID, signal),
     }),
@@ -640,7 +640,7 @@ describe('Global search', () => {
     stubSearchApi({ failWorkItems: true });
     renderSearchRoute();
     await openWithShortcut();
-    expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /factory\/pr-900/ })).toBeInTheDocument();
     expect(await screen.findByText(/^Board cards could not be loaded/)).toBeInTheDocument();
   });
 
@@ -648,19 +648,10 @@ describe('Global search', () => {
     const requests = stubSearchApi();
     let githubIntakeRequests = 0;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({
-          connections: [
-            {
-              ...factoryConnections[ACTIVE_FACTORY_ID][0],
-              integrationId: 'gitlab',
-              repositories: [
-                {
-                  ...factoryConnections[ACTIVE_FACTORY_ID][0].repositories[0],
-                },
-              ],
-            },
-          ],
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        projectListResponse({
+          ...factoryRepositories,
+          [ACTIVE_FACTORY_ID]: [{ ...factoryRepositories[ACTIVE_FACTORY_ID][0], integrationId: 'gitlab' }],
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
@@ -756,11 +747,11 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute();
     await openWithShortcut();
-    await screen.findByText('factory/pr-900');
+    await screen.findByRole('option', { name: /factory\/pr-900/ });
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#900');
 
-    expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /factory\/pr-900/ })).toBeInTheDocument();
     expect(screen.queryByText('feature/offline-index')).not.toBeInTheDocument();
   });
 
@@ -965,8 +956,9 @@ describe('Global search', () => {
     await screen.findByText('Review command palette PR');
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
-    const candidate = await screen.findByText('Harden the review board drop target');
-    expect(within(dialog).getByText(/Intake · not filed/)).toBeInTheDocument();
+    const candidate = await within(dialog).findByRole('option', { name: /Harden the review board drop target/ });
+    expect(within(candidate).getByText('Intake')).toBeInTheDocument();
+    expect(within(candidate).getByText('not filed')).toBeInTheDocument();
 
     await user.click(candidate);
 
@@ -1101,7 +1093,7 @@ describe('Global search', () => {
     const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
-    await user.click(within(dialog).getByText(title));
+    await user.click(within(dialog).getByRole('option', { name: name => name.startsWith(title) }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(path));
     if (preservesOrigin) expectOriginPathname(router.state.location.state, origin);

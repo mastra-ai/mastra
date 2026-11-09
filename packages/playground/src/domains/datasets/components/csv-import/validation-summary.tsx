@@ -27,11 +27,11 @@ export function ValidationSummary({ errors }: ValidationSummaryProps) {
       <div className="max-h-[120px] space-y-1 overflow-y-auto">
         {errors.map((error: ValidationError, index: number) => (
           <Txt as="p" variant="body" key={index}>
-            Row {error.row}:{' '}
+            Row {error.row}{' '}
             <Txt as="span" variant="subheading">
               [{error.column}]
-            </Txt>{' '}
-            - {error.message}
+            </Txt>
+            : {error.message}
           </Txt>
         ))}
       </div>

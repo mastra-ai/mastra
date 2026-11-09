@@ -16,8 +16,10 @@ import {
   factoryId,
   projectRepositoryId,
   reviewName,
+  reviewRowName,
   reviewSessionId,
   workName,
+  workRowName,
   workSessionId,
 } from './fixtures/sessionHoverDetails';
 
@@ -30,9 +32,6 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
 
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json(fixtures.projectsResponse)),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
-      HttpResponse.json(fixtures.connectionsResponse),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json(fixtures.sessionsResponse),
     ),
@@ -92,8 +91,8 @@ async function setupSessionRows() {
 
   return {
     user,
-    workRow: await screen.findByRole('link', { name: workName }),
-    reviewRow: await screen.findByRole('link', { name: reviewName }),
+    workRow: await screen.findByRole('link', { name: workRowName }),
+    reviewRow: await screen.findByRole('link', { name: reviewRowName }),
   };
 }
 
@@ -119,7 +118,7 @@ describe('Workspace session hover details', () => {
         'src',
         'https://example.com/ada.png',
       );
-      expect(within(card).getByRole('link', { name: 'Open in GitHub: #42' })).toHaveAttribute(
+      expect(within(card).getByRole('link', { name: /^Open in GitHub: .*#42\b/ })).toHaveAttribute(
         'href',
         'https://github.com/mastra-ai/mastra/issues/42',
       );
@@ -154,7 +153,7 @@ describe('Workspace session hover details', () => {
       const user = userEvent.setup();
       renderSection();
 
-      await user.hover(await screen.findByRole('link', { name: workName }));
+      await user.hover(await screen.findByRole('link', { name: workRowName }));
 
       const card = await screen.findByLabelText(`${workName} session details`);
       expect(await within(card).findByRole('img', { name: /Ada Lovelace took over/ })).toBeInTheDocument();
@@ -221,7 +220,7 @@ describe('Workspace session hover details', () => {
       const card = await screen.findByLabelText(`${reviewName} session details`);
       expect(within(card).getByText(reviewName)).toBeInTheDocument();
       expect(within(card).getByText('Ada Lovelace')).toBeInTheDocument();
-      expect(within(card).getByRole('link', { name: 'Open in GitHub: #99' })).toHaveAttribute(
+      expect(within(card).getByRole('link', { name: /^Open in GitHub: .*#99\b/ })).toHaveAttribute(
         'href',
         'https://github.com/mastra-ai/mastra/pull/99',
       );
@@ -251,7 +250,7 @@ describe('Workspace session hover details', () => {
         <SidebarProvider storageKey="session-hover-test">{section}</SidebarProvider>
       ));
 
-      const workRow = await screen.findByRole('link', { name: workName });
+      const workRow = await screen.findByRole('link', { name: workRowName });
       await waitForMutationsIdle(client);
       await user.hover(workRow);
       await user.tab();

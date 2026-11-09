@@ -36,7 +36,7 @@ type Story = StoryObj<typeof Input>;
 
 export const Default: Story = {
   args: {
-    placeholder: 'Enter text...',
+    placeholder: 'Enter text',
     variant: 'default',
   },
 };
@@ -174,25 +174,25 @@ export const OnDifferentSurfaces: Story = {
         <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
-        <Input aria-label="Search agents on the sidebar" placeholder="Search agents..." />
+        <Input aria-label="Search agents on the sidebar" placeholder="Search agents" />
       </div>
       <div className="rounded-lg border border-border bg-background p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
-        <Input aria-label="Search agents on the main canvas" placeholder="Search agents..." />
+        <Input aria-label="Search agents on the main canvas" placeholder="Search agents" />
       </div>
       <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
         <Txt variant="caption" tone="muted" className="mb-2">
           Card
         </Txt>
-        <Input aria-label="Search agents on a card" placeholder="Search agents..." />
+        <Input aria-label="Search agents on a card" placeholder="Search agents" />
       </div>
       <div className="rounded-lg border border-border bg-popover p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>
-        <Input aria-label="Search agents in a popover" placeholder="Search agents..." />
+        <Input aria-label="Search agents in a popover" placeholder="Search agents" />
       </div>
     </div>
   ),

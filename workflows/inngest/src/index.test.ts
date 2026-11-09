@@ -286,7 +286,7 @@ describe('MastraInngestWorkflow', () => {
     }
   });
 
-  describe.sequential('FGA actor signal', () => {
+  describe('FGA actor signal', { concurrent: false }, () => {
     it('bypasses membership resolution for a trusted system actor across a nested-workflow step boundary', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -399,7 +399,7 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  describe.sequential('Basic Workflow Execution', () => {
+  describe('Basic Workflow Execution', { concurrent: false }, () => {
     it('should be able to bail workflow execution', async ctx => {
       const t0 = Date.now();
       const inngest = new Inngest({
@@ -13076,7 +13076,7 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  describe.sequential('Long Running Steps', () => {
+  describe('Long Running Steps', { concurrent: false }, () => {
     it('should handle long-running steps with eventual consistency', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -13164,7 +13164,7 @@ describe('MastraInngestWorkflow', () => {
     }, 120000); // 2 minute timeout for the test
   });
 
-  describe.sequential('Flow Control Configuration', () => {
+  describe('Flow Control Configuration', { concurrent: false }, () => {
     it('should accept workflow configuration with flow control properties', async ctx => {
       const inngest = new Inngest({
         id: 'mastra-flow-control',
@@ -14028,7 +14028,7 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  describe.sequential('startAsync', () => {
+  describe('startAsync', { concurrent: false }, () => {
     it('should start workflow and complete successfully', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -14109,7 +14109,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     }, 60000);
   });
-  describe.sequential('onFinish and onError callbacks', () => {
+  describe('onFinish and onError callbacks', { concurrent: false }, () => {
     it('should call onFinish callback when workflow completes successfully', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -14656,7 +14656,7 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  describe.sequential('Workflow Tracing', () => {
+  describe('Workflow Tracing', { concurrent: false }, () => {
     it('should provide tracingContext.currentSpan to step execution', async ctx => {
       // This test verifies that workflow tracing works correctly.
       // The InngestWorkflow creates a workflow span and passes it to the execution engine,
@@ -15196,8 +15196,6 @@ createWorkflowTestSuite({
 
   beforeAll: async () => {
     console.log('[beforeAll] Ready');
-    vi.unmock('crypto');
-    vi.unmock('node:crypto');
   },
 
   afterAll: async () => {
@@ -15317,6 +15315,7 @@ createWorkflowTestSuite({
     resumeWithLabel: false, // Testing - uses label instead of step
     resumeWithState: true, // requestContext bug #4442 - request context not preserved during resume
     resumeNested: true, // Nested step path resume not supported on Inngest
+    directNestedChildResume: true, // Direct child resume does not wake the suspended parent
     resumeNestedWithLabel: true, // same as resumeNested
     resumeParallelMulti: true, // parallel suspended steps behavior differs on Inngest
     resumeAutoDetect: true, // Inngest result doesn't include 'suspended' array property

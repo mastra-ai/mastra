@@ -1,13 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Drawer, DrawerTrigger } from '@mastra/playground-ui/components/Drawer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { RotateCcw } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useFactoryEnvironmentQuery } from '../../../../hooks/useFactoryEnvironment';
+import { useSidePanelDrawer } from '../../../lib/hooks/useSidePanelDrawer';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { RepositoriesBlock } from '../../settings/components/environment/RepositoriesBlock';
 import type { RepositoryProviders } from '../../settings/components/environment/RepositoriesBlock';
@@ -17,7 +17,7 @@ import type { FactoryProject } from '../services/github';
 import { AddRepositoryPicker } from './AddRepositoryPicker';
 
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
-  const isMobile = useIsMobile();
+  const sidePanel = useSidePanelDrawer();
   const [adding, setAdding] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const linkRepository = useLinkRepositoryMutation();
@@ -32,9 +32,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
 
   return (
     <Drawer
-      side={isMobile ? 'bottom' : 'right'}
-      variant={isMobile ? 'default' : 'floating'}
-      overlay="visible"
+      {...sidePanel}
       open={adding}
       onOpenChange={open => {
         if (mutationPending) return;

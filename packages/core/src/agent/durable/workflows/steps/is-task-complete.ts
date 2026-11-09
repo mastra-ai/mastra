@@ -10,6 +10,7 @@ import { emitChunkEvent } from '../../stream-adapter';
 import type { SerializableDurableOptions } from '../../types';
 import { restoreRequestContext } from '../../utils/resolve-runtime';
 import { restoreCompletionPolicy } from '../../utils/restore-completion';
+import { readAccumulatedSteps } from '../shared/accumulated-steps';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
@@ -41,7 +42,8 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         iterationCount: number;
         /** Present only on runs that thread the transcript through step payloads. */
         messageListState?: any;
-        accumulatedSteps: Array<{
+        /** Present only on runs that thread step records through step payloads. */
+        accumulatedSteps?: Array<{
           text?: string;
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
@@ -96,7 +98,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         return messageList;
       };
 
-      const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+      const lastStep = readAccumulatedSteps(params.state, state).at(-1);
       const outcome = await evaluateTaskCompletion({
         policy,
         // Durable steps replay under at-least-once redelivery: a

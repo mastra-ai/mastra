@@ -125,7 +125,7 @@ export function AskUserTextAnswer({ disabled = false, ...props }: AskUserTextAns
     <Input
       type="text"
       aria-labelledby={props['aria-label'] ? undefined : context.questionId}
-      placeholder="Type your answer..."
+      placeholder="Type your answer"
       size="sm"
       {...props}
       disabled={context.disabled || disabled}

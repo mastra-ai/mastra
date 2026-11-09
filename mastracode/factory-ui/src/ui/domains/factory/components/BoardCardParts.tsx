@@ -17,6 +17,7 @@ import {
   metadataLabelColors,
   metadataLabels,
   pullRequestStatusForItem,
+  workItemKey,
 } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { WorkItem, WorkItemSource } from '../services/workItems';
@@ -30,6 +31,11 @@ export function SourceTitle({ source, title, id }: { source: WorkItemSource; tit
       <span id={id}>{title}</span>
     </>
   );
+}
+
+export function CardKey({ item }: { item: Pick<WorkItem, 'source' | 'metadata'> }) {
+  // SourceTitle's sr-only prefix already announces the source.
+  return workItemKey(item) ?? <span aria-hidden>{SOURCE_LABELS[item.source]}</span>;
 }
 
 export function WorkItemSourceIcon({ item }: { item: WorkItem }) {

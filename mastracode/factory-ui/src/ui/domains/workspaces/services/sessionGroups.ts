@@ -158,9 +158,41 @@ export function groupSessionRows(
   });
 }
 
-export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): SessionListRow[] {
-  const visible = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
+export function collapsedRowsKeepingActive(rows: readonly SessionListRow[], additionalRowCount = 0): SessionListRow[] {
+  const collapsed = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
   const open = rows.find(row => row.active);
-  if (open && !visible.includes(open)) visible.push(open);
+  const openOutsideFold = open !== undefined && !collapsed.includes(open);
+  const visible = rows.slice(0, collapsed.length + Number(openOutsideFold) + additionalRowCount);
+  // The open row already occupies a slot, including when a later batch reaches it.
+  if (open && !visible.includes(open)) visible[visible.length - 1] = open;
   return visible;
+}
+
+export type SessionListEntry =
+  | { kind: 'row'; row: SessionListRow }
+  | { kind: 'card'; itemId: string; title: string; rows: SessionListRow[] };
+
+/**
+ * Gathers a card's sessions under one entry for the card, at the place of its
+ * first row, so each is told apart by its context. A card with one session
+ * still gets its entry, so the row reads as that context.
+ */
+export function nestCardSessions(rows: readonly SessionListRow[]): SessionListEntry[] {
+  const entries: SessionListEntry[] = [];
+  const cards = new Map<string, SessionListRow[]>();
+  for (const row of rows) {
+    if (row.itemId === undefined || row.contextLabel === undefined) {
+      entries.push({ kind: 'row', row });
+      continue;
+    }
+    const cardRows = cards.get(row.itemId);
+    if (cardRows) {
+      cardRows.push(row);
+      continue;
+    }
+    const nested = [row];
+    cards.set(row.itemId, nested);
+    entries.push({ kind: 'card', itemId: row.itemId, title: row.item?.title ?? row.name, rows: nested });
+  }
+  return entries;
 }

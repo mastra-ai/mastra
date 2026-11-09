@@ -515,7 +515,7 @@ function Section({
       {title && (
         <DataPanel.SectionHeading>
           {title}
-          {count != null && <span className="tabular-nums"> · {count}</span>}
+          {count != null && <span className="tabular-nums">{count}</span>}
         </DataPanel.SectionHeading>
       )}
       {children}

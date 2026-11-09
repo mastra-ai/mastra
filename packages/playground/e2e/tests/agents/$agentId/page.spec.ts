@@ -45,7 +45,7 @@ test.describe('Agent detail page', () => {
       await expect(overview).not.toBeVisible();
 
       // The composer auto-focuses and swallows `]` as text, so move focus out of it first.
-      const composer = page.getByPlaceholder('Enter your message...');
+      const composer = page.getByPlaceholder('Enter your message');
       await expect(composer).toBeFocused();
       await composer.blur();
 

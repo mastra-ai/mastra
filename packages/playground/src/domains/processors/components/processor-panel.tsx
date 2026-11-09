@@ -182,7 +182,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
             <Textarea
               value={testMessage}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
-              placeholder="Enter a test message..."
+              placeholder="Enter a test message"
               rows={4}
             />
           </Field>

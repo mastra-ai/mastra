@@ -11,7 +11,7 @@ interface ActiveRunResourcesOptions {
 }
 
 /** `/active-runs` is the controller's whole registry, so every caller shares one poll. */
-function activeRunsQuery(agentControllerId: string, baseUrl: string) {
+export function activeRunsQueryOptions(agentControllerId: string, baseUrl: string) {
   return queryOptions({
     queryKey: queryKeys.agentControllerActivity(agentControllerId, baseUrl),
     queryFn: async () => {
@@ -30,7 +30,7 @@ function activeRunsQuery(agentControllerId: string, baseUrl: string) {
  */
 export function useActiveRunResourceIds(agentControllerId: string): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
-  const { data } = useQuery(activeRunsQuery(agentControllerId, baseUrl));
+  const { data } = useQuery(activeRunsQueryOptions(agentControllerId, baseUrl));
   return useMemo(
     () =>
       new Set(

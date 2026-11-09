@@ -5,6 +5,7 @@ import type { MCPServerContext } from '@mastra/core/tools';
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
 import type {
   CacheHint,
+  CallToolResult,
   InputRequiredResult,
   Prompt,
   PromptMessage,
@@ -26,6 +27,38 @@ export type MCPServerCacheableMethod =
 
 /** Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results, keyed by operation. */
 export type MCPServerCacheHints = Partial<Record<MCPServerCacheableMethod, CacheHint>>;
+
+/** What `MCPServerToolResultOptions.transform` receives for a tool call that completed. */
+export interface MCPServerToolResultContext {
+  /** The name the tool is served under, e.g. `readFile` or `ask_researcher`. */
+  toolName: string;
+  /** The value the tool returned. */
+  output: unknown;
+  /** The result the server would send, after `modelOutput` mapping when it is on. */
+  result: CallToolResult;
+  /** The request context the tool ran with. */
+  requestContext: RequestContext;
+}
+
+/** Controls how a tool's return value becomes the `CallToolResult` an MCP client receives. */
+export interface MCPServerToolResultOptions {
+  /**
+   * Build the result content from each tool's `toModelOutput`, the same output a Mastra agent
+   * sends to its model. Text becomes text blocks, image and audio media become `image` and `audio`
+   * blocks, and other media become embedded resources. Tools with an `outputSchema` keep their
+   * `structuredContent` and JSON text block; the mapped blocks follow it.
+   *
+   * Defaults to `false`: the output is sent as JSON text. The default becomes `true` in the next
+   * major version; set `false` explicitly to keep today's output.
+   */
+  modelOutput?: boolean;
+  /**
+   * Rewrites the result of every tool call that completed, including agent and workflow tools,
+   * before it is sent. Return `undefined` to keep `result`. Not called for thrown errors or for
+   * workflow tasks. If it throws, the client receives the tool error result.
+   */
+  transform?: (context: MCPServerToolResultContext) => CallToolResult | undefined | Promise<CallToolResult | undefined>;
+}
 
 /**
  * Protocol context handed to resource and prompt callbacks: the same object tools

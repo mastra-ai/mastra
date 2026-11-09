@@ -1,0 +1,9 @@
+{
+  "name": "npm-import-otel-exporter",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "e2e-test",
+    "@mastra/otel-exporter": "e2e-test"
+  }
+}

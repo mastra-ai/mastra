@@ -114,7 +114,8 @@ describe('ExperimentKpis', () => {
     it('splits the total tokens into input and output', async () => {
       const { queryClient } = renderWithMetrics();
 
-      expect(await screen.findByText('9,900 in · 2,500 out')).toBeDefined();
+      expect(await screen.findByText('9,900 in')).toBeDefined();
+      expect(screen.getByText('2,500 out')).toBeDefined();
 
       await waitForMutationsIdle(queryClient);
     });

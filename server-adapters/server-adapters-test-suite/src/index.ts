@@ -1,6 +1,7 @@
 export { createRouteAdapterTestSuite } from './route-adapter-test-suite';
 export { createStructuredWakeTestSuite, type StructuredWakeTestConfig } from './structured-wake-test-suite';
 export { createDurableDisconnectTestSuite, type DurableDisconnectTestConfig } from './durable-disconnect-test-suite';
+export { createStreamDisconnectTestSuite, type StreamDisconnectTestConfig } from './stream-disconnect-test-suite';
 export type {
   AdapterTestSuiteConfig,
   AdapterTestContext,
@@ -23,3 +24,8 @@ export {
   consumeSSEStream,
 } from './test-helpers';
 export { createKnowledgeRoutesTestSuite, type KnowledgeRoutesTestSuiteConfig } from './knowledge-routes-test-suite';
+
+export {
+  createObservabilitySignalWriteTestSuite,
+  type ObservabilitySignalWriteTestConfig,
+} from './observability-signal-write-test-suite';

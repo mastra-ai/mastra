@@ -148,7 +148,7 @@ export function FilterBarGroupEditor({
         {connector('input')}
         <FilterBarInput
           groupId={group.id}
-          placeholder="Add condition…"
+          placeholder="Add condition"
           onLeave={() => {
             focusAddFilter.current = true;
           }}
@@ -235,7 +235,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
           Group
         </Txt>
         <Txt as="span" variant="label" tone="muted">
-          · {count} {count === 1 ? 'condition' : 'conditions'}
+          {count} {count === 1 ? 'condition' : 'conditions'}
         </Txt>
         <div className="ml-auto flex items-center gap-1">
           <FilterBarLogicSwitch groupId={group.id} logic={group.logic} />

@@ -20,6 +20,9 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
           stage,
           {
             ...phase,
+            // Lifecycle tests jump straight to the phase whose handlers they exercise; the
+            // Work board's own topology is tested against workBoard itself.
+            nextPhases: Object.keys(workBoard.phases).filter(other => other !== stage),
             onEnter: {
               ...phase.onEnter,
               ...Object.fromEntries(
