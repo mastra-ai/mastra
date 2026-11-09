@@ -522,19 +522,15 @@ export class Computers implements MastraComputers {
           throw error;
         }
       }
-      this.#computers.set(entry.id, entry);
-      this.#attach(scope, entry);
       try {
         await this.#persistAttachment(scope, entry);
       } catch (error) {
-        if (this.#attachments.get(scope.key) === entry.id) this.#attachments.delete(scope.key);
-        if (this.#computers.get(entry.id) === entry) this.#computers.delete(entry.id);
-        this.#handsExtension?.release?.(entry.id, scope.threadId);
-        await this.#deleteAttachment(scope).catch(() => {});
         if (persistent) await stores.computers!.deleteComputer(entry.id).catch(() => {});
         await sandbox.destroy().catch(() => {});
         throw error;
       }
+      this.#computers.set(entry.id, entry);
+      this.#attach(scope, entry);
       await this.#emit(context, entry, scope.threadId, 'attached');
       return { computer: this.#describe(entry, 'attached') };
     });
@@ -552,8 +548,8 @@ export class Computers implements MastraComputers {
         return isReattachFailure(error) ? NOT_FOUND : UNAVAILABLE;
       }
       if (entry.destroyed) return NOT_FOUND;
-      this.#attach(scope, entry);
       await this.#persistAttachment(scope, entry);
+      this.#attach(scope, entry);
       await this.#emit(context, entry, scope.threadId, 'attached');
       return { computer: this.#describe(entry, 'attached') };
     });

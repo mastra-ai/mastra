@@ -356,6 +356,48 @@ describe('Computers', () => {
     });
   });
 
+  it('keeps the previous attachment when creating a persistent computer fails', async () => {
+    const storage = new InMemoryStore();
+    const computerStorage = new InMemoryComputersStorage();
+    storage.stores.computers = computerStorage;
+    const computers = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers });
+    const previous = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    storage.stores.threadState!.setState = vi.fn(async () => {
+      throw new Error('thread state unavailable');
+    });
+
+    await expect(
+      (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context),
+    ).rejects.toThrow('thread state unavailable');
+    await expect(
+      computers.viewer(previous.computer.id, { resourceId: 'resource', threadId: 'thread' }),
+    ).resolves.toMatchObject({ url: 'https://viewer.test/sandbox-1' });
+  });
+
+  it('keeps the previous attachment and emits nothing when attaching another computer fails', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const computers = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers });
+    const previous = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    const otherContext = { agent: { resourceId: 'resource', threadId: 'other-thread' } } as any;
+    const next = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, otherContext);
+    storage.stores.threadState!.setState = vi.fn(async () => {
+      throw new Error('thread state unavailable');
+    });
+    const writer = { custom: vi.fn(async () => {}) };
+
+    await expect(
+      (computers.tools().mastra_workspace_computer_attach as any).execute({ id: next.computer.id }, { ...context, writer }),
+    ).rejects.toThrow('thread state unavailable');
+    await expect(
+      computers.viewer(previous.computer.id, { resourceId: 'resource', threadId: 'thread' }),
+    ).resolves.toMatchObject({ url: 'https://viewer.test/sandbox-1' });
+    await expect(computers.viewer(next.computer.id, { resourceId: 'resource', threadId: 'thread' })).rejects.toThrow();
+    expect(writer.custom).not.toHaveBeenCalled();
+  });
+
   it('rolls back persistent creation when the attachment catalog update fails', async () => {
     const storage = new InMemoryStore();
     const computerStorage = new InMemoryComputersStorage();
