@@ -204,7 +204,12 @@ describe('control handoff through a real agent', () => {
     ]);
     const first = await runToEnd(agent);
     const id = await computerIdOf(computers);
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'please log in', revision: 1 });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({
+      holder: 'human',
+      reason: 'please log in',
+      revision: 1,
+      enforced: true,
+    });
 
     const subscription = await agent.subscribeToThread({ threadId: T, resourceId: R });
     expect(subscription.activeRunId()).toBeNull();
@@ -344,7 +349,7 @@ describe('control handoff through a real agent', () => {
       holder: 'agent',
       notified: false,
     });
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent', revision: 2 });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent', revision: 2, enforced: true });
   });
 
   it('keeps the lease change without notifications storage', async () => {

@@ -808,7 +808,12 @@ describe('control lease', () => {
       { type: 'data-computer', data: { computerId: id, threadId: 't1', control: 'human', reason: 'log in please' } },
     ]);
     expect(events[0].data).not.toHaveProperty('status');
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'log in please', revision: 1 });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({
+      holder: 'human',
+      reason: 'log in please',
+      revision: 1,
+      enforced: true,
+    });
   });
 
   it('writes the control part before returning, and a failing writer keeps the handoff', async () => {
@@ -933,7 +938,7 @@ describe('control lease', () => {
       holder: 'agent',
       revision: 2,
     });
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent', revision: 2 });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent', revision: 2, enforced: true });
     await expect(computers.control(id, scope, { action: 'release' })).resolves.toMatchObject({
       revision: 2,
       reason: 'no-change',
@@ -949,6 +954,7 @@ describe('control lease', () => {
       holder: 'human',
       reason: 'user took control',
       revision: 1,
+      enforced: true,
     });
     expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe(HUMAN_HAS_CONTROL);
   });
@@ -966,7 +972,7 @@ describe('control lease', () => {
     await expect(computers.control(id, scope, { action: 'take', note: 'x'.repeat(501) })).rejects.toThrow(
       'note too long',
     );
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent', revision: 0 });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent', revision: 0, enforced: true });
   });
 
   it('direct Workspace executes already started before a take finish without a provider FIFO', async () => {
