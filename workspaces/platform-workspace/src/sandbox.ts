@@ -99,6 +99,12 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   template?: PlatformSandboxTemplate;
   idleTimeoutMinutes?: number;
   networkIsolation?: PlatformSandboxNetworkIsolation;
+  /**
+   * Let anyone with a port's URL reach it, without signing in. Off by default:
+   * ports are private and open through a signed-in preview link. The URL is
+   * the same either way. Fixed when the sandbox is created.
+   */
+  publicPorts?: boolean;
   env?: Record<string, string>;
   timeout?: number;
   instructions?: InstructionsOption;
@@ -616,6 +622,7 @@ export class PlatformSandbox extends MastraSandbox {
   private _templateResolutionInFlight?: Promise<void>;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
+  private readonly _publicPorts?: boolean;
   private readonly _env: Record<string, string>;
   private readonly _timeout?: number;
   private readonly _instructionsOverride?: InstructionsOption;
@@ -721,6 +728,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._template = options.template;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
+    this._publicPorts = options.publicPorts;
     this._env = options.env ?? {};
     this._timeout = options.timeout;
     this._instructionsOverride = options.instructions;
@@ -797,6 +805,7 @@ export class PlatformSandbox extends MastraSandbox {
       ...(this._template !== undefined && { template: this._template }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
+      ...(this._publicPorts !== undefined && { publicPorts: this._publicPorts }),
       env: options.env ?? this._env,
       ...(this._timeout !== undefined && { timeout: this._timeout }),
       ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
@@ -875,6 +884,7 @@ export class PlatformSandbox extends MastraSandbox {
         environmentId: this._environmentId,
         idleTimeoutMinutes: this._idleTimeoutMinutes,
         networkIsolation: this._networkIsolation,
+        publicPorts: this._publicPorts,
         env: this._env,
       });
     // Provisioning is observed to fail intermittently with proxy 500s while
