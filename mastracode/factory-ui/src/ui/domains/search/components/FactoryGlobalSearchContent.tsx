@@ -125,13 +125,18 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 const target = result.target;
                 if (target.kind === 'candidate') {
                   // Until the default board's catalog entry loads there is nowhere to file it: stay open.
-                  const [move] = cardMoves(target.candidate, target.candidate.column, defaultBoard);
-                  if (!move) {
+                  if (!defaultBoard) {
                     toast.error('The board is still loading. Try again in a moment.');
                     return;
                   }
+                  // A board with no move for it still takes it, filed in its initial phase.
+                  const [move] = cardMoves(target.candidate, target.candidate.column, defaultBoard);
                   closeSearch();
-                  workBoard.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
+                  workBoard.handleDrop(
+                    candidatePayload(target.candidate),
+                    move?.stage ?? defaultBoard.initialPhase,
+                    'card_action',
+                  );
                   return;
                 }
                 const item = target.item;
@@ -151,7 +156,8 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   toast.error(BUSY_CARD_MOVE_REFUSAL);
                   return;
                 }
-                const [move] = definition ? cardMoves(item, definition.initialPhase, definition) : [];
+                // Moves read from the phase the card sits in, which need not be its board's first.
+                const [move] = definition ? cardMoves(item, item.stages[0] ?? definition.initialPhase, definition) : [];
                 if (move) {
                   closeSearch();
                   board.move(item.id, move.stage);
