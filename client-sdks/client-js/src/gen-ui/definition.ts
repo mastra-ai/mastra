@@ -46,6 +46,11 @@ export interface GenUISpecToolOptions {
   /**
    * The edit tool, through which the model changes an earlier interface into a new one. On by default with
    * json-render's `patch` mode; `false` turns it off.
+   *
+   * The edited interface keeps what the user had entered in the one it edits. That state is saved in the edit
+   * tool's result as `baseState` so it survives a reload, which means the model sees it on later turns, including
+   * values the user typed but never submitted. Turn the edit tool off if your interfaces collect input the model
+   * must not see before the user submits it.
    */
   edit?: boolean | GenUISpecEditToolOptions;
 }
