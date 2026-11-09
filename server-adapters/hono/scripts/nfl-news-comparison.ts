@@ -115,6 +115,15 @@ async function run() {
     { id: 'exa', name: 'Exa search', tools: { exaSearch } },
   ];
   const experimentIds: string[] = [];
+  // Written as soon as each experiment exists so `--serve` can reopen completed turns after an interrupted run.
+  const writeManifest = () => {
+    const [baseline, contender] = experimentIds;
+    const comparisonPath = `/experiments/compare?dataset=${runId}&baseline=${baseline}${contender ? `&contender=${contender}` : ''}`;
+    return writeFile(
+      manifestPath,
+      JSON.stringify({ datasetId: runId, experimentIds, window, model, comparisonPath }, null, 2),
+    );
+  };
   for (const candidate of candidates) {
     const agent = new Agent({
       id: `${runId}-${candidate.id}`,
@@ -134,6 +143,7 @@ async function run() {
       grouping: { comparisonId: runId, variantId: candidate.id },
     });
     experimentIds.push(experiment.experimentId);
+    await writeManifest();
     const startedAt = new Date();
     const turns: ConversationTurnResult[] = [];
     const memory = { thread: { id: `${runId}-${candidate.id}-thread` }, resource: `${runId}-${candidate.id}` };
@@ -213,11 +223,6 @@ async function run() {
     }
     await dataset.finalizeExperiment({ experimentId: experiment.experimentId });
   }
-  const comparisonPath = `/experiments/compare?dataset=${runId}&baseline=${experimentIds[0]}&contender=${experimentIds[1]}`;
-  await writeFile(
-    manifestPath,
-    JSON.stringify({ datasetId: runId, experimentIds, window, model, comparisonPath }, null, 2),
-  );
   await mastra.observability.flush();
 }
 
