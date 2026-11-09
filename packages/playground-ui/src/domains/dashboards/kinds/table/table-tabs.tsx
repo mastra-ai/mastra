@@ -45,7 +45,10 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
             .map(c => ({ label: c.label, value: c.options.value })),
         },
   );
-  const heading = withAction({ ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) }, alert);
+  const heading = withAction(
+    { ...menu.heading, dragHandle: props.dragHandle, onTitleChange: props.onTitleChange, ...pinActions(props.pin) },
+    alert,
+  );
 
   if (unsupported) {
     return (

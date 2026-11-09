@@ -13,12 +13,17 @@ import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
+import { PlatformByteBatcher, resolveByteBatchingConfig } from './platform-byte-batcher';
+import type { PlatformByteBatchingConfig, PlatformByteBatchingStats } from './platform-byte-batcher';
 import { withSpanPreviews } from './span-previews';
+export type { PlatformByteBatchingConfig, PlatformByteBatchingStats } from './platform-byte-batcher';
 
 export interface MastraPlatformExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
   maxRetries?: number; // Default: 3
+  /** Opt into UTF-8 JSON byte flush thresholds and upload concurrency control. */
+  byteBatching?: PlatformByteBatchingConfig;
 
   accessToken?: string; // Mastra Observability access token (from env or config)
   projectId?: string; // Project ID for project-scoped collector routes
@@ -281,6 +286,8 @@ export class MastraPlatformExporter extends BaseExporter {
   private quotaProbeTimer: NodeJS.Timeout | null = null;
   private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
   private shuttingDown = false;
+  private byteBatcher?: PlatformByteBatcher<PlatformSignal>;
+  private byteUploadTimeoutMs?: number;
 
   constructor(config: MastraPlatformExporterConfig = {}) {
     super(config);
@@ -354,6 +361,18 @@ export class MastraPlatformExporter extends BaseExporter {
     };
 
     this.authFailureCooldown = new AuthFailureCooldown('MastraPlatformExporter', () => this.logger);
+    if (config.byteBatching) {
+      const byteConfig = resolveByteBatchingConfig(config.byteBatching);
+      this.byteUploadTimeoutMs = byteConfig.uploadTimeoutMs;
+      this.byteBatcher = new PlatformByteBatcher(
+        byteConfig,
+        this.platformConfig.maxBatchSize,
+        this.platformConfig.maxBatchWaitMs,
+        SIGNAL_PUBLISH_SEGMENTS,
+        (signal, body, count) => this.flushByteBatch(signal, body, count),
+        error => this.logger.error('Byte batch upload failed', { error }),
+      );
+    }
 
     this.buffer = {
       spans: [],
@@ -436,6 +455,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addToBuffer(event: TracingEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('traces', this.formatSpan(event.exportedSpan));
+      return;
+    }
     this.markBufferStart();
 
     const spanRecord = this.formatSpan(event.exportedSpan);
@@ -444,6 +467,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addLogToBuffer(event: LogEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('logs', this.formatLog(event.log));
+      return;
+    }
     this.markBufferStart();
 
     this.buffer.logs.push(this.formatLog(event.log));
@@ -451,6 +478,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addMetricToBuffer(event: MetricEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('metrics', this.formatMetric(event.metric));
+      return;
+    }
     this.markBufferStart();
 
     this.buffer.metrics.push(this.formatMetric(event.metric));
@@ -458,6 +489,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addScoreToBuffer(event: ScoreEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('scores', this.formatScore(event.score));
+      return;
+    }
     this.markBufferStart();
 
     this.buffer.scores.push(this.formatScore(event.score));
@@ -465,6 +500,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addFeedbackToBuffer(event: FeedbackEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('feedback', this.formatFeedback(event.feedback));
+      return;
+    }
     this.markBufferStart();
 
     this.buffer.feedback.push(this.formatFeedback(event.feedback));
@@ -517,6 +556,7 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private async handleBufferedEvent(): Promise<void> {
+    if (this.byteBatcher) return;
     if (this.shouldFlush()) {
       void this.flush().catch(error => {
         this.logger.error('Batch flush failed', {
@@ -655,6 +695,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private async batchUpload<T>(signal: PlatformSignal, records: T[]): Promise<void> {
+    await this.uploadBody(signal, this.buildPublishBody(signal, records));
+  }
+
+  private async uploadBody(signal: PlatformSignal, body: string): Promise<void> {
     const endpointMap: Record<PlatformSignal, string> = {
       traces: this.platformConfig.tracesEndpoint,
       logs: this.platformConfig.logsEndpoint,
@@ -666,7 +710,8 @@ export class MastraPlatformExporter extends BaseExporter {
     const options: RequestInit = {
       method: 'POST',
       headers: this.buildPublishHeaders(),
-      body: this.buildPublishBody(signal, records),
+      body,
+      ...(this.byteUploadTimeoutMs ? { signal: AbortSignal.timeout(this.byteUploadTimeoutMs) } : {}),
     };
 
     // Capture a quota-exceeded response in the retry predicate: returning
@@ -704,6 +749,8 @@ export class MastraPlatformExporter extends BaseExporter {
     if (isObservabilityDisabled(response)) {
       this.enterQuotaPause(parseQuotaRetryAfterSeconds(response));
     }
+    // Publish responses carry no payload; release the response stream in both modes.
+    await response.body?.cancel().catch(() => {});
   }
 
   /**
@@ -720,6 +767,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
 
     this.quotaPaused = true;
+    this.byteBatcher?.clearQueued();
 
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
@@ -810,6 +858,34 @@ export class MastraPlatformExporter extends BaseExporter {
     this.scheduleQuotaProbe();
   }
 
+  /** Current queued and active serialized JSON bytes; undefined in count mode. */
+  getByteBatchingStats(): PlatformByteBatchingStats | undefined {
+    return this.byteBatcher?.getStats();
+  }
+
+  private async flushByteBatch(signal: PlatformSignal, body: string, count: number): Promise<void> {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventsIfCoolingDown(count)) return;
+    try {
+      await this.uploadBody(signal, body);
+      this.authFailureCooldown.reset();
+    } catch (error) {
+      if (isAuthFailureError(error)) {
+        this.authFailureCooldown.recordFailure({
+          status: error.status,
+          failedSignals: [signal],
+          droppedBatchSize: count,
+        });
+        this.byteBatcher?.clearQueued();
+      } else {
+        this.logger.error('Byte batch upload failed after retries, dropping batch', {
+          signal,
+          droppedBatchSize: count,
+          error,
+        });
+      }
+    }
+  }
+
   private async flushSignalBatch<T>(
     signal: PlatformSignal,
     records: T[],
@@ -865,6 +941,11 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
+    if (this.byteBatcher) {
+      await this.byteBatcher.flush();
+      return;
+    }
+
     while (this.buffer.totalSize > 0 || this.inFlightFlushes.size > 0) {
       if (this.buffer.totalSize > 0) {
         this.logger.debug('Flushing buffered events', {
@@ -911,10 +992,10 @@ export class MastraPlatformExporter extends BaseExporter {
         {
           id: `MASTRA_PLATFORM_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
           domain: ErrorDomain.MASTRA_OBSERVABILITY,
-          category: ErrorCategory.USER,
-          details: {
-            remainingEvents: this.buffer.totalSize,
-          },
+          category: ErrorCategory.SYSTEM,
+          details: this.byteBatcher
+            ? { pendingBytes: this.byteBatcher.getStats().pendingBytes }
+            : { remainingEvents: this.buffer.totalSize },
         },
         error,
       );

@@ -3,7 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import type { ProcessHandle } from '../sandbox/process-manager/process-handle';
-import { DEFAULT_FOREGROUND_DETACH_MS, willNotifyOnExit } from './execute-command';
+import { DEFAULT_FOREGROUND_DETACH_MS, formatWait, willNotifyOnExit } from './execute-command';
 import { coerceNumericString, emitWorkspaceMetadata, getDynamicSandboxCacheKeyHint, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
@@ -187,10 +187,4 @@ async function waitForExit(
     clearTimeout(timer);
     if (onAbort) abortSignal?.removeEventListener('abort', onAbort);
   }
-}
-
-function formatWait(ms: number) {
-  const seconds = Math.max(1, Math.round(ms / 1000));
-  if (seconds % 60 === 0) return `${seconds / 60} minute${seconds === 60 ? '' : 's'}`;
-  return `${seconds} second${seconds === 1 ? '' : 's'}`;
 }

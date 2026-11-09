@@ -989,8 +989,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     const topic = AGENT_STREAM_TOPIC(runId);
     let target = -1;
     try {
+      // Frames this process cached but could not publish stay in the log for
+      // late subscribers, but the live subscription will never deliver them —
+      // waiting on them would burn the full timeout on a broken transport.
+      const undelivered = (
+        pubsub as PubSub & { getUndeliveredIndices?: (topic: string) => ReadonlySet<number> }
+      ).getUndeliveredIndices?.(topic);
       for (const event of await pubsub.getHistory(topic, nextLogIndex)) {
-        if (typeof event.index === 'number' && event.index > target) target = event.index;
+        if (typeof event.index !== 'number' || undelivered?.has(event.index)) continue;
+        if (event.index > target) target = event.index;
       }
     } catch (error) {
       logError(`[DurableAgentStream] Failed to read ${topic} history:`, error);

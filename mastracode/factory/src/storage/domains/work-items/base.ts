@@ -1134,6 +1134,10 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_run_bindings_session_idx',
         columns: ['factory_project_id', 'thread_id', 'resource_id', 'session_id'],
       },
+      {
+        name: 'factory_run_bindings_org_thread_idx',
+        columns: ['org_id', 'thread_id', 'resource_id', 'session_id'],
+      },
       // Restart reconciler enumerates active bindings across all tenants.
       { name: 'factory_run_bindings_status_idx', columns: ['status'] },
     ],
@@ -2819,6 +2823,35 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   ): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#completeLease('factory_deferred_decisions', identity, now, 'superseded');
     return row ? toDeferredDecision(row) : null;
+  }
+
+  /**
+   * Hand a leased decision back untouched until `availableAt`: it could not act yet and did
+   * nothing, so the claim is not an attempt and leaves no error behind.
+   */
+  async postponeDeferredDecision(
+    identity: FactoryLeaseIdentity,
+    availableAt: Date,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let postponed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        postponed = true;
+        return {
+          status: 'pending',
+          attempts: Math.max(0, Number(current.attempts) - 1),
+          available_at: availableAt,
+          lease_owner: null,
+          lease_expires_at: null,
+          updated_at: now,
+        };
+      },
+    );
+    return postponed && row ? toDeferredDecision(row) : null;
   }
 
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {

@@ -855,7 +855,7 @@ The `execute_command` tool accepts these options:
     description:
       'How long, in milliseconds, a foreground command can run before it moves to the background. The tool returns the output so far and the PID, the command keeps running, and the agent is notified when it exits. Applies to sandboxes with a process manager. Set to `false` to wait for every foreground command to finish.',
     isOptional: true,
-    defaultValue: '300000',
+    defaultValue: '30000',
   },
   {
     name: 'requireDescription',

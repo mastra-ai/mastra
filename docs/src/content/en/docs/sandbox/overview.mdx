@@ -269,7 +269,7 @@ These callbacks fire for all background processes started by the agent through `
 
 When a background process exits on its own, the agent that started it also gets a notification with the exit code and the last lines of output, so it doesn't have to poll `get_process_output`. If the thread is idle, the notification wakes it. This needs the `notifications` storage domain. Set `notifyOnExit: false` in `backgroundProcesses` to turn it off.
 
-Foreground commands don't block the agent forever either. A foreground command still running after 5 minutes moves to the background: the tool returns the output so far and the PID, and the agent is notified when the command exits. `get_process_output` with `waitSeconds` stops waiting at the same limit and returns the output so far. Change the limit with `foregroundDetachMs`, or set it to `false` to wait for every foreground command:
+Foreground commands don't block the agent forever either. A foreground command still running after 30 seconds moves to the background: the tool returns the output so far and the PID, and the agent is notified when the command exits. `get_process_output` with `waitSeconds` stops waiting at the same limit and returns the output so far. Change the limit with `foregroundDetachMs`, or set it to `false` to wait for every foreground command:
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({

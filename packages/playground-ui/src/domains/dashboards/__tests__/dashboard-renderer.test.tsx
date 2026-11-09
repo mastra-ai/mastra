@@ -473,11 +473,12 @@ describe('DashboardRenderer', () => {
       ['a table card', models()],
       ['a scores card', scoresWidget],
       ['a KPI group', kpisWidget],
-    ])("puts the handle before the title of %s, and dragging it starts the host's drag", async (_, widget) => {
+    ])("puts the handle in view before the title of %s, and dragging it starts the host's drag", async (_, widget) => {
       const { container } = renderDashboard(definition(widget), { dragHandle });
       const card = cell(container, widget.id);
       const handle = await within(card).findByRole('button', { name: `Move ${widget.id}` }, { timeout: 5000 });
       expect(handle.getAttribute('draggable')).toBe('true');
+      expect(handle.closest('.opacity-0')).toBeNull();
       await waitFor(() => expect(firstControl(card)).toBe(handle));
       fireEvent.dragStart(handle);
       expect(onDragStart).toHaveBeenCalledTimes(1);
@@ -589,6 +590,7 @@ describe('DashboardRenderer', () => {
       ['a timeseries card', metricsWidget('agent-runs')],
       ['a table card', models()],
       ['a scores card', scoresWidget],
+      ['a KPI group', kpisWidget],
     ])('keeps the unpin button of a pinned %s in view, and the pin of an unpinned one for hover', async (_, widget) => {
       const { container } = renderWithProviders(<PinningHost widgets={[widget]} onPin={() => {}} />);
       const card = cell(container, widget.id);
@@ -597,6 +599,17 @@ describe('DashboardRenderer', () => {
 
       fireEvent.click(pin);
       expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
+    });
+
+    it('lets clicks through the hidden controls of a KPI group, which float over the gap above its first figure', async () => {
+      const { container } = renderWithProviders(<PinningHost widgets={[kpisWidget]} onPin={() => {}} />);
+      const card = cell(container, kpisWidget.id);
+      const pin = await within(card).findByRole('button', { name: pinLabel('Pin', kpisWidget) }, { timeout: 5000 });
+      expect(pin.closest('.pointer-events-none')).not.toBeNull();
+
+      fireEvent.click(pin);
+      const unpin = within(card).getByRole('button', { name: pinLabel('Unpin', kpisWidget) });
+      expect(unpin.closest('.pointer-events-none')).toBeNull();
     });
 
     it("shows the host's pinned widgets without a click", async () => {
@@ -1218,7 +1231,7 @@ describe('DashboardRenderer', () => {
       views: [{ ...view, queries: [{ ...runs, filters: { environment: 'staging' } }] }],
     };
     const { container } = renderDashboard(definition(staging), { environment: 'production' });
-    expect(await within(cell(container, 'agent-runs')).findByText('No agent runs in this range.')).toBeDefined();
+    expect(await within(cell(container, 'agent-runs')).findByText('No data in this range')).toBeDefined();
     server.events.removeAllListeners();
     expect(sent.filter(path => path.includes('/metrics/'))).toEqual([]);
   });

@@ -111,7 +111,14 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
   return `${output}${separator}${terminalLine}`;
 }
 
-export const DEFAULT_FOREGROUND_DETACH_MS = 5 * 60_000;
+export const DEFAULT_FOREGROUND_DETACH_MS = 30_000;
+
+/** A wait as `30 seconds` or `5 minutes`. */
+export function formatWait(ms: number) {
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  if (seconds % 60 === 0) return `${seconds / 60} minute${seconds === 60 ? '' : 's'}`;
+  return `${seconds} second${seconds === 1 ? '' : 's'}`;
+}
 
 /** Processes whose exit will be reported to the agent that started them. */
 const exitNotified = new WeakSet<ProcessHandle>();
@@ -446,13 +453,12 @@ async function executeCommand(input: Record<string, any>, context: any) {
           noteDroppedOutput(await truncateOutput(handle.stdout, tail, tokenLimit, tokenFrom), stdout.dropped, 'stdout'),
           noteDroppedOutput(await truncateOutput(handle.stderr, tail, tokenLimit, tokenFrom), stderr.dropped, 'stderr'),
         );
-        const minutes = Math.round((detachMs / 60_000) * 10) / 10;
         const notified = exitNotificationTarget(context, toolConfig?.backgroundProcesses?.notifyOnExit)
           ? " You'll be notified when it exits."
           : '';
         return appendTerminalLine(
           parts,
-          `Still running after ${minutes} minute${minutes === 1 ? '' : 's'}, so it was moved to the background (PID: ${handle.pid}).${notified} Use get_process_output to check on it or kill_process to stop it.`,
+          `Still running after ${formatWait(detachMs)}, so it was moved to the background (PID: ${handle.pid}).${notified} Use get_process_output to check on it or kill_process to stop it.`,
         );
       }
       result = outcome.result;
@@ -558,9 +564,9 @@ export const executeCommandTool = createTool({
 
 const backgroundDescription = `${baseDescription}
 
-Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process, and a notification with its exit code and last output when it exits, so there's no need to poll it.
+Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process, and a notification with its exit code and last output when it exits, so there's no need to poll it. On a background command, timeout stops the process after that many seconds: leave it out for dev servers and anything else that should keep running.
 
-A foreground command still running after 5 minutes moves to the background: you get its output so far and its PID, and a notification when it exits.`;
+A foreground command still running after 30 seconds moves to the background: you get its output so far and its PID, and a notification when it exits.`;
 
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({

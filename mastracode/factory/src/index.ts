@@ -32,6 +32,7 @@ export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.
 export { MastraFactory } from './factory.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
+  FactoryTools,
   MastraArgs,
   MastraFactoryConfig,
   MastraFactorySandboxConfig,

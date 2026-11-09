@@ -41,15 +41,15 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "glm5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
       }
     ],
     "gpt-oss-120b": [

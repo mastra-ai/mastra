@@ -2,12 +2,19 @@ import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts } from '../rules/rule-group.js';
 import type { StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import type { BoardEventFacts } from './board-events.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 
 /** Reads a project's intake routes, in order. */
 export type IntakeRoutesReader = Pick<StoredBoardsStorage, 'listIntakeRoutes'>;
 
-type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target'>;
+type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'>;
+type EventRoute = IntakeRoute & Pick<StoredIntakeRouteRecord, 'allowWorkingPhase'>;
+
+/** Whether the route places new cards, rather than only moving existing ones on later events. */
+export function placesNewCards(route: Pick<StoredIntakeRouteRecord, 'on'>): boolean {
+  return route.on.includes('work_item.created');
+}
 
 /**
  * Card metadata naming the intake route that placed the card. Label routes, repository
@@ -25,11 +32,16 @@ export type IntakeTargetProblem = {
   message: string;
 };
 
-/** Why a route's target can't take cards in this project, or undefined when it can. */
+/**
+ * Why a route's target can't take cards in this project, or undefined when it can. A route that
+ * places new cards needs a phase they can reach; one that only moves existing cards on later
+ * events, such as a close, may name any phase, terminal ones included.
+ */
 export function intakeTargetProblem(
   registry: BoardRegistry,
-  target: { boardKey: string; phaseKey?: string | null },
+  route: { target: { boardKey: string; phaseKey?: string | null }; on: readonly string[] },
 ): IntakeTargetProblem | undefined {
+  const { target } = route;
   const board = registry.get(target.boardKey);
   if (!board) {
     return { code: 'unknown_board', message: `Board "${target.boardKey}" is not installed in this project.` };
@@ -39,6 +51,7 @@ export function intakeTargetProblem(
   if (!kind) {
     return { code: 'unknown_phase', message: `Board "${target.boardKey}" has no phase "${target.phaseKey}".` };
   }
+  if (!route.on.includes('work_item.created')) return undefined;
   if (kind === 'terminal') {
     return {
       code: 'terminal_phase',
@@ -67,7 +80,7 @@ function placementTakesCard(boardId: string, phase: string, facts: RuleFacts): b
 }
 
 /**
- * Where a new card lands: the first enabled route whose condition matches the card and whose
+ * Where a new card lands: the first enabled route that places new cards, whose condition matches the card and whose
  * board is installed and can hold it. A route without a phase, or whose phase has since gone,
  * lands the card in the board's initial phase. Undefined leaves today's placement alone.
  */
@@ -77,7 +90,7 @@ export function resolveIntakePlacement(
   registry: BoardRegistry,
 ): { board: string; phase: string; routeId: string } | undefined {
   for (const route of routes) {
-    if (!route.enabled || !evaluateRuleGroup(route.when, facts)) continue;
+    if (!route.enabled || !placesNewCards(route) || !evaluateRuleGroup(route.when, facts)) continue;
     const board = registry.get(route.target.boardKey);
     if (!board) continue;
     const phase = landingPhase(board, route.target.phaseKey);
@@ -95,4 +108,40 @@ export function landingPhase(board: InstalledBoard, phase: string | null | undef
     !board.isTerminal(phase) &&
     board.allowsTransition(board.initialPhase, phase);
   return usable ? phase : board.initialPhase;
+}
+
+/** Whether any route on the board, enabled or not, handles the event: then the routes own it. */
+export function routesHandleEvent(
+  routes: readonly Pick<IntakeRoute, 'on' | 'target'>[],
+  event: BoardEventFacts,
+  board: Pick<InstalledBoard, 'id'>,
+): boolean {
+  return routes.some(route => route.target.boardKey === board.id && route.on.includes(event.type));
+}
+
+/**
+ * Where a status event moves an existing card: the first enabled route whose `on` names the
+ * event, whose `when` matches the card and the event, and whose board is the card's own and can
+ * hold it there. A route without a phase moves the card to its board's first phase. Undefined
+ * leaves the card where it is.
+ */
+export function resolveEventRoute(
+  routes: readonly EventRoute[],
+  event: BoardEventFacts,
+  cardFacts: RuleFacts,
+  board: InstalledBoard,
+): { phase: string; routeId: string; allowWorkingPhase: boolean } | undefined {
+  const facts: RuleFacts = {
+    ...cardFacts,
+    'event.type': event.type,
+    ...(event.reason ? { 'event.reason': event.reason } : {}),
+  };
+  for (const route of routes) {
+    if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
+    if (!evaluateRuleGroup(route.when, facts)) continue;
+    const phase = route.target.phaseKey ?? board.initialPhase;
+    if (board.phaseKind(phase) === undefined || !placementTakesCard(board.id, phase, facts)) continue;
+    return { phase, routeId: route.id, allowWorkingPhase: route.allowWorkingPhase };
+  }
+  return undefined;
 }

@@ -835,7 +835,7 @@ describe('background processes killed by an aborted run', () => {
       controller.abort();
 
       expect(await reading).toBe(
-        'started\n\n\nStill running after 1 minute. Call get_process_output again to check on it, or kill_process to stop it.',
+        'started\n\n\nStill running after 30 seconds. Call get_process_output again to check on it, or kill_process to stop it.',
       );
       await new Promise(resolve => setTimeout(resolve, 300));
       expect(handle.exitCode).toBeUndefined();

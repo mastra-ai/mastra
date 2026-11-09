@@ -136,4 +136,102 @@ describe('ChartCard', () => {
     );
     expect(screen.getByRole('link', { name: 'Spend by model' }).getAttribute('href')).toBe('/app/query');
   });
+  describe('with an editable title', () => {
+    const titleInput = () => screen.getByRole('textbox', { name: 'Widget title' });
+
+    function renderEditable(props: Partial<Parameters<typeof ChartCard>[0]> = {}) {
+      const onTitleChange = vi.fn();
+      render(
+        <ChartCard title="Spend by model" onTitleChange={onTitleChange} {...props}>
+          <div />
+        </ChartCard>,
+      );
+      return onTitleChange;
+    }
+
+    it('shows the title in an input inside the heading', () => {
+      renderEditable();
+      expect(titleInput()).toHaveProperty('value', 'Spend by model');
+      expect(screen.getByRole('heading').contains(titleInput())).toBe(true);
+    });
+
+    it('is plain text without onTitleChange', () => {
+      render(
+        <ChartCard title="Spend by model">
+          <div />
+        </ChartCard>,
+      );
+      expect(screen.getByRole('heading', { name: 'Spend by model' })).toBeTruthy();
+      expect(screen.queryByRole('textbox')).toBeNull();
+    });
+
+    it('commits the trimmed title on Enter', () => {
+      const onTitleChange = renderEditable();
+      titleInput().focus();
+      fireEvent.change(titleInput(), { target: { value: '  Spend by provider ' } });
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+      expect(onTitleChange).toHaveBeenCalledTimes(1);
+      expect(onTitleChange).toHaveBeenCalledWith('Spend by provider');
+      expect(document.activeElement).not.toBe(titleInput());
+    });
+
+    it('commits the title on blur', () => {
+      const onTitleChange = renderEditable();
+      titleInput().focus();
+      fireEvent.change(titleInput(), { target: { value: 'Spend by provider' } });
+      fireEvent.blur(titleInput());
+      expect(onTitleChange).toHaveBeenCalledWith('Spend by provider');
+    });
+
+    it('reverts on Escape without committing', () => {
+      const onTitleChange = renderEditable();
+      titleInput().focus();
+      fireEvent.change(titleInput(), { target: { value: 'Spend by provider' } });
+      fireEvent.keyDown(titleInput(), { key: 'Escape' });
+      expect(titleInput()).toHaveProperty('value', 'Spend by model');
+      expect(document.activeElement).not.toBe(titleInput());
+      expect(onTitleChange).not.toHaveBeenCalled();
+    });
+
+    it("doesn't commit a title that didn't change", () => {
+      const onTitleChange = renderEditable();
+      titleInput().focus();
+      fireEvent.change(titleInput(), { target: { value: 'Spend by model  ' } });
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+      expect(onTitleChange).not.toHaveBeenCalled();
+      expect(titleInput()).toHaveProperty('value', 'Spend by model');
+    });
+
+    it('shows the title the caller passes back', () => {
+      const onTitleChange = vi.fn();
+      const { rerender } = render(
+        <ChartCard title="Spend by model" onTitleChange={onTitleChange}>
+          <div />
+        </ChartCard>,
+      );
+      rerender(
+        <ChartCard title="Spend by provider" onTitleChange={onTitleChange}>
+          <div />
+        </ChartCard>,
+      );
+      expect(titleInput()).toHaveProperty('value', 'Spend by provider');
+    });
+
+    it('is not editable with a title menu or a link', () => {
+      renderEditable({ titleMenu: { value: 'model', onValueChange: () => {}, options: views } });
+      expect(screen.queryByRole('textbox')).toBeNull();
+      cleanup();
+      renderEditable({ href: '/query' });
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(screen.getByRole('link', { name: 'Spend by model' })).toBeTruthy();
+    });
+
+    it('sits after the drag handle, which still drags the card', () => {
+      renderEditable({ dragHandle: { 'aria-label': 'Move card', draggable: true } });
+      const handle = screen.getByRole('button', { name: 'Move card' });
+      expect(handle.getAttribute('draggable')).toBe('true');
+      expect(handle.compareDocumentPosition(titleInput()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(titleInput().closest('[draggable="true"]')).toBeNull();
+    });
+  });
 });
