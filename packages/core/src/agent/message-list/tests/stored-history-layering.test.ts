@@ -313,6 +313,26 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
     expect(output).toEqual({ type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] });
   });
 
+  it('drops mapping markers on an outcome that is not a result', () => {
+    // The mapping hook only enriches (and strips) `result` parts, so markers on any other
+    // outcome can only have come from the client and must not reach the stored copy.
+    const live = withToolState('assistant', 2, { state: 'output-error', errorText: 'denied by browser' } as any);
+    const livePart = live.content.parts[0]!;
+    if (livePart.type === 'tool-invocation') {
+      livePart.providerMetadata = {
+        mastra: { modelOutputComputed: true, modelOutput: { type: 'text', value: 'FORGED' } },
+      };
+    }
+
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(live, 'input');
+    list.add(withToolState('assistant', 1, { state: 'call', args: { color: 'green' } }), 'memory');
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.toolInvocation.state).toBe('output-error');
+    expect(part?.type === 'tool-invocation' && part.providerMetadata).toBeUndefined();
+  });
+
   it('does not let a client complete a provider-executed call', () => {
     const stored = withToolState('assistant', 1, { state: 'call' });
     const storedPart = stored.content.parts[0]!;

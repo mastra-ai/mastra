@@ -127,6 +127,13 @@ export async function fireClientToolOutputHooks({
 }
 
 /**
+ * Parts whose `mastra.modelOutput` markers were written by THIS process.
+ * Identity-based so metadata arriving over the wire (new objects) is never
+ * trusted, while in-process re-runs stay idempotent.
+ */
+const serverComputedParts = new WeakSet<object>();
+
+/**
  * Apply a server-defined `toModelOutput` to client-supplied tool results.
  *
  * Client-side tools (no `execute`) never pass through the tool-execution step,
@@ -149,13 +156,6 @@ export async function fireClientToolOutputHooks({
  * could forge `mastra.modelOutput` to inject arbitrary prompt content, so
  * they are stripped and the mapping is recomputed from the raw result.
  */
-/**
- * Parts whose `mastra.modelOutput` markers were written by THIS process.
- * Identity-based so metadata arriving over the wire (new objects) is never
- * trusted, while in-process re-runs stay idempotent.
- */
-const serverComputedParts = new WeakSet<object>();
-
 export async function applyClientToolModelOutput({
   messageList,
   tools,
@@ -165,12 +165,11 @@ export async function applyClientToolModelOutput({
   tools?: Record<string, CoreTool>;
   logger?: Pick<IMastraLogger, 'error'>;
 }): Promise<void> {
-  if (!tools) return;
   const isClientMappedTool = (
     tool: CoreTool,
   ): tool is CoreTool & { toModelOutput: NonNullable<CoreTool['toModelOutput']> } =>
     !tool.execute && tool.type !== 'provider-defined' && typeof tool.toModelOutput === 'function';
-  const hasClientMappedTool = Object.values(tools).some(isClientMappedTool);
+  const hasClientMappedTool = !!tools && Object.values(tools).some(isClientMappedTool);
 
   for (const message of messageList.get.input.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
@@ -217,7 +216,7 @@ export async function applyClientToolModelOutput({
       }
 
       const { toolName, toolCallId } = part.toolInvocation;
-      const tool = tools[toolName];
+      const tool = tools?.[toolName];
       // Client-side tools only: tools WITH execute get toModelOutput applied at
       // execution time by the tool-call step, and provider-executed tools are
       // mapped by the provider round trip, not by us.

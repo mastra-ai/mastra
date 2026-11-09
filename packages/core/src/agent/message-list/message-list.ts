@@ -187,9 +187,10 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
     // applyClientToolModelOutput runs before memory reconciliation and caches the
     // server-computed toModelOutput projection on this live part. That mapping is
     // server-generated, not a client rendering, so it must survive — but only these
-    // fields: any other client-supplied metadata stays untrusted and is dropped.
+    // fields, and only on a result (the only state the hook maps and strips): any other
+    // client-supplied metadata stays untrusted and is dropped.
     const liveMastra = part.providerMetadata?.mastra;
-    if (liveMastra && typeof liveMastra === 'object' && !Array.isArray(liveMastra)) {
+    if (state === 'result' && liveMastra && typeof liveMastra === 'object' && !Array.isArray(liveMastra)) {
       const { modelOutput, modelOutputComputed } = liveMastra as Record<string, unknown>;
       if (modelOutputComputed || modelOutput != null) {
         outcomePart.providerMetadata = {
