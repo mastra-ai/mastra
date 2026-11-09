@@ -31,7 +31,12 @@ export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 export { setupBrowserStream } from './browser-stream';
 export type { HonoBrowserStreamConfig } from './browser-stream';
 export { setupComputerStream } from './computer-stream';
-export type { ComputerStreamResult, ComputerViewerSource, HonoComputerStreamConfig } from './computer-stream';
+export type {
+  ComputerControlSource,
+  ComputerStreamResult,
+  ComputerViewerSource,
+  HonoComputerStreamConfig,
+} from './computer-stream';
 export { createWebSocketSupport } from './shared/websocket-support';
 export type { WebSocketSupport } from './shared/websocket-support';
 

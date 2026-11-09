@@ -323,6 +323,7 @@ export async function createHonoServer(
         allowedOrigins: browserStreamOrigins,
         ticketStore: computerTicketStore,
         getViewer: (computerId, scope) => computers.viewer(computerId, scope),
+        getControl: async (computerId, scope) => (await computers.controlState?.(computerId, scope)) ?? { holder: 'agent' },
       })
     : null;
   if (computers && computerStreamSetup) {

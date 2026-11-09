@@ -7,8 +7,11 @@ import { isOriginAllowed, isSameOrigin, requestHost } from '../shared/origin';
 import type { BrowserStreamOrigin } from '../shared/origin';
 import { createWebSocketSupport } from '../shared/websocket-support';
 import type { WebSocketSupport } from '../shared/websocket-support';
+import { RfbProtocolError, RfbTooLargeError, RfbWatchFilter } from './rfb-watch-filter';
 import { ComputerSessionStore } from './sessions';
 import type { ComputerSession, ComputerViewerTarget } from './sessions';
+
+export { RfbWatchFilter } from './rfb-watch-filter';
 
 /**
  * Resolves a computer's viewer for a thread. Matches the contract of
@@ -23,11 +26,19 @@ export type ComputerViewerSource = (
   scope: { threadId: string; resourceId: string },
 ) => Promise<{ url: string; headers: Record<string, string> } | null>;
 
+/** Resolves the authoritative holder for live relay input enforcement. @experimental */
+export type ComputerControlSource = (
+  computerId: string,
+  scope: { threadId: string; resourceId: string },
+) => Promise<{ holder: 'agent' | 'human' }>;
+
 /** @experimental */
 export interface HonoComputerStreamConfig {
   mastra: Mastra;
   /** Viewer resolver; `undefined` when no computers are registered (routes answer 404). */
   getViewer: ComputerViewerSource | undefined;
+  /** Authoritative control state used to permit input on control tickets. */
+  getControl: ComputerControlSource;
   apiPrefix?: string;
   /** Origins other than the server's own that may embed the viewer (same shape as `cors.origin`). */
   allowedOrigins?: BrowserStreamOrigin;
@@ -200,9 +211,6 @@ export async function setupComputerStream(
 
   const computerIdOf = (c: Context) => c.req.param('computerId')!;
 
-  // Platform's view filter permits RFB setup/read requests and blocks these input-bearing message types.
-  const isWatchInput = (data: ArrayBuffer): boolean => [4, 5, 6, 251, 255].includes(new Uint8Array(data)[0] ?? -1);
-
   const requireComputers: MiddlewareHandler = async (c, next) => {
     if (!config.getViewer) return c.json({ error: 'No computers are registered' }, 404);
     return next();
@@ -259,6 +267,18 @@ export async function setupComputerStream(
       let pendingBytes = 0;
       let clientClosed = false;
       let retried = false;
+      const rfbFilter = new RfbWatchFilter(async () => {
+        if (session.mode !== 'control') return false;
+        try {
+          const control = await config.getControl(session.computerId, {
+            threadId: session.threadId,
+            resourceId: session.resourceId,
+          });
+          return control.holder === 'human';
+        } catch {
+          return false;
+        }
+      });
 
       const upstreamProtocols = c.req.header('sec-websocket-protocol') ? ['binary'] : [];
       const openUpstream = (ws: { send: (data: ArrayBuffer | string) => void; close: (code?: number) => void }) => {
@@ -280,7 +300,13 @@ export async function setupComputerStream(
             ws.close(1003);
             return;
           }
-          ws.send(data);
+          try {
+            rfbFilter.observeServer(Buffer.from(data));
+            ws.send(data);
+          } catch (error) {
+            upstream.terminate();
+            ws.close(error instanceof RfbProtocolError ? 1002 : 1011);
+          }
         });
         let refused = false;
         upstream.on('unexpected-response', (_req, res) => {
@@ -316,25 +342,34 @@ export async function setupComputerStream(
           startRevalidation(session);
           openUpstream(ws);
         },
-        onMessage(event, ws) {
+        async onMessage(event, ws) {
           const data = event.data as ArrayBuffer | string;
           if (typeof data === 'string') {
             ws.close(1003, 'binary frames only');
             return;
           }
           sessions.touch(session.id, session.computerId);
-          if (session.mode === 'watch' && isWatchInput(data)) return;
+          let messages: Buffer[];
+          try {
+            messages = await rfbFilter.filterClient(Buffer.from(data));
+          } catch (error) {
+            ws.close(error instanceof RfbTooLargeError ? 1009 : error instanceof RfbProtocolError ? 1002 : 1011, 'invalid RFB input');
+            return;
+          }
           const upstream = live.upstream;
-          if (upstream?.readyState === WebSocketClient.OPEN) {
-            upstream.send(data);
-            return;
+          for (const message of messages) {
+            const frame = message.buffer.slice(message.byteOffset, message.byteOffset + message.byteLength) as ArrayBuffer;
+            if (upstream?.readyState === WebSocketClient.OPEN) {
+              upstream.send(frame);
+              continue;
+            }
+            pendingBytes += frame.byteLength;
+            if (pendingBytes > MAX_PENDING_CLIENT_BYTES) {
+              ws.close(1009, 'Message too big');
+              return;
+            }
+            pending.push(frame);
           }
-          pendingBytes += data.byteLength;
-          if (pendingBytes > MAX_PENDING_CLIENT_BYTES) {
-            ws.close(1009, 'Message too big');
-            return;
-          }
-          pending.push(data);
         },
         onClose() {
           clientClosed = true;

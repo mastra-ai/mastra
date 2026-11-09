@@ -29,7 +29,7 @@ export interface UpstreamRequest {
  */
 export async function startUpstream() {
   const requests: UpstreamRequest[] = [];
-  const state = { secret: SECRET, wsUnauthorizedOnce: false, wsDelayMs: 0 };
+  const state = { secret: SECRET, wsUnauthorizedOnce: false, wsDelayMs: 0, echo: true };
   const authorized = (req: IncomingMessage) => (req.headers.cookie ?? '').includes(`__mastra_preview=${state.secret}`);
 
   const server = createServer((req, res) => {
@@ -96,7 +96,7 @@ export async function startUpstream() {
           ws.send('sandbox text', { binary: false });
           return;
         }
-        ws.send(data, { binary: isBinary });
+        if (state.echo) ws.send(data, { binary: isBinary });
       });
     }), state.wsDelayMs);
   });
@@ -166,6 +166,7 @@ export async function startProxy(
   const stream = await setupComputerStream(app, {
     mastra: options.mastra ?? createStubMastra(),
     getViewer: 'getViewer' in options ? options.getViewer : async () => null,
+    getControl: options.getControl ?? (async () => ({ holder: 'human' })),
     allowedOrigins: options.allowedOrigins,
     ticketStore,
     webSocket,

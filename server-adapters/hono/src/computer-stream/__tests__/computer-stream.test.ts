@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { upstreamSocketUrl, viewerTarget } from '../index.js';
+import { RfbWatchFilter, upstreamSocketUrl, viewerTarget } from '../index.js';
 import {
   SECRET,
   mintSocketUrl,
@@ -56,14 +56,106 @@ describe('no sandbox HTTP content', () => {
 
 });
 
+describe('stateful RFB watch filter', () => {
+  async function ready(controlAllowed: () => Promise<boolean> = async () => false) {
+    const filter = new RfbWatchFilter(controlAllowed);
+    filter.observeServer(Buffer.from('RFB 003.008\n'));
+    await filter.filterClient(Buffer.from('RFB 003.008\n'));
+    filter.observeServer(Buffer.from([1, 1]));
+    await filter.filterClient(Buffer.from([1]));
+    filter.observeServer(Buffer.alloc(4));
+    await filter.filterClient(Buffer.from([1]));
+    const serverInit = Buffer.alloc(24);
+    filter.observeServer(serverInit);
+    return filter;
+  }
+
+  it('forwards only complete allowlisted messages from concatenated watch traffic', async () => {
+    const filter = await ready();
+    const allowed = Buffer.concat([
+      Buffer.alloc(20, 0),
+      Buffer.from([2, 0, 0, 0]),
+      Buffer.from([3, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+      Buffer.from([150, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+      Buffer.from([248, 0, 0, 0, 0, 0, 0, 0, 0]),
+    ]);
+    const key = Buffer.from([4, 1, 0, 0, 0, 0, 0, 1]);
+    await expect(filter.filterClient(Buffer.concat([allowed, key]))).resolves.toEqual([
+      allowed.subarray(0, 20),
+      allowed.subarray(20, 24),
+      allowed.subarray(24, 34),
+      allowed.subarray(34, 44),
+      allowed.subarray(44),
+    ]);
+  });
+
+  it('carries split input and drops input appended to handshake bytes', async () => {
+    const filter = await ready();
+    const key = Buffer.from([4, 1, 0, 0, 0, 0, 0, 1]);
+    await expect(filter.filterClient(key.subarray(0, 3))).resolves.toEqual([]);
+    await expect(filter.filterClient(key.subarray(3))).resolves.toEqual([]);
+
+    const duringHandshake = new RfbWatchFilter(async () => false);
+    duringHandshake.observeServer(Buffer.from('RFB 003.008\n'));
+    await duringHandshake.filterClient(Buffer.from('RFB 003.008\n'));
+    duringHandshake.observeServer(Buffer.from([1, 1]));
+    await duringHandshake.filterClient(Buffer.from([1]));
+    duringHandshake.observeServer(Buffer.alloc(4));
+    expect(await duringHandshake.filterClient(Buffer.concat([Buffer.from([1]), key]))).toEqual([Buffer.from([1])]);
+    duringHandshake.observeServer(Buffer.alloc(24));
+    await expect(duringHandshake.filterClient(Buffer.alloc(0))).resolves.toEqual([]);
+  });
+
+  it('drops ClientCutText and fails closed on unknown message types', async () => {
+    const filter = await ready();
+    await expect(filter.filterClient(Buffer.from([6, 0, 0, 0, 0, 0, 0, 0]))).resolves.toEqual([]);
+    await expect(filter.filterClient(Buffer.from([250]))).rejects.toThrow('Unsupported RFB client message');
+  });
+
+  it('uses the authoritative holder for control-session input', async () => {
+    let holder: 'agent' | 'human' = 'agent';
+    const filter = await ready(async () => holder === 'human');
+    const key = Buffer.from([4, 1, 0, 0, 0, 0, 0, 1]);
+    await expect(filter.filterClient(key)).resolves.toEqual([]);
+    holder = 'human';
+    await expect(filter.filterClient(key)).resolves.toEqual([key]);
+  });
+});
+
 describe('websocket proxy', () => {
+  async function completeHandshake(ws: NonNullable<Awaited<ReturnType<typeof openSocket>>['ws']>) {
+    upstream.state.echo = false;
+    await waitFor(() => upstream.upstreamSockets.size === 1);
+    const server = [...upstream.upstreamSockets][0]!;
+    const sendServer = async (data: Buffer) => {
+      const received = nextMessage(ws);
+      server.send(data);
+      expect(Buffer.from((await received).data)).toEqual(data);
+    };
+    const sendClient = async (data: Buffer) => {
+      const count = upstream.upstreamMessages.length;
+      ws.send(data);
+      await waitFor(() => upstream.upstreamMessages.length === count + 1);
+    };
+    await sendServer(Buffer.from('RFB 003.008\n'));
+    await sendClient(Buffer.from('RFB 003.008\n'));
+    await sendServer(Buffer.from([1, 1]));
+    await sendClient(Buffer.from([1]));
+    await sendServer(Buffer.alloc(4));
+    await sendClient(Buffer.from([1]));
+    await sendServer(Buffer.alloc(24));
+    upstream.upstreamMessages.length = 0;
+  }
   it("relays noVNC's default upgrade, which requests no subprotocol", async () => {
     const { origin } = await start();
     const { url } = await mintSocketUrl(origin, 'c1');
     const { ws, protocol } = await openSocket(url, { origin }, []);
     expect(protocol).toBe('');
-    ws!.send(Buffer.from([7, 8]));
-    expect([...(await nextMessage(ws!)).data]).toEqual([7, 8]);
+    await completeHandshake(ws!);
+    const request = Buffer.from([3, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    upstream.state.echo = true;
+    ws!.send(request);
+    expect(Buffer.from((await nextMessage(ws!)).data)).toEqual(request);
     const handshake = upstream.wsHandshakes.at(-1)!;
     expect(handshake.headers['sec-websocket-protocol']).toBeUndefined();
     expect(handshake.headers.cookie).toBe(`__mastra_preview=${SECRET}`);
@@ -107,7 +199,7 @@ describe('websocket proxy', () => {
     const pointer = Buffer.from([5, 0, 0, 1, 0, 1]);
 
     const watch = await openSocket((await mintSocketUrl(origin, 'c1', { mode: 'watch' })).url, { origin });
-    await waitFor(() => upstream.upstreamSockets.size === 1);
+    await completeHandshake(watch.ws!);
     watch.ws!.send(pointer);
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(upstream.upstreamMessages).toEqual([]);
@@ -115,7 +207,7 @@ describe('websocket proxy', () => {
     await waitFor(() => upstream.upstreamSockets.size === 0);
 
     const control = await openSocket((await mintSocketUrl(origin, 'c1', { mode: 'control' })).url, { origin });
-    await waitFor(() => upstream.upstreamSockets.size === 1);
+    await completeHandshake(control.ws!);
     control.ws!.send(pointer);
     await waitFor(() => upstream.upstreamMessages.length === 1);
     expect([...upstream.upstreamMessages[0]!]).toEqual([...pointer]);
@@ -138,8 +230,11 @@ describe('websocket proxy', () => {
     const { url } = await mintSocketUrl(origin, 'c1');
     upstream.state.wsUnauthorizedOnce = true;
     const { ws } = await openSocket(url, { origin });
-    ws!.send(Buffer.from([9]));
-    expect([...(await nextMessage(ws!)).data]).toEqual([9]);
+    await completeHandshake(ws!);
+    const request = Buffer.from([3, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    upstream.state.echo = true;
+    ws!.send(request);
+    expect(Buffer.from((await nextMessage(ws!)).data)).toEqual(request);
     ws!.close();
   });
 
@@ -148,7 +243,7 @@ describe('websocket proxy', () => {
     const { ws } = await openSocket((await mintSocketUrl(origin, 'c1')).url, { origin });
     await waitFor(() => upstream.upstreamSockets.size === 1);
     const closed = nextClose(ws!);
-    ws!.send(Buffer.from('close-me'));
+    [...upstream.upstreamSockets][0]!.close(4000, 'upstream bye');
     expect(await closed).toBe(4000);
     await waitFor(() => upstream.upstreamSockets.size === 0);
   });
@@ -166,7 +261,7 @@ describe('websocket proxy', () => {
     const received: unknown[] = [];
     fromSandbox.ws!.on('message', data => received.push(data));
     const sandboxClosed = nextClose(fromSandbox.ws!);
-    fromSandbox.ws!.send(Buffer.from('text-please'));
+    [...upstream.upstreamSockets][0]!.send('sandbox text', { binary: false });
     expect(await sandboxClosed).toBe(1003);
     expect(received).toEqual([]);
     await waitFor(() => upstream.upstreamSockets.size === 0);
