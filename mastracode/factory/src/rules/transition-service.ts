@@ -19,6 +19,7 @@ import type {
   FactoryRuleStage,
   FactoryStageRuleContext,
   FactoryTransitionResult,
+  FactoryTransitionResultRejected,
 } from './types.js';
 import { factoryRuleSourceForWorkItem, workItemSource } from './types.js';
 import {
@@ -156,6 +157,24 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
     default:
       return { actorId: id, actorType: actor.type };
   }
+}
+
+/** The role a session's own agent moves under when nobody signed in started its turn (see `factory_transition_work_item` in the session tools). */
+const SESSION_AGENT_ROLE = 'session';
+
+function isStale(result: FactoryTransitionResult): result is FactoryTransitionResultRejected {
+  return result.status === 'rejected' && result.code === 'stale';
+}
+
+/** Tell the caller where the card is now, so a model doesn't read "stale" as "already moved". */
+function staleRejection(result: FactoryTransitionResultRejected, current: Card): FactoryTransitionResult {
+  const stage = currentStage(current.stages) ?? current.stages.join(', ');
+  return rejection(
+    result.transitionId,
+    result.itemId,
+    'stale',
+    `The card changed (now revision ${current.revision}, in ${stage}). Retry with expectedRevision ${current.revision} if the move still applies.`,
+  );
 }
 
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
@@ -296,10 +315,41 @@ export class FactoryTransitionService {
       await this.#recordTransition(request, undefined, rejection);
       return rejection;
     }
-    const result = await this.#evaluateAndCommit(request, transitionId, item);
-    await this.#recordTransition(request, item, result);
-    this.#notifyCommitted(request, item, result);
+    let moved = item;
+    let result = await this.#evaluateAndCommit(request, transitionId, item);
+    if (isStale(result)) {
+      // A stale move persisted nothing (not even its ingress), so the same identity can commit now.
+      const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
+      if (current && (await this.#retriesStaleMove(request, item, current))) {
+        moved = current;
+        result = await this.#evaluateAndCommit(
+          { ...request, expectedRevision: current.revision },
+          transitionId,
+          current,
+        );
+      }
+      if (isStale(result) && current) result = staleRejection(result, current);
+    }
+    await this.#recordTransition(request, moved, result);
+    this.#notifyCommitted(request, moved, result);
     return result;
+  }
+
+  /**
+   * A bound phase agent reads the card's revision from its phase signal, and its own run moves it
+   * on: attaching the pull request it opened, recording a verdict. A revision lost only to such a
+   * write, with the card still in the phase this agent's seat runs, retries once at the current
+   * revision; the move is evaluated again, so one the board no longer allows is still refused.
+   * A card whose phase changed is left to the agent with the current revision and phase.
+   */
+  async #retriesStaleMove(request: FactoryTransitionRequest, read: Card, current: Card): Promise<boolean> {
+    if (request.actor.type !== 'agent' || request.actor.role === SESSION_AGENT_ROLE) return false;
+    // Only a revision the card has since moved past; one it never reached was not read from it.
+    if (request.expectedRevision >= current.revision) return false;
+    const stage = currentStage(current.stages);
+    if (stage === undefined || stage !== currentStage(read.stages)) return false;
+    const board = (await this.#boards.load(request)).get(request.board);
+    return board?.roleForPhase(stage) === request.actor.role;
   }
 
   #notifyCommitted(request: FactoryTransitionRequest, item: Card, result: FactoryTransitionResult): void {
