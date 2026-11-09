@@ -45,6 +45,7 @@ function createContext({
   mastra,
   method,
   runId,
+  chatId,
   requestContext,
   signal,
   memory,
@@ -52,16 +53,22 @@ function createContext({
   mastra: Mastra;
   method: 'POST' | 'GET';
   runId: string;
+  chatId?: string;
   requestContext?: RequestContext;
   signal?: AbortSignal;
   memory?: { resource?: string; thread?: string };
 }) {
-  const body = { messages, runId, ...(memory ? { memory } : {}) };
-  const request = new Request(`http://localhost/chat/test-agent${method === 'GET' ? `/runs/${runId}` : ''}`, {
-    method,
-    signal,
-    ...(method === 'POST' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
-  });
+  const effectiveChatId =
+    chatId ?? (requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) ?? memory?.thread ?? runId;
+  const body = { id: effectiveChatId, messages, runId, ...(memory ? { memory } : {}) };
+  const request = new Request(
+    `http://localhost/chat/test-agent${method === 'GET' ? `/${effectiveChatId}/stream` : ''}`,
+    {
+      method,
+      signal,
+      ...(method === 'POST' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+    },
+  );
 
   return {
     req: {
@@ -69,7 +76,7 @@ function createContext({
       json: () => Promise.resolve(body),
       param: (name: string) => {
         if (name === 'agentId') return 'test-agent';
-        if (name === 'runId') return runId;
+        if (name === 'chatId') return effectiveChatId;
         return undefined;
       },
       query: () => undefined,
@@ -113,14 +120,14 @@ function createRouteFetch(mastra: Mastra) {
     const method = request.method as 'POST' | 'GET';
     const body = method === 'POST' ? await request.clone().json() : undefined;
     const pathParts = url.pathname.split('/');
-    const runId = method === 'GET' ? pathParts.at(-1) : body.runId;
+    const chatId = method === 'GET' ? pathParts.at(-2) : body.id;
     const context = {
       req: {
         raw: request,
         json: () => Promise.resolve(body),
         param: (name: string) => {
           if (name === 'agentId') return 'test-agent';
-          if (name === 'runId') return runId;
+          if (name === 'chatId') return chatId;
           return undefined;
         },
         query: (name: string) => url.searchParams.get(name) ?? undefined,
@@ -131,12 +138,12 @@ function createRouteFetch(mastra: Mastra) {
   };
 }
 
-describe('chatRoute reconnect', () => {
+describe('chatRoute resumable streams', () => {
   it('returns explicit POST and GET routes and normalizes them in server config', () => {
-    const routes = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const routes = chatRoute({ path: '/chat/:agentId', resumable: true });
     expect(routes.map(({ method, path }) => `${method} ${path}`)).toEqual([
       'POST /chat/:agentId',
-      'GET /chat/:agentId/runs/:runId',
+      'GET /chat/:agentId/:chatId/stream',
     ]);
     const mastra = new Mastra({
       logger: false,
@@ -145,19 +152,19 @@ describe('chatRoute reconnect', () => {
 
     expect(mastra.getServer()?.apiRoutes?.map(({ method, path }) => `${method} ${path}`)).toEqual([
       'POST /chat/:agentId',
-      'GET /chat/:agentId/runs/:runId',
+      'GET /chat/:agentId/:chatId/stream',
     ]);
 
-    const fixedRoutes = chatRoute({ path: '/fixed-chat', agent: 'test-agent', reconnect: true });
+    const fixedRoutes = chatRoute({ path: '/fixed-chat', agent: 'test-agent', resumable: true });
     const fixedMastra = new Mastra({ logger: false, server: { apiRoutes: [fixedRoutes] } });
     expect(fixedMastra.getServer()?.apiRoutes?.map(({ method, path }) => `${method} ${path}`)).toEqual([
       'POST /fixed-chat',
-      'GET /fixed-chat/runs/:runId',
+      'GET /fixed-chat/:chatId/stream',
     ]);
   });
 
   it.each(['v5', 'v6', 'v7'] as const)(
-    'replays a client-owned run after the POST response disconnects with %s',
+    'replays the active chat run after the POST response disconnects with %s',
     async version => {
       const controlled = createControlledModel();
       const agent = new Agent({
@@ -167,13 +174,13 @@ describe('chatRoute reconnect', () => {
         model: controlled.model,
       });
       const observe = vi.spyOn(agent, 'observe');
-      const route = chatRoute({ path: '/chat/:agentId', reconnect: true, version });
+      const route = chatRoute({ path: '/chat/:agentId', resumable: true, version });
       const mastra = new Mastra({
         logger: false,
         agents: { [agent.id]: agent },
         server: { apiRoutes: [route] },
       });
-      const runId = `client-owned-run-id-${version}`;
+      const runId = `resumable-run-id-${version}`;
       const requestAbort = new AbortController();
 
       const postResponse = await invoke(
@@ -211,7 +218,7 @@ describe('chatRoute reconnect', () => {
       .fn()
       .mockResolvedValueOnce(agent)
       .mockRejectedValue(new Error('No published agent version'));
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
     const mastra = new Mastra({
       logger: false,
       agents: { [agent.id]: agent },
@@ -242,22 +249,15 @@ describe('chatRoute reconnect', () => {
       instructions: 'Help the user.',
       model: controlled.model,
     });
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
     const mastra = new Mastra({
       logger: false,
       agents: { [agent.id]: agent },
       server: { apiRoutes: [route] },
     });
-    const runId = 'transport-owned-run-id';
     const transport = new DefaultChatTransport({
       api: '/chat/test-agent',
       fetch: createRouteFetch(mastra),
-      prepareSendMessagesRequest: ({ messages: requestMessages }) => ({
-        body: { messages: requestMessages, runId },
-      }),
-      prepareReconnectToStreamRequest: () => ({
-        api: `/chat/test-agent/runs/${runId}`,
-      }),
     });
 
     const initialStream = await transport.sendMessages({
@@ -289,7 +289,7 @@ describe('chatRoute reconnect', () => {
     ]);
   });
 
-  it('rejects reconnects outside the run resource and thread scope', async () => {
+  it('hides active runs outside the caller resource and thread scope', async () => {
     const controlled = createControlledModel();
     const agent = new Agent({
       id: 'test-agent',
@@ -297,7 +297,7 @@ describe('chatRoute reconnect', () => {
       instructions: 'Help the user.',
       model: controlled.model,
     });
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
     const mastra = new Mastra({
       logger: false,
       agents: { [agent.id]: agent },
@@ -322,7 +322,6 @@ describe('chatRoute reconnect', () => {
         threadId: 'owner-thread',
       }),
     );
-
     const intruderContext = new RequestContext();
     intruderContext.set(MASTRA_RESOURCE_ID_KEY, 'other-resource');
     intruderContext.set(MASTRA_THREAD_ID_KEY, 'owner-thread');
@@ -330,16 +329,16 @@ describe('chatRoute reconnect', () => {
       getRoute(mastra, 'GET'),
       createContext({ mastra, method: 'GET', runId, requestContext: intruderContext }),
     );
-    expect(intruderResponse.status).toBe(404);
+    expect(intruderResponse.status).toBe(204);
 
     const missingScopeResponse = await invoke(getRoute(mastra, 'GET'), createContext({ mastra, method: 'GET', runId }));
-    expect(missingScopeResponse.status).toBe(404);
+    expect(missingScopeResponse.status).toBe(204);
 
     const ownerReconnectContext = new RequestContext();
     ownerReconnectContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-resource');
     const ownerResponse = await invoke(
       getRoute(mastra, 'GET'),
-      createContext({ mastra, method: 'GET', runId, requestContext: ownerReconnectContext }),
+      createContext({ mastra, method: 'GET', runId, chatId: 'owner-thread', requestContext: ownerReconnectContext }),
     );
     expect(ownerResponse.status).toBe(200);
     expect(ownerReconnectContext.get(MASTRA_THREAD_ID_KEY)).toBe('owner-thread');
@@ -362,7 +361,7 @@ describe('chatRoute reconnect', () => {
       filterAccessible: vi.fn(),
       clearCache: vi.fn(),
     } as any;
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
     const mastra = new Mastra({
       logger: false,
       agents: { [agent.id]: agent },
@@ -386,7 +385,7 @@ describe('chatRoute reconnect', () => {
     reconnectContext.set('user', { id: 'owner-user' });
     const response = await invoke(
       getRoute(mastra, 'GET'),
-      createContext({ mastra, method: 'GET', runId, requestContext: reconnectContext }),
+      createContext({ mastra, method: 'GET', runId, chatId: 'owner-thread', requestContext: reconnectContext }),
     );
 
     expect(response.status).toBe(404);
@@ -417,7 +416,7 @@ describe('chatRoute reconnect', () => {
       filterAccessible: vi.fn(),
       clearCache: vi.fn(),
     } as any;
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
     const mastra = new Mastra({
       logger: false,
       agents: { [agent.id]: agent },
@@ -446,7 +445,7 @@ describe('chatRoute reconnect', () => {
     const serverCallsBeforeReconnect = serverFga.require.mock.calls.length;
     const response = await invoke(
       getRoute(mastra, 'GET'),
-      createContext({ mastra, method: 'GET', runId, requestContext: reconnectContext }),
+      createContext({ mastra, method: 'GET', runId, chatId: 'owner-thread', requestContext: reconnectContext }),
     );
 
     expect(response.status).toBe(404);
@@ -469,7 +468,7 @@ describe('chatRoute reconnect', () => {
       filterAccessible: vi.fn(),
       clearCache: vi.fn(),
     } as any;
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
     const mastra = new Mastra({
       logger: false,
       agents: { [agent.id]: agent },
@@ -494,7 +493,7 @@ describe('chatRoute reconnect', () => {
     reconnectContext.set('user', { id: 'owner-user' });
     const response = await invoke(
       getRoute(mastra, 'GET'),
-      createContext({ mastra, method: 'GET', runId, requestContext: reconnectContext }),
+      createContext({ mastra, method: 'GET', runId, chatId: 'owner-thread', requestContext: reconnectContext }),
     );
 
     expect(response.status).toBe(404);
@@ -514,7 +513,7 @@ describe('chatRoute reconnect', () => {
     routeRequestContext.set(MASTRA_RESOURCE_ID_KEY, 'route-resource');
     const route = chatRoute({
       path: '/chat/:agentId',
-      reconnect: true,
+      resumable: true,
       defaultOptions: { requestContext: routeRequestContext },
     });
     const mastra = new Mastra({
@@ -539,7 +538,10 @@ describe('chatRoute reconnect', () => {
       }),
     );
 
-    const reconnectResponse = await invoke(getRoute(mastra, 'GET'), createContext({ mastra, method: 'GET', runId }));
+    const reconnectResponse = await invoke(
+      getRoute(mastra, 'GET'),
+      createContext({ mastra, method: 'GET', runId, chatId: 'route-thread' }),
+    );
     expect(reconnectResponse.status).toBe(200);
     const reconnectBody = reconnectResponse.text();
     controlled.finish();
@@ -564,7 +566,7 @@ describe('chatRoute reconnect', () => {
     controlled.finish();
   });
 
-  it('rejects an owner-less run for a tenant-scoped caller', async () => {
+  it('hides an owner-less run from a tenant-scoped caller', async () => {
     const controlled = createControlledModel();
     const agent = new Agent({
       id: 'test-agent',
@@ -572,7 +574,7 @@ describe('chatRoute reconnect', () => {
       instructions: 'Help the user.',
       model: controlled.model,
     });
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
     const mastra = new Mastra({
       logger: false,
       agents: { [agent.id]: agent },
@@ -594,18 +596,18 @@ describe('chatRoute reconnect', () => {
       createContext({ mastra, method: 'GET', runId, requestContext: tenantContext }),
     );
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(204);
     controlled.finish();
   });
 
-  it('returns 204 when the client-owned run is unknown', async () => {
+  it('returns 204 when the chat has no active run', async () => {
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'Help the user.',
       model: new MockLanguageModelV2(),
     });
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
     const mastra = new Mastra({
       logger: false,
       agents: { [agent.id]: agent },

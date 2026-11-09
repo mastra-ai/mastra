@@ -209,6 +209,8 @@ export type ChatStreamHandlerParams<
   UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage,
   OUTPUT = undefined,
 > = AgentExecutionOptions<OUTPUT> & {
+  /** The chat ID sent by AI SDK's useChat hook. */
+  id?: string;
   messages: UI_MESSAGE[];
   resumeData?: Record<string, any>;
   /** The trigger for the request - sent by AI SDK's useChat hook */
@@ -658,8 +660,8 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   version?: 'v5' | 'v6' | 'v7';
   agentVersion?: AgentVersionOptions;
-  /** Register a GET route that replays and follows a client-owned run ID. */
-  reconnect?: boolean;
+  /** Enable AI SDK resumable streams with `useChat({ resume: true })`. */
+  resumable?: boolean;
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -692,7 +694,7 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * @param {string} [options.path='/chat/:agentId'] - The route path. Include `:agentId` for dynamic routing
  * @param {string} [options.agent] - Fixed agent ID when not using dynamic routing
  * @param {AgentExecutionOptions} [options.defaultOptions] - Default options passed to agent execution
- * @param {boolean} [options.reconnect=false] - Registers `GET <path>/runs/:runId` for replaying and following resumable runs. The client must generate a fresh `runId` for each generation, include it in the POST body, and retain it for reconnects.
+ * @param {boolean} [options.resumable=false] - Enables AI SDK resumable streams for `useChat({ resume: true })`. Registers `GET <path>/:chatId/stream`, uses the POST chat ID as the Mastra memory thread ID, and lets the run continue when the POST connection closes.
  * @param {boolean} [options.sendStart=true] - Whether to send start events in the stream
  * @param {boolean} [options.sendFinish=true] - Whether to send finish events in the stream
  * @param {boolean} [options.sendReasoning=false] - Whether to include reasoning steps in the stream
@@ -702,7 +704,7 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, errors are passed through a default serializer that strips sensitive fields (e.g. `APICallError.requestBodyValues`, which holds the system prompt) before they reach the client.
  * @param {Function} [options.messageMetadata] - Maps stream parts to metadata attached to AI SDK start and finish message parts. Receives `{ part, traceId }`.
  *
- * @returns A POST route, or `[postRoute, reconnectRoute]` when `reconnect: true`
+ * @returns A POST route, or `[postRoute, reconnectRoute]` when `resumable: true`
  *
  * @throws {Error} When path doesn't include `:agentId` and no fixed agent is specified
  * @throws {RangeError} When `heartbeatMs` is `NaN`, positive infinity, or greater than 2,147,483,647
@@ -731,21 +733,22 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * - The response is a Server-Sent Events (SSE) stream compatible with the selected AI SDK version
  * - If both `agent` and `:agentId` are present, a warning is logged and the fixed `agent` takes precedence
  * - Request context from the incoming request overrides `defaultOptions.requestContext` if both are present
- * - With `reconnect: true`, scoped runs can only be reconnected with matching resource and thread IDs in request context
- * - Reconnect returns 204 when the run is unknown, expired, or already finished
+ * - With `resumable: true`, scoped runs can only be resumed with matching resource and thread IDs in request context
+ * - Resumption returns 204 when the run is unknown, expired, or already finished
+ * - Abort-based cancellation is unavailable because HTTP disconnects must not abort resumable runs
  */
 type ChatApiRoute = ReturnType<typeof registerApiRoute>;
-type ReconnectChatApiRoutes = [postRoute: ChatApiRoute, reconnectRoute: ChatApiRoute];
+type ResumableChatApiRoutes = [postRoute: ChatApiRoute, reconnectRoute: ChatApiRoute];
 
 export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>(
-  options: chatRouteOptions<OUTPUT, UI_MESSAGE> & { reconnect: true },
-): ReconnectChatApiRoutes;
+  options: chatRouteOptions<OUTPUT, UI_MESSAGE> & { resumable: true },
+): ResumableChatApiRoutes;
 export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>(
-  options: chatRouteOptions<OUTPUT, UI_MESSAGE> & { reconnect?: false },
+  options: chatRouteOptions<OUTPUT, UI_MESSAGE> & { resumable?: false },
 ): ChatApiRoute;
 export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>(
   options: chatRouteOptions<OUTPUT, UI_MESSAGE>,
-): ChatApiRoute | ReconnectChatApiRoutes;
+): ChatApiRoute | ResumableChatApiRoutes;
 export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>({
   path = '/chat/:agentId',
   agent,
@@ -753,7 +756,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
   experimentalTransform,
   version = 'v5',
   agentVersion,
-  reconnect = false,
+  resumable = false,
   sendStart = true,
   sendFinish = true,
   sendReasoning = false,
@@ -762,7 +765,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
   heartbeatMs,
   onError,
   messageMetadata,
-}: chatRouteOptions<OUTPUT, UI_MESSAGE>): ChatApiRoute | ReconnectChatApiRoutes {
+}: chatRouteOptions<OUTPUT, UI_MESSAGE>): ChatApiRoute | ResumableChatApiRoutes {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
   }
@@ -909,7 +912,14 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
       }
 
       // Prioritize requestContext from middleware/route options over body
-      const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
+      const configuredRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
+      const effectiveRequestContext =
+        resumable && params.id
+          ? new RequestContext(configuredRequestContext ? configuredRequestContext.entries() : undefined)
+          : configuredRequestContext;
+      if (resumable && params.id) {
+        (effectiveRequestContext as RequestContext).set(MASTRA_THREAD_ID_KEY, params.id);
+      }
 
       if (
         (contextRequestContext && defaultOptions?.requestContext) ||
@@ -926,6 +936,9 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
       }
 
       const effectiveAgentVersion = resolveAgentVersionFromQuery(name => c.req.query(name), agentVersion);
+      const resumableResourceId = (effectiveRequestContext as RequestContext | undefined)?.get<string>(
+        MASTRA_RESOURCE_ID_KEY,
+      );
 
       const handlerOptions = {
         mastra,
@@ -933,8 +946,17 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         agentVersion: effectiveAgentVersion,
         params: {
           ...params,
+          ...(resumable && params.id
+            ? {
+                memory: {
+                  ...(typeof params.memory === 'object' ? params.memory : {}),
+                  ...(resumableResourceId ? { resource: resumableResourceId } : {}),
+                  thread: params.id,
+                },
+              }
+            : {}),
           requestContext: effectiveRequestContext,
-          ...(!reconnect && { abortSignal: c.req.raw.signal }),
+          ...(!resumable && { abortSignal: c.req.raw.signal }),
         } as any,
         defaultOptions,
         experimentalTransform,
@@ -968,16 +990,16 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
     },
   });
 
-  if (!reconnect) {
+  if (!resumable) {
     return postRoute;
   }
 
-  const reconnectPath = `${path.replace(/\/$/, '')}/runs/:runId`;
+  const reconnectPath = `${path.replace(/\/$/, '')}/:chatId/stream`;
   const reconnectRoute = registerApiRoute(reconnectPath, {
     method: 'GET',
     openapi: {
-      summary: 'Reconnect to an agent chat run',
-      description: 'Replay and follow an existing agent run in the AI SDK format',
+      summary: 'Reconnect to an agent chat stream',
+      description: 'Replay and follow the active agent run for an AI SDK chat',
       tags: ['ai-sdk'],
       parameters: [
         ...(path.includes(':agentId')
@@ -991,7 +1013,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
             ]
           : []),
         {
-          name: 'runId',
+          name: 'chatId',
           in: 'path',
           required: true,
           schema: { type: 'string' },
@@ -1019,10 +1041,10 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
           },
         },
         '204': {
-          description: 'The run is unknown, expired, or already finished',
+          description: 'The chat has no active resumable run',
         },
         '404': {
-          description: 'The run does not belong to the current resource or thread',
+          description: 'The active run does not belong to the current resource or thread',
         },
       },
     },
@@ -1033,9 +1055,9 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         middlewareRequestContext ||
         (defaultOptions?.requestContext ? new RequestContext(defaultOptions.requestContext.entries()) : undefined);
       const agentToUse = agent ?? c.req.param('agentId');
-      const runId = c.req.param('runId');
+      const chatId = c.req.param('chatId');
 
-      if (!agentToUse || !runId) {
+      if (!agentToUse || !chatId) {
         return new Response(null, { status: 204 });
       }
 
@@ -1048,6 +1070,11 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         requestContext,
         defaultToPublished: false,
       });
+      const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+      const runId = agentObj.getActiveThreadRunId({ threadId: chatId, resourceId });
+      if (!runId) {
+        return new Response(null, { status: 204 });
+      }
       const runRecord = await agentObj.__getRunRecord(runId);
       if (!runRecord || runRecord.status === 'finished') {
         return new Response(null, { status: 204 });
