@@ -3,9 +3,6 @@ import { CONTENT_ROOT, frontmatterKeyLine, isPartial } from '../content'
 import { finding } from '../finding'
 import type { Check, ContentFile, Finding } from '../types'
 
-export const DESCRIPTION_MIN = 50
-export const DESCRIPTION_MAX = 200
-
 export function checkFrontmatter(file: ContentFile): Finding[] {
   const findings: Finding[] = []
   const at = (line?: number) => ({ file: file.path, line })
@@ -32,27 +29,6 @@ export function checkFrontmatter(file: ContentFile): Finding[] {
     findings.push(
       finding('mastra/frontmatter-title', 'Missing `title` in frontmatter', at(frontmatterKeyLine(file, 'title') ?? 1)),
     )
-  }
-
-  if (typeof data.description !== 'string' || data.description.trim() === '') {
-    findings.push(
-      finding(
-        'mastra/description-required',
-        'Missing `description` in frontmatter',
-        at(frontmatterKeyLine(file, 'description') ?? 1),
-      ),
-    )
-  } else {
-    const length = data.description.trim().length
-    if (length < DESCRIPTION_MIN || length > DESCRIPTION_MAX) {
-      findings.push(
-        finding(
-          'mastra/description-length',
-          `\`description\` is ${length} characters; keep it between ${DESCRIPTION_MIN} and ${DESCRIPTION_MAX}`,
-          at(frontmatterKeyLine(file, 'description')),
-        ),
-      )
-    }
   }
 
   // Package checks reuse validate-frontmatter.ts, including its skip list.

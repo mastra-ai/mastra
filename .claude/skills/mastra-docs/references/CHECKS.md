@@ -77,6 +77,8 @@ Vale also honors its own `{/* vale off */}` and `{/* vale on */}` comments.
 
 ## Rules
 
+`mastra/description-required`, `mastra/description-length`, `mastra/single-h1`, `mastra/code-block-lang`, and `mastra/bare-url` are implemented in `@mastra/lint-docs/remark-preset`, so `pnpm lint:remark` reports them too. `pnpm check` maps them to the IDs below.
+
 | Rule                              | Category    | Severity | Fixable | Description                                                                                                                                           |
 | --------------------------------- | ----------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mastra/frontmatter-missing`      | frontmatter | error    | No      | The page has no `---` frontmatter block.                                                                                                              |

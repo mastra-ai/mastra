@@ -1,8 +1,7 @@
-import type { Code, Definition, Heading, Link, Root, Text } from 'mdast'
+import type { Definition, Link, Root } from 'mdast'
 import { finding } from '../finding'
-import { parseMdx } from '../mdx'
-import { isPartial } from '../content'
-import { slugifyRuleName } from '../rules'
+import { parseMdx, type LintMessage } from '../mdx'
+import { isKnownRuleId, slugifyRuleName } from '../rules'
 import {
   buildRouteIndex,
   findRedirect,
@@ -33,59 +32,6 @@ function walk(node: Node, visit: (node: Node) => boolean | void): void {
 
 function at(file: ContentFile, node: Node) {
   return { file: file.path, line: node.position?.start.line, column: node.position?.start.column }
-}
-
-export function checkSingleH1(file: ContentFile, tree: Root): Finding[] {
-  if (isPartial(file)) return []
-  const h1s: Heading[] = []
-  walk(tree as Node, node => {
-    if (node.type === 'heading' && (node as unknown as Heading).depth === 1) h1s.push(node as unknown as Heading)
-  })
-  if (h1s.length === 0) {
-    return [finding('mastra/single-h1', 'Page has no `#` heading', { file: file.path, line: file.bodyStartLine })]
-  }
-  return h1s
-    .slice(1)
-    .map(h1 => finding('mastra/single-h1', `Page has ${h1s.length} \`#\` headings; use one`, at(file, h1 as Node)))
-}
-
-export function checkCodeBlockLanguage(file: ContentFile, tree: Root): Finding[] {
-  const findings: Finding[] = []
-  walk(tree as Node, node => {
-    if (node.type !== 'code') return
-    const code = node as unknown as Code
-    const offset = node.position?.start.offset
-    const fenced = offset !== undefined && /^[`~]{3}/.test(file.source.slice(offset).trimStart())
-    if (fenced && !code.lang) {
-      findings.push(
-        finding(
-          'mastra/code-block-lang',
-          'Code block has no language; add one, e.g. ```typescript or ```text',
-          at(file, node),
-        ),
-      )
-    }
-  })
-  return findings
-}
-
-const URL_PATTERN = /https?:\/\/[^\s)<>"'`]+/g
-
-export function checkBareUrls(file: ContentFile, tree: Root): Finding[] {
-  const findings: Finding[] = []
-  walk(tree as Node, node => {
-    if (node.type === 'link' || node.type === 'linkReference' || node.type === 'definition') return false
-    if (node.type !== 'text') return
-    const text = node as unknown as Text
-    for (const match of text.value.matchAll(URL_PATTERN)) {
-      findings.push(
-        finding('mastra/bare-url', `Bare URL ${match[0]}; wrap it in a Markdown link`, at(file, node), {
-          suggestion: `[descriptive text](${match[0]})`,
-        }),
-      )
-    }
-  })
-  return findings
 }
 
 const SELF_HOST = /^https?:\/\/(?:www\.)?mastra\.ai(\/(?:docs|integrations|models|reference)(?:[/?#].*)?)$/
@@ -182,7 +128,7 @@ export function remarkFindings(
   messages: Awaited<ReturnType<typeof parseMdx>>['lintMessages'],
 ): Finding[] {
   return messages.map(message =>
-    finding(`mastra/remark-${slugifyRuleName(message.ruleId ?? 'unknown')}`, message.reason, {
+    finding(ruleIdForMessage(message), message.reason, {
       file: file.path,
       line: message.line ?? undefined,
       column: message.column ?? undefined,
@@ -190,13 +136,22 @@ export function remarkFindings(
   )
 }
 
+/** The preset's own rules (`source: 'mastra'`) keep their `mastra/<rule>` ID; third-party remark-lint rules get `mastra/remark-<rule>`. */
+function ruleIdForMessage(message: LintMessage): string {
+  const own = `mastra/${message.ruleId}`
+  if (message.source === 'mastra' && isKnownRuleId(own)) return own
+  return `mastra/remark-${slugifyRuleName(message.ruleId ?? 'unknown')}`
+}
+
+const PAGE_RULES = new Set(['mastra/description-required', 'mastra/description-length'])
+
 /**
  * Runs every rule that needs the parsed MDX tree: remark-lint, structure, links, and bare URLs.
  * Parsing happens once per file and is shared between rules.
  */
 export const mdxCheck: Check = {
   name: 'mdx',
-  categories: ['structure', 'links', 'prose'],
+  categories: ['frontmatter', 'structure', 'links', 'prose'],
   scope: 'files',
   async run(ctx: CheckContext): Promise<CheckResult> {
     const findings: Finding[] = []
@@ -206,16 +161,10 @@ export const mdxCheck: Check = {
 
     for (const file of ctx.files) {
       const { tree, lintMessages } = await parseMdx(file)
-      // Generated model pages only get link checks; remark, prose, and structure rules cover authored sections.
-      const authored = isFormattedFile(file)
-      if (authored && wants('prose')) {
-        findings.push(...remarkFindings(file, lintMessages))
-        findings.push(...checkBareUrls(file, tree))
-      }
-      if (authored && wants('structure')) {
-        findings.push(...checkSingleH1(file, tree))
-        findings.push(...checkCodeBlockLanguage(file, tree))
-      }
+      // Generated model pages only get link and description checks; the other remark rules cover authored sections.
+      // The runner drops findings outside the selected categories.
+      const remark = remarkFindings(file, lintMessages)
+      findings.push(...(isFormattedFile(file) ? remark : remark.filter(item => PAGE_RULES.has(item.ruleId))))
       if (index) {
         const result = checkLinks(file, tree, index)
         const active = ctx.fix

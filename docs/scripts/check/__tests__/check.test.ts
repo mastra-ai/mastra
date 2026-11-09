@@ -3,7 +3,7 @@ import os from 'os'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkFrontmatter } from '../checks/frontmatter'
-import { checkBareUrls, checkCodeBlockLanguage, checkLinks, checkSingleH1 } from '../checks/mdx'
+import { checkLinks, remarkFindings } from '../checks/mdx'
 import { checkRedirectList } from '../checks/redirects'
 import { valeFindings } from '../checks/vale'
 import { parseContentFile } from '../content'
@@ -78,10 +78,10 @@ describe('frontmatter rules', () => {
     expect(item.line).toBeGreaterThan(1)
   })
 
-  it('reports missing title, short description, and invalid packages', () => {
+  it('reports missing title and invalid packages', () => {
     const file = page('docs/a.mdx', '# A', `---\ndescription: 'Too short.'\npackages:\n  - 'not-a-package'\n---`)
     expect(checkFrontmatter(file).map(f => f.ruleId)).toEqual(
-      expect.arrayContaining(['mastra/frontmatter-title', 'mastra/description-length', 'mastra/frontmatter-packages']),
+      expect.arrayContaining(['mastra/frontmatter-title', 'mastra/frontmatter-packages']),
     )
   })
 })
@@ -189,41 +189,24 @@ describe('inline lint comments', () => {
   })
 })
 
-describe('structure rules', () => {
-  it('requires exactly one H1', async () => {
-    const good = page('docs/a.mdx', '# One\n\n## Two')
-    expect(checkSingleH1(good, await tree(good))).toEqual([])
-
-    const none = page('docs/a.mdx', '## Only a subheading')
-    expect(checkSingleH1(none, await tree(none)).map(f => f.ruleId)).toEqual(['mastra/single-h1'])
-
-    const two = page('docs/a.mdx', '# One\n\n# Two')
-    const findings = checkSingleH1(two, await tree(two))
-    expect(findings).toHaveLength(1)
-    expect(findings[0].line).toBe(two.source.split('\n').indexOf('# Two') + 1)
-  })
-
-  it('requires a language on fenced code blocks', async () => {
-    const good = page('docs/a.mdx', '# A\n\n```typescript\nconst a = 1\n```')
-    expect(checkCodeBlockLanguage(good, await tree(good))).toEqual([])
-
-    const bad = page('docs/a.mdx', '# A\n\n```\nconst a = 1\n```')
-    expect(checkCodeBlockLanguage(bad, await tree(bad)).map(f => f.ruleId)).toEqual(['mastra/code-block-lang'])
-  })
-})
-
-describe('prose rules', () => {
-  it('reports bare URLs but not links or code', async () => {
-    const good = page(
+describe('@mastra/lint-docs preset rules', () => {
+  it('keeps mastra/<rule> IDs for the preset rules and namespaces third-party ones', async () => {
+    const file = page(
       'docs/a.mdx',
-      '# A\n\nSee [the site](https://example.com) or `https://example.com`.\n\n```bash\ncurl https://example.com\n```',
+      '## Only a subheading\n\n#### Skipped level\n\nSee https://example.com.\n\n\`\`\`\nno language\n\`\`\`',
+      "---\ntitle: 'A'\ndescription: 'Too short.'\n---",
     )
-    expect(checkBareUrls(good, await tree(good))).toEqual([])
-
-    const bad = page('docs/a.mdx', '# A\n\nSee https://example.com for details.')
-    const findings = checkBareUrls(bad, await tree(bad))
-    expect(findings.map(f => f.ruleId)).toEqual(['mastra/bare-url'])
-    expect(findings[0].suggestion).toBe('[descriptive text](https://example.com)')
+    const ids = remarkFindings(file, (await parseMdx(file)).lintMessages).map(f => f.ruleId)
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'mastra/single-h1',
+        'mastra/description-length',
+        'mastra/bare-url',
+        'mastra/code-block-lang',
+        'mastra/remark-heading-increment',
+      ]),
+    )
+    for (const id of ids) expect(isKnownRuleId(id), id).toBe(true)
   })
 })
 
