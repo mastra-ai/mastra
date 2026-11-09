@@ -13,6 +13,13 @@ import type { ContentFile } from './types'
  */
 const COMMENT = /\{\s*\/\*\s*lint\s+(disable|enable|ignore)\b([\s\S]*?)\*\/\s*\}/g
 const FENCE = /^\s*(`{3,}|~{3,})/
+const FENCE_CLOSE = /^\s*(`{3,}|~{3,})\s*$/
+
+/** CommonMark: same fence character, at least as long as the opener, nothing but whitespace after. */
+function closesFence(text: string, opener: string): boolean {
+  const match = text.match(FENCE_CLOSE)
+  return match !== null && match[1][0] === opener[0] && match[1].length >= opener.length
+}
 
 interface Range {
   /** Suppressed rule IDs, or `null` for every rule. */
@@ -41,7 +48,7 @@ export function parseSuppressions(file: ContentFile): Suppressions {
     while (i < lines.length && lines[i].trim() === '') i++
     const opening = lines[i]?.match(FENCE)
     if (opening) {
-      for (let j = i + 1; j < lines.length; j++) if (lines[j].trim().startsWith(opening[1])) return j + 1
+      for (let j = i + 1; j < lines.length; j++) if (closesFence(lines[j], opening[1])) return j + 1
       return lines.length
     }
     while (i < lines.length && lines[i].trim() !== '') i++
@@ -52,7 +59,7 @@ export function parseSuppressions(file: ContentFile): Suppressions {
     const text = lines[i]
     const marker = text.match(FENCE)
     if (fence) {
-      if (marker && marker[1].startsWith(fence)) fence = null
+      if (closesFence(text, fence)) fence = null
       continue
     }
     if (marker) {

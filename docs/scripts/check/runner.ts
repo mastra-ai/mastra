@@ -32,6 +32,9 @@ export interface RunOptions {
   skipVale?: boolean
 }
 
+/** Invalid invocation (bad arguments), as opposed to a crash in a check. */
+export class UsageError extends Error {}
+
 function isContentPath(relativePath: string): boolean {
   return (
     CONTENT_SECTIONS.some(section => relativePath.startsWith(`${CONTENT_ROOT}/${section.name}/`)) &&
@@ -65,11 +68,19 @@ export async function runChecks(options: RunOptions): Promise<CheckReport> {
   const allFiles = () => (allFilesPromise ??= loadAllContentFiles(rootDir))
 
   let files: ContentFile[]
+  const ignoredArgs: string[] = []
   if (scoped) {
     const relative = [
       ...new Set(options.files!.map(file => toPosix(path.relative(rootDir, path.resolve(rootDir, file))))),
     ]
-    files = await Promise.all(relative.filter(isContentPath).map(file => loadContentFile(rootDir, file)))
+    const content = relative.filter(isContentPath)
+    ignoredArgs.push(...relative.filter(file => !isContentPath(file)))
+    if (content.length === 0) {
+      throw new UsageError(
+        `None of the file arguments are docs content pages (src/content/en/**/*.mdx): ${relative.join(', ')}`,
+      )
+    }
+    files = await Promise.all(content.map(file => loadContentFile(rootDir, file)))
   } else {
     files = await allFiles()
   }
@@ -91,7 +102,10 @@ export async function runChecks(options: RunOptions): Promise<CheckReport> {
       }
     }
   }
-  const skipped: SkippedCheck[] = []
+  const skipped: SkippedCheck[] = ignoredArgs.map(file => ({
+    check: 'files',
+    reason: `${file} is not a docs content page (src/content/en/**/*.mdx), so it was not checked`,
+  }))
   const ran: string[] = []
   let fixed = 0
 

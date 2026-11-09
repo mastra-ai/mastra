@@ -81,7 +81,18 @@ export const redirectsCheck: Check = {
     if (result.findings.some(f => f.ruleId === 'mastra/redirect-duplicate' || f.ruleId === 'mastra/redirect-chain')) {
       return result
     }
-    const expected: string = renderVercelConfig(JSON.parse(raw))
+    let expected: string
+    try {
+      expected = renderVercelConfig(JSON.parse(raw))
+    } catch (error) {
+      result.skipped = [
+        {
+          check: 'mastra/redirect-generated-drift',
+          reason: `Could not generate ${GENERATED_FILE}: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
+        },
+      ]
+      return result
+    }
     const generatedPath = path.join(ctx.rootDir, GENERATED_FILE)
     const actual = await fs.readFile(generatedPath, 'utf-8').catch(() => '')
     if (expected !== actual) {

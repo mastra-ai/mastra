@@ -11,7 +11,7 @@ import { formatHuman, parseArgs } from '../index'
 import { parseMdx } from '../mdx'
 import { buildRouteIndex, routeForFile } from '../routes'
 import { isKnownRuleId, matchesRuleFilter, RULE_FAMILIES, RULES, slugifyRuleName } from '../rules'
-import { runChecks } from '../runner'
+import { runChecks, UsageError } from '../runner'
 import { isSuppressed, parseSuppressions } from '../suppress'
 
 const ROOT = '/repo'
@@ -161,6 +161,26 @@ describe('inline lint comments', () => {
     expect(s.invalid).toEqual([{ id: 'mastra/nope-*', line: lineOf(file, 'nope-*') }])
     expect(isSuppressed(s, 'mastra/redirect-chain', lineOf(file, 'body'))).toBe(true)
     expect(isSuppressed(s, 'mastra/redirected-link', lineOf(file, 'body'))).toBe(false)
+  })
+
+  it('closes code fences only on a bare fence of the same character and length', () => {
+    const file = page(
+      'docs/a.mdx',
+      [
+        '# A',
+        '````mdx',
+        '```ts',
+        '{/* lint disable mastra/nope */}',
+        '```',
+        '~~~~',
+        '````',
+        '{/* lint ignore mastra/bare-url */}',
+        'https://x.example',
+      ].join('\n'),
+    )
+    const s = parseSuppressions(file)
+    expect(s.invalid).toEqual([])
+    expect(isSuppressed(s, 'mastra/bare-url', lineOf(file, 'x.example'))).toBe(true)
   })
 
   it('reports unknown rule IDs', () => {
@@ -385,6 +405,18 @@ describe('runChecks', () => {
     expect(report.summary.filesChecked).toBe(1)
     expect(report.summary.status).toBe('passed')
     expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/internal-link'])
+  })
+
+  it('reports file arguments that are not content pages and rejects runs with none', async () => {
+    const report = await runChecks({
+      rootDir,
+      categories: ['structure'],
+      files: ['src/content/en/docs/bad.mdx', 'README.md'],
+    })
+    expect(report.summary.filesChecked).toBe(1)
+    expect(report.summary.status).toBe('partial')
+    expect(report.summary.skipped).toEqual([{ check: 'files', reason: expect.stringContaining('README.md') }])
+    await expect(runChecks({ rootDir, files: ['src/content/en/docs/typo.md'] })).rejects.toBeInstanceOf(UsageError)
   })
 
   it('applies fixes with --fix', async () => {

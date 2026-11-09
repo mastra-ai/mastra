@@ -38,10 +38,14 @@ async function oxfmtUnformatted(rootDir: string): Promise<string[]> {
     if (typeof err.code !== 'number') throw error
     const output = `${err.stdout ?? ''}\n${err.stderr ?? ''}`
     // oxfmt lists each unformatted file as `path (12ms)`; summary lines don't match.
-    return output
+    const files = output
       .split('\n')
       .map(line => line.trim().match(/^(\S+\.\w+) \(\d+m?s\)$/)?.[1])
       .filter((file): file is string => file !== undefined)
+    if (files.length === 0) {
+      throw new Error(`oxfmt --check failed with exit code ${err.code}: ${output.trim().split('\n')[0]}`)
+    }
+    return files
   }
 }
 

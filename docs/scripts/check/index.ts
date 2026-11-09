@@ -1,7 +1,7 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { isDirectRun } from '../is-direct-run'
-import { runChecks, type RunOptions } from './runner'
+import { runChecks, UsageError, type RunOptions } from './runner'
 import { CATEGORIES, type Category, type CheckReport, type Finding } from './types'
 
 const USAGE = `Usage: pnpm check [options] [files...]
@@ -128,7 +128,14 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   // pnpm runs scripts from the package root; resolve file arguments against the caller's directory.
   const cwd = process.env.INIT_CWD ?? process.cwd()
   const files = options.files!.map(file => path.resolve(cwd, file))
-  const report = await runChecks({ ...options, rootDir, files })
+  let report: Awaited<ReturnType<typeof runChecks>>
+  try {
+    report = await runChecks({ ...options, rootDir, files })
+  } catch (error) {
+    if (!(error instanceof UsageError)) throw error
+    console.error(error.message)
+    return 2
+  }
 
   if (options.json) console.log(JSON.stringify(report, null, 2))
   else console.log(formatHuman(report, { quiet: options.quiet, color: process.stdout.isTTY }))
