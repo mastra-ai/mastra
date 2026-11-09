@@ -166,12 +166,9 @@ export async function applyClientToolModelOutput({
   tools?: Record<string, CoreTool>;
   logger?: Pick<IMastraLogger, 'error'>;
 }): Promise<void> {
-  const isClientMappedTool = (
-    tool: CoreTool,
-  ): tool is CoreTool & { toModelOutput: NonNullable<CoreTool['toModelOutput']> } =>
-    !tool.execute && tool.type !== 'provider-defined' && typeof tool.toModelOutput === 'function';
+  const isClientTool = (tool: CoreTool) => !tool.execute && tool.type !== 'provider-defined';
   if (!tools) return;
-  if (!Object.values(tools).some(isClientMappedTool)) return;
+  if (!Object.values(tools).some(isClientTool)) return;
 
   for (const message of messageList.get.input.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
@@ -186,7 +183,7 @@ export async function applyClientToolModelOutput({
       // mapped by the provider round trip, not by us. Their stored mapping is
       // left alone: it cannot be recomputed here, and conversation history
       // passed back as input (e.g. `response.messages`) relies on it.
-      if (!tool || !isClientMappedTool(tool)) continue;
+      if (!tool || !isClientTool(tool)) continue;
 
       // Trust boundary: `mastra.modelOutput` / `modelOutputComputed` are
       // server-computed markers. A client could forge them on its input to
@@ -213,6 +210,10 @@ export async function applyClientToolModelOutput({
         }
       }
 
+      // The server never stores a mapping for a client tool without one.
+      const toModelOutput = tool.toModelOutput;
+      if (typeof toModelOutput !== 'function') continue;
+
       const mastraMetadata = part.providerMetadata?.mastra;
       // Idempotency: skip parts this process already mapped (retries and
       // in-request re-runs). Markers from any other origin were stripped above.
@@ -232,7 +233,7 @@ export async function applyClientToolModelOutput({
       if (normalized.isError) continue;
 
       try {
-        const modelOutput = normalizeModelOutput(await tool.toModelOutput(normalized.output));
+        const modelOutput = normalizeModelOutput(await toModelOutput(normalized.output));
         const nextMastra: Record<string, unknown> = {
           ...(typeof mastraMetadata === 'object' ? mastraMetadata : undefined),
           modelOutputComputed: true,
