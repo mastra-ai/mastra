@@ -473,7 +473,7 @@ Runs on that adapter get a `render_card` tool whose description lists the availa
 }
 ```
 
-The tool returns `{ ok: true, messageId }` once the card is posted. When the spec is invalid or exceeds the platform's limits (on Slack, one table and 100 rows per card), it returns `{ ok: false, issues }` without posting, so the agent can fix the spec and call it again. The tool call itself isn't rendered as a tool card. Interactive buttons aren't available yet; cards can link out with `LinkButton`.
+The tool returns `{ ok: true, messageId }` once the card is posted. When the spec is invalid or exceeds the platform's limits (on Slack, one table and 100 rows per card), it returns `{ ok: false, issues }` without posting, so the agent can fix the spec and call it again. The tool call itself isn't rendered as a tool card. Interactive buttons aren't available yet. Cards can link out with `LinkButton`.
 
 ## Custom typing status
 
