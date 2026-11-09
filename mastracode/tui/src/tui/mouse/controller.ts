@@ -45,6 +45,8 @@ export const REQUEST_CURSOR_POSITION = '\x1b[6n';
 const WHEEL_UP_KEY = '\x1b[A';
 const WHEEL_DOWN_KEY = '\x1b[B';
 const CURSOR_POSITION_TIMEOUT_MS = 200;
+/** After this many unanswered queries in a row, stop expecting replies (the terminal doesn't answer). */
+const MAX_UNANSWERED_CURSOR_QUERIES = 3;
 
 type MouseAction = 'click' | 'hover' | 'inputPress';
 
@@ -78,6 +80,7 @@ export class MouseController {
   private overlayHover: { component: Component; row: number; col: number } | undefined;
   private readonly decoratedRenders = new Map<Component, Component['render']>();
   private outstandingCursorQueries = 0;
+  private unansweredCursorQueries = 0;
   private readonly removeInputListener: () => void;
   private readonly originalDoRender: () => void;
   private readonly originalStop: () => void;
@@ -225,6 +228,7 @@ export class MouseController {
         // Swallow every reply we asked for, including ones that arrive after the timeout:
         // left unconsumed they reach the focused component as keys (row 1 looks like a modified F3).
         this.outstandingCursorQueries--;
+        this.unansweredCursorQueries = 0;
         const pending = this.pendingPointer;
         if (pending) {
           this.clearPendingPointer();
@@ -299,6 +303,8 @@ export class MouseController {
     const timer = setTimeout(() => {
       const timedOut = this.pendingPointer;
       this.clearPendingPointer();
+      // Otherwise a terminal that never answers leaves us eating keys shaped like replies (Shift+F3).
+      if (++this.unansweredCursorQueries >= MAX_UNANSWERED_CURSOR_QUERIES) this.outstandingCursorQueries = 0;
       // Without a reply, modals fall back to assuming the frame is bottom-aligned with the screen.
       if (timedOut) this.resolvePointer(timedOut.event, timedOut.action, undefined);
     }, CURSOR_POSITION_TIMEOUT_MS);

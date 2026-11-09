@@ -210,6 +210,27 @@ describe('MouseController on the real pi-tui renderer', () => {
     expect(received).toEqual([]);
   });
 
+  it('stops swallowing reply-shaped keys once the terminal has ignored several queries', async () => {
+    harness = createHarness({ answerCursorQueries: false });
+    const { box } = modalWithList(harness.ui, 3);
+    const received: string[] = [];
+    const forward = box.handleInput;
+    box.handleInput = (data: string) => {
+      received.push(data);
+      forward(data);
+    };
+    await harness.render();
+
+    for (const text of ['item-0', 'item-1', 'item-2']) {
+      const target = harness.find(text);
+      await harness.hover(target.row, target.col);
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    // Shift+F3: with no replies coming, this is a key press, not a late reply.
+    harness.send('\x1b[1;2R');
+    expect(received).toEqual(['\x1b[1;2R']);
+  });
+
   it('releases the hover wrapper once its dialog closes', async () => {
     harness = createHarness();
     const { handle } = modalWithList(harness.ui, 3);
