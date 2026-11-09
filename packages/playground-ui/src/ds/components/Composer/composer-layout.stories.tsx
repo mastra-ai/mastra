@@ -30,7 +30,7 @@ const providers: ModelPickerProvider[] = [
     name: 'Anthropic',
     models: [
       { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
-      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', badge: 'Default' },
+      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
       { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5' },
     ],
   },
@@ -56,9 +56,11 @@ const thinkingLevels: ThinkingLevelOption[] = [
 interface LayoutStoryProps {
   reconnecting?: boolean;
   status?: boolean;
+  /** Only Anthropic is connected, so the picker drops its provider filter and group heading. */
+  singleProvider?: boolean;
 }
 
-const LayoutStory = ({ reconnecting = false, status = false }: LayoutStoryProps) => {
+const LayoutStory = ({ reconnecting = false, status = false, singleProvider = false }: LayoutStoryProps) => {
   const [model, setModel] = useState<ModelPickerValue>({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
   const [thinking, setThinking] = useState('high');
 
@@ -89,9 +91,10 @@ const LayoutStory = ({ reconnecting = false, status = false }: LayoutStoryProps)
               </ComposerActionsStart>
               <ComposerActionsEnd>
                 <ModelPicker
-                  providers={providers}
+                  providers={singleProvider ? providers.slice(0, 1) : providers}
                   value={model}
                   onValueChange={setModel}
+                  defaultModel={{ provider: 'anthropic', model: 'claude-sonnet-4-6' }}
                   addProvider={{ label: 'Connect a provider', render: <a href="#connect-provider" /> }}
                   settings={
                     <ThinkingLevelRamp
@@ -152,3 +155,5 @@ export const Default: Story = { args: {} };
 export const WithStatus: Story = { args: { status: true } };
 
 export const Reconnecting: Story = { args: { status: true, reconnecting: true } };
+
+export const SingleProvider: Story = { args: { singleProvider: true } };

@@ -1,13 +1,14 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 
 export interface ModelPickerModel {
   /** Unique within its provider; reported back through `onValueChange` with the provider id. */
   id: string;
-  name: string;
-  /** Extra search terms. */
+  /** Defaults to the id formatted by `formatModelName`, e.g. `claude-opus-4-6` reads "Claude Opus 4.6". */
+  name?: string;
+  /** Lists newest first; models without a date follow, by id. */
+  releaseDate?: string;
+  /** Extra search terms. The id, name and provider name always match. */
   keywords?: string[];
-  /** Shown after the name, e.g. a "Default" badge. */
-  badge?: ReactNode;
 }
 
 export interface ModelPickerProvider {

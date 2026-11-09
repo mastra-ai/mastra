@@ -356,7 +356,7 @@ describe('Standalone thread page', () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`, queryClient);
       try {
-        await screen.findByRole('button', { name: /gpt-5-mini/ });
+        await screen.findByRole('button', { name: /GPT-5 Mini/ });
         await waitFor(() => expect(push).toBeDefined());
         await act(async () => push?.());
         await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
@@ -913,8 +913,8 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     // Provider + model pill (needs PlaygroundModelProvider, which this page must supply itself).
-    expect(await screen.findByRole('button', { name: /^Model:.*gpt-5-mini$/ })).not.toBeNull();
-    expect(await screen.findByText('gpt-5-mini')).not.toBeNull();
+    expect(await screen.findByRole('button', { name: /^Model:.*GPT-5 Mini$/ })).not.toBeNull();
+    expect(await screen.findByText('GPT-5 Mini')).not.toBeNull();
     expect(await screen.findByTestId('composer-model-settings-trigger')).not.toBeNull();
   });
 
@@ -1356,8 +1356,8 @@ describe('Standalone thread page', () => {
       const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
       // The switcher lists only the agent's own model until the providers query resolves.
       await waitFor(() => expect(providersServed).toHaveBeenCalled());
-      fireEvent.click(await screen.findByRole('button', { name: /^Model:.*gpt-5-mini$/ }));
-      fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /^Model:.*GPT-5 Mini$/ }));
+      fireEvent.click(await screen.findByRole('option', { name: /GPT-4o Mini/ }));
       fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
       fireEvent.click(await screen.findByRole('radio', { name: 'Stream' }));
       // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
@@ -1381,14 +1381,14 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
-      expect(await screen.findByText('gpt-5-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-5 Mini')).toBeTruthy();
       await act(() => router.navigate(savedPath));
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       cleanup();
       renderAt(savedPath);
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
       expect((await screen.findByRole('radio', { name: 'Stream' })).getAttribute('aria-checked')).toBe('true');
       fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });

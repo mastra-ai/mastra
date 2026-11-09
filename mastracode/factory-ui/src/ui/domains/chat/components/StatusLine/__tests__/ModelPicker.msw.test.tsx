@@ -275,9 +275,9 @@ describe('ModelPicker', () => {
       });
 
       await user.click(await screen.findByLabelText('Session model'));
-      const ownerOption = await screen.findByRole('option', { name: /claude-sonnet-4-6/ });
+      const ownerOption = await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ });
       expect(within(ownerOption).getByText('Default')).toBeVisible();
-      expect(screen.queryByRole('option', { name: /gpt-5/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /GPT-5/ })).not.toBeInTheDocument();
       expect(screen.queryByText(/not configured/)).not.toBeInTheDocument();
     },
   );
@@ -291,12 +291,10 @@ describe('ModelPicker', () => {
     });
 
     await user.click(await screen.findByLabelText('Session model'));
-    const factoryOption = await screen.findByRole('option', { name: /gpt-5/ });
+    const factoryOption = await screen.findByRole('option', { name: /GPT-5/ });
     expect(within(factoryOption).getByText('Default')).toBeVisible();
-    expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/ })).not.toBeInTheDocument();
-    expect(await screen.findByRole('note')).toHaveTextContent(
-      "Showing models this Factory's organization credentials can run.",
-    );
+    expect(screen.queryByRole('option', { name: /Claude Sonnet 4\.6/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Add an organization credential' })).toBeInTheDocument();
   });
 
   it("starts a chat on personal defaults at its owner's personal thinking level", async () => {
@@ -336,11 +334,12 @@ describe('ModelPicker', () => {
     });
 
     await user.click(await screen.findByRole('button', { name: 'Session model' }));
-    const personalOption = await screen.findByRole('option', { name: /claude-sonnet-4-6/ });
+    const personalOption = await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ });
     expect(within(personalOption).getByText('Default')).toBeVisible();
-    expect(screen.queryByRole('option', { name: /gpt-5/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /GPT-5/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/not configured/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Showing models this Factory/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Connect a provider' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Add an organization credential' })).not.toBeInTheDocument();
   });
 
   it.each(['factory', 'hybrid'] as const)(
@@ -350,24 +349,24 @@ describe('ModelPicker', () => {
       renderPicker({ kind: 'factory', modelScope, factoryDefaultModelId: 'openai/gpt-5' });
 
       await user.click(await screen.findByLabelText('Session model'));
-      const option = await screen.findByRole('option', { name: /gpt-5/ });
+      const option = await screen.findByRole('option', { name: /GPT-5/ });
       expect(within(option).getByText('Default')).toBeVisible();
       expect(screen.queryByRole('option', { name: /Reset to your default/ })).not.toBeInTheDocument();
     },
   );
 
-  it('says the list is limited to organization credentials in an organization-scoped Factory', async () => {
+  it('offers an organization credential, not a personal connection, in an organization-scoped Factory', async () => {
     const user = userEvent.setup();
     renderPicker({ modelScope: 'factory' });
 
     await user.click(await screen.findByLabelText('Session model'));
 
-    expect(screen.getByRole('option', { name: /gpt-5/i })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/i })).not.toBeInTheDocument();
-    expect(await screen.findByRole('note')).toHaveTextContent(
-      "Showing models this Factory's organization credentials can run.",
+    expect(screen.getByRole('option', { name: /GPT-5/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Claude Sonnet 4\.6/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Add an organization credential' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add an organization credential' }).getAttribute('href')).toMatch(
+      /^\/factories\/fp-1\/settings\/models/,
     );
-    expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
   });
 
   it('points an organization-scoped Factory with no usable models at its credential settings', async () => {
@@ -396,7 +395,7 @@ describe('ModelPicker', () => {
     expect(screen.queryByRole('link', { name: 'needs an organization credential' })).not.toBeInTheDocument();
   });
 
-  it('leaves the list unexplained when the Factory uses personal credentials', async () => {
+  it('offers to connect a personal provider when the Factory uses personal credentials', async () => {
     const user = userEvent.setup();
     const projectLoaded = new Promise<void>(resolve => {
       server.events.on('response:mocked', ({ request }) => {
@@ -409,8 +408,9 @@ describe('ModelPicker', () => {
     await projectLoaded;
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(screen.getByRole('option', { name: /claude-sonnet-4-6/i })).toBeInTheDocument();
-    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Claude Sonnet 4\.6/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Connect a provider' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Add an organization credential' })).not.toBeInTheDocument();
   });
 
   it('shows only provider-grouped models and marks the default', async () => {
@@ -421,7 +421,7 @@ describe('ModelPicker', () => {
 
     expect(screen.getByText('Anthropic')).toBeInTheDocument();
     expect(screen.getByText('OpenAI')).toBeInTheDocument();
-    const defaultOption = screen.getByRole('option', { name: /claude-sonnet-4-6/i });
+    const defaultOption = screen.getByRole('option', { name: /Claude Sonnet 4\.6/ });
     expect(within(defaultOption).getByText('Default')).toBeInTheDocument();
   });
 
@@ -470,7 +470,7 @@ describe('ModelPicker', () => {
 
     await user.click(await screen.findByLabelText('Session model'));
 
-    expect(screen.getByRole('option', { name: /gpt-5/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /GPT-5/ })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Reset to your default' })).not.toBeInTheDocument();
   });
 
@@ -482,7 +482,7 @@ describe('ModelPicker', () => {
     });
 
     await openThinking(user, 'Thinking: Max (this session)');
-    await user.click(screen.getByRole('option', { name: /gpt-5/i }));
+    await user.click(screen.getByRole('option', { name: /GPT-5/ }));
     await waitForMutationsIdle(client);
 
     expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5' }]);
@@ -586,7 +586,7 @@ describe('ModelPicker', () => {
     const { client } = renderPicker({ modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'high', modelSwitched });
 
     await openThinking(user, 'Thinking: High (this session)');
-    await user.click(screen.getByRole('option', { name: /gpt-5/i }));
+    await user.click(screen.getByRole('option', { name: /GPT-5/ }));
 
     const sessionModel = screen.getByRole('button', { name: 'Session model' });
     await waitFor(() => expect(sessionModel).toBeDisabled());
@@ -613,7 +613,7 @@ describe('ModelPicker', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Change model' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Change model' }));
-    await user.click(screen.getByRole('option', { name: /gpt-5/i }));
+    await user.click(screen.getByRole('option', { name: /GPT-5/ }));
 
     const sessionModel = await screen.findByRole('button', { name: 'Session model' });
     await waitFor(() => expect(sessionModel).toBeDisabled());

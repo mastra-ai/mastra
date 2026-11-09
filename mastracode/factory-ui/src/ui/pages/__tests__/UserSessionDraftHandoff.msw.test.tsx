@@ -412,7 +412,7 @@ describe('a user session draft on the real thread route', () => {
     const modelPicker = await screen.findByLabelText('Session model');
     await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
     await waitFor(() => expect(modelPicker).toBeEnabled());
     if (modelPicker.getAttribute('aria-expanded') !== 'true') await user.click(modelPicker);
     await screen.findByRole('group', { name: /^Thinking: Medium/ });
@@ -458,7 +458,7 @@ describe('a user session draft on the real thread route', () => {
     const modelPicker = await screen.findByLabelText('Session model');
     await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
     await waitFor(() => expect(modelPicker).toBeEnabled());
     if (modelPicker.getAttribute('aria-expanded') !== 'true') await user.click(modelPicker);
     await screen.findByRole('group', { name: /^Thinking: Medium/ });

@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { modelDisplayName } from './model-display-name';
 import { ModelPickerPanel } from './model-picker-panel';
 import type { ModelPickerAddProvider, ModelPickerProvider, ModelPickerValue } from './model-picker-types';
 import { ProviderLogo } from './provider-logo';
@@ -10,12 +11,15 @@ import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/ds/componen
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/utils/cn';
+import { formatModelName } from '@/utils/model';
 
 export interface ModelPickerProps {
   /** Providers in display order, each with its models in display order. */
   providers: ModelPickerProvider[];
   value?: ModelPickerValue;
   onValueChange: (value: ModelPickerValue) => void;
+  /** Marked "Default" in the list. */
+  defaultModel?: ModelPickerValue;
   /** Trigger content. Defaults to the selected provider's icon and the selected model's name. */
   children?: ReactNode;
   renderProviderIcon?: (providerId: string) => ReactNode;
@@ -28,7 +32,7 @@ export interface ModelPickerProps {
   settings?: ReactNode;
   /** Below the list and settings. */
   footer?: ReactNode;
-  /** A "+" at the end of the provider row, e.g. a link to connect another provider. */
+  /** A "+" at the end of the search field, e.g. a link to connect another provider. */
   addProvider?: ModelPickerAddProvider;
   /** Extra command groups after the models; call `close` after acting. */
   actions?: (close: () => void) => ReactNode;
@@ -56,6 +60,7 @@ export function ModelPicker({
   providers,
   value,
   onValueChange,
+  defaultModel,
   children,
   renderProviderIcon = defaultProviderIcon,
   header,
@@ -109,7 +114,13 @@ export function ModelPicker({
         <>
           <span className="sr-only">Model: </span>
           {value?.provider ? <span className="flex shrink-0">{renderProviderIcon(value.provider)}</span> : null}
-          <span className="truncate max-sm:max-w-28">{selectedModel?.name ?? value?.model ?? 'Select model'}</span>
+          <span className="truncate max-sm:max-w-28">
+            {selectedModel
+              ? modelDisplayName(selectedModel)
+              : value?.model
+                ? formatModelName(value.model)
+                : 'Select model'}
+          </span>
         </>
       )}
       <ChevronDown aria-hidden className="shrink-0" size={12} />
@@ -119,6 +130,7 @@ export function ModelPicker({
     <ModelPickerPanel
       providers={providers}
       value={value}
+      defaultModel={defaultModel}
       onSelect={select}
       query={query}
       onQueryChange={setQuery}
@@ -152,7 +164,9 @@ export function ModelPicker({
         <DrawerContent
           showCloseButton={false}
           initialFocus={false}
-          className="pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          // The muted frame matches the popover, so the inset card reads the same in both themes. The
+          // handle is muted too, so it takes the side handle's stronger fill to stay visible on the frame.
+          className="bg-muted pb-[max(0.75rem,env(safe-area-inset-bottom))] **:data-[slot=drawer-handle]:bg-border-strong"
         >
           <DrawerTitle className="sr-only">Choose a model</DrawerTitle>
           {panel}
@@ -171,7 +185,8 @@ export function ModelPicker({
       <PopoverContent
         side={side}
         align={align}
-        className="w-80 p-0"
+        // An inset card holds search and the list; the header and settings sit on the frame around it.
+        className="w-80 rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1"
         // A touch open (e.g. a tablet) would raise the keyboard over the list; search stays one tap away.
         initialFocus={openType => openType !== 'touch'}
       >

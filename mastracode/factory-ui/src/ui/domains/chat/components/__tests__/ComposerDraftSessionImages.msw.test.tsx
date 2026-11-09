@@ -168,7 +168,7 @@ describe('Starting a user session with images attached', () => {
       const message = await draftReadyForImages();
 
       await user.click(await screen.findByLabelText('Session model'));
-      await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+      await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
       await dropScreenshot(container);
       await user.type(message, 'use my model');
       await user.keyboard('{Enter}');

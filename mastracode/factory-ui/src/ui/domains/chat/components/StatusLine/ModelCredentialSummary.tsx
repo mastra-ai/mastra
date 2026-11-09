@@ -8,7 +8,7 @@ export function ModelCredentialSummary({ modelId }: { modelId: string | undefine
   const credential = useModelCredential(modelId);
   if (!credential) return null;
   return (
-    <div className="border-border text-caption flex flex-col gap-1 border-b px-3 py-2">
+    <div className="text-caption flex flex-col gap-1 px-3 py-2">
       <div className="flex min-w-0 items-center gap-1.5">
         <ProviderBrandIcon provider={credential.provider} fallback={<KeyRound className="size-3.5" />} />
         <span className="text-foreground truncate font-medium">{credential.credential}</span>

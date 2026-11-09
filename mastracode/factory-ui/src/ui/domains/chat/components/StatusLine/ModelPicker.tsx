@@ -1,12 +1,11 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CommandGroup, CommandItem, CommandSeparator } from '@mastra/playground-ui/components/Command';
 import { ModelPicker as SharedModelPicker } from '@mastra/playground-ui/domains/llm';
 import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { KeyRound, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -24,7 +23,7 @@ import { LockedModelButton } from './LockedModelButton';
 import { ModelCredential } from './ModelCredential';
 import { ModelCredentialSummary } from './ModelCredentialSummary';
 import { ModelProviderMark } from './ModelProviderMark';
-import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
+import { useOrganizationScopedFactory } from './useOrganizationScopedFactory';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
 import { SessionThinkingBars } from './SessionThinkingBars';
 import { SessionThinkingSettings } from './SessionThinkingSettings';
@@ -36,13 +35,12 @@ function groupByProvider(models: AvailableModelOption[]): [string, AvailableMode
     if (group) group.push(model);
     else groups.set(model.provider, [model]);
   }
-  for (const group of groups.values()) {
-    group.sort(
-      (a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.modelName.localeCompare(b.modelName),
-    );
-  }
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
+
+/** The shared picker keys models within their provider, so drop the provider prefix. */
+const withinProvider = (provider: string, modelId: string) =>
+  modelId.startsWith(`${provider}/`) ? modelId.slice(provider.length + 1) : modelId;
 
 function canSwitchModel({
   kind,
@@ -123,19 +121,9 @@ function ModelMenu({
   const providers: ModelPickerProvider[] = groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => ({
     id: provider,
     name: providerDisplayName(provider),
-    // The shared picker keys models within their provider, so drop the provider prefix here.
-    models: models.map(model => ({
-      id: model.id.startsWith(`${provider}/`) ? model.id.slice(provider.length + 1) : model.id,
-      name: model.modelName,
-      keywords: [formatModelName(model.id)],
-      badge:
-        model.id === defaultModelId ? (
-          <Badge variant="blue" size="xs">
-            Default
-          </Badge>
-        ) : undefined,
-    })),
+    models: models.map(model => ({ id: withinProvider(provider, model.id), releaseDate: model.releaseDate })),
   }));
+  const defaultProvider = modelsQuery.data?.find(option => option.id === defaultModelId)?.provider;
   const toModelId = (provider: string, model: string) =>
     modelsQuery.data?.find(
       option => option.provider === provider && (option.id === `${provider}/${model}` || option.id === model),
@@ -143,9 +131,7 @@ function ModelMenu({
   const selected = modelsQuery.data?.find(option => option.id === selectedModelId);
   const selectedProvider = selected?.provider ?? selectedModelId?.split('/')[0];
   const selectedModel =
-    selectedModelId && selectedProvider && selectedModelId.startsWith(`${selectedProvider}/`)
-      ? selectedModelId.slice(selectedProvider.length + 1)
-      : selectedModelId;
+    selectedModelId && selectedProvider ? withinProvider(selectedProvider, selectedModelId) : undefined;
 
   return (
     <SharedModelPicker
@@ -155,14 +141,19 @@ function ModelMenu({
         const modelId = toModelId(provider, model);
         if (modelId) pickModel(modelId);
       }}
+      defaultModel={
+        defaultModelId && defaultProvider
+          ? { provider: defaultProvider, model: withinProvider(defaultProvider, defaultModelId) }
+          : undefined
+      }
       renderProviderIcon={renderProviderIcon}
       header={<ModelCredentialSummary modelId={selectedModelId} />}
       settings={settings}
-      footer={organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : undefined}
       addProvider={
         factoryId
           ? {
-              label: 'Connect a provider',
+              // Only organization credentials feed this list, so a personal connection would not show up in it.
+              label: organizationScoped ? 'Add an organization credential' : 'Connect a provider',
               render: (
                 <Link
                   to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope))}

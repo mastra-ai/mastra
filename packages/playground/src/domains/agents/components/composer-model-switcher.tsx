@@ -3,7 +3,6 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ModelPicker, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
-import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
@@ -26,8 +25,7 @@ export const ComposerModelSwitcher = () => {
     connected: provider.connected,
     models: allowedModels
       .filter(model => model.provider === provider.id)
-      .sort((a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.model.localeCompare(b.model))
-      .map(model => ({ id: model.model, name: model.model })),
+      .map(model => ({ id: model.model, releaseDate: model.releaseDate })),
   }));
 
   if (!selection) return null;
