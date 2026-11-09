@@ -62,6 +62,8 @@ if (result.acquired) {
   // This process owns the thread, so wake and run the agent.
 } else if (result.owner) {
   // result.owner holds the lease, so route the signal to them.
+} else {
+  // The holder is unknown, so retry acquisition or report the failure instead of dropping the work.
 }
 ```
 
