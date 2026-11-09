@@ -111,7 +111,7 @@ const workspace = new Workspace({
 })
 ```
 
-The port URL is the same either way. Only whether it asks for sign-in changes. The setting is fixed when the sandbox is created. Clones inherit it.
+The port URL is the same either way. Only whether it asks for sign-in changes. The setting is fixed when the sandbox is created, so passing it when reattaching changes nothing for that sandbox. Clones use the `publicPorts` option you passed, not the reattached sandbox's setting.
 
 ### Reattaching to a running sandbox
 
