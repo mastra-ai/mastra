@@ -111,8 +111,8 @@ export async function routeEventDecision(
   // A close moves only an unfinished card and a reopen only a finished one, unless an earlier
   // status event is still queued for the card: this one overtakes it, so the last one wins.
   const finished = context.phase?.kind === 'terminal';
+  if (isPullRequestEvent(event.type)) return eventMovesCard(event.type, finished) ? decision : undefined;
   if (eventMovesCard(event.type, finished)) return decision;
-  if (isPullRequestEvent(event.type)) return undefined;
   const queued = await storage.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
     workItemId: context.item.id,
     statuses: QUEUED_STATUSES,

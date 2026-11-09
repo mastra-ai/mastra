@@ -877,6 +877,7 @@ Pull request events (GitHub and GitLab) work the same way, with these difference
 - The integration's default pull request rule decides first, then hands its move to the routes: a route on the card's board naming the event sends the card to the route's phase instead. A route that targets the phase the rule already chose keeps the rule's move whole, its message and its re-entry (a push re-enters PR review to restart the pass) included. A rule that moves nothing (an older pull request merging while a newer one is open, a push to a card resting in its first phase) leaves routes out of it.
 - On a board with no pull request loop, a merge or close of a pull request's own card goes to the routes alone; without a route naming it the card stays put.
 - A merge or close moves only an unfinished card. `pull_request.opened`, `pull_request.synchronized` and `pull_request.review_requested` move finished cards too, so a done pull request is re-reviewed on a push as before.
+- When the card's board has routes on the event but none enabled matches the card, the rule's own move still runs: disabling the merge route doesn't strand a merged card in review.
 - Pull request events never drop one another: each concerns its own pull request.
 - Factory sees no pull request reopen, so there is no `pull_request.reopened`.
 
