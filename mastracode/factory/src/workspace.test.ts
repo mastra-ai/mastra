@@ -593,6 +593,11 @@ describe('bundled Factory skill assets', () => {
       '- **Neither review phase is in `Next phases`:** open no change request and move nothing. Ask the person with `ask_user`',
     );
     expect(build).toContain('**Open the change request** (the usual path, and the only one on the default Work board');
+    // Review takes the card only once the change request it just opened is attached: the builder retries.
+    expect(build).toContain(
+      'If the move is refused because the card has no pull request yet, wait briefly (`sleep 20`), re-read the revision',
+    );
+    expect(build).toContain('say it is tracked on its own card and that a person should confirm it is reviewed there');
     expect(build).toContain('Then move the card to its `pull request review` phase');
     expect(build).toContain('`Board phases by part:` line names each phase');
     expect(build).not.toMatch(/stage: "(review|pr-review|planning)"/);
