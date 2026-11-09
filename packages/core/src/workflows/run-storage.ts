@@ -243,7 +243,13 @@ class RunStorageV1 implements RunStorage {
 
   async writeState({ state, statePatch, requestContext }: StateWrite & { requestContext: Record<string, any> }) {
     if (statePatch) throw new Error('Storage v1 runs write the whole state, not a patch');
-    await this.writeStepResult({ stepId: '__state', result: state as StepResult<any, any, any, any>, requestContext });
+    // Passing `state` makes the store replace `__state` whole instead of merging it like a step result.
+    await this.writeStepResult({
+      stepId: '__state',
+      result: state as StepResult<any, any, any, any>,
+      requestContext,
+      state,
+    });
   }
 
   async delete(): Promise<void> {
