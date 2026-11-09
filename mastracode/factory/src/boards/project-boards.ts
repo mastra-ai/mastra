@@ -1,10 +1,17 @@
 import type { InlineSkill } from '@mastra/core/skills';
 
 import { findBoardSkillProblems } from '../skills/app-skills.js';
-import type { StoredBoardRecord, StoredBoardScope, StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type {
+  StoredBoardInput,
+  StoredBoardRecord,
+  StoredBoardScope,
+  StoredBoardsStorage,
+} from '../storage/domains/boards/base.js';
+import { codeBoardOf } from './define-board.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
-import { compileStoredBoard } from './stored-board.js';
+import { reviewBoard } from './review.js';
+import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from './stored-board.js';
 
 const DEFAULT_RECHECK_MS = 1000;
 const PRELOAD_CONCURRENCY = 8;
@@ -15,9 +22,20 @@ export type BoardSourceKind = 'builtin' | 'app' | 'stored';
 
 export interface StoredBoardDetails {
   source: BoardSourceKind;
-  /** Only boards the project stored can be edited; code boards are read-only. */
+  /**
+   * Stored boards, the built-in Work board and app boards can be edited; the legacy Review board,
+   * which is being retired, stays read-only.
+   */
   editable: boolean;
   problems: string[];
+}
+
+/**
+ * Code boards Factory stores in each project: every code board except the legacy Review board,
+ * which is being retired and is served from code.
+ */
+function isEditableCodeBoard(board: InstalledBoard): boolean {
+  return codeBoardOf(board) !== reviewBoard;
 }
 
 /** A project's boards: the code boards plus its stored boards, and what to report about each board. */
@@ -82,10 +100,14 @@ function scopeKey(scope: StoredBoardScope): string {
 }
 
 /**
- * The per-project board cache. A project's boards are the code boards, served as code built them
- * and winning on their key, followed by the boards the project stored. Loads recheck the
- * project's board version at most every `recheckMs` and recompile when it changed, so stored
- * edits on other replicas arrive within that delay. The cache never writes.
+ * The per-project board cache. A project's boards are its rows: the Work and app boards Factory
+ * stored in it, in code order, then the others. A Work or app board's row runs with the code
+ * behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}); only the
+ * legacy Review board is served from code. The first load of each project in a process stores the
+ * boards Factory hasn't stored in it yet, each once ({@link StoredBoardsStorage.seedBoards}); a
+ * release never rewrites them. Loads recheck the project's board version at most every
+ * `recheckMs` and recompile when it changed, so stored edits on other replicas arrive within that
+ * delay.
  */
 export class ProjectBoardCache implements ProjectBoardSource {
   readonly [PROJECT_BOARD_SOURCE] = true;
@@ -100,7 +122,9 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #loading = new Map<string, Promise<ProjectBoards>>();
   readonly #generations = new Map<string, number>();
   readonly #warned = new Set<string>();
+  readonly #seeded = new Set<string>();
   readonly #codeSkills: readonly InlineSkill[];
+  readonly #seeds: ReadonlyMap<string, StoredBoardInput>;
 
   constructor(options: ProjectBoardCacheOptions) {
     this.codeRegistry = options.codeRegistry;
@@ -115,11 +139,24 @@ export class ProjectBoardCache implements ProjectBoardSource {
         board.id,
         {
           source: defaultBoards.includes(board) ? 'builtin' : 'app',
-          editable: false,
+          editable: isEditableCodeBoard(board),
           problems: this.#skillProblems(board),
         },
       ]),
     );
+    this.#seeds = new Map(
+      [...this.codeRegistry.values()].filter(isEditableCodeBoard).map(board => [board.id, boardDefinitionOf(board)]),
+    );
+  }
+
+  /** The boards Factory stores in each project once, in order. */
+  seeds(): StoredBoardInput[] {
+    return [...this.#seeds.values()];
+  }
+
+  /** Factory's current definition for `key`, which reset restores; undefined when Factory has none. */
+  seedFor(key: string): StoredBoardInput | undefined {
+    return this.#seeds.get(key);
   }
 
   async load(scope: StoredBoardScope): Promise<BoardRegistry> {
@@ -176,7 +213,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
     if (entry) entry.checkedAt = Number.NEGATIVE_INFINITY;
   }
 
-  /** Loads every project, a few at a time, so sync reads find them warm. */
+  /** Loads every project, a few at a time, so sync reads find them warm and each has its boards stored. */
   async preload(): Promise<void> {
     const projects = (await this.#projects?.listAll()) ?? [];
     let next = 0;
@@ -195,6 +232,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   async #refresh(scope: StoredBoardScope, key: string, generation: number): Promise<ProjectBoards> {
+    await this.#seed(scope, key);
     const current = this.#entries.get(key);
     const version = await this.#storage.readVersion(scope);
     if (current && current.version === version) {
@@ -219,25 +257,78 @@ export class ProjectBoardCache implements ProjectBoardSource {
     return snapshot;
   }
 
+  /**
+   * Stores the boards Factory hasn't stored in the project yet, once per process. A failure is
+   * logged and retried on the next load; the boards it didn't store aren't served meanwhile.
+   */
+  async #seed(scope: StoredBoardScope, key: string): Promise<void> {
+    if (this.#seeded.has(key)) return;
+    try {
+      if (this.#seeds.size > 0) await this.#storage.seedBoards(scope, this.seeds());
+      this.#seeded.add(key);
+    } catch (error) {
+      this.#warnOnce(
+        `seed:${key}`,
+        `Boards for project ${scope.factoryProjectId} could not be stored; Factory stores them on the next load: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[]): ProjectBoards {
-    const boards: InstalledBoard[] = [...this.codeRegistry.values()];
+    const byKey = new Map(rows.map(row => [row.key, row]));
     const details = new Map(this.#codeDetails);
     const problems: string[] = [];
-    for (const row of rows) {
-      if (this.codeRegistry.has(row.key)) {
-        problems.push(`Stored board "${row.key}" is hidden by the code board with the same key.`);
+    const report = (row: StoredBoardRecord, messages: readonly string[]) => {
+      problems.push(...messages);
+      for (const message of messages) {
+        this.#warnOnce(
+          `row:${scopeKey(scope)}:${row.key}:${row.revision}:${message}`,
+          `${message} (project ${scope.factoryProjectId})`,
+        );
+      }
+    };
+    const boards: InstalledBoard[] = [];
+    // Work and app boards keep their code order, each served from its row.
+    for (const code of this.codeRegistry.values()) {
+      const row = byKey.get(code.id);
+      if (!this.#seeds.has(code.id)) {
+        if (row) problems.push(`Stored board "${row.key}" is hidden by the code board with the same key.`);
+        boards.push(code);
         continue;
       }
+      if (!row) {
+        details.delete(code.id);
+        // Stored once and deleted since, or not stored because storing failed.
+        if (!this.#seeded.has(scopeKey(scope))) {
+          problems.push(`Board "${code.id}" isn't stored in this project yet; Factory stores it on the next load.`);
+        }
+        continue;
+      }
+      let merged: ReturnType<typeof mergeCodeBehaviour>;
+      try {
+        merged = mergeCodeBehaviour(row, code);
+      } catch (error) {
+        report(row, [
+          `Board '${row.key}' could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
+        ]);
+        continue;
+      }
+      report(row, merged.problems);
+      details.set(code.id, {
+        ...details.get(code.id)!,
+        problems: [...merged.problems, ...this.#skillProblems(merged.board)],
+      });
+      boards.push(merged.board);
+    }
+    for (const row of rows) {
+      if (this.codeRegistry.has(row.key)) continue;
       let board: InstalledBoard;
       try {
         board = compileStoredBoard(row);
       } catch (error) {
-        const message = `Board '${row.key}' could not be loaded: ${error instanceof Error ? error.message : String(error)}`;
-        problems.push(message);
-        this.#warnOnce(
-          `compile:${scopeKey(scope)}:${row.key}:${row.revision}`,
-          `${message} (project ${scope.factoryProjectId})`,
-        );
+        report(row, [
+          `Board '${row.key}' could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
+        ]);
         continue;
       }
       boards.push(board);

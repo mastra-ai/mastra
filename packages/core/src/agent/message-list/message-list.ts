@@ -29,6 +29,7 @@ import {
   StepContentExtractor,
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
+import { isPersistedCopy } from './conversion/utils';
 import { TypeDetector } from './detection/TypeDetector';
 import type { StoredMessageLoader } from './memory-message-refs';
 import { MessageMerger } from './merge';
@@ -2744,8 +2745,11 @@ export class MessageList {
     if (messageSource === `memory`) {
       // messagesAreEqual only matches stored messages that share the incoming id
       for (const existingMessage of this.getMessagesWithId(messageV2.id)) {
-        // don't double store any messages
-        if (messagesAreEqual(existingMessage, messageV2)) {
+        // don't double store any messages. Memory cleans messages when it saves them
+        // (trimmed text, working memory removed), so a stored copy can differ from the live
+        // message only by that cleanup. Treating it as new content would re-add a sealed
+        // message under a new id with the same provider item ids (#29380).
+        if (messagesAreEqual(existingMessage, messageV2) || isPersistedCopy(existingMessage, messageV2)) {
           return;
         }
       }

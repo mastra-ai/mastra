@@ -39,12 +39,15 @@ export function runPrune({
   targets,
   options,
   logger,
+  deleteBatch,
 }: {
   db: LibSQLDB;
   domain: string;
   targets: PruneTarget[];
   options?: PruneOptions;
   logger?: { warn?: (msg: string, err?: unknown) => void };
+  /** Deletes one batch for targets that need more than a plain row delete; return `undefined` to use the default. */
+  deleteBatch?: (target: PruneTarget, cutoff: string | number, limit: number) => Promise<number> | undefined;
 }): Promise<PruneResult[]> {
   return executeRetentionPrune({
     domain,
@@ -53,6 +56,7 @@ export function runPrune({
     beforeTarget: target => ensureAnchorIndex(db, target, logger),
     cutoffFor: (target, now) => cutoffFor(target.policy, target.anchorType ?? 'timestamp', now),
     deleteBatch: (target, cutoff, limit) =>
+      deleteBatch?.(target, cutoff, limit) ??
       db.pruneBatch({ tableName: target.table, column: target.column, cutoff, limit }),
   });
 }

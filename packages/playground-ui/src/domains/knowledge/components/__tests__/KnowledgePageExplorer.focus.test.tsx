@@ -101,7 +101,7 @@ beforeAll(() => {
   };
 });
 
-const tree = () => screen.getByRole('tree');
+const tree = () => screen.getByRole('tree', { name: 'Knowledge pages' });
 const treeNames = () =>
   within(tree())
     .getAllByRole('treeitem')
@@ -115,7 +115,7 @@ describe('KnowledgePageExplorer scope focus', () => {
 
     const focus = screen.getByTestId('knowledge-scope-focus');
     expect(focus.textContent).toContain('Team');
-    expect(focus.textContent).toContain('team:support');
+    expect(focus.textContent).toContain('Support team');
     await waitFor(() => expect(within(tree()).queryByText('Refunds')).toBeNull());
     expect(within(tree()).getByText('Macros')).toBeTruthy();
     // Labelled circles and dots alike.
@@ -144,7 +144,7 @@ describe('KnowledgePageExplorer mention popup', () => {
     const popup = await screen.findByRole('dialog', { name: /Refunds mentions Roadmap/ });
     expect(within(popup).getByText(/item 4/)).toBeTruthy();
     expect(within(popup).queryByText('Unrelated note')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Graph' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('true');
 
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -204,7 +204,7 @@ describe('KnowledgePageExplorer search', () => {
     fireEvent.change(screen.getByLabelText('Search knowledge'), { target: { value: 'ro' } });
     fireEvent.click(screen.getByRole('button', { name }));
   };
-  const pressed = (name: string) => screen.getByRole('button', { name }).getAttribute('aria-pressed');
+  const pressed = (name: string) => screen.getByRole('tab', { name }).getAttribute('aria-selected');
 
   it('in graph view, focuses the result and stays on the graph; a second pick opens it', async () => {
     renderWithProviders(<SearchHost initialView="graph" />);

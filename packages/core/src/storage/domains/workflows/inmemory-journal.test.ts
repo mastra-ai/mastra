@@ -814,22 +814,21 @@ describe('WorkflowsInMemory storage v2 state patches', () => {
     expect((await statesOf(store, child)).state).toEqual({ own: true });
   });
 
-  it('starts from an empty state when the base run is not stored, or the checkpoint has no state', async () => {
-    const { store } = setup();
-    await store.writeWorkflowRunCheckpoint({
-      ...child,
-      header: childOf('missing'),
-      steps: {},
-      stateBase: { workflowName: 'missing', runId: 'r1', seq: 3 },
-    });
-    await store.appendWorkflowRunEntries({
-      ...child,
-      header: childOf('missing'),
-      steps: {},
-      statePatch: [set(['c'], 1)],
-    });
-    expect((await statesOf(store, child)).state).toEqual({ c: 1 });
+  it('rejects a checkpoint built on a state version that is not stored', async () => {
+    const { db, store } = setup();
+    await expect(
+      store.writeWorkflowRunCheckpoint({
+        ...child,
+        header: childOf('missing'),
+        steps: {},
+        stateBase: { workflowName: 'missing', runId: 'r1', seq: 3 },
+      }),
+    ).rejects.toThrow(/not stored/);
+    expect(db.workflowRunHeaders.has('child-r1')).toBe(false);
+  });
 
+  it('starts from an empty state when the checkpoint has no state', async () => {
+    const { store } = setup();
     await store.appendWorkflowRunEntries({ ...parent, header: makeHeader('r1'), steps: {}, state: { p: 1 } });
     await store.writeWorkflowRunCheckpoint({ ...parent, header: makeHeader('r1'), steps: {} });
     expect((await statesOf(store, parent)).state).toEqual({});

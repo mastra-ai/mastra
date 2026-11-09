@@ -4,5 +4,5 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/dashboard-renderer.ts", "src/observability-tools.ts"]
+  "include": ["src/index.ts", "src/host.ts"]
 }

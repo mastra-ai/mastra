@@ -84,6 +84,55 @@ jobs:
             echo "has_code=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # Deployer changes must come with monorepo E2E coverage (packages/deployer/AGENTS.md).
+  # Its own job, not a step in `changes`: a failing `changes` job would skip every test job.
+  deployer-e2e-coverage:
+    name: Deployer E2E coverage
+    # The Changesets release PR only bumps versions and changelogs, so it can never add the
+    # coverage. A fork can pick any branch name, so the head must also live in this repository.
+    if: >-
+      github.event_name == 'pull_request' &&
+      !(github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'changeset-release/'))
+    runs-on: starsling-ubuntu-26.04-2
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
+
+      - name: Require monorepo E2E changes alongside deployer changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed_files=$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")
+          # The package instructions and the generated changelog are exempt.
+          deployer_file=$(printf '%s\n' "$changed_files" \
+            | grep '^packages/deployer/' \
+            | grep -vxE 'packages/deployer/(AGENTS|CHANGELOG)\.md' \
+            | head -n 1 || true)
+          if [ -z "$deployer_file" ]; then
+            echo "No deployer changes."
+            exit 0
+          fi
+          # Here-string, not a pipe: under pipefail, grep -q exiting early can fail printf.
+          if grep -q '^e2e-tests/monorepo/' <<< "$changed_files"; then
+            echo "Deployer changes come with monorepo E2E changes."
+            exit 0
+          fi
+          deployer_file="${deployer_file//%/%25}"
+          deployer_file="${deployer_file//:/%3A}"
+          deployer_file="${deployer_file//,/%2C}"
+          echo "::error file=${deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications; add or update a monorepo E2E test. See packages/deployer/AGENTS.md."
+          exit 1
+
   prebuild:
     name: Build
     needs: changes
@@ -131,6 +180,7 @@ jobs:
     outputs:
       run_full: ${{ steps.compute.outputs.run_full }}
       has_unit_tests: ${{ steps.compute.outputs.has_unit_tests }}
+      unit_shards: ${{ steps.compute.outputs.unit_shards }}
       e2e_test_files: ${{ steps.compute.outputs.e2e_test_files }}
       e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
       experiment_worker_e2e_changed: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
@@ -164,12 +214,25 @@ jobs:
       - name: Install affected-test dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts --filter mastra-turbo
 
+      # What detection extracts from each file is cached by content hash
+      # (scripts/affected-tests-cache.mjs); resolution still runs live, so a
+      # stale or missing cache only costs time. Seeded on every push to main by
+      # affected-graph-seed.yml. PRs only restore it, so per-PR runs don't fill
+      # the repo's cache quota.
+      - name: Restore affected-test extraction cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/affected-graph.json
+          key: affected-graph-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: affected-graph-v1-${{ runner.os }}-
+
       - name: Compute affected test files
         id: compute
         env:
           BASE_SHA: ${{ needs.changes.outputs.base_sha }}
           HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
           FULL_SUITE: ${{ needs.changes.outputs.full_suite }}
+          AFFECTED_TESTS_CACHE: ${{ runner.temp }}/affected-graph.json
         run: |
           # The full suite ignores the diff, and a workflow_call has no PR base to diff against.
           if [ "$FULL_SUITE" = "true" ]; then
@@ -338,6 +401,7 @@ jobs:
             console.error('Full suite requested — running full suite.');
             output('run_full=true\n');
             output('has_unit_tests=false\n');
+            output('unit_shards=[1]\n');
             output('e2e_test_files=\n');
           } else {
             console.error(`Running ${count} affected tests.`);
@@ -345,6 +409,9 @@ jobs:
             // The unit list can reach hundreds of KB, so it travels as an artifact; the job
             // output only says whether there is one.
             output(`has_unit_tests=${unitTestFiles.length > 0}\n`);
+            // Core-touching PRs select 2,000+ unit files, which runs past the job's cap on one
+            // machine. Lists that large run on three; narrow PRs stay one job.
+            output(`unit_shards=${JSON.stringify(unitTestFiles.length >= 500 ? [1, 2, 3] : [1])}\n`);
             outputList('e2e_test_files', e2eTestFiles);
           }
           NODE
@@ -390,7 +457,7 @@ jobs:
   test-suite:
     name: Unit and E2E Tests
     needs: [changes, prebuild, affected-tests]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success')
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success') }}
     uses: ./.github/workflows/test-suite.yml
     permissions:
       actions: read
@@ -400,6 +467,7 @@ jobs:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       has_code: ${{ needs.changes.outputs.has_code }}
       has_unit_tests: ${{ needs.affected-tests.outputs.has_unit_tests }}
+      unit_shards: ${{ needs.affected-tests.outputs.unit_shards || '[1]' }}
       e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
       run_full: ${{ needs.affected-tests.outputs.run_full }}
       durable_streams_changed: ${{ needs.affected-tests.outputs.durable_streams_changed }}
@@ -410,7 +478,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true') && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true') && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
@@ -425,7 +493,7 @@ jobs:
   mastracode-e2e:
     name: Mastra Code E2E
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.mastracode_e2e_changed == 'true' && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.mastracode_e2e_changed == 'true' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/mastracode-e2e.yml
     permissions:
       contents: read
@@ -439,7 +507,7 @@ jobs:
   combined-stores-tests:
     name: Combined Store Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.stores_changed == 'true' && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.stores_changed == 'true' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/test-combined-stores.yml
     permissions:
       contents: read
@@ -458,7 +526,7 @@ jobs:
   workspace-tests:
     name: Workspace Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.workspaces_changed == 'true' && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.workspaces_changed == 'true' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/test-workspaces.yml
     permissions:
       contents: read
@@ -474,7 +542,7 @@ jobs:
   memory-test:
     name: Memory Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success' }}
     runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read

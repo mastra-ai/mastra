@@ -1,5 +1,71 @@
 # @mastra/temporal
 
+## 0.6.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/deployer@1.83.0-alpha.2
+  - @mastra/core@1.83.0-alpha.2
+
+## 0.6.0-alpha.1
+
+### Patch Changes
+
+- Fixed `run.start()` results for failed runs. Before, every failed run returned `status: 'failed'`, `steps: {}` and Temporal's `WorkflowFailedError`. A failed run now returns the same status, error, tripwire and step records as on Mastra's default workflow engine. Fixes [#28754](https://github.com/mastra-ai/mastra/issues/28754). ([#29169](https://github.com/mastra-ai/mastra/pull/29169))
+
+  - `error` is the error the step threw, with its own fields such as `code`.
+  - `steps` has a record for each step that ran, including the failed step and every branch of a `.parallel()`. As in successful Temporal results, it has no `input` record.
+  - A step that throws a `TripWire`, as an agent step does when a guardrail aborts, returns `status: 'tripwire'` with `tripwire: { reason, retry, metadata, processorId }`.
+
+  Restart your Workers to pick up the change. Runs that fail on a Worker running an older version return the same result as before.
+
+  **Changes if you read Temporal failures directly**
+
+  The run still fails in Temporal, but with a different failure chain. If you call `handle.result()` with the Temporal client, `WorkflowFailedError.cause` is now an `ApplicationFailure` carrying the step's error. The step's `ActivityFailure`, including input and request context validation failures, is one level lower in its `cause`. Code that checks `cause instanceof ActivityFailure` or the top-level failure `type` needs to look one level deeper:
+
+  ```ts
+  // Before
+  if (error.cause instanceof ActivityFailure) {
+    // handle the step's failure
+  }
+
+  // After
+  if (error.cause instanceof ApplicationFailure && error.cause.cause instanceof ActivityFailure) {
+    // handle the step's failure
+  }
+  ```
+
+  **`.parallel()` waits for every branch**
+
+  When a branch fails, the run now waits for the other branches to finish before it fails, as on the default engine. Before, it failed as soon as one branch failed. The other branches run to completion, side effects included. If a branch retries indefinitely, the run doesn't fail until that branch stops. Set `retry` in `init()` to limit retries.
+
+- Fixed Temporal workflow results to include the workflow input under `result.steps.input` again, matching a local run. `run.start()` includes it for successful, failed, tripwire and suspended results, and `run.resume()` includes it for suspended and successful results. ([#29506](https://github.com/mastra-ai/mastra/pull/29506))
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`d076f44`](https://github.com/mastra-ai/mastra/commit/d076f44bd73688f85b4f9a94500feabeaef378b0), [`d076f44`](https://github.com/mastra-ai/mastra/commit/d076f44bd73688f85b4f9a94500feabeaef378b0), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`da7549b`](https://github.com/mastra-ai/mastra/commit/da7549b7418f516626ec5b792273254bf721f874), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`90e981b`](https://github.com/mastra-ai/mastra/commit/90e981b6e27fd877206a657572f0424fa0d32dfe), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+  - @mastra/deployer@1.83.0-alpha.1
+
+## 0.6.0-alpha.0
+
+### Minor Changes
+
+- Added Temporal-backed workflow suspend and resume support. `run.start()` and `run.resume()` now return Mastra-compatible suspended results while the Temporal workflow remains open waiting for a signal, and resumed step results include their suspend payload and resume data. Successful Temporal runs now return the workflow result directly in the standard Mastra result shape and expose normalized `StepResult` entries in `steps`. ([#27020](https://github.com/mastra-ai/mastra/pull/27020))
+
+  Resume a suspended step and wait for its next suspended or terminal result with `run.resume({ step: 'approval', resumeData })`. Use `run.resumeAsync({ step: 'approval', resumeData })` to signal the workflow without waiting. Keyless resumes target the only active suspension, and resume labels declared by `suspend(payload, { resumeLabel })` are also supported.
+
+### Patch Changes
+
+- Fixed Temporal workflows honoring disabled input validation when started programmatically. ([#29409](https://github.com/mastra-ai/mastra/pull/29409))
+
+- Fixed canceled Temporal workflows returning a failed result. ([#29409](https://github.com/mastra-ai/mastra/pull/29409))
+
+- Fixed duplicate Temporal workflow starts incorrectly invoking terminal lifecycle hooks. ([#29409](https://github.com/mastra-ai/mastra/pull/29409))
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`eaa3b5c`](https://github.com/mastra-ai/mastra/commit/eaa3b5ce1ea71e484666eb096a0db8b96bfd2c0b), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`52af646`](https://github.com/mastra-ai/mastra/commit/52af6465245b1d09c520be19fff88ba34a12e0e4), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`742b37d`](https://github.com/mastra-ai/mastra/commit/742b37dc32d863a116821acf92c07a26d2b926fc), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6)]:
+  - @mastra/core@1.83.0-alpha.0
+  - @mastra/deployer@1.83.0-alpha.0
+
 ## 0.5.0
 
 ### Minor Changes

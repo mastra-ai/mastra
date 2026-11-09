@@ -8,6 +8,7 @@ import { createSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import { MastraError } from '../error';
 import { getErrorFromUnknown } from '../error/utils';
+import { RegisteredLogger } from '../logger/constants';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -30,6 +31,7 @@ import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
 import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
+import { createChatLogger } from './chat-logger';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
@@ -239,7 +241,9 @@ export class AgentChannels {
    */
   __setLogger(logger: IMastraLogger): void {
     this.logger =
-      'child' in logger && typeof (logger as any).child === 'function' ? (logger as any).child('CHANNEL') : logger;
+      'child' in logger && typeof (logger as any).child === 'function'
+        ? (logger as any).child({ component: RegisteredLogger.CHANNEL })
+        : logger;
   }
 
   /**
@@ -503,6 +507,8 @@ export class AgentChannels {
         // Lambda can cause subsequent messages to be queued forever.
         concurrency: { strategy: 'concurrent' },
         ...this.chatOptions,
+        // Not `this.logger`: that child already binds `component`, and pino would emit the key twice.
+        logger: this.chatOptions.logger ?? createChatLogger(() => mastra.getLogger()),
       });
 
       // Register handlers with optional overrides

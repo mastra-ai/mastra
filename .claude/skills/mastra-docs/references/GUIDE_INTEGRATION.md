@@ -98,6 +98,24 @@ Usually cover:
 - tool availability and exclusions;
 - a minimal invocation.
 
+### Mastra Connect providers
+
+Each product has one integration page. When a vendor sells separate products, such as Neon Postgres, Neon Functions, and Neon Object Storage, keep separate pages and add the Connect section to the page for the product its tools manage. List each page in the sidebar category that matches what the product does; use **Other providers** only when no category fits. Put `## Connect` first, then `## Self-managed setup` when a supported alternative exists. On a page whose main topic isn't Connect, such as Neon Postgres storage, put `## Connect` at the end and link it from the introduction. Add new Connect pages to the Connect page's provider grid too. Don't add a self-managed section for Connect-only providers.
+
+`packages/connect/scripts/generate-provider-docs.ts` owns these pages:
+
+- Simple providers have fully generated pages. Change `packages/connect/scripts/provider-docs-metadata.ts` and regenerate; don't edit the page.
+- Pages with other capabilities, such as channels or authentication, are handwritten and import a generated `### Agent tools` partial from `src/components/connect/generated/`.
+
+On a handwritten page:
+
+1. Start with a short list of the ways to use the provider, and link each non-Connect capability to its section.
+1. In `## Connect`, link the Connect setup prerequisite, then render the partial. Add Connect-specific tasks, such as `### Agent chat`, as H3 sections.
+1. Put other capabilities under their own H2, such as `## Server authentication`. Use `## Self-managed setup` only for an alternative way to do the same task as Connect, such as running your own Slack app.
+1. Name each connection ID and credential type. When one provider needs separate connections, such as Slack's `slack` and `slack-channels`, say so before the steps.
+
+Link the full tool list in `/reference/connect/providers` instead of repeating it. See `packages/connect/scripts/README.md` for regeneration.
+
 ## Deployment integrations
 
 Use the following guidance for pages under `/integrations/deploy`.

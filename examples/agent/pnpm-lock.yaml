@@ -26,6 +26,7 @@ overrides:
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
   '@mastra/playground-ui': link:../../packages/playground-ui
+  '@mastra/server': link:../../packages/server
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
   '@mastra/auth-studio': link:../../auth/studio
@@ -53,7 +54,7 @@ overrides:
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.11.0
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   jose@>=4.14.0 <6.2.12: 6.2.12
-  better-auth: ^1.7.7
+  better-auth: ^1.7.16
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.7: 4.6.7
   es-toolkit@<1.52.0: 1.52.0
@@ -149,6 +150,9 @@ importers:
       '@mastra/playground-ui':
         specifier: link:../../packages/playground-ui
         version: link:../../packages/playground-ui
+      '@mastra/server':
+        specifier: link:../../packages/server
+        version: link:../../packages/server
       '@mastra/slack':
         specifier: link:../../channels/slack
         version: link:../../channels/slack
@@ -165,7 +169,7 @@ importers:
         specifier: npm:ai@^5.0.93
         version: ai@5.0.285(zod@4.6.7)
       better-auth:
-        specifier: ^1.7.7
+        specifier: ^1.7.16
         version: 1.7.16(@opentelemetry/api@1.9.0)(react@19.3.1)(vitest@4.1.12(@opentelemetry/api@1.9.0)(@types/node@26.6.6)(msw@2.15.0(@types/node@26.6.6)(typescript@5.9.3))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)))
       fetch-to-node:
         specifier: ^2.1.0

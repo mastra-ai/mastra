@@ -66,6 +66,11 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     board_key: { type: 'text' },
     // Null lands the card in the board's first phase.
     phase_key: { type: 'text', nullable: true },
+    // The status events the route handles (`StatusEvent`s). Null on rows written before routes named
+    // events: those place new cards, as `['work_item.created']`.
+    on_events: { type: 'json', nullable: true },
+    // Lets an event move an existing card into a working phase. Null on older rows: off.
+    allow_working_phase: { type: 'boolean', nullable: true },
     // Rises on every write to the route, including a move; the compare-and-set token for edits.
     revision: { type: 'integer' },
     created_by: { type: 'text' },
@@ -110,6 +115,9 @@ export const FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA: CollectionSchema = {
     factory_project_id: { type: 'text' },
     version: { type: 'text' },
     updated_at: { type: 'timestamp' },
+    // Keys of the boards Factory stored in the project (Work, app and seed boards); each is stored
+    // once, so one the project deleted stays deleted. Null on projects stored before the list.
+    seeded_boards: { type: 'json', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_board_definition_versions_project', columns: ['org_id', 'factory_project_id'] }],
 };

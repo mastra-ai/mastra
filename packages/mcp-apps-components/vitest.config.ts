@@ -12,8 +12,7 @@ export default defineConfig({
           // Browser-side tests opt into jsdom with a `@vitest-environment jsdom` comment.
           environment: 'node',
           include: ['src/**/*.test.{ts,tsx}'],
-          setupFiles: ['./src/test/setup.ts'],
-          // Must stay above the 3s Testing Library async timeout set in setup.ts.
+          setupFiles: ['./src/__tests__/setup.ts'],
           testTimeout: 15000,
         },
       },

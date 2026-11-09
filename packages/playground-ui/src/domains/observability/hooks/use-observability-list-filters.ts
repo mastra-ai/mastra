@@ -84,14 +84,17 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   const fromMs = dateFrom?.getTime();
   const toMs = dateTo?.getTime();
   // Rolling presets are resolved against "now" only when the range changes, so the query key
-  // (and the cursors issued for it) stays stable while the list scrolls.
+  // (and the cursors issued for it) stays stable while the list scrolls. Both ends share one `now`
+  // so a rolling preset spans exactly its length.
   const timeRange = useMemo(() => {
+    const now = new Date();
     const window = resolveTracesDateWindow(
       datePreset,
       fromMs === undefined ? undefined : new Date(fromMs),
       toMs === undefined ? undefined : new Date(toMs),
+      now,
     );
-    return resolveTraceQueryTimeRange(window.dateFrom, window.dateTo, new Date());
+    return resolveTraceQueryTimeRange(window.dateFrom, window.dateTo, now);
   }, [datePreset, fromMs, toMs]);
 
   // react-router resolves even a functional update against the params of the last render, so writes

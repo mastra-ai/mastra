@@ -1,0 +1,144 @@
+---
+title: 'Resumable streams | Agents'
+description: 'Publish agent runs on a stream topic so clients can reconnect, other readers can follow a run with observe(), and any reader can stop it.'
+packages:
+  - '@mastra/core'
+  - '@mastra/server'
+---
+
+# Resumable streams
+
+A resumable stream publishes every chunk of an agent run to a PubSub topic and keeps a replay cache of those events. A client that drops its connection can reconnect and catch up, another reader can follow the same run with `observe()`, and any reader can stop it.
+
+Resumable streams don't make the run itself durable. Reconnecting isn't crash recovery: if the process running the agent stops, the run stops, and observers see an error or nothing more. For runs that survive process restarts, use [durable agents](/docs/harness/durable-agents), which publish through the same stream layer.
+
+## Defaults
+
+| Agent | Streams |
+| - | - |
+| Registered on a `Mastra` instance | On |
+| Standalone (`new Agent()` without `Mastra`) | Off |
+| Plain agent with `durable: true` | On, including standalone agents |
+| Plain agent with `durable: false` | Off, including registered agents |
+| Explicit `createDurableAgent()` wrapper | Always published; pass `cache: false` to the factory to disable the replay cache, not transport history |
+
+A registered agent, durable or not, publishes on `mastra.pubsub` and caches events in `mastra.serverCache`, or an in-memory cache when the server has none. Every `Mastra` instance that shares that PubSub and cache can observe the run. An agent-level `pubsub` takes precedence, except on the evented engine, whose steps always publish on `mastra.pubsub`.
+
+## Configure streams
+
+Set `durable` on the agent to turn streams on or off, or to pass your own PubSub and cache:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'You help customers with their orders.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  durable: {
+    // Keep finished runs replayable for 2 minutes instead of 30 seconds
+    cleanupTimeoutMs: 120_000,
+  },
+})
+```
+
+| Option | Default | Description |
+| - | - | - |
+| `pubsub` | `mastra.pubsub` | Bus the run is published on. Use a shared bus to follow runs across processes. |
+| `cache` | `mastra.serverCache`, else an in-memory cache | Replay cache. Pass `false` to disable this cache. Transports such as Redis Streams can still replay retained history. |
+| `shouldCache` | Every topic | Return `false` for a topic to skip caching it. |
+| `cleanupTimeoutMs` | `30000` | How long after it finishes a run is cleared. `0` turns off this timer only. The cache's own expiry and eviction still apply. |
+
+`durable: true` turns streams on with these defaults, including for standalone agents.
+
+On a plain `Agent`, `durable` configures resumable streams only. For checkpoint-backed execution, wrap the agent explicitly with `createDurableAgent({ agent })`. To recover in-flight runs after a crash, also configure persistent workflow storage and `recovery: { durableAgents: 'auto' }`. For manual recovery instead, pass a `shouldPersistSnapshot` policy that includes `running` snapshots and call `recoverActiveRuns()` yourself. See [crash recovery](/docs/harness/durable-agents#crash-recovery) for setup and persistence policies.
+
+Configure the wrapper's stream cache and transport through the factory's `cache`, `pubsub`, `shouldCache`, and `cleanupTimeoutMs` options.
+
+## Turn streams off
+
+Streams have a cost. Each chunk is published to PubSub, and with caching on, each event is stored until the run is cleaned up. With the in-memory cache that's process memory. With a remote PubSub or cache such as Redis it's a network write per chunk. For high-volume agents that never reconnect or observe runs, turn streams off:
+
+```typescript title="src/mastra/agents/batch-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const batchAgent = new Agent({
+  id: 'batch-agent',
+  name: 'Batch agent',
+  instructions: 'You classify support tickets.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  durable: false,
+})
+```
+
+To keep live observation but skip the replay cache, pass `durable: { cache: false }`.
+
+### How long runs stay available
+
+After a run finishes, the executing process schedules cleanup of its events and ownership record after `cleanupTimeoutMs`. The timer allows the process to exit before cleanup. Shared cache data then remains until expiry or eviction. Redis Streams retains its native topic data until `clearTopic()` succeeds or its idle TTL expires. The transport's default idle TTL is seven days. Configure `streamIdleTtlMs` to change it, or set it to `0` to disable transport expiry. A run parked on a tool approval or suspension isn't cleared by that timer, because resuming it continues on the same topic.
+
+The cache bounds everything else:
+
+- Run logs and ownership records ask the cache for a 24-hour TTL. The in-memory cache uses at least this TTL for indexed run logs, unless cache expiry is disabled. Cache entry limits can evict data sooner.
+- The in-memory cache holds 1,000 entries by default. Each run uses several entries (its event log, a counter and its ownership record), so heavy traffic evicts older runs sooner.
+- The server's observe and abort routes return 404 when a run's ownership record is evicted or expires. Evicted run events can't be replayed.
+
+Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
+
+## Follow a run
+
+Run IDs must be unique across agents sharing a PubSub bus.
+
+Call `observe()` with the run's ID to follow it from any agent instance that shares the bus. Without an offset, `observe()` replays the cached events and then delivers live ones. Replay needs the same replay cache too. An instance with its own cache receives only live events, unless the PubSub keeps history. When a run waits on a tool approval, the observation receives the approval request and stays open until the approved run finishes, errors or is aborted. Call `detach()` to stop following a parked run:
+
+```typescript title="src/server/reconnect.ts"
+import { supportAgent } from '../mastra/agents/support-agent'
+
+export async function followRun(runId: string, request: Request) {
+  const { output, detach } = await supportAgent.observe(runId)
+
+  request.signal.addEventListener('abort', detach, { once: true })
+  if (request.signal.aborted) detach()
+
+  for await (const chunk of output.fullStream) {
+    // Chunks from the run, including any missed while disconnected
+  }
+}
+```
+
+Each chunk from `observe()` carries its run-log position as `chunk.index`. To resume an observation after a dropped connection, pass `index + 1` of the last chunk that has an index as `offset`. Chunks from a plain agent's `stream()`, and chunks delivered without a replay cache, carry no `index`, so a client that lost one of those connections should observe without an `offset`. The [`observe()` reference](/reference/agents/durable-agent#observerunid-options) covers which chunks carry no index, structured output, and replay limits.
+
+Over HTTP, observing a run that can't be resumed fails instead of returning an empty stream. An unknown run, or one whose ownership record expired or was evicted, answers 404, and the client rejects with a `MastraClientError` carrying that status rather than resolving to an empty, closed stream.
+
+`agent.hasResumableStreams()` reports whether this agent publishes its runs, and with them whether `observe()` and the server's observe and abort routes can reach them. It's `true` for a durable agent and for any agent with streams on.
+
+### Until-idle streams
+
+`streamUntilIdle()` and `resumeStreamUntilIdle()` combine the initial run and background-task continuations in their `fullStream`. Without an offset, `observe(returnedRunId)` replays only the initial segment and closes at its finish event. It doesn't reconnect to the combined until-idle stream or replay later background-task answers. Supplying an explicit run ID doesn't change this limit. The same limit applies to durable agents.
+
+## Stop a run
+
+With streams on, a closed reader doesn't stop the run. When a client disconnects from the server's stream route, the server detaches that reader and the run keeps going: it keeps generating tokens, calling tools and running `onFinish`, so the client can reconnect. Stop it explicitly, or set `durable: false` on a plain agent whose runs should end with the request. A durable agent's run always continues after a disconnect. A detached run still ends when it finishes, when it's stopped, or when its step budget is spent. With neither `maxSteps` nor `stopWhen` set, each loop stops after five steps, excluding processor retries. The budget applies per loop invocation, with a fresh loop after an approval or background continuation.
+
+Stop a run explicitly with one of these:
+
+- `observe(runId)` returns an `abort()` function that asks a running run to stop wherever it executes. The request is best effort. It doesn't wait for confirmation, and a failed publish is only logged. Use the abort route below when you need confirmation. A run parked on an approval no longer listens for it, so stop a parked run with `agent.abortRunStream(runId)` in the process that holds it, or with `POST /agents/:agentId/threads/abort` for a run in a memory thread.
+- `agent.abortRunStream(runId)` stops a run in this process, and asks other processes on the same bus to stop it. It returns `true` for a running run stopped in this process. A run parked on an approval outside a memory thread is cancelled here too, but the call returns `false`. A later approval in this process fails. The cancellation fence is process-local and leaves the shared snapshot intact. Another process can still approve that snapshot. For a run elsewhere the request is best effort.
+- The server's `POST /agents/:agentId/runs/:runId/abort` route stops a run on any server that shares the PubSub and cache, after checking the caller owns it. It returns `{ aborted: true }` only once the process executing the run confirms it stopped. It returns `{ aborted: false }` for a finished run, for a run parked on an approval (nothing is executing it), and when no process answers in time. Runs in a memory thread can also be stopped with `POST /agents/:agentId/threads/abort`.
+
+With `durable: false` on a non-durable agent, closing the HTTP request aborts the run, as before.
+
+## Across servers
+
+When several servers share a PubSub and cache, such as Redis, a run started on one server can be observed and stopped through any of them:
+
+- Each run writes an ownership record (agent, run, resource and thread) to the cache before its first event. The server's observe and abort routes check the caller against that record, so tenant and thread checks hold on every server.
+- An unknown, expired or evicted record returns 404. If the cache can't be read, the routes return 503 rather than skipping the check.
+- With `durable: { cache: false }` the record is kept in `mastra.serverCache`, so ownership still works across servers. Replay then depends on the PubSub: one that keeps history, like Redis Streams, replays it, and an in-process bus delivers only live events.
+- With the default in-memory cache and PubSub, nothing is shared, so only the server running the agent can observe or stop its runs.
+
+## Related
+
+- [Durable agents](/docs/harness/durable-agents)
+- [Agent reference](/reference/agents/agent)
