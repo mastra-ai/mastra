@@ -3,22 +3,22 @@ import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptio
 import type { LanguageModelV4, LanguageModelV4CallOptions, SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
-import type { z as z3 } from 'zod/v3';
 import type { z } from 'zod/v4';
 import type { TracingPolicy } from '../../observability';
 import type { StandardSchemaWithJSON, InferStandardSchemaOutput, ZodSchema } from '../../schema';
 import type { ScoringData } from './base.types';
 import type { ModelRouterModelId } from './provider-registry.js';
 
-// zod v4's `z.infer` reads `_zod.output`, which v3 schemas lack, so v3 needs its own branch.
+// zod v4's `z.infer` reads `_zod.output`, which v3 schemas lack, so v3 needs its own branch. It reads
+// `_output` structurally: a v3 schema from a different zod install than core's fails `extends z3.ZodTypeAny`.
 // See https://github.com/mastra-ai/mastra/issues/29574
 export type inferOutput<Output extends StandardSchemaWithJSON | ZodSchema | JSONSchema7 | undefined = undefined> =
   Output extends StandardSchemaWithJSON
     ? InferStandardSchemaOutput<Output>
     : Output extends z.ZodType
       ? z.infer<Output>
-      : Output extends z3.ZodTypeAny
-        ? z3.infer<Output>
+      : Output extends { readonly _output: infer O; readonly _def: unknown }
+        ? O
         : Output extends JSONSchema7
           ? unknown
           : undefined;

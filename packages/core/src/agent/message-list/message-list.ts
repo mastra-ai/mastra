@@ -572,8 +572,7 @@ export class MessageList {
               role: 'user',
               content: messageInput,
             }
-          : // See AIV7ForwardCompatibleUIMessage in ./types
-            (messageInput as MessageInput),
+          : messageInput,
         messageSource,
         options,
       );

@@ -39,15 +39,15 @@ export type AIV6ResponseMessage = AIV6.AssistantModelMessage | AIV6.ToolModelMes
  * a part that did not exist when it was built, and it does not act on such parts
  * at runtime. Object literals are still checked strictly, because excess property
  * checks reject a literal part against `{ type: string }` and leave only
- * `AIV7.UIMessage`. Kept out of `MessageInput` so the converters keep narrowing
- * on the known part types.
+ * `AIV7.UIMessage`.
  *
  * See https://github.com/mastra-ai/mastra/issues/29575
  */
-type AIV7ForwardCompatibleUIMessage = Omit<AIV7.UIMessage, 'parts'> & { parts: Array<{ type: string }> };
+export type AIV7ForwardCompatibleUIMessage = Omit<AIV7.UIMessage, 'parts'> & { parts: Array<{ type: string }> };
 
 export type MessageInput =
   | AIV7.UIMessage
+  | AIV7ForwardCompatibleUIMessage
   | AIV7.ModelMessage
   | AIV6.UIMessage
   | AIV6.ModelMessage
@@ -59,7 +59,7 @@ export type MessageInput =
   | MastraMessageV1
   | MastraDBMessage;
 
-export type BaseMessageListItem = string | MessageInput | AIV7ForwardCompatibleUIMessage;
-export type BaseMessageListInput = BaseMessageListItem | BaseMessageListItem[];
+export type BaseMessageListItem = string | MessageInput;
+export type BaseMessageListInput = string | MessageInput | BaseMessageListItem[];
 export type MessageListItem = BaseMessageListItem | CreatedAgentSignal;
 export type MessageListInput = BaseMessageListInput | CreatedAgentSignal | MessageListItem[];
