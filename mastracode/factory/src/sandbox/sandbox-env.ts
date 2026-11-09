@@ -30,7 +30,7 @@ export async function resolveSandboxEnv(
   return { runtime, build, revision, buildRevision };
 }
 
-function warnRefreshFailed(message: string, error: unknown) {
+function warnReadFailed(message: string, error: unknown) {
   console.warn(`[Mastra Factory] ${message}`, {
     // Storage and decryption errors name no values.
     error: error instanceof Error ? error.message : String(error),
@@ -50,7 +50,7 @@ export async function resolveSandboxEnvOrEmpty(
   try {
     return await resolveSandboxEnv(store, scope);
   } catch (error) {
-    warnRefreshFailed('Could not read sandbox environment variables; starting without them', error);
+    warnReadFailed('Could not read sandbox environment variables; starting without them', error);
     return { runtime: {}, build: {}, revision: '', buildRevision: '' };
   }
 }
@@ -162,7 +162,7 @@ export function attachSandboxEnvRefresh(
     inFlight ??= refresh()
       .catch(error => {
         if (options.onError) options.onError(error);
-        else warnRefreshFailed('Could not refresh sandbox environment variables; using the last applied', error);
+        else warnReadFailed('Could not refresh sandbox environment variables; using the last applied', error);
       })
       .finally(() => {
         inFlight = undefined;

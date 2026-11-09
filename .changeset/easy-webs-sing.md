@@ -8,5 +8,7 @@ If your provider spreads the context into a repository template (for example `cr
 
 ```ts
 const { buildEnv, buildEnvRevision, ...rest } = ctx;
-return createRepoTemplate({ ...rest, buildStepEnv: buildEnv, buildEnvRevision });
+// Pass buildEnv only to an option your builder keeps out of identity and the image,
+// and add buildEnvRevision to the template identity.
+return createRepoTemplate({ ...rest, buildEnvRevision });
 ```
