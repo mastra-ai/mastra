@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { PageHeader } from '@/ds/new/layout/page-header';
+import { cn } from '@/lib/utils';
 
 export interface SettingsLayoutProps {
   /** The page title. Leave it out when the app's own header already names the page. */
@@ -18,7 +19,14 @@ export interface SettingsLayoutProps {
  */
 export function SettingsLayout({ title, titleAccessory, action, header, children }: SettingsLayoutProps) {
   return (
-    <div data-slot="settings-layout" className="mx-auto grid w-full max-w-160 min-w-0 content-start gap-8 py-6">
+    // The content row takes the rest of the page's height, so a lone `EmptyState variant="fill"` centers in it.
+    <div
+      data-slot="settings-layout"
+      className={cn(
+        'mx-auto grid min-h-full w-full max-w-160 min-w-0 gap-8 py-6',
+        header != null || title != null ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
+      )}
+    >
       {header != null && (
         <div data-slot="settings-page-header" className="ps-2.5">
           {header}
@@ -31,7 +39,10 @@ export function SettingsLayout({ title, titleAccessory, action, header, children
           {action != null && <PageHeader.Action>{action}</PageHeader.Action>}
         </PageHeader>
       )}
-      <div data-slot="settings-layout-content" className="grid min-w-0 gap-7">
+      <div
+        data-slot="settings-layout-content"
+        className="grid min-w-0 content-start gap-7 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch"
+      >
         {children}
       </div>
     </div>

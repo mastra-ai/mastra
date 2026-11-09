@@ -28,6 +28,7 @@ export function MemorySettings({
   if (providersKnown && !anyConnected) {
     return (
       <EmptyState
+        variant="fill"
         as="h2"
         iconSlot={<Brain />}
         titleSlot="No models configured"
