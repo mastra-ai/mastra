@@ -215,10 +215,9 @@ export class KnowledgeScopeRuntime {
   }
 
   /**
-   * {@link materializeScope} for each address in turn (a write-run start's principals), deciding from
-   * one scope lookup which need a store call. A scope that exists, has its template children, and
-   * needs no new `belongsTo` link only gets the warnings the store path would give. Declarations with
-   * template pages always take the store path, which restores missing pages.
+   * {@link materializeScope} for each address in turn (a write-run start's principals), reading
+   * scopes from one lookup. `#materialize` skips the store call for a scope that exists, needs no new
+   * `belongsTo` link, has its child scopes and declares no template pages; warnings fire as before.
    */
   async materializeScopes(
     addresses: readonly string[],
