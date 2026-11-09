@@ -167,6 +167,24 @@ describe('computer tool calls run in model order', () => {
     });
   }
 
+  it('orders computer calls from an opted-in sandbox resolver', async () => {
+    const previous = process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+    process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+    try {
+      const log: string[] = [];
+      const workspace = new Workspace({
+        sandbox: async () => sandbox(recordingComputer(log), [300, 150, 0]),
+        computerTools: 'resolve',
+        tools: computerToolsConfig(false),
+      });
+      await run(agentWith(workspace, CLICK_TYPE_PRESS), 'stream');
+      expect(log).toEqual(['leftClick', '/leftClick', 'type', '/type', 'press', '/press']);
+    } finally {
+      if (previous === undefined) delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+      else process.env.MASTRA_EXPERIMENTAL_COMPUTER = previous;
+    }
+  });
+
   it('runs computer-wait and the post-action screenshot before the next action', async () => {
     expect(DEFAULT_SCREENSHOT_AFTER_ACTION).toBe(true);
     expect(DEFAULT_SCREENSHOT_DELAY_MS).toBe(500);
