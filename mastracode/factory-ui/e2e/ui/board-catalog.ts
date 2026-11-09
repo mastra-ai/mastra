@@ -53,3 +53,62 @@ export const builtinBoardCatalog: BoardCatalogResponse = {
     },
   ],
 };
+
+function workingPhase(
+  id: string,
+  name: string,
+  context: string,
+  nextPhases: string[],
+  extra: Partial<InstalledBoardInfo['phases'][number]> = {},
+): InstalledBoardInfo['phases'][number] {
+  return {
+    id,
+    name,
+    title: name,
+    kind: 'working',
+    context,
+    role: context,
+    autoStart: false,
+    nextPhases,
+    transitions: [],
+    ...extra,
+  };
+}
+
+/** The built-in Work board as the catalog serves it today: one `work` context from Planning to PR review. */
+export const workBoard: InstalledBoardInfo = {
+  id: 'work',
+  name: 'Work',
+  title: 'Work',
+  initialPhase: 'intake',
+  phases: [
+    {
+      id: 'intake',
+      name: 'Intake',
+      title: 'Intake',
+      kind: 'resting',
+      nextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
+      transitions: [],
+    },
+    workingPhase('triage', 'Triage', 'triage', ['intake', 'planning', 'done', 'canceled']),
+    workingPhase('planning', 'Planning', 'work', ['execute', 'triage', 'intake', 'done', 'canceled'], {
+      exitTool: { id: 'submit_plan', autoApprove: false },
+    }),
+    workingPhase('execute', 'Building', 'work', ['review', 'planning', 'done', 'canceled']),
+    workingPhase('review', 'Review', 'work', ['execute', 'intake', 'done', 'canceled']),
+    workingPhase('pr-review', 'PR review', 'work', ['intake', 'done', 'canceled']),
+    { id: 'done', name: 'Done', title: 'Done', kind: 'terminal', nextPhases: ['pr-review'], transitions: [] },
+    {
+      id: 'canceled',
+      name: 'Canceled',
+      title: 'Canceled',
+      kind: 'terminal',
+      nextPhases: ['intake', 'pr-review'],
+      transitions: [],
+    },
+  ],
+};
+
+export const workBoardCatalog: BoardCatalogResponse = {
+  boards: [workBoard, builtinBoardCatalog.boards[1]],
+};

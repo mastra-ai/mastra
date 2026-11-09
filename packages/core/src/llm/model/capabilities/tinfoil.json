@@ -18,22 +18,10 @@
     "kimi-k3-1-pro"
   ],
   "reasoning": {
-    "deepseek-v4-1-flash": [
+    "gemma4-31b": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-oss-safeguard-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "kimi-k3-1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "glm-5-3": [
@@ -42,10 +30,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gemma4-31b": [
+    "kimi-k3": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "kimi-k3-1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "gpt-oss-120b": [
@@ -54,10 +54,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "kimi-k3": [
+    "gpt-oss-safeguard-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ]
   }

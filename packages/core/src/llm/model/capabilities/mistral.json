@@ -88,30 +88,6 @@
     "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "zai-glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "deepseek-v4-1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "mistral-large-4-0-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "zai-glm-5-3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "mistral-medium-latest": [
       {
         "type": "effort",
@@ -124,16 +100,28 @@
         "values": ["none", "high"]
       }
     ],
-    "glm-5-2": [
+    "mistral-large-4-0-8": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "magistral-medium-latest": [
+    "deepseek-v4-1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "mistral-small-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "zai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-glm-5-3": [
@@ -142,7 +130,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "mistral-medium-2604": [
+    "mistral-small-2603": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -154,13 +142,25 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "mistral-small-2603": [
+    "glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "zai-glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "mistral-medium-2604": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "mistral-small-latest": [
+    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
