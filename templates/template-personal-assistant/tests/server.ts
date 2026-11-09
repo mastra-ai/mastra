@@ -57,7 +57,9 @@ process.on('message', async (message: { requestId: string; operation: string; in
       await mastra.scheduler!.tick();
       result = true;
     } else if (operation === 'publish') {
-      const row = await store!.getSchedule(String(input.id));
+      const row = input.target
+        ? { id: String(input.id), target: input.target }
+        : await store!.getSchedule(String(input.id));
       await mastra.pubsub.publish('agent-schedules', {
         type: 'agent-schedule.fire',
         runId: String(input.claimId),

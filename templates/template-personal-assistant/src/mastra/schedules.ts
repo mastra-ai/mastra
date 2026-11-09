@@ -42,11 +42,10 @@ export const scheduleTiming = timingInput.transform((input, context) => {
   try {
     if (input.kind === 'cron') {
       validateCron(input.cron, input.timezone);
-      computeNextFireAt(input.cron, { timezone: input.timezone });
       return { cron: input.cron, timezone: input.timezone };
     }
     const instant = Date.parse(input.date);
-    if (!Number.isFinite(instant) || instant <= Date.now()) throw new Error('Choose a valid future date.');
+    if (!Number.isFinite(instant)) throw new Error('Choose a valid calendar date.');
     const local = input.date.slice(0, 19);
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: input.timezone,
@@ -66,7 +65,7 @@ export const scheduleTiming = timingInput.transform((input, context) => {
       );
     const cron = `${part('second')} ${part('minute')} ${part('hour')} ${part('day')} ${part('month')} * ${part('year')}`;
     validateCron(cron, input.timezone);
-    if (computeNextFireAt(cron, { timezone: input.timezone }) !== instant)
+    if (computeNextFireAt(cron, { timezone: input.timezone, after: instant - 1000 }) !== instant)
       throw new Error(
         'The native scheduler cannot represent this offset choice. Choose a different explicit date and offset.',
       );
@@ -79,6 +78,14 @@ export const scheduleTiming = timingInput.transform((input, context) => {
     return z.NEVER;
   }
 });
+
+function requireFuture(timing: z.output<typeof scheduleTiming>) {
+  try {
+    computeNextFireAt(timing.cron, { timezone: timing.timezone });
+  } catch {
+    throw new Error('Choose schedule timing with a valid future occurrence.');
+  }
+}
 
 const detail =
   'Dispatch is best effort, not proof of completed work. Active or approval-blocked conversations can skip checks. Missed checks may not replay. A completed cadence does not mean the responsibility succeeded. Inspect conversation results and provider references before repeating an uncertain action.';
@@ -148,34 +155,44 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
     if (!instance) throw new Error('Schedules require the assistant runtime.');
     return instance;
   };
-  async function thread(threadId?: string, resourceId?: string) {
-    if (!threadId || resourceId !== config.ownerId) throw new Error('Schedules require an owner-backed conversation.');
-    const stored = await (await getAgent().getMemory())?.getThreadById({ threadId });
-    if (!stored || stored.resourceId !== config.ownerId)
-      throw new Error('The schedule conversation does not belong to this owner.');
+  async function findThread(threadId?: string, resourceId?: string) {
+    if (!threadId || resourceId !== config.ownerId) return null;
+    const memory = await getAgent().getMemory();
+    if (!memory) throw new Error('Schedule memory is unavailable.');
+    const stored = await memory.getThreadById({ threadId });
+    if (!stored || stored.resourceId !== config.ownerId) return null;
     return threadId;
   }
-  async function owned(schedule: AnySchedule | null): Promise<AgentSchedule> {
+  async function thread(threadId?: string, resourceId?: string) {
+    const value = await findThread(threadId, resourceId);
+    if (!value) throw new Error('Schedules require an owner-backed conversation.');
+    return value;
+  }
+  async function owned(schedule: AnySchedule | null): Promise<AgentSchedule | null> {
     if (
       !schedule ||
       schedule.agentId !== getAgent().id ||
       schedule.resourceId !== config.ownerId ||
       schedule.metadata?.personalAssistant !== true
     )
-      throw new Error('Schedule not found in this assistant owner scope.');
-    await thread(schedule.threadId, schedule.resourceId);
+      return null;
+    if (!(await findThread(schedule.threadId, schedule.resourceId))) return null;
     return schedule as AgentSchedule;
+  }
+  async function requireOwned(schedule: AnySchedule | null) {
+    const value = await owned(schedule);
+    if (!value) throw new Error('Schedule not found in this assistant owner scope.');
+    return value;
   }
   async function canRead(scheduleId: string) {
     try {
-      await owned(await mastra().schedules.get(scheduleId));
-      return true;
+      return (await owned(await mastra().schedules.get(scheduleId))) !== null;
     } catch {
-      return false;
+      throw new Error('Schedule storage is unavailable.');
     }
   }
   async function inspect(schedule: AnySchedule) {
-    const value = await owned(schedule);
+    const value = await requireOwned(schedule);
     const store = await mastra().getStorage()?.getStore('schedules');
     return {
       schedule: value,
@@ -188,6 +205,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
       if (agentId !== getAgent().id) return null;
       try {
         const value = await owned(await mastra().schedules.get(schedule.id));
+        if (!value) return null;
         const suspended = await getAgent().listSuspendedRuns({ threadId: value.threadId, resourceId: config.ownerId });
         if (suspended.runs.length) return null;
         return {
@@ -212,7 +230,13 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
           },
         };
       } catch {
-        return null;
+        mastra().getLogger().warn('Schedule preparation failed.', {
+          category: 'schedule-preparation',
+          scheduleId: schedule.id,
+          triggerKind: trigger.kind,
+          actualFireAt: trigger.firedAt.toISOString(),
+        });
+        throw new Error('Schedule preparation failed: schedule dependency unavailable.');
       }
     },
   };
@@ -234,7 +258,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
           ),
         );
         const schedules: AgentSchedule[] = [];
-        for (const value of all.flat()) if (await canRead(value.id)) schedules.push(await owned(value));
+        for (const value of all.flat()) if (await canRead(value.id)) schedules.push(await requireOwned(value));
         return { schedules, detail };
       }
       if (input.action === 'create') {
@@ -247,6 +271,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
             ...(await inspect(existing)),
             detail: `Existing identified request preserved. Use update to change it. ${detail}`,
           };
+        requireFuture(input.timing);
         const { cron, timezone, ...timing } = input.timing;
         return inspect(
           await service.create({
@@ -264,7 +289,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
           }),
         );
       }
-      const value = await owned(await service.get(input.scheduleId));
+      const value = await requireOwned(await service.get(input.scheduleId));
       if (input.action === 'inspect') return inspect(value);
       if (input.action === 'cancel') {
         await service.delete(value.id);
@@ -283,6 +308,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
         };
       if (input.action === 'pause') return inspect(await service.pause(value.id));
       if (input.action === 'resume') return inspect(await service.resume(value.id));
+      requireFuture(input.timing);
       const { cron, timezone, ...timing } = input.timing;
       return inspect(
         await service.update(value.id, {

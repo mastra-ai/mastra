@@ -82,28 +82,37 @@ export function createAssistantServer(
         c.get('requestContext').set(MASTRA_RESOURCE_ID_KEY, config.ownerId);
         const schedulePath = c.req.path.match(/\/schedules(?:\/(.*))?$/);
         if (schedulePath) {
-          if (c.req.method !== 'GET')
-            return c.json({ error: 'Manage schedules through the assistant conversation.' }, 403);
-          const segments = (schedulePath[1] ?? '').split('/').filter(Boolean);
-          if (segments.length > 2 || (segments.length === 2 && segments[1] !== 'triggers'))
-            return c.json({ error: 'Schedule route not found.' }, 404);
-          if (segments[0]) {
-            let scheduleId: string;
-            try {
-              scheduleId = decodeURIComponent(segments[0]);
-            } catch {
-              return c.json({ error: 'Schedule not found.' }, 404);
+          try {
+            if (c.req.method !== 'GET')
+              return c.json({ error: 'Manage schedules through the assistant conversation.' }, 403);
+            const segments = (schedulePath[1] ?? '').split('/').filter(Boolean);
+            if (segments.length > 2 || (segments.length === 2 && segments[1] !== 'triggers'))
+              return c.json({ error: 'Schedule route not found.' }, 404);
+            if (segments[0]) {
+              let scheduleId: string;
+              try {
+                scheduleId = decodeURIComponent(segments[0]);
+              } catch {
+                return c.json({ error: 'Schedule not found.' }, 404);
+              }
+              if (!(await schedules.canRead(scheduleId))) return c.json({ error: 'Schedule not found.' }, 404);
             }
-            if (!(await schedules.canRead(scheduleId))) return c.json({ error: 'Schedule not found.' }, 404);
+            await next();
+            if (c.res.status >= 500) {
+              c.res = c.json({ error: 'Schedule storage is unavailable. Try again after recovery.' }, 503);
+              return;
+            }
+            if (!segments[0] && c.res.ok) {
+              const body = await c.res.clone().json();
+              const visible = [];
+              for (const value of body.schedules ?? []) if (await schedules.canRead(value.id)) visible.push(value);
+              c.res = c.json({ ...body, schedules: visible });
+            }
+            return;
+          } catch {
+            c.res = c.json({ error: 'Schedule storage is unavailable. Try again after recovery.' }, 503);
+            return c.res;
           }
-          await next();
-          if (!segments[0] && c.res.ok) {
-            const body = await c.res.clone().json();
-            const visible = [];
-            for (const value of body.schedules ?? []) if (await schedules.canRead(value.id)) visible.push(value);
-            c.res = c.json({ ...body, schedules: visible });
-          }
-          return;
         }
         if (c.req.method === 'POST' && c.req.path.includes('/agents/') && c.req.raw.body) {
           let value: unknown;

@@ -8,6 +8,7 @@ import { once } from 'node:events';
 import { parseEnv } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { createAssistant } from '../src/mastra/assistant';
@@ -1571,6 +1572,310 @@ import {
 } from './schedules';
 import type { Schedule } from '@mastra/core/storage';
 import type { AgentSchedule } from '@mastra/core/schedules';
+
+test(
+  'schedule infrastructure failures remain distinguishable from intentional skips',
+  { timeout: 180000 },
+  async () => {
+    const fixture = await progressFixture();
+    const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-fault-'));
+    let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+    let database: DatabaseSync | undefined;
+    const hidden = new Set<string>();
+    const hide = (table: string) => {
+      database!.exec(`ALTER TABLE "${table}" RENAME TO "${table}_fault"`);
+      hidden.add(table);
+    };
+    const restore = () => {
+      for (const table of hidden) database!.exec(`ALTER TABLE "${table}_fault" RENAME TO "${table}"`);
+      hidden.clear();
+    };
+    try {
+      app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+      const value = await createMonitor(app, 'schedule-fault', 'fault');
+      const row = await nativeSchedule<Schedule>(app, 'row', { id: value.id });
+      database = new DatabaseSync(join(dataDir, 'assistant.db'));
+      const before = fixture.models.length;
+      const records = () =>
+        database!.prepare('SELECT * FROM mastra_schedule_triggers WHERE schedule_id = ?').all(value.id);
+      const publish = (time: number, id = value.id, target = row.target) =>
+        nativeSchedule(app!, 'publish', { id, target, claimId: `outage-${time}`, scheduledFireAt: time });
+      const httpUnavailable = async () => {
+        for (const path of [`/schedules/${value.id}`, `/schedules/${value.id}/triggers`, '/schedules']) {
+          const response = await fetch(`${app!.url}/api${path}`);
+          const body = await response.text();
+          assert.equal(response.status, 503, body);
+          assert.match(body, /Schedule storage is unavailable/);
+          assert.doesNotMatch(body, /SQLITE|mastra_|assistant.db|file:|fault/);
+        }
+      };
+      // Actual SQLite faults exercise ownership, suspension discovery and schedule lookup independently.
+      for (const [index, table] of ['mastra_threads', 'mastra_workflow_snapshot', 'mastra_schedules'].entries()) {
+        const time = 101 + index;
+        hide(table);
+        await publish(time);
+        const triggers = await eventually(
+          async () => records(),
+          rows => rows.some(record => record.scheduled_fire_at === time),
+        );
+        assert.equal(triggers.find(record => record.scheduled_fire_at === time)!.outcome, 'failed');
+        assert.match(
+          String(triggers.find(record => record.scheduled_fire_at === time)!.error),
+          /Schedule preparation failed/,
+        );
+        if (table !== 'mastra_workflow_snapshot') await httpUnavailable();
+        restore();
+        assert.equal(fixture.models.length, before, `No model dispatch during ${table} outage.`);
+        assert.equal(fixture.providerCalls.length, 0);
+      }
+      const outageDiagnostics: string[] = [];
+      // The outcome table can fail independently, or together with all preparation dependencies.
+      for (const [index, tables] of [
+        ['mastra_threads', 'mastra_schedule_triggers'],
+        ['mastra_threads', 'mastra_workflow_snapshot', 'mastra_schedules', 'mastra_schedule_triggers'],
+      ].entries()) {
+        const outputStart = app.output.length;
+        for (const table of tables) hide(table);
+        await publish(201 + index);
+        await eventually(
+          async () => app!.output.slice(outputStart),
+          output => output.includes('Schedule outcome could not be persisted.'),
+        );
+        const diagnostic = app.output.slice(outputStart);
+        assert.match(diagnostic, /schedule-outcome-recording/);
+        assert.match(diagnostic, new RegExp(value.id));
+        assert.match(diagnostic, new RegExp(`outage-${201 + index}`));
+        outageDiagnostics.push(diagnostic);
+        await httpUnavailable();
+        restore();
+        assert.equal(
+          records().some(record => record.scheduled_fire_at === 201 + index),
+          false,
+          'Recording failure has no persisted outcome; no success claim or automatic retry.',
+        );
+        assert.equal(fixture.models.length, before);
+      }
+      hide('mastra_schedule_triggers');
+      const triggerFailure = await fetch(`${app.url}/api/schedules/${value.id}/triggers`);
+      assert.equal(triggerFailure.status, 503);
+      assert.deepEqual(await triggerFailure.json(), {
+        error: 'Schedule storage is unavailable. Try again after recovery.',
+      });
+      restore();
+      await json(await app.request('/schedules/missing-schedule'), 404);
+      for (const [index, overrides] of [
+        { threadId: 'missing-conversation' },
+        { resourceId: 'foreign-owner' },
+        { metadata: {} },
+      ].entries()) {
+        const hiddenSchedule: AgentSchedule = await nativeSchedule<AgentSchedule>(app, 'create', {
+          id: `intentional-skip-${index}`,
+          agentId: 'personal-assistant',
+          cron: recurring.cron,
+          timezone: recurring.timezone,
+          resourceId: 'local-owner',
+          threadId: 'schedule-fault',
+          prompt: 'private-source-marker',
+          metadata: { personalAssistant: true },
+          ...overrides,
+        });
+        const native = await nativeSchedule<Schedule>(app, 'row', { id: hiddenSchedule.id });
+        await publish(301 + index, hiddenSchedule.id, native.target);
+        const trigger: ReturnType<ReturnType<DatabaseSync['prepare']>['all']> = await eventually(
+          async () =>
+            database!.prepare('SELECT * FROM mastra_schedule_triggers WHERE schedule_id = ?').all(hiddenSchedule.id),
+          rows => rows.length === 1,
+        );
+        assert.equal(trigger[0]!.outcome, 'skipped');
+        await json(await app.request(`/schedules/${hiddenSchedule.id}`), 404);
+      }
+      assert.equal(fixture.models.length, before);
+      // A real pending approval remains a deliberate skip with the original arguments untouched.
+      const approval = await createMonitor(app, 'fault-approval', 'approval');
+      await nativeSchedule(app, 'run', { id: approval.id });
+      const waiting = await pending(app, 'fault-approval');
+      const modelCount = fixture.models.length;
+      const providerCount = fixture.providerCalls.length;
+      await nativeSchedule(app, 'run', { id: approval.id });
+      await eventually(
+        () => occurrences(app!, approval.id),
+        rows => rows.some(record => record.outcome === 'skipped'),
+      );
+      assert.deepEqual(await pending(app, 'fault-approval'), waiting);
+      assert.equal(fixture.models.length, modelCount);
+      assert.equal(fixture.providerCalls.length, providerCount);
+      assert.equal(
+        (await schedules(app)).some(schedule => schedule.id === value.id),
+        true,
+        'Recovered storage exposes the real owned schedule.',
+      );
+      await json(
+        await app.request(`/agents/${agent}/decline-tool-call-generate`, 'POST', {
+          runId: waiting.runId,
+          toolCallId: waiting.toolCalls[0]!.toolCallId,
+        }),
+      );
+      // Keep this strict: the native LibSQL retry closure retains its default logger.
+      // A supported dependency repair is required before this privacy contract can pass.
+      assert.doesNotMatch(
+        outageDiagnostics.join('\n'),
+        /SQLITE|mastra_threads|mastra_schedules|mastra_workflow_snapshot|mastra_schedule_triggers|assistant.db|file:|SELECT|ALTER|stack/,
+      );
+    } finally {
+      restore();
+      database?.close();
+      await app?.stop();
+      await fixture.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test('identified schedule creation survives elapsed timing and restart', { timeout: 120000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-replay-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    const date = new Date(Math.ceil((Date.now() + 6000) / 1000) * 1000).toISOString().replace('.000Z', 'Z');
+    const instant = new Date(date);
+    const finite = `${instant.getUTCSeconds()} ${instant.getUTCMinutes()} ${instant.getUTCHours()} ${instant.getUTCDate()} ${instant.getUTCMonth() + 1} * ${instant.getUTCFullYear()}`;
+    const requests: { thread: string; input: Record<string, unknown>; value: AgentSchedule; status: string }[] = [];
+    for (const [index, status] of ['paused', 'completed', 'active'].entries()) {
+      const thread = `schedule-replay-${status}`;
+      const input = {
+        action: 'create',
+        requestId: 'lost-response',
+        name: 'Recover existing request',
+        prompt: JSON.stringify({ missing: 'confirmed recovery evidence' }),
+        timing: index === 1 ? { kind: 'cron', cron: finite, timezone: 'UTC' } : { kind: 'once', date, timezone: 'UTC' },
+      };
+      await scheduleTurn(app, thread, input);
+      const value = (await schedules(app)).find(schedule => schedule.threadId === thread)!;
+      assert.ok(value);
+      if (status === 'paused') await scheduleTurn(app, thread, { action: 'pause', scheduleId: value.id });
+      if (status === 'active')
+        await scheduleTurn(app, thread, {
+          action: 'update',
+          scheduleId: value.id,
+          name: 'Explicitly updated',
+          prompt: 'Keep current content',
+          timing: recurring,
+        });
+      requests.push({ thread, input, value, status });
+    }
+    await delay(Math.max(0, Date.parse(date) - Date.now() + 100));
+    await nativeSchedule(app, 'tick');
+    await eventually(
+      () => schedules(app!, 'completed'),
+      rows => rows.some(row => row.id === requests[1]!.value.id),
+    );
+    await eventually(
+      () => history(app!, requests[1]!.thread),
+      text => text.includes('confirmed recovery evidence'),
+    );
+    const persisted = [];
+    for (const request of requests)
+      persisted.push({
+        row: await nativeSchedule<Schedule>(app, 'row', { id: request.value.id }),
+        triggers: await occurrences(app, request.value.id),
+      });
+    await app.stop();
+    app = undefined;
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    for (const [index, request] of requests.entries()) {
+      const replay = await scheduleTurn(app, request.thread, request.input);
+      assert.match(replay.text, /Existing identified request preserved/);
+      assert.match(replay.text, /Use update to change it/);
+      const after: Schedule = await nativeSchedule<Schedule>(app, 'row', { id: request.value.id });
+      assert.equal(after.status, request.status);
+      assert.deepEqual(after, persisted[index]!.row);
+      assert.deepEqual(await occurrences(app, request.value.id), persisted[index]!.triggers);
+    }
+    assert.equal(fixture.providerCalls.length, 0);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('schedule replay preserves existing content and rejects expired new requests', { timeout: 120000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-replay-reject-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, { ...fixture.env, TEST_SEED_FOREIGN: 'true' });
+    const value = await createMonitor(app, 'replay-validation', 'stable');
+    const persisted = await nativeSchedule(app, 'row', { id: value.id });
+    const triggers = await occurrences(app, value.id);
+    const expired = [
+      { kind: 'once', date: '2020-01-01T10:00:00Z', timezone: 'UTC' },
+      { kind: 'cron', cron: '0 0 9 1 1 * 2020', timezone: 'UTC' },
+    ];
+    const create = { action: 'create', requestId: 'stable', name: 'Changed name', prompt: 'Changed content' };
+    for (const timing of [recurring, ...expired]) {
+      const replay = await scheduleTurn(app, 'replay-validation', { ...create, timing });
+      assert.match(replay.text, /Existing identified request preserved/);
+      assert.deepEqual(await nativeSchedule(app, 'row', { id: value.id }), persisted);
+      assert.deepEqual(await occurrences(app, value.id), triggers);
+    }
+    for (const timing of expired) {
+      for (const input of [
+        { ...create, requestId: 'expired-new', timing },
+        { action: 'update', scheduleId: value.id, timing },
+      ]) {
+        const rejected = await scheduleTurn(app, 'replay-validation', input);
+        assert.match(rejected.text, /valid future occurrence/);
+        assert.deepEqual(await nativeSchedule(app, 'row', { id: value.id }), persisted);
+        assert.deepEqual(await occurrences(app, value.id), triggers);
+        assert.deepEqual(
+          (await schedules(app)).map(schedule => schedule.id),
+          [value.id],
+        );
+      }
+    }
+    for (const timing of [
+      { kind: 'once', date: '2028-02-30T10:00:00Z', timezone: 'UTC' },
+      { kind: 'once', date: '2028-01-01T10:00:00+01:00', timezone: 'UTC' },
+      { kind: 'cron', cron: 'bad cadence', timezone: 'UTC' },
+      { ...recurring, timezone: 'Invalid/Zone' },
+    ]) {
+      const rejected = await scheduleTurn(app, 'replay-validation', { ...create, timing });
+      assert.match(rejected.text, /validation failed/);
+      assert.deepEqual(await nativeSchedule(app, 'row', { id: value.id }), persisted);
+    }
+    await json(
+      await app.request(`/agents/${agent}/generate`, 'POST', {
+        messages: [
+          {
+            role: 'user',
+            content: JSON.stringify({ calls: [[{ name: 'schedule', args: { ...create, timing: recurring } }]] }),
+          },
+        ],
+        memory: { thread: 'foreign-thread' },
+      }),
+      403,
+    );
+    assert.deepEqual(await nativeSchedule(app, 'row', { id: value.id }), persisted);
+    await scheduleTurn(app, 'replay-validation', { action: 'cancel', scheduleId: value.id, reason: 'owner-request' });
+    assert.equal(await nativeSchedule(app, 'row', { id: value.id }), null);
+    await json(await app.request(`/schedules/${value.id}/triggers`), 404);
+    const expiredReplay = await scheduleTurn(app, 'replay-validation', { ...create, timing: expired[0] });
+    assert.match(expiredReplay.text, /valid future occurrence/);
+    assert.equal(
+      await nativeSchedule(app, 'row', { id: value.id }),
+      null,
+      'Deleted expired requests cannot resurrect; there is no tombstone ledger.',
+    );
+    assert.deepEqual(await schedules(app), []);
+    assert.equal(fixture.providerCalls.length, 0);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
 
 test('schedule lifecycle persists timing and owner scope across restart', { timeout: 120000 }, async () => {
   const fixture = await progressFixture();

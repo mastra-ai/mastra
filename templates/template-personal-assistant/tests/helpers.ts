@@ -159,6 +159,9 @@ export async function startAssistant(dataDir: string, modelUrl: string, extraEnv
   }
   return {
     child,
+    get output() {
+      return output;
+    },
     url: `http://127.0.0.1:${port}`,
     async request(path: string, method = 'GET', body?: unknown, headers: Record<string, string> = {}) {
       const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {

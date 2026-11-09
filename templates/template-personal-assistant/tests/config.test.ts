@@ -222,11 +222,9 @@ test('schedule timing preserves explicit timezone dates and rejects calendar or 
     { kind: 'once', date: `${year}-01-10T10:00:00`, timezone: 'UTC' },
     { kind: 'once', date: gap, timezone: 'America/New_York' },
     { kind: 'once', date: `${year}-01-10T10:00:00+01:00`, timezone: 'UTC' },
-    { kind: 'once', date: '2020-01-01T10:00:00Z', timezone: 'UTC' },
     { kind: 'cron', cron: '* * * * *', timezone: '+01:00' },
     { kind: 'cron', cron: '* * * * *', timezone: 'Invalid/Zone' },
     { kind: 'cron', cron: 'invalid cron', timezone: 'UTC' },
-    { kind: 'cron', cron: '0 0 9 1 1 * 2020', timezone: 'UTC' },
   ])
     assert.equal(scheduleTiming.safeParse(input).success, false, JSON.stringify(input));
   const date = `${year}-01-10T10:15:00-03:00`;

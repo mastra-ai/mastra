@@ -8,7 +8,7 @@ import type { JudgeModel } from './objectives';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { createObservability } from './observability';
+import { AssistantLogger, createObservability } from './observability';
 import type { AssistantConfig } from './config';
 import { createConnections, connectedContentProcessor } from './connect';
 import { createScheduleOperations } from './schedules';
@@ -102,6 +102,7 @@ ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No sc
     },
   });
   return new Mastra({
+    logger: new AssistantLogger(),
     agents: { personalAssistant },
     storage,
     schedules: schedules.hooks,
