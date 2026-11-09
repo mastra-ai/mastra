@@ -15,8 +15,8 @@ rules: [
 
 // After — keep each role's path restriction (admins still limited to /api/*)
 authorize: async (path, method, user) =>
-  (path.startsWith('/api/') && user.role === 'admin') ||
-  (path.startsWith('/api/reports/') && user.role === 'analyst'),
+  (/^\/api\//i.test(path) && user.role === 'admin') ||
+  (/^\/api\/reports\//i.test(path) && user.role === 'analyst'),
 ```
 
 Async conditions are now awaited, so a `condition` that resolves to `false` or rejects denies access.
