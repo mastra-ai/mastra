@@ -398,6 +398,66 @@ describe('Computers', () => {
     expect(writer.custom).not.toHaveBeenCalled();
   });
 
+  it('does not publish an attachment destroyed while its durable pointer is saving', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const computers = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers });
+    const previous = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    const otherContext = { agent: { resourceId: 'resource', threadId: 'other-thread' } } as any;
+    const next = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, otherContext);
+    const setState = storage.stores.threadState!.setState.bind(storage.stores.threadState);
+    let releaseSave!: () => void;
+    let blocked = false;
+    const saveStarted = new Promise<void>(resolve => {
+      storage.stores.threadState!.setState = vi.fn(async input => {
+        if (input.threadId === 'thread' && !blocked) {
+          blocked = true;
+          resolve();
+          await new Promise<void>(release => (releaseSave = release));
+        }
+        await setState(input);
+      });
+    });
+    const writer = { custom: vi.fn(async () => {}) };
+
+    const attaching = (computers.tools().mastra_workspace_computer_attach as any).execute(
+      { id: next.computer.id },
+      { ...context, writer },
+    );
+    await saveStarted;
+    await (computers.tools().mastra_workspace_computer_destroy as any).execute({ id: next.computer.id }, otherContext);
+    releaseSave();
+
+    await expect(attaching).resolves.toBe('computer not found');
+    await expect(
+      computers.viewer(previous.computer.id, { resourceId: 'resource', threadId: 'thread' }),
+    ).resolves.toMatchObject({ url: 'https://viewer.test/sandbox-1' });
+    expect(writer.custom).not.toHaveBeenCalled();
+  });
+
+  it('treats rejected persistent reattachment as not attached', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: first });
+    await (first.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    const failingProvider = provider();
+    failingProvider.create = vi.fn(input => {
+      const next = sandbox(input.sandboxId);
+      next.start = vi.fn(async () => {
+        throw new Error('reattach failed');
+      });
+      return next;
+    });
+    const second = new Computers({ provider: failingProvider, secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: second });
+
+    await expect((second.tools().mastra_workspace_computer_snapshot as any).execute({}, context)).resolves.toBe(
+      'no computer attached — call mastra_workspace_computer_attach or mastra_workspace_computer_create',
+    );
+  });
+
   it('rolls back persistent creation when the attachment catalog update fails', async () => {
     const storage = new InMemoryStore();
     const computerStorage = new InMemoryComputersStorage();

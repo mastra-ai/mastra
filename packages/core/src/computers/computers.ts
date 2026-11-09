@@ -529,6 +529,7 @@ export class Computers implements MastraComputers {
         await sandbox.destroy().catch(() => {});
         throw error;
       }
+      // Durable commit point: persist, publish locally, release previous hands, then emit.
       this.#computers.set(entry.id, entry);
       this.#attach(scope, entry);
       await this.#emit(context, entry, scope.threadId, 'attached');
@@ -548,7 +549,15 @@ export class Computers implements MastraComputers {
         return isReattachFailure(error) ? NOT_FOUND : UNAVAILABLE;
       }
       if (entry.destroyed) return NOT_FOUND;
+      const previousId = this.#attachments.get(scope.key);
+      const previous = previousId ? this.#computers.get(previousId) : undefined;
       await this.#persistAttachment(scope, entry);
+      if (entry.destroyed) {
+        if (previous) await this.#persistAttachment(scope, previous);
+        else await this.#deleteAttachment(scope);
+        return NOT_FOUND;
+      }
+      // Durable commit point: persist, publish locally, release previous hands, then emit.
       this.#attach(scope, entry);
       await this.#emit(context, entry, scope.threadId, 'attached');
       return { computer: this.#describe(entry, 'attached') };
@@ -822,7 +831,11 @@ export class Computers implements MastraComputers {
       };
       await this.#persistAttachment(scope, entry);
     }
-    await entry.ready;
+    try {
+      await entry.ready;
+    } catch {
+      return undefined;
+    }
     this.#attachments.set(scope.key, entry.id);
     return entry;
   }
