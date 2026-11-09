@@ -70,7 +70,10 @@ export function boardFlow(board: InstalledBoard | undefined): FactoryRuleBoardFl
     (phase.tools ?? []).some(granted => granted === tool);
   const pullRequestReview = entries.find(([, phase]) => grants(phase, 'factory_review_source'))?.[0];
   const selfReview = entries.find(
-    ([key, phase]) => key !== pullRequestReview && grants(phase, 'factory_record_review_verdict'),
+    ([key, phase]) =>
+      key !== pullRequestReview &&
+      grants(phase, 'factory_record_review_verdict') &&
+      !grants(phase, 'factory_review_source'),
   )?.[0];
   const handoff = selfReview ?? pullRequestReview;
   const build = handoff
