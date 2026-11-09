@@ -2929,16 +2929,23 @@ export class DurableAgent<
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted?.snapshot;
       if (snapshot?.status === 'canceled') {
+        // Reserved before the publish, so concurrent rejections publish once; released
+        // if the publish fails, so the next rejection retries it.
         if (this.#canceledRunTerminals.has(runId)) return;
         this.#canceledRunTerminals.add(runId);
         if (this.#canceledRunTerminals.size > 1000) {
           this.#canceledRunTerminals.delete(this.#canceledRunTerminals.values().next().value!);
         }
-      } else if (snapshot?.status === 'suspended') {
-        await this.deleteRunSnapshots(runId);
-      } else {
+        try {
+          await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
+        } catch (error) {
+          this.#canceledRunTerminals.delete(runId);
+          throw error;
+        }
         return;
       }
+      if (snapshot?.status !== 'suspended') return;
+      await this.deleteRunSnapshots(runId);
       await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`Failed to delete snapshot of aborted suspended run ${runId}`, {
@@ -3416,18 +3423,19 @@ export class DurableAgent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    const fencedHere = agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub());
-    if (fencedHere || (await this.#isRunCanceledInStorage(runId))) {
-      // The fenced run can never continue, so the rejected caller must not find it in
-      // listSuspendedRuns() afterwards (#27619).
-      if (fencedHere) await this.#deleteFencedSuspendedRun(runId);
-      throw new MastraError({
+    const abortedRunError = () =>
+      new MastraError({
         id: 'AGENT_RESUME_ABORTED_RUN',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: `DurableAgent "${this.name}" cannot resume aborted run "${runId}".`,
         details: { agentName: this.name, runId },
       });
+    if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
+      // The fenced run can never continue, so the rejected caller must not find it in
+      // listSuspendedRuns() afterwards (#27619).
+      await this.#deleteFencedSuspendedRun(runId);
+      throw abortedRunError();
     }
     // Marked before the first await, so a second resume of the same tool call
     // fails fast even when both start in the same tick (#27365).
@@ -3447,6 +3455,8 @@ export class DurableAgent<
       releaseResumeMarker = release;
     }
     try {
+      // An abort on another server leaves the run canceled in storage.
+      if (await this.#isRunCanceledInStorage(runId)) throw abortedRunError();
       return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker);
     } catch (error) {
       releaseResumeMarker();

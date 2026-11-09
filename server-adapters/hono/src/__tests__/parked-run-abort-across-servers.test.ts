@@ -24,6 +24,24 @@ const users: Record<string, { id: string; resourceId: string }> = {
   bob: { id: 'bob', resourceId: 'bob' },
 };
 
+// A broker outage that rejects the next abort publish, then recovers.
+class FlakyPubSub extends EventEmitterPubSub {
+  constructor(
+    emitter: EventEmitter,
+    private faults: { failNextAbort: boolean },
+  ) {
+    super(emitter);
+  }
+
+  override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+    if (args[1].type === 'abort' && this.faults.failNextAbort) {
+      this.faults.failNextAbort = false;
+      throw new Error('broker unavailable');
+    }
+    return super.publish(...args);
+  }
+}
+
 let llm: LLMock;
 beforeAll(async () => {
   llm = new LLMock({ port: 0 });
@@ -53,6 +71,7 @@ describe('aborting a parked durable run across servers', () => {
     const bus = new EventEmitter();
     const storage = new InMemoryStore();
     const cache = new InMemoryServerCache();
+    const faults = { failNextAbort: false };
     let toolRuns = 0;
 
     async function startPeer() {
@@ -73,7 +92,7 @@ describe('aborting a parked durable run across servers', () => {
         logger: false,
         storage,
         cache,
-        pubsub: new EventEmitterPubSub(bus),
+        pubsub: new FlakyPubSub(bus, faults),
         agents: { agent: createDurableAgent({ agent: inner }), other: createDurableAgent({ agent: other }) },
         server: {
           auth: {
@@ -125,7 +144,7 @@ describe('aborting a parked durable run across servers', () => {
     const runId = text.match(/"runId":"([^"]+)"/)?.[1];
     if (!runId) throw new Error(`no runId in stream: ${text}`);
 
-    return { bus, executor, other, runId, storage, toolRuns: () => toolRuns };
+    return { bus, executor, faults, other, runId, storage, toolRuns: () => toolRuns };
   }
 
   async function abort(peer: { post: (path: string, body: unknown) => Promise<Response> }, runId: string) {
@@ -195,6 +214,34 @@ describe('aborting a parked durable run across servers', () => {
     const peerApproval = await other.post('approve-tool-call', { runId, toolCallId: 'call-fetch-1' });
     await peerApproval.text();
     expect({ status: peerApproval.status, toolRuns: toolRuns() }).toEqual({ status: 409, toolRuns: 0 });
+  });
+
+  it('closes an observer on the next refused approval when publishing the abort failed', async () => {
+    const { bus, executor, faults, runId, toolRuns } = await setup();
+    let published = 0;
+    await new EventEmitterPubSub(bus).subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      if (event.type === 'abort') published++;
+    });
+    const observed = await executor.post('observe', { runId });
+    expect(observed.status).toBe(200);
+    const reader = observed.body!.getReader();
+    const closed = (async () => {
+      for (;;) if ((await reader.read()).done) return true;
+    })();
+
+    await abort(executor, runId);
+    faults.failNextAbort = true;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const approved = await executor.post('approve-tool-call', { runId, toolCallId: 'call-fetch-1' });
+      await approved.text();
+      expect(approved.status).toBe(409);
+    }
+    expect(faults.failNextAbort).toBe(false);
+
+    const timeout = new Promise<false>(resolve => setTimeout(() => resolve(false), 2_000));
+    const ended = await Promise.race([closed, timeout]);
+    if (!ended) await reader.cancel();
+    expect({ ended, published, toolRuns: toolRuns() }).toEqual({ ended: true, published: 1, toolRuns: 0 });
   });
 
   it('denies another resource before disclosing that the run was aborted', async () => {
