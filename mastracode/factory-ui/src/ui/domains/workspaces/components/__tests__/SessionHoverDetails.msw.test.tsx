@@ -16,8 +16,10 @@ import {
   factoryId,
   projectRepositoryId,
   reviewName,
+  reviewRowName,
   reviewSessionId,
   workName,
+  workRowName,
   workSessionId,
 } from './fixtures/sessionHoverDetails';
 
@@ -89,8 +91,8 @@ async function setupSessionRows() {
 
   return {
     user,
-    workRow: await screen.findByRole('link', { name: workName }),
-    reviewRow: await screen.findByRole('link', { name: reviewName }),
+    workRow: await screen.findByRole('link', { name: workRowName }),
+    reviewRow: await screen.findByRole('link', { name: reviewRowName }),
   };
 }
 
@@ -151,7 +153,7 @@ describe('Workspace session hover details', () => {
       const user = userEvent.setup();
       renderSection();
 
-      await user.hover(await screen.findByRole('link', { name: workName }));
+      await user.hover(await screen.findByRole('link', { name: workRowName }));
 
       const card = await screen.findByLabelText(`${workName} session details`);
       expect(await within(card).findByRole('img', { name: /Ada Lovelace took over/ })).toBeInTheDocument();
@@ -248,7 +250,7 @@ describe('Workspace session hover details', () => {
         <SidebarProvider storageKey="session-hover-test">{section}</SidebarProvider>
       ));
 
-      const workRow = await screen.findByRole('link', { name: workName });
+      const workRow = await screen.findByRole('link', { name: workRowName });
       await waitForMutationsIdle(client);
       await user.hover(workRow);
       await user.tab();

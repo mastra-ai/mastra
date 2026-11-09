@@ -13,6 +13,7 @@ import {
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { ConnectionsSection } from './ConnectionsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
+import { ConnectToolsSection } from './ConnectToolsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
@@ -72,6 +73,7 @@ export function SettingsPanel() {
         />
       )}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
+      {section === 'tools' && <ConnectToolsSection />}
       {section === 'behavior' && (
         <BehaviorSettings
           settings={settings}

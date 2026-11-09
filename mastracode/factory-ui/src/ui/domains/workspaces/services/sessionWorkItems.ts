@@ -4,6 +4,8 @@ import { isPullRequestSource } from '../../factory/services/workItems';
 
 export interface SessionWorkItem {
   item: WorkItem;
+  /** The session context the card filed this session under (`triage`, `work`, …). */
+  context: string;
   threadId: string;
   pullRequest: WorkItem | undefined;
 }
@@ -19,12 +21,18 @@ export function sessionWorkItemIndex(workItems: readonly WorkItem[]): ReadonlyMa
 
   return new Map(
     workItems.flatMap(item => {
-      const sessionRefs = Object.values(item.sessions ?? {});
+      // A legacy `plan` key may share its session with `work`; the current key names it.
+      const sessionRefs = Object.entries(item.sessions ?? {}).toSorted(
+        ([a], [b]) => Number(a === 'plan') - Number(b === 'plan'),
+      );
       if (sessionRefs.length === 0) return [];
       const pullRequest = latestPullRequestFor(item);
-      return sessionRefs.map(
-        sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId, pullRequest }] as const,
-      );
+      const seen = new Set<string>();
+      return sessionRefs.flatMap(([context, sessionRef]) => {
+        if (seen.has(sessionRef.sessionId)) return [];
+        seen.add(sessionRef.sessionId);
+        return [[sessionRef.sessionId, { item, context, threadId: sessionRef.threadId, pullRequest }] as const];
+      });
     }),
   );
 }

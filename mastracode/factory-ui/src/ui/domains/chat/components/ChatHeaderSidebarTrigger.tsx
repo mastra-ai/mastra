@@ -1,6 +1,9 @@
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 
-/** Desktop sidebar trigger shown while the sidebar is collapsed. */
+/** Opens the navigation drawer on mobile, or reopens the collapsed sidebar on desktop. */
 export function ChatHeaderSidebarTrigger() {
-  return <Sidebar.Trigger className="shrink-0" />;
+  const { isMobile, desktopState } = useSidebar();
+  if (isMobile) return <Sidebar.MobileTrigger id="mobile-navigation-trigger" className="shrink-0" />;
+  if (desktopState === 'collapsed') return <Sidebar.Trigger className="shrink-0" />;
+  return null;
 }

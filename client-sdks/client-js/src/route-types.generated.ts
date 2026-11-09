@@ -5485,7 +5485,7 @@ export type PostAgentsAgentIdObserve_PathParams = GetAgentsAgentId_PathParams;
 export type PostAgentsAgentIdObserve_Body = {
   /** The run ID to observe/reconnect to */
   runId: string;
-  /** Resume from this event index (0-based). If omitted, replays all events. */
+  /** Run-log position to resume from. Every /observe frame, and every /stream frame from a durable or evented agent, carries an `index` except abort frames; pass the index + 1 of the last frame that has one. A client that reconnects between an abort frame and its finish frame gets the abort frame again. A frame whose replay-cache write failed, or any frame when caching is off, arrives without an index, so no offset can resume at it; omitting `offset` replays whatever the transport itself retains, which can repeat frames already received. If omitted, replays the frames still retained. */
   offset?: number | undefined;
 };
 
