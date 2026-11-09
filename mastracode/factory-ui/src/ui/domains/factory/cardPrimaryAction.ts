@@ -47,9 +47,16 @@ const PREPARE_APPROVAL: CardMove = {
 /** A card's pull request is reviewed in Work's PR review. */
 const REVIEW_MOVE: CardMove = { label: 'Review', role: 'review', stage: 'pr-review' };
 const RE_REVIEW_MOVE: CardMove = { label: 'Re-review', role: 'review', stage: 'pr-review' };
+/** A card its project keeps on the retired Review board is reviewed in that board's Reviewing. */
+const KEPT_REVIEW_MOVE: CardMove = { label: 'Review', role: 'review', stage: 'review' };
+const KEPT_RE_REVIEW_MOVE: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
+  if (item.board === 'review') {
+    if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [KEPT_RE_REVIEW_MOVE] : [];
+    return [KEPT_REVIEW_MOVE];
+  }
   if (item.board != null && item.board !== 'work') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW_MOVE] : [];
   // A card carrying a pull request, its own or one attached to its issue, sends it to PR review.

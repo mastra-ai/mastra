@@ -84,7 +84,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     const links = () => within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ });
     expect(links()).toHaveLength(5);
 
@@ -117,7 +117,7 @@ describe('Sessions sidebar show more', () => {
 
       renderSection(`sess-${index}`);
 
-      const group = await screen.findByRole('region', { name: 'Review sessions' });
+      const group = await screen.findByRole('region', { name: 'Work sessions' });
       const links = () => within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ });
       expect(links()).toHaveLength(6);
       const activeName = `factory/pr-${20000 + index}`;
@@ -142,7 +142,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     const showMore = within(group).getByRole('button', { name: 'Show 20 more' });
     expect(showMore).not.toHaveAttribute('aria-expanded');
     showMore.focus();

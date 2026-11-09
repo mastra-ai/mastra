@@ -370,7 +370,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(described.details.get('release')).toEqual({ source: 'app', editable: true, problems: [] });
     expect(described.registry.has('bugs')).toBe(true);
     expect(described.problems).toEqual([
-      'Stored board "review" isn\'t served: the key is reserved for the retired Review board, whose cards now live on Work.',
+      'Stored board "review" isn\'t served: the key is reserved for the retired Review board.',
     ]);
     expect((await a.boards.get(scope, 'release'))!).toMatchObject({ name: 'Stored release', revision: 1 });
   });

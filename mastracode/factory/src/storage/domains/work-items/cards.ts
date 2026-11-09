@@ -6,10 +6,13 @@ import { splitLegacyWorkItem } from '../../../work-items/split-migration.js';
 import type { ExternalWorkItemSource, WorkItemDbRow } from './base.js';
 import {
   isLegacyReviewPlacement,
+  LEGACY_REVIEW_BOARD,
   normalizeLegacyReviewColumns,
   readLegacyReviewRow,
+  readReviewBoardInUse,
   widenLegacyReviewBoardFilter,
 } from './legacy-review.js';
+import type { ReviewBoardInUse } from './legacy-review.js';
 import {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
@@ -92,36 +95,49 @@ function joinCard(
   board: BoardItemDbRecord,
   work: WorkItemDbRecord | null,
   sources: WorkItemSourceDbRecord[],
+  reviewInUse = false,
 ): WorkItemDbRow {
   if (!work) throw new Error(`Board item ${board.id} has no work item ${board.work_item_id}.`);
   const source = sources.find(isOriginSource) ?? sources[0];
-  return readLegacyReviewRow({
-    work_item: work,
-    work_item_sources: sources,
-    id: board.id,
-    org_id: board.org_id,
-    factory_project_id: board.factory_project_id,
-    board: board.board,
-    external_source: externalSourceOf(source),
-    source_key: source?.source_key ?? null,
-    claim_key: null,
-    parent_work_item_id: board.parent_board_item_id,
-    title: work.title,
-    stages: board.stages,
-    stage_history: board.stage_history as WorkItemDbRow['stage_history'],
-    sessions: board.sessions as WorkItemDbRow['sessions'],
-    metadata: board.metadata || source?.metadata ? { ...board.metadata, ...source?.metadata } : null,
-    triage_type: board.triage_type ?? null,
-    autonomy_armed_at: board.autonomy_armed_at ?? null,
-    plans_preapproved_at: board.plans_preapproved_at ?? null,
-    accepted_at: board.accepted_at ?? null,
-    comment_count: board.comment_count ?? 0,
-    feed_activity_at: board.feed_activity_at ?? null,
-    revision: board.revision,
-    created_by: board.created_by,
-    created_at: board.created_at,
-    updated_at: board.updated_at,
-  });
+  return readLegacyReviewRow(
+    {
+      work_item: work,
+      work_item_sources: sources,
+      id: board.id,
+      org_id: board.org_id,
+      factory_project_id: board.factory_project_id,
+      board: board.board,
+      external_source: externalSourceOf(source),
+      source_key: source?.source_key ?? null,
+      claim_key: null,
+      parent_work_item_id: board.parent_board_item_id,
+      title: work.title,
+      stages: board.stages,
+      stage_history: board.stage_history as WorkItemDbRow['stage_history'],
+      sessions: board.sessions as WorkItemDbRow['sessions'],
+      metadata: board.metadata || source?.metadata ? { ...board.metadata, ...source?.metadata } : null,
+      triage_type: board.triage_type ?? null,
+      autonomy_armed_at: board.autonomy_armed_at ?? null,
+      plans_preapproved_at: board.plans_preapproved_at ?? null,
+      accepted_at: board.accepted_at ?? null,
+      comment_count: board.comment_count ?? 0,
+      feed_activity_at: board.feed_activity_at ?? null,
+      revision: board.revision,
+      created_by: board.created_by,
+      created_at: board.created_at,
+      updated_at: board.updated_at,
+    },
+    reviewInUse,
+  );
+}
+
+/** A board filter that leaves Review out: a widened query's rows a project keeping Review holds there. */
+function excludesReview(filter: unknown): boolean {
+  if (filter === LEGACY_REVIEW_BOARD) return false;
+  if (filter && typeof filter === 'object' && 'in' in filter && Array.isArray(filter.in)) {
+    return !filter.in.includes(LEGACY_REVIEW_BOARD);
+  }
+  return true;
 }
 
 function boardColumns(patch: Partial<WorkItemDbRow>, { filter = false } = {}): Partial<BoardItemDbRecord> {
@@ -141,7 +157,26 @@ export class Cards {
     private readonly ops: FactoryStorageOps,
     private readonly legacyMode = false,
     private readonly copier?: LegacyCardCopier,
+    private readonly reviewInUse: ReviewBoardInUse = readReviewBoardInUse,
   ) {}
+
+  readonly #reviewInUse = new Map<string, Promise<boolean>>();
+
+  /** The projects among `boards` that still use the Review board, asked once per project per operation. */
+  async #projectsUsingReview(boards: readonly BoardItemDbRecord[]): Promise<Set<string>> {
+    const using = new Set<string>();
+    for (const board of boards) {
+      if (board.board !== LEGACY_REVIEW_BOARD) continue;
+      const key = `${board.org_id}\0${board.factory_project_id}`;
+      let inUse = this.#reviewInUse.get(key);
+      if (!inUse) {
+        inUse = this.reviewInUse(this.ops, { orgId: board.org_id, factoryProjectId: board.factory_project_id });
+        this.#reviewInUse.set(key, inUse);
+      }
+      if (await inUse) using.add(key);
+    }
+    return using;
+  }
 
   /**
    * Copies the legacy cards a lookup by id or source addresses that have no split rows and no
@@ -211,10 +246,16 @@ export class Cards {
       }
     }
     const deletedMidRead = await this.#deletedBoardIds(boards.filter(board => !items.has(board.work_item_id)));
+    const usingReview = await this.#projectsUsingReview(boards);
     return boards
       .filter(board => !deletedMidRead.has(board.id))
       .map(board =>
-        joinCard(board, items.get(board.work_item_id) ?? null, originFirst(sources.get(board.work_item_id) ?? [])),
+        joinCard(
+          board,
+          items.get(board.work_item_id) ?? null,
+          originFirst(sources.get(board.work_item_id) ?? []),
+          usingReview.has(`${board.org_id}\0${board.factory_project_id}`),
+        ),
       );
   }
 
@@ -239,8 +280,25 @@ export class Cards {
   async #findOne(where: CollectionWhere): Promise<WorkItemDbRow | null> {
     const boardWhere = await this.#where(where);
     if (!boardWhere) return null;
+    if (where.board !== undefined && excludesReview(where.board)) {
+      // The widened filter may match a row its project keeps on Review; only another row answers.
+      return (await this.#findMany(where, boardWhere))[0] ?? null;
+    }
     const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, boardWhere);
     return board ? ((await this.#join([board]))[0] ?? null) : null;
+  }
+
+  async #findMany(
+    where: CollectionWhere,
+    boardWhere: CollectionWhere,
+    options?: CollectionListOptions,
+  ): Promise<WorkItemDbRow[]> {
+    const rows = await this.#join(await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, options));
+    // A filter that leaves Review out was widened to find redundant Review rows read as Work;
+    // rows a project keeps on Review still read as Review, so they don't match it.
+    return where.board !== undefined && excludesReview(where.board)
+      ? rows.filter(row => row.board !== LEGACY_REVIEW_BOARD)
+      : rows;
   }
 
   async findMany(where: CollectionWhere, options?: CollectionListOptions): Promise<WorkItemDbRow[]> {
@@ -248,7 +306,7 @@ export class Cards {
     // A split hit does not prove every match is copied (a source spans projects), so check first.
     await this.#copyLegacy(where);
     const boardWhere = await this.#where(where);
-    return boardWhere ? this.#join(await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, options)) : [];
+    return boardWhere ? this.#findMany(where, boardWhere, options) : [];
   }
 
   async insertOne(card: CardInsert): Promise<WorkItemDbRow> {
@@ -270,7 +328,8 @@ export class Cards {
     const work = await this.ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, rows.workItem);
     if (rows.source) await this.ops.insertOne(SOURCES, rows.source);
     const board = await this.ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, rows.boardItem);
-    return joinCard(board, work, rows.source ? [rows.source] : []);
+    const reviewInUse = (await this.#projectsUsingReview([board])).size > 0;
+    return joinCard(board, work, rows.source ? [rows.source] : [], reviewInUse);
   }
 
   async updateAtomic(
@@ -360,8 +419,11 @@ export class Cards {
         if (!touch) return null;
         return { updated_at: new Date(Math.max(Date.now(), new Date(row.updated_at).getTime() + 1)) };
       }
-      // A legacy Review row stores its Work placement on its first real write.
-      if (isLegacyReviewPlacement(row.board, joined.work_item_sources?.[0]?.source_type)) {
+      // A legacy Review row read as Work stores its Work placement on its first real write.
+      if (
+        isLegacyReviewPlacement(row.board, joined.work_item_sources?.[0]?.source_type) &&
+        joined.board !== LEGACY_REVIEW_BOARD
+      ) {
         Object.assign(columns, normalizeLegacyReviewColumns(row, columns));
       }
       return {
@@ -418,7 +480,8 @@ export class Cards {
       return {
         revision: row.revision + 1,
         updated_at: source.now,
-        ...(isLegacyReviewPlacement(row.board, joined.work_item_sources?.[0]?.source_type)
+        ...(isLegacyReviewPlacement(row.board, joined.work_item_sources?.[0]?.source_type) &&
+        joined.board !== LEGACY_REVIEW_BOARD
           ? normalizeLegacyReviewColumns(row, {})
           : {}),
       };

@@ -93,6 +93,7 @@ export function intakeTargetProblem(
  */
 function placementTakesCard(boardId: string, phase: string, facts: RuleFacts): boolean {
   const pullRequest = facts['source.kind'] === 'pull_request';
+  if (boardId === 'review') return pullRequest;
   if (boardId === 'work') return pullRequest ? phase === 'intake' || phase === 'pr-review' : phase !== 'pr-review';
   return true;
 }

@@ -2,6 +2,7 @@ import {
   isPullRequestCard,
   newestOpenPullRequestNumber,
   PULL_REQUEST_REVIEW_PHASE,
+  pullRequestReviewPhase,
   pullRequestSourceNumber,
   pullRequestSources,
   reviewedChangeRequest,
@@ -33,6 +34,15 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 }
 
 /** The Work card whose session authored the merge request, as opposed to the merge request's own card. */
+/** The board holding the merge request's own card: Work, or Review for a card a project still keeps there. */
+function mergeRequestCardBoard(context: FactoryGitLabRuleContext): 'work' | 'review' {
+  return context.board === 'review' ? 'review' : 'work';
+}
+
+function mergeRequestCardNoun(context: FactoryGitLabRuleContext): string {
+  return context.board === 'review' ? 'Review card' : 'merge request card';
+}
+
 function authoringCard(context: FactoryGitLabRuleContext): boolean {
   return context.board === 'work' && context.item !== undefined && !isPullRequestCard(context.item);
 }
@@ -154,12 +164,12 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
   if (context.item.stages.some(stage => stage === 'intake')) return;
   // An untrusted push must not start review passes on demand.
   if (!trustedGitLabActor(context) && !context.mergeRequest.factoryAuthored) return;
-  const stage = PULL_REQUEST_REVIEW_PHASE;
+  const stage = pullRequestReviewPhase(context.board);
   const alreadyReviewing = context.item.stages.some(current => current === stage);
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-updated`,
-    board: 'work',
+    board: mergeRequestCardBoard(context),
     stage,
     ...(alreadyReviewing ? { reenter: true } : {}),
   } as const;
@@ -189,10 +199,10 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:merge-request-merged`,
-      board: 'work',
+      board: mergeRequestCardBoard(context),
       stage: 'done',
       message: {
-        text: `GitLab merge request !${context.mergeRequest.number} merged; this merge request card was moved to Done.`,
+        text: `GitLab merge request !${context.mergeRequest.number} merged; this ${mergeRequestCardNoun(context)} was moved to Done.`,
       },
     } as const;
   }
@@ -252,12 +262,12 @@ function mergeRequestClosed(context: FactoryGitLabRuleContext) {
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:merge-request-closed`,
-    board: 'work',
+    board: mergeRequestCardBoard(context),
     stage: 'canceled',
     message: {
       text:
         `GitLab merge request !${context.mergeRequest.number} was closed without merging; ` +
-        'this merge request card was moved to Canceled.',
+        `this ${mergeRequestCardNoun(context)} was moved to Canceled.`,
     },
   } as const;
 }

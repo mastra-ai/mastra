@@ -39,6 +39,8 @@ import {
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
+import { readReviewBoardInUse } from './legacy-review.js';
+import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
   WorkItemDbRecord,
@@ -1350,6 +1352,31 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#split.pending;
   }
 
+  /** Projects found not to use the Review board; once redundant it stays so, with no card left to reopen on it. */
+  readonly #reviewRedundant = new Set<string>();
+
+  /** {@link reviewBoardInUse} through `ops`, so a caller inside a transaction reads within it. */
+  readonly #reviewInUse: ReviewBoardInUse = async (ops, scope) => {
+    const key = `${scope.orgId}\0${scope.factoryProjectId}`;
+    if (this.#reviewRedundant.has(key)) return false;
+    const inUse = await readReviewBoardInUse(ops, scope, {
+      split: !this.#legacyMode,
+      // Legacy cards not copied yet still count.
+      legacy: this.#legacyMode || this.#split.pending,
+    });
+    if (!inUse) this.#reviewRedundant.add(key);
+    return inUse;
+  };
+
+  /**
+   * Whether the project still uses the retired Review board: it holds a card stored on Review
+   * that isn't Done or Canceled. Such a project keeps the board and its cards stay on it; in any
+   * other project Review is redundant and its cards read as Work.
+   */
+  reviewBoardInUse(scope: ReviewBoardScope): Promise<boolean> {
+    return this.#reviewInUse(this.#db, scope);
+  }
+
   constructor() {
     super('work-items');
   }
@@ -1521,21 +1548,26 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * LibSQL), else in a transaction of its own.
    */
   #cards(ops: FactoryStorageOps, { transaction }: { transaction: boolean }): Cards {
-    if (this.#legacyMode || !this.#split.pending) return new Cards(ops, this.#legacyMode);
-    return new Cards(ops, false, {
-      copy: async rows => {
-        if (transaction) {
-          await copyLegacyRows(ops, rows);
-          return;
-        }
-        try {
-          await this.#withTransaction(tx => copyLegacyRows(tx, rows));
-        } catch (error) {
-          // A concurrent first copy won (its retry lost again); the re-read finds its rows.
-          if (!(error instanceof UniqueViolationError)) throw error;
-        }
+    if (this.#legacyMode || !this.#split.pending) return new Cards(ops, this.#legacyMode, undefined, this.#reviewInUse);
+    return new Cards(
+      ops,
+      false,
+      {
+        copy: async rows => {
+          if (transaction) {
+            await copyLegacyRows(ops, rows);
+            return;
+          }
+          try {
+            await this.#withTransaction(tx => copyLegacyRows(tx, rows));
+          } catch (error) {
+            // A concurrent first copy won (its retry lost again); the re-read finds its rows.
+            if (!(error instanceof UniqueViolationError)) throw error;
+          }
+        },
       },
-    });
+      this.#reviewInUse,
+    );
   }
 
   /** Validation reads the split tables only, so a parent still in legacy is copied first. */
@@ -1631,7 +1663,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     let result: Awaited<ReturnType<Cards['attachSource']>>;
     try {
       result = await this.#withTransaction(async ops => {
-        const cards = new Cards(ops, this.#legacyMode);
+        const cards = new Cards(ops, this.#legacyMode, undefined, this.#reviewInUse);
         const attached = await cards.attachSource(
           { org_id: orgId, id },
           { external_source: source, metadata, now: new Date() },
@@ -1645,7 +1677,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       // A concurrent attach or upsert of the same record won the unique index.
       if (error instanceof UniqueViolationError && error.collection === FACTORY_WORK_ITEM_SOURCES_SCHEMA.name) {
         // Sources are unique per project, so another project's copy of the record is no owner here.
-        const card = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
+        const card = await new Cards(this.#db, this.#legacyMode, undefined, this.#reviewInUse).findOne({
+          org_id: orgId,
+          id,
+        });
         const owner = card
           ? await this.#db.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {
               org_id: orgId,

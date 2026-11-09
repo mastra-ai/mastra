@@ -923,6 +923,10 @@ export class MastraFactory {
         storage: storedBoardsStorage,
         projects: factoryProjectsStorage,
         codeSkills: this.#skills,
+        // A project still using the retired Review board keeps it; work items are read once they're ready.
+        ...(storage.isDomainReady('work-items')
+          ? { reviewBoardInUse: (scope: StoredBoardScope) => workItemsStorage.reviewBoardInUse(scope) }
+          : {}),
       });
       this.#projectBoards = projectBoards;
       this.#boardStore = {

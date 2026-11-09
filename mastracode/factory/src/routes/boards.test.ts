@@ -108,6 +108,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       }),
       storage: domains.boards,
       projects: domains.projects,
+      // As MastraFactory wires it: a project still using the retired Review board keeps it.
+      reviewBoardInUse: scope => domains.workItems.reviewBoardInUse(scope),
       recheckMs: RECHECK_MS,
       now: () => clock.now,
       warn: () => {},
@@ -230,7 +232,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       status: 409,
       body: {
         error: 'reserved_board',
-        message: 'Board "review" is reserved: the retired Review board\'s cards now live on Work.',
+        message: 'Board "review" is reserved for the retired Review board.',
       },
     };
     expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual(reserved);
@@ -846,6 +848,52 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       bugsBoard.phases.map(phase => (phase.key === 'fixing' ? { ...phase, name: 'Patching' } : phase)),
     );
     expect(renamed.status).toBe(200);
+  });
+
+  describe('the retired Review board', () => {
+    const pullRequestCard = (stage: string) => ({
+      title: 'PR 17',
+      board: 'review',
+      stages: [stage],
+      externalSource: { integrationId: 'github', type: 'pull-request' as const, externalId: 'github-pr:17' },
+    });
+
+    it('serves it, read-only, to a project that still has an open card on it, and lists the card there', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('review') });
+
+      const catalog = await replicaA.send('GET', base);
+      expect(
+        (catalog.body.boards as Array<Record<string, unknown>>).map(board => [board.id, board.source, board.editable]),
+      ).toEqual([
+        ['work', 'builtin', true],
+        ['release', 'app', true],
+        ['review', 'builtin', false],
+      ]);
+      const cards = await replicaA.send('GET', `/web/factory/projects/${scope.factoryProjectId}/work-items`);
+      expect(cards).toMatchObject({
+        status: 200,
+        body: { workItems: [{ id: item.id, board: 'review', stages: ['review'] }] },
+      });
+      // The key stays reserved: nobody stores a board over it.
+      expect((await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).status).toBe(409);
+      expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['work', 'release']);
+    });
+
+    it('serves it to no project whose cards there are all finished, and shows those cards on Work', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('done') });
+
+      expect(await replicaA.send('GET', `${base}/review`)).toMatchObject({
+        status: 404,
+        body: { error: 'board_not_found' },
+      });
+      const cards = await replicaA.send('GET', `/web/factory/projects/${scope.factoryProjectId}/work-items`);
+      expect(cards).toMatchObject({
+        status: 200,
+        body: { workItems: [{ id: item.id, board: 'work', stages: ['done'] }] },
+      });
+    });
   });
 
   it('refuses deleting a board that still has cards', async () => {

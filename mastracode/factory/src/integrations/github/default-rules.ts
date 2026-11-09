@@ -2,6 +2,7 @@ import {
   isPullRequestCard,
   newestOpenPullRequestNumber,
   PULL_REQUEST_REVIEW_PHASE,
+  pullRequestReviewPhase,
   pullRequestSourceNumber,
   pullRequestSources,
   reviewedChangeRequest,
@@ -31,6 +32,15 @@ function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): str
 /** The Work card whose session authored the pull request, as opposed to the PR's own card. */
 function authoringCard(context: FactoryGithubRuleContext): boolean {
   return context.board === 'work' && context.item !== undefined && !isPullRequestCard(context.item);
+}
+
+/** The board holding the PR's own card: Work, or Review for a card a project still keeps there. */
+function pullRequestCardBoard(context: FactoryGithubRuleContext): 'work' | 'review' {
+  return context.board === 'review' ? 'review' : 'work';
+}
+
+function pullRequestCardNoun(context: FactoryGithubRuleContext): string {
+  return context.board === 'review' ? 'Review card' : 'pull request card';
 }
 
 /** Whether the rule's card carries the event's pull request as one of its sources, attached to its issue. */
@@ -216,11 +226,11 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:pull-request-merged`,
-      board: 'work',
+      board: pullRequestCardBoard(context),
       stage: 'done',
       message: {
         text:
-          `Pull request #${context.pullRequest.number} merged; this pull request card was moved to Done. ` +
+          `Pull request #${context.pullRequest.number} merged; this ${pullRequestCardNoun(context)} was moved to Done. ` +
           'No further review is needed unless follow-up work was requested.',
       },
     } as const;
@@ -371,12 +381,12 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:pull-request-closed`,
-    board: 'work',
+    board: pullRequestCardBoard(context),
     stage: 'canceled',
     message: {
       text:
         `Pull request #${context.pullRequest.number} was closed without merging; ` +
-        'this pull request card was moved to Canceled.',
+        `this ${pullRequestCardNoun(context)} was moved to Canceled.`,
     },
   } as const;
 }
@@ -405,7 +415,7 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   // Already in Reviewing with no verdict yet: a pass is pending or running.
   // Once a verdict is recorded the card rests in Reviewing, so a fresh request
   // re-enters the stage to start another pass.
-  const stage = PULL_REQUEST_REVIEW_PHASE;
+  const stage = pullRequestReviewPhase(context.board);
   const reviewing = context.item.stages.length === 1 && context.item.stages[0] === stage;
   // On an issue card the pass reviews one pull request at a time; a request for another
   // waits until that one is reviewed or settled.
@@ -414,7 +424,7 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-requested`,
-    board: 'work',
+    board: pullRequestCardBoard(context),
     stage,
     ...(reviewing ? { reenter: true } : {}),
   } as const;
@@ -436,12 +446,12 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   // A fork's author controls its head branch, so an untrusted push must not be
   // able to start review passes on demand; a maintainer can still request one.
   if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
-  const stage = PULL_REQUEST_REVIEW_PHASE;
+  const stage = pullRequestReviewPhase(context.board);
   const alreadyReviewing = context.item.stages.some(current => current === stage);
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-updated`,
-    board: 'work',
+    board: pullRequestCardBoard(context),
     stage,
     // Re-entry is the point when the card is already Reviewing: the stage's
     // entry rule is what cancels the superseded pass and starts one on the code

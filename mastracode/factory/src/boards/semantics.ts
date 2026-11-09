@@ -19,7 +19,8 @@ export interface PhaseSemantics {
 /**
  * Board that owns a work item. Rows created before boards were persisted carry no `board`;
  * they belong to Work. (Pull requests used to default to the retired Review board; storage
- * now reads those rows as Work.)
+ * reads those rows as Work, and keeps cards stored on Review there only in a project that
+ * still uses it.)
  */
 export function boardForWorkItem(item: Pick<Card, 'board'>): string {
   return item.board ?? 'work';
@@ -27,6 +28,15 @@ export function boardForWorkItem(item: Pick<Card, 'board'>): string {
 
 /** The Work phase where a card's pull or merge request gets its independent review. */
 export const PULL_REQUEST_REVIEW_PHASE = 'pr-review';
+
+/**
+ * The phase a pull or merge request's own card is reviewed in: Work's `pr-review`, or the
+ * retired Review board's `review` for a card a project still keeps there. Work's own `review`
+ * phase is the builder's self-review, which a pull request card never enters.
+ */
+export function pullRequestReviewPhase(board: string | undefined): 'review' | 'pr-review' {
+  return board === 'review' ? 'review' : PULL_REQUEST_REVIEW_PHASE;
+}
 
 interface SourcedItem {
   readonly workItem?: { readonly sources?: readonly WorkItemSourceRow[] } | null;
@@ -183,6 +193,8 @@ export function reviewsPullRequest(context: {
   readonly board?: string;
   readonly item?: SourcedItem & { readonly source: string };
 }): boolean {
+  // Every card on the retired Review board is a pull or merge request's own card.
+  if (context.board === 'review') return true;
   return context.board === 'work' && context.item !== undefined && hasPullRequest(context.item);
 }
 
@@ -264,7 +276,7 @@ export function rulePhaseContext(
 
 /**
  * Whether a persisted card has finished, judged by the board it sits on: the installed
- * board's phase kind first, then the built-in Work names for rows whose board is
+ * board's phase kind first, then the built-in Work and Review names for rows whose board is
  * not installed. Unknown boards or phases are never terminal, so a card is only ever
  * released from ownership on the board's own say-so.
  */
@@ -274,7 +286,8 @@ export function isTerminalWorkItem(
 ): boolean {
   const semantics = workItemPhaseSemantics(boards, item);
   if (semantics) return semantics.kind === 'terminal';
-  if (boardForWorkItem(item) !== 'work') return false;
+  const board = boardForWorkItem(item);
+  if (board !== 'work' && board !== 'review') return false;
   const stage = item.stages.length === 1 ? item.stages[0] : undefined;
   return stage === 'done' || stage === 'canceled';
 }

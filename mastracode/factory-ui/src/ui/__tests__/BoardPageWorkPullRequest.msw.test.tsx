@@ -12,6 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { builtinBoardCatalog, keptReviewBoard } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -195,6 +196,42 @@ describe('Pull requests on the Work board', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
     expect(new URLSearchParams(router.state.location.search).get('item')).toBe(issueWithPullRequest.id);
     expect(new URLSearchParams(router.state.location.search).getAll('source')).toEqual(['pull-request']);
+  });
+
+  it('opens the Review board itself from an old link while the project still has open cards on it', async () => {
+    const keptCard: Card = { ...reviewItem, id: 'kept-review', board: 'review', stages: ['review'] };
+    stubBoards({ items: [keptCard] });
+    server.use(
+      http.get(`${projectUrl}/boards`, () =>
+        HttpResponse.json({ boards: [...builtinBoardCatalog.boards, keptReviewBoard] }),
+      ),
+    );
+    const { router } = renderBoard('review', `?item=${keptCard.id}`);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/review`));
+    expect(new URLSearchParams(router.state.location.search).get('item')).toBe(keptCard.id);
+    const reviewing = await screen.findByRole('region', { name: 'Reviewing' });
+    expect(await within(reviewing).findByText(reviewItem.title)).toBeVisible();
+    // Nothing new is filed on the retired board.
+    expect(screen.queryByRole('button', { name: /^Create work item in/ })).toBeNull();
+  });
+
+  it('reviews a card on a kept Review board in its own Reviewing phase', async () => {
+    const keptCard: Card = { ...reviewItem, id: 'kept-review', board: 'review', stages: ['intake'] };
+    const { transitions } = stubBoards({ items: [keptCard] });
+    server.use(
+      http.get(`${projectUrl}/boards`, () =>
+        HttpResponse.json({ boards: [...builtinBoardCatalog.boards, keptReviewBoard] }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderBoard('review');
+
+    const intake = await screen.findByRole('region', { name: 'Intake' });
+    await user.click(await within(intake).findByRole('button', { name: 'Review' }));
+    await waitForMutationsIdle(client);
+
+    expect(transitions).toEqual([expect.objectContaining({ board: 'review', stage: 'review' })]);
   });
 
   it('shows only pull requests for an old Review board link that picked another source', async () => {

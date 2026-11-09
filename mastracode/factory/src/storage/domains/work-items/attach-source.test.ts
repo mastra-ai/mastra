@@ -247,32 +247,87 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('one card for an
     });
   });
 
-  it('reads a card stored on the retired Review board as Work and stores Work on its next write', async () => {
-    const { storage, workItems, scope, file } = await setup();
-    const card = await file(pullRequest34, { state: 'open' });
-    // A row as the Review board left it: board `review`, phase `review`. No migration rewrote it.
-    await storage.ops.updateMany(
-      FACTORY_BOARD_ITEMS_SCHEMA.name,
-      { id: card.id },
-      {
-        board: 'review',
-        stages: ['review'],
-        stage_history: [{ stage: 'review', enteredAt: new Date(0).toISOString(), by: 'user' }],
-      },
-    );
+  describe("a project's retired Review board", () => {
+    /** A row as the Review board left it. No migration rewrote it. */
+    async function storeOnReview(storage: Awaited<ReturnType<typeof setup>>['storage'], id: string, stage: string) {
+      await storage.ops.updateMany(
+        FACTORY_BOARD_ITEMS_SCHEMA.name,
+        { id },
+        {
+          board: 'review',
+          stages: [stage],
+          stage_history: [{ stage, enteredAt: new Date(0).toISOString(), by: 'user' }],
+        },
+      );
+    }
+    const raw = async (storage: Awaited<ReturnType<typeof setup>>['storage'], id: string) =>
+      storage.ops.findOne<{ board: string; stages: string[] }>(FACTORY_BOARD_ITEMS_SCHEMA.name, { id });
 
-    const legacy = (await workItems.get({ orgId: scope.orgId, id: card.id }))!;
-    expect(legacy).toMatchObject({ board: 'work', stages: ['pr-review'] });
-    expect(legacy.stageHistory.map(entry => entry.stage)).toEqual(['pr-review']);
-    const listed = await workItems.list({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
-    expect(listed.map(item => [item.id, item.board, item.stages])).toEqual([[card.id, 'work', ['pr-review']]]);
-    expect((await storage.ops.findOne(FACTORY_BOARD_ITEMS_SCHEMA.name, { id: card.id }))?.board).toBe('review');
+    it('keeps a card on Review, in its phase, while the project still has an open card there', async () => {
+      const { storage, workItems, scope, file } = await setup();
+      const card = await file(pullRequest34, { state: 'open' });
+      await storeOnReview(storage, card.id, 'review');
 
-    await workItems.update({ ...scope, id: card.id, patch: { stages: ['done'] } });
+      expect(await workItems.reviewBoardInUse(scope)).toBe(true);
+      const kept = (await workItems.get({ orgId: scope.orgId, id: card.id }))!;
+      expect(kept).toMatchObject({ board: 'review', stages: ['review'] });
+      expect(kept.stageHistory.map(entry => entry.stage)).toEqual(['review']);
+      const listed = await workItems.list({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+      expect(listed.map(item => [item.id, item.board, item.stages])).toEqual([[card.id, 'review', ['review']]]);
 
-    const raw = await storage.ops.findOne<{ board: string; stages: string[] }>(FACTORY_BOARD_ITEMS_SCHEMA.name, {
-      id: card.id,
+      await workItems.update({ ...scope, id: card.id, patch: { stages: ['intake'] } });
+      expect(await raw(storage, card.id)).toMatchObject({ board: 'review', stages: ['intake'] });
     });
-    expect(raw).toMatchObject({ board: 'work', stages: ['done'] });
+
+    it("reads a project's Review cards as Work once none is open, and stores Work on the next write", async () => {
+      const { storage, workItems, scope, file } = await setup();
+      const card = await file(pullRequest34, { state: 'merged' });
+      await storeOnReview(storage, card.id, 'done');
+
+      expect(await workItems.reviewBoardInUse(scope)).toBe(false);
+      expect(await workItems.get({ orgId: scope.orgId, id: card.id })).toMatchObject({
+        board: 'work',
+        stages: ['done'],
+      });
+      expect((await raw(storage, card.id))?.board).toBe('review');
+
+      await workItems.update({ ...scope, id: card.id, patch: { stages: ['pr-review'] } });
+      expect(await raw(storage, card.id)).toMatchObject({ board: 'work', stages: ['pr-review'] });
+    });
+
+    it("retires a project's Review board once its last open card there is done", async () => {
+      const { storage, workItems, scope, file } = await setup();
+      const open = await file(pullRequest34, { state: 'open' });
+      await storeOnReview(storage, open.id, 'review');
+      expect((await workItems.get({ orgId: scope.orgId, id: open.id }))?.board).toBe('review');
+
+      // The project's last open Review card is finished.
+      await workItems.update({ ...scope, id: open.id, patch: { stages: ['done'] } });
+
+      expect(await workItems.reviewBoardInUse(scope)).toBe(false);
+      expect(await workItems.get({ orgId: scope.orgId, id: open.id })).toMatchObject({
+        board: 'work',
+        stages: ['done'],
+      });
+    });
+
+    it('decides per project: an open Review card in one project leaves another on Work', async () => {
+      const { storage, workItems, scope, file } = await setup();
+      const kept = await file(pullRequest34, { state: 'open' });
+      await storeOnReview(storage, kept.id, 'review');
+      const other = { ...scope, factoryProjectId: 'other-project' };
+      const retired = (
+        await workItems.upsert({
+          ...other,
+          input: { title: 'old', board: 'work', stages: ['intake'], externalSource: issue12, metadata: {} },
+        })
+      ).item;
+      await storeOnReview(storage, retired.id, 'canceled');
+
+      expect(await workItems.reviewBoardInUse(scope)).toBe(true);
+      expect(await workItems.reviewBoardInUse(other)).toBe(false);
+      expect((await workItems.get({ orgId: scope.orgId, id: kept.id }))?.board).toBe('review');
+      expect((await workItems.get({ orgId: scope.orgId, id: retired.id }))?.board).toBe('work');
+    });
   });
 });
