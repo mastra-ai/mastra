@@ -621,7 +621,7 @@ describe('mastraCache server handler', () => {
     ).resolves.toEqual({ ok: false, error: 'mastra:cache:other exists but is not a number' });
   });
 
-  describe('takes the index from the list when the counter document has drifted', () => {
+  describe('allocates indices safely when the counter document has drifted', () => {
     const seedList = async (ctx: ReturnType<typeof createCtx>, length: number) => {
       for (let i = 0; i < length; i++) {
         await handleCacheOperation(ctx as any, {
@@ -646,7 +646,7 @@ describe('mastraCache server handler', () => {
       return { pushed, row: rows[rows.length - 1]! };
     };
 
-    it('when the counter document is ahead of the list', async () => {
+    it('never reuses an index when the counter document is ahead of the list', async () => {
       const ctx = createCtx();
       await seedList(ctx, 2);
       for (let i = 0; i < 3; i++) {
@@ -660,9 +660,11 @@ describe('mastraCache server handler', () => {
 
       const { pushed, row } = await pushAndReadLast(ctx);
 
-      expect(pushed).toEqual({ ok: true, result: 2 });
+      // A client may already hold index 2 from the old non-atomic path, so the
+      // new frame must not be stamped 2 again.
+      expect(pushed).toEqual({ ok: true, result: 3 });
       expect(row).toMatchObject({ index: 2 });
-      expect(JSON.parse(row.value as string)).toEqual({ id: 'next', index: 2 });
+      expect(JSON.parse(row.value as string)).toEqual({ id: 'next', index: 3 });
       await expect(
         handleCacheOperation(ctx as any, {
           op: 'increment',
@@ -670,10 +672,10 @@ describe('mastraCache server handler', () => {
           keyPrefix: 'mastra:cache:',
           expiresAt: null,
         }),
-      ).resolves.toEqual({ ok: true, result: 4 });
+      ).resolves.toEqual({ ok: true, result: 5 });
     });
 
-    it('when the list is live but the counter document is missing', async () => {
+    it('keeps indices aligned with positions when the counter document is missing', async () => {
       const ctx = createCtx();
       await seedList(ctx, 3);
 
