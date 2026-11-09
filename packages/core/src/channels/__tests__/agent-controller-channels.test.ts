@@ -1020,7 +1020,7 @@ describe('AgentControllerChannels', () => {
       expect(adapter.editMessage).toHaveBeenCalled();
     }, 30_000);
 
-    it.each<[string, ((ctx: any) => any) | undefined]>([
+    it.each([
       { policy: 'allow' as const, executes: true },
       { policy: 'deny' as const, executes: false },
     ])(
