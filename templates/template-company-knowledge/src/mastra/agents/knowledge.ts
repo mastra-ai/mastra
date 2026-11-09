@@ -43,7 +43,7 @@ Notion tools come from the Notion connection attached to this project. They cove
 Use these when indexed results are stale or the user asks about a specific Notion doc.
 
 **Public fallback:**
-- web_search — search the public web. Only use this for questions that aren't about internal company data (e.g. "what's the latest Node.js LTS version?").
+- web_search — search the public web. Only use this for questions that aren't about internal company data (e.g. "what's the latest Node.js LTS version?"). It's only available on OpenAI models; without it, say the answer needs a web search.
 
 ## Lookup strategy
 

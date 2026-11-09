@@ -33,6 +33,16 @@ async function callTool<T>(tools: Record<string, ConnectTool>, id: string, input
   }
 }
 
+async function connectionNames(
+  tools: Record<string, ConnectTool>,
+  integrationId: string,
+): Promise<Array<{ connection_name?: string }>> {
+  const listTool = `${integrationId}__list_connections`;
+  if (!tools[listTool]) return [{}];
+  const list = await callTool<{ connections: Array<{ name: string }> }>(tools, listTool, {});
+  return (list?.connections ?? []).map(({ name }) => ({ connection_name: name }));
+}
+
 const fetchStep = createStep({
   id: 'fetch-sources',
   description: 'Pull recent Linear issues and Notion pages through Mastra Connect.',
@@ -51,59 +61,71 @@ const fetchStep = createStep({
     }
     const tools = (await connectTools({ mastra })) as Record<string, ConnectTool>;
 
-    let remaining = inputData.linearLimit ?? 100;
-    let after: string | undefined;
-    while (remaining > 0) {
-      const page = await callTool<{
-        issues: Array<{
-          id: string;
-          identifier: string;
-          title: string;
-          description?: string | null;
-          url?: string | null;
-        }>;
-        nextCursor?: string;
-      }>(tools, 'linear_list_issues', { first: Math.min(remaining, 100), after, orderBy: 'updatedAt' });
-      if (!page) break;
-      for (const issue of page.issues) {
-        docs.push({
-          id: `linear:${issue.id}`,
-          source: 'linear',
-          title: `${issue.identifier} ${issue.title}`,
-          url: issue.url ?? '',
-          text: `${issue.title}\n\n${issue.description ?? ''}`.trim(),
+    for (const connection of await connectionNames(tools, 'linear')) {
+      let remaining = inputData.linearLimit ?? 100;
+      let after: string | undefined;
+      while (remaining > 0) {
+        const page = await callTool<{
+          issues: Array<{
+            id: string;
+            identifier: string;
+            title: string;
+            description?: string | null;
+            url?: string | null;
+          }>;
+          nextCursor?: string;
+        }>(tools, 'linear_list_issues', {
+          ...connection,
+          first: Math.min(remaining, 100),
+          after,
+          orderBy: 'updatedAt',
         });
+        if (!page) break;
+        for (const issue of page.issues) {
+          docs.push({
+            id: `linear:${issue.id}`,
+            source: 'linear',
+            title: `${issue.identifier} ${issue.title}`,
+            url: issue.url ?? '',
+            text: `${issue.title}\n\n${issue.description ?? ''}`.trim(),
+          });
+        }
+        remaining -= page.issues.length;
+        after = page.nextCursor;
+        if (!after || page.issues.length === 0) break;
       }
-      remaining -= page.issues.length;
-      after = page.nextCursor;
-      if (!after || page.issues.length === 0) break;
     }
 
-    const search = await callTool<{ results: Array<{ id: string; url?: string; properties?: Record<string, any> }> }>(
-      tools,
-      'notion_search_pages',
-      { query: inputData.notionQuery || undefined, page_size: 50 },
-    );
-    for (const page of search?.results ?? []) {
-      let title = '(untitled)';
-      for (const prop of Object.values(page.properties ?? {})) {
-        if (prop?.type === 'title' && Array.isArray(prop.title)) {
-          title =
-            prop.title
-              .map((t: any) => t?.plain_text ?? '')
-              .join('')
-              .trim() || title;
-          break;
+    for (const connection of await connectionNames(tools, 'notion')) {
+      const search = await callTool<{ results: Array<{ id: string; url?: string; properties?: Record<string, any> }> }>(
+        tools,
+        'notion_search_pages',
+        { ...connection, query: inputData.notionQuery || undefined, page_size: 50 },
+      );
+      for (const page of search?.results ?? []) {
+        let title = '(untitled)';
+        for (const prop of Object.values(page.properties ?? {})) {
+          if (prop?.type === 'title' && Array.isArray(prop.title)) {
+            title =
+              prop.title
+                .map((t: any) => t?.plain_text ?? '')
+                .join('')
+                .trim() || title;
+            break;
+          }
         }
+        const content = await callTool<{ markdown?: string }>(tools, 'notion_get_page_as_markdown', {
+          ...connection,
+          page_id: page.id,
+        });
+        docs.push({
+          id: `notion:${page.id}`,
+          source: 'notion',
+          title,
+          url: page.url ?? '',
+          text: content?.markdown?.trim() || title,
+        });
       }
-      const content = await callTool<{ markdown: string }>(tools, 'notion_get_page_as_markdown', { page_id: page.id });
-      docs.push({
-        id: `notion:${page.id}`,
-        source: 'notion',
-        title,
-        url: page.url ?? '',
-        text: content?.markdown.trim() || title,
-      });
     }
 
     return { docs };
