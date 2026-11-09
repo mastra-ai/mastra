@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.83.0-alpha.1",
+  "version": "1.83.0-alpha.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -931,6 +931,7 @@
     "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.137",
     "@ai-sdk/anthropic-v7": "npm:@ai-sdk/anthropic@4.0.94",
     "@ai-sdk/azure": "^2.0.146",
+    "@ai-sdk/azure-v6": "npm:@ai-sdk/azure@3.0.147",
     "@ai-sdk/cerebras-v7": "npm:@ai-sdk/cerebras@3.0.82",
     "@ai-sdk/deepinfra-v7": "npm:@ai-sdk/deepinfra@3.0.82",
     "@ai-sdk/deepseek-v7": "npm:@ai-sdk/deepseek@3.0.77",

@@ -255,7 +255,8 @@ minimumReleaseAgeExclude:
   - '@vitest/spy@5.1.0'
   - '@vitest/utils@5.1.0'
   - deepmerge-ts@8.0.2
-  - zod@4.6.5
+  # Renovate security update: zod@3.25.76
+  - zod@4.6.5 || 3.25.76
   - zod@4.6.7
   # Renovate security update: brace-expansion@2.1.4 || 5.0.9
   - brace-expansion@2.1.4 || 5.0.9
@@ -380,14 +381,13 @@ overrides:
   # Vanta 2026-10-23: AIKIDO-2026-886499 (fixed in 4.1.1). deepeval -> open@9 ->
   # default-browser@4 pins bundle-name ^3; 4.x keeps the same bundleName() API.
   'default-browser@4.0.0>bundle-name': 4.1.1
-  client-js-e2e-tests-zod-v3>zod: ^3.24.0
+  client-js-e2e-tests-zod-v3>zod: ^3.25.76
   client-js-e2e-tests-zod-v4>zod: ^4.6.7
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
   # Vanta 2026-10-12: AIKIDO-2026-373183 critical (better-auth) fixed 1.7.7; pulls drizzle-adapter 1.7.7 (AIKIDO-2026-261025)
-  # Vanta 2026-11-05: 1.7.15 is still flagged; 1.7.16 is the newest release older than the 1-day age gate (1.7.17 is newer).
-  better-auth: ^1.7.16
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.16
+  better-auth: ^1.7.18
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.18
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
   body-parser@<2.4.0: 2.4.0

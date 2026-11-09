@@ -206,6 +206,28 @@ export const CompactLoading: Story = {
   ),
 };
 
+/** `ChartArea` with `isEmpty`: the dates stay, under dashed rulers and "No data in this range"; the legend hides. */
+export const CompactEmpty: Story = {
+  render: () => (
+    <div className="w-[min(32rem,calc(100vw-3rem))]">
+      <ChartCard variant="compact" title="Tokens" total="0" toolbar={<MetricsLineChartLegend series={tokenSeries} />}>
+        <ChartArea isEmpty>
+          <MetricsLineChart
+            data={data.map(d => ({ ...d, input: 0, cached: 0, output: 0 }))}
+            series={tokenSeries}
+            height="fill"
+            xLabels="edges"
+            showLegend={false}
+            valueFormatter={tokens.format}
+            axisFormatter={tokens.format}
+            {...EDGE_BUCKET_AXIS}
+          />
+        </ChartArea>
+      </ChartCard>
+    </div>
+  ),
+};
+
 /**
  * `variant="hero"`, for one large chart that is the page's subject (an explorer): the title as a
  * label over a large total, the change beside it, and the actions always shown.

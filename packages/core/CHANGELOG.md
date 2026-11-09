@@ -1,5 +1,7 @@
 # @mastra/core
 
+## 1.83.0-alpha.2
+
 ## 1.83.0-alpha.1
 
 ### Minor Changes
