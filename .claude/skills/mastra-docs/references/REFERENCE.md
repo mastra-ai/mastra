@@ -10,6 +10,8 @@ Use this file for API, configuration, CLI, type, and lookup pages under `docs/sr
 
 ## Reference page types
 
+Scaffold API pages from `.claude/skills/mastra-docs/templates/reference-api.md` and CLI pages from `.claude/skills/mastra-docs/templates/reference-cli.md`.
+
 Choose the structure that matches the subject:
 
 - class or factory;
