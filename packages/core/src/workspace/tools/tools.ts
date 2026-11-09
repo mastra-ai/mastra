@@ -271,20 +271,28 @@ const COMPUTER_MUTATION_TOOLS = new Set<string>([
   WORKSPACE_TOOLS.COMPUTER.SCROLL,
 ]);
 
-const COMPUTER_REQUEST_CONTEXTS = new WeakMap<RequestContext, Map<string, RequestContext>>();
+const COMPUTER_REQUEST_CONTEXTS = new WeakMap<
+  RequestContext,
+  WeakMap<RequestContext, Map<string, RequestContext>>
+>();
+const COMPUTER_IDENTITY_KEYS = new Set([MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY]);
 
-class ComputerRequestContextView extends RequestContext {
+export class ComputerRequestContextView extends RequestContext {
   readonly #source: RequestContext;
   readonly #identity: Map<string, string>;
 
-  constructor(source: RequestContext, threadId?: string, resourceId?: string) {
+  constructor(source: RequestContext, inputSource: RequestContext, threadId?: string, resourceId?: string) {
+    // The super registry stays empty: every RequestContext API is delegated below so values remain live.
     super();
     this.#source = source;
     this.#identity = new Map([
       ...(threadId ? [[MASTRA_THREAD_ID_KEY, threadId] as const] : []),
       ...(resourceId ? [[MASTRA_RESOURCE_ID_KEY, resourceId] as const] : []),
     ]);
-    Object.defineProperty(this, REQUEST_CONTEXT_INPUT_SOURCE, { value: source });
+    Object.defineProperty(this, REQUEST_CONTEXT_INPUT_SOURCE, { value: inputSource });
+    Object.defineProperty(this, 'isSerializable', {
+      value: (value: unknown) => (source as any).isSerializable(value),
+    });
   }
 
   #entries(): Map<string, unknown> {
@@ -293,40 +301,57 @@ class ComputerRequestContextView extends RequestContext {
     return entries;
   }
 
+  #setIdentity(key: string, value: unknown): boolean {
+    if (!COMPUTER_IDENTITY_KEYS.has(key)) return false;
+    if (this.#identity.get(key) === value) return true;
+    throw new Error('computer identity is read-only in the execution context');
+  }
+
+  #assertDeletable(key: string): void {
+    if (COMPUTER_IDENTITY_KEYS.has(key)) {
+      throw new Error('computer identity is read-only in the execution context');
+    }
+  }
+
   public override get(key: string): any {
-    return this.#source.hasRaw(key) ? this.#source.getRaw(key) : this.#identity.get(key);
+    return this.#source.has(key) ? this.#source.get(key) : this.#identity.get(key);
   }
 
   public override getRaw(key: string): unknown {
-    return this.get(key);
+    return this.#source.hasRaw(key) ? this.#source.getRaw(key) : this.#identity.get(key);
   }
 
   public override set(key: string, value: any): void {
-    this.#source.setRaw(key, value);
+    if (!this.#setIdentity(key, value)) this.#source.set(key, value);
   }
 
   public override setRaw(key: string, value: unknown): void {
-    this.#source.setRaw(key, value);
+    if (!this.#setIdentity(key, value)) this.#source.setRaw(key, value);
   }
 
   public override has(key: string): boolean {
-    return this.#source.hasRaw(key) || this.#identity.has(key);
+    return this.#source.has(key) || this.#identity.has(key);
   }
 
   public override hasRaw(key: string): boolean {
-    return this.has(key);
+    return this.#source.hasRaw(key) || this.#identity.has(key);
   }
 
   public override delete(key: string): boolean {
-    return this.#source.deleteRaw(key);
+    this.#assertDeletable(key);
+    return this.#source.delete(key);
   }
 
   public override deleteRaw(key: string): boolean {
+    this.#assertDeletable(key);
     return this.#source.deleteRaw(key);
   }
 
   public override clear(): void {
-    this.#source.clear();
+    // Clear caller values, but never the per-identity overlay that scopes this view.
+    for (const key of [...this.#source.keys()] as string[]) {
+      if (!COMPUTER_IDENTITY_KEYS.has(key)) this.#source.deleteRaw(key);
+    }
   }
 
   public override keys(): IterableIterator<string> {
@@ -352,15 +377,25 @@ class ComputerRequestContextView extends RequestContext {
   }
 
   public override toJSON(): Record<string, any> {
-    return Object.fromEntries(this.#entries());
+    const values = this.#source.toJSON();
+    for (const [key, value] of this.#identity) {
+      if (!(key in values)) values[key] = value;
+    }
+    return values;
   }
 
   public override serializeForSpan(): Record<string, unknown> {
+    // Identity overlay keys are intentionally omitted: the base serializer excludes all reserved keys from spans.
     return this.#source.serializeForSpan();
   }
 
   public override get all(): Record<string, any> {
-    return Object.fromEntries(this.#entries());
+    // `all` is the raw map view, not the JSON serialization boundary; retain live values and overlay absent identity.
+    const values = { ...this.#source.all };
+    for (const [key, value] of this.#identity) {
+      if (!(key in values)) values[key] = value;
+    }
+    return values;
   }
 }
 
@@ -371,26 +406,31 @@ function computerExecutionContext(context: any, workspace: Workspace): any {
   const agentResourceId = context?.agent?.resourceId as string | undefined;
   if (!agentThreadId && !agentResourceId) return context;
 
-  const current = context.requestContext as RequestContext | undefined;
-  const source = getRequestContextInputSource(current) ?? current ?? new RequestContext();
+  const current = (context.requestContext as RequestContext | undefined) ?? new RequestContext();
+  const inputSource = getRequestContextInputSource(current) ?? current;
   const { threadId, resourceId } = resolveComputerIdentity({
-    reservedThreadId: source.getRaw(MASTRA_THREAD_ID_KEY) as string | undefined,
-    reservedResourceId: source.getRaw(MASTRA_RESOURCE_ID_KEY) as string | undefined,
+    reservedThreadId: current.getRaw(MASTRA_THREAD_ID_KEY) as string | undefined,
+    reservedResourceId: current.getRaw(MASTRA_RESOURCE_ID_KEY) as string | undefined,
     agentThreadId,
     agentResourceId,
   });
   const identityKey = JSON.stringify([threadId ?? '', resourceId ?? '']);
-  let views = COMPUTER_REQUEST_CONTEXTS.get(source);
-  if (!views) {
-    views = new Map();
-    COMPUTER_REQUEST_CONTEXTS.set(source, views);
+  let currentViews = COMPUTER_REQUEST_CONTEXTS.get(inputSource);
+  if (!currentViews) {
+    currentViews = new WeakMap();
+    COMPUTER_REQUEST_CONTEXTS.set(inputSource, currentViews);
   }
-  const existing = views.get(identityKey);
+  let identityViews = currentViews.get(current);
+  if (!identityViews) {
+    identityViews = new Map();
+    currentViews.set(current, identityViews);
+  }
+  const existing = identityViews.get(identityKey);
   if (existing) return { ...context, requestContext: existing };
 
-  // Identity is overlaid per run while every non-identity value remains a live view of the source.
-  const requestContext = new ComputerRequestContextView(source, threadId, resourceId);
-  views.set(identityKey, requestContext);
+  // Identity is overlaid per run while every non-identity value remains a live view of the current context.
+  const requestContext = new ComputerRequestContextView(current, inputSource, threadId, resourceId);
+  identityViews.set(identityKey, requestContext);
   return { ...context, requestContext };
 }
 
