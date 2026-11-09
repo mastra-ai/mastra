@@ -25,6 +25,8 @@ const PAST_ONE_REFRESH_GAP_MS = 6_000;
 const PAST_ONE_FALLBACK_POLL_MS = 7_000;
 const PAST_ONE_STREAM_RETRY_MS = 3_100;
 const BOARD_READ_SLOWER_THAN_THE_REFRESH_GAP_MS = 8_000;
+const SERVER_PING_EVERY_MS = 25_000;
+const PAST_THE_SILENCE_A_LIVE_STREAM_ALLOWS_MS = 61_000;
 
 function card(title: string, stage = 'intake') {
   return {
@@ -285,6 +287,36 @@ describe('FeedEventsProvider, on the board', () => {
     await advance(WITHIN_A_SECOND_MS);
     await waitFor(() => expect(requests.runs).toBe(moving.runs + 1));
     expect(shownStages()).toEqual(['review']);
+    await waitForMutationsIdle(rendered.client);
+  });
+
+  it('reopens a stream that has gone silent, the way a dead server leaves it', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    server.use(stream.handler);
+    boardEndpoints();
+    const rendered = await renderQuietBoard();
+
+    await advance(PAST_THE_SILENCE_A_LIVE_STREAM_ALLOWS_MS);
+    await advance(PAST_ONE_STREAM_RETRY_MS);
+
+    await waitFor(() => expect(stream.opens).toBe(2));
+    await waitFor(() => expect(rendered.result.current.connected).toBe(true));
+    await waitForMutationsIdle(rendered.client);
+  });
+
+  it('keeps a quiet stream open as long as the server keeps pinging it', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    server.use(stream.handler);
+    boardEndpoints();
+    const rendered = await renderQuietBoard();
+
+    for (let ping = 0; ping < 4; ping += 1) {
+      stream.ping();
+      await advance(SERVER_PING_EVERY_MS);
+    }
+
+    expect(stream.opens).toBe(1);
+    expect(rendered.result.current.connected).toBe(true);
     await waitForMutationsIdle(rendered.client);
   });
 });

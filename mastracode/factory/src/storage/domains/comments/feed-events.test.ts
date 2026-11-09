@@ -203,6 +203,23 @@ describe('feed events stream', () => {
     await otherFeed.stop();
   });
 
+  it('sends a new reader a first byte at once, before any change or keepalive is due', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const { app } = buildApp(seed, new EventEmitterPubSub(), asAlice);
+    const response = await app.request(`/web/factory/projects/${project.id}/feed-events`);
+    if (!response.body) throw new Error('feed response has no body');
+    const reader = response.body.getReader();
+    let firstBytes: string | undefined;
+    void reader.read().then(({ value }) => {
+      firstBytes = new TextDecoder().decode(value);
+    });
+
+    await vi.waitFor(() => expect(firstBytes).toBe(': ping\n\n'));
+
+    await reader.cancel();
+  });
+
   it('acknowledges every delivery so durable brokers can settle it', async () => {
     // On Redis Streams an unacked event stays pending (broker PEL + client
     // in-flight map) for the life of the SSE connection — a per-tab leak.
