@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
+import { ErrorBoundary, ErrorBoundaryFallback } from '@mastra/playground-ui/components/ErrorBoundary';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
@@ -27,7 +27,7 @@ import { NavigationCommand, useNavigationCommand } from '@/lib/command';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 
-function MobileNavbar() {
+function MobileSearchButton() {
   const { setOpenMobile } = useSidebar();
   const { setOpen: setNavigationCommandOpen } = useNavigationCommand({ enableShortcut: false });
 
@@ -37,28 +37,17 @@ function MobileNavbar() {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-sidebar px-3 lg:hidden">
-      <div className="flex min-w-0 items-center gap-3">
-        <Sidebar.MobileTrigger />
-        <span className="flex min-w-0 items-center gap-2">
-          <LogoWithoutText className="size-[1.5rem] shrink-0" />
-          <Txt variant="body-sm" font="display" as="span" className="whitespace-nowrap">
-            Mastra Studio
-          </Txt>
-        </span>
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-md"
-        tooltip="Search"
-        aria-label="Search and navigate"
-        onClick={openNavigationCommand}
-        className="shrink-0"
-      >
-        <Search />
-      </Button>
-    </header>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      tooltip="Search"
+      aria-label="Search and navigate"
+      onClick={openNavigationCommand}
+      className="shrink-0"
+    >
+      <Search />
+    </Button>
   );
 }
 
@@ -136,12 +125,22 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       <NavigationCommand />
       <AppShell
         sidebar={shouldShowSidebar ? <AppSidebar /> : undefined}
-        mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
+        mobileBrand={<Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Studio" />}
+        mobileActions={<MobileSearchButton />}
       >
         <StudioFrame className="flex min-h-0 flex-1 flex-col">
           <MainCard>
             <AuthRequired>
-              <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+              <ErrorBoundary
+                resetKeys={[pathname]}
+                fallback={props => (
+                  <PageLayout variant="fit">
+                    <ErrorBoundaryFallback {...props} variant="section" />
+                  </PageLayout>
+                )}
+              >
+                {children}
+              </ErrorBoundary>
             </AuthRequired>
           </MainCard>
         </StudioFrame>

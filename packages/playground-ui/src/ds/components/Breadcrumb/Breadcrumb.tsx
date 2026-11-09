@@ -2,7 +2,9 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
+import { BreadcrumbOverflow } from './breadcrumb-overflow';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { useAppShellMobileBar } from '@/ds/new/layout/app-shell/app-shell-mobile-bar-context';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { PopupAnchorProvider } from '@/ds/primitives/popup-anchor';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -17,9 +19,23 @@ export interface BreadcrumbProps {
 }
 
 export const Breadcrumb = ({ children, label, className, listClassName }: BreadcrumbProps) => {
+  const collapsed = Boolean(useAppShellMobileBar());
   return (
     <nav aria-label={label} className={className}>
-      <ol className={cn('flex items-center gap-0.5', listClassName)}>{children}</ol>
+      <ol
+        className={cn(
+          'flex items-center gap-0.5',
+          collapsed && [
+            '[&>li:not([data-breadcrumb-overflow]):nth-last-child(n+4)]:hidden',
+            'has-[>li:nth-last-child(7)]:[&>[data-breadcrumb-overflow]]:flex',
+            'has-[>li:nth-last-child(7)]:[&>li:last-child]:max-w-1/2',
+          ],
+          listClassName,
+        )}
+      >
+        {collapsed && <BreadcrumbOverflow />}
+        {children}
+      </ol>
     </nav>
   );
 };
@@ -72,9 +88,10 @@ export const Crumb = ({
     <>
       <li
         ref={crumbRef}
+        data-slot="crumb"
         className={cn(
           'group flex h-control-sm min-w-0 items-center',
-          isCurrent ? 'shrink' : 'shrink-0',
+          isCurrent ? 'max-w-2/3 shrink-0 first:max-w-full [[data-breadcrumb-overflow]+&]:max-w-full' : 'shrink',
           switcherCoversCrumb &&
             'relative rounded-full has-[[data-slot=crumb-switcher]_[data-popup-open]]:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:hover:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:active:bg-fill',
         )}
@@ -114,7 +131,9 @@ export const Crumb = ({
             // `text-overflow` needs a block container, so the label truncates in its
             // own box rather than on the flex Root. Works for plain strings and for
             // components that resolve to a string (route-header `Component` crumbs).
-            <span className="min-w-0 flex-1 truncate">{children}</span>
+            <span data-slot="crumb-label" className="min-w-0 flex-1 truncate">
+              {children}
+            </span>
           )}
         </Root>
         {switcher && (

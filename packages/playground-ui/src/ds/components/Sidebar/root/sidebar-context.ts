@@ -13,7 +13,7 @@ type SidebarContextValue = {
   collapsedWidth: number;
   isMobile: boolean;
   openMobile: boolean;
-  mobileTriggerRef: React.RefObject<HTMLButtonElement | null>;
+  mobileTriggerRef: React.RefObject<HTMLElement | null>;
   setOpenMobile: (open: boolean) => void;
   setMobileDrawerPresent: (present: boolean) => void;
   toggleSidebar: () => void;
@@ -29,7 +29,7 @@ type SidebarContextValue = {
 // do not re-render when the mobile drawer toggles.
 export type MobileDrawerContextValue = {
   openMobile: boolean;
-  mobileTriggerRef: React.RefObject<HTMLButtonElement | null>;
+  mobileTriggerRef: React.RefObject<HTMLElement | null>;
   setOpenMobile: (open: boolean) => void;
   setMobileDrawerPresent: (present: boolean) => void;
 };

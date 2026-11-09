@@ -1,5 +1,7 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
+import { AppShellMobileBarContext } from './app-shell-mobile-bar-context';
+import { useMaybeSidebarState } from '@/ds/components/Sidebar/root/sidebar-context';
 import { cn } from '@/lib/utils';
 
 import './app-shell.css';
@@ -7,12 +9,27 @@ import './app-shell.css';
 export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'children'> {
   children: ReactNode;
   mobileHeader?: ReactNode;
+  mobileBrand?: ReactNode;
+  mobileActions?: ReactNode;
   sidebar?: ReactNode;
   edgeToEdge?: boolean;
 }
 
-export function AppShell({ children, className, edgeToEdge, mobileHeader, ref, sidebar, ...props }: AppShellProps) {
+export function AppShell({
+  children,
+  className,
+  edgeToEdge,
+  mobileActions,
+  mobileBrand,
+  mobileHeader,
+  ref,
+  sidebar,
+  ...props
+}: AppShellProps) {
   const animatesEdgeToEdge = edgeToEdge !== undefined;
+  const isMobile = useMaybeSidebarState()?.isMobile ?? false;
+  const mobileBar =
+    sidebar && isMobile && mobileHeader === undefined ? { brand: mobileBrand, actions: mobileActions } : undefined;
 
   return (
     <div
@@ -42,7 +59,7 @@ export function AppShell({ children, className, edgeToEdge, mobileHeader, ref, s
             !edgeToEdge && (sidebar ? 'lg:pl-0' : 'lg:pl-2'),
           )}
         >
-          {children}
+          <AppShellMobileBarContext value={mobileBar}>{children}</AppShellMobileBarContext>
         </div>
       </div>
     </div>

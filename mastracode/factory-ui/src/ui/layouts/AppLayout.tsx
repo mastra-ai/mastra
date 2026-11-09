@@ -5,6 +5,7 @@ import { Outlet } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
+import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { OverlaysProvider } from '../lib/overlays';
 import { PwaInstallBanner } from '../lib/pwa';
 import { AppSidebar } from '../AppSidebar';
@@ -21,7 +22,11 @@ function AppFrame() {
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
 
   return (
-    <AppShell sidebar={<AppSidebar />} edgeToEdge={edgeToEdge}>
+    <AppShell
+      sidebar={<AppSidebar />}
+      mobileActions={<GlobalSearchButton id="global-search-mobile-trigger" />}
+      edgeToEdge={edgeToEdge}
+    >
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
         <Outlet />
       </MainCard>
