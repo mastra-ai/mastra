@@ -112,7 +112,14 @@ const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  */
 function cancelUnreadBodyOnAbort(response: Response, signal: AbortSignal): void {
   const cancel = () => {
-    const body = response.body;
+    let body: ReadableStream | null;
+
+    try {
+      body = response.body;
+    } catch {
+      // @hono/node-server's Response throws on `body` once it is streaming the body, and it cancels that body itself.
+      return;
+    }
 
     if (body && !body.locked) {
       void body.cancel('request aborted').catch(() => {});
