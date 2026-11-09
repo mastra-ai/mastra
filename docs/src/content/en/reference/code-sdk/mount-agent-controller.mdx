@@ -136,8 +136,21 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
   },
   {
     name: 'storage',
-    type: 'StorageConfig',
-    description: 'Custom storage config instead of the auto-detected default.',
+    type: 'StorageConfig | MastraCompositeStore',
+    description:
+      'Custom storage config instead of the auto-detected default, or a pre-built store instance. An instance is used as-is, with no connection test and no LibSQL fallback.',
+    isOptional: true,
+  },
+  {
+    name: 'storageBackend',
+    type: "'libsql' | 'pg'",
+    description: 'Backend of an injected `storage` instance. Inferred for `LibSQLStore` and `PostgresStore`.',
+    isOptional: true,
+  },
+  {
+    name: 'vector',
+    type: 'MastraVector',
+    description: 'Pre-built vector store for recall search. Skips creating the default vector store.',
     isOptional: true,
   },
   {

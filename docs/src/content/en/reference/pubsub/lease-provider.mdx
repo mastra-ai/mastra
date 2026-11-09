@@ -53,14 +53,14 @@ export class CustomPubSub extends PubSub implements LeaseProvider {
 
 #### `acquireLease(key, owner, ttlMs)`
 
-Atomically tries to acquire a lease on a key. Returns `{ acquired: true, owner }` if the caller claimed the lease, or `{ acquired: false, owner }` where `owner` is the current holder, so the caller can route follow-up work to them. The same owner can call `acquireLease` idempotently to renew or re-claim.
+Atomically tries to acquire a lease on a key. Returns `{ acquired: true, owner }` if the caller claimed the lease, or `{ acquired: false, owner }` where `owner` is the current holder, so the caller can route follow-up work to them. A failed acquisition can omit `owner` when the holder is unknown, for example when the backend is closed or the competing lease expired before it could be read. Check for `owner` before routing to it. The same owner can call `acquireLease` idempotently to renew or re-claim.
 
 ```typescript
 const result = await pubsub.acquireLease('thread:abc', runId, 15000)
 
 if (result.acquired) {
   // This process owns the thread, so wake and run the agent.
-} else {
+} else if (result.owner) {
   // result.owner holds the lease, so route the signal to them.
 }
 ```

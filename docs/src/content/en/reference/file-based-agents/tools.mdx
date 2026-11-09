@@ -7,7 +7,7 @@ packages:
 
 # Tools
 
-A file-based agent discovers tools from `.ts` and `.js` files directly under its `tools/` directory. Each discovered file is imported at build time, the file must default-export a [`createTool()`](/reference/tools/create-tool) result, and the filename without its extension becomes the tool key the model can call.
+A file-based agent discovers tools from `.ts` and `.js` files directly under its `tools/` directory. Each discovered file is imported at build time and must default-export a tool. Any tool an agent's `tools` option accepts works, such as a [`createTool()`](/reference/tools/create-tool) result or a Vercel AI SDK `tool()`. The filename without its extension becomes the tool key the model can call.
 
 Use this page for the file-based convention. For tool schemas, execution options, output shaping, and approval options, see the [`createTool()` reference](/reference/tools/create-tool).
 
