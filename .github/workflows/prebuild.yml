@@ -237,10 +237,18 @@ jobs:
           # The full suite ignores the diff, and a workflow_call has no PR base to diff against.
           if [ "$FULL_SUITE" = "true" ]; then
             : > /tmp/changed-files.txt
+            : > /tmp/changed-status.txt
           else
             git diff --name-only \
               "$BASE_SHA...$HEAD_SHA" \
               > /tmp/changed-files.txt
+            git diff --name-status --find-renames \
+              "$BASE_SHA...$HEAD_SHA" \
+              > /tmp/changed-status.txt
+            # Dependency routing compares resolved trees, so it needs the lockfile the diff started from.
+            if grep -qx 'pnpm-lock.yaml' /tmp/changed-files.txt; then
+              git show "$(git merge-base "$BASE_SHA" "$HEAD_SHA")":pnpm-lock.yaml > /tmp/base-lockfile.yaml
+            fi
           fi
 
           CHANGED=$(grep -E '/src/.*\.(ts|tsx)$' /tmp/changed-files.txt \
@@ -264,13 +272,41 @@ jobs:
           const data = JSON.parse(fs.readFileSync('/tmp/affected.json', 'utf-8'));
           const changedFiles = fs.readFileSync('/tmp/changed-files.txt', 'utf-8').split(/\r?\n/).filter(Boolean);
           const nonMarkdownChangedFiles = changedFiles.filter(file => !file.endsWith('.md'));
-          const affectedTests = (data.affectedTests || []).sort();
-          const count = data.count || 0;
-          const total = data.testFiles || 1;
+          const requestedFullSuite = process.env.FULL_SUITE === 'true';
+
+          // The import graph misses dependency bumps and tests that scan their package's files.
+          const { execFileSync } = require('child_process');
+          const { dependencyAffectedTests } = require('./.github/scripts/dependency-test-routing.cjs');
+          const testFiles = execFileSync('git', ['ls-files'], { encoding: 'utf-8', maxBuffer: 1 << 28 })
+            .split('\n')
+            .filter(file => /\.(?:test|spec)(?:-d)?\.tsx?$/.test(file) && !/__fixtures__|\/fixtures\/|node_modules/.test(file));
+          const dependencySelection = requestedFullSuite ? null : dependencyAffectedTests({
+            changedFiles,
+            addedOrRemovedFiles: fs.readFileSync('/tmp/changed-status.txt', 'utf-8')
+              .split(/\r?\n/)
+              .filter(line => /^[ADR]/.test(line))
+              .flatMap(line => line.split('\t').slice(1)),
+            baseLockfile: fs.existsSync('/tmp/base-lockfile.yaml') ? fs.readFileSync('/tmp/base-lockfile.yaml', 'utf-8') : '',
+            headLockfile: fs.readFileSync('pnpm-lock.yaml', 'utf-8'),
+            testFiles,
+            readTest: file => fs.readFileSync(file, 'utf-8'),
+          });
+          if (dependencySelection && dependencySelection.reason !== 'none') {
+            console.error(`Dependency routing: ${dependencySelection.reason}`);
+            for (const { dir, reason } of dependencySelection.packages) console.error(`  ${dir}: ${reason}`);
+            fs.appendFileSync(
+              process.env.GITHUB_STEP_SUMMARY,
+              `## Dependency test routing\n\n- Reason: \`${dependencySelection.reason}\`\n- Packages: ${dependencySelection.packages.length ? dependencySelection.packages.map(pkg => `\`${pkg.dir}\``).join(', ') : 'none'}\n`,
+            );
+          }
+
+          const affectedTests = [...new Set([...(data.affectedTests || []), ...(dependencySelection?.tests || [])])].sort();
+          const count = affectedTests.length;
+          const total = testFiles.length || 1;
           const ratio = count / total;
-          // Only the release PR and workflow calls run the full suite. A regular PR runs its
-          // affected tests, however many there are.
-          const fullSuite = process.env.FULL_SUITE === 'true';
+          // Only the release PR, workflow calls and wide dependency changes run the full suite.
+          // A regular PR runs its affected tests, however many there are.
+          const fullSuite = requestedFullSuite || Boolean(dependencySelection?.runFull);
           const runFull = fullSuite;
 
           const output = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, line);
