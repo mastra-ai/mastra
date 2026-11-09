@@ -1,5 +1,6 @@
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -250,12 +251,14 @@ describe('FactorySessionPage', () => {
       startedBy: 'user-1',
     };
 
-    function renderContextHeader(sessionId: string, threadId: string, stage = 'execute') {
-      const item = {
-        ...workItem(undefined),
-        stages: [stage],
-        sessions: { triage: triageRef, work: workRef, review: reviewRef },
-      };
+    function renderContextHeader(
+      sessionId: string,
+      threadId: string,
+      stage = 'execute',
+      sessions: Record<string, typeof workRef> = { triage: triageRef, work: workRef, review: reviewRef },
+      runningSessionIds: string[] = [],
+    ) {
+      const item = { ...workItem(undefined), stages: [stage], sessions };
       server.use(
         http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
           HttpResponse.json({ sessions: [workspaceSession] }),
@@ -263,11 +266,16 @@ describe('FactorySessionPage', () => {
         http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
           HttpResponse.json({ workItems: [item] }),
         ),
-        http.get(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, () =>
-          HttpResponse.json({ session: { ...workspaceSession, sessionId } }),
+        http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) =>
+          HttpResponse.json({ session: { ...workspaceSession, sessionId: String(params.sessionId) } }),
         ),
         http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
           HttpResponse.json(workBoardCatalog satisfies BoardCatalogResponse),
+        ),
+        http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+          HttpResponse.json({
+            runs: runningSessionIds.map(id => ({ runId: `run-${id}`, resourceId: id, threadId: `${id}-thread` })),
+          }),
         ),
       );
       return renderWithProviders(
@@ -291,10 +299,40 @@ describe('FactorySessionPage', () => {
     it("names the session's context and the phase the card moved on to", async () => {
       renderContextHeader('triage-session', 'triage-thread');
 
-      const cardPhase = await screen.findByText('card is now in Building');
-      expect(currentCrumb()).toContainElement(cardPhase);
-      expect(currentCrumb()).toHaveTextContent(/^Triagecard is now in Building$/);
+      const cardPhase = await screen.findByRole('link', { name: 'card is now in Building' });
+      expect(cardPhase).toHaveAttribute(
+        'href',
+        `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
+      );
+      expect(currentCrumb()).toHaveTextContent(/^Triage$/);
       expect(screen.getByText('Issue #7: Fix sandbox setup')).toBeInTheDocument();
+    });
+
+    it("switches to another of the card's sessions from the context crumb", async () => {
+      const user = userEvent.setup();
+      renderContextHeader('triage-session', 'triage-thread', 'execute', undefined, ['review-session']);
+
+      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Triage$/));
+      await user.click(screen.getByRole('button', { name: 'Switch session' }));
+      const menu = await screen.findByRole('menu');
+      await waitFor(() =>
+        expect(
+          within(menu)
+            .getAllByRole('menuitem')
+            .map(item => item.getAttribute('aria-label')),
+        ).toEqual(['Work, current phase', 'Triage, open', 'Review, running']),
+      );
+
+      await user.click(within(menu).getByRole('menuitem', { name: 'Work, current phase' }));
+      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Work$/));
+      expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
+    });
+
+    it('keeps the context a plain crumb when the card holds one session', async () => {
+      renderContextHeader(SESSION_ID, THREAD_ID, 'execute', { work: workRef });
+
+      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Work$/));
+      expect(screen.queryByRole('button', { name: 'Switch session' })).not.toBeInTheDocument();
     });
 
     it('names only the context when the card still works in it', async () => {

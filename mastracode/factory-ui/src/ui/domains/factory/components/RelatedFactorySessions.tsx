@@ -1,6 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useMatch, useParams } from 'react-router';
@@ -13,7 +14,7 @@ import { getUserSessionLabel } from '../../workspaces/services/sessionPresentati
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { cardContextSessions, linearIdentifierForItem, phaseContext } from '../boardItems';
-import type { ContextPhase } from '../boardItems';
+import type { CardContextSession, ContextPhase } from '../boardItems';
 import { itemBoard } from '../boardStages';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
@@ -22,6 +23,7 @@ import { isPullRequestSource } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
+import { SessionContextMenu, cardSessionPath } from './SessionContextMenu';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
@@ -60,16 +62,25 @@ function activeWorkItem(
   );
 }
 
+interface SessionContextCrumb {
+  label: string;
+  /** Every session the card holds, one per context. */
+  sessions: CardContextSession[];
+  /** The phase the card is in, when that runs in another context, and that context's session. */
+  cardPhase?: { name: string; session?: CardContextSession };
+}
+
 /** The context this session runs in, and the phase the card is in when that runs elsewhere. */
 function sessionContextCrumb(
   item: WorkItem,
   phases: readonly ContextPhase[] | undefined,
   sessionId: string,
   threadId: string,
-): { label: string; cardPhase?: string } | undefined {
+): SessionContextCrumb | undefined {
   const stage = item.stages[0];
   if (stage === undefined) return undefined;
-  const entry = cardContextSessions(item, phases, stage).find(
+  const sessions = cardContextSessions(item, phases, stage);
+  const entry = sessions.find(
     candidate => candidate.ref.sessionId === sessionId && candidate.ref.threadId === threadId,
   );
   if (!entry) return undefined;
@@ -78,9 +89,16 @@ function sessionContextCrumb(
   // one the card moves out of, so the card being elsewhere says nothing.
   const phaseRunsHere = phases?.some(phase => phaseContext(phase) === entry.context);
   if (entry.current || !phaseRunsHere || !currentPhase || phaseContext(currentPhase) === undefined) {
-    return { label: entry.label };
+    return { label: entry.label, sessions };
   }
-  return { label: entry.label, cardPhase: currentPhase.name ?? currentPhase.title };
+  return {
+    label: entry.label,
+    sessions,
+    cardPhase: {
+      name: currentPhase.name ?? currentPhase.title,
+      session: sessions.find(candidate => candidate.current),
+    },
+  };
 }
 
 /** Chat page frame for a factory thread: breadcrumb of the work item or session, plus its actions. */
@@ -118,15 +136,36 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
         <Crumb as="span" isCurrent={!contextCrumb}>
           {sessionTitle(currentItem)}
         </Crumb>
-        {contextCrumb ? (
-          <Crumb as="span" isCurrent>
-            <span className="flex items-baseline gap-2">
-              <span>{contextCrumb.label}</span>
-              {contextCrumb.cardPhase ? (
-                <span className="text-muted-foreground">card is now in {contextCrumb.cardPhase}</span>
-              ) : null}
-            </span>
+        {contextCrumb && sessionId ? (
+          <Crumb
+            as="span"
+            isCurrent
+            switcher={
+              contextCrumb.sessions.length > 1 ? (
+                <SessionContextMenu factoryId={factoryId} sessions={contextCrumb.sessions} openSessionId={sessionId} />
+              ) : undefined
+            }
+          >
+            {contextCrumb.label}
           </Crumb>
+        ) : null}
+        {contextCrumb?.cardPhase ? (
+          <li className="flex min-w-0 items-center px-2">
+            {contextCrumb.cardPhase.session ? (
+              <Link
+                to={cardSessionPath(factoryId, contextCrumb.cardPhase.session)}
+                className={`text-muted-foreground hover:text-foreground truncate rounded-sm ${focusRing}`}
+              >
+                <Txt as="span" variant="caption">
+                  card is now in {contextCrumb.cardPhase.name}
+                </Txt>
+              </Link>
+            ) : (
+              <Txt as="span" variant="caption" tone="muted" className="truncate">
+                card is now in {contextCrumb.cardPhase.name}
+              </Txt>
+            )}
+          </li>
         ) : null}
       </>
     ) : isUserThread && session ? (
