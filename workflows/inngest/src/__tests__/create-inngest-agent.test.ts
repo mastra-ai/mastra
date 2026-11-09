@@ -25,6 +25,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -3485,5 +3486,89 @@ describe('thread and run abort (#25156)', () => {
 
     expect(() => durableAgent.abortRunStream('abort-run-publish-fails-run')).not.toThrow();
     await new Promise(resolve => setTimeout(resolve, 10));
+  });
+});
+
+describe('background task finished while untilIdle is open (#29785)', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-bg-notify',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeRegistered(id: string) {
+    const storage = new InMemoryStore();
+    const durableAgent = createInngestAgent({
+      agent: new Agent({
+        id,
+        name: id,
+        instructions: 'Test',
+        model: createMockModel() as any,
+        memory: new Memory({ storage }),
+      }),
+      inngest,
+    });
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      agents: { [id]: durableAgent as any },
+      storage,
+      backgroundTasks: { enabled: true },
+      logger: false,
+    });
+    // The durable tool-call step resolves the owner like this before notifying it.
+    const owner = Object.values(mastra.listAgents()).find(a => a.id === id) as any;
+    return { durableAgent, owner };
+  }
+
+  function finishedTask(threadId: string, resourceId: string) {
+    return {
+      threadId,
+      resourceId,
+      taskId: 'task-1',
+      toolCallId: 'call-1',
+      toolName: 'brew',
+      status: 'completed' as const,
+    };
+  }
+
+  it('does not wake the thread when an untilIdle stream is open for it', async () => {
+    const { durableAgent, owner } = makeRegistered('bg-notify-open');
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const signalSpy = vi.spyOn(durableAgent.agent, 'sendSignal');
+    const threadId = 'bg-notify-open-t';
+    const resourceId = 'bg-notify-open-r';
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      untilIdle: true,
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    try {
+      await vi.waitFor(() => expect(owner.__untilIdleHandlesBackgroundTask(threadId, resourceId, 'probe')).toBe(true));
+
+      await owner.__notifyBackgroundTaskFinished(finishedTask(threadId, resourceId));
+
+      expect(signalSpy).not.toHaveBeenCalled();
+    } finally {
+      (result as any).cleanup?.();
+      durableAgent.abortThreadStream({ threadId, resourceId, localOnly: true } as any);
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('still wakes the thread when no untilIdle stream is open', async () => {
+    const { durableAgent, owner } = makeRegistered('bg-notify-idle');
+    const signalSpy = vi.spyOn(durableAgent.agent, 'sendSignal').mockReturnValue({
+      signal: { id: 'sig-1' },
+      accepted: Promise.resolve({ action: 'woke' }),
+    } as any);
+
+    expect(owner.__untilIdleHandlesBackgroundTask('bg-notify-idle-t', 'bg-notify-idle-r', 'task-1')).toBe(false);
+    await owner.__notifyBackgroundTaskFinished(finishedTask('bg-notify-idle-t', 'bg-notify-idle-r'));
+
+    expect(signalSpy).toHaveBeenCalledTimes(1);
+    expect(signalSpy.mock.calls[0]?.[0]).toMatchObject({ type: 'notification', tagName: 'background-task' });
+    expect(signalSpy.mock.calls[0]?.[1]).toMatchObject({
+      threadId: 'bg-notify-idle-t',
+      resourceId: 'bg-notify-idle-r',
+    });
   });
 });
