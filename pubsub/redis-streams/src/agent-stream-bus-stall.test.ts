@@ -222,4 +222,95 @@ describe('agent run-stream bus stalled by CLIENT PAUSE (COR-1519)', () => {
       expect(replay.types.at(-1)).toBe('finish');
     }, 90_000);
   });
+
+  // Measures, at the bus boundary only, how far plain-agent run streams fall
+  // behind their callers while Redis is stalled. The publisher's queue is
+  // internal, so its depth is inferred: frames the callers already received
+  // minus run-stream publishes Redis has acknowledged.
+  describe('plain agents: publish backlog while stalled', () => {
+    const RUNS = 10;
+    const PAUSE_MS = 5_000;
+
+    it(`${RUNS} concurrent runs during a ${PAUSE_MS}ms stall: callers finish, backlog drains after unpause`, async () => {
+      await flushRedis();
+      const keyPrefix = `bus-backlog-${randomUUID()}`;
+      const counts = { started: 0, acked: 0, inFlight: 0, peakInFlight: 0 };
+      const pubsub = new (class extends RedisStreamsPubSub {
+        override async publish(...args: Parameters<RedisStreamsPubSub['publish']>) {
+          if (!args[0].startsWith('agent.stream.')) return super.publish(...args);
+          counts.started++;
+          counts.inFlight++;
+          counts.peakInFlight = Math.max(counts.peakInFlight, counts.inFlight);
+          try {
+            return await super.publish(...args);
+          } finally {
+            counts.inFlight--;
+            counts.acked++;
+          }
+        }
+      })({ url: REDIS_URL, keyPrefix, blockMs: 200 });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+      const mastra = new Mastra({
+        logger: false,
+        pubsub,
+        agents: {
+          'stall-agent': new Agent({
+            id: 'stall-agent',
+            name: 'Stall Agent',
+            instructions: 'You are a test agent driven by scripted AIMock responses.',
+            model: openai('gpt-4o-mini'),
+          }),
+        },
+      });
+      const agent = mastra.getAgent('stall-agent' as any);
+      try {
+        // Warm the bus so the stall measures queuing, not the connect timeout.
+        await read((await agent.stream('Say the words.')).fullStream, Date.now(), 15_000);
+        while (counts.inFlight > 0) await new Promise(r => setTimeout(r, 20));
+        await new Promise(r => setTimeout(r, 200));
+        while (counts.inFlight > 0) await new Promise(r => setTimeout(r, 20));
+        const before = { ...counts };
+        const heapBefore = process.memoryUsage().heapUsed;
+
+        await admin.sendCommand(['CLIENT', 'PAUSE', String(PAUSE_MS), 'ALL']);
+        const started = Date.now();
+        const runs = await Promise.all(Array.from({ length: RUNS }, () => agent.stream('Say the words.')));
+        const callers = await Promise.all(runs.map(run => read(run.fullStream, started, PAUSE_MS + 20_000)));
+        const callersDoneMs = Date.now() - started;
+        const callerFrames = callers.reduce((n, c) => n + c.types.length, 0);
+        const atCallersDone = { started: counts.started - before.started, acked: counts.acked - before.acked };
+        const heapDelta = process.memoryUsage().heapUsed - heapBefore;
+
+        const drainDeadline = started + PAUSE_MS + 20_000;
+        while (counts.inFlight > 0 || counts.acked - before.acked < callerFrames) {
+          if (Date.now() > drainDeadline) break;
+          await new Promise(r => setTimeout(r, 50));
+        }
+        const drainedMs = Date.now() - started;
+        const total = { started: counts.started - before.started, acked: counts.acked - before.acked };
+        const replays = await Promise.all(
+          runs.map(async run => read((await agent.observe(run.runId)).fullStream, Date.now(), 15_000)),
+        );
+
+        console.info(
+          `[COR-1519 backlog] ${RUNS} plain runs, pause ${PAUSE_MS}ms: callers done ${callersDoneMs}ms ` +
+            `(slowest ${Math.max(...callers.map(c => c.ms))}ms) with ${callerFrames} frames; at that point bus ` +
+            `publishes started=${atCallersDone.started} acked=${atCallersDone.acked} ` +
+            `(inferred backlog >= ${callerFrames - atCallersDone.acked}); peak concurrent publishes ` +
+            `${counts.peakInFlight}; heapUsed delta ${(heapDelta / 1024).toFixed(0)}KiB (GC-noisy); drained ` +
+            `${drainedMs}ms, total started=${total.started} acked=${total.acked}`,
+        );
+
+        expect(callersDoneMs).toBeLessThan(PAUSE_MS);
+        for (const c of callers) expect(c.text).toBe(REPLY);
+        expect(atCallersDone.acked).toBe(0);
+        expect(drainedMs).toBeGreaterThanOrEqual(PAUSE_MS - 500);
+        expect(drainedMs).toBeLessThan(PAUSE_MS + 20_000);
+        for (const r of replays) expect(r.text).toBe(REPLY);
+      } finally {
+        await admin.sendCommand(['CLIENT', 'UNPAUSE']).catch(() => {});
+        await pubsub.close?.();
+      }
+    }, 60_000);
+  });
 });
