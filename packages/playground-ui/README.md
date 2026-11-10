@@ -430,7 +430,7 @@ Foundations/Color has one story each for monochrome and chromatic ramps, semanti
 
 Text uses roles, not sizes. A role such as `body-sm` or `caption` sets size, line height, weight, and tracking together. Render text with `Txt`, or use the matching `text-<role>` utility inside a component's own markup.
 
-Roles use two weights. Regular (`--font-weight-normal`, 450) is for anything read: `body`, `body-sm`, `caption`, `lead`, and `menu`. Strong (`--font-weight-medium`, 500) is for anything that labels or heads something: `label`, `column`, `eyebrow`, `meta`, and every heading role. Text without a role inherits regular. `font-normal` and `font-medium` resolve to the same two weights, so inline emphasis such as a highlighted name in a sentence stays on the scale. Before adding `font-medium` to a role, check whether another role already pairs that size with the strong weight: `text-body font-medium` is `subheading`, and `text-body-sm font-medium` is `label`.
+Roles use two weights. Regular (`--font-weight-normal`, 465) is for anything read: `body`, `body-sm`, `caption`, `lead`, and `menu`. Strong (`--font-weight-medium`, 515) is for anything that labels or heads something: `label`, `column`, `eyebrow`, `meta`, and every heading role. Text without a role inherits regular. `font-normal` and `font-medium` resolve to the same two weights, so inline emphasis such as a highlighted name in a sentence stays on the scale. Before adding `font-medium` to a role, check whether another role already pairs that size with the strong weight: `text-body font-medium` is `subheading`, and `text-body-sm font-medium` is `label`.
 
 Shared components own their typography. Use their existing size and semantic variant APIs, and let compound slots style direct children through inheritance. Use `Txt` for text that the call site owns. Do not add a generic text-role prop or wrap arbitrary children just to migrate a CSS class. A specialized surface can use the existing `className` escape hatch with a DS role when the component's defaults do not fit.
 
@@ -483,7 +483,7 @@ Card titles use 13px text with a 150% line height. Choose the complete role rath
 </Txt>
 ```
 
-These roles preserve the existing Factory card typography. Control labels remain `label` at 500 weight.
+These roles preserve the existing Factory card typography. Control labels remain `label` at the strong weight.
 
 #### Monospace
 

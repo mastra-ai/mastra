@@ -9,16 +9,17 @@
      reads these names off `ds/tokens/fonts.ts`) and a later role cleanly replaces
      an earlier one.
 
-     Two weights carry the application shell: regular (450) for anything read,
-     strong (500) for anything that labels or heads something. Hierarchy comes
-     from size and tone, not more weights. Regular is 450 rather than 400
-     because 400 reads thin at UI sizes on a dark surface; it matches what
-     Linear ships. `font-normal` and `font-medium` resolve to the same two
+     Two weights carry the application shell: regular (465) for anything read,
+     strong (515) for anything that labels or heads something. Hierarchy comes
+     from size and tone, not more weights. Regular is 465 rather than 400
+     because 400 reads thin at UI sizes on a dark surface; 465/515 read most
+     naturally in Mona Sans when compared side by side with 450/500 and
+     475/525. `font-normal` and `font-medium` resolve to the same two
      tokens, so inline emphasis stays on the scale. Factory card titles are the
      exception: their 550 and 600 weights preserve the existing emphasis of
      work-item and candidate titles. */
-  --font-weight-normal: 450;
-  --font-weight-medium: 500;
+  --font-weight-normal: 465;
+  --font-weight-medium: 515;
 
   /* Large welcome pages share a responsive headline and introduction. */
   --text-hero: clamp(2rem, 3.9vw, 3.25rem);

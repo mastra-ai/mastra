@@ -362,10 +362,10 @@ describe('theme.css export', () => {
     expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
   });
 
-  it('gives text roles two weights, regular 450 and strong 500', () => {
+  it('gives text roles two weights, regular 465 and strong 515', () => {
     const variables = parseVariables(themeCss);
-    expect(variables.get('font-weight-normal')).toBe('450');
-    expect(variables.get('font-weight-medium')).toBe('500');
+    expect(variables.get('font-weight-normal')).toBe('465');
+    expect(variables.get('font-weight-medium')).toBe('515');
     for (const role of ['body', 'body-sm', 'caption', 'lead', 'menu']) {
       expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-normal)');
     }

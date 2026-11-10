@@ -54,7 +54,7 @@
     font-size: 1em;
   }
 
-  /* Bold sits a clear step above the regular (450) prose weight; 500 is too close to tell apart. */
+  /* Bold sits a clear step above the regular (465) prose weight; the strong (515) weight is too close to tell apart. */
   .mastra-markdown strong {
     color: var(--foreground);
     font-weight: 600;
