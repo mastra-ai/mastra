@@ -5,7 +5,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { BookOpen, ChevronRight } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router';
 
@@ -13,7 +13,6 @@ import type { FactorySkillInfo, StoredBoardResponse } from '../../../../api/type
 import { useDeleteBoardMutation, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { boardPath, orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
@@ -23,7 +22,7 @@ import { useBoardDraft } from '../BoardDraftProvider';
 import { canRemovePhase, draftChanged, phaseHasProblem, rawRuleKey, removePhase } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
-import { IntakeNote } from './IntakeNote';
+import { NewCardsHere } from './NewCardsHere';
 import { PhaseConfig } from './PhaseConfig';
 
 const RULE_FIELDS: RuleField[] = ['autoStartWhen', 'autoApproveWhen'];
@@ -58,7 +57,14 @@ export function BoardConfigEditor({
 }) {
   const { board, canEdit } = response;
   const { draft, rawRules, locked, setDraft, setRawRule, discard } = useBoardDraft(factory.id, boardId, board);
+  // Rule editors read their rule once, so a discard or a new revision gives the phase page fresh ones.
+  const [discards, setDiscards] = useState(0);
+  const discardEdits = () => {
+    discard();
+    setDiscards(count => count + 1);
+  };
   const catalog = useBoardCatalog(factory.id);
+  const installed = catalog.data?.find(candidate => candidate.id === boardId);
   const navigate = useNavigate();
   const save = useSaveBoardMutation(factory.id, boardId);
   const reset = useResetBoardMutation(factory.id, boardId);
@@ -105,7 +111,7 @@ export function BoardConfigEditor({
     body = (
       <PhaseConfig
         // Each phase gets its own editors, so state one phase's editors hold never shows on another's page.
-        key={phase.key}
+        key={`${phase.key}:${board.revision ?? 'code'}:${discards}`}
         phase={phase}
         phases={draft.phases}
         requiredNextPhases={board.codeBehaviour?.[phase.key]?.requiredNextPhases ?? []}
@@ -179,7 +185,7 @@ export function BoardConfigEditor({
           </SettingsSubsection>
         )}
 
-        {boardId !== DEFAULT_BOARD_ID && <IntakeNote factoryId={factory.id} />}
+        {installed && <NewCardsHere factoryId={factory.id} board={installed} />}
 
         {board.source !== 'stored' && !readOnly && (
           <SettingsSubsection title="Default">
@@ -293,7 +299,7 @@ export function BoardConfigEditor({
                   ? `Fix ${phasesToFix.map(candidate => candidate.name || candidate.key).join(', ')} to save.`
                   : 'Unsaved changes'}
             </Txt>
-            <Button size="sm" variant="ghost" disabled={save.isPending} onClick={discard}>
+            <Button size="sm" variant="ghost" disabled={save.isPending} onClick={discardEdits}>
               Discard
             </Button>
             <Button

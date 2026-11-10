@@ -62,10 +62,10 @@ export function SettingsPanel() {
       {section === 'connections' && <ConnectionsSection />}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'intake' && (
-        <>
+        <div className="flex flex-col gap-8">
           <IntakeSection />
           <IntakeRoutesSection factoryId={factoryId} />
-        </>
+        </div>
       )}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && (

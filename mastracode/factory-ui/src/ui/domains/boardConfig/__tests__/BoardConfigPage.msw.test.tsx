@@ -279,7 +279,18 @@ describe('Board configuration', () => {
       configNav()
         .getAllByRole('link')
         .map(link => link.textContent),
-    ).toEqual(['Skills', 'General', 'Intake', 'Triage', 'Plan', 'Review', 'Building', 'Done', 'Canceled']);
+    ).toEqual([
+      'Skills',
+      'General',
+      'Card moves',
+      'Intake',
+      'Triage',
+      'Plan',
+      'Review',
+      'Building',
+      'Done',
+      'Canceled',
+    ]);
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
@@ -362,13 +373,47 @@ describe('Board configuration', () => {
     expect(screen.queryByLabelText('Triage: start only when JSON')).not.toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Edit as JSON' })[0]);
     expect(screen.getByLabelText('Triage: start only when JSON')).toHaveValue(JSON.stringify(bugs, null, 2));
-    await user.click(screen.getByRole('button', { name: 'Use rule builder' }));
+    await user.click(screen.getByRole('button', { name: 'Edit as conditions' }));
 
     // Back on Planning, the unfinished text is still there and still holds the save.
     await user.click(configNav().getByRole('link', { name: 'Planning' }));
     expect(await screen.findByLabelText('Planning: start only when JSON')).toHaveValue(unfinished);
     expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  it("puts a phase's saved conditions back on Discard", async () => {
+    stubFactory();
+    const work = storedWorkBoard();
+    serveBoard(
+      storedWorkBoard({
+        phases: work.board.phases.map(phase =>
+          phase.key === 'triage'
+            ? {
+                ...phase,
+                autoStart: true,
+                autoStartWhen: {
+                  operator: 'AND',
+                  conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }],
+                },
+              }
+            : phase,
+        ),
+      }),
+    );
+    renderAt(`/factories/${FACTORY_ID}/work/config`);
+
+    const user = await openPhase('Triage');
+    const rule = screen.getByRole('group', { name: 'Triage: start only when' });
+    await user.click(within(rule).getByRole('button', { name: 'Add condition' }));
+    await user.click(within(rule).getAllByRole('button', { name: 'Remove condition' })[0]);
+    expect(within(rule).getAllByRole('button', { name: 'Remove condition' })).toHaveLength(1);
+    expect(within(rule).queryByRole('textbox', { name: 'Value' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    const reloaded = await screen.findByRole('group', { name: 'Triage: start only when' });
+    expect(within(reloaded).getAllByRole('button', { name: 'Remove condition' })).toHaveLength(1);
+    expect(within(reloaded).getByRole('textbox', { name: 'Value' })).toHaveValue('bug');
   });
 
   it('asks before leaving the board with unsaved changes', async () => {
@@ -384,7 +429,7 @@ describe('Board configuration', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/config/planning`);
-    expect(screen.getByRole('textbox', { name: 'Planning instructions' })).toHaveValue('Keep plans short.');
+    expect(screen.getByRole('textbox', { name: 'Planning instructions' })).toHaveTextContent('Keep plans short.');
 
     await user.click(screen.getByRole('button', { name: 'Back to Work: Board settings' }));
     await user.click(
@@ -453,7 +498,7 @@ describe('Board configuration', () => {
     renderAt(`/factories/${FACTORY_ID}/work/config/planning`);
 
     expect(await screen.findByText('Only organization admins can change this board.')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Planning instructions' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Planning instructions' })).toHaveAttribute('aria-readonly', 'true');
     expect(screen.getByRole('switch', { name: 'Planning: start on its own' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
@@ -569,7 +614,10 @@ describe('Board configuration', () => {
       ).toBeInTheDocument();
       const user = userEvent.setup();
       await user.click(configNav().getByRole('link', { name: 'Drafting' }));
-      expect(await screen.findByRole('textbox', { name: 'Drafting instructions' })).toBeDisabled();
+      expect(await screen.findByRole('textbox', { name: 'Drafting instructions' })).toHaveAttribute(
+        'aria-readonly',
+        'true',
+      );
       expect(screen.queryByRole('textbox', { name: 'Phase name' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     });
