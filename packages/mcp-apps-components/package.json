@@ -25,6 +25,16 @@
         "default": "./dist/host.cjs"
       }
     },
+    "./dashboards": {
+      "import": {
+        "types": "./dist/dashboards.d.ts",
+        "default": "./dist/dashboards.js"
+      },
+      "require": {
+        "types": "./dist/dashboards.d.ts",
+        "default": "./dist/dashboards.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
