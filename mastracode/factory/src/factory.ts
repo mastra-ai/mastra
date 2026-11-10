@@ -381,8 +381,9 @@ export interface MastraFactoryConfig {
    */
   skills?: readonly InlineSkill[];
   /**
-   * Whether projects get the built-in Work board, stored in each project once, and the legacy
-   * read-only Review board. Default: true.
+   * @deprecated Ignored, and removed in a future release. Every project gets Factory's Work board
+   * when it has no boards yet; one that has any keeps what it has. To run your own Work board,
+   * store it under the `work` key with `factory.upsertBoard(board, { projects: 'all' })`.
    */
   includeDefaultBoards?: boolean;
 
@@ -505,6 +506,16 @@ function buildDefaultStudioAuth(): IMastraAuthProvider {
   return new MastraAuthStudio();
 }
 
+let warnedIncludeDefaultBoards = false;
+
+function warnIncludeDefaultBoards(): void {
+  if (warnedIncludeDefaultBoards) return;
+  warnedIncludeDefaultBoards = true;
+  console.warn(
+    "[Mastra Factory] MastraFactory({ includeDefaultBoards }) is deprecated and ignored: every project gets Factory's Work board when it has no boards yet, and one that has any keeps what it has. To run your own Work board, store it under the 'work' key with factory.upsertBoard(board, { projects: 'all' }).",
+  );
+}
+
 let warnedDefinedBoards = false;
 
 /** Warns once per process when the app declares boards in code; Factory's own boards never warn. */
@@ -555,7 +566,9 @@ export class MastraFactory {
   /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
   #projectBoards: ProjectBoardCache | undefined;
   /** Writes to stored boards for `upsertBoard()`; undefined until `prepare()` or when the boards domain is down. */
-  #boardStore: { writes: BoardWrites; projects: FactoryProjectsStorage; audit: AuditDomain } | undefined;
+  #boardStore:
+    | { writes: BoardWrites; boards: ProjectBoardCache; projects: FactoryProjectsStorage; audit: AuditDomain }
+    | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
@@ -584,10 +597,8 @@ export class MastraFactory {
           "new LibSQLFactoryStorage({ url }) from '@mastra/libsql' for local dev.",
       );
     }
-    this.#boards = createBoardRegistry({
-      boards: config.boards,
-      includeDefaultBoards: config.includeDefaultBoards,
-    });
+    if (config.includeDefaultBoards !== undefined) warnIncludeDefaultBoards();
+    this.#boards = createBoardRegistry({ boards: config.boards });
     warnDefinedBoards(this.#boards);
     if ('rules' in config) {
       throw new Error(
@@ -617,8 +628,11 @@ export class MastraFactory {
   /**
    * Writes a board definition into projects: each project that has no board under its key gets
    * it, and each one that has it, edited or not, has it replaced at the next revision. Use it to
-   * push a board from code into projects; it isn't run for you, and projects created later don't
-   * get it until you run it again. A Work or app board's key keeps that board's code behaviour,
+   * push a board from code into projects, at startup. With `projects: 'all'`, a project that has
+   * no boards yet on its first load (one created later, during onboarding) gets it too, before
+   * Factory's own boards; Factory adds its default Work only to a project with no boards, so that
+   * project gets none. This lasts for the process, so run it at every startup. A Work or app
+   * board's key keeps that board's code behaviour,
    * so the definition is checked as an edit is; a new key gets none (no tool, source-closed or
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
@@ -654,13 +668,15 @@ export class MastraFactory {
           : 'MastraFactory.upsertBoard() needs prepare() first.',
       );
     }
-    const { writes, projects, audit } = store;
+    const { writes, boards, projects, audit } = store;
     const input = writes.validate(board);
     // Work and app boards are stored per project like any other; the retired Review board's key is reserved.
     writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
     let scopes: StoredBoardScope[];
     if (options.projects === 'all') {
+      // Projects created from now on get it too, before Factory's own boards.
+      boards.rememberBoardForAllProjects(input);
       scopes = (await projects.listAll()).map(project => ({ orgId: project.orgId, factoryProjectId: project.id }));
     } else {
       scopes = [...options.projects];
@@ -972,6 +988,7 @@ export class MastraFactory {
       this.#projectBoards = projectBoards;
       this.#boardStore = {
         writes: new BoardWrites({ storage: storedBoardsStorage, boards: projectBoards, workItems: workItemsStorage }),
+        boards: projectBoards,
         projects: factoryProjectsStorage,
         audit: auditDomain,
       };

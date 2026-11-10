@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
-
 import { ProjectBoardCache } from '../boards/project-boards.js';
-import { createBoardRegistry } from '../boards/registry.js';
+
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
@@ -82,7 +82,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   /** One replica: the intake route and board routes over HTTP, with its own board cache. */
   function replica(domains: Client, orgId: string, options: { auth?: RouteAuth } = {}) {
     const cache = new ProjectBoardCache({
-      codeRegistry: createBoardRegistry(),
+      codeRegistry: createTriageWorkRegistry(),
       storage: domains.boards,
       projects: domains.projects,
       recheckMs: 1000,

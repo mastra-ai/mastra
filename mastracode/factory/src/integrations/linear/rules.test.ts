@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -306,7 +306,7 @@ describe('LinearRules', () => {
     const linearRules = resolveLinearRules({ issueObserved: () => decision });
     const { project, service, workItems } = await setup(
       { issueObserved: () => decision },
-      createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+      boardRegistryOf([createTestBoard()]),
     );
     const input = { orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] };
     await expect(service.ingest(input)).resolves.toEqual({ status: 'committed', ingested: 1 });
@@ -316,7 +316,7 @@ describe('LinearRules', () => {
       projects: { get: async () => project },
       storage: workItems,
       configVersion: 'replacement-config',
-      boards: createBoardRegistry({ includeDefaultBoards: false }),
+      boards: boardRegistryOf([]),
       linearRules,
     });
     await expect(restarted.ingest(input)).resolves.toEqual({ status: 'replayed', ingested: 1 });

@@ -4,7 +4,7 @@ import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.
 import type { Card } from '../storage/domains/work-items/base.js';
 import { moveCardToBoard } from './relocate.js';
 import { createTestBoard } from './test-utils.js';
-import { createBoardRegistry } from './index.js';
+import { boardRegistryOf, createBoardRegistry } from './index.js';
 
 function item(overrides: Partial<Card> = {}): Card {
   return {
@@ -182,7 +182,7 @@ describe('moveCardToBoard', () => {
   ])('leaves a card on an uninstalled board alone (%s)', async (_label, overrides) => {
     const row = item(overrides as Partial<Card>);
     const update = vi.fn();
-    const boards = createBoardRegistry({ includeDefaultBoards: false, boards: [createTestBoard()] });
+    const boards = boardRegistryOf([createTestBoard()]);
 
     await expect(
       moveCardToBoard({

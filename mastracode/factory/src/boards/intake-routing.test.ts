@@ -4,10 +4,11 @@ import type { RuleGroup } from '../rules/rule-group.js';
 import { cardRuleFacts } from './card-facts.js';
 import { defineBoard } from './define-board.js';
 import { intakeTargetProblem, resolveIntakePlacement } from './intake-routing.js';
-import { createBoardRegistry } from './registry.js';
-import { createTestBoard } from './test-utils.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
+import { createTestBoard, createTriageWorkRegistry } from './test-utils.js';
 
-const registry = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: true });
+// Work with Triage, as projects stored before new projects' Work dropped it: routes here target Triage.
+const registry = createTriageWorkRegistry(createTestBoard());
 
 const DOCS: RuleGroup = {
   operator: 'AND',
@@ -41,22 +42,19 @@ const pullRequest = cardRuleFacts({
 });
 
 /** A board whose first phase can't reach `fixing` directly: cards go through `triaged`. */
-const stepwise = createBoardRegistry({
-  boards: [
-    defineBoard({
-      id: 'stepwise',
-      name: 'Stepwise',
-      initialPhase: 'reported',
-      phases: {
-        reported: { name: 'Reported', kind: 'resting', nextPhases: ['triaged'] },
-        triaged: { name: 'Triaged', kind: 'resting', nextPhases: ['fixing'] },
-        fixing: { name: 'Fixing', kind: 'working', nextPhases: ['fixed'] },
-        fixed: { name: 'Fixed', kind: 'terminal' },
-      },
-    }),
-  ],
-  includeDefaultBoards: false,
-});
+const stepwise = boardRegistryOf([
+  defineBoard({
+    id: 'stepwise',
+    name: 'Stepwise',
+    initialPhase: 'reported',
+    phases: {
+      reported: { name: 'Reported', kind: 'resting', nextPhases: ['triaged'] },
+      triaged: { name: 'Triaged', kind: 'resting', nextPhases: ['fixing'] },
+      fixing: { name: 'Fixing', kind: 'working', nextPhases: ['fixed'] },
+      fixed: { name: 'Fixed', kind: 'terminal' },
+    },
+  }),
+]);
 
 describe('resolveIntakePlacement', () => {
   it("lands a card in the first phase when the route's phase can't be reached from it", () => {
