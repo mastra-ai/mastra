@@ -798,7 +798,7 @@ Label routes (`GET`/`PUT /web/intake/label-routes`) and a binding's `board` were
 
 Each project has an ordered list of intake routes: the only thing that decides where a new card lands. Admins manage them in Settings › Work Intake › Intake routes or through the API, and anyone in the project can read them. A route names the board events it handles in `on`. A route on `work_item.created`, the default, decides where a new card lands: the first enabled route whose `when` matches the card names its board and phase. A route on `work_item.closed` or `work_item.reopened` decides where an existing card moves when its source closes or reopens (see [Status events](#status-events-move-existing-cards)).
 
-**The default routes.** Every project starts with eleven routes: three for new cards, one of which files a pull request on its issue's card; three that move cards when their issue closes or reopens; and five that move cards when a pull request's status changes. The first, `Pull requests that close a waiting issue join its card`:
+**The default routes.** Every project starts with twelve routes: four for new cards, one of which files a pull request on its issue's card and the last of which takes everything else; three that move cards when their issue closes or reopens; and five that move cards when a pull request's status changes. The first, `Pull requests that close a waiting issue join its card`:
 
 ```json
 {
