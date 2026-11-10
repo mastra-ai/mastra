@@ -270,6 +270,21 @@ describe('VectorizeFilterTranslator', () => {
       expect(() => translator.translate(filter)).toThrow(/Vectorize/);
     });
 
+    it('merges a filter that repeats the scope value', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, { resource_id: 'u', mode: 'work' }] };
+      expect(translator.translate(filter)).toEqual({ resource_id: { $eq: 'u' }, mode: { $eq: 'work' } });
+    });
+
+    it('merges a repeated range bound with the same value', () => {
+      const filter: any = { $and: [{ score: { $gte: 1 } }, { score: { $gte: 1, $lt: 5 } }] };
+      expect(translator.translate(filter)).toEqual({ score: { $gte: 1, $lt: 5 } });
+    });
+
+    it('still rejects the same operator with a different value', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, { resource_id: 'v' }] };
+      expect(() => translator.translate(filter)).toThrow(/Vectorize/);
+    });
+
     it('treats empty, null and undefined clauses as no condition', () => {
       const filter: any = { $and: [{ resource_id: 'u' }, {}, null, undefined] };
       expect(translator.translate(filter)).toEqual({ resource_id: { $eq: 'u' } });

@@ -26,6 +26,12 @@ const isRangePair = (operators: string[]): boolean =>
   operators.filter(operator => operator === '$gt' || operator === '$gte').length === 1 &&
   operators.filter(operator => operator === '$lt' || operator === '$lte').length === 1;
 
+/** Equal primitives, or arrays of equal primitives in the same order. */
+const sameValue = (a: unknown, b: unknown): boolean =>
+  Array.isArray(a) && Array.isArray(b)
+    ? a.length === b.length && a.every((item, index) => Object.is(item, b[index]))
+    : Object.is(a, b);
+
 export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
@@ -73,8 +79,15 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVec
       for (const [field, condition] of Object.entries(translated)) {
         const existing = merged.get(field);
         if (existing) {
-          const operators = [...Object.keys(existing), ...Object.keys(condition)];
-          if (new Set(operators).size !== operators.length || !isRangePair(operators)) {
+          // A condition repeated with the same value (e.g. a filter that repeats the scope's
+          // resource_id) adds nothing; the same operator with another value can't be combined.
+          for (const [operator, value] of Object.entries(condition)) {
+            if (operator in existing && !sameValue(existing[operator], value)) {
+              throw new Error(`Vectorize $and clauses on ${field} set ${operator} to different values`);
+            }
+          }
+          const operators = Object.keys({ ...existing, ...condition });
+          if (operators.length > 1 && !isRangePair(operators)) {
             throw new Error(
               `Vectorize $and clauses on ${field} can only combine one lower and one upper bound; got ${operators.join(', ')}`,
             );
