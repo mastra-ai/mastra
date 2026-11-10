@@ -134,6 +134,68 @@ describe('ChatChannelGenerativeUIProcessor', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('rejects a line chart Slack would silently render as a text table', async () => {
+    const { render, post } = renderContext();
+    const days = Array.from({ length: 31 }, (_, i) => `Day ${i + 1}`);
+    const result = await renderCard(render, {
+      root: 'card',
+      elements: {
+        card: { type: 'Card', children: ['chart'] },
+        chart: {
+          type: 'Chart',
+          props: {
+            title: 'Daily velocity',
+            chart: {
+              type: 'line',
+              categories: days,
+              series: [{ name: 'Factory (mastra-platform[bot])', values: days.map(() => 1) }],
+            },
+          },
+        },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.issues.join('\n')).toContain('at most 20 categories');
+    expect(result.issues.join('\n')).toContain('"Factory (mastra-platform[bot])" longer than 20 characters');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('reports other Slack text fallbacks as issues', async () => {
+    const { render, post } = renderContext();
+    const result = await renderCard(render, {
+      root: 'card',
+      elements: {
+        card: { type: 'Card', children: ['chart', 'table'] },
+        chart: {
+          type: 'Chart',
+          props: {
+            title: 'Deploys',
+            chart: {
+              type: 'bar',
+              categories: ['Mon', 'Mon'],
+              series: [
+                { name: 'web', values: [1, 2] },
+                { name: 'web', values: [3, 4] },
+              ],
+              yLabel: 'y'.repeat(51),
+            },
+          },
+        },
+        table: { type: 'Table', props: { headers: ['a'], rows: [['x'.repeat(10_001)]] } },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.issues).toEqual([
+      'chart: chart would fall back to text: categories must be unique',
+      'chart: chart would fall back to text: series names must be unique',
+      'chart: chart would fall back to text: xLabel and yLabel at most 50 characters',
+      'table: table would fall back to text: 10002 characters across cells > 10000',
+    ]);
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it('reports a failed post to the model', async () => {
     const { render, post } = renderContext();
     post.mockRejectedValueOnce(new Error('invalid_blocks'));

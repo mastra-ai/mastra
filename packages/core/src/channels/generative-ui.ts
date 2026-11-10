@@ -59,6 +59,44 @@ const PLATFORM_LIMITS: Record<string, Record<string, number>> = {
   },
 };
 
+type ChartProps =
+  | { type: 'pie' }
+  | {
+      type: 'bar' | 'line' | 'area';
+      categories: string[];
+      series: { name: string }[];
+      xLabel?: string | null;
+      yLabel?: string | null;
+    };
+
+/**
+ * Slack fallbacks `toCard` limits don't catch: the adapter turns these charts and
+ * tables into text instead of failing, so report them for the agent to fix.
+ */
+function slackFallbackIssues(elements: Record<string, { type: string; props: Record<string, unknown> }>): string[] {
+  const issues: string[] = [];
+  for (const [key, el] of Object.entries(elements)) {
+    if (el.type === 'Chart') {
+      const chart = el.props.chart as ChartProps;
+      if (chart.type === 'pie') continue;
+      const why = (reason: string) => issues.push(`${key}: chart would fall back to text: ${reason}`);
+      if (new Set(chart.categories).size !== chart.categories.length) why('categories must be unique');
+      if (new Set(chart.series.map(series => series.name)).size !== chart.series.length) {
+        why('series names must be unique');
+      }
+      if ((chart.xLabel?.length ?? 0) > 50 || (chart.yLabel?.length ?? 0) > 50)
+        why('xLabel and yLabel at most 50 characters');
+    }
+    if (el.type === 'Table') {
+      const { headers, rows } = el.props as { headers: string[]; rows: (string | number)[][] };
+      const chars = [headers, ...rows].flat().reduce((total: number, cell) => total + String(cell).length, 0);
+      if (chars > 10_000)
+        issues.push(`${key}: table would fall back to text: ${chars} characters across cells > 10000`);
+    }
+  }
+  return issues;
+}
+
 const elementSchema = z.object({
   type: z.string().describe('Component name, e.g. "Card", "Text", "Table"'),
   props: z.record(z.string(), z.unknown()).optional().describe('Component props'),
@@ -98,7 +136,7 @@ Rules that keep the card valid Block Kit (Slack rejects the whole message otherw
 - Text content uses Slack mrkdwn: **bold**, _italic_, \`code\`, links as <https://example.com|label>, "- " bullets. No headings (#), markdown tables, [label](url) links or images in text; use Card title, Table, LinkButton and Image instead. Keep each Text under 3000 chars.
 - Fields: at most 10 per Fields group; keep each label + value under 2000 chars.
 - Table: at most one per card, 100 rows (header included), 20 columns, about 10,000 chars across all cells. Split bigger data or summarize it.
-- Chart: at most 2 per card; title 1-50 chars; labels, category names and series names 1-20 chars and unique; up to 12 series or pie segments and 20 categories; every series has one value per category.
+- Chart: at most 2 per card; title 1-50 chars; xLabel/yLabel at most 50 chars; labels, category names and series names 1-20 chars and unique; up to 12 series or pie segments and 20 categories (points); every series has one value per category. Fit the data before calling: downsample long ranges (e.g. 31 days to weekly or the last 20 days) and shorten names ("Factory", not "Factory (mastra-platform[bot])"). Charts that break these come back as issues instead of posting.
 - Image and Card imageUrl: a public https URL that points directly at a PNG, JPG or GIF. Slack fetches it, so never use private, localhost, auth-gated or made-up URLs.
 - LinkButton: absolute http(s) URL, label at most 75 chars, at most 25 per Actions row, and no two buttons with the same URL in one card.
 - Keep the whole card under 50 blocks; prefer a few focused elements over many.
@@ -167,6 +205,10 @@ function createRenderCardTool(render: ChatChannelRenderContext) {
         if (Array.isArray(issues)) return { ok: false as const, issues: issues.map(String) };
         throw err;
       }
+
+      // The Slack adapter silently swaps a chart or table it can't render natively for a text block.
+      const fallbacks = render.platform === 'slack' ? slackFallbackIssues(elements) : [];
+      if (fallbacks.length) return { ok: false as const, issues: fallbacks };
 
       try {
         const sent = await render.chatThread.post(card as Parameters<typeof render.chatThread.post>[0]);
