@@ -173,22 +173,22 @@ describe('GraphRAG', () => {
       );
     });
 
-    it('topK must be greater than 0', () => {
+    it('topK must be a positive integer', () => {
       const graph = new GraphRAG(3);
       const queryEmbedding = [1, 2, 3];
       const topK = 0;
       expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps: 3, restartProb: 0.1 })).toThrowError(
-        'TopK must be greater than 0',
+        'TopK must be a positive integer',
       );
     });
 
-    it('randomWalkSteps must be greater than 0', () => {
+    it('randomWalkSteps must be a positive integer', () => {
       const graph = new GraphRAG(3);
       const queryEmbedding = [1, 2, 3];
       const topK = 2;
       const randomWalkSteps = 0;
       expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps, restartProb: 0.1 })).toThrowError(
-        'Random walk steps must be greater than 0',
+        'Random walk steps must be a positive integer',
       );
     });
 
@@ -201,6 +201,26 @@ describe('GraphRAG', () => {
       expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps, restartProb })).toThrowError(
         'Restart probability must be between 0 and 1',
       );
+    });
+
+    // Invalid controls must fail even when an empty graph would otherwise skip retrieval and walking. (#29608)
+    it.each([
+      ['NaN topK', { topK: NaN }, 'TopK must be a positive integer'],
+      ['infinite topK', { topK: Infinity }, 'TopK must be a positive integer'],
+      ['fractional topK', { topK: 1.5 }, 'TopK must be a positive integer'],
+      ['NaN random walk steps', { randomWalkSteps: NaN }, 'Random walk steps must be a positive integer'],
+      ['infinite random walk steps', { randomWalkSteps: Infinity }, 'Random walk steps must be a positive integer'],
+      ['fractional random walk steps', { randomWalkSteps: 1.5 }, 'Random walk steps must be a positive integer'],
+      ['NaN restart probability', { restartProb: NaN }, 'Restart probability must be between 0 and 1'],
+      ['infinite restart probability', { restartProb: Infinity }, 'Restart probability must be between 0 and 1'],
+      [
+        'negative infinite restart probability',
+        { restartProb: -Infinity },
+        'Restart probability must be between 0 and 1',
+      ],
+    ] as const)('rejects %s', (_description, options, error) => {
+      const graph = new GraphRAG(2);
+      expect(() => graph.query({ query: [1, 0], ...options })).toThrowError(error);
     });
 
     it('should apply metadata filters correctly', () => {
