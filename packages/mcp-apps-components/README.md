@@ -229,6 +229,46 @@ Don't use these schemas in a request-body schema. Their input type is `unknown` 
 
 Dashboards with custom widget kinds should keep using core's `dashboardDefinitionSchema`.
 
+### Saving dashboards a model writes
+
+A model writes a widget more reliably from a schema that spells out each kind's options than from an open object. `createObservabilityDraftSchemas` returns the schemas the dashboard tool takes, for a single widget (`widget`) and a whole dashboard (`dashboard`), to use as the input of tools that save them. Convert what the model wrote with `toObservabilityWidget` or `toObservabilityDashboard`:
+
+```ts
+import { createTool } from '@mastra/core/tools';
+import {
+  createObservabilityDraftSchemas,
+  toObservabilityDashboard,
+  toObservabilityWidget,
+} from '@mastra/mcp-apps-components/dashboards';
+
+const schemas = createObservabilityDraftSchemas(
+  { metricNames: await listMetricNames() },
+  { kinds: ['kpis', 'timeseries', 'table'], dashboardFilters: false },
+);
+
+const addWidget = createTool({
+  id: 'addWidget',
+  description: 'Adds a widget to the dashboard',
+  inputSchema: schemas.widget,
+  execute: async widget => saveWidget(toObservabilityWidget(widget)),
+});
+
+const createDashboard = createTool({
+  id: 'createDashboard',
+  description: 'Creates a dashboard',
+  inputSchema: schemas.dashboard,
+  execute: async dashboard => saveDashboard(toObservabilityDashboard({ dashboard }).dashboard),
+});
+```
+
+- **Options:** `kinds` lists the widget kinds a model can write, and `dashboardFilters: false` limits a dashboard's `defaults` to `datePreset`. What you leave out is missing from the JSON schema the model sees, and rejected when a model writes it anyway. Narrowing `kinds` doesn't narrow the TypeScript types.
+- **One call per catalog:** Build both tools' schemas from one call. Building takes about a millisecond, so it's fine to build them per request.
+- **Ids:** `toObservabilityWidget` keeps a widget's `id` when the model gives one, so a widget can be pinned or replaced by it, and assigns a fresh UUID otherwise. `toObservabilityDashboard` does the same for each widget.
+- **Converting outside a tool:** `toObservabilityWidget` and `toObservabilityDashboard` check against the default schemas, which allow every kind and metric name. Inside a tool built as above, its input schema has already applied your catalog and options. Anywhere else, check the draft against your schemas first, such as with `schemas.widget.parse(draft)`.
+- **Errors:** As tool input schemas, the schemas reject a draft before `execute` runs, with paths into what the model wrote, such as `timeseries.series.1.value` for a widget or `rows.0.widgets.0.timeseries.series.1.value` for a dashboard. Nested under a field of a larger input, paths start with that field's name. `toObservabilityWidget` throws an error whose `cause` is the `ZodError`, with the same paths. Checks across widgets, such as unique ids and the widget limit, need the whole dashboard.
+
+A draft that passes converts to a widget that passes `strictDashboardWidgetSchema`. Keep checking with the strict schemas where you store dashboards, since they also cover writes that don't come from a draft.
+
 ## Documentation
 
 - [MCP Apps in Mastra](https://mastra.ai/docs/connections/mcp)

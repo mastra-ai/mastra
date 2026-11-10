@@ -492,21 +492,21 @@ describe('bundled Factory skill assets', () => {
     const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('| Type'));
     const handoff = triage.slice(markerIndex);
     // A ratings table with a real header row leads, then the plain summary,
-    // the next step, and collapsed rating reasons, root cause, reproduction
-    // and assumptions; only open questions stay expanded.
+    // the next step, and one collapsed Details block with rating reasons, root
+    // cause, reproduction and assumptions; only open questions stay expanded.
     const headerIndex = handoff.search(/^\| Type +\| Severity +\| Confidence +\| Effort +\| Impact +\| Route +\|$/m);
     const typeIndex = handoff.indexOf('| <Type>');
     const severityIndex = handoff.indexOf('<Severity>');
     const routeIndex = handoff.indexOf('<Route>');
     const summaryIndex = handoff.indexOf('### Summary');
     const nextStepIndex = handoff.indexOf('**Next step:**');
-    const ratingsIndex = handoff.indexOf('<strong>Why these ratings</strong>');
+    const ratingsIndex = handoff.indexOf('**Why these ratings**');
     const confidenceIndex = handoff.indexOf('**Confidence**');
     const effortIndex = handoff.indexOf('**Effort**');
     const impactIndex = handoff.indexOf('**Impact**');
-    const rootCauseIndex = handoff.indexOf('<strong>Root cause</strong>');
-    const reproductionIndex = handoff.indexOf('<strong>Reproduction</strong>');
-    const assumptionsIndex = handoff.indexOf('<strong>Assumptions</strong>');
+    const rootCauseIndex = handoff.indexOf('**Root cause**');
+    const reproductionIndex = handoff.indexOf('**Reproduction**');
+    const assumptionsIndex = handoff.indexOf('**Assumptions**');
     const questionsIndex = handoff.indexOf('### Open questions');
 
     // GitHub renders an empty header row as a blank band above the table.
@@ -819,7 +819,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('related-issue context and external CI status must still be reported in the handoff');
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
-    expect(review).toContain('- **Issue and intent**');
+    expect(review).toContain('**Issue and intent** (');
     expect(review).toContain('including base-versus-head evidence for behavior-changing claims');
 
     // Issue context is collected and reported, but a missing or unrelated issue
@@ -952,7 +952,7 @@ describe('bundled Factory skill assets', () => {
 
     // The handoff carries the approach judgment and unhedged requests.
     const handoff = section('## Phase 6: Handoff & Verdict', '## Behavior Rules');
-    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('**Approach** (');
     expect(handoff).toContain('imperative and present tense');
     expect(handoff).toContain('No softened requests');
     expect(handoff).toContain('Preserve qualifications that express real limits of evidence');
@@ -1124,7 +1124,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
     const handoff = section('## Phase 7: Handoff & Verdict', '## Behavior Rules');
-    expect(handoff).toContain('- **Issue and intent**');
+    expect(handoff).toContain('**Issue and intent** (');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
 
@@ -1150,7 +1150,7 @@ describe('bundled Factory skill assets', () => {
     expect(verdict).toContain(
       'A prior-pass request that the push showed to be wrong is corrected here, not carried out of loyalty',
     );
-    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('**Approach** (');
     expect(handoff).toContain('No softened requests');
     expect(instructions).toContain('**Your design before theirs.**');
   });

@@ -1,25 +1,39 @@
-import {
-  DASHBOARD_SCOPES,
-  DASHBOARD_WIDGET_KINDS,
-  dashboardDefinitionSchema,
-  dashboardWidgetSchema,
-} from '@mastra/core/storage/dashboards';
+import { dashboardDefinitionSchema, dashboardWidgetSchema } from '@mastra/core/storage/dashboards';
 import type {
   DashboardColumn,
   DashboardDefinition,
   DashboardWidget,
   DashboardWidgetView,
 } from '@mastra/core/storage/dashboards';
-import { tableColumnOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/table';
 import { z } from 'zod/v4';
-import { inScope, KIND_CHECKS, viewIssues } from './dashboard-views';
+import { widgetIssues, zodIssues } from './dashboard-views';
 import type { WidgetIssue } from './dashboard-views';
 
+export {
+  OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
+  createObservabilityDraftSchemas,
+  createObservabilityWidgetInputSchema,
+  observabilityWidgetInputSchema,
+  toObservabilityDashboard,
+  toObservabilityWidget,
+} from './observability-dashboard';
+export type {
+  ObservabilityCatalog,
+  ObservabilityDashboardDraft,
+  ObservabilityDashboardInput,
+  ObservabilityDashboardOpened,
+  ObservabilityDraftOptions,
+  ObservabilityDraftSchemas,
+  ObservabilityWidgetDraft,
+} from './observability-dashboard';
+
 /*
- * The stored dashboard format, checked at least as strictly as the dashboard renderer checks it:
- * core's `dashboardDefinitionSchema`, then each widget's kind, each view's options and each table
- * column's options, then what each kind checks beyond its schema (queries an option names, labels,
- * ...). It also rejects columns on views that aren't tables, which the renderer ignores.
+ * Dashboards to store, and the drafts a model writes them as. The stored format is checked at least
+ * as strictly as the dashboard renderer checks it: core's `dashboardDefinitionSchema`, then each
+ * widget's kind, each view's options and each table column's options, then what each kind checks
+ * beyond its schema (queries an option names, labels, ...). It also rejects columns on views that
+ * aren't tables, which the renderer ignores. A draft (`createObservabilityDraftSchemas`) converts to
+ * a widget or definition that passes those checks.
  *
  * The types are written out here rather than inferred, so this entry's declarations need nothing
  * beyond `@mastra/core` and `zod`; the package's tests check they match the kinds' own schemas.
@@ -187,59 +201,6 @@ export type StrictDashboardDefinition = Omit<DashboardDefinition, 'rows'> & {
 };
 
 type Issue = WidgetIssue;
-
-const isBuiltInKind = (kind: string): kind is keyof typeof KIND_CHECKS => Object.hasOwn(KIND_CHECKS, kind);
-
-const zodIssues = (error: z.ZodError, prefix: PropertyKey[]): Issue[] =>
-  error.issues.map(issue => ({ path: [...prefix, ...issue.path], message: issue.message }));
-
-/**
- * What the renderer would reject in a widget core accepts, paths relative to the widget. Every
- * view's options and columns are parsed; the kind's own checks then run at each scope the widget
- * shows at, as the renderer runs them there, skipping views whose options or columns don't parse.
- * All problems come back together. It also rejects columns on views that aren't tables, which the
- * renderer ignores.
- */
-function widgetIssues(widget: DashboardWidget): Issue[] {
-  if (!isBuiltInKind(widget.kind)) {
-    return [
-      {
-        path: ['kind'],
-        message: `Unknown widget kind '${widget.kind}'; expected one of ${DASHBOARD_WIDGET_KINDS.join(', ')}`,
-      },
-    ];
-  }
-  const check = KIND_CHECKS[widget.kind];
-
-  const issues = new Map<string, Issue>();
-  const add = (found: Issue[]) => {
-    for (const issue of found) issues.set(`${JSON.stringify(issue.path)} ${issue.message}`, issue);
-  };
-  // The table's own checks would report a bad column again, at the view.
-  const badColumns = new Set<number>();
-  for (const [i, view] of widget.views.entries()) {
-    const options = check.optionsSchema.safeParse(view.options ?? {});
-    if (!options.success) add(zodIssues(options.error, ['views', i, 'options']));
-    if (!view.columns) continue;
-    // The renderer ignores columns on other kinds; rejected so a widget written as another kind isn't stored.
-    if (widget.kind !== 'table') {
-      add([{ path: ['views', i, 'columns'], message: 'Only table widgets have columns' }]);
-      continue;
-    }
-    for (const [m, column] of view.columns.entries()) {
-      const columnOptions = tableColumnOptionsSchema.safeParse(column.options ?? {});
-      if (!columnOptions.success) {
-        add(zodIssues(columnOptions.error, ['views', i, 'columns', m, 'options']));
-        badColumns.add(i);
-      }
-    }
-  }
-
-  for (const scope of DASHBOARD_SCOPES) {
-    if (inScope(widget, scope)) add(viewIssues(widget, check, scope, badColumns));
-  }
-  return [...issues.values()];
-}
 
 const report = (ctx: z.RefinementCtx, issues: Issue[], prefix: PropertyKey[] = []) => {
   for (const issue of issues) {
