@@ -58,6 +58,9 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
 }));
 
+const flags = vi.hoisted(() => ({ knowledgeOn: false }));
+vi.mock('../utils/experimental-features.js', () => ({ isKnowledgeEnabled: () => flags.knowledgeOn }));
+
 vi.mock('../model-packs/apply.js', () => ({
   switchModeWithPack: vi.fn(),
 }));
@@ -75,7 +78,7 @@ function setPlatform(platform: NodeJS.Platform) {
 
 afterEach(() => {
   Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
-  delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+  flags.knowledgeOn = false;
   vi.mocked(execFileSync).mockReset();
   vi.restoreAllMocks();
 });
@@ -251,7 +254,7 @@ describe('setupKeyboardShortcuts', () => {
   });
 
   it('defaults slash-command autocomplete to the first visible built-in command before custom commands', () => {
-    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    flags.knowledgeOn = true;
     autocompleteProviders.length = 0;
     const { state, editor } = createState(false);
     state.customSlashCommands = [
@@ -341,7 +344,7 @@ describe('setupKeyboardShortcuts', () => {
       'Alias for /memory',
     );
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'knowledge')?.description).toBe(
-      'Browse scoped Subconscious knowledge',
+      'Browse scoped knowledge',
     );
     expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
@@ -351,7 +354,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
   });
 
-  it('hides experimental knowledge autocomplete unless Subconscious is enabled', () => {
+  it('hides experimental knowledge autocomplete unless Knowledge is enabled', () => {
     autocompleteProviders.length = 0;
     const { state } = createState(false);
 

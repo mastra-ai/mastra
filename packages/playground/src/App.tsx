@@ -68,6 +68,7 @@ import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ReviewQueuePage from './pages/experiments/review-queue';
 import IntegrationsPage from './pages/integrations';
+import KnowledgePage from './pages/knowledge';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -101,6 +102,7 @@ import { PlaygroundConfigGuard } from '@/domains/configuration/components/playgr
 
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+import { StudioKnowledgeLinks } from '@/domains/knowledge/studio-knowledge-links';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
 import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
@@ -141,11 +143,13 @@ const RootLayout = () => {
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       <KeyboardShortcutsProvider>
         <GlobalShortcuts />
-        <Layout>
-          <RoutePermissionGuard>
-            <Outlet />
-          </RoutePermissionGuard>
-        </Layout>
+        <StudioKnowledgeLinks>
+          <Layout>
+            <RoutePermissionGuard>
+              <Outlet />
+            </RoutePermissionGuard>
+          </Layout>
+        </StudioKnowledgeLinks>
       </KeyboardShortcutsProvider>
     </LinkComponentProvider>
   );
@@ -460,6 +464,8 @@ export const routes: RouteObject[] = [
           { path: 'schedules', element: <WorkflowSchedules /> },
         ],
       },
+
+      { path: '/knowledge', element: <KnowledgePage /> },
 
       ...(isExperimentalFeatures
         ? [

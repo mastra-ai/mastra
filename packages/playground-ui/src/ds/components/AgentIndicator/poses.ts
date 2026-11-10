@@ -1,18 +1,27 @@
+import { delegating, workflow, connecting, planning, messaging, branching } from './poses/coordination';
+import { writing } from './poses/documents';
+import { finding, creating, listing, inspecting } from './poses/files';
+import { fetching, clicking, typing, screenshot, asking, inbox, scheduling } from './poses/interface';
+import { knowledge } from './poses/knowledge';
+import { noting, pinning, unpinning, moving, merging } from './poses/knowledge-actions';
+import { skill, skillSearching, skillReading } from './poses/skills';
+import { running, stopping, output } from './poses/terminal';
+import { thinking } from './poses/thinking';
 import {
   allOf,
   anyOf,
-  around,
   dot,
   inCap,
   inCirc,
-  inOval,
   inRoundRect,
   inShape,
   kit,
   lerpFrame,
+  loopPulse,
   nothing,
   once,
   placed,
+  polyline,
   range,
   sstep,
   TAU,
@@ -29,9 +38,36 @@ export const agentIndicatorStates = [
   'finding',
   'browsing',
   'editing',
+  'writing',
+  'creating',
+  'knowledge',
+  'listing',
+  'inspecting',
+  'stopping',
+  'output',
+  'fetching',
+  'clicking',
+  'typing',
+  'screenshot',
+  'asking',
+  'inbox',
+  'scheduling',
+  'noting',
+  'pinning',
+  'unpinning',
+  'moving',
+  'merging',
+  'delegating',
+  'workflow',
+  'connecting',
+  'planning',
+  'messaging',
+  'branching',
   'running',
   'deleting',
   'skill',
+  'skill-searching',
+  'skill-reading',
   'tool',
   'waiting',
   'done',
@@ -92,84 +128,6 @@ const memory: Pose = t => {
   );
 };
 
-const sulcus =
-  ([a, b, amp, waves]: [Point, Point, number, number]) =>
-  (u: number): Point => {
-    const dx = b[0] - a[0];
-    const dy = b[1] - a[1];
-    const length = Math.hypot(dx, dy);
-    const s = amp * Math.sin(Math.PI * waves * u);
-    return [a[0] + dx * u - (dy / length) * s, a[1] + dy * u + (dx / length) * s];
-  };
-
-const PROFILE = anyOf(
-  inOval(-0.3, -1.3, 7.9, 5.3, 0.035),
-  inOval(-1.6, 2.2, 4.6, 2.6),
-  inOval(5, 3.4, 2.8, 2),
-  inCap([1.4, 2.6], [2.1, 6.8], 1.2),
-);
-const SULCI = (
-  [
-    [[-5.8, 1.4], [3, -1.6], 0.5, 2],
-    [[0.9, -7], [-0.6, -2.6], 0.45, 3],
-    [[-7.6, -2.2], [-3.4, -3.4], 0.55, 2],
-    [[4.6, -6], [5.6, -1.6], 0.5, 2],
-    [[2.4, 2.4], [8.2, 1.8], 0, 1],
-  ] satisfies [Point, Point, number, number][]
-).map(sulcus);
-
-const brainKit = once(() => kit(PROFILE, [0.4, 0.4], { cuts: [[2.9, 3, 3.4, 6.2, 1.2]] }));
-
-const brain = (t: number) =>
-  withTrail(
-    brainKit(),
-    SULCI.flatMap((fold, j) =>
-      range(9).map((i): TrailPoint => {
-        const pulse = 0.7 * Math.max(0, Math.cos(2.2 * t - 1.3 * j - (3 * i) / 8)) ** 6;
-        return [...fold(i / 8), 0, i < 8 ? (j ? 1.6 : 1.9) + pulse : 0];
-      }),
-    ),
-  );
-
-const BULB = anyOf(
-  inCirc(0, -1.2, 4.6),
-  inShape([
-    [-3.1, 1.9],
-    [3.1, 1.9],
-    [2.1, 4.4],
-    [-2.1, 4.4],
-  ]),
-  inRoundRect(0, 5.5, 2.1, 1.4, 0.8),
-);
-const BULB_RAYS = [-132, -48, -174, -6, -90].map(d => (d * Math.PI) / 180);
-
-const bulbKit = once(() =>
-  kit(BULB, [0, 0], {
-    cuts: [
-      [0, -2, 0, -2, 0],
-      [-2.6, 5.4, 2.6, 5.4, 0.8],
-    ],
-  }),
-);
-
-const bulb = (light: number) =>
-  withTrail(
-    bulbKit(),
-    BULB_RAYS.flatMap((a, j) => {
-      const n = j < 4 ? 15 : 2;
-      return range(n).map(
-        (i): TrailPoint => [...around([0, -1.2], a, 5.9 + (1.5 * light * i) / (n - 1)), i < n - 1 ? 1.8 * light : 0, 0],
-      );
-    }),
-  );
-
-const thinking: Pose = t => {
-  const p = (t / 5) % 1;
-  const lit = sstep(0.28, 0.4, p) * (1 - sstep(0.76, 0.88, p));
-  const glow = sstep(0.4, 0.5, p) * (1 - sstep(0.68, 0.76, p));
-  return lerpFrame(brain(t), bulb(glow * (1 + 0.06 * Math.sin(8 * t))), lit);
-};
-
 const TELESCOPE = anyOf(
   inShape([
     [-6.8, -1.3],
@@ -215,8 +173,6 @@ const turned = ([x, y]: Point, a: number): Point => [
 ];
 const shifted = ([x, y]: Point, [dx, dy]: Point): Point => [x + dx, y + dy];
 const segment = (a: Point, b: Point, width: number): Segment => [...a, ...b, width];
-const polyline = (points: Point[], ink: number, cut: number): TrailPoint[] =>
-  points.map((p, i) => (i < points.length - 1 ? [...p, ink, cut] : [...p, 0, 0]));
 const dotCut = (p: Point, d: number): TrailPoint[] => [
   [...p, 0, d],
   [...p, 0, 0],
@@ -230,28 +186,14 @@ const reading: Pose = t => {
 };
 
 const LENS: Point = [-1.6, -1.6];
-const MAGNIFIER = anyOf(inCirc(...LENS, 5), inCap([1.8, 1.8], [5.4, 5.4], 1.7));
 
 const searching: Pose = t => {
   const w = (TAU * t) / 2.4;
   const at: Point = [0.9 * Math.sin(w), 0.5 * Math.sin(2 * w)];
   const lens = shifted(LENS, at);
-  return withTrail(kit(placed(MAGNIFIER, 0, at), lens, { hole: inCirc(...lens, 3.1), holeCenter: lens }));
-};
-
-const FOLDER = anyOf(inRoundRect(0, 0.8, 7.6, 5, 1.8), inRoundRect(-4, -4.4, 3.6, 1.4, 1.2));
-const FOLDER_LENS: Point = [-0.6, 0.6];
-
-const finding: Pose = t => {
-  const w = (TAU * t) / 2.8;
-  const lens = shifted(FOLDER_LENS, [1.3 * Math.sin(w), 0.6 * Math.sin(2 * w)]);
   return withTrail(
-    kit(FOLDER, [0, 0.4], {
-      hole: inCirc(...lens, 2.9),
-      holeCenter: lens,
-      balls: [[...lens, 1.7]],
-      cuts: [segment(shifted(lens, [2.1, 2.1]), shifted(lens, [3.5, 3.5]), 1.5)],
-    }),
+    kit(nothing, lens, { rings: [[...lens, 4.05, 1.9]] }),
+    polyline([shifted([1.8, 1.8], at), shifted([5.4, 5.4], at)], 3.1, 0),
   );
 };
 
@@ -284,22 +226,6 @@ const editing: Pose = t => {
   );
 };
 
-const SCREEN = inRoundRect(0, 0, 7.6, 6.2, 2);
-const PROMPT: Point[] = [
-  [-4, -2.4],
-  [-1.2, 0.2],
-  [-4, 2.8],
-];
-
-const running: Pose = t => {
-  const p = (t / 1.1) % 1;
-  const cursor = 1 - sstep(0.45, 0.55, p) + sstep(0.9, 1, p);
-  return withTrail(
-    kit(SCREEN, [0, 0], { cuts: [segment([0.6, 2.8], [4.2, 2.8], 1.8 * cursor)] }),
-    polyline(PROMPT, 0, 1.8),
-  );
-};
-
 const CAN = anyOf(inRoundRect(0, 1.6, 5.4, 5.2, 1.4), inRoundRect(0, -4.4, 7.2, 1, 1), inRoundRect(0, -6, 2.4, 1, 0.8));
 const CAN_CUTS: [Point, Point][] = [
   [
@@ -328,25 +254,6 @@ const deleting: Pose = t => {
   );
 };
 
-const page = (side: 1 | -1, lift: number): Inside =>
-  inShape(
-    (
-      [
-        [-0.1, -3.6],
-        [3, -5.2 - lift],
-        [7.6, -5 - lift],
-        [7.6, 4.6],
-        [3, 4.8],
-        [-0.1, 6.2],
-      ] satisfies Point[]
-    ).map(([x, y]): Point => [side * x, y]),
-  );
-
-const skill: Pose = t => {
-  const lift = 0.5 * Math.sin((TAU * t) / 2.2);
-  return withTrail(kit(anyOf(page(1, lift), page(-1, -lift)), [0, 0.4], { cuts: [segment([0, -3.2], [0, 5.6], 1)] }));
-};
-
 const LAYER_TIERS = [-3.2, 0, 3.2];
 const diamond = (cy: number): [Point, Point, Point, Point] => [
   [0, cy - 3.6],
@@ -355,19 +262,36 @@ const diamond = (cy: number): [Point, Point, Point, Point] => [
   [-7.4, cy],
 ];
 
-const context = once(() =>
-  withTrail(
-    kit(anyOf(...LAYER_TIERS.map(cy => inShape(diamond(cy)))), [0, 0]),
-    LAYER_TIERS.slice(0, -1).flatMap(cy => {
-      const [, right, bottom, left] = diamond(cy);
-      return polyline([left, bottom, right], 0, 1);
-    }),
-  ),
-);
+const contextFrames = once(() => {
+  const layers = (spacing: number) =>
+    withTrail(
+      kit(anyOf(...LAYER_TIERS.map(cy => inShape(diamond(cy * spacing)))), [0, 0]),
+      LAYER_TIERS.slice(0, -1).flatMap(cy => {
+        const [, right, bottom, left] = diamond(cy * spacing);
+        return polyline([left, bottom, right], 0, 1);
+      }),
+    );
+  return { closed: layers(1), open: layers(1.16) };
+});
 
-const notice = once(() =>
-  withTrail(kit(inCirc(0, 0, 7.4), [0, 0], { cuts: [segment([0, -0.4], [0, 3.8], 1.9)] }), dotCut([0, -3.6], 2.3)),
-);
+const context: Pose = clock => {
+  const { closed, open } = contextFrames();
+  return lerpFrame(closed, open, loopPulse(clock, 3.6));
+};
+
+const noticeFrames = once(() => {
+  const information = (dotSize: number) =>
+    withTrail(
+      kit(inCirc(0, 0, 7.4), [0, 0], { cuts: [segment([0, -0.4], [0, 3.8], 1.9)] }),
+      dotCut([0, -3.6], dotSize),
+    );
+  return { rest: information(2.3), emphasis: information(3.1) };
+});
+
+const notice: Pose = clock => {
+  const { rest, emphasis } = noticeFrames();
+  return lerpFrame(rest, emphasis, loopPulse(clock, 2.8));
+};
 
 const blank = once(() => kit(nothing, [0, 0]));
 const line =
@@ -382,6 +306,8 @@ const twoStrokes = (first: (u: number) => Point, second: (u: number) => Point, w
 
 const waiting = once(() => twoStrokes(line([-2.7, -3.4], [-2.7, 3.4]), line([2.7, -3.4], [2.7, 3.4]), 2.2));
 
+const OUTCOME_STROKE_WIDTH = 2.1;
+
 const CHECK: [Point, Point, Point] = [
   [-6.2, 0.4],
   [-2.2, 4.4],
@@ -393,7 +319,7 @@ const done: Pose = (_, s) => {
   const k = 1 + 0.08 * Math.exp(-q * 7) * Math.sin(q * 15);
   const at = ([x, y]: Point): Point => [x * k, y * k];
   const [a, b, c] = CHECK;
-  return twoStrokes(line(at(a), at(b)), line(at(b), at(c)), 2.1);
+  return twoStrokes(line(at(a), at(b)), line(at(b), at(c)), OUTCOME_STROKE_WIDTH);
 };
 
 const CROSS = 4.6;
@@ -404,7 +330,7 @@ const error: Pose = (_, s) => {
   return twoStrokes(
     line([-CROSS + shake, -CROSS], [CROSS + shake, CROSS]),
     line([CROSS + shake, -CROSS], [-CROSS + shake, CROSS]),
-    2.1,
+    OUTCOME_STROKE_WIDTH,
   );
 };
 
@@ -418,8 +344,6 @@ const RINGING_SECONDS = MORPH_SECONDS + 2;
 export const restsAfterSeconds: Partial<Record<AgentIndicatorState, number>> = {
   idle: 0,
   waiting: 0,
-  context: 0,
-  notice: 0,
   done: RINGING_SECONDS,
   error: RINGING_SECONDS,
 };
@@ -433,9 +357,36 @@ export const poses: Record<AgentIndicatorState, Pose> = {
   finding: grown(finding),
   browsing: grown(browsing),
   editing: grown(editing),
+  writing: grown(writing),
+  creating: grown(creating),
+  knowledge: grown(knowledge),
+  listing: grown(listing),
+  inspecting: grown(inspecting),
+  stopping: grown(stopping),
+  output: grown(output),
+  fetching: grown(fetching),
+  clicking: grown(clicking),
+  typing: grown(typing),
+  screenshot: grown(screenshot),
+  asking: grown(asking),
+  inbox: grown(inbox),
+  scheduling: grown(scheduling),
+  noting: grown(noting),
+  pinning: grown(pinning),
+  unpinning: grown(unpinning),
+  moving: grown(moving),
+  merging: grown(merging),
+  delegating: grown(delegating),
+  workflow: grown(workflow),
+  connecting: grown(connecting),
+  planning: grown(planning),
+  messaging: grown(messaging),
+  branching: grown(branching),
   running: grown(running),
   deleting: grown(deleting),
   skill: grown(skill),
+  'skill-searching': grown(skillSearching),
+  'skill-reading': grown(skillReading),
   tool: grown(tool),
   waiting: grown(waiting),
   done: grown(done),

@@ -66,6 +66,14 @@ describe('Default grouped issue list', () => {
     expect(within(intake).queryByRole('button', { name: 'Create card' })).not.toBeInTheDocument();
   });
 
+  it('names a card with no upstream key by its source', async () => {
+    renderBoard();
+    const triage = await screen.findByTestId('board-column-triage');
+    const row = await within(triage).findByRole('article', { name: 'Moved recently' });
+
+    expect(within(row).getByText('Manual')).toBeVisible();
+  });
+
   it('collapses groups independently and expands them with the keyboard', async () => {
     renderBoard();
     const user = userEvent.setup();

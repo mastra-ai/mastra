@@ -12,7 +12,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, CableIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
+import { BookIcon, CableIcon, ClipboardCheck, LayoutGrid, LibraryIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -102,6 +102,12 @@ export const mainNav: NavSection[] = [
         Icon: WorkspacesIcon,
         isOnMastraPlatform: true,
         foldable: true,
+      },
+      {
+        name: 'Knowledge',
+        url: '/knowledge',
+        Icon: LibraryIcon,
+        isOnMastraPlatform: false,
       },
     ],
   },

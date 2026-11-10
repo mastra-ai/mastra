@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig } from '@mastra/core/agent';
+import type { WidenModelId } from '@mastra/core/llm';
 import { Memory } from '@mastra/memory';
 import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '@mastra/core/processors';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
@@ -97,6 +98,14 @@ export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>)
             ),
           ]
         : (callerErrorProcessors ?? DEFAULT_BUILDER_ERROR_PROCESSORS);
+
+  // Spreading the caller's config over the default `model` makes TypeScript
+  // subtype-reduce the union of both model types. With every model-id literal
+  // in the registry that exceeds the compiler's limit (TS2590), so widen the
+  // caller's model ids to `string` first; `string` is still a valid model id.
+  const callerConfig: Omit<Partial<AgentConfig<'builder-agent'>>, 'model'> & {
+    model?: WidenModelId<AgentConfig<'builder-agent'>['model']>;
+  } = args || {};
 
   const config: AgentConfig<'builder-agent'> = {
     instructions: `You are the Agent Builder.
@@ -234,7 +243,7 @@ Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include w
     // `maxProcessorRetries` just to silence it would also convert
     // input/output processor `abort({ retry: true })` from abort into retry,
     // so the warning stays.
-    ...(args || {}),
+    ...callerConfig,
     errorProcessors,
     id: 'builder-agent',
     name: 'Agent Builder Agent',

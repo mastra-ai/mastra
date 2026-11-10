@@ -58,8 +58,18 @@ export function callerTrace(ctx: ServerContext): CallerTraceContext | undefined 
 }
 
 /**
+ * Where `@mastra/server` attaches, on `req.auth`, the request context its auth
+ * resolved (user, permissions, roles, resource id, tenant, auth mode). A symbol
+ * cannot come out of a token or JSON payload, so only server code can supply it.
+ */
+const MCP_TRUSTED_REQUEST_CONTEXT = Symbol.for('mastra.mcp.trustedRequestContext');
+const MASTRA_USER_KEY = 'mastra__user';
+
+/**
  * Builds the trusted application context for one request. Auth is re-derived from
- * the transport every time; nothing is carried between continuation rounds. The W3C
+ * the transport every time; nothing is carried between continuation rounds. When
+ * the request came through a Mastra server route, the values its auth resolved are
+ * copied in, so tools are authorized the same way as that server's routes. The W3C
  * trace fields sent by the client are exposed under `traceContext` as opaque
  * strings for observability only; they are never consulted for authorization.
  */
@@ -72,6 +82,13 @@ export async function toRequestContext(
   if (traceContext) requestContext.set('traceContext', traceContext);
   const authInfo = ctx.http?.authInfo;
   if (!authInfo) return requestContext;
+  const trusted = (authInfo as { [MCP_TRUSTED_REQUEST_CONTEXT]?: unknown })[MCP_TRUSTED_REQUEST_CONTEXT];
+  if (trusted && typeof trusted === 'object') {
+    for (const [key, value] of Object.entries(trusted)) requestContext.set(key, value);
+    // Server auth also exposes the user under `user`, which MCP's own FGA check reads.
+    const trustedUser = (trusted as Record<string, unknown>)[MASTRA_USER_KEY];
+    if (trustedUser) requestContext.set('user', trustedUser);
+  }
   requestContext.set('authInfo', authInfo);
   const user = await mapAuthInfoToUser?.({ authInfo, extra: { authInfo }, requestContext });
   if (user) requestContext.set('user', user);

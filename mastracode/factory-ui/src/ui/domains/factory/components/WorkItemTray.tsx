@@ -1,10 +1,14 @@
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { History } from 'lucide-react';
 
+import type { CardContextSession } from '../boardItems';
+import type { ReworkReason } from '../reworkReason';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import { CardSourceDescription } from './BoardCardDetails';
+import { CardSessions } from './CardSessions';
 import { ActivityEvent } from './WorkItemActivity';
 import { WorkItemDescription } from './WorkItemDescription';
 
@@ -15,12 +19,16 @@ export function WorkItemTray({
   projectRepositoryId,
   events,
   actors,
+  contextSessions,
+  rework,
 }: {
   item: WorkItem;
   factoryId: string;
   projectRepositoryId: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
+  contextSessions: readonly CardContextSession[];
+  rework?: ReworkReason;
 }) {
   const factoryProjectId = factoryId || undefined;
 
@@ -37,6 +45,8 @@ export function WorkItemTray({
             factoryProjectId={factoryProjectId}
           />
           <WorkItemDescription item={item} factoryProjectId={factoryProjectId} />
+          {rework && <WhyItMovedBack rework={rework} />}
+          <CardSessions factoryId={factoryId} sessions={contextSessions} />
         </div>
         <div className="flex items-center gap-2 px-3 pt-2 pb-1">
           <span className="bg-border h-px flex-1" />
@@ -65,5 +75,26 @@ export function WorkItemTray({
         )}
       </ScrollAreaViewport>
     </ScrollArea>
+  );
+}
+
+const MOVED_BY = { human: 'a person', agent: 'an agent', system: 'Factory' } as const;
+
+function WhyItMovedBack({ rework }: { rework: ReworkReason }) {
+  return (
+    <section aria-label="Why it moved back" className="flex flex-col gap-1">
+      <Txt as="h4" variant="eyebrow" tone="muted" className="m-0">
+        Why it moved back from {rework.fromLabel}
+      </Txt>
+      {rework.reason ? (
+        <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
+          {rework.reason}
+        </MarkdownRenderer>
+      ) : (
+        <Txt variant="meta" tone="muted" className="m-0">
+          Moved back by {MOVED_BY[rework.movedBy]}
+        </Txt>
+      )}
+    </section>
   );
 }

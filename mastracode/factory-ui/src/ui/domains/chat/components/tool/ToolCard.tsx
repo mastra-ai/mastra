@@ -1,10 +1,14 @@
-import { Activity, ActivityContent, ActivityHeadline } from '@mastra/playground-ui/components/ai/activity';
-import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
-import { ActivityTimedTrigger } from '@mastra/playground-ui/domains/chat/activity';
+import {
+  Activity,
+  ActivityContent,
+  ActivityHeadline,
+  ActivityTrigger,
+} from '@mastra/playground-ui/components/ai/activity';
+import { presentTool, ToolCallExitStatus } from '@mastra/playground-ui/components/ai/tool-call';
 
 import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
-import { ToolBody, toolHasBody } from './ToolBody';
+import { ToolBody, toolHasBody, toolKnowledgeCard } from './ToolBody';
 
 export function ToolCard({
   tool,
@@ -15,7 +19,12 @@ export function ToolCard({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { icon: ToolIcon, label, detail, description, command } = presentTool(tool.toolName, tool.args);
+  const presented = presentTool(tool.toolName, tool.args);
+  const { icon: ToolIcon, description, command } = presented;
+  // A finished Knowledge call says what it did ("Read Refunds", "Pinned Escalation Process") like Studio's card.
+  const knowledge = toolKnowledgeCard(tool);
+  const label = knowledge?.title ?? presented.label;
+  const detail = knowledge ? knowledge.detail : presented.detail;
   const foldable = toolHasBody(tool, command);
 
   return (
@@ -28,9 +37,12 @@ export function ToolCard({
       open={open && foldable}
       onOpenChange={onOpenChange}
     >
-      <ActivityTimedTrigger at={tool.createdAt}>
-        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
-      </ActivityTimedTrigger>
+      <div className="flex w-full min-w-0 items-center">
+        <ActivityTrigger className="min-w-0 flex-1">
+          <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
+        </ActivityTrigger>
+        {tool.exit && <ToolCallExitStatus exit={tool.exit} />}
+      </div>
       <ActivityContent>
         <ToolBody tool={tool} command={command} />
       </ActivityContent>

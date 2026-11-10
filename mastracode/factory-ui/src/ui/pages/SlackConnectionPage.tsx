@@ -1,6 +1,7 @@
 import { SettingsRowsSkeleton } from '../ui/SettingsRowsSkeleton';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { toast } from '@mastra/playground-ui/components/Toaster';
@@ -161,19 +162,22 @@ export function SlackConnectionSettings() {
                 <SettingsContainer key={`${account.externalTeamId}:${account.externalUserId}`}>
                   <SettingsRow
                     label={
-                      <span className="flex items-center gap-1.5">
-                        <IdentityWithTooltip
-                          label={account.externalTeamName ?? 'Slack workspace'}
-                          idLabel="Workspace ID"
-                          id={account.externalTeamId}
-                        />
-                        <span aria-hidden="true">·</span>
-                        <IdentityWithTooltip
-                          label={account.externalUserName ?? account.externalUserId}
-                          idLabel="Slack user ID"
-                          id={account.externalUserId}
-                        />
-                      </span>
+                      <Metadata>
+                        <Metadata.Item>
+                          <IdentityWithTooltip
+                            label={account.externalTeamName ?? 'Slack workspace'}
+                            idLabel="Workspace ID"
+                            id={account.externalTeamId}
+                          />
+                        </Metadata.Item>
+                        <Metadata.Item>
+                          <IdentityWithTooltip
+                            label={account.externalUserName ?? account.externalUserId}
+                            idLabel="Slack user ID"
+                            id={account.externalUserId}
+                          />
+                        </Metadata.Item>
+                      </Metadata>
                     }
                     description={
                       <Txt tone="faint" as="span" variant="meta">

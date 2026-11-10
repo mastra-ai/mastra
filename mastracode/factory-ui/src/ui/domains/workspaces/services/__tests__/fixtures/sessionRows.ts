@@ -1,3 +1,4 @@
+import { builtinBoardCatalog } from '../../../../../../../e2e/ui/board-catalog';
 import type { WorkItem } from '../../../../factory/services/workItems';
 import { buildFactorySessionRow, buildUserSessionRow } from '../../sessionRows';
 import type { FactorySessionRowInput, SessionListRow } from '../../sessionRows';
@@ -55,7 +56,7 @@ export function factoryRow(
   return buildFactorySessionRow({
     session,
     item: undefined,
-    boards: undefined,
+    boards: builtinBoardCatalog.boards,
     threadId: undefined,
     pullRequest: undefined,
     factoryId: 'fp-1',

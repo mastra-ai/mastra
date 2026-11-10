@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -7,7 +8,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Code as CodeIcon, FileText, Pencil } from 'lucide-react';
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
@@ -17,27 +18,21 @@ import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { FactorySkillEditorDialog } from './FactorySkillEditorDialog';
 import { SettingsSubsection } from './SettingsSubsection';
 
+/** Which Factory's copy of each skill the cards edit, and whether the viewer may. */
+const SkillEditingContext = createContext<{ factoryId?: string; canEdit: boolean }>({ canEdit: false });
+
 interface DisplayedSkill {
   name: string;
   title: string;
 }
 
-const BUILT_IN_BOARD_SKILLS: Record<'work' | 'review', DisplayedSkill[]> = {
-  work: [
-    { name: 'factory-triage', title: 'Triage' },
-    { name: 'factory-plan', title: 'Planning' },
-  ],
-  review: [
-    { name: 'factory-review', title: 'Review' },
-    { name: 'factory-rereview', title: 'Re-review' },
-  ],
-};
-
-const DISPLAYED_SKILLS: DisplayedSkill[] = [...BUILT_IN_BOARD_SKILLS.work, ...BUILT_IN_BOARD_SKILLS.review];
-
-function isBuiltInBoard(id: string): id is 'work' | 'review' {
-  return id === 'work' || id === 'review';
-}
+// The default board runs every built-in skill: its Review lane (`pr-review`) took over from the retired Review board.
+const DISPLAYED_SKILLS: DisplayedSkill[] = [
+  { name: 'factory-triage', title: 'Triage' },
+  { name: 'factory-plan', title: 'Planning' },
+  { name: 'factory-review', title: 'Review' },
+  { name: 'factory-rereview', title: 'Re-review' },
+];
 
 function SkillContent({ content }: { content: string }) {
   const [raw, setRaw] = useState(false);
@@ -67,6 +62,8 @@ function SkillContent({ content }: { content: string }) {
 
 function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo }) {
   const [editing, setEditing] = useState(false);
+  const { factoryId, canEdit } = useContext(SkillEditingContext);
+  const editable = factoryId !== undefined && canEdit;
 
   return (
     <SettingsContainer>
@@ -85,6 +82,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
                 {skill.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && (
                   <Badge>Overridden by app</Badge>
                 )}
+                {skill.edited && <Badge>Edited</Badge>}
               </span>
               {skill.error ? (
                 <Txt as="span" variant="caption" className="text-destructive-foreground whitespace-pre-wrap">
@@ -98,15 +96,27 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
             </div>
             <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
           </CollapsibleTrigger>
-          <Button size="sm" icon={<Pencil />} aria-label={`Edit ${skill.name}`} onClick={() => setEditing(true)}>
-            Edit
+          <Button
+            size="sm"
+            icon={editable ? <Pencil /> : <FileText />}
+            aria-label={`${editable ? 'Edit' : 'View'} ${skill.name}`}
+            onClick={() => setEditing(true)}
+          >
+            {editable ? 'Edit' : 'View'}
           </Button>
         </div>
         <CollapsibleContent>
           <SkillContent content={skill.content} />
         </CollapsibleContent>
       </Collapsible>
-      {editing && <FactorySkillEditorDialog skill={skill} onClose={() => setEditing(false)} />}
+      {editing && (
+        <FactorySkillEditorDialog
+          skill={skill}
+          factoryId={factoryId}
+          canEdit={canEdit}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </SettingsContainer>
   );
 }
@@ -233,8 +243,8 @@ function BoardGroup({
       <Txt tone="ink" as="h4" variant="body" className="m-0">
         {board.title}
       </Txt>
-      {isBuiltInBoard(board.id) ? (
-        <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} />
+      {board.id === DEFAULT_BOARD_ID ? (
+        <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
       ) : (
         <CustomBoardPhases board={board} skills={skills} skillsLoaded={skillsLoaded} />
       )}
@@ -262,49 +272,52 @@ function OtherAppSkills({ skills, boards }: { skills: FactorySkillInfo[]; boards
 }
 
 export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
-  const skillsQuery = useFactorySkillsQuery();
+  const skillsQuery = useFactorySkillsQuery(factoryId);
   const catalog = useBoardCatalog(factoryId);
-  const skills = skillsQuery.data ?? [];
+  const skills = skillsQuery.data?.skills ?? [];
+  const canEdit = skillsQuery.data?.canEdit ?? false;
   const boards = catalog.data === undefined ? undefined : orderedBoards(catalog.data);
 
   return (
-    <SettingsSubsection
-      scope="deployment"
-      title="Factory skills"
-      description="The playbooks Factory agents follow when working your items: the built-in ones shipped with the server and your app's own skills. Expand a skill to read the exact instructions the agent receives, or open it in the editor. Saving changes is not available yet."
-    >
-      {skillsQuery.isPending && (
-        <Txt tone="muted" as="p" variant="caption" role="status">
-          Loading skills…
-        </Txt>
-      )}
-      {skillsQuery.error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground">
-          {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
-        </Txt>
-      )}
-      {catalog.error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground">
-          Installed boards could not be loaded; showing built-in skills ungrouped.
-        </Txt>
-      )}
-      {boards === undefined ? (
-        <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
-      ) : boards.length === 0 ? (
-        <div className="flex flex-col gap-5">
-          <Txt tone="muted" as="p" variant="caption">
-            No boards are installed, so no board skills apply.
+    <SkillEditingContext.Provider value={{ factoryId, canEdit }}>
+      <SettingsSubsection
+        scope="factory"
+        title="Factory skills"
+        description="The playbooks Factory agents follow when working your items: the built-in ones shipped with the server and your app's own skills. Expand a skill to read the exact instructions the agent receives. Organization admins can edit a skill for this Factory or revert it to the original."
+      >
+        {skillsQuery.isPending && (
+          <Txt tone="muted" as="p" variant="caption" role="status">
+            Loading skills…
           </Txt>
-          <OtherAppSkills skills={skills} boards={boards} />
-        </div>
-      ) : (
-        <div className="flex flex-col gap-5">
-          {boards.map(board => (
-            <BoardGroup key={board.id} board={board} skills={skills} skillsLoaded={skillsQuery.isSuccess} />
-          ))}
-          <OtherAppSkills skills={skills} boards={boards} />
-        </div>
-      )}
-    </SettingsSubsection>
+        )}
+        {skillsQuery.error && (
+          <Txt as="p" variant="caption" className="text-destructive-foreground">
+            {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
+          </Txt>
+        )}
+        {catalog.error && (
+          <Txt as="p" variant="caption" className="text-destructive-foreground">
+            Installed boards could not be loaded; showing built-in skills ungrouped.
+          </Txt>
+        )}
+        {boards === undefined ? (
+          <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
+        ) : boards.length === 0 ? (
+          <div className="flex flex-col gap-5">
+            <Txt tone="muted" as="p" variant="caption">
+              No boards are installed, so no board skills apply.
+            </Txt>
+            <OtherAppSkills skills={skills} boards={boards} />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5">
+            {boards.map(board => (
+              <BoardGroup key={board.id} board={board} skills={skills} skillsLoaded={skillsQuery.isSuccess} />
+            ))}
+            <OtherAppSkills skills={skills} boards={boards} />
+          </div>
+        )}
+      </SettingsSubsection>
+    </SkillEditingContext.Provider>
   );
 }

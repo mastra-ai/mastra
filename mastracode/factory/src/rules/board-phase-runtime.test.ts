@@ -18,7 +18,7 @@ import { GithubIntegration } from '../integrations/github/integration.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RuleGroup } from './rule-group.js';
 
 class TestSandbox extends MastraSandbox {
@@ -43,10 +43,13 @@ const LOW_EFFORT: RuleGroup = {
 
 const ORG = 'phase-org';
 
+const PUBLISH = 'Publish the card you were given.';
+const publishSkill = createSkill({ name: 'publish', description: 'Publish a card', instructions: PUBLISH });
+
 /**
- * Cards enter Build by a board rule, not a person, so only the phase's start rule decides
- * whether their run starts. Build ends when its agent has listed the work items; the agent then
- * moves the card itself.
+ * Cards enter Build through the project's intake route, not a person, so only the phase's start
+ * rule decides whether their run starts. Build ends when its agent has listed the work items; the
+ * agent then moves the card itself.
  */
 const release = defineBoard({
   id: 'release',
@@ -57,31 +60,15 @@ const release = defineBoard({
       name: 'Backlog',
       kind: 'resting',
       nextPhases: ['build'],
-      onEnter: {
-        issue: context => ({
-          type: 'transition',
-          idempotencyKey: `${context.ingress.id}:ship`,
-          board: 'release',
-          stage: 'build',
-        }),
-      },
     },
     build: {
       name: 'Build',
       kind: 'working',
-      runner: { context: 'publisher', instructions: 'Keep it short.' },
+      runner: { context: 'publisher', skill: 'publish', instructions: 'Keep it short.' },
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
       exitTool: 'factory_list_work_items',
       nextPhases: ['done', 'backlog'],
-      onEnter: {
-        issue: context => ({
-          type: 'invokeSkill',
-          idempotencyKey: `${context.ingress.id}:publish`,
-          role: 'publisher',
-          prompt: `Publish ${context.item.title}.`,
-        }),
-      },
     },
     done: { name: 'Done', kind: 'terminal' },
   },
@@ -162,7 +149,7 @@ function fakeModel(requests: string[], decide: (text: string) => ToolCall | unde
 function publisher(): (text: string) => ToolCall | undefined {
   const steps = new Map<string, number>();
   return text => {
-    const title = text.match(/Publish (quick fix|large rewrite)\./)?.[1];
+    const title = text.includes(PUBLISH) ? text.match(/quick fix|large rewrite/)?.[0] : undefined;
     const step = title ? (steps.get(title) ?? 0) : 2;
     if (!title || step >= 2) return undefined;
     steps.set(title, step + 1);
@@ -176,7 +163,7 @@ function publisher(): (text: string) => ToolCall | undefined {
 }
 
 /** A real Factory on in-memory storage with one linked GitHub repository, driven over HTTP. */
-async function startFactory(board: ReturnType<typeof defineBoard>, skills?: InlineSkill[]) {
+async function startFactory(board: ReturnType<typeof defineBoard>, landing: string, skills?: InlineSkill[]) {
   vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
   const storage = new LibSQLFactoryStorage({ id: 'phase-runtime', url: ':memory:' });
   const github = new GithubIntegration({
@@ -219,7 +206,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>, skills?: Inli
     app.request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
   const { project } = await (await send('POST', '/web/factory/projects', { name: 'Phase project' })).json();
-  // Project auto-run stays off: only the phase's own start rule may start runs.
+  // No project setting starts runs: only the phase's own start rule may.
   expect(
     (await send('PATCH', `/web/factory/projects/${project.id}`, { defaultModelId: 'openai/gpt-5.6-sol' })).status,
   ).toBe(200);
@@ -248,20 +235,26 @@ async function startFactory(board: ReturnType<typeof defineBoard>, skills?: Inli
     sandboxWorkdir: '/tmp/phase-runtime',
   });
 
+  // The project's intake route files new cards straight into the phase the test exercises.
+  const route = await send('POST', `/web/factory/projects/${project.id}/intake-routes`, {
+    name: `New cards go to ${landing}`,
+    target: { boardKey: board.id, phaseKey: landing },
+  });
+  expect(route.status, await route.clone().text()).toBe(201);
+
   const workItems = storage.getDomain<WorkItemsStorage>('work-items');
-  const card = async (title: string, labels: string[]): Promise<WorkItemRow> => {
+  const card = async (title: string, labels: string[]): Promise<Card> => {
     const response = await send('POST', `/web/factory/projects/${project.id}/work-items`, {
-      board: board.id,
       title,
       externalSource: { integrationId: 'github', type: 'issue', externalId: `phase:${title}` },
       metadata: { authorTrusted: true, labels },
     });
     const created = await response.json();
     expect(created, JSON.stringify(created)).toMatchObject({ workItem: { board: board.id } });
-    return created.workItem as WorkItemRow;
+    return created.workItem as Card;
   };
-  const read = async (item: WorkItemRow) => (await workItems.get({ orgId: ORG, id: item.id }))!;
-  const decisionsFor = async (item: WorkItemRow) =>
+  const read = async (item: Card) => (await workItems.get({ orgId: ORG, id: item.id }))!;
+  const decisionsFor = async (item: Card) =>
     (await workItems.listDeferredDecisions(ORG, project.id)).filter(record => record.workItemId === item.id);
   return { project, workItems, card, read, decisionsFor, close };
 }
@@ -279,49 +272,29 @@ const delivery = defineBoard({
       name: 'Backlog',
       kind: 'resting',
       nextPhases: ['planning'],
-      onEnter: {
-        issue: context => ({
-          type: 'transition',
-          idempotencyKey: `${context.ingress.id}:plan`,
-          board: 'delivery',
-          stage: 'planning',
-        }),
-      },
     },
     planning: {
       name: 'Planning',
       kind: 'working',
-      runner: { context: 'builder' },
+      runner: { context: 'builder', skill: 'plan-feature' },
       autoStart: true,
       nextPhases: ['building'],
-      onEnter: {
-        issue: context => ({
-          type: 'invokeSkill',
-          idempotencyKey: `${context.ingress.id}:plan`,
-          role: 'builder',
-          prompt: `Plan ${context.item.title}.`,
-        }),
-      },
     },
     building: {
       name: 'Building',
       kind: 'working',
-      runner: { context: 'builder' },
+      runner: { context: 'builder', skill: 'build-feature' },
       autoStart: true,
       nextPhases: ['delivered'],
-      onEnter: {
-        issue: context => ({
-          type: 'invokeSkill',
-          idempotencyKey: `${context.ingress.id}:build`,
-          role: 'builder',
-          prompt: `Build ${context.item.title}.`,
-          startsAfterOwnMove: true,
-        }),
-      },
     },
     delivered: { name: 'Delivered', kind: 'terminal' },
   },
 });
+
+const deliverySkills = [
+  createSkill({ name: 'plan-feature', description: 'Plan a feature', instructions: 'Plan the feature.' }),
+  createSkill({ name: 'build-feature', description: 'Build a feature', instructions: 'Build the feature.' }),
+];
 
 /** Plans by moving the card to Building, then builds by moving it to Delivered. */
 function builder(): (text: string) => ToolCall | undefined {
@@ -345,10 +318,10 @@ describe('board phase fields at runtime', () => {
   it('starts a phase only for the cards its condition matches, and the agent moves the card after the exit tool', async () => {
     const requests: string[] = [];
     fakeModel(requests, publisher());
-    const runtime = await startFactory(release);
+    const runtime = await startFactory(release, 'build', [publishSkill]);
     try {
       const { project, workItems, card, read, decisionsFor } = runtime;
-      const stagesOf = async (item: WorkItemRow) => (await read(item)).stages;
+      const stagesOf = async (item: Card) => (await read(item)).stages;
 
       const quick = await card('quick fix', ['effort:low']);
       const large = await card('large rewrite', ['effort:high']);
@@ -357,10 +330,10 @@ describe('board phase fields at runtime', () => {
       // factory-phase signal names the exit tool and where the card may go; after the exit tool
       // the agent moves the card with factory_transition_work_item.
       await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['done']), { timeout: 15_000 });
-      const publishRequest = requests.find(text => text.includes('Publish quick fix.'));
+      const publishRequest = requests.find(text => text.includes(PUBLISH) && text.includes('quick fix'));
       expect(publishRequest).toContain('Keep it short.');
       expect(publishRequest).toContain(
-        'This phase ends when factory_list_work_items succeeds. Then move the card with factory_transition_work_item to one of: done, backlog.',
+        'This phase ends when factory_list_work_items succeeds; until then the card stays here. Then move the card with factory_transition_work_item to one of: done, backlog.',
       );
 
       // The high-effort card reaches Build too, but its run waits for a person: nothing ran.
@@ -374,7 +347,7 @@ describe('board phase fields at runtime', () => {
         { timeout: 15_000 },
       );
       expect(await workItems.listRunBindings(ORG, project.id, large.id)).toEqual([]);
-      expect(requests.some(text => text.includes('Publish large rewrite.'))).toBe(false);
+      expect(requests.some(text => text.includes('large rewrite'))).toBe(false);
     } finally {
       await runtime.close();
     }
@@ -382,7 +355,7 @@ describe('board phase fields at runtime', () => {
   it("starts the next phase's run in the same session when the agent moves its own card within one context", async () => {
     const requests: string[] = [];
     fakeModel(requests, builder());
-    const runtime = await startFactory(delivery);
+    const runtime = await startFactory(delivery, 'planning', deliverySkills);
     try {
       const { project, workItems, card, read } = runtime;
       const feature = await card('the feature', []);
@@ -402,7 +375,7 @@ describe('board phase fields at runtime', () => {
   }, 60_000);
 
   describe('a custom phase that runs an app skill', () => {
-    /** Cards move from Backlog into Drafting by a board rule; Drafting runs only `runner.skill`. */
+    /** The intake route files cards into Drafting; Drafting runs only `runner.skill`. */
     const notes = defineBoard({
       id: 'notes',
       name: 'Notes',
@@ -412,14 +385,6 @@ describe('board phase fields at runtime', () => {
           name: 'Backlog',
           kind: 'resting',
           nextPhases: ['drafting'],
-          onEnter: {
-            issue: context => ({
-              type: 'transition',
-              idempotencyKey: `${context.ingress.id}:draft`,
-              board: 'notes',
-              stage: 'drafting',
-            }),
-          },
         },
         drafting: {
           name: 'Drafting',
@@ -450,7 +415,7 @@ describe('board phase fields at runtime', () => {
     async function draftNotes(skills?: InlineSkill[]) {
       const requests: string[] = [];
       fakeModel(requests, writer());
-      const runtime = await startFactory(notes, skills);
+      const runtime = await startFactory(notes, 'drafting', skills);
       try {
         const item = await runtime.card('v2 notes', []);
         // Capture the start the moment it settles: a missing skill keeps retrying in the background.

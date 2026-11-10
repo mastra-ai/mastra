@@ -15,6 +15,8 @@ interface WorkspaceViewerPanelProps {
   workspacePath: string;
   onSizeChange?: (size: WorkspacePanelSize) => void;
   visible?: boolean;
+  /** False keeps the overview from reading changes, which would wake an idle sandbox. */
+  readsChanges?: boolean;
   factoryProjectId?: string;
   /** The Factory session this workspace belongs to; enables session actions such as recreating the sandbox. */
   sessionId?: string;
@@ -30,6 +32,7 @@ export function WorkspaceViewerPanel({
   workspacePath,
   onSizeChange,
   visible = true,
+  readsChanges = true,
   factoryProjectId,
   sessionId,
 }: WorkspaceViewerPanelProps) {
@@ -39,7 +42,7 @@ export function WorkspaceViewerPanel({
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
-  const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
+  const changes = useWorkspaceChanges(workspacePath, { enabled: visible && readsChanges });
   const factory = useFactoryQuery(factoryProjectId);
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))

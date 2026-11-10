@@ -295,6 +295,31 @@ export type AuthResult =
 
 const pass: AuthResult = { action: 'next' };
 
+/**
+ * Lets an app's `authorize(path, method, user, context)` read `context.get('requestContext')` and
+ * `context.get('mastra')` on every adapter, as it can on Hono, so per-caller values (the Knowledge scope) bind
+ * the same way everywhere. Hono and NestJS contexts already answer `get`; Express, Fastify and Koa pass a web
+ * Request, Elysia its own context, and adapters with no builder pass nothing.
+ */
+const withAuthorizeVariables = (
+  base: unknown,
+  ctx: Pick<AuthMiddlewareContext, 'mastra' | 'requestContext' | 'customRouteAuthConfig' | 'rawRequest'>,
+): unknown => {
+  const variables: Record<string, unknown> = {
+    mastra: ctx.mastra,
+    requestContext: ctx.requestContext,
+    customRouteAuthConfig: ctx.customRouteAuthConfig,
+  };
+  const get = (key: string) => variables[key];
+  if (base === null || base === undefined) {
+    return { get, req: ctx.rawRequest };
+  }
+  if (typeof base === 'object' && typeof (base as { get?: unknown }).get !== 'function') {
+    Object.defineProperty(base, 'get', { value: get, configurable: true });
+  }
+  return base;
+};
+
 const adaptToMastraAuthRequest = (request: MastraAuthRequest): MastraAuthRequest => {
   if (!(request instanceof Request)) {
     return request;
@@ -570,63 +595,98 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   // ── Authorization ──
 
+  const authorizationError = await authorizeAuthenticatedUser({
+    path,
+    method,
+    user,
+    mastra,
+    authConfig,
+    customRouteAuthConfig,
+    requestContext,
+    rawRequest,
+    buildAuthorizeContext: ctx.buildAuthorizeContext,
+  });
+  if (authorizationError) {
+    return { action: 'error', ...authorizationError, headers: refreshHeaders };
+  }
+
+  return refreshHeaders ? { action: 'next', headers: refreshHeaders } : pass;
+};
+
+export interface AuthorizeAuthenticatedUserContext {
+  path: string;
+  method: string;
+  user: unknown;
+  mastra: Mastra;
+  authConfig: MastraAuthConfig;
+  customRouteAuthConfig?: Map<string, boolean>;
+  requestContext: AuthMiddlewareContext['requestContext'];
+  rawRequest: MastraAuthRequest;
+  buildAuthorizeContext: () => unknown;
+}
+
+/**
+ * The authorization step of server auth for an already authenticated user:
+ * `authorizeUser`, `authorize(path, method, user)`, `rules`, or the RBAC default rules.
+ * Returns null when the user may access `method path`.
+ */
+export const authorizeAuthenticatedUser = async (
+  ctx: AuthorizeAuthenticatedUserContext,
+): Promise<{ status: number; body: Record<string, unknown> } | null> => {
+  const { path, method, user, mastra, authConfig, requestContext, rawRequest } = ctx;
+  const denied = { status: 403, body: { error: 'Access denied' } };
+
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {
-      const isAuthorized = await authConfig.authorizeUser(user, authRequest);
-
-      if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+      const isAuthorized = await authConfig.authorizeUser(user, adaptToMastraAuthRequest(rawRequest));
+      return isAuthorized ? null : denied;
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorizeUser', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
+      return { status: 500, body: { error: 'Authorization error' } };
     }
-  } else if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
-    try {
-      const authorizeCtx = ctx.buildAuthorizeContext();
-      const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
+  }
 
-      if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+  if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
+    try {
+      const authorizeCtx = withAuthorizeVariables(ctx.buildAuthorizeContext(), {
+        mastra,
+        requestContext,
+        customRouteAuthConfig: ctx.customRouteAuthConfig,
+        rawRequest,
+      });
+      const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
+      return isAuthorized ? null : denied;
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorize', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
         path,
         method,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
-    }
-  } else if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
-    const isAuthorized = await checkRules(authConfig.rules, path, method, user);
-
-    if (!isAuthorized) {
-      return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-    }
-  } else {
-    // No explicit authorization configured (authorizeUser, authorize, or rules)
-    // Check if RBAC is configured - if not, allow authenticated users through
-    // (auth-only mode = authenticated users get full access)
-    const rbacProvider =
-      requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
-        ? (mastra.getStudio?.()?.rbac ?? mastra.getServer()?.rbac)
-        : mastra.getServer()?.rbac;
-    if (rbacProvider) {
-      if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
-        const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
-
-        if (!isAuthorized) {
-          return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-        }
-      } else {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+      return { status: 500, body: { error: 'Authorization error' } };
     }
   }
 
-  return refreshHeaders ? { action: 'next', headers: refreshHeaders } : pass;
+  if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
+    return (await checkRules(authConfig.rules, path, method, user)) ? null : denied;
+  }
+
+  // No explicit authorization configured (authorizeUser, authorize, or rules)
+  // Check if RBAC is configured - if not, allow authenticated users through
+  // (auth-only mode = authenticated users get full access)
+  const rbacProvider =
+    requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
+      ? (mastra.getStudio?.()?.rbac ?? mastra.getServer()?.rbac)
+      : mastra.getServer()?.rbac;
+  if (rbacProvider) {
+    if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
+      return (await checkRules(defaultAuthConfig.rules, path, method, user)) ? null : denied;
+    }
+    return denied;
+  }
+
+  return null;
 };
 
 // Check authorization rules

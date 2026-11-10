@@ -36,7 +36,7 @@ import { ModelCredentialsStorage } from '../storage/domains/credentials/base.js'
 import type { LoginCredentialScope, LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base.js';
 import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 import type { RouteDependencies } from './route.js';
 
 /** Lifetime of a paste-code session (Anthropic gives no explicit expiry). */
@@ -151,10 +151,6 @@ const OAUTH_FLOWS: Record<string, OAuthFlow> = {
     },
   },
 };
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /**
  * Local-mode login sessions. Flows in local mode are single-process, so a

@@ -9,6 +9,7 @@ export type ListSearchProps = {
   label: string;
   placeholder: string;
   debounceMs?: number;
+  /** Defaults to 'sm', the toolbar rung. */
   size?: SearchInputProps['size'];
   /**
    * Optional controlled value. When provided, ListSearch stays in sync with this
@@ -28,7 +29,7 @@ export const ListSearch = ({
   label,
   placeholder,
   debounceMs = 300,
-  size,
+  size = 'sm',
   value: controlledValue,
   shortcutDisabled = false,
 }: ListSearchProps) => {

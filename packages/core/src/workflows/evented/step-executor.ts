@@ -1,3 +1,5 @@
+import { isExecutionFenceError, isStorageFencedExecution } from '../../agent/durable/execution-fence';
+import { AGENT_STREAM_TOPIC } from '../../agent/streams/constants';
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
@@ -15,10 +17,11 @@ import type { TracingContext, TracingPolicy } from '../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
+import type { StepExecutionParentWorkflow } from '../../worker/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
-import { getStepResult } from '../step';
+import { getStepResult, getStepResultAsync } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
 import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
 import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
@@ -33,9 +36,16 @@ import {
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
   #stepPubsub?: PubSub;
+  #warnedUnnumbered = false;
   constructor({ mastra }: { mastra?: Mastra }) {
     super({ name: 'StepExecutor', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
+    // Workflow event processors construct executors without registering them,
+    // so adopt the Mastra logger here or warnings fall back to an ERROR-level console logger.
+    const logger = mastra?.getLogger?.();
+    if (logger) {
+      this.__setLogger(logger);
+    }
   }
 
   __registerMastra(mastra: Mastra) {
@@ -59,10 +69,14 @@ export class StepExecutor extends MastraBase {
    * Reusing an existing `CachingPubSub`, or wrapping the bus with one that
    * shares `mastra.serverCache`, puts every frame through one append path.
    *
-   * A process-local cache only numbers frames correctly when every publisher
-   * shares it. Behind a cross-process transport, each process would number its
-   * own frames from 0 and observers would drop the worker's frames as late
-   * duplicates, so those steps publish unnumbered (live-only), as before.
+   * A process-local cache only numbers a run's frames correctly in the process
+   * that holds the run's log. Behind a cross-process transport, a worker
+   * numbering the same run from 0 in its own cache would have observers drop
+   * its frames as late duplicates. So with a process-local cache behind a
+   * cross-process transport, steps only append to logs this process already
+   * holds — the caller writes the run's `start` frame before any step runs, so
+   * steps in the caller's process are numbered (#28324) and steps on other
+   * workers publish unnumbered (live-only).
    */
   #getStepPubsub(): PubSub {
     if (this.#stepPubsub) return this.#stepPubsub;
@@ -70,17 +84,30 @@ export class StepExecutor extends MastraBase {
     const cache = this.mastra?.serverCache;
     if (inner instanceof CachingPubSub) {
       this.#stepPubsub = inner;
-    } else if (cache && !(cache instanceof InMemoryServerCache && !(inner.__rawBus() instanceof EventEmitterPubSub))) {
+    } else if (cache) {
+      const processLocalLogs =
+        cache instanceof InMemoryServerCache && !(inner.__rawBus() instanceof EventEmitterPubSub);
       this.#stepPubsub = new CachingPubSub(inner, cache, {
         // Run-local watch events are per-process fan-out (often megabytes of
         // cumulative step results) and must never land in a shared cache.
         shouldCache: topic => !isRunLocalTopic(topic),
+        extendExistingLogsOnly: processLocalLogs,
+        onUnlogged: topic => this.#warnUnnumberedAgentStream(topic),
         logger: this.logger,
       });
     } else {
       this.#stepPubsub = inner;
     }
     return this.#stepPubsub;
+  }
+
+  #warnUnnumberedAgentStream(topic: string): void {
+    if (this.#warnedUnnumbered || !topic.startsWith(AGENT_STREAM_TOPIC(''))) return;
+    this.#warnedUnnumbered = true;
+    this.logger.warn(
+      `Agent stream frames published from this process are not numbered: the run started in another process and the in-memory server cache is process-local, so observe(runId, { offset }) cannot skip these frames. Configure a shared server cache (e.g. RedisServerCache) on Mastra.`,
+      { topic },
+    );
   }
 
   /**
@@ -115,6 +142,7 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     requestContext: RequestContext;
+    parentWorkflow?: StepExecutionParentWorkflow;
     /** Caller identity, forwarded to step/tool/agent execution contexts (parity with the default engine). */
     actor?: ActorSignal;
     retryCount?: number;
@@ -253,6 +281,7 @@ export class StepExecutor extends MastraBase {
               suspendData: suspendDataToUse,
               getInitData: () => stepResults?.input as any,
               getStepResult: getStepResult.bind(this, stepResults),
+              getStepResultAsync: getStepResultAsync.bind(this, stepResults),
               suspend: async (suspendPayload: unknown, suspendOptions?: SuspendOptions): Promise<InnerOutput> => {
                 const { suspendData, validationError } = await validateStepSuspendData({
                   suspendData: suspendPayload,
@@ -412,6 +441,14 @@ export class StepExecutor extends MastraBase {
         },
       });
 
+      if (
+        isExecutionFenceError(error) &&
+        this.mastra &&
+        !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
+      ) {
+        if (isStorageFencedExecution(requestContext, runId, params.parentWorkflow)) throw error;
+      }
+
       // Log the error for observability (matching default engine behavior)
       const mastraError = new MastraError(
         {
@@ -555,6 +592,7 @@ export class StepExecutor extends MastraBase {
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
+          getStepResultAsync: getStepResultAsync.bind(this, stepResults),
           bail: (() => {}) as () => InnerOutput,
           writer: new ToolStream(
             {
@@ -632,6 +670,7 @@ export class StepExecutor extends MastraBase {
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
+            getStepResultAsync: getStepResultAsync.bind(this, stepResults),
             suspend: async (_suspendPayload: any): Promise<any> => {
               throw new Error('Not implemented');
             },
@@ -717,6 +756,7 @@ export class StepExecutor extends MastraBase {
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
+            getStepResultAsync: getStepResultAsync.bind(this, stepResults),
             suspend: async (_suspendPayload: any): Promise<any> => {
               throw new Error('Not implemented');
             },

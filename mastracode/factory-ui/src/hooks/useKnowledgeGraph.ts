@@ -1,133 +1,185 @@
-/**
- * React Query hooks for the knowledge graph page.
- *
- * The graph query keys on `(factoryProjectId, selection, threadId)` so the default
- * project view, each thread drill-down view, and each structural scope-node lens
- * are distinct cache entries — switching views swaps payloads wholesale instead of
- * mutating one entry.
- */
+/** React Query hooks for a Factory project's Knowledge page. */
 
-import { skipToken, useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
+import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryKey } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
+import { useDocumentVisible } from '../ui/lib/hooks/useDocumentVisible';
 import {
   fetchKnowledgeActivity,
-  fetchKnowledgeNode,
   fetchKnowledgeGraph,
-  fetchKnowledgeScopes,
+  fetchKnowledgePage,
   fetchKnowledgeSearch,
+  fetchKnowledgeTreeLevel,
+  streamKnowledgeChanges,
 } from '../ui/domains/factory/services/knowledge';
-import type { KnowledgeRung, KnowledgeSelection } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
+const MIN_SEARCH_LENGTH = 2;
+const POLL_MS = 5_000;
 /**
- * Live polling gate. Only a 404 is terminal (stale/deleted session on a
- * thread view); transient errors keep polling so a hiccup never freezes
- * live updates. `paused` (the user is interacting with the graph) suspends
- * polling so the layout never shifts under someone mid-exploration.
+ * While the change stream is open it announces writes made through this server process. Writes from another
+ * Factory replica are not on it, so a slow poll still catches those.
  */
-export function knowledgeRefetchInterval(error: unknown, paused: boolean): number | false {
+const LIVE_POLL_MS = 60_000;
+const RETRY_MS = 3_000;
+/** Writes arrive in bursts (a page and its notes); one refetch covers the burst. */
+const BURST_MS = 150;
+
+/**
+ * Refresh gate, so pages agents write show up while the page is open. Only a 404 is terminal; transient
+ * errors keep polling. `paused` suspends it while the user is interacting; `live` slows it to a safety net
+ * while the change stream carries updates.
+ */
+export function knowledgeRefetchInterval(error: unknown, paused: boolean, live = false): number | false {
   if (error instanceof RequestError && error.status === 404) return false;
   if (paused) return false;
-  return 5_000;
+  return live ? LIVE_POLL_MS : POLL_MS;
 }
 
-/** Cache-key slot for a selection: the scope node id or the identity rung. */
-function selectionKey(selection: KnowledgeSelection | undefined): string | undefined {
-  return selection?.scopeNodeId ?? selection?.scopeLevel;
+function isProjectKnowledgeQuery(key: QueryKey, factoryProjectId: string): boolean {
+  return (
+    key[0] === 'factory' && typeof key[1] === 'string' && key[1].startsWith('knowledge-') && key[2] === factoryProjectId
+  );
 }
 
-export function useKnowledgeScopes(factoryProjectId: string | undefined, threadId?: string) {
+/**
+ * Follows the project's Knowledge change stream while the tab is visible and refetches the project's
+ * Knowledge queries when a write lands. Returns whether the stream is open; when it is not (an older server,
+ * a dropped connection) the queries keep polling.
+ */
+export function useKnowledgeLiveUpdates(factoryProjectId: string | undefined): boolean {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  // A hidden tab must not hold a stream: browsers cap HTTP/1.1 connections per host.
+  const visible = useDocumentVisible();
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !factoryProjectId) return;
+    const abort = new AbortController();
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let burst: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () =>
+      void queryClient.invalidateQueries({
+        predicate: query => isProjectKnowledgeQuery(query.queryKey, factoryProjectId),
+      });
+
+    const connect = () => {
+      streamKnowledgeChanges(
+        baseUrl,
+        factoryProjectId,
+        {
+          onChange: () => {
+            clearTimeout(burst);
+            burst = setTimeout(refresh, BURST_MS);
+          },
+          onConnected: () => {
+            setConnected(true);
+            // Whatever landed while no stream was open was never announced.
+            refresh();
+          },
+        },
+        abort.signal,
+      )
+        .then(() => false)
+        .catch((error: unknown) => error instanceof RequestError && error.status >= 400 && error.status < 500)
+        .then(fatal => {
+          if (abort.signal.aborted) return;
+          setConnected(false);
+          // A signed-out member or a missing route never heals by retrying; polling carries on.
+          if (!fatal) retry = setTimeout(connect, RETRY_MS);
+        });
+    };
+    connect();
+
+    return () => {
+      abort.abort();
+      clearTimeout(retry);
+      clearTimeout(burst);
+      setConnected(false);
+    };
+  }, [baseUrl, factoryProjectId, queryClient, visible]);
+
+  return connected;
+}
+
+const notFound = (error: unknown) => error instanceof RequestError && error.status === 404;
+
+export function useKnowledgeGraph(factoryProjectId: string | undefined, paused = false, live = false) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.knowledgeScopes(factoryProjectId, threadId),
+    queryKey: queryKeys.knowledgeGraph(factoryProjectId),
+    queryFn: factoryProjectId ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, signal) : skipToken,
+    refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused, live),
+    retry: (failureCount, error) => !notFound(error) && failureCount < 2,
+  });
+}
+
+export function useKnowledgePage(
+  factoryProjectId: string | undefined,
+  pageId: string | null,
+  noteCursor?: string,
+  live = false,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.knowledgePage(factoryProjectId, pageId, noteCursor),
+    queryFn:
+      factoryProjectId && pageId
+        ? ({ signal }) => fetchKnowledgePage(baseUrl, factoryProjectId, pageId, noteCursor, signal)
+        : skipToken,
+    // Only the first notes chunk polls; later chunks are fetched once as the user loads them.
+    refetchInterval: query => (noteCursor ? false : knowledgeRefetchInterval(query.state.error, false, live)),
+    retry: (failureCount, error) => !notFound(error) && failureCount < 2,
+  });
+}
+
+/** Tree levels for the explorer's lazily loaded sidebar, one query per request, in order. */
+export function useKnowledgeTreeLevels(
+  factoryProjectId: string | undefined,
+  requests: KnowledgeExplorerTreeRequest[],
+  live = false,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQueries({
+    queries: requests.map(request => ({
+      queryKey: queryKeys.knowledgeTreeLevel(factoryProjectId, request.parentId, request.cursor),
+      queryFn: factoryProjectId
+        ? ({ signal }: { signal: AbortSignal }) => fetchKnowledgeTreeLevel(baseUrl, factoryProjectId, request, signal)
+        : skipToken,
+      // A level's first chunk refreshes, so new children appear in the tree and the page's child list.
+      refetchInterval: (query: { state: { error: unknown } }) =>
+        request.cursor ? false : knowledgeRefetchInterval(query.state.error, false, live),
+      retry: (failureCount: number, error: unknown) => !notFound(error) && failureCount < 2,
+    })),
+  });
+}
+
+export function useKnowledgeActivity(factoryProjectId: string | undefined, pageId: string, live = false) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.knowledgeActivity(factoryProjectId, pageId),
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeScopes(baseUrl, factoryProjectId, threadId, signal)
+      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, pageId, signal)
       : skipToken,
-    retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
+    refetchInterval: query => knowledgeRefetchInterval(query.state.error, false, live),
+    retry: (failureCount, error) => !notFound(error) && failureCount < 2,
   });
 }
 
-export function useKnowledgeSearch(factoryProjectId: string | undefined, query: string, threadId?: string) {
+export function useKnowledgeSearch(factoryProjectId: string | undefined, query: string) {
   const { baseUrl } = useApiConfig();
-  const normalizedQuery = query.trim();
+  const trimmed = query.trim();
   return useQuery({
-    queryKey: queryKeys.knowledgeSearch(factoryProjectId, normalizedQuery, threadId),
+    queryKey: queryKeys.knowledgeSearch(factoryProjectId, trimmed),
     queryFn:
-      factoryProjectId && normalizedQuery.length >= 2
-        ? ({ signal }) => fetchKnowledgeSearch(baseUrl, factoryProjectId, normalizedQuery, threadId, signal)
+      factoryProjectId && trimmed.length >= MIN_SEARCH_LENGTH
+        ? ({ signal }) => fetchKnowledgeSearch(baseUrl, factoryProjectId, trimmed, signal)
         : skipToken,
-  });
-}
-
-export function useKnowledgeScopePage(factoryProjectId: string | undefined, threadId?: string) {
-  const { baseUrl } = useApiConfig();
-  return useMutation({
-    mutationFn: (page: { parentId?: string; cursor?: string }) => {
-      if (!factoryProjectId) throw new Error('Factory project is required.');
-      return fetchKnowledgeScopes(baseUrl, factoryProjectId, threadId, undefined, page);
-    },
-  });
-}
-
-export function useKnowledgeGraph(
-  factoryProjectId: string | undefined,
-  selection: KnowledgeSelection | undefined,
-  threadId?: string,
-  options?: { paused?: boolean },
-) {
-  const { baseUrl } = useApiConfig();
-  const paused = options?.paused ?? false;
-  return useQuery({
-    queryKey: queryKeys.knowledgeGraph(factoryProjectId, selectionKey(selection), threadId),
-    queryFn:
-      factoryProjectId && selection
-        ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, selection, threadId, signal)
-        : skipToken,
-    // Live: same 5s cadence as the board (useWorkItems precedent).
-    refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused),
-    refetchOnWindowFocus: !paused,
-    retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
-  });
-}
-
-export function useKnowledgeActivity(
-  factoryProjectId: string | undefined,
-  selection: KnowledgeSelection | undefined,
-  threadId?: string,
-) {
-  const { baseUrl } = useApiConfig();
-  const initialPageParam: string | undefined = undefined;
-  const queryFn =
-    factoryProjectId && selection
-      ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-          fetchKnowledgeActivity(baseUrl, factoryProjectId, selection, threadId, pageParam, signal)
-      : skipToken;
-  return useInfiniteQuery({
-    queryKey: queryKeys.knowledgeActivity(factoryProjectId, selectionKey(selection), threadId),
-    queryFn,
-    initialPageParam,
-    getNextPageParam: lastPage => lastPage.nextCursor,
-    // Never evict pages: the first page holds the newest rows and nothing
-    // fetches it back. Polling refetches every loaded page, and older pages do
-    // not change, so poll only until the reader loads older history.
-    refetchInterval: query => ((query.state.data?.pages.length ?? 0) > 1 ? false : 5_000),
-  });
-}
-
-export function useKnowledgeNode(
-  factoryProjectId: string | undefined,
-  nodeId: string | undefined,
-  scopeLevel: KnowledgeRung | undefined,
-  threadId?: string,
-) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.knowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId),
-    queryFn:
-      factoryProjectId && nodeId && scopeLevel
-        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, { scopeLevel }, threadId, signal)
-        : skipToken,
+    placeholderData: keepPreviousData,
   });
 }

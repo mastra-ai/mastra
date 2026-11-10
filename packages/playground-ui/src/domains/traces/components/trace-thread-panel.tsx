@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FeedbackOptions } from './feedback-options';
 
 import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 import { DataPanel } from '@/ds/components/DataPanel';
@@ -9,6 +10,7 @@ export interface TraceThreadPanelProps {
   threadId: string;
   withQueryTrace: boolean;
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   onOpenScore: (traceId: string, scoreId: string) => void;
   /** Close the thread drawer, revealing the trace panel underneath. */
   onClose: () => void;
@@ -26,6 +28,7 @@ export function TraceThreadPanel({
   threadId,
   withQueryTrace,
   withFeedback,
+  feedbackOptions,
   onOpenScore,
   onClose,
   depth = 2,
@@ -57,6 +60,7 @@ export function TraceThreadPanel({
             threadId={threadId}
             withQueryTrace={withQueryTrace}
             withFeedback={withFeedback}
+            feedbackOptions={feedbackOptions}
             onOpenScore={onOpenScore}
             onSelectedSpanChange={selected => setHasSelectedSpan(selected !== null)}
           />

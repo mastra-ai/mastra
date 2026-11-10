@@ -2,7 +2,11 @@ import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import { getCustomRouteHTTPExceptionResponse } from '@mastra/server/server-adapter';
+import {
+  cancelReaderOnResponseClose,
+  getCustomRouteHTTPExceptionResponse,
+  writeWithBackpressure,
+} from '@mastra/server/server-adapter';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Request, Response as ExpressResponse } from 'express';
 import { Hono } from 'hono';
@@ -96,26 +100,15 @@ export class CustomRouteService {
     }
 
     const reader = response.body.getReader();
-    const onClose = () => void reader.cancel().catch(() => {});
-    res.once('close', onClose);
+    const readerCancel = cancelReaderOnResponseClose(reader, res);
     try {
       while (!res.destroyed) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (!res.write(value)) {
-          await new Promise<void>(resolve => {
-            const resume = () => {
-              res.off('drain', resume);
-              res.off('close', resume);
-              resolve();
-            };
-            res.once('drain', resume);
-            res.once('close', resume);
-          });
-        }
+        await writeWithBackpressure(res, value);
       }
     } finally {
-      res.off('close', onClose);
+      readerCancel.dispose();
       res.end();
     }
     return true;

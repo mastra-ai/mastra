@@ -1,9 +1,9 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createLifecycleTestRegistry } from '../boards/test-utils.js';
+import { createBoardRegistry } from '../boards/index.js';
+import { createPolicyTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -461,14 +461,11 @@ describe('FactoryStartCoordinator', () => {
     const transitionService = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({
-        execute: {
-          issue: {
-            onEnter: async () => {
-              bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
-            },
-          },
-        },
+      boards: createPolicyTestRegistry(async context => {
+        if (context.toStage === 'execute') {
+          bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
+        }
+        return undefined;
       }),
     });
     const { controller, sendMessage } = makeController();
@@ -561,6 +558,54 @@ describe('FactoryStartCoordinator', () => {
     );
   });
 
+  it.each([
+    ['pr-review', 'pr-review', true],
+    ['review', 'review', false],
+    // Started from Intake: the card reaches PR review only after the session is ready.
+    ['intake', 'pr-review', true],
+  ] as const)(
+    "treats an issue card's checkout from %s into %s as untrusted only when it reviews an attached pull request",
+    async (stage, destinationStage, untrusted) => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          board: 'work',
+          title: 'Fix issue 1',
+          stages: [stage],
+          externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+          metadata: { authorTrusted: true },
+        },
+      });
+      // A maintainer's pull request: trusted author, but its branch can still carry anyone's AGENTS.md.
+      await storage.attachSource({
+        orgId: 'org-1',
+        id: item.id,
+        source: { integrationId: 'github', type: 'pull-request', externalId: 'github:10:pull-request:34' },
+        metadata: { githubPullRequestNumber: 34, state: 'open', authorTrusted: true },
+      });
+      const { controller, session } = makeController();
+      const coordinator = new FactoryStartCoordinator(
+        controller as never,
+        storage,
+        new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards: createBoardRegistry() }),
+        makeSourceControl() as never,
+        undefined,
+        undefined,
+        createBoardRegistry(),
+      );
+
+      await coordinator.prepare({ ...startRequest({ role: 'review', id: item.id }), destinationStage });
+
+      const flagged = session.state.set.mock.calls.some(
+        ([state]) => (state as { untrustedCheckout?: boolean }).untrustedCheckout === true,
+      );
+      expect(flagged).toBe(untrusted);
+    },
+  );
+
   it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
@@ -640,9 +685,9 @@ describe('FactoryStartCoordinator', () => {
     const transitionService = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({
-        execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
-      }),
+      boards: createPolicyTestRegistry(context =>
+        context.toStage === 'execute' ? { type: 'reject', code: 'forbidden', reason: 'Blocked' } : undefined,
+      ),
     });
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(

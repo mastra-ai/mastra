@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 
-import type { ToolKind } from './tool-phrases';
+import { canonicalToolName, resolveToolStyle } from './tool-styles';
 import { agentGlyph } from '@/ds/components/AgentIndicator';
 import type { AgentIndicatorState } from '@/ds/components/AgentIndicator';
 import { humanize } from '@/lib/string';
@@ -52,48 +52,13 @@ function firstStringArg(args: unknown, keys: string[]): string | undefined {
   return undefined;
 }
 
-interface ToolStyle {
-  pose: AgentIndicatorState;
-  label: ToolKind;
-  detailKeys?: string[];
-  isCommand?: boolean;
-}
-
-const TOOL_STYLES: Record<string, ToolStyle> = {
-  view: { pose: 'reading', label: 'Read', detailKeys: ['path'] },
-  read_file: { pose: 'reading', label: 'Read', detailKeys: ['path'] },
-  write_file: { pose: 'editing', label: 'Write', detailKeys: ['path'] },
-  create_file: { pose: 'editing', label: 'Write', detailKeys: ['path'] },
-  edit_file: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
-  string_replace: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
-  str_replace: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
-  ast_edit: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
-  execute_command: { pose: 'running', label: 'Run', detailKeys: ['command'], isCommand: true },
-  get_process_output: { pose: 'reading', label: 'Process output', detailKeys: ['pid'] },
-  kill_process: { pose: 'running', label: 'Stop process', detailKeys: ['pid'] },
-  find_files: { pose: 'finding', label: 'Find files', detailKeys: ['pattern', 'path'] },
-  list_files: { pose: 'finding', label: 'List files', detailKeys: ['pattern', 'path'] },
-  grep: { pose: 'searching', label: 'Search', detailKeys: ['pattern', 'path'] },
-  search_content: { pose: 'searching', label: 'Search', detailKeys: ['pattern', 'query'] },
-  search: { pose: 'searching', label: 'Search', detailKeys: ['query'] },
-  web_search: { pose: 'browsing', label: 'Search the web', detailKeys: ['query'] },
-  lsp_inspect: { pose: 'reading', label: 'Inspect code', detailKeys: ['path'] },
-  file_stat: { pose: 'reading', label: 'File info', detailKeys: ['path'] },
-  delete: { pose: 'deleting', label: 'Delete', detailKeys: ['path'] },
-  delete_file: { pose: 'deleting', label: 'Delete', detailKeys: ['path'] },
-  mkdir: { pose: 'editing', label: 'New folder', detailKeys: ['path'] },
-  skill: { pose: 'skill', label: 'Skill', detailKeys: ['name'] },
-  skill_search: { pose: 'skill', label: 'Search skills', detailKeys: ['query'] },
-  skill_read: { pose: 'skill', label: 'Skill file', detailKeys: ['path'] },
-};
-
 /** Agents prefix commands with `cd <workspace> &&`, which crowds out the command itself on a one-line row. */
 function withoutCdPrefix(command: string): string {
   return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
 }
 
 export function presentTool(toolName: string, args: unknown): ToolPresentation {
-  const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
+  const style = resolveToolStyle(toolName, stringArg(args, 'op') ?? stringArg(args, 'action'));
   if (!style) return { pose: 'tool', icon: agentGlyph('tool'), label: humanize(toolName) };
 
   const dressed = { pose: style.pose, icon: agentGlyph(style.pose), label: style.label };
@@ -114,13 +79,14 @@ function stringField(args: unknown, key: string): string | undefined {
 }
 
 export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined {
-  const path = stringField(args, 'path');
+  const name = canonicalToolName(toolName);
+  const path = stringField(args, 'path') ?? stringField(args, 'file_path');
   const newText = stringField(args, 'new_string');
-  if (/string_replace|str_replace|edit_file/i.test(toolName) && newText !== undefined) {
+  if (/string_replace|str_replace|edit_file/i.test(name) && newText !== undefined) {
     return { path, oldText: stringField(args, 'old_string') ?? '', newText };
   }
   const content = stringField(args, 'content');
-  if (/write_file|create_file/i.test(toolName) && content !== undefined) return { path, content };
+  if (/write_file|create_file/i.test(name) && content !== undefined) return { path, content };
   return undefined;
 }
 
@@ -142,6 +108,11 @@ export function visibleToolArgumentsText({ args, argsText, hideArguments }: Tool
 
 export function hasToolArguments(input: ToolArgumentsInput): boolean {
   return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
+}
+
+/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
+export function exitedWithFailure(toolName: string, exitCode: number | undefined): boolean {
+  return resolveToolStyle(toolName)?.isCommand === true && exitCode !== undefined && exitCode !== 0;
 }
 
 /** Task tools draw in the docked task list, never as a transcript row. */

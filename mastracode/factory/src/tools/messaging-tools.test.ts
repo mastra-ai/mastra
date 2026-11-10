@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { FactoryRunBindingRecord, WorkItemSubscription } from '../storage/domains/work-items/base.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import type { FactoryDeliveryController } from './deliver.js';
 import { SIGNAL_RATE_LIMIT, SIGNAL_RATE_WINDOW_MS, createFactoryMessagingTools } from './messaging-tools.js';
 import type { FactoryMessagingToolDependencies } from './messaging-tools.js';
@@ -127,7 +128,19 @@ function setup({
           bindings.find(binding => binding.sessionId === sessionId && binding.status === 'active') ?? null,
       ),
       getForProject: vi.fn(async (_org: string, _project: string, id: string) =>
-        id === 'item-7' ? ({ id, metadata: { number: 7 }, stages: ['execute'] } as never) : null,
+        id === 'item-7'
+          ? ({
+              id,
+              workItem: createProviderWorkItemForTests({
+                id,
+                title: 'Item',
+                source: { integrationId: 'github', type: 'issue', externalId: '7' },
+                metadata: { number: 7 },
+              }),
+              metadata: {},
+              stages: ['execute'],
+            } as never)
+          : null,
       ),
       listSessionSubscriptions: vi.fn(async ({ sessionId }: { sessionId: string }) =>
         subscriptions.filter(subscription => subscription.sessionId === sessionId),
@@ -845,6 +858,26 @@ describe('side session tools', () => {
       model: 'anthropic/claude-sonnet-4-5',
       state: 'idle',
     });
+  });
+
+  it('lists a run parked on a tool prompt as parked while it is still in flight', async () => {
+    const env = setup();
+    const controller = (await env.deps.messaging())!.controller as unknown as { getSession: ReturnType<typeof vi.fn> };
+    controller.getSession.mockImplementation(async (resourceId: string) => ({
+      thread: { getId: () => `thread-${resourceId}` },
+      stream: { isActive: () => true },
+      model: { get: () => '' },
+    }));
+    env.deps.liveSessions = () => ({
+      parked: sessionId => (sessionId === 'session-side' ? { toolName: 'submit_plan', suspendedAt: 0 } : undefined),
+      parkedIn: () => [],
+    });
+
+    const { sessions } = (await env.run(USER, 'factory_list_side_sessions', {})) as {
+      sessions: Array<{ sessionId: string; state: string }>;
+    };
+    expect(sessions.find(session => session.sessionId === 'session-side')?.state).toBe('parked');
+    expect(sessions.find(session => session.sessionId === 'session-side-muted')?.state).toBe('running');
   });
 
   it('mutes a side session’s reports without stopping it, then resubscribes', async () => {

@@ -14,9 +14,11 @@ export const TracesPageContent = memo(function TracesPageContent({ isScoped }: {
   const toolbar = (
     <ActionRow>
       <ActionRow.Start>
-        <TracesExplorer.ColumnsMenu />
         <TracesExplorer.FilterBar />
       </ActionRow.Start>
+      <ActionRow.End>
+        <TracesExplorer.ColumnsMenu />
+      </ActionRow.End>
     </ActionRow>
   );
   const chart = <TracesExplorer.Histogram />;

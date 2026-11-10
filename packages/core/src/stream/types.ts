@@ -15,7 +15,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
-import type { AIV5ResponseMessage } from '../agent/message-list';
+import type { AIV5ResponseMessage, MessageList } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { AgentSignalDataPart, AgentSignalType } from '../agent/signals';
@@ -95,6 +95,14 @@ interface BaseChunkType {
   traceId?: string;
   from: ChunkFrom;
   metadata?: Record<string, any>;
+  /**
+   * Position of the run-log entry this chunk came from, on durable and evented agent streams and
+   * on `observe()` for any agent, when the transport numbers its entries. To resume after a dropped connection, observe the run
+   * from the last received chunk's `index + 1`. Entries that send no chunk leave gaps. Structured-output `object` chunks are
+   * built by the client, so they carry no index, and neither does an `abort` chunk, whose index is on the `finish` sent
+   * beside it: resume from the last chunk that has one. An `object-result` logged by a structuring-model run carries an index.
+   */
+  index?: number;
 }
 
 interface ResponseMetadataPayload {
@@ -328,6 +336,12 @@ export interface StepStartPayload {
   };
   inputMessages?: LanguageModelV2Prompt;
   warnings?: LanguageModelV2CallWarning[];
+  /**
+   * @internal Background tasks whose outcome this request carries. Set only on the inner runs of
+   * an `untilIdle` stream, which removes it before the caller sees the chunk. Observing such an
+   * inner run directly (durable `observe`) still shows it.
+   */
+  backgroundResultTaskIds?: string[];
   [key: string]: unknown;
 }
 
@@ -898,6 +912,8 @@ export type DataChunkType = {
   id?: string;
   /** When true, the chunk is streamed to the client but not persisted to storage. */
   transient?: boolean;
+  /** Run-log index on durable and evented agent streams; see `BaseChunkType.index`. */
+  index?: number;
 };
 
 /**
@@ -1326,6 +1342,10 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   /** The agent producing this output, passed to output processors as `agent`. */
   agent?: Agent<any, any, any, any>;
   requestContext?: RequestContext;
+  /** @internal Runs before the total-deadline output pass saves the turn. Throwing or resolving `false` skips that pass. */
+  beforeDeadlineSave?: () => Promise<boolean | void>;
+  /** @internal Runs when an output processor trips during the total-deadline pass. */
+  onDeadlineTripwire?: (turn: MessageList) => Promise<void>;
   /** The run's abort signal, forwarded to output processors. */
   abortSignal?: AbortSignal;
   transportRef?: StreamTransportRef;

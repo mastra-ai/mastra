@@ -62,7 +62,7 @@ export function ConnectedProviderRow({
   requestScope: CredentialScope | undefined;
   disabled: boolean;
   onUpdateKey: () => void;
-  onOAuthStarted: (provider: string, session: OAuthStartResponse) => void;
+  onOAuthStarted?: (provider: string, session: OAuthStartResponse) => void;
 }) {
   const { provider, status, credential, signInExpired } = connection;
   const displayName = providerDisplayName(provider.provider);
@@ -82,9 +82,9 @@ export function ConnectedProviderRow({
     );
   };
 
-  const signInAgain = () => {
+  const signInAgain = (onStarted: (provider: string, session: OAuthStartResponse) => void) => {
     startOAuthMutation.mutate(signInRequest(provider, requestScope), {
-      onSuccess: session => onOAuthStarted(provider.provider, session),
+      onSuccess: session => onStarted(provider.provider, session),
       onError: error => toast.error(error.message || 'Failed to start sign-in'),
     });
   };
@@ -110,9 +110,13 @@ export function ConnectedProviderRow({
           displayName={displayName}
           credential={credential}
           disabled={disabled || pending !== undefined}
-          onSignInAgain={signInExpired && provider.oauth?.supported === true ? signInAgain : undefined}
+          onSignInAgain={
+            signInExpired && provider.oauth?.supported === true && onOAuthStarted
+              ? () => signInAgain(onOAuthStarted)
+              : undefined
+          }
           onSignOut={signOut}
-          onUpdateKey={onUpdateKey}
+          onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
           onRemoveKey={removeKey}
         />
       ) : (
@@ -136,7 +140,7 @@ function CredentialMenu({
   disabled: boolean;
   onSignInAgain: (() => void) | undefined;
   onSignOut: () => void;
-  onUpdateKey: () => void;
+  onUpdateKey: (() => void) | undefined;
   onRemoveKey: () => void;
 }) {
   return (
@@ -156,7 +160,7 @@ function CredentialMenu({
           </>
         ) : (
           <>
-            <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>
+            {onUpdateKey && <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>}
             <DropdownMenu.Item onClick={onRemoveKey}>Remove key</DropdownMenu.Item>
           </>
         )}

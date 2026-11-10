@@ -8,6 +8,7 @@ import { createSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import { MastraError } from '../error';
 import { getErrorFromUnknown } from '../error/utils';
+import { RegisteredLogger } from '../logger/constants';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -30,10 +31,12 @@ import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
 import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
+import { createChatLogger } from './chat-logger';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
+import { ChatChannelGenerativeUIProcessor, GENERATIVE_UI_PROCESSOR_ID, RENDER_CARD_TOOL_NAME } from './generative-ui';
 import {
   buildInlineMediaCheck,
   extractUrls,
@@ -211,6 +214,8 @@ export class AgentChannels {
     this.resolveThreadId = config.resolveThreadId;
     this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
+    // The card itself is the output; a tool card for the call would duplicate it.
+    if (this.generativeUIEnabled) this.channelToolNames.add(RENDER_CARD_TOOL_NAME);
   }
 
   /**
@@ -239,7 +244,9 @@ export class AgentChannels {
    */
   __setLogger(logger: IMastraLogger): void {
     this.logger =
-      'child' in logger && typeof (logger as any).child === 'function' ? (logger as any).child('CHANNEL') : logger;
+      'child' in logger && typeof (logger as any).child === 'function'
+        ? (logger as any).child({ component: RegisteredLogger.CHANNEL })
+        : logger;
   }
 
   /**
@@ -356,6 +363,9 @@ export class AgentChannels {
           streamOptions: {
             requestContext,
             memory,
+            // Background results are posted to the chat by this run, which carries the
+            // channel's render context, so keep it open until they finish.
+            untilIdle: true,
             // Without approval-button rendering, auto-approve tools to
             // avoid getting stuck waiting for input we can't ask for.
             ...(autoResumeSuspendedTools ? { autoResumeSuspendedTools } : {}),
@@ -500,6 +510,8 @@ export class AgentChannels {
         // Lambda can cause subsequent messages to be queued forever.
         concurrency: { strategy: 'concurrent' },
         ...this.chatOptions,
+        // Not `this.logger`: that child already binds `component`, and pino would emit the key twice.
+        logger: this.chatOptions.logger ?? createChatLogger(() => mastra.getLogger()),
       });
 
       // Register handlers with optional overrides
@@ -1147,10 +1159,20 @@ export class AgentChannels {
    * - Skipped if the user already added a processor with the same id.
    */
   getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
-    if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
-    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
-    if (hasProcessor) return [];
-    return [new ChatChannelProcessor(this)];
+    const has = (id: string) => configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+    const processors: InputProcessor[] = [];
+    if (this.channelConfig.threadContext?.addSystemMessage !== false && !has('chat-channel-context')) {
+      processors.push(new ChatChannelProcessor(this));
+    }
+    if (this.generativeUIEnabled && !has(GENERATIVE_UI_PROCESSOR_ID)) {
+      processors.push(new ChatChannelGenerativeUIProcessor(this));
+    }
+    return processors;
+  }
+
+  /** Whether the Slack adapter opted into `generativeUI` (the only platform it supports). */
+  private get generativeUIEnabled(): boolean {
+    return this.adapterConfigs.slack?.generativeUI === true;
   }
 
   /**
@@ -2100,6 +2122,7 @@ export class AgentChannels {
       formatError: adapterConfig?.formatError,
       textFormat: adapterConfig?.textFormat,
       textDisplay: adapterConfig?.textDisplay,
+      generativeUI: platform === 'slack' && adapterConfig?.generativeUI === true,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };

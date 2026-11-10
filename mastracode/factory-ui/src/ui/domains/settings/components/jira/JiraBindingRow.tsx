@@ -5,7 +5,6 @@ import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
-import { BoardPicker } from '../IntakeSourceRouting';
 import { JiraLabelEditor } from './JiraLabelEditor';
 import { RoutingNote } from './RoutingNote';
 import { routingGap } from './routing';
@@ -14,15 +13,13 @@ const ALL_ISSUES = 'all';
 const LABELLED = 'labelled';
 const LABELLED_TEXT = 'Only issues labelled…';
 
-/** One factory a Jira project feeds: its board, which issues it takes, and removing it. */
+/** One factory a Jira project feeds: which issues it takes, and removing it. */
 export function JiraBindingRow({
   project,
   factory,
   binding,
   othersTakeLabels,
   error,
-  saving,
-  onBoardChange,
   onLabelsChange,
   onTakeAllIssues,
   onRemove,
@@ -32,8 +29,6 @@ export function JiraBindingRow({
   binding: IntakeSourceBinding;
   othersTakeLabels: boolean;
   error?: string;
-  saving: boolean;
-  onBoardChange: (board: string | null) => void;
   onLabelsChange: (labels: string[]) => void;
   onTakeAllIssues: () => void;
   onRemove: () => void;
@@ -59,14 +54,7 @@ export function JiraBindingRow({
         <Txt as="span" variant="caption" className="min-w-24 wrap-anywhere">
           {factory}
         </Txt>
-        <BoardPicker
-          name={`${project} in ${factory}`}
-          factoryProjectId={binding.factoryProjectId}
-          board={binding.board}
-          disabled={saving}
-          onChange={onBoardChange}
-        />
-        <Select value={labelled ? LABELLED : ALL_ISSUES} disabled={saving} onValueChange={pickFilter}>
+        <Select value={labelled ? LABELLED : ALL_ISSUES} onValueChange={pickFilter}>
           <SelectTrigger
             size="sm"
             aria-label={`Issues from ${project} for ${factory}`}
@@ -86,15 +74,14 @@ export function JiraBindingRow({
           variant="ghost"
           tooltip={`Remove ${factory}`}
           aria-label={`Remove ${factory} from ${project}`}
-          disabled={saving}
           onClick={onRemove}
           className="ml-auto"
         >
           <X />
         </Button>
       </div>
-      {labelled && <JiraLabelEditor factory={factory} labels={labels} saving={saving} onChange={onLabelsChange} />}
-      <RoutingNote error={error} hint={routingGap({ board: binding.board, labelled, labels })} />
+      {labelled && <JiraLabelEditor factory={factory} labels={labels} onChange={onLabelsChange} />}
+      <RoutingNote error={error} hint={routingGap({ labelled, labels })} />
     </li>
   );
 }

@@ -9,6 +9,7 @@ import {
   MetaSchemaCompatLayer,
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
+  isZodType,
   jsonSchema,
 } from '@mastra/schema-compat';
 import type { SchemaCompatLayer } from '@mastra/schema-compat';
@@ -60,6 +61,7 @@ import type {
 } from '../types';
 import {
   createStandardSchemaIssuesError,
+  getValidationIssuePaths,
   isValidationError,
   registerToolOutputValidationSchema,
   validateToolInput,
@@ -271,6 +273,23 @@ function buildJsonOverrideSchema(
       jsonSchema: fallback['~standard'].jsonSchema,
     },
   } as StandardSchemaWithJSON;
+}
+
+/**
+ * A remote MCP tool's error text is written by the server and can echo the submitted arguments
+ * (Issue #29318). The model still receives it; the tracked exception records only its id.
+ * Covers every MCPClient tool failure (execution, task failure, cancellation, polling).
+ */
+function trackableToolError(mastraError: MastraError, err: unknown, model: string): MastraError {
+  const id = (err as { id?: unknown } | null)?.id;
+  if (typeof id !== 'string' || !id.startsWith('MCP_CLIENT_TOOL_')) return mastraError;
+  return new MastraError({
+    id: mastraError.id,
+    domain: mastraError.domain as ErrorDomain,
+    category: mastraError.category as ErrorCategory,
+    text: `Remote tool failed (${id})`,
+    details: { errorMessage: id, model },
+  });
 }
 
 export class CoreToolBuilder extends MastraBase {
@@ -623,6 +642,8 @@ export class CoreToolBuilder extends MastraBase {
     if (!fgaProvider) return;
     const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
       await import('../../auth/ee/fga-check');
+    const user = requestContext?.get('user');
+    const resolved = await options.resolveExecuteFGA?.({ user, requestContext });
     const toolResourceId = mcpMeta?.serverName
       ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
       : options.agentId
@@ -630,13 +651,14 @@ export class CoreToolBuilder extends MastraBase {
         : getStandaloneToolFGAResourceId(options.name);
     await requireFGA({
       fgaProvider,
-      user: requestContext?.get('user'),
-      resource: { type: 'tool', id: toolResourceId },
-      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+      user,
+      resource: resolved?.resource ?? { type: 'tool', id: toolResourceId },
+      permission: resolved?.permission ?? MastraFGAPermissions.TOOLS_EXECUTE,
       requestContext,
       actor,
       context: {
         resourceId: options.resourceId,
+        ...resolved?.context,
       },
       metadata: {
         toolName: options.name,
@@ -646,6 +668,7 @@ export class CoreToolBuilder extends MastraBase {
         threadId: options.threadId,
         executionResourceId: options.resourceId,
         mcpMetadata: mcpMeta,
+        ...resolved?.metadata,
       },
     });
   }
@@ -683,7 +706,12 @@ export class CoreToolBuilder extends MastraBase {
     const mcpMeta =
       !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
 
-    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions, toolSpan?: AnySpan) => {
+    const execFunction = async (
+      args: unknown,
+      execOptions: MastraToolInvocationOptions,
+      toolSpan?: AnySpan,
+      inputValidated = false,
+    ) => {
       // Without a tool span (skipToolSpan), nested work attaches to the caller's span instead.
       const contextSpan = toolSpan ?? (execOptions?.tracingContext || options.tracingContext)?.currentSpan;
       let suspensionRequested = false;
@@ -859,7 +887,10 @@ export class CoreToolBuilder extends MastraBase {
           if (resumeData != null) {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
-              logger?.warn(resumeValidation.error.message);
+              logger?.warn('Tool resume data validation failed', {
+                ...logData,
+                issuePaths: getValidationIssuePaths(resumeValidation.error, resumeSchema),
+              });
               toolSpan?.end({
                 output: resumeValidation.error,
                 ...executionFailureTermination(resumeValidation.error),
@@ -872,14 +903,13 @@ export class CoreToolBuilder extends MastraBase {
           result = await executeWithContext({
             span: contextSpan,
             fn: async () => {
-              if (inputValidationSchema || this.injectedInputSchema) {
-                // The injected keys are only declared on the builder-local
-                // schema. `Tool.execute` validates against the user's original
-                // schema, which would strip them (breaking sub-agent/workflow
-                // resume via `suspendedToolRunId`), so once this builder has
-                // validated the args itself — against the injected schema or a
-                // compat-processed version of it — mark the context to skip
-                // that second validation.
+              if (inputValidated || inputValidationSchema || this.injectedInputSchema) {
+                // Skip the second validation in `Tool.execute` once this builder
+                // has validated the args (they are now the schema's output) or a
+                // builder-local schema applies. A transforming schema (e.g.
+                // string -> URL) rejects its own output (#27259), and the user's
+                // original schema would strip the builder-injected keys (breaking
+                // sub-agent/workflow resume via `suspendedToolRunId`).
                 markBuilderValidatedInput(toolContext);
               }
               return tool?.execute?.(executionArgs, toolContext);
@@ -891,7 +921,10 @@ export class CoreToolBuilder extends MastraBase {
           const suspendSchema = this.getSuspendSchema();
           const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
-            logger?.warn(suspendValidation.error.message);
+            logger?.warn('Tool suspend data validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(suspendValidation.error, suspendSchema),
+            });
             toolSpan?.end({
               output: suspendValidation.error,
               ...executionFailureTermination(suspendValidation.error),
@@ -921,7 +954,10 @@ export class CoreToolBuilder extends MastraBase {
           const outputSchema = this.getOutputSchema();
           const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
           if (outputValidation.error) {
-            logger?.warn(outputValidation.error.message);
+            logger?.warn('Tool output validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(outputValidation.error, outputSchema, 'output'),
+            });
             toolSpan?.end({
               output: outputValidation.error,
               ...executionFailureTermination(outputValidation.error),
@@ -1014,6 +1050,7 @@ export class CoreToolBuilder extends MastraBase {
         const isResuming = execOptions?.resumeData != null;
 
         const parameters = inputValidationSchema ?? this.getParameters();
+        let inputValidated = false;
         if (!isResuming || this.injectedInputSchema) {
           const { data, error } = validateToolInput(
             parameters as StandardSchemaWithJSON | undefined,
@@ -1024,12 +1061,16 @@ export class CoreToolBuilder extends MastraBase {
           const suspendedToolRunIdErrToIgnore =
             error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
           if (error && !suspendedToolRunIdErrToIgnore) {
-            logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
+            logger.warn('Tool input validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(error, parameters),
+            });
             toolSpan?.end({ output: error, ...executionFailureTermination(error), attributes: { success: false } });
             return error;
           }
-          if (data !== undefined) {
+          if (!error) {
             args = data;
+            inputValidated = true;
           }
         }
 
@@ -1037,7 +1078,7 @@ export class CoreToolBuilder extends MastraBase {
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions!, toolSpan);
+              const result = await execFunction(args, execOptions!, toolSpan, inputValidated);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -1064,7 +1105,11 @@ export class CoreToolBuilder extends MastraBase {
           ...executionFailureTermination(mastraError),
           attributes: { success: false },
         });
-        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject });
+        logger.trackException(trackableToolError(mastraError, err, model?.modelId ?? ''), {
+          ...logData,
+          ...rest,
+          model: logModelObject,
+        });
         throw mastraError;
       }
     };
@@ -1143,7 +1188,13 @@ export class CoreToolBuilder extends MastraBase {
       );
     }
 
-    const originalSchema = this.getParameters();
+    const parameters = this.getParameters();
+    // JSON Schema (client tools, AI SDK `jsonSchema()`) must not round-trip through Zod: that
+    // conversion turns unions into intersections the compat layers collapse to `{}`.
+    const originalSchema =
+      parameters && !isZodType(parameters) && !isStandardSchemaWithJSON(parameters)
+        ? toStandardSchema(parameters)
+        : parameters;
     const inputValidationSchema = this.buildCompatValidationSchema(originalSchema, schemaCompatLayers);
     let processedInputSchema: Schema | undefined;
 

@@ -9,6 +9,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
@@ -98,14 +99,17 @@ const buildingWorkItem = {
 };
 
 /**
- * Triage classified this card as a feature request and a plan run was parked
- * on it, but the rules will not let that run advance the card until a person
- * accepts it.
+ * Triage looked at this card and sent it back to Intake, and a plan run was
+ * parked on it, but moving the card on is a person's call.
  */
 const heldWorkItem = {
   ...workItem,
-  triageType: 'feature request',
-  acceptedAt: null,
+  stages: ['intake'],
+  stageHistory: [
+    { stage: 'intake', enteredAt: '2026-08-10T00:00:00.000Z', by: 'user-1' },
+    { stage: 'triage', enteredAt: '2026-08-10T00:01:00.000Z', by: 'user-1' },
+    { stage: 'intake', enteredAt: '2026-08-10T00:02:00.000Z', by: 'agent:binding-1' },
+  ],
   sessions: {
     triage: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
   },
@@ -144,22 +148,12 @@ function stubBoardEndpoints({
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -346,7 +340,7 @@ describe('Board card with a proposed run', () => {
     // With no status badge, the highlighted action is what keeps the parked run
     // from reading as a plain link to the card's session.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    const release = await within(card).findByRole('button', { name: 'Start suggested run: Build' });
+    const release = await within(card).findByRole('button', { name: 'Start suggested run: Plan' });
     expect(within(card).queryByText(/^Suggested:/)).toBeNull();
     expect(release).toHaveAttribute('data-variant', 'primary');
     expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'ghost');
@@ -362,18 +356,18 @@ describe('Board card with a proposed run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    // The parked plan cannot move a feature request on its own, so the card
-    // leads with the decision and keeps the run out of reach until it is made.
+    // Triage left the card for a person, so the card leads with that decision
+    // and keeps the parked run out of reach until it is made.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    expect(await within(card).findByText('Feature request · needs your approval')).toBeVisible();
+    expect(await within(card).findByText('Triaged and waiting for you')).toBeVisible();
     expect(within(card).queryByText('Suggested: Investigate')).not.toBeInTheDocument();
     const accept = within(card).getByRole('button', { name: 'Accept and plan' });
     expect(accept).toHaveAttribute('data-variant', 'primary');
 
     await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
-    await screen.findByRole('menuitem', { name: 'Accept and build' });
+    await screen.findByRole('menuitem', { name: 'Accept and plan' });
     expect(screen.queryByRole('menuitem', { name: 'Start suggested run' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Build' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Plan' })).not.toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Dismiss suggested run' })).toBeVisible();
     await user.keyboard('{Escape}');
 

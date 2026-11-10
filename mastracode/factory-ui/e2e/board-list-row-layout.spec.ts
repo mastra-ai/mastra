@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
 import { largeBoard } from '../src/ui/__tests__/fixtures/largeBoard';
+import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
 const [base] = largeBoard(1);
@@ -75,21 +76,13 @@ test.describe('Factory board list row layout', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     server.use(
       http.get('*/auth/me', () => HttpResponse.json({ authenticated: true, authEnabled: false })),
-      http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Factory' }] })),
-      http.get('*/web/factory/projects/fp-1/source-control-connections', () =>
+      http.get('*/web/factory/projects', () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
-              repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '/repo',
-                  repository: { slug: 'acme/app', defaultBranch: 'main' },
-                },
-              ],
+              id: 'fp-1',
+              name: 'Factory',
+              repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
             },
           ],
         }),

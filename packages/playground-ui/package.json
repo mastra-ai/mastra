@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "66.1.0-alpha.2",
+  "version": "69.0.0-alpha.5",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -11,6 +11,8 @@
     "theme.css",
     "components.css",
     "sources.css",
+    "fonts.css",
+    "fonts",
     "theme",
     "oxlint"
   ],
@@ -19,6 +21,7 @@
     "./theme.css": "./theme.css",
     "./components.css": "./components.css",
     "./sources.css": "./sources.css",
+    "./fonts.css": "./fonts.css",
     "./oxlint": {
       "import": {
         "types": "./oxlint/index.d.ts",
@@ -205,13 +208,14 @@
     "@uiw/react-codemirror": "^4.25.12",
     "@xyflow/react": "^12.12.0",
     "cmdk": "^1.1.1",
+    "d3-force": "^3.0.0",
     "date-fns": "catalog:",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-to-markdown": "^2.2.0",
     "nanoid": "^5.1.16",
     "prettier": "^3.9.10",
     "prism-react-renderer": "^2.4.1",
-    "react-day-picker": "^8.10.2",
+    "react-day-picker": "^9.14.0",
     "react-hook-form": "^7.91.0",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.15.0",
@@ -244,6 +248,9 @@
     "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@storybook/addon-a11y": "^10.6.2",
     "@storybook/addon-docs": "^10.6.2",
@@ -256,6 +263,7 @@
     "@tanstack/react-query": "^5.104.5",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
+    "@types/d3-force": "^3.0.10",
     "@types/json-schema": "^7.0.15",
     "@types/mdast": "^4.0.4",
     "@types/node": "22.19.15",
@@ -273,7 +281,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "^8.5.0",
-    "rollup-plugin-node-externals": "^8.1.2",
+    "rollup-plugin-node-externals": "^9.0.1",
     "storybook": "^10.6.2",
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "4.3.3",

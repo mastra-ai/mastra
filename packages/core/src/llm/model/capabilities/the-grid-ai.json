@@ -35,6 +35,15 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "agent-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "agent-prime": [
       {
         "type": "effort",
@@ -56,22 +65,22 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "text-max": [
-      {
-        "type": "toggle"
-      },
+    "gpt-sol-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "agent-max": [
-      {
-        "type": "toggle"
-      },
+    "kimi-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "text-standard": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "code-standard": [
@@ -86,19 +95,34 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "deepseek-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "text-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemini-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimax-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "agent-standard": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-sol-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "bytedance-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -113,34 +137,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "text-standard": [
+    "bytedance-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "minimax-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "kimi-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

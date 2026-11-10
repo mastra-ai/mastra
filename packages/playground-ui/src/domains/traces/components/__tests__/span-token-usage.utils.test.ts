@@ -20,8 +20,8 @@ describe('getTokenUsageRows', () => {
         outputDetails: { reasoning: 256, text: 109 },
       }),
     ).toEqual([
-      { label: 'Input', total: 6606, breakdown: '5,632 cached · 974 text' },
-      { label: 'Output', total: 365, breakdown: '256 reasoning · 109 text' },
+      { label: 'Input', total: 6606, breakdown: '5,632 cached, 974 text' },
+      { label: 'Output', total: 365, breakdown: '256 reasoning, 109 text' },
     ]);
   });
 

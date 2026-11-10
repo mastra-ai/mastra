@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -82,6 +83,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

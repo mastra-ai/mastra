@@ -4,15 +4,18 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { builtinBoardCatalog, shipBoard } from '../../../e2e/ui/board-catalog';
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import { storedWorkBoard } from '../domains/settings/components/__tests__/fixtures/work-board';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
 
 function project(overrides: Record<string, unknown> = {}) {
-  return { id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, autoApprovePlans: false, ...overrides };
+  return { id: FACTORY_ID, name: 'Acme Factory', ...overrides };
 }
 
 let patchBodies: unknown[];
@@ -23,21 +26,12 @@ function stubBoard({ items, factory }: { items: unknown[]; factory: Record<strin
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [factory] })),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            ...factory,
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -77,76 +71,57 @@ function stubBoard({ items, factory }: { items: unknown[]; factory: Record<strin
   );
 }
 
-function renderBoard(board: 'work' | 'review') {
+function renderBoard(board: 'work' | 'review' | 'ship') {
+  const path = board === 'ship' ? `boards/${board}` : board;
   const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/${board}`],
+    initialEntries: [`/factories/${FACTORY_ID}/${path}`],
   });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
 describe('Board automation settings', () => {
-  it('edits plan auto-approval in a dismissible settings popover', async () => {
-    stubBoard({ items: [], factory: project() });
+  it('offers no project switches, ignoring the retired ones an older project still stores', async () => {
+    // Every switch the board's phases and the review skill replaced, still on in the stored project.
+    stubBoard({
+      items: [],
+      factory: project({
+        autoRunEnabled: true,
+        selfReviewEnabled: true,
+        autoApprovePlans: true,
+        reviewTestChecksEnabled: true,
+      }),
+    });
+    // A board with a self-review phase, where the old self-review switch used to appear.
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [...builtinBoardCatalog.boards, shipBoard] }),
+      ),
+    );
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    renderBoard('ship');
 
     const settings = await screen.findByRole('button', { name: 'Automation settings' });
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
     await user.click(settings);
-    const autoApprove = await screen.findByRole('switch', { name: 'Auto-approve plans' });
-    expect(autoApprove).not.toBeChecked();
-    await user.click(autoApprove);
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ autoApprovePlans: true }]);
-    expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
+    expect(await screen.findByRole('link', { name: 'Edit the Work board' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Automation settings' })).not.toBeInTheDocument());
     expect(settings).toHaveFocus();
-    await user.click(settings);
-    expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
+    expect(patchBodies).toEqual([]);
   });
 
-  it('turns review test checks on, defaulting to off for older projects', async () => {
+  it('sends people to the board editor to choose which runs start on their own', async () => {
     stubBoard({ items: [], factory: project() });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/boards/work`, () => HttpResponse.json(storedWorkBoard())),
+    );
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    renderBoard('work');
 
     await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    const testChecks = await screen.findByRole('switch', { name: 'Publish review test checks' });
-    expect(testChecks).not.toBeChecked();
-    await user.click(testChecks);
+    await user.click(await screen.findByRole('link', { name: 'Edit the Work board' }));
 
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ reviewTestChecksEnabled: true }]);
-    expect(await screen.findByRole('switch', { name: 'Publish review test checks' })).toBeChecked();
-  });
-
-  it('turns self-review on, defaulting to off for older projects', async () => {
-    stubBoard({ items: [], factory: project() });
-    const user = userEvent.setup();
-    const { client } = renderBoard('work');
-
-    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    const selfReview = await screen.findByRole('switch', { name: 'Self-review before pull requests' });
-    expect(selfReview).not.toBeChecked();
-    await user.click(selfReview);
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ selfReviewEnabled: true }]);
-    expect(await screen.findByRole('switch', { name: 'Self-review before pull requests' })).toBeChecked();
-  });
-
-  it('keeps the automation switches separate', async () => {
-    stubBoard({ items: [], factory: project() });
-    const user = userEvent.setup();
-    const { client } = renderBoard('review');
-
-    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    await user.click(await screen.findByRole('switch', { name: 'Auto-start runs' }));
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
-    expect(screen.getByRole('switch', { name: 'Auto-approve plans' })).not.toBeChecked();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Boards' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Planning phase' })).toBeInTheDocument();
   });
 });

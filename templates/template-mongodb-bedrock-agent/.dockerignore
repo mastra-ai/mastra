@@ -1,0 +1,14 @@
+node_modules
+dist
+.mastra
+.git
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# Deploy tooling and docs — not needed inside the runtime image.
+agentcore
+scripts/ask.sh
+*.pdf
+*.md

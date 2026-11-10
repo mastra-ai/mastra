@@ -91,7 +91,7 @@ describe('FactoryDefaultModel', () => {
     stubFactory(null);
     renderInField();
 
-    expect(await screen.findByPlaceholderText('GPT-5 · Built-in default')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('GPT-5 (Built-in default)')).toBeInTheDocument();
   });
 
   it('saves the new default before asking whether to switch running sessions', async () => {

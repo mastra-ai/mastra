@@ -1,8 +1,8 @@
 ---
-title: "Reference: Agent class | Agents"
-description: "The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses and streaming interactions."
+title: 'Reference: Agent class | Agents'
+description: 'The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses and streaming interactions.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Agent class
@@ -1051,10 +1051,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'scopes',
-    type: 'string[] | ({ requestContext: RequestContext }) => string[] | Promise<string[]>',
+    type: 'string[] | ({ scopes: string[]; requestContext: RequestContext; mastra?: Mastra }) => string[] | Promise<string[]>',
     isOptional: true,
     description:
-      'Scopes every run of this agent acts as, written as `<type>:<value>`. Combined with per-call `scopes` and the `mastra__scopes` request context key.',
+      "Scopes the agent's runs act as, written as `<type>:<value>`. A list adds to the incoming scopes (per-call `scopes`, `defaultOptions.scopes` and the `mastra__scopes` request context key). A function receives the incoming scopes as `scopes` and returns the run's final set; it must keep every incoming `resource:` and `thread:` scope.",
   },
   {
     name: 'memory',
@@ -1084,9 +1084,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'voice',
-    type: 'CompositeVoice',
+    type: 'IMastraVoice | ({ requestContext: RequestContext }) => IMastraVoice | Promise<IMastraVoice>',
     isOptional: true,
-    description: 'Voice settings for speech input and output.',
+    description:
+      'Voice provider for speech input and output, such as `OpenAIVoice` or `CompositeVoice`. Pass a function to create one per request.',
   },
   {
     name: 'inputProcessors',
@@ -1116,8 +1117,15 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
       'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
   },
   {
+    name: 'durable',
+    type: 'boolean | { pubsub?: PubSub; cache?: MastraServerCache | false; shouldCache?: (topic: string) => boolean; cleanupTimeoutMs?: number }',
+    isOptional: true,
+    description:
+      'Publishes each run on its stream topic so another reader can follow it with observe() or reconnect after a disconnect. Omit to turn streams on when the agent is registered on Mastra and off for standalone agents. On a plain agent, pass false to stop publishing. This controls resumable streams only, not checkpoint execution. For durable execution, wrap the agent explicitly with createDurableAgent(). See [Resumable streams](/docs/agents/resumable-streams).',
+  },
+  {
     name: 'editor',
-    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean } }',
+    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean }; model?: boolean }',
     isOptional: true,
     description:
       'Controls which fields the editor can override for this code-defined agent. Omit to allow editing instructions and tools. See Editor overrides below.',
@@ -1202,17 +1210,17 @@ When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `ed
   content={[
   {
     name: 'editor',
-    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean } }',
+    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean }; model?: boolean }',
     isOptional: true,
     description:
-      'Omit to allow editing instructions and tools, using values in code as defaults. Set to `false` to lock the agent. Set `instructions: true` to make Studio own the instructions; omit `instructions` from code. Set `tools: true` to make Studio own tool membership and descriptions; omit `tools` from code. Set `tools: { description: true }` to keep tool membership in code and allow only description edits.',
+      'Omit to allow editing instructions and tools, using values in code as defaults. Set to `false` to lock the agent. Set `instructions: true` to make Studio own the instructions; omit `instructions` from code. Set `tools: true` to make Studio own tool membership and descriptions; omit `tools` from code. Set `tools: { description: true }` to keep tool membership in code and allow only description edits. Set `model: true` to allow edits to a static model fallback list.',
   },
 ]}
 />
 
 When a field is owned by Studio, TypeScript rejects it in code: `instructions` with `editor: { instructions: true }` and `tools` with `editor: { tools: true }` are type errors. An agent whose instructions are owned by Studio fails closed until a stored version with instructions is published.
 
-The agent's `id`, `name`, and `model` always come from code and can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
+The agent's `id` and `name` always come from code. Models also remain code-owned unless you set `model: true`. Model ownership supports static fallback arrays whose entries have immutable IDs. Function-valued model configuration can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
 
 ## Returns
 

@@ -181,4 +181,55 @@ describe('rerank', () => {
     expect(span.error).toHaveBeenCalledWith({ error, endSpan: true });
     expect(span.end).not.toHaveBeenCalled();
   });
+
+  describe('topK validation', () => {
+    const results = [
+      { id: '1', metadata: { text: 'Test result 1' }, score: 0.5 },
+      { id: '2', metadata: { text: 'Test result 2' }, score: 0.4 },
+      { id: '3', metadata: { text: 'Test result 3' }, score: 0.9 },
+    ];
+
+    it.each([-1, 1.5, NaN, Infinity, -Infinity])('rejects topK %s before scoring', async topK => {
+      const scorer = { getRelevanceScore: vi.fn(async () => 1) };
+
+      await expect(rerankWithScorer({ results, query: 'test query', scorer, options: { topK } })).rejects.toThrow(
+        'topK must be a nonnegative integer',
+      );
+      expect(scorer.getRelevanceScore).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid topK through rerank', async () => {
+      await expect(rerank(results, 'test query', cohere('rerank-v3.5'), { topK: -1 })).rejects.toThrow(
+        'topK must be a nonnegative integer',
+      );
+      expect(CohereRelevanceScorer.prototype.getRelevanceScore).not.toHaveBeenCalled();
+    });
+
+    it('marks the rerank span as errored for invalid topK', async () => {
+      const span = { end: vi.fn(), error: vi.fn() };
+      const currentSpan = { createChildSpan: vi.fn(() => span) };
+      const scorer = { getRelevanceScore: vi.fn(async () => 1) };
+
+      await expect(
+        rerankWithScorer({
+          results,
+          query: 'test query',
+          scorer,
+          options: { topK: -1, observabilityContext: { tracingContext: { currentSpan } } as any },
+        }),
+      ).rejects.toThrow('topK must be a nonnegative integer');
+
+      expect(span.error).toHaveBeenCalledWith({ error: expect.any(Error), endSpan: true });
+      expect(span.end).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [0, 0],
+      [2, 2],
+    ])('returns at most topK results for topK %s', async (topK, expected) => {
+      const scorer = { getRelevanceScore: vi.fn(async () => 1) };
+      const ranked = await rerankWithScorer({ results, query: 'test query', scorer, options: { topK } });
+      expect(ranked).toHaveLength(expected);
+    });
+  });
 });

@@ -303,7 +303,7 @@ afterEach(async () => {
   window.sessionStorage.clear();
 });
 
-async function composerInput(placeholder = 'Enter your message...') {
+async function composerInput(placeholder = 'Enter your message') {
   await screen.findByPlaceholderText(placeholder);
   await waitFor(() => expect(screen.queryByText('Restoring draft…')).toBeNull());
   return screen.getByPlaceholderText<HTMLTextAreaElement>(placeholder);
@@ -356,7 +356,7 @@ describe('Standalone thread page', () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`, queryClient);
       try {
-        await screen.findByText('OpenAI');
+        await screen.findByRole('button', { name: /GPT-5 Mini/ });
         await waitFor(() => expect(push).toBeDefined());
         await act(async () => push?.());
         await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
@@ -611,7 +611,7 @@ describe('Standalone thread page', () => {
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount } } });
         renderAt(path, client);
         await screen.findByText('Failed to check authentication');
-        expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+        expect(screen.queryByPlaceholderText('Enter your message')).toBeNull();
         server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })));
         await act(async () => {
           await client.invalidateQueries({ queryKey: ['auth', 'capabilities'] });
@@ -699,9 +699,8 @@ describe('Standalone thread page', () => {
           renderAt(path);
           fireEvent.change(await composerInput(), { target: { value: 'Read my attachment' } });
           fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-          const picker = document.querySelector('input[type=file]');
-          if (!(picker instanceof HTMLInputElement)) throw new Error('File picker did not open');
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+          const picker = screen.getByLabelText('Files');
           const contents = 'name,note\r\nZoë,"hello\nworld"\r\n';
           fireEvent.change(picker, { target: { files: [new File([contents], 'leads.csv', { type: 'text/csv' })] } });
           await screen.findByRole('button', { name: 'Preview leads.csv' }, ATTACHMENT_TIMEOUT);
@@ -721,9 +720,8 @@ describe('Standalone thread page', () => {
           if (editWhilePreparing) {
             fireEvent.change(input, { target: { value: 'Keep the next question' } });
             fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-            const nextPicker = document.querySelector('input[type=file]');
-            if (!(nextPicker instanceof HTMLInputElement)) throw new Error('File picker did not open');
+            fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+            const nextPicker = screen.getByLabelText('Files');
             fireEvent.change(nextPicker, {
               target: { files: [new File(['Next file'], 'next.txt', { type: 'text/plain' })] },
             });
@@ -761,7 +759,7 @@ describe('Standalone thread page', () => {
       fireEvent.change(input, { target: { value: 'Pasta draft' } });
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
       expect((await composerInput()).value).toBe('');
-      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Sushi draft' } });
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), { target: { value: 'Sushi draft' } });
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
       expect((await composerInput()).value).toBe('Pasta draft');
     });
@@ -915,8 +913,8 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     // Provider + model pill (needs PlaygroundModelProvider, which this page must supply itself).
-    expect(await screen.findByText('OpenAI')).not.toBeNull();
-    expect(await screen.findByText('gpt-5-mini')).not.toBeNull();
+    expect(await screen.findByRole('button', { name: /^Model:.*GPT-5 Mini$/ })).not.toBeNull();
+    expect(await screen.findByText('GPT-5 Mini')).not.toBeNull();
     expect(await screen.findByTestId('composer-model-settings-trigger')).not.toBeNull();
   });
 
@@ -1358,8 +1356,8 @@ describe('Standalone thread page', () => {
       const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
       // The switcher lists only the agent's own model until the providers query resolves.
       await waitFor(() => expect(providersServed).toHaveBeenCalled());
-      fireEvent.click(await screen.findByText('gpt-5-mini'));
-      fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /^Model:.*GPT-5 Mini$/ }));
+      fireEvent.click(await screen.findByRole('option', { name: /GPT-4o Mini/ }));
       fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
       fireEvent.click(await screen.findByRole('radio', { name: 'Stream' }));
       // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
@@ -1383,14 +1381,14 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
-      expect(await screen.findByText('gpt-5-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-5 Mini')).toBeTruthy();
       await act(() => router.navigate(savedPath));
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       cleanup();
       renderAt(savedPath);
-      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      expect(await screen.findByText('GPT-4o Mini')).toBeTruthy();
       fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
       expect((await screen.findByRole('radio', { name: 'Stream' })).getAttribute('aria-checked')).toBe('true');
       fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
@@ -1436,7 +1434,7 @@ describe('Standalone thread page', () => {
       expect(screen.getByText(/may have been renamed or removed/)).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
       expect(screen.getByRole('link', { name: 'Choose agent' })).not.toBeNull();
-      expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+      expect(screen.queryByPlaceholderText('Enter your message')).toBeNull();
     });
 
     it('lets the user leave the dead chat and choose an agent', async () => {
