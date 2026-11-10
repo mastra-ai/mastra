@@ -47,4 +47,10 @@ describe('durable stream adapter total-timeout error', () => {
     expect(errors).toHaveLength(2);
     expect(errors[1]).toMatchObject({ message: 'run failed' });
   });
+
+  it('still reports a run error whose name and message match a streamed non-timeout error', async () => {
+    const errors = await errorChunksFor('same-message-run', new Error('boom'), new Error('boom'));
+
+    expect(errors).toHaveLength(2);
+  });
 });
