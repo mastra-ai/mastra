@@ -186,7 +186,10 @@ export interface LinearConnectionCheck {
   connected: boolean;
   /** Whether the granted OAuth scope allows posting issue comments. */
   canComment: boolean;
-  /** Linear workspace slug, for `https://linear.app/<urlKey>/issue/<ID>` links. */
+  /**
+   * Linear workspace slug, for `https://linear.app/<urlKey>/issue/<ID>` links.
+   * Null when unknown or when several workspaces are connected.
+   */
   workspaceUrlKey: string | null;
   checkedAt: number;
 }

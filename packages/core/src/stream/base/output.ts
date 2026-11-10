@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { TransformStreamDefaultController } from 'node:stream/web';
+import type { StepResult } from '@internal/ai-sdk-v5';
 import { convertMessages, coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -8,6 +9,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import { DEADLINE_SAVE_WAIT_MS, isMastraTimeoutError, settledOrElapsed } from '../../loop/timeout';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
@@ -2130,6 +2132,141 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
               self.#error = error;
               self.#status = 'failed';
+              // A total deadline closes the stream without a finish chunk, so the output processors
+              // (and with them memory) get their one pass here, over the steps that completed in time.
+              // The pass writes memory, so it only runs for callers that supply the write check.
+              const beforeDeadlineSave = self.#options.beforeDeadlineSave;
+              if (
+                isMastraTimeoutError(error) &&
+                error.timeoutType === 'total' &&
+                self.processorRunner &&
+                !self.#options.isLLMExecutionStep &&
+                beforeDeadlineSave
+              ) {
+                let streamOpen = true;
+                // Taken before the write check: a slow check must not stamp the cut-off reply with a
+                // time after a retry the deadline error already let the caller start.
+                // Like a cancel, the text the unfinished step already streamed is part of the turn.
+                const { turn, inFlightMessageId } = self.messageList.cloneWithCompletedSteps(self.#bufferedByStep.text);
+                const cutOffStep = self.#bufferedByStep;
+                const deadlinePass = (async () => {
+                  try {
+                    if ((await beforeDeadlineSave()) === false) return;
+                  } catch (authError) {
+                    self.logger?.warn('Memory write denied at the total deadline, the turn is not saved', {
+                      error: authError,
+                    });
+                    return;
+                  }
+                  // Data parts a step processor writes for the cut-off text, whether it names that message or
+                  // not, are held until the message is written back: the write-back replaces it, and would
+                  // drop parts merged into it.
+                  let heldDataChunks:
+                    | { data: { type: string; data?: unknown; transient?: boolean }; messageId?: string }[]
+                    | undefined;
+                  const writer = {
+                    custom: async (
+                      data: { type: string; data?: unknown; transient?: boolean },
+                      writerOptions?: { messageId?: string },
+                    ) => {
+                      if (
+                        heldDataChunks &&
+                        (!writerOptions?.messageId || writerOptions.messageId === inFlightMessageId)
+                      )
+                        heldDataChunks.push({ data, messageId: writerOptions?.messageId });
+                      else
+                        persistProcessorDataChunk(
+                          turn,
+                          resolveProcessorWriterMessageId(turn, self.messageId, writerOptions?.messageId),
+                          data,
+                        );
+                      if (!streamOpen) return;
+                      self.#emitChunk(data as ChunkType<OUTPUT>);
+                      controller.enqueue(data as ChunkType<OUTPUT>);
+                    },
+                  };
+                  let cutOffTextDropped = false;
+                  if (inFlightMessageId) {
+                    heldDataChunks = [];
+                    // The cut-off text never reached the step processors (redaction, refusal handling...).
+                    // Run them over that message alone: the rest of the turn already went through them.
+                    try {
+                      const stepList = turn.clone();
+                      stepList.removeByIds(
+                        stepList.get.all
+                          .db()
+                          .map(message => message.id)
+                          .filter(id => id !== inFlightMessageId),
+                      );
+                      await self.processorRunner!.runProcessOutputStep({
+                        // The loop hands step processors these same step results, typed as AI SDK steps.
+                        steps: [...self.#bufferedSteps] as unknown as StepResult<any>[],
+                        messages: stepList.get.all.db(),
+                        messageList: stepList,
+                        stepNumber: self.#bufferedSteps.length,
+                        finishReason: 'error',
+                        toolCalls: cutOffStep.toolCalls.length
+                          ? cutOffStep.toolCalls.map(({ payload }) => ({
+                              toolName: payload.toolName,
+                              toolCallId: payload.toolCallId,
+                              args: payload.args,
+                            }))
+                          : undefined,
+                        text: cutOffStep.text,
+                        usage: self.#usageCount,
+                        ...resolveObservabilityContext(options),
+                        requestContext: self.#options.requestContext,
+                        writer,
+                      });
+                      turn.removeByIds([inFlightMessageId]);
+                      for (const message of stepList.get.all.db()) turn.add(message, 'response', { merge: false });
+                    } catch (stepError) {
+                      // Fail closed: keep the completed steps rather than save unprocessed text.
+                      turn.removeByIds([inFlightMessageId]);
+                      cutOffTextDropped = true;
+                      self.logger?.warn('Output step processors failed on the text cut off at the total deadline', {
+                        error: stepError,
+                      });
+                    }
+                    for (const { data, messageId } of heldDataChunks) {
+                      // A part aimed at the cut-off message lands on it if it survived the write-back,
+                      // otherwise on the message an untargeted write would reach.
+                      const target =
+                        messageId && turn.get.all.db().some(message => message.id === messageId)
+                          ? messageId
+                          : resolveProcessorWriterMessageId(turn, self.messageId);
+                      persistProcessorDataChunk(turn, target, data);
+                    }
+                    heldDataChunks = undefined;
+                  }
+                  try {
+                    await self.processorRunner!.runOutputProcessors(
+                      turn,
+                      resolveObservabilityContext(options),
+                      self.#options.requestContext,
+                      0,
+                      writer,
+                      {
+                        // Text the step processors blocked must not reach the result processors either.
+                        text: cutOffTextDropped
+                          ? self.#bufferedSteps.map(step => step.text).join('')
+                          : self.#bufferedText.join(''),
+                        usage: self.#usageCount,
+                        finishReason: 'error',
+                        steps: [...self.#bufferedSteps] as LLMStepResult[],
+                      },
+                    );
+                  } catch (processorError) {
+                    if (processorError instanceof TripWire) await self.#options.onDeadlineTripwire?.(turn);
+                    throw processorError;
+                  }
+                })().catch(processorError => {
+                  self.logger?.error('Output processors failed at the total deadline', { error: processorError });
+                });
+                // Saved before the stream ends, unless the store hangs: the deadline must still surface.
+                await settledOrElapsed(deadlinePass, DEADLINE_SAVE_WAIT_MS);
+                streamOpen = false;
+              }
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
               Object.values(self.#delayedPromises).forEach(promise => {

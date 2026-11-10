@@ -209,7 +209,14 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(Object.keys(body).sort()).toEqual(
-        ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
+        [
+          'calculatorTool',
+          'lodashTool',
+          'hello-world',
+          'generate-password',
+          'compare-password',
+          'wait-for-abort',
+        ].sort(),
       );
     });
 
@@ -1273,6 +1280,55 @@ export const mastra = new Mastra({
 
           await expect(server).resolves.toMatchObject({ exitCode: 0 });
           expect(stdout).toContain('shutdown-drain-workflow:finished');
+        } finally {
+          server.kill('SIGKILL');
+          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'hands back an in-flight agent thread run before the generated server exits on SIGTERM (#27364)',
+      async () => {
+        // The run's tool only returns once the run is aborted. Nothing but
+        // `mastra.shutdown()` handing the thread run back aborts it, and that
+        // handback runs after the drain window, so the generated server's core
+        // shutdown bound must leave room for it.
+        const handbackPort = await getPort();
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        const handbackController = new AbortController();
+        const server = execaNode('index.mjs', {
+          cwd: outputDir,
+          cancelSignal: handbackController.signal,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: handbackPort.toString(),
+          },
+        });
+        activeProcesses.push({ controller: handbackController, proc: server });
+
+        let output = '';
+        server.stdout?.on('data', (chunk: Buffer) => {
+          output += chunk.toString();
+        });
+        server.stderr?.on('data', (chunk: Buffer) => {
+          output += chunk.toString();
+        });
+
+        try {
+          await waitForServer(handbackPort);
+
+          const response = await fetch(`http://localhost:${handbackPort}/shutdown-thread-run`, { method: 'POST' });
+          expect(response.ok).toBe(true);
+          expect(output).toContain('shutdown-thread-run:tool-started');
+          expect(output).not.toContain('shutdown-thread-run:aborted');
+
+          server.kill('SIGTERM');
+
+          await expect(server).resolves.toMatchObject({ exitCode: 0 });
+          expect(output).toContain('shutdown-thread-run:aborted');
+          expect(output).not.toContain('Mastra shutdown timed out');
         } finally {
           server.kill('SIGKILL');
           await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);

@@ -153,7 +153,6 @@ function stubBoardEndpoints({
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            autoRunEnabled: false,
             repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],

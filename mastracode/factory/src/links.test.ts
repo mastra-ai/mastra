@@ -21,7 +21,8 @@ describe('factory links', () => {
   it('links boards, cards, comments, sessions, settings and rules', () => {
     vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com/');
     const base = 'https://factory.example.com/factories/f%201';
-    expect(factoryBoardUrl('f 1', 'review')).toBe(`${base}/review`);
+    // The Review board is retired; a board keyed `review` now is a custom board like any other.
+    expect(factoryBoardUrl('f 1', 'review')).toBe(`${base}/boards/review`);
     expect(factoryBoardUrl('f 1', 'ops')).toBe(`${base}/boards/ops`);
     expect(factoryWorkItemUrl({ factoryProjectId: 'f 1', board: 'work', workItemId: 'i-1', commentId: 'c' })).toBe(
       `${base}/work?item=i-1&comment=c`,

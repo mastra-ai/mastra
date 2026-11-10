@@ -622,6 +622,8 @@ export type SkippableTest =
   | 'streamingTripwireOutputStream'
   // Streaming detailed event structure (exact event count/structure assertions)
   | 'streamingDetailedEvents'
+  // Exact streamLegacy event sequence for an agent used as a step
+  | 'streamingAgentDetailedEventsLegacy'
   // Streaming suspend/resume with streamLegacy API
   | 'streamingSuspendResumeLegacy'
   // Auto-resume without specifying step parameter (single suspended step)
