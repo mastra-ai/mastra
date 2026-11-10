@@ -263,6 +263,21 @@ describe('IntakeRoutesSection', () => {
     expect(routeNames().slice(-2)).toEqual(['Releases go to Ship', 'Everything else goes to Work › Intake']);
   });
 
+  it('offers new cards only the phases they can land in from the board’s first phase', async () => {
+    serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Releases go to Ship');
+    await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(within(draft).getByRole('combobox', { name: 'Phase' }));
+
+    const phases = (await screen.findAllByRole('option')).map(option => option.textContent);
+    // Ship starts cards in Inbox, which moves them to Think, Make or Pr; Check is only reached from Make.
+    expect(phases).toEqual(['Inbox', 'Think', 'Make', 'Pr']);
+  });
+
   it('sends one repository to another board, picking the repository from the fields a route can test', async () => {
     const state = serveRoutes();
     const user = userEvent.setup();

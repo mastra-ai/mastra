@@ -83,8 +83,16 @@ function inScope(route: IntakeRouteInfo, scope: RouteScope): boolean {
 }
 
 /** The phases a route can send cards to: a route placing new cards can't land them in a finished phase. */
+/** Phases a route may aim at. New cards start in the first phase, so they can only land where it can move them. */
 function targetPhases(board: InstalledBoardInfo | undefined, placesNew: boolean) {
-  return (board?.phases ?? []).filter(phase => !placesNew || phase.kind !== 'terminal');
+  const phases = board?.phases ?? [];
+  if (!placesNew) return phases;
+  const first = phases.find(phase => phase.id === board?.initialPhase);
+  return phases.filter(
+    phase =>
+      phase.kind !== 'terminal' &&
+      (phase.id === first?.id || first?.transitions.some(transition => transition.to === phase.id) === true),
+  );
 }
 
 /** What a rule can't say on a route listening for these events, or undefined when the route can save it. */
@@ -154,10 +162,14 @@ function useRouteSaves(factoryId: string) {
       .catch((error: unknown) => {
         setFailures(count => count + 1);
         toast.error(saveFailureMessage(error));
+        return queryClient.invalidateQueries({ queryKey: key });
       });
   };
   return { latest, show, save, failures };
 }
+
+/** The routes changed under a queued edit, so it can't be applied as shown. */
+const routesChanged = () => new BoardRequestError(409, 'intake_route_set_mismatch', 'The routes changed.');
 
 function announce(id: string, message: string, undo?: () => void) {
   toast(message, { id: `route-${id}`, ...(undo ? { action: { label: 'Undo', onClick: undo } } : {}) });
@@ -678,7 +690,7 @@ function RouteList({
     apply();
     save(async send => {
       const revision = latest().find(entry => entry.id === route.id)?.revision;
-      if (revision === undefined) return;
+      if (revision === undefined) throw routesChanged();
       apply();
       await send([{ kind: 'update', id: route.id, patch: { ...fields, expectedRevision: revision } }]);
       announce(route.id, message, undoable ? () => update(route, previous, 'Change undone', false) : undefined);
@@ -690,7 +702,7 @@ function RouteList({
     apply();
     save(async send => {
       const current = latest();
-      if (current.length !== order.length || current.some(entry => !order.includes(entry.id))) return;
+      if (current.length !== order.length || current.some(entry => !order.includes(entry.id))) throw routesChanged();
       apply();
       await send([{ kind: 'reorder', ids: order }]);
       announce('order', message, undo ? () => reorder(undo, 'Order restored') : undefined);

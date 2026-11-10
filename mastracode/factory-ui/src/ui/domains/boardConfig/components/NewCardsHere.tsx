@@ -24,15 +24,6 @@ export function NewCardsHere({ factoryId, board }: { factoryId: string; board: I
   const defaultBoard = boards.find(candidate => candidate.id === DEFAULT_BOARD_ID) ?? boards[0];
   const takesLeftovers = catchAllIndex === -1 && defaultBoard?.id === board.id;
 
-  const summary =
-    count === 0
-      ? takesLeftovers
-        ? 'Cards no intake route takes land here.'
-        : 'No intake route sends new cards here.'
-      : `${count === 1 ? '1 intake route sends' : `${count} intake routes send`} new cards here${
-          takesLeftovers ? ', plus cards no route takes' : ''
-        }.`;
-
   return (
     <SettingsSubsection
       title="New cards"
@@ -47,8 +38,18 @@ export function NewCardsHere({ factoryId, board }: { factoryId: string; board: I
       }
     >
       <Txt as="p" variant="caption" tone="muted" role={query.isError ? 'alert' : 'status'}>
-        {query.isPending ? 'Loading intake routes…' : query.isError ? 'Intake routes didn’t load.' : summary}
+        {statusText(query, count, takesLeftovers)}
       </Txt>
     </SettingsSubsection>
   );
+}
+
+function statusText(query: { isPending: boolean; isError: boolean }, count: number, takesLeftovers: boolean) {
+  if (query.isPending) return 'Loading intake routes…';
+  if (query.isError) return 'Intake routes didn’t load.';
+  if (count === 0) {
+    return takesLeftovers ? 'Cards no intake route takes land here.' : 'No intake route sends new cards here.';
+  }
+  const routes = count === 1 ? '1 intake route sends' : `${count} intake routes send`;
+  return `${routes} new cards here${takesLeftovers ? ', plus cards no route takes' : ''}.`;
 }
