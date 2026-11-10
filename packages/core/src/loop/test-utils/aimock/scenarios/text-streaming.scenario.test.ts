@@ -12,6 +12,12 @@ import {
   useLoopScenarioAimock,
 } from '../aimock-scenario';
 
+async function collect<T>(stream: ReadableStream<T> | AsyncIterable<T>): Promise<T[]> {
+  const items: T[] = [];
+  for await (const item of stream as AsyncIterable<T>) items.push(item);
+  return items;
+}
+
 /**
  * Regression class: text-streaming fidelity.
  *
@@ -28,12 +34,6 @@ import {
  *  - step-start/step-finish bracket each model turn
  *  - start/finish bracket the entire run
  */
-async function collect<T>(stream: ReadableStream<T> | AsyncIterable<T>): Promise<T[]> {
-  const items: T[] = [];
-  for await (const item of stream as AsyncIterable<T>) items.push(item);
-  return items;
-}
-
 describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine => {
   const getMock = useLoopScenarioAimock();
 
