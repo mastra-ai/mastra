@@ -221,7 +221,7 @@ On top of core's checks, the schema:
 - Runs each kind's checks, such as a KPI reading a query its view has, or a chart's series all fitting its buckets.
 - Checks the widget at both `org` and `project` scope, so a widget that only breaks on one kind of page is rejected too.
 
-Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have or two views with one label, point at the view, such as `rows.0.widgets.1.views.0`, with a message saying what's wrong, such as `options: reads query 'nope', which the view doesn't have`.
+Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have or two views with one label, point at the view, such as `rows.0.widgets.1.views.0`, with a message saying what's wrong, such as `options: reads query 'nope', which the view doesn't have`. All of a definition's problems come back together, so one fix can address them all.
 
 `result.data` is the definition you passed in, unchanged; store it as sent. Definitions that core has already parsed, with its defaults filled in, also pass. Use `strictDashboardWidgetSchema` to check a single widget, such as one being added or pinned; its issue paths start at the widget. Checks across widgets, such as unique ids and the widget limit, need the full definition.
 

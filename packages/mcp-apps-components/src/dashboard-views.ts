@@ -42,8 +42,14 @@ export const inScope = (item: { scope?: DashboardScope }, scope: DashboardScope)
 /**
  * What the renderer rejects in the widget's views at `scope`, in the order it finds them: options
  * parsed, then the kind's own issues, then labels unique. Takes a widget core's schema accepts.
+ * Views in `skipKindChecks` skip the kind's own issues, for callers that already report them.
  */
-export function viewIssues(widget: DashboardWidget, check: KindCheck, scope: DashboardScope): WidgetIssue[] {
+export function viewIssues(
+  widget: DashboardWidget,
+  check: KindCheck,
+  scope: DashboardScope,
+  skipKindChecks: ReadonlySet<number> = new Set(),
+): WidgetIssue[] {
   const issues: WidgetIssue[] = [];
   const values = new Set<string>();
   let shown = 0;
@@ -65,7 +71,9 @@ export function viewIssues(widget: DashboardWidget, check: KindCheck, scope: Das
     }
     // Columns at the other scope are left out before the kind sees them.
     const resolved = { ...view, columns: view.columns?.filter(c => inScope(c, scope)), options: options.data };
-    issues.push(...(check.issues?.(resolved) ?? []).map(message => ({ path: ['views', index], message })));
+    if (!skipKindChecks.has(index)) {
+      issues.push(...(check.issues?.(resolved) ?? []).map(message => ({ path: ['views', index], message })));
+    }
     if (repeated) {
       issues.push({ path: ['views', index], message: `another view is already labelled '${view.label ?? value}'` });
     }

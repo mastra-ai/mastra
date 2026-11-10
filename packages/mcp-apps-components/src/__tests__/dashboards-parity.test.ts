@@ -6,6 +6,7 @@ import { inScope, KIND_CHECKS, viewIssues } from '../dashboard-views';
 import type { DashboardScope } from '../dashboard-views';
 import {
   BROKEN_DASHBOARDS,
+  emptyKpis,
   kpis,
   metricsWidgets,
   readsMissingQuery,
@@ -41,7 +42,7 @@ describe("the strict schema's view checks", () => {
   );
 
   it.each([
-    ['its options fail to parse', { ...kpis.views[0]!, options: { items: [] } }],
+    ['its options fail to parse', emptyKpis],
     ['its kind finds a problem', readsMissingQuery],
   ])('report a later issue as the renderer does once the view before it is fixed, when %s', (_, first) => {
     const [, second] = viewIssues(threeKpiViews(first), KIND_CHECKS.kpis, 'project');

@@ -194,9 +194,10 @@ const zodIssues = (error: z.ZodError, prefix: PropertyKey[]): Issue[] =>
 
 /**
  * What the renderer would reject in a widget core accepts, paths relative to the widget. Every
- * view's options and columns are parsed first; the kind's own checks then run at each scope the
- * widget shows at, as the renderer runs them there. It also rejects columns on views that aren't
- * tables, which the renderer ignores.
+ * view's options and columns are parsed; the kind's own checks then run at each scope the widget
+ * shows at, as the renderer runs them there, skipping views whose options or columns don't parse.
+ * All problems come back together. It also rejects columns on views that aren't tables, which the
+ * renderer ignores.
  */
 function widgetIssues(widget: DashboardWidget): Issue[] {
   if (!isBuiltInKind(widget.kind)) {
@@ -209,31 +210,32 @@ function widgetIssues(widget: DashboardWidget): Issue[] {
   }
   const check = KIND_CHECKS[widget.kind];
 
-  const parsed: Issue[] = [];
+  const issues = new Map<string, Issue>();
+  const add = (found: Issue[]) => {
+    for (const issue of found) issues.set(`${JSON.stringify(issue.path)} ${issue.message}`, issue);
+  };
+  // The table's own checks would report a bad column again, at the view.
+  const badColumns = new Set<number>();
   for (const [i, view] of widget.views.entries()) {
     const options = check.optionsSchema.safeParse(view.options ?? {});
-    if (!options.success) parsed.push(...zodIssues(options.error, ['views', i, 'options']));
+    if (!options.success) add(zodIssues(options.error, ['views', i, 'options']));
     if (!view.columns) continue;
     // The renderer ignores columns on other kinds; rejected so a widget written as another kind isn't stored.
     if (widget.kind !== 'table') {
-      parsed.push({ path: ['views', i, 'columns'], message: 'Only table widgets have columns' });
+      add([{ path: ['views', i, 'columns'], message: 'Only table widgets have columns' }]);
       continue;
     }
     for (const [m, column] of view.columns.entries()) {
       const columnOptions = tableColumnOptionsSchema.safeParse(column.options ?? {});
       if (!columnOptions.success) {
-        parsed.push(...zodIssues(columnOptions.error, ['views', i, 'columns', m, 'options']));
+        add(zodIssues(columnOptions.error, ['views', i, 'columns', m, 'options']));
+        badColumns.add(i);
       }
     }
   }
-  if (parsed.length) return parsed;
 
-  const issues = new Map<string, Issue>();
   for (const scope of DASHBOARD_SCOPES) {
-    if (!inScope(widget, scope)) continue;
-    for (const issue of viewIssues(widget, check, scope)) {
-      issues.set(`${JSON.stringify(issue.path)} ${issue.message}`, issue);
-    }
+    if (inScope(widget, scope)) add(viewIssues(widget, check, scope, badColumns));
   }
   return [...issues.values()];
 }
