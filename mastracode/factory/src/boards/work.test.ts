@@ -119,6 +119,9 @@ describe('work board build prompt', () => {
     });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
     expect(decision.prompt).toContain(`Self-review requested changes on branch head ${'a'.repeat(40)}`);
+    expect(decision.prompt).toContain('Address every required change');
+    expect(decision.prompt).toContain('Do not implement the follow-ups.');
+    expect(decision.prompt).not.toContain('Address every finding');
     expect(decision.prompt).toContain('1. Fix the test');
   });
 
@@ -181,6 +184,7 @@ describe('work board self-review', () => {
     expect(approved).toMatchObject({ type: 'invokeSkill', role: 'work' });
     expect(approved?.prompt).toContain(`at branch head ${'b'.repeat(40)}. Open the pull request now`);
     expect(approved?.prompt).toContain('All checks passed');
+    expect(approved?.prompt).toContain("the self-review's test report, and its follow-ups");
     expect(result({ selfReviewVerdict: 'request changes' })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve', openPullRequestNumber: 7 })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve' }, 'work')).toBeUndefined();
