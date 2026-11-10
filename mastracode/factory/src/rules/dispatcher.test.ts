@@ -2206,6 +2206,88 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
+  it('waits for the previous role run on the same thread before kicking off a rotated seat', async () => {
+    // Self-review rotates the builder's binding to `review` on the same thread.
+    // The builder's run, still live after its transition, was built with work-role
+    // tools; a review kickoff delivered into it has no factory_record_review_verdict.
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'review',
+      skillName: 'factory-self-review',
+      idempotencyKey: 'wait-for-previous-role-run',
+    });
+    const workBinding = await bindWorkRun(storage, item.id);
+    const reviewStart = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'review',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: `kickoff-review-${item.id}`,
+      kickoffMessage: null,
+    });
+    await storage.markPendingStart(reviewStart.binding.id, 'sent');
+    expect(reviewStart.binding.id).not.toBe(workBinding.id);
+    expect(reviewStart.binding.threadId).toBe(workBinding.threadId);
+    const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'complete',
+      streamActive: true,
+    });
+    await session.thread.setSetting({
+      key: FACTORY_OPEN_RUNS_SETTING,
+      value: [
+        {
+          kickoffId: 'builder-kickoff',
+          bindingId: workBinding.id,
+          role: workBinding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: workBinding.orgId,
+          factoryProjectId: workBinding.factoryProjectId,
+          workItemId: workBinding.workItemId,
+          sessionId: workBinding.sessionId,
+          threadId: workBinding.threadId,
+          branch: workBinding.branch,
+        },
+      ],
+    });
+    controller.listActiveThreadRuns.mockReturnValue([{ runId: 'builder-run', threadId: workBinding.threadId }]);
+    observeSessionRunEnd(session, { audit: seed.audit });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      audit: seed.audit,
+      ownerId: 'worker-1',
+    });
+
+    const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(2));
+    expect(session.sendSignal).not.toHaveBeenCalled();
+
+    controller.listActiveThreadRuns.mockReturnValue([]);
+    emitAgentEnd('complete');
+    await dispatch;
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
   describe('an intake route moving a card with a run in flight', () => {
     async function runningCard(phaseKey: string) {
       const seed = await createFactoryStorageForTests();

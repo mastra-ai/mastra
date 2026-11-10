@@ -2238,7 +2238,12 @@ export class FactoryDecisionDispatcher {
         runStillActive,
       });
       try {
-        const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+        // A run started under the seat this binding rotated from shares its
+        // thread. Its tools were built for that earlier role, so a kickoff
+        // delivered into it would run without the new role's tools.
+        const open = (await listSessionOpenRuns(session)).filter(
+          entry => entry.bindingId === binding.id || entry.threadId === binding.threadId,
+        );
         if (open.length === 0) break;
         if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
           throw new FactoryDispatchError(
