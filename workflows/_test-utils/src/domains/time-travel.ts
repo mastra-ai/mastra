@@ -1581,6 +1581,37 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
       },
     );
 
+    it.skipIf(skipTests.timeTravelLoopIterationCount || !timeTravel).each(['dountil', 'dowhile'] as const)(
+      'should feed a %s loop the caller-supplied previous step output when time travelling to a failed iteration',
+      async loopType => {
+        const entry = registry![`timetravel-loop-iteration-${loopType}-after-step-workflow`]!;
+        entry.resetMocks?.();
+        const runId = randomUUID();
+
+        const failed = await execute(entry.workflow, { n: 0 }, { runId });
+        expect(failed.status).toBe('failed');
+
+        const recovered = await timeTravel!(entry.workflow, {
+          step: 'call',
+          runId,
+          context: {
+            prep: {
+              payload: { n: 0 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { n: 10 },
+              endedAt: Date.now(),
+            },
+          },
+        });
+
+        expect(recovered.status).toBe('success');
+        expect(recovered.result).toEqual({ n: 12 });
+        expect(entry.getInputs()).toEqual([0, 1, 10, 11]);
+        expect(entry.getCounts()).toEqual([1, 2, 3]);
+      },
+    );
+
     it.skipIf(skipTests.timeTravelPreviousRunPerStep || !timeTravel)(
       'should timeTravel previously ran workflow with perStep',
       async () => {
