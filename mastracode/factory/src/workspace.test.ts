@@ -631,11 +631,18 @@ describe('bundled Factory skill assets', () => {
     // The phase's own moves pick the hand-off: a move to self-review means no change request is
     // opened, even where the board also allows the move to pull request review.
     expect(build).toContain(
-      '- **The board has a self-review phase** (`Board phases by part:` names a `self-review` phase and it is in `Next phases`): this path comes first, even when the `pull request review` phase is in `Next phases` too',
+      '- **The board has a self-review phase** (`Board phases by part:` names a `self-review` phase and it is in `Next phases`): this path comes before opening the change request, even when the `pull request review` phase is in `Next phases` too',
     );
     expect(build).toContain(
-      'it needs the `pull request review` phase in `Next phases`, and no `self-review` phase there',
+      'it needs the `pull request review` phase in `Next phases`, and a board whose `Board phases by part:` names no `self-review` phase',
     );
+    // Factory's gate refuses the change request on any board with a self-review phase, so the
+    // builder asks instead of opening one when it can't move there.
+    expect(build).toContain(
+      '- **The board has a self-review phase that is not in `Next phases`:** open no change request',
+    );
+    // An open change request of this session decides before the self-review path.
+    expect(build).toContain('A change request of this session that is already open decides first');
     expect(build).not.toContain('Self-review: on');
     expect(build).not.toContain('whatever the setting says');
     // A push to an open change request with no move to pull request review asks a person; self-review stops on an open one.

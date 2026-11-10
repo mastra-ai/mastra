@@ -264,8 +264,9 @@ function reviewPhases(board: StoredBoardRecord) {
  * Carries a project's retired self-review switch into its boards: with the switch off, a card went
  * past any board's self-review phase, so the phase goes, with every move into it. A board is left
  * as it is, with a warning, when its code board declares the phase (without it the board would run
- * without its code rules), when cards sit in the phase (removing it would strand them) or when its
- * build phase could only reach the pull request review through it.
+ * without its code rules), when cards sit in the phase (removing it would strand them), when its
+ * build phase could only reach the pull request review through it, or when it is another phase's
+ * only move.
  */
 export function migrateSelfReviewSwitch(
   board: StoredBoardRecord,
@@ -289,6 +290,10 @@ export function migrateSelfReviewSwitch(
   if (build && !(pullRequestReview && (build.nextPhases ?? []).includes(pullRequestReview.key))) {
     return keep(`"${build.key}" can't move to a pull request review without it, add that move first`);
   }
+  const stranded = board.phases.find(
+    record => record.key !== phase && record.nextPhases?.length && record.nextPhases.every(key => key === phase),
+  );
+  if (stranded) return keep(`it is the only move out of "${stranded.key}", give that phase another move first`);
   const phases = board.phases
     .filter(record => record.key !== phase)
     .map(record => {

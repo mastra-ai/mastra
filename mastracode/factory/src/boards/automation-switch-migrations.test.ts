@@ -246,6 +246,35 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect(boards.get('ship')!.transitionPolicy).toBe(transitionPolicy);
       });
 
+      it('keeps a self-review phase another phase could only move into, and says why', async () => {
+        const ship = shipBoard(['check', 'pr']);
+        const fasttrack: StoredBoardInput = {
+          ...ship,
+          phases: ship.phases.map(phase =>
+            phase.key === 'inbox' ? { ...phase, nextPhases: ['build', 'check'] } : phase,
+          ),
+        };
+        const stuck: StoredBoardInput = {
+          ...ship,
+          key: 'stuck',
+          phases: [
+            { key: 'triage', name: 'Triage', kind: 'resting', nextPhases: ['check'] },
+            ...ship.phases.filter(phase => phase.key !== 'inbox'),
+          ],
+        };
+        const { load, boards: stored, scope, warn } = await setup({ self_review_enabled: false }, [fasttrack, stuck]);
+        const before = await stored.get(scope, 'stuck');
+
+        await load();
+
+        // A phase that keeps another move just loses this one.
+        expect((await stored.get(scope, 'ship'))!.phases.find(phase => phase.key === 'inbox')!.nextPhases).toEqual([
+          'build',
+        ]);
+        expect(await stored.get(scope, 'stuck')).toEqual(before);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Board "stuck" keeps its self-review phase "check"'));
+      });
+
       it("keeps a self-review phase the build phase can't get past without, and says why", async () => {
         const {
           load,
