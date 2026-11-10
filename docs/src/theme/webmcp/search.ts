@@ -10,11 +10,11 @@ export interface DocsRecord {
   hierarchy?: Partial<Record<(typeof LEVELS)[number], string | null>>
 }
 
-/** Absolute http(s) URL, anchor kept; relative URLs resolve against the site. */
+/** Absolute URL on the docs site, anchor kept; relative URLs resolve against the site. */
 function absoluteUrl(value: string, siteUrl: string): string | undefined {
   try {
     const url = new URL(value, siteUrl)
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined
+    return url.origin === new URL(siteUrl).origin ? url.href : undefined
   } catch {
     return undefined
   }

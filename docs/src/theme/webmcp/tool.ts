@@ -58,7 +58,9 @@ export function validateInput(input: unknown): SearchInput | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
   const record = input as Record<string, unknown>
   if (Object.keys(record).some(key => key !== 'query' && key !== 'limit')) return undefined
-  const { query, limit = LIMITS.defaultLimit } = record
+  // Agents often send null for optional parameters.
+  const query = record.query
+  const limit = record.limit ?? LIMITS.defaultLimit
   if (typeof query !== 'string' || !query.trim() || [...query].length > LIMITS.query) return undefined
   if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > LIMITS.maxLimit) return undefined
   return { query: query.trim(), limit }

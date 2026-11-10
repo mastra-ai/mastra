@@ -129,6 +129,18 @@ describe('registration', () => {
     expect(context.registerTool).not.toHaveBeenCalled()
   })
 
+  it('keeps exactly one live registration across a StrictMode remount', async () => {
+    const context = stubContext()
+    vi.stubGlobal('document', { modelContext: context })
+    mountWebMcp(config)()
+    const cleanup = mountWebMcp(config)
+    await vi.waitFor(() => expect(context.registerTool).toHaveBeenCalledTimes(1))
+    await vi.dynamicImportSettled()
+    expect(context.registerTool).toHaveBeenCalledTimes(1)
+    expect(context.registerTool.mock.calls[0]![1]?.signal?.aborted).toBe(false)
+    cleanup()
+  })
+
   it('swallows a rejected registration', async () => {
     const context = stubContext()
     context.registerTool.mockRejectedValueOnce(new DOMException('Duplicate', 'InvalidStateError'))
@@ -157,6 +169,7 @@ describe('input validation', () => {
 
   it('defaults limit to 5 and trims the query', () => {
     expect(validateInput({ query: '  agents  ' })).toEqual({ query: 'agents', limit: 5 })
+    expect(validateInput({ query: 'agents', limit: null })).toEqual({ query: 'agents', limit: 5 })
     expect(validateInput({ query: 'a'.repeat(500), limit: 20 })).toEqual({ query: 'a'.repeat(500), limit: 20 })
   })
 
@@ -266,6 +279,7 @@ describe('mapHit', () => {
   it('drops hits without a usable URL', () => {
     expect(mapHit({ url: null }, config.siteUrl)).toBeUndefined()
     expect(mapHit({ url: 'javascript:alert(1)' }, config.siteUrl)).toBeUndefined()
+    expect(mapHit({ url: 'https://evil.example/docs' }, config.siteUrl)).toBeUndefined()
   })
 
   it('caps the excerpt at 1000 characters', () => {

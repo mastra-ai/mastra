@@ -11,9 +11,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
   const { siteConfig } = useDocusaurusContext()
   const posthogApiKey = siteConfig.customFields.posthogApiKey as string
   const posthogHost = (siteConfig.customFields.posthogHost as string) || 'https://us.i.posthog.com'
-  const algolia = usePluginData('docusaurus-plugin-algolia', 'default', { failfast: false }) as
-    | Partial<AlgoliaPluginData>
-    | undefined
+  const algolia = usePluginData('docusaurus-plugin-algolia', 'default') as Partial<AlgoliaPluginData> | undefined
   const { algoliaAppId, algoliaSearchApiKey, indexName, siteUrl } = algolia ?? {}
 
   useEffect(
