@@ -35,7 +35,7 @@ export function MetricsCardTitleMenu<V extends string>({
             <button
               type="button"
               className={cn(
-                '-mx-1.5 -my-0.5 flex items-center gap-1 self-start rounded-md px-1.5 py-0.5 text-left text-body font-medium text-foreground hover:bg-fill-subtle',
+                '-mx-1.5 -my-0.5 flex items-center gap-1 self-start rounded-md px-1.5 py-0.5 text-left text-subheading text-foreground hover:bg-fill-subtle',
                 className,
               )}
             />
