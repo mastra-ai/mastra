@@ -3,7 +3,6 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { findMatchingCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -781,33 +780,29 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
     for (const route of routes) {
       const fastifyHandler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
-        // Fastify prefers static paths, but the custom route handler dispatches to the first
-        // registered match. Check auth against the route that will actually run.
+        // Fastify prefers static paths, but the custom-route app may dispatch the request
+        // to a different route. Check auth against the route that will actually run for
+        // the URL it's forwarded.
         const requestPath = String(request.url.split('?')[0] || '/');
-        // The custom route handler (Hono) is case-sensitive, so match it that way.
-        const match = findMatchingCustomRoute(requestPath, String(request.method || 'GET'), routes, {
-          caseSensitive: true,
-        });
-        const dispatched = match?.route ?? route;
-        const serverRoute: ServerRoute = {
-          method: dispatched.method as any,
-          path: dispatched.path,
-          responseType: 'json',
-          handler: async () => {},
-          requiresAuth: dispatched.requiresAuth,
-          requiresPermission: dispatched.requiresPermission,
-          fga: dispatched.fga,
-        };
+        const requestMethod = String(request.method || 'GET');
+        const dispatchUrl = `http://${request.headers.host}${request.url}`;
+        const { match, serverRoute, customRouteAuthConfig } = this.resolveCustomRouteAuth(
+          dispatchUrl,
+          requestMethod,
+          requestPath,
+          route,
+        );
 
         // Per-route auth check (same pattern as registerRoute)
         const authError = await this.checkRouteAuth(serverRoute, {
-          path: String(request.url.split('?')[0] || '/'),
-          method: String(request.method || 'GET'),
+          path: requestPath,
+          method: requestMethod,
           getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
           getQuery: name => (request.query as Record<string, string>)[name],
           requestContext: request.requestContext,
           request: toWebRequest(request),
           buildAuthorizeContext: () => toWebRequest(request),
+          customRouteAuthConfig,
         });
 
         if (authError) {
@@ -867,7 +862,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         const response = await this.handleCustomRouteRequest(
-          `http://${request.headers.host}${request.url}`,
+          dispatchUrl,
           request.method,
           request.headers as Record<string, string | string[] | undefined>,
           request.body,

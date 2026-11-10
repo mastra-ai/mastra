@@ -135,6 +135,87 @@ export function createCustomRouteFGATestSuite(config: CustomRouteFGATestSuiteCon
       expect(await authed.json()).toEqual({ route: 'admin' });
     });
 
+    const startWithAuth = async (apiRoutes: ReturnType<typeof registerApiRoute>[]) => {
+      const mastra = new Mastra({ logger: false, server: { apiRoutes } });
+      const originalGetServer = mastra.getServer.bind(mastra);
+      mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+            authorize: async () => true,
+          },
+        }) as any;
+      const server = await startServer(mastra);
+      close = server.close;
+      return server;
+    };
+    const authed = { headers: { authorization: 'Bearer valid-token' } };
+
+    it('does not run a protected route shadowed by an earlier public one without auth', async () => {
+      // Public '/admin/:id' is registered first, so it serves '/admin/public'. The
+      // protected '/admin/public' handler must never run for an unauthenticated caller.
+      const protectedHandler = vi.fn(async (c: any) => c.json({ route: 'protected' }));
+      const server = await startWithAuth([
+        registerApiRoute('/admin/:id', {
+          method: 'GET',
+          requiresAuth: false,
+          handler: async (c: any) => c.json({ route: 'param' }),
+        }),
+        registerApiRoute('/admin/public', { method: 'GET', handler: protectedHandler }),
+      ]);
+
+      const response = await server.request('/admin/public');
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ route: 'param' });
+      expect(protectedHandler).not.toHaveBeenCalled();
+    });
+
+    it('requires auth for HEAD requests to a protected GET route', async () => {
+      const protectedHandler = vi.fn(async (c: any) => c.json({ secret: true }));
+      const server = await startWithAuth([registerApiRoute('/secret', { method: 'GET', handler: protectedHandler })]);
+
+      expect((await server.request('/secret', { method: 'HEAD' })).status).toBe(401);
+      expect(protectedHandler).not.toHaveBeenCalled();
+      expect((await server.request('/secret', { method: 'HEAD', ...authed })).status).toBe(200);
+    });
+
+    it('matches routes case-sensitively when deciding auth', async () => {
+      const protectedHandler = vi.fn(async (c: any) => c.json({ route: 'protected' }));
+      const server = await startWithAuth([
+        registerApiRoute('/Admin', {
+          method: 'GET',
+          requiresAuth: false,
+          handler: async (c: any) => c.json({ route: 'public' }),
+        }),
+        registerApiRoute('/admin', { method: 'GET', handler: protectedHandler }),
+      ]);
+
+      expect((await server.request('/admin')).status).toBe(401);
+      expect(protectedHandler).not.toHaveBeenCalled();
+      const publicResponse = await server.request('/Admin');
+      expect(publicResponse.status).toBe(200);
+      expect(await publicResponse.json()).toEqual({ route: 'public' });
+    });
+
+    it('checks auth for percent-encoded paths against the route they decode to', async () => {
+      // '/%61dmin' is dispatched to '/admin' after decoding, not to the public '/:page'.
+      const protectedHandler = vi.fn(async (c: any) => c.json({ route: 'admin' }));
+      const server = await startWithAuth([
+        registerApiRoute('/admin', { method: 'GET', handler: protectedHandler }),
+        registerApiRoute('/:page', {
+          method: 'GET',
+          requiresAuth: false,
+          handler: async (c: any) => c.json({ route: 'page' }),
+        }),
+      ]);
+
+      const response = await server.request('/%61dmin');
+      expect(protectedHandler).not.toHaveBeenCalled();
+      expect(response.status).not.toBe(200);
+      expect((await server.request('/about')).status).toBe(200);
+    });
+
     it('checks FGA with the params of the route that handles an overlapping path', async () => {
       // '/docs/:docId' is registered first, so it serves '/docs/open' even though the
       // framework may pick the static route. FGA must still see docId from the URL.
