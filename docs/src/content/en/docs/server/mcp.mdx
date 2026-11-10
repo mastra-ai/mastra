@@ -1,6 +1,6 @@
 ---
 title: 'Built-in MCP server | Server'
-description: 'Let MCP clients such as Claude Code, Cursor, and the MCP Inspector call your Mastra agents, workflows, and tools through the built-in /api/mcp endpoint, with the same auth, RBAC, and FGA as the HTTP API.'
+description: 'Let MCP clients such as Claude Code, Cursor, and the MCP Inspector call your agents, workflows, and tools through the built-in /api/mcp endpoint, with the same auth, RBAC, and FGA as the HTTP API.'
 packages:
   - '@mastra/core'
   - '@mastra/server'
@@ -29,7 +29,7 @@ Without it, the rest of the server keeps working, and `/api/mcp` answers with HT
 
 | Environment | Served at `/api/mcp` |
 | - | - |
-| `mastra dev` | Yes, also without auth. Requests with a foreign `Origin` or `Host` header are rejected to block DNS rebinding. This also blocks tunnels and LAN IP addresses unless `server.host` matches them. |
+| `mastra dev` | Yes, also without auth. Requests with a foreign `Origin` or `Host` header are rejected to block DNS rebinding. This also blocks tunnels and LAN IP addresses. To reach the endpoint from another machine, set `server.host` to the hostname or IP address clients connect to. Binding to `0.0.0.0` doesn't allow other hosts. |
 | Production build with `server.auth` | Yes. Every request needs a bearer token. |
 | Production build without `server.auth` | No, the endpoint returns 404. |
 
@@ -71,7 +71,7 @@ The server groups tools into three toolsets. Agents and workflows are reached th
 
 - When a caller can see up to `enumLimit` agents or workflows (25 by default), the `agentId` and `workflowId` arguments list the allowed ids. Above that they're plain strings, and the client calls `list_agents` or `list_workflows` to find ids.
 - When a caller can see more than `enumLimit` tools, the `tool_<id>` tools are replaced by `list_tools`, `get_tool`, and `call_tool`.
-- `call_agent` returns the reply text and a `threadId`. Pass the `threadId` back to continue the conversation in the agent's memory.
+- `call_agent` returns the reply text and a `threadId`. Pass the `threadId` back to continue the conversation in the agent's memory. A call without a `threadId` starts a new thread, so a client that never passes one stores a thread for each call.
 - `start_workflow` waits for the run to finish or suspend. A suspended run returns its `runId` and suspend payload. Continue it with `resume_workflow_run`.
 - Agents without a `description` get a generic one and a warning in the logs. Add descriptions so clients can pick the right agent.
 
