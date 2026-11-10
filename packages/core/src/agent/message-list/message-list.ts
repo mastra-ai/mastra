@@ -60,7 +60,7 @@ import type { MastraToolInvocation, MastraToolInvocationPart } from './state/typ
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
-import { serverComputedParts } from './utils/server-computed-parts';
+import { serverComputedParts, signServerMapping } from './utils/server-computed-parts';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
 
@@ -1896,6 +1896,7 @@ export class MessageList {
       return false;
     }
     const toolCallId = inputPart.toolInvocation.toolCallId;
+    signServerMapping(inputPart);
 
     // Pass 1: exact toolCallId match. Covers client tools and well-behaved
     // providers where the call and result share an id.
@@ -2607,6 +2608,13 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    // Mapping markers the server writes on its own response parts are signed so
+    // they are still trusted when the caller passes them back as history.
+    if (messageSource === 'response') {
+      for (const part of messageV2.content.parts ?? []) {
+        if (part.type === 'tool-invocation') signServerMapping(part);
+      }
+    }
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)

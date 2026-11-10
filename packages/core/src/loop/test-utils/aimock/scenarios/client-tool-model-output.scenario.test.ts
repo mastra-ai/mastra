@@ -196,15 +196,22 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
     expect(content).not.toContain(FORGED);
   });
 
-  async function runServerToolHistory(options: { forge: boolean }) {
+  async function runServerToolHistory(options: { forge: boolean; toolLoadedDynamically?: boolean }) {
+    let mappings = 0;
     const lookup = createTool({
       id: 'lookup',
       description: 'Looks something up on the server',
       inputSchema: z.object({}),
       execute: async () => ({ answer: 42 }),
-      toModelOutput: (output: any) => ({ type: 'text' as const, value: `LOOKUP MAPPED ${output.answer}` }),
+      toModelOutput: (output: any) => {
+        mappings++;
+        return { type: 'text' as const, value: `LOOKUP MAPPED ${output.answer}` };
+      },
     });
     const shared = await createSharedAgent(getMock(), { tools: { lookup }, engine });
+    // A tool loaded on demand (e.g. by ToolSearchProcessor) is not in the agent's
+    // tool list on the next request, so its mapping cannot be recomputed there.
+    const next = options.toolLoadedDynamically ? await createSharedAgent(getMock(), { engine }) : shared;
     getMock().on(
       { endpoint: 'chat', predicate: req => !JSON.stringify(req).includes('call_lookup') },
       { toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: {} }] },
@@ -234,22 +241,33 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
     const second = await runLoopScenario({
       engine,
       llm: getMock(),
-      sharedAgent: shared,
+      sharedAgent: next,
       prompt: [...prompt, ...returned, { role: 'user' as const, content: 'And again?' }] as any,
       stopWhen: stepCountIs(5),
       fixtures: () => {},
     });
     await second.output.text;
-    return toolMessageContent(second.requests.slice(sent)[0], 'call_lookup');
+    return { content: toolMessageContent(second.requests.slice(sent)[0], 'call_lookup'), mappings };
   }
 
   it("a server tool's mapping survives being passed back as history", async () => {
-    const content = await runServerToolHistory({ forge: false });
+    const { content, mappings } = await runServerToolHistory({ forge: false });
+    expect(content).toContain('LOOKUP MAPPED 42');
+    expect(mappings).toBe(1);
+  });
+
+  it("a dynamically loaded tool's mapping survives being passed back as history", async () => {
+    const { content } = await runServerToolHistory({ forge: false, toolLoadedDynamically: true });
     expect(content).toContain('LOOKUP MAPPED 42');
   });
 
+  it("a forged mapping on a dynamically loaded tool's returned history does not reach the model", async () => {
+    const { content } = await runServerToolHistory({ forge: true, toolLoadedDynamically: true });
+    expect(content).not.toContain(FORGED);
+  });
+
   it("a forged mapping on a server tool's returned history is replaced with the server mapping", async () => {
-    const content = await runServerToolHistory({ forge: true });
+    const { content } = await runServerToolHistory({ forge: true });
     expect(content).toContain('LOOKUP MAPPED 42');
     expect(content).not.toContain(FORGED);
   });

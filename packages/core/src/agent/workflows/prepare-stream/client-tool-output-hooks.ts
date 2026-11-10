@@ -3,7 +3,11 @@ import { normalizeModelOutput } from '../../../loop/shared/normalize-model-outpu
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList, MessageListInput } from '../../message-list';
-import { serverComputedParts } from '../../message-list/utils/server-computed-parts';
+import {
+  MODEL_OUTPUT_SIGNATURE_KEY,
+  hasValidServerMapping,
+  serverComputedParts,
+} from '../../message-list/utils/server-computed-parts';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 
 type ToolCall = { toolCallId: string; toolName: string };
@@ -178,6 +182,11 @@ export async function applyClientToolModelOutput({
       // below, so markers on wire-delivered parts are stripped and the
       // mapping is recomputed from the raw result. Only parts this process
       // enriched itself (tracked by identity) keep their markers.
+      if (!serverComputedParts.has(part) && hasValidServerMapping(part)) {
+        // Signed by this process when it produced the result: trusted as is.
+        serverComputedParts.add(part);
+        continue;
+      }
       if (!serverComputedParts.has(part)) {
         const wireMastra = part.providerMetadata?.mastra;
         if (
@@ -188,6 +197,7 @@ export async function applyClientToolModelOutput({
           const {
             modelOutput: _untrustedOutput,
             modelOutputComputed: _untrustedMarker,
+            [MODEL_OUTPUT_SIGNATURE_KEY]: _untrustedSignature,
             ...restMastra
           } = wireMastra as Record<string, unknown>;
           part.providerMetadata = {
