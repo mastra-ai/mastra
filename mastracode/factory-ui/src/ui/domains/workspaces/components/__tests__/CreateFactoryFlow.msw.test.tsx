@@ -513,7 +513,7 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     await waitForMutationsIdle(client);
-    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1', board: 'work' }]);
+    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]);
     expect(intakeConfigs).toEqual([
       { github: { enabled: true, sourceIds: ['octo/hello'] } },
       { linear: { enabled: true, sourceIds: ['lin-1'] } },
@@ -546,9 +546,7 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     await waitForMutationsIdle(client);
-    expect(bindings).toEqual([
-      { integrationId: 'jira', sourceId: 'jira-source-1', factoryProjectId: 'fp-1', board: 'work' },
-    ]);
+    expect(bindings).toEqual([{ integrationId: 'jira', sourceId: 'jira-source-1', factoryProjectId: 'fp-1' }]);
     expect(intakeConfigs).toEqual([
       { github: { enabled: true, sourceIds: ['octo/hello'] } },
       { jira: { enabled: true, sourceIds: ['jira-source-1'] } },
@@ -628,7 +626,7 @@ describe('Create Factory wizard', () => {
       await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
       await waitForMutationsIdle(client);
-      expect(bindings).toEqual([{ integrationId, sourceId, factoryProjectId: 'fp-1', board: null }]);
+      expect(bindings).toEqual([{ integrationId, sourceId, factoryProjectId: 'fp-1' }]);
       expect(intakeConfigs.at(-1)).toMatchObject({ [integrationId]: { enabled: true, sourceIds: [sourceId] } });
       await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
     },

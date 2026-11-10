@@ -306,7 +306,7 @@ describe('intake config and bindings drive the Jira issue cache', () => {
     await waitFor(() => expect(result.current.issues.data).toBeDefined());
     expect(issueHits).toBe(1);
 
-    result.current.bind.mutate({ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A, board: null });
+    result.current.bind.mutate({ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A });
 
     await waitFor(() => expect(issueHits).toBe(2));
   });

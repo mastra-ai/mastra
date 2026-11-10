@@ -17,8 +17,8 @@ export function placesNewCards(route: Pick<StoredIntakeRouteRecord, 'on'>): bool
 }
 
 /**
- * Card metadata naming the intake route that placed the card. Label routes, repository
- * bindings and replayed arrivals leave such a card where the route put it.
+ * Card metadata naming the intake route that placed the card. Label changes, rebinding its
+ * source and replayed arrivals leave such a card where the route put it.
  */
 export const INTAKE_ROUTE_METADATA_KEY = 'intakeRouteId';
 

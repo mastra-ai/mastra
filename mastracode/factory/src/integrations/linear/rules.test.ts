@@ -96,16 +96,7 @@ describe('LinearRules', () => {
     });
   });
 
-  it.each([
-    { name: 'the bound custom board initial phase', sourceId: 'proj-release', board: 'release', stage: 'queued' },
-    { name: 'Work Intake when the source is unbound', sourceId: 'proj-other', board: 'work', stage: 'intake' },
-    {
-      name: 'Work Intake when the bound board is not installed',
-      sourceId: 'proj-gone',
-      board: 'work',
-      stage: 'intake',
-    },
-  ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
+  it('files an observed issue on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
       createBoardRegistry({ boards: [createTestBoard()] }),
@@ -114,11 +105,10 @@ describe('LinearRules', () => {
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: project.id,
-      issues: [{ ...issue, sourceId }],
-      intakeBoards: { 'proj-release': 'release', 'proj-gone': 'hotfix' },
+      issues: [issue],
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+      { decision: { type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' } },
     ]);
   });
 

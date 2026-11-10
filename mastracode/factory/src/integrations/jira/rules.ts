@@ -57,7 +57,7 @@ export interface JiraIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** Jira source the issue was read from; resolves the bound board via `intakeBoards`. */
+  /** Jira source the issue was read from. */
   sourceId?: string | null;
 }
 
@@ -75,8 +75,6 @@ export interface JiraRulesIngress {
   userId: string;
   factoryProjectId: string;
   issues: JiraIssueIngress[];
-  /** Board id per bound Jira source id, from the project's intake bindings. */
-  intakeBoards?: Readonly<Record<string, string>>;
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
@@ -139,8 +137,6 @@ export class JiraRules {
     }
 
     const event = isClosed ? 'issueClosed' : 'issueObserved';
-    const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.#boards(input).get(boundBoardId) : undefined;
     const context: FactoryJiraRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -168,7 +164,7 @@ export class JiraRules {
             ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...withIntakeTarget(this.#boards(input), boundBoard),
+      ...withIntakeTarget(this.#boards(input)),
       event,
       issue,
     };

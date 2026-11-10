@@ -126,7 +126,9 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   async #list(c: Context, scope: Resolved, routes?: StoredIntakeRouteRecord[]) {
     const registry = await this.#registry(scope);
     routes ??= await this.deps.storage.listIntakeRoutes(scope);
-    return c.json({ intakeRoutes: routes.map(route => present(route, registry)) });
+    const { auth } = this.deps;
+    const canEdit = !auth.enabled() || (await auth.isOrganizationAdmin(c, scope.orgId));
+    return c.json({ intakeRoutes: routes.map(route => present(route, registry)), canEdit });
   }
 
   async #respond(c: Context, scope: Resolved, route: StoredIntakeRouteRecord, status: 200 | 201 = 200) {

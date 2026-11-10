@@ -268,10 +268,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   flow?: FactoryRuleBoardFlow;
   /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
   phase?: FactoryRulePhaseContext;
-  /**
-   * Board an issue's labels route it to, when the project has a matching label route and that board
-   * is installed. Absent for pull requests and for issues whose labels select nothing.
-   */
+  /** Where a new card is filed before the project's intake routes place it. */
   intake?: FactoryRuleIntakeTarget;
   /**
    * Set on the one evaluation per pull request delivery that files the pull
@@ -348,14 +345,13 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
 }
 
 /**
- * Where new items from this source land: the board a label route or the source's intake binding
- * names, else the project's default board. Absent only when none of those boards is installed.
+ * Where an integration files a new card: the default board's initial phase. The project's intake
+ * routes then decide where the card goes; the board and phase a rule names don't. Absent when the
+ * default board is not installed.
  */
 export interface FactoryRuleIntakeTarget {
   board: string;
   initialPhase: string;
-  /** The board's pull request review phase, where a pull request asked to be reviewed lands. */
-  pullRequestReview?: string;
 }
 
 /**
@@ -475,7 +471,7 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   flow?: FactoryRuleBoardFlow;
   /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
   phase?: FactoryRulePhaseContext;
-  /** Bound board for the source this issue came from, when one is configured and installed. */
+  /** Where a new card is filed before the project's intake routes place it. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryLinearEventName;
   issue: {
@@ -509,7 +505,7 @@ export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
   flow?: FactoryRuleBoardFlow;
   /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
   phase?: FactoryRulePhaseContext;
-  /** Bound board for the source this issue came from, when one is configured and installed. */
+  /** Where a new card is filed before the project's intake routes place it. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryJiraEventName;
   issue: {
@@ -543,7 +539,7 @@ export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
   flow?: FactoryRuleBoardFlow;
   /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
   phase?: FactoryRulePhaseContext;
-  /** Bound board for the source this follow-up came from, when one is configured and installed. */
+  /** Where a new card is filed before the project's intake routes place it. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryIncidentioEventName;
   issue: {

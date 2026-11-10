@@ -173,7 +173,11 @@ const intakeRouteSchema = z.object({
   problems: z.array(z.string()),
 });
 const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
-const intakeRouteListResponseSchema = z.object({ intakeRoutes: z.array(intakeRouteSchema) });
+const intakeRouteListResponseSchema = z.object({
+  intakeRoutes: z.array(intakeRouteSchema),
+  /** Whether the caller may add, edit, reorder, or delete routes. */
+  canEdit: z.boolean(),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -909,7 +913,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   intakeRouteCreate: {
     method: 'POST',
     path: '/web/factory/projects/:id/intake-routes',
-    description: 'Add an intake route at the end of a Factory project',
+    description:
+      'Add an intake route to a Factory project, after its routes; a route that places new cards goes ahead of the first route that takes every new card',
     pathSchema: projectPathSchema,
     bodySchema: intakeRouteInputSchema,
     responseSchema: intakeRouteResponseSchema,

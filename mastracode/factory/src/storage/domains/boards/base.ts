@@ -179,6 +179,7 @@ export {
   PULL_REQUEST_UPDATED_ROUTE,
   PULL_REQUEST_REVIEW_REQUESTED_ROUTE,
   CLOSES_ISSUE_INTAKE_ROUTE,
+  CATCH_ALL_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTES,
 } from '../../../boards/work-routes.js';
 
@@ -560,7 +561,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return row ? toIntakeRouteRecord(row) : null;
   }
 
-  /** Adds a route after the project's last one. */
+  /**
+   * Adds a route after the project's last one. A route that places new cards goes just ahead of the
+   * first route that takes every new card instead, since after it it would never place one.
+   */
   async createIntakeRoute(
     scope: StoredBoardScope,
     input: StoredIntakeRouteInput,
@@ -577,12 +581,15 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           `A project can have at most ${MAX_INTAKE_ROUTES} intake routes; delete one first.`,
         );
       }
-      await insertIntakeRoute(ops, scope, {
-        id,
-        input,
-        position: rows.reduce((max, row) => Math.max(max, row.position), -1) + 1,
-        actor,
-      });
+      const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
+      await insertIntakeRoute(ops, scope, { id, input, position, actor });
+      const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
+        ? rows.findIndex(catchesEveryNewCard)
+        : -1;
+      if (ahead >= 0) {
+        const added = (await readIntakeRoutes(ops, scope)).find(row => row.id === id)!;
+        await placeIntakeRoutes(ops, rows.toSpliced(ahead, 0, added), actor);
+      }
     });
     return (await this.getIntakeRoute(scope, id))!;
   }
@@ -892,6 +899,16 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
   };
+}
+
+/** Whether `row` places every new card that reaches it, as the seeded "Everything else" route does. */
+function catchesEveryNewCard(row: IntakeRouteRow): boolean {
+  return (
+    row.enabled &&
+    row.when_condition === null &&
+    (row.on_events ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created') &&
+    !row.join_closed_issue
+  );
 }
 
 async function readIntakeRoutes(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<IntakeRouteRow[]> {

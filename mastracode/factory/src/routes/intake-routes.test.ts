@@ -14,6 +14,7 @@ import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import {
+  CATCH_ALL_INTAKE_ROUTE,
   CLOSES_ISSUE_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
@@ -156,7 +157,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
-    const [closesIssue, route, pullRequests, ...events] = await list(replicaA.send, base, MEMBER);
+    const [closesIssue, route, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
+    const events = rest.slice(0, -1);
+    // Whatever no other route takes lands on Work's first phase, as it did before routes existed.
+    expect(rest.at(-1)).toMatchObject({
+      name: CATCH_ALL_INTAKE_ROUTE.name,
+      position: 11,
+      on: ['work_item.created'],
+      when: null,
+      target: { boardKey: 'work', phaseKey: 'intake' },
+      createdBy: 'factory',
+      problems: [],
+    });
     // Close, reopen and pull request routes target Work's phases, and none has a problem to report.
     expect(events).toMatchObject([
       { name: 'Closed issues go to Done', on: ['work_item.closed'], target: { phaseKey: 'done' }, problems: [] },
@@ -280,6 +292,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(await list(replicaA.send, base, MEMBER)).toEqual([
       expect.objectContaining({ id: route.id, name: 'Docs', enabled: true, revision: 1 }),
     ]);
+    expect((await replicaA.send('GET', base, undefined, MEMBER)).body).toMatchObject({ canEdit: false });
+    expect((await replicaA.send('GET', base)).body).toMatchObject({ canEdit: true });
   });
 
   it("hides another organization's project and refuses a signed-out request", async () => {
@@ -329,7 +343,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         body: { error },
       });
     }
-    const route = (await replicaA.send('POST', base, { name: 'Ok', target: { boardKey: 'work' } })).body
+    const route = (await replicaA.send('POST', base, { name: 'Ok', when: DOCS, target: { boardKey: 'work' } })).body
       .intakeRoute as Route;
     expect(route.target).toEqual({ boardKey: 'work', phaseKey: null, joinClosedIssue: false });
     // A card a pull request joins moves to any phase its board allows from where it is, so a
@@ -531,6 +545,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(placement).toMatchObject({ status: 422, body: { error: 'invalid_intake_route' } });
     expect(await list(replicaA.send, base)).toEqual([]);
+  });
+
+  it('saves a route sending a repository, team or project to a board, by any fact of the work item', async () => {
+    const { projectPath, base, replicaA } = await setup();
+    expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+    const when = {
+      operator: 'OR',
+      conditions: [
+        { field: 'source.repository', operator: 'equals', value: 'acme/app' },
+        {
+          operator: 'AND',
+          conditions: [
+            { field: 'source.provider', operator: 'equals', value: 'linear' },
+            { field: 'item.key', operator: 'contains', value: 'ENG-' },
+            { field: 'item.state', operator: 'not_equals', value: 'Backlog' },
+            { field: 'item.assignees', operator: 'contains', value: 'ada' },
+          ],
+        },
+      ],
+    };
+    const created = await replicaA.send('POST', base, { name: 'App and ENG', when, target: { boardKey: 'docs' } });
+
+    expect(created.status).toBe(201);
+    expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ name: 'App and ENG', when })]);
   });
 
   it('accepts a stored board as a target and reports the route once that board is gone', async () => {
