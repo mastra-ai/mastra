@@ -10,7 +10,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGithubRuleContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
-import { workItemBranch } from '../../work-item-branch.js';
+import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
 import { GithubAppIdentity } from './app-identity.js';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 import type { GithubRuleOverrides } from './default-rules.js';
@@ -3549,7 +3549,7 @@ describe('GithubRules', () => {
     });
   });
 
-  it('links an opened Review card to the work item named by the PR head branch when no session holds it', async () => {
+  it("links an outside author's PR to the work item named by its head branch, on a card of its own", async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await createLinkedIssue(workItems, project.id, ['execute']);
     const headBranch = workItemBranch({ id: work.id, source: 'github-issue', metadata: work.workItem.metadata });
@@ -3566,12 +3566,15 @@ describe('GithubRules', () => {
     opened.payload.pull_request.head.ref = headBranch;
 
     await service.ingest(opened);
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual([
       expect.objectContaining({
         workItemId: work.id,
         decision: expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr' }),
       }),
     ]);
+    // Only a trusted author's pull request joins the card; this one is filed beside it.
+    expect(decisions[0]!.decision).not.toHaveProperty('attachTo');
   });
 
   it('does not link a PR to a same-named branch card from another repository', async () => {
@@ -6244,6 +6247,49 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const own = cards.find(card => card.id !== issue.id)!;
       expect(own).toMatchObject({ board: 'work', stages: ['pr-review'] });
       expect(sourceTypes(own)).toEqual(['pull-request']);
+    });
+
+    const ownBranch = (card: Awaited<ReturnType<Awaited<ReturnType<typeof harness>>['issueCard']>>) =>
+      workItemBranch({
+        id: card.id,
+        source: workItemBranchSource(card.externalSource),
+        metadata: card.workItem.metadata,
+      });
+
+    it("files a maintainer's pull request from a card's own branch name on that card, and the merge finishes it", async () => {
+      const h = await harness('write');
+      // No session on the card holds the branch: the pull request was opened from one that only follows the card.
+      const issue = await h.issueCard(42, 'execute');
+      const branch = ownBranch(issue);
+
+      await h.ingest(openedPullRequest(17, 'Rate limits the API.', undefined, 'opened', false, branch));
+
+      let cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards[0]!.metadata).toMatchObject({ openPullRequestNumber: 17 });
+
+      await h.ingest(openedPullRequest(17, 'Rate limits the API.', 'delivery-merge-17', 'closed', true, branch));
+
+      cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['done'] });
+    });
+
+    it('files a pull request on neither card when two claim its branch', async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'execute');
+      const branch = ownBranch(issue);
+      const other = await h.issueCard(43, 'execute', {
+        work: { sessionId: 'session-43', branch, threadId: 'session-43' },
+      });
+
+      await h.ingest(openedPullRequest(17, 'Rate limits the API.', undefined, 'opened', false, branch));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(3);
+      expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+      expect(sourceTypes(cards.find(card => card.id === other.id)!)).toEqual(['issue']);
     });
 
     it('gives a pull request its own card when the issue it fixes is already Done', async () => {

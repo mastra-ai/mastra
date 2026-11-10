@@ -1208,7 +1208,7 @@ describe('FactoryTransitionService', () => {
       status: 'rejected',
       code: 'invalid_transition',
       reason:
-        'The Work board does not allow moving from pr-review to triage. Next stages declared from pr-review: intake, planning, execute, done, canceled.',
+        'A pull request card is reviewed on the Work board; it cannot enter triage. Move it to pr-review, done, or canceled.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['pr-review']);
   });
@@ -2603,16 +2603,34 @@ describe('pull request cards on the Work board', () => {
     });
   });
 
-  it('tells an agent moving a Review card with an open PR to PR review why it stays in Review', async () => {
+  it('tells an agent moving a card with no pull request to PR review why it cannot go there', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { board: 'work', stages: ['review'] });
+    // Building does not lead to PR review, so the board's graph alone would only say the move is undeclared.
+    const item = await createItem(storage, { board: 'work', stages: ['execute'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition(request(item, { stage: 'pr-review' }));
     expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     expect(result.status === 'rejected' && result.reason).toMatch(
-      /^PR review holds only pull request cards.*stays in Review while its pull request is open, and the merge moves it to Done\.$/,
+      /^PR review holds only cards with a pull request.*enters PR review once a pull request is attached to it, and the merge moves it to Done\.$/,
     );
+  });
+
+  it('moves a Review card to PR review once its pull request is attached to it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const created = await createItem(storage, { board: 'work', stages: ['review'] });
+    const item = (await storage.attachSource({
+      orgId: 'org-1',
+      id: created.id,
+      source: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:34' },
+      metadata: { githubPullRequestNumber: 34, state: 'open' },
+    }))!.item;
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(service.transition(request(item, { stage: 'pr-review' }))).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'pr-review',
+    });
   });
 
   it('keeps PR review for pull request cards: an issue card cannot enter it, nor a PR card self-review', async () => {
