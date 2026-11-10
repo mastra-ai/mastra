@@ -20,6 +20,12 @@ export type VectorizeVectorFilter = VectorFilter<
   VectorizeBlacklistedRootOperators
 >;
 
+/** Vectorize runs several operators on one field only as a single lower plus upper bound. */
+const isRangePair = (operators: string[]): boolean =>
+  operators.length === 2 &&
+  operators.filter(operator => operator === '$gt' || operator === '$gte').length === 1 &&
+  operators.filter(operator => operator === '$lt' || operator === '$lte').length === 1;
+
 export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
@@ -56,19 +62,25 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVec
   private mergeClauses(clauses: VectorizeVectorFilter[]): VectorizeVectorFilter {
     const merged: Record<string, Record<string, unknown>> = {};
     for (const clause of clauses) {
+      if (clause === null || clause === undefined) continue;
+      if (typeof clause !== 'object' || Array.isArray(clause)) {
+        throw new Error('Vectorize $and clause must be a filter object');
+      }
       if (this.isEmpty(clause)) continue;
       this.validateFilter(clause);
       const translated = this.translateNode(clause) as Record<string, Record<string, unknown>>;
       for (const [field, condition] of Object.entries(translated)) {
-        const existing = merged[field] ?? {};
-        for (const operator of Object.keys(condition)) {
-          if (operator in existing) {
-            throw new Error(
-              `Vectorize cannot combine $and clauses that use the same operator (${operator}) on ${field}`,
-            );
-          }
+        const operators = Object.keys({ ...merged[field], ...condition });
+        const combined = Object.keys(merged[field] ?? {}).length + Object.keys(condition).length;
+        if (merged[field] && (operators.length !== combined || !isRangePair(operators))) {
+          throw new Error(
+            `Vectorize $and clauses on ${field} can only combine one lower and one upper bound; got ${[
+              ...Object.keys(merged[field]),
+              ...Object.keys(condition),
+            ].join(', ')}`,
+          );
         }
-        merged[field] = { ...existing, ...condition };
+        merged[field] = { ...merged[field], ...condition };
       }
     }
     return merged as VectorizeVectorFilter;

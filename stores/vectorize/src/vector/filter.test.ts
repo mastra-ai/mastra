@@ -223,7 +223,35 @@ describe('VectorizeFilterTranslator', () => {
 
     it('rejects clauses that set the same operator on the same field', () => {
       const filter: any = { $and: [{ resource_id: 'user-1' }, { resource_id: 'user-2' }] };
-      expect(() => translator.translate(filter)).toThrow(/same operator/);
+      expect(() => translator.translate(filter)).toThrow(/Vectorize/);
+    });
+
+    it.each([
+      ['$eq with $in', [{ resource_id: 'u' }, { resource_id: { $in: ['u', 'v'] } }]],
+      ['$ne with $nin', [{ tag: { $ne: 'a' } }, { tag: { $nin: ['b'] } }]],
+      ['two lower bounds', [{ score: { $gt: 1 } }, { score: { $gte: 2 } }]],
+      ['two upper bounds', [{ score: { $lt: 9 } }, { score: { $lte: 8 } }]],
+    ])('rejects combining %s on one field, which Vectorize cannot run', (_name, clauses) => {
+      expect(() => translator.translate({ $and: clauses } as any)).toThrow(/Vectorize/);
+    });
+
+    it('accepts one lower and one upper bound on a field', () => {
+      const filter: any = { $and: [{ score: { $gte: 1 } }, { score: { $lte: 5 } }] };
+      expect(translator.translate(filter)).toEqual({ score: { $gte: 1, $lte: 5 } });
+    });
+
+    it.each([
+      ['an array', []],
+      ['an array of values', ['x']],
+      ['a number', 5],
+      ['a string', 'x'],
+    ])('rejects a clause that is %s', (_name, clause) => {
+      expect(() => translator.translate({ $and: [{ resource_id: 'u' }, clause] } as any)).toThrow(/clause/);
+    });
+
+    it('treats empty, null and undefined clauses as no condition', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, {}, null, undefined] };
+      expect(translator.translate(filter)).toEqual({ resource_id: { $eq: 'u' } });
     });
 
     it('still rejects $and clauses that use logical operators', () => {
