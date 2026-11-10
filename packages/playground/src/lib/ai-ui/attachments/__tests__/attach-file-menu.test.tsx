@@ -2,32 +2,30 @@ import { Composer } from '@mastra/playground-ui/components/Composer';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AttachFilePopover } from '../attach-file-popover';
+import { AttachFileMenu } from '../attach-file-menu';
 import { ComposerAttachments } from '../attachment';
 import { ComposerAttachmentsProvider } from '../composer-attachments';
 
 // The native picker is the only browser boundary; the real provider classifies the files.
-const pickLocalFiles = (files: File[]) => {
-  fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-  const input = document.querySelector<HTMLInputElement>('input[type="file"]');
-  if (!input) throw new Error('Native file picker input is missing');
-  fireEvent.change(input, { target: { files } });
+const pickLocalFiles = async (files: File[]) => {
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+  fireEvent.change(screen.getByLabelText('Files'), { target: { files } });
 };
 
-describe('AttachFilePopover', () => {
-  describe('when a spreadsheet is selected', () => {
-    it('attaches it and closes the popover', async () => {
+describe('AttachFileMenu', () => {
+  describe('when a spreadsheet is picked from Files', () => {
+    it('attaches it and closes the menu', async () => {
       render(
         <ComposerAttachmentsProvider>
-          <AttachFilePopover />
+          <AttachFileMenu />
           <ComposerAttachments />
         </ComposerAttachmentsProvider>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-      pickLocalFiles([new File(['binary'], 'leads.xlsx')]);
+      await pickLocalFiles([new File(['binary'], 'leads.xlsx')]);
 
       expect(await screen.findByRole('button', { name: 'Remove leads.xlsx' })).toBeTruthy();
-      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add a local file' })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Files' })).toBeNull());
     });
   });
 
@@ -37,12 +35,13 @@ describe('AttachFilePopover', () => {
       render(
         <ComposerAttachmentsProvider>
           <Composer onSubmit={sendMessage}>
-            <AttachFilePopover />
+            <AttachFileMenu />
           </Composer>
         </ComposerAttachmentsProvider>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-      const url = screen.getByRole('textbox', { name: 'Public URL' });
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
+      const url = await screen.findByRole('textbox', { name: 'Public URL' });
       fireEvent.change(url, { target: { value: 'not a url' } });
       fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
