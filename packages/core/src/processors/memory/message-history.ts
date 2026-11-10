@@ -321,6 +321,9 @@ export class MessageHistory implements Processor {
     // Don't persist an input-only failed turn: if the provider errored before
     // producing any output, saving the user message would orphan it in history.
     // A run that accepted the input before failing (e.g. cut off by its total deadline) keeps it.
+    // A message a person sent as a `user` signal is already stored before the first model
+    // request (see agent/save-accepted-user-signals.ts) and stays, so the chat can show the
+    // error next to it.
     if (result?.finishReason === 'error' && newOutput.length === 0 && !result.inputAccepted) {
       return messageList;
     }

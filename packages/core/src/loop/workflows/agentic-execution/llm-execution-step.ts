@@ -86,6 +86,7 @@ import {
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
   RESOURCE_ID_KEY,
+  SAVE_ACCEPTED_USER_SIGNALS_KEY,
   SUBSCRIBE_PENDING_SIGNALS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
@@ -2077,6 +2078,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.error('Error in processLLMRequest processors:', error);
             throw error;
           }
+
+          // After the last step processor hook that can still reject the message.
+          await readScoped(
+            scopeCtx,
+            SAVE_ACCEPTED_USER_SIGNALS_KEY,
+            'saveAcceptedUserSignals',
+          )?.(messageList.get.input.db(), currentStep.model);
 
           const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
           const omContinuationText = omContinuation?.content.parts
