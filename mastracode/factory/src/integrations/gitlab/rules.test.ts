@@ -3,6 +3,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 import { boundChangeRequestNumber, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { reviewBoard } from '../../boards/review.js';
+import { autoStartingBoards } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGitLabRuleContext } from '../../rules/types.js';
@@ -760,8 +761,7 @@ describe('GitLabRules', () => {
           boards,
         }),
         storage: seeded.workItems,
-        boards,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(boards),
         ownerId: 'worker-1',
       });
       // Run the dispatcher's poll tick right after the push's re-review
@@ -1058,8 +1058,7 @@ describe('merge request cards on the Work board', () => {
         boards,
       }),
       storage: base.seeded.workItems,
-      boards,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(boards),
       ownerId: 'worker-1',
     });
     let tick = 0;
@@ -1267,9 +1266,8 @@ describe('GitLab board events', () => {
         boards: createBoardRegistry(),
       }),
       storage: base.seeded.workItems,
-      boards: createBoardRegistry(),
+      boards: autoStartingBoards(createBoardRegistry()),
       intakeRoutes: base.seeded.boards,
-      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
     let tick = 0;
@@ -1455,9 +1453,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         controller: { getSession: vi.fn(async () => undefined) } as never,
         transitionService,
         storage: base.seeded.workItems,
-        boards,
+        boards: autoStartingBoards(boards),
         intakeRoutes: base.seeded.boards,
-        isAutoRunEnabled: async () => true,
         ownerId: 'worker-1',
       });
       let tick = 0;

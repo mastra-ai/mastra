@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardTransitionPolicy } from '../boards/index.js';
 import { createBoardRegistry, defineBoard, workItemPhaseSemantics } from '../boards/index.js';
+import { autoStartingBoards } from '../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { createTerminalStageCleanup } from './terminal-cleanup.js';
@@ -88,10 +89,9 @@ async function setup(options: { reject?: boolean } = {}) {
   };
   const dispatcher = new FactoryDecisionDispatcher({
     storage,
-    boards,
+    boards: autoStartingBoards(boards),
     transitionService: service,
     controller: {} as never,
-    isAutoRunEnabled: async () => true,
   });
   return {
     storage,

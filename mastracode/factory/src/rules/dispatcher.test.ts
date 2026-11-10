@@ -12,6 +12,7 @@ import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js'
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
 import {
+  autoStartingBoards,
   commitDecisions,
   createLifecycleTestRegistry,
   createTestBoard,
@@ -307,7 +308,8 @@ async function goalAgent() {
 async function queueDecision(
   storage: WorkItemsStorage,
   decision: FactoryCommitDecision,
-  options?: { sourceKey?: string; ingress?: string },
+  // `armed`: a person started the card, so a run outside an auto-starting phase needs no approval.
+  options?: { sourceKey?: string; ingress?: string; armed?: boolean },
 ) {
   const item = await createItem(storage, options?.sourceKey);
   const configVersion = 'rules-v1';
@@ -325,6 +327,7 @@ async function queueDecision(
     configVersion,
   });
   expect(result.status).toBe('committed');
+  if (options?.armed) await armItem(storage, item.id);
   return { item, transitionService };
 }
 
@@ -455,7 +458,6 @@ describe('FactoryDecisionDispatcher', () => {
         transitionService,
         audit: seed.audit,
         prepareBinding,
-        isAutoRunEnabled: async () => false,
       });
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
       const proposed = (await storage.listDeferredDecisions('org-1', PROJECT_ID))[0];
@@ -517,7 +519,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       transitionService,
       audit: seed.audit,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
@@ -537,7 +539,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       reconcileToolResults,
@@ -561,7 +563,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       reconcileToolResults,
@@ -596,7 +598,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       staleBindingSweepIntervalMs: 10 * 60_000,
@@ -632,7 +634,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       staleBindingSweepIntervalMs: 10 * 60_000,
@@ -680,7 +682,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       reconcileToolResults,
@@ -899,7 +901,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -929,7 +931,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, sendNotificationSignal } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -976,7 +978,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -1022,7 +1024,7 @@ describe('FactoryDecisionDispatcher', () => {
     Object.assign(session, { machinery: { getAgent: () => agent } });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -1085,7 +1087,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -1128,7 +1130,6 @@ describe('FactoryDecisionDispatcher', () => {
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -1185,7 +1186,7 @@ describe('FactoryDecisionDispatcher', () => {
       const renew = vi.spyOn(storage, 'renewDeferredDecisionLease');
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1245,7 +1246,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1327,7 +1328,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1421,7 +1422,7 @@ describe('FactoryDecisionDispatcher', () => {
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -1521,7 +1522,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -1586,7 +1587,7 @@ describe('FactoryDecisionDispatcher', () => {
       // delivered onto the same run. When that run finally dies, the verdict
       // is the work decision's — the plan did what it was for.
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-handed-on'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-handed-on'), { armed: true });
       const { controller, emitAgentEnd, session } = createSession(undefined, {
         // The kickoff wakes a run that keeps going; this test ends it by hand.
         signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
@@ -1594,7 +1595,7 @@ describe('FactoryDecisionDispatcher', () => {
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1635,14 +1636,16 @@ describe('FactoryDecisionDispatcher', () => {
           }
           return bindings;
         });
-        const { item, transitionService } = await queueDecision(storage, planSkill('plan-error-before-hand-on'));
+        const { item, transitionService } = await queueDecision(storage, planSkill('plan-error-before-hand-on'), {
+          armed: true,
+        });
         const { controller, emitAgentEnd, session } = createSession(undefined, {
           signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
         });
         await bindRole(storage, item.id, 'plan');
         const dispatcher = new FactoryDecisionDispatcher({
           controller: controller as never,
-          isAutoRunEnabled: async () => true,
+          boards: autoStartingBoards(),
           transitionService,
           storage,
           ownerId: 'worker-1',
@@ -1669,14 +1672,14 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('completes a retry for a plan seat that Build already replaced without minting a new seat', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-stale-retry'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-stale-retry'), { armed: true });
       const { controller, session } = createSession();
       await bindRole(storage, item.id, 'plan');
       await bindRole(storage, item.id, 'work');
       const prepareBinding = vi.fn(async () => {});
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1695,7 +1698,9 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('does not treat a matching session on another resource as a successor', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-other-resource'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-other-resource'), {
+        armed: true,
+      });
       const stale = await bindRole(storage, item.id, 'plan');
       await storage.revokeRunBinding({
         orgId: 'org-1',
@@ -1710,7 +1715,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1732,7 +1737,7 @@ describe('FactoryDecisionDispatcher', () => {
       // card came back) must not be written off by that old handoff: its seat
       // gets prepared and the kickoff goes out.
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-second-pass'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-second-pass'), { armed: true });
       // The earlier hand-on: plan seat revoked before this decision existed,
       // work seat live on the shared session since.
       const stale = await bindRole(storage, item.id, 'plan');
@@ -1749,7 +1754,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1768,7 +1773,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('still fails when the plan seat was revoked with nobody taking the session over', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-orphaned'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-orphaned'), { armed: true });
       const { controller } = createSession();
       const binding = await bindRole(storage, item.id, 'plan');
       await storage.revokeRunBinding({
@@ -1779,7 +1784,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1800,7 +1805,7 @@ describe('FactoryDecisionDispatcher', () => {
       // must settle as superseded rather than flap through session_unavailable
       // retries and page a person on a finished card.
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-terminal'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-terminal'), { armed: true });
       const { controller } = createSession();
       const binding = await bindRole(storage, item.id, 'plan');
       await storage.revokeRunBinding({
@@ -1824,7 +1829,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1840,12 +1845,12 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('still fails when the run ends in error with the plan seat intact', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-real-error'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-real-error'), { armed: true });
       const { controller } = createSession(undefined, { agentEndReason: 'error' });
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1861,7 +1866,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('fails terminally when an abort follows a permanent OM provider rejection', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-permanent'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-permanent'), { armed: true });
       const { controller } = createSession(undefined, {
         agentEndReason: 'aborted',
         omObservationError: 'HTTP 400: model not supported with ChatGPT account',
@@ -1869,7 +1874,7 @@ describe('FactoryDecisionDispatcher', () => {
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1886,7 +1891,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('surfaces the real OM error but stays retryable for an ambiguous abort', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-transient'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-transient'), { armed: true });
       const { controller } = createSession(undefined, {
         agentEndReason: 'aborted',
         omObservationError: 'network timeout while observing',
@@ -1894,7 +1899,7 @@ describe('FactoryDecisionDispatcher', () => {
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1910,7 +1915,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('stays retryable when a bare 400 appears without HTTP status context', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-bare-400'));
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-bare-400'), { armed: true });
       const { controller } = createSession(undefined, {
         agentEndReason: 'aborted',
         omObservationError: 'observation retry failed after 400 attempts',
@@ -1918,7 +1923,7 @@ describe('FactoryDecisionDispatcher', () => {
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -1953,7 +1958,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2005,7 +2010,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session } = createSession(undefined, { initialDeliveredSignalIds: [decision!.id] });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2051,7 +2056,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2098,7 +2103,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2147,7 +2152,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2256,7 +2261,7 @@ describe('FactoryDecisionDispatcher', () => {
     observeSessionRunEnd(session, { audit: seed.audit });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       audit: seed.audit,
@@ -2340,7 +2345,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService: new FactoryTransitionService({
           storage,
           configVersion: 'rules-v1',
@@ -2430,7 +2435,7 @@ describe('FactoryDecisionDispatcher', () => {
       observeSessionRunEnd(session, { audit: seed.audit });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         audit: seed.audit,
@@ -2486,7 +2491,7 @@ describe('FactoryDecisionDispatcher', () => {
         observeSessionRunEnd(session, { audit: seed.audit });
         const dispatcher = new FactoryDecisionDispatcher({
           controller: controller as never,
-          isAutoRunEnabled: async () => true,
+          boards: autoStartingBoards(),
           transitionService,
           storage,
           audit: seed.audit,
@@ -2564,7 +2569,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2619,7 +2624,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -2684,7 +2689,7 @@ describe('FactoryDecisionDispatcher', () => {
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -2752,7 +2757,7 @@ describe('FactoryDecisionDispatcher', () => {
       const heartbeat = FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs;
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -2814,7 +2819,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2868,7 +2873,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2935,7 +2940,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -2991,7 +2996,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3050,7 +3055,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3076,7 +3081,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3094,12 +3099,14 @@ describe('FactoryDecisionDispatcher', () => {
     const { storage, item, transitionService } = await prepareDeliverScenario('skill-card-moved-before-retry');
     await new Promise(resolve => setTimeout(resolve, 5));
     await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    // Started by a person, so the decision isn't held for approval in a phase that can't auto-start.
+    await armItem(storage, item.id);
     const { controller, session } = createSession(undefined, {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3160,7 +3167,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3187,7 +3194,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session, abort, sendNotificationSignal } = createSession(undefined, { streamActive: true });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3222,7 +3229,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3241,13 +3248,17 @@ describe('FactoryDecisionDispatcher', () => {
     // Decided while the card sat outside the plan seat's stages, like a held
     // triage run in Intake that Investigate approves and moves into Triage.
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'plan',
-      skillName: 'understand-issue',
-      arguments: 'Issue 42',
-      idempotencyKey: 'skill-held-then-moved-in',
-    });
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'plan',
+        skillName: 'understand-issue',
+        arguments: 'Issue 42',
+        idempotencyKey: 'skill-held-then-moved-in',
+      },
+      { armed: true },
+    );
     await new Promise(resolve => setTimeout(resolve, 5));
     await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
     await storage.prepareRunStart({
@@ -3273,7 +3284,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3320,7 +3331,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3350,7 +3361,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3408,10 +3419,9 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
       transitionService,
       storage,
-      boards,
+      boards: autoStartingBoards(boards),
       ownerId: 'worker-1',
     });
 
@@ -3434,7 +3444,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3482,7 +3492,7 @@ describe('FactoryDecisionDispatcher', () => {
     }));
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -3517,7 +3527,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -3557,7 +3566,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -3609,7 +3617,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -3654,7 +3661,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -3728,7 +3734,6 @@ describe('FactoryDecisionDispatcher', () => {
         storage,
         boards,
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => false,
       });
 
       await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -3766,7 +3771,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -3802,7 +3806,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -3854,7 +3857,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -3893,7 +3895,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       boards,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -3942,7 +3943,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
     const start = new Date('2030-01-01T00:01:00Z');
 
@@ -3962,7 +3962,7 @@ describe('FactoryDecisionDispatcher', () => {
 
   // Trust decides only where a card arrives (the default intake route keeps outside work in Intake).
   // Once a person has armed a card, its runs start like any other card's.
-  it('runs an externally authored card a person armed, with auto-run on', async () => {
+  it('runs an externally authored card a person armed, on a board whose phases start on their own', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({
@@ -4005,7 +4005,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -4062,7 +4062,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -4071,7 +4070,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
-  it('runs a GitHub card missing its trust stamp a person armed, with auto-run on', async () => {
+  it('runs a GitHub card missing its trust stamp a person armed, on a board whose phases start on their own', async () => {
     // Cards created before arrival stamps existed carry no `authorTrusted`; the default intake
     // route treats that as untrusted at arrival, and a person's arming releases it like any card.
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -4114,7 +4113,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -4128,7 +4127,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
-  it("lets the Factory's own pull request run under auto-run despite its untrusted bot author", async () => {
+  it("lets the Factory's own pull request run where the phase starts on its own, despite its untrusted bot author", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({
@@ -4169,7 +4168,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
@@ -4241,7 +4240,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
@@ -4264,8 +4262,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-      boards: plansAutoApprovedBoards(),
+      boards: autoStartingBoards(plansAutoApprovedBoards()),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4293,7 +4290,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4320,7 +4317,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4345,8 +4342,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-      boards: plansAutoApprovedBoards(),
+      boards: autoStartingBoards(plansAutoApprovedBoards()),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4367,8 +4363,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService: person.transitionService,
       storage: personStorage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-      boards: plansAutoApprovedBoards(),
+      boards: autoStartingBoards(plansAutoApprovedBoards()),
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(personSession.session.respondToToolSuspension).not.toHaveBeenCalled();
@@ -4384,7 +4379,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4404,7 +4398,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
       boards: plansAutoApprovedBoards(),
     });
 
@@ -4427,7 +4420,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4451,7 +4443,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4475,8 +4467,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-      boards: plansAutoApprovedBoards(),
+      boards: autoStartingBoards(plansAutoApprovedBoards()),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4500,7 +4491,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4543,7 +4533,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4637,7 +4626,6 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4658,7 +4646,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, sendNotificationSignal } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4703,7 +4691,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSession: vi.fn(async () => undefined), listActiveThreadRuns: vi.fn(() => []) },
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4748,7 +4736,7 @@ describe('FactoryDecisionDispatcher', () => {
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4810,7 +4798,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4863,7 +4851,7 @@ describe('FactoryDecisionDispatcher', () => {
     }));
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4912,7 +4900,7 @@ describe('FactoryDecisionDispatcher', () => {
     }));
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4931,12 +4919,16 @@ describe('FactoryDecisionDispatcher', () => {
 
   it('prepares a missing binding before dispatching a rule-driven skill', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'understand-issue',
-      idempotencyKey: 'skill-auto-start',
-    });
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'triage',
+        skillName: 'understand-issue',
+        idempotencyKey: 'skill-auto-start',
+      },
+      { armed: true },
+    );
     const { controller, session } = createSession();
     const prepareBinding = vi.fn(async () => {
       await storage.prepareRunStart({
@@ -4962,7 +4954,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -4982,12 +4974,16 @@ describe('FactoryDecisionDispatcher', () => {
 
   it('recreates a missing controller session before dispatching to an active binding', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'understand-issue',
-      idempotencyKey: 'skill-session-recovery',
-    });
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'triage',
+        skillName: 'understand-issue',
+        idempotencyKey: 'skill-session-recovery',
+      },
+      { armed: true },
+    );
     await storage.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
@@ -5034,7 +5030,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5055,12 +5051,16 @@ describe('FactoryDecisionDispatcher', () => {
 
   it('does not deliver a skill kickoff twice after completion ambiguity', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'understand-issue',
-      idempotencyKey: 'skill-ambiguity',
-    });
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'triage',
+        skillName: 'understand-issue',
+        idempotencyKey: 'skill-ambiguity',
+      },
+      { armed: true },
+    );
     await storage.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
@@ -5086,7 +5086,7 @@ describe('FactoryDecisionDispatcher', () => {
     vi.spyOn(storage, 'completeDeferredDecision').mockRejectedValueOnce(new Error('database unavailable'));
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5136,7 +5136,7 @@ describe('FactoryDecisionDispatcher', () => {
     vi.spyOn(storage, 'completeDeferredDecision').mockRejectedValueOnce(new Error('database unavailable'));
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5198,7 +5198,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5245,7 +5245,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5319,7 +5319,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5388,7 +5388,7 @@ describe('FactoryDecisionDispatcher', () => {
       const { controller } = createSession();
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -5470,7 +5470,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService: recoveringTransition,
       storage,
       ownerId: 'worker-1',
@@ -5557,7 +5557,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5633,7 +5633,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5698,7 +5698,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5762,7 +5762,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5820,7 +5820,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5873,7 +5873,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5919,7 +5919,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, sendNotificationSignal } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -5978,7 +5978,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6025,7 +6025,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6087,7 +6087,7 @@ describe('FactoryDecisionDispatcher', () => {
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6097,7 +6097,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     const restarted = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-2',
@@ -6134,7 +6134,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6159,7 +6159,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6182,7 +6182,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6212,7 +6212,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6237,7 +6237,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService,
         storage,
         ownerId: 'worker-1',
@@ -6273,7 +6273,7 @@ describe('FactoryDecisionDispatcher', () => {
       const { controller, delivered } = createSession();
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
         storage,
         ownerId: 'worker-1',
@@ -6411,7 +6411,7 @@ describe('FactoryDecisionDispatcher', () => {
         const { controller } = createSession();
         const dispatcher = new FactoryDecisionDispatcher({
           controller: controller as never,
-          isAutoRunEnabled: async () => true,
+          boards: autoStartingBoards(),
           transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
           storage,
           ownerId: 'worker-1',
@@ -6506,9 +6506,8 @@ describe('custom-board deferred targets', () => {
     return new FactoryDecisionDispatcher({
       controller: createSession().controller as never,
       storage,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({ storage, boards, configVersion }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'custom-worker',
     });
   }
@@ -6922,10 +6921,9 @@ describe('custom-board deferred targets', () => {
     });
     await new FactoryDecisionDispatcher({
       storage,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: service,
       controller: createSession().controller as never,
-      isAutoRunEnabled: async () => true,
     }).runOnce();
     expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
       status: 'retry',
@@ -7076,7 +7074,7 @@ describe('run-end backstop report', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       ...(reportRunEnd ? { reportRunEnd } : {}),
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7143,7 +7141,7 @@ describe('run-end backstop report', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       reportRunEnd,
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7167,7 +7165,7 @@ describe('run-end backstop report', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       reportRunEnd,
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7213,7 +7211,7 @@ describe('run-end backstop report', () => {
     const fake = createSession(undefined, sessionOptions);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: fake.controller as never,
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -7274,7 +7272,7 @@ describe('a skill run that ends in error (#27740)', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       // The clock jumps hours between attempts; keep the sweep from revoking the seat meanwhile.
       staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
     });
@@ -7331,7 +7329,7 @@ describe('a skill run that ends in error (#27740)', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
     });
     const start = Date.parse('2030-01-01T00:00:00Z');
@@ -7371,7 +7369,7 @@ describe('a skill run that ends in error (#27740)', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7403,7 +7401,7 @@ describe('a skill run that ends in error (#27740)', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7443,7 +7441,7 @@ describe('a skill run that ends in error (#27740)', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7482,7 +7480,7 @@ describe('a skill run that ends in error (#27740)', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7509,7 +7507,7 @@ describe('a skill run that ends in error (#27740)', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7539,7 +7537,7 @@ describe('a skill run that ends in error (#27740)', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -7601,7 +7599,6 @@ describe('board phase automation', () => {
         storage,
         boards,
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => false,
       }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe(expected);
@@ -7633,7 +7630,6 @@ describe('board phase automation', () => {
         storage,
         boards,
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => false,
       }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe(expected);
@@ -7655,9 +7651,8 @@ describe('board phase automation', () => {
       controller: controller as never,
       transitionService,
       storage,
-      boards: boardsWithBuilding({ autoStart: true }),
+      boards: autoStartingBoards(boardsWithBuilding({ autoStart: true })),
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
@@ -7678,9 +7673,8 @@ describe('board phase automation', () => {
         controller: controller as never,
         transitionService,
         storage,
-        boards,
+        boards: autoStartingBoards(boards),
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => true,
       }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
       if (approved) {
@@ -7803,12 +7797,16 @@ describe('review status comment lifecycle', () => {
 
   async function reviewRun(key: string, sessionOptions: Parameters<typeof createSession>[1] = {}) {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const queued = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'review',
-      prompt: 'Review this pull request.',
-      idempotencyKey: key,
-    });
+    const queued = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'review',
+        prompt: 'Review this pull request.',
+        idempotencyKey: key,
+      },
+      { armed: true },
+    );
     await bindReviewRun(storage, queued.item.id);
     const conversation = pullRequestConversation();
     const dispatch = async (options: Parameters<typeof createSession>[1], at: Date) => {
@@ -7818,7 +7816,7 @@ describe('review status comment lifecycle', () => {
         transitionService: queued.transitionService,
         storage,
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         reportReviewStatus: conversation.reportReviewStatus,
       }).runOnce(at);
     };
@@ -7877,12 +7875,16 @@ describe('review status comment lifecycle', () => {
 
   it('cancels the status when the card moves on before the review starts', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'review',
-      prompt: 'Review this pull request.',
-      idempotencyKey: 'review-status-cancelled',
-    });
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'review',
+        prompt: 'Review this pull request.',
+        idempotencyKey: 'review-status-cancelled',
+      },
+      { armed: true },
+    );
     await bindReviewRun(storage, item.id);
     await new Promise(resolve => setTimeout(resolve, 5));
     // Planning: a lane the reviewer does not work (Review and PR review both run in its context).
@@ -7894,7 +7896,7 @@ describe('review status comment lifecycle', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       reportReviewStatus,
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
@@ -7950,12 +7952,16 @@ describe('review status comment lifecycle', () => {
     });
     const run = async (skillName: string, stage: string) => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const queued = await queueDecision(storage, {
-        type: 'invokeSkill',
-        role: 'review',
-        skillName,
-        idempotencyKey: `review-status-ship-${skillName}`,
-      });
+      const queued = await queueDecision(
+        storage,
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          skillName,
+          idempotencyKey: `review-status-ship-${skillName}`,
+        },
+        { armed: true },
+      );
       await bindReviewRun(storage, queued.item.id);
       await storage.update({
         orgId: 'org-1',
@@ -7968,9 +7974,8 @@ describe('review status comment lifecycle', () => {
         controller: createSession(undefined, { agentEndReason: 'complete' }).controller as never,
         transitionService: queued.transitionService,
         storage,
-        boards: createBoardRegistry({ boards: [ship] }),
+        boards: autoStartingBoards(createBoardRegistry({ boards: [ship] })),
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => true,
         reportReviewStatus,
       }).runOnce(new Date('2030-01-01T00:00:00Z'));
       return reportReviewStatus;
@@ -7982,12 +7987,16 @@ describe('review status comment lifecycle', () => {
 
   it('leaves non-review runs alone and never lets a status failure fail the review', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'work',
-      prompt: 'Continue work.',
-      idempotencyKey: 'review-status-work-role',
-    });
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'work',
+        prompt: 'Continue work.',
+        idempotencyKey: 'review-status-work-role',
+      },
+      { armed: true },
+    );
     await bindWorkRun(storage, item.id);
     const reportReviewStatus = vi.fn(async () => {});
     const { controller } = createSession(undefined, { agentEndReason: 'complete' });
@@ -7996,7 +8005,7 @@ describe('review status comment lifecycle', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       reportReviewStatus,
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
     expect(reportReviewStatus).not.toHaveBeenCalled();
@@ -8005,12 +8014,16 @@ describe('review status comment lifecycle', () => {
     // card sits on an older project's Work, the board that still has a self-review phase.
     const selfReview = await (async () => {
       const store = (await createFactoryStorageForTests()).workItems;
-      const queued = await queueDecision(store, {
-        type: 'invokeSkill',
-        role: 'review',
-        skillName: 'factory-self-review',
-        idempotencyKey: 'review-status-self-review',
-      });
+      const queued = await queueDecision(
+        store,
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          skillName: 'factory-self-review',
+          idempotencyKey: 'review-status-self-review',
+        },
+        { armed: true },
+      );
       await bindReviewRun(store, queued.item.id);
       return { store, queued };
     })();
@@ -8019,9 +8032,8 @@ describe('review status comment lifecycle', () => {
       controller: createSession(undefined, { agentEndReason: 'complete' }).controller as never,
       transitionService: selfReview.queued.transitionService,
       storage: selfReview.store,
-      boards: new Map([['work', selfReviewWorkBoard]]),
+      boards: autoStartingBoards(new Map([['work', selfReviewWorkBoard]])),
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
       reportReviewStatus: selfReviewStatus,
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
     expect(selfReviewStatus).not.toHaveBeenCalled();
@@ -8029,12 +8041,16 @@ describe('review status comment lifecycle', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const failing = await (async () => {
       const store = (await createFactoryStorageForTests()).workItems;
-      const queued = await queueDecision(store, {
-        type: 'invokeSkill',
-        role: 'review',
-        prompt: 'Review this pull request.',
-        idempotencyKey: 'review-status-port-down',
-      });
+      const queued = await queueDecision(
+        store,
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          prompt: 'Review this pull request.',
+          idempotencyKey: 'review-status-port-down',
+        },
+        { armed: true },
+      );
       await bindReviewRun(store, queued.item.id);
       const session = createSession(undefined, { agentEndReason: 'complete' });
       await new FactoryDecisionDispatcher({
@@ -8042,7 +8058,7 @@ describe('review status comment lifecycle', () => {
         transitionService: queued.transitionService,
         storage: store,
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         reportReviewStatus: async () => {
           throw new Error('GitHub is down');
         },
@@ -8056,12 +8072,16 @@ describe('review status comment lifecycle', () => {
   /** A worker claimed the review, delivered its kickoff and said `reviewing`, then was lost. */
   async function lostReview(key: string) {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const queued = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'review',
-      prompt: 'Review this pull request.',
-      idempotencyKey: key,
-    });
+    const queued = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'review',
+        prompt: 'Review this pull request.',
+        idempotencyKey: key,
+      },
+      { armed: true },
+    );
     await bindReviewRun(storage, queued.item.id);
     const lostAt = new Date('2030-01-01T00:00:00Z');
     const [lost] = await storage.claimDeferredDecisions({
@@ -8096,7 +8116,7 @@ describe('review status comment lifecycle', () => {
         transitionService: queued.transitionService,
         storage,
         ownerId,
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         reportReviewStatus: conversation.reportReviewStatus,
         ...options,
       }).runOnce(at);
@@ -8134,7 +8154,7 @@ describe('review status comment lifecycle', () => {
       transitionService,
       storage,
       ownerId: 'worker-2',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       reportReviewStatus: conversation.reportReviewStatus,
     })
       .runOnce(new Date(lostAt.getTime() + 2_000))
@@ -8185,12 +8205,16 @@ describe('review status comment lifecycle', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const queued = await queueDecision(storage, {
-        type: 'invokeSkill',
-        role: 'review',
-        prompt: 'Review this pull request.',
-        idempotencyKey: 'review-status-hung',
-      });
+      const queued = await queueDecision(
+        storage,
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          prompt: 'Review this pull request.',
+          idempotencyKey: 'review-status-hung',
+        },
+        { armed: true },
+      );
       await bindReviewRun(storage, queued.item.id);
       let releaseReviewing!: () => void;
       const reviewingHeld = new Promise<void>(resolve => (releaseReviewing = resolve));
@@ -8206,7 +8230,7 @@ describe('review status comment lifecycle', () => {
         transitionService: queued.transitionService,
         storage,
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         reportReviewStatus,
       }).runOnce();
 
@@ -8246,12 +8270,16 @@ describe('review status comment lifecycle', () => {
 
   it('never reports a review handed on mid-run as finished, even when the cancellation write fails', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const queued = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'review',
-      prompt: 'Review this pull request.',
-      idempotencyKey: 'review-status-handed-on',
-    });
+    const queued = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'review',
+        prompt: 'Review this pull request.',
+        idempotencyKey: 'review-status-handed-on',
+      },
+      { armed: true },
+    );
     await bindReviewRun(storage, queued.item.id);
     const conversation = pullRequestConversation();
     const reportReviewStatus = vi.fn(async (event: FactoryReviewStatusEvent) => {
@@ -8268,7 +8296,7 @@ describe('review status comment lifecycle', () => {
         transitionService: queued.transitionService,
         storage,
         ownerId: 'worker-1',
-        isAutoRunEnabled: async () => true,
+        boards: autoStartingBoards(),
         reportReviewStatus,
       }).runOnce(new Date('2030-01-01T00:00:00Z'));
       await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
@@ -8286,12 +8314,16 @@ describe('review status comment lifecycle', () => {
 
   it('reports a review handed on mid-run as cancelled when the shared run ends cleanly', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const queued = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'review',
-      prompt: 'Review this pull request.',
-      idempotencyKey: 'review-status-handed-on-clean',
-    });
+    const queued = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'review',
+        prompt: 'Review this pull request.',
+        idempotencyKey: 'review-status-handed-on-clean',
+      },
+      { armed: true },
+    );
     await bindReviewRun(storage, queued.item.id);
     const conversation = pullRequestConversation();
     const { controller, emitAgentEnd, session } = createSession(undefined, {
@@ -8302,7 +8334,7 @@ describe('review status comment lifecycle', () => {
       transitionService: queued.transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
+      boards: autoStartingBoards(),
       reportReviewStatus: conversation.reportReviewStatus,
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
     await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
@@ -8386,9 +8418,8 @@ describe('phase goals', () => {
       controller: fake.controller as never,
       transitionService,
       storage,
-      boards,
+      boards: autoStartingBoards(boards),
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
     });
     return { storage, item, transitionService, dispatcher, ...fake };
   }

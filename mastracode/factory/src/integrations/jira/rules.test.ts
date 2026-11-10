@@ -51,7 +51,6 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
       configVersion: 'factory-config-v1',
     }),
     intakeRoutes: seeded.boards,
-    isAutoRunEnabled: async () => false,
     ownerId: 'jira-rules-test',
   });
   /** Files every committed decision, as the dispatcher's poll would. */

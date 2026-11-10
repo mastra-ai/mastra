@@ -5,7 +5,7 @@
  * The endpoint is a constrained ingress in front of
  * `WorkItemsStorage.commitRuleEvaluation()`: it commits exactly one
  * `invokeSkill` decision, stamps a non-human system actor, and leaves
- * execution (session creation, auto-run/approval policy, retry, restart
+ * execution (session creation, the board's approval policy, retry, restart
  * recovery) to the `FactoryDecisionDispatcher`.
  *
  * Idempotency: the `requestId` becomes the ingress identity, so replaying the

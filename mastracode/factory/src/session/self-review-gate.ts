@@ -6,7 +6,6 @@ import type { BoardRegistry } from '../boards/registry.js';
 import { cardBoardFlow, isPullRequestCard } from '../boards/semantics.js';
 import { resolveFactorySessionAddress } from '../rules/binding-context.js';
 import { workItemSource } from '../rules/types.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /**
@@ -17,10 +16,9 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 export async function selfReviewApprovedHead(options: {
   requestContext: RequestContext | undefined;
   workItems: WorkItemsStorage;
-  projects: FactoryProjectsStorage;
   boards: BoardRegistry | ProjectBoardSource;
 }): Promise<string | null | undefined> {
-  const { requestContext, workItems, projects } = options;
+  const { requestContext, workItems } = options;
   const resolution = await resolveFactorySessionAddress({ requestContext, storage: workItems });
   if (!resolution) return undefined;
   const binding = resolution.binding ?? (await workItems.findActiveRunBinding(resolution.address));
@@ -32,12 +30,6 @@ export async function selfReviewApprovedHead(options: {
   // A pull request's own card is reviewed, never self-reviewed.
   if (isPullRequestCard({ source: workItemSource(item.externalSource) })) return undefined;
   if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
-  // A verdict already recorded still binds the change request to its head.
-  if (item.metadata?.selfReviewVerdict === undefined) {
-    await projects.ensureReady();
-    const project = await projects.get({ orgId: binding.orgId, id: binding.factoryProjectId });
-    if (!project?.selfReviewEnabled) return undefined;
-  }
   const sha = item.metadata?.selfReviewedHeadSha;
   return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string' ? sha : null;
 }
