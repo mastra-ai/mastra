@@ -186,14 +186,17 @@ describe.each(Object.entries(PROVIDERS))('T4 background tools · %s', (provider,
             expect(repairs.repaired.length).toBe(repairs.ended.length);
             // Only the untilIdle follow-up request ends on an assistant turn, the shape that trips
             // Anthropic's prefill guard. A foreground or awaited call hands its result to the model
-            // inside the run, so no follow-up is sent (#29679). A deferred task gets one only when it
-            // finished after the run's last model request, which depends on timing.
+            // inside the run, so no follow-up is sent (#29679). A deferred task gets one when it
+            // finished after the run's last model request, as it does in these recordings except on
+            // evented, so those cells keep the repair check from passing with nothing to repair.
+            if (variant === 'deferred' && engine !== 'evented') expect(rejected.length).toBeGreaterThan(0);
             if (variant !== 'deferred') expect(rejected).toEqual([]);
           } else {
             expect(repairs.ended).toEqual([]);
             expect(recorder.requests.every(request => request.status === 200)).toBe(true);
             // The control: an OpenAI request ending on an assistant turn is accepted as-is (200) and
-            // is not pre-repaired. As above, only a deferred task can produce one.
+            // is not pre-repaired. As above, only a deferred task produces one.
+            if (variant === 'deferred') expect(endedByProvider.accepted.length).toBeGreaterThan(0);
             if (variant !== 'deferred') expect(endedByProvider.accepted).toEqual([]);
             for (const { i } of endedByProvider.accepted) {
               expect(recorder.requests[i]!.status).toBe(200);
