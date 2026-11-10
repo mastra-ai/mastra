@@ -8,13 +8,13 @@ import type { RoleDefinition } from '@mastra/core/auth/ee';
 import { StaticRBACProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { SimpleAuth } from '@mastra/core/server';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { MastraServer } from '@mastra/hono';
 import { LibSQLStore } from '@mastra/libsql';
 import { Hono } from 'hono';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { MastraEditor } from './index';
-import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 
 type User = { id: string; role: string };
 
