@@ -157,6 +157,15 @@ export function jwtAudienceIncludes(aud: unknown, audience: string): boolean {
   return Array.isArray(aud) ? aud.includes(audience) : aud === audience;
 }
 
+/**
+ * JWT claims as the authenticated user. OIDC tokens name the user in `sub`, while RBAC and FGA look the user up
+ * by `id`, so `id` is filled from `sub` when the token has no `id` claim of its own.
+ */
+export function withSubjectAsId<T extends object>(claims: T): T {
+  const { sub, id } = claims as { sub?: unknown; id?: unknown };
+  return id == null && typeof sub === 'string' && sub ? { ...claims, id: sub } : claims;
+}
+
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {
   public protected?: MastraAuthConfig['protected'];
   public public?: MastraAuthConfig['public'];

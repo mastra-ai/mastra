@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { MastraJwtAuth } from '@mastra/auth';
+import { StaticRBACProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import type { ServerConfig, ServerMCPOAuthConfig } from '@mastra/core/server';
 import { createTool } from '@mastra/core/tools';
@@ -35,10 +36,9 @@ async function startJwks() {
   return {
     jwksUri: `http://127.0.0.1:${port}/.well-known/jwks.json`,
     sign: (claims: JWTPayload, expiresIn: string | number = '5m') =>
-      new SignJWT(claims)
+      new SignJWT({ sub: 'user-1', ...claims })
         .setProtectedHeader({ alg: 'RS256', kid: KID })
         .setIssuer(ISSUER)
-        .setSubject('user-1')
         .setIssuedAt()
         .setExpirationTime(expiresIn)
         .sign(privateKey),
@@ -200,6 +200,43 @@ export function createBuiltinMCPOAuthTestSuite(config: BuiltinMCPOAuthTestSuiteC
           await fetch(`${server.url}/.well-known/oauth-protected-resource/api/mcp`)
         ).json()) as Record<string, unknown>;
         expect(document.resource).toBe(resource);
+      });
+    });
+
+    // An OIDC access token identifies its user with `sub` and has no `id` claim; RBAC needs a user id to load
+    // permissions, so without one every protected route answered 403 "Missing required permission".
+    describe('RBAC with an access token that carries only sub', () => {
+      let server: Running;
+      beforeAll(async () => {
+        server = await serve({
+          auth: new MastraJwtAuth({ jwksUri: jwks.jwksUri, issuer: ISSUER }),
+          rbac: new StaticRBACProvider<{ id: string }>({
+            roles: [
+              { id: 'caller', name: 'Caller', permissions: ['tools:read', 'tools:execute', 'mcp:read', 'mcp:execute'] },
+              { id: 'nobody', name: 'Nobody', permissions: [] },
+            ],
+            getUserRoles: user => [user.id === 'user-1' ? 'caller' : 'nobody'],
+          }),
+          mcp: {},
+        });
+      });
+
+      it('serves a protected route to a user whose role allows it', async () => {
+        const response = await fetch(`${server.url}/api/tools`, {
+          headers: { authorization: `Bearer ${await jwks.sign({})}` },
+        });
+        expect(response.status).toBe(200);
+      });
+
+      it('lists MCP tools for a user whose role allows it', async () => {
+        expect(await listTools(server.url, await jwks.sign({}))).toContain('mastra_tool_echo');
+      });
+
+      it('still answers 403 to a user whose role does not allow the route', async () => {
+        const token = await jwks.sign({ sub: 'user-2' });
+        const response = await fetch(`${server.url}/api/tools`, { headers: { authorization: `Bearer ${token}` } });
+        expect(response.status).toBe(403);
+        expect((await postMCP(server.url, token)).status).toBe(403);
       });
     });
 

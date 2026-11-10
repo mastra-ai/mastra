@@ -1,5 +1,5 @@
 import type { User, IUserProvider } from '@internal/auth';
-import { MastraAuthProvider, jwtAudienceIncludes, normalizeMastraUser } from '@internal/auth/provider';
+import { MastraAuthProvider, jwtAudienceIncludes, normalizeMastraUser, withSubjectAsId } from '@internal/auth/provider';
 import type { MastraAuthOAuthMetadata, MastraAuthProviderOptions } from '@internal/auth/provider';
 
 import jwt from 'jsonwebtoken';
@@ -75,7 +75,7 @@ export class MastraJwtAuth extends MastraAuthProvider<JwtUser> implements IUserP
     const verifyOptions: jwt.VerifyOptions = this.issuer ? { issuer: this.issuer } : {};
     const jwks = this.jwks;
     if (!jwks) {
-      return jwt.verify(token, this.secret, verifyOptions) as JwtUser;
+      return withSubjectAsId(jwt.verify(token, this.secret, verifyOptions) as JwtUser);
     }
     // A public key restricts the accepted algorithms to its key type, so HMAC tokens can't be passed off as RS*.
     return new Promise((resolve, reject) => {
@@ -88,7 +88,7 @@ export class MastraJwtAuth extends MastraAuthProvider<JwtUser> implements IUserP
           );
         },
         verifyOptions,
-        (error, payload) => (error ? reject(error) : resolve(payload as JwtUser)),
+        (error, payload) => (error ? reject(error) : resolve(withSubjectAsId(payload as JwtUser))),
       );
     });
   }

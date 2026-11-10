@@ -198,6 +198,31 @@ describe('MastraJwtAuth', () => {
       expect(payload.sub).toBe('user-123');
     });
 
+    // RBAC and FGA look the user up by `id`; an OIDC access token only carries `sub`.
+    it('exposes the subject as the user id when the token has no id claim', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+
+      const payload = await auth.authenticateToken(signToken({ sub: 'user-123' }));
+
+      expect(payload.id).toBe('user-123');
+    });
+
+    it('keeps an id claim the token already has', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+
+      const payload = await auth.authenticateToken(signToken({ sub: 'user-123', id: 'custom-id' }));
+
+      expect(payload).toEqual(expect.objectContaining({ sub: 'user-123', id: 'custom-id' }));
+    });
+
+    it('adds no id to a token without a subject', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+
+      const payload = await auth.authenticateToken(signToken({ email: 'a@example.com' }));
+
+      expect(payload.id).toBeUndefined();
+    });
+
     it('enforces the issuer when configured', async () => {
       const auth = new MastraJwtAuth({ secret: SECRET, issuer: 'https://issuer.example' });
 

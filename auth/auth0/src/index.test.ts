@@ -114,7 +114,17 @@ describe('MastraAuthAuth0', () => {
         issuer: 'https://test-tenant.auth0.com/',
         audience: 'https://test-api',
       });
-      expect(result).toEqual({ sub: 'user123', permissions: ['read'] });
+      // RBAC looks the user up by `id`; an Auth0 access token only carries `sub`.
+      expect(result).toEqual({ sub: 'user123', id: 'user123', permissions: ['read'] });
+    });
+
+    test('keeps an id claim the token already has', async () => {
+      (createRemoteJWKSet as any).mockReturnValue(vi.fn());
+      (jwtVerify as any).mockResolvedValue({ payload: { sub: 'user123', id: 'custom-id' } });
+
+      const result = await new MastraAuthAuth0().authenticateToken('test-token');
+
+      expect(result).toEqual({ sub: 'user123', id: 'custom-id' });
     });
 
     test('handles JWT verification failure', async () => {
@@ -623,7 +633,7 @@ describe('MastraAuthAuth0', () => {
       });
 
       const user = await auth0.authenticateToken('valid-jwt', request);
-      expect(user).toEqual({ sub: 'auth0|jwt-user' });
+      expect(user).toEqual({ sub: 'auth0|jwt-user', id: 'auth0|jwt-user' });
     });
   });
 
