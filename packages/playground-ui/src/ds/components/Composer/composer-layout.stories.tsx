@@ -8,7 +8,7 @@ import { ProviderLogo } from '../../../domains/llm/provider-logo';
 import { formatModelName } from '../../../utils/model';
 import { Button } from '../Button';
 import { Spinner } from '../Spinner';
-import { ThinkingLevelBars, ThinkingLevelRamp } from '../ThinkingLevel';
+import { ThinkingLevelIcon, ThinkingLevelRamp } from '../ThinkingLevel';
 import type { ThinkingLevelOption } from '../ThinkingLevel';
 import {
   Composer,
@@ -102,7 +102,7 @@ const LayoutStory = ({ reconnecting = false, status = false, singleProvider = fa
                   <span className="sr-only">Model: </span>
                   <ProviderLogo providerId={model.provider} size={14} />
                   <span className="truncate max-sm:max-w-28">{formatModelName(model.model)}</span>
-                  <ThinkingLevelBars options={thinkingLevels} value={thinking} />
+                  <ThinkingLevelIcon options={thinkingLevels} value={thinking} />
                 </ModelPicker>
                 <Button type="button" variant="ghost" size="icon-sm" tooltip="Start dictation">
                   <Mic />

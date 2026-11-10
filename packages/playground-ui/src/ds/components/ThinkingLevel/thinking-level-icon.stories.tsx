@@ -1,19 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import { Txt } from '../Txt';
-import { ThinkingLevelBars } from './thinking-level-picker';
+import { ThinkingLevelIcon } from './thinking-level-icon';
 import { ALL_LEVELS, LOW_HIGH_LEVELS } from './thinking-level-story-data';
 
-const meta: Meta<typeof ThinkingLevelBars> = {
-  title: 'Elements/ThinkingLevel/Bars',
-  component: ThinkingLevelBars,
+const meta: Meta<typeof ThinkingLevelIcon> = {
+  title: 'Elements/ThinkingLevel/Icon',
+  component: ThinkingLevelIcon,
   parameters: {
     layout: 'centered',
   },
 };
 
 export default meta;
-type Story = StoryObj<typeof ThinkingLevelBars>;
+type Story = StoryObj<typeof ThinkingLevelIcon>;
 
 export const EveryLevel: Story = {
   render: () => (
@@ -23,7 +23,7 @@ export const EveryLevel: Story = {
           <Txt as="span" variant="caption" tone="muted">
             {level.label}
           </Txt>
-          <ThinkingLevelBars options={ALL_LEVELS} value={level.value} />
+          <ThinkingLevelIcon options={ALL_LEVELS} value={level.value} />
         </div>
       ))}
     </div>
@@ -31,9 +31,9 @@ export const EveryLevel: Story = {
 };
 
 export const FewerLevels: Story = {
-  render: () => <ThinkingLevelBars options={LOW_HIGH_LEVELS} value="low" />,
+  render: () => <ThinkingLevelIcon options={LOW_HIGH_LEVELS} value="low" />,
 };
 
 export const Loading: Story = {
-  render: () => <ThinkingLevelBars options={ALL_LEVELS} value={undefined} loading />,
+  render: () => <ThinkingLevelIcon options={ALL_LEVELS} value={undefined} loading />,
 };
