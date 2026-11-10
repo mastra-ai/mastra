@@ -163,10 +163,9 @@ describe('git-ref instruction readers', () => {
     );
   const contentReads = () =>
     vi.mocked(execFileSync).mock.calls.filter(([, args]) => args?.includes('show') || args?.includes('blob'));
-  const refLookups = () => [
-    ...contentReads(),
-    ...vi.mocked(execFileSync).mock.calls.filter(([, args]) => args?.includes('ls-tree')),
-  ];
+  // Every git call except the one resolving the ref to its trees.
+  const objectReads = () =>
+    vi.mocked(execFileSync).mock.calls.filter(([, args]) => !args?.some(arg => arg.startsWith('--batch-check')));
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'mastracode-gitref-'));
@@ -362,7 +361,7 @@ describe('git-ref instruction readers', () => {
     loadAtRef();
     vi.mocked(execFileSync).mockClear();
     expect(loadAtRef()).toEqual(['trusted base instructions']);
-    expect(refLookups()).toEqual([]);
+    expect(objectReads()).toEqual([]);
   });
 
   it('serves repeated reminder path checks without re-reading the ref', () => {
@@ -377,7 +376,7 @@ describe('git-ref instruction readers', () => {
     probe();
     vi.mocked(execFileSync).mockClear();
     expect(probe()).toEqual([false, false, true]);
-    expect(refLookups()).toEqual([]);
+    expect(objectReads()).toEqual([]);
   });
 
   it('reads nothing at a base ref name carrying a line break', () => {
