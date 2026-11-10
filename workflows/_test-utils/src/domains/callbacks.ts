@@ -11,13 +11,10 @@ import { MockRegistry } from '../mock-registry';
 
 export function createCallbackTests(context: DurableAgentTestContext) {
   const { createAgent, eventPropagationDelay } = context;
-  // Poll rather than sleep: callbacks fire after the run settles, which can lag on a loaded runner.
-  const callbackTimeout = Math.max(eventPropagationDelay * 10, 4000);
 
   describe('callbacks', () => {
     it('should invoke onFinish callback when streaming completes', async () => {
       const mockModel = createTextStreamModel('Complete response');
-      let finishData: any = null;
 
       const agent = await createAgent({
         id: 'finish-callback-agent',
@@ -26,19 +23,16 @@ export function createCallbackTests(context: DurableAgentTestContext) {
         model: mockModel,
       });
 
-      const { cleanup } = await agent.stream('Test', {
-        onFinish: data => {
-          finishData = data;
-        },
-      });
+      let onFinish!: (data: any) => void;
+      const finished = new Promise(resolve => (onFinish = resolve));
+      const { cleanup } = await agent.stream('Test', { onFinish });
 
-      await vi.waitFor(() => expect(finishData).not.toBeNull(), { timeout: callbackTimeout });
+      expect(await finished).toBeDefined();
       cleanup();
     });
 
     it('should invoke onError callback when error occurs', async () => {
       const errorModel = createErrorModel('Simulated LLM error');
-      let errorReceived: Error | string | null = null;
 
       const agent = await createAgent({
         id: 'error-callback-agent',
@@ -47,13 +41,11 @@ export function createCallbackTests(context: DurableAgentTestContext) {
         model: errorModel,
       });
 
-      const { cleanup } = await agent.stream('Test', {
-        onError: ({ error }) => {
-          errorReceived = error;
-        },
-      });
+      let onError!: (error: Error | string) => void;
+      const errored = new Promise(resolve => (onError = resolve));
+      const { cleanup } = await agent.stream('Test', { onError: ({ error }) => onError(error) });
 
-      await vi.waitFor(() => expect(errorReceived).not.toBeNull(), { timeout: callbackTimeout });
+      expect(await errored).toBeTruthy();
       cleanup();
     });
 
