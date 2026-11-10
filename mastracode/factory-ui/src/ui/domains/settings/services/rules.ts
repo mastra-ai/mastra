@@ -44,3 +44,42 @@ export function rawRuleProblem<Rule>(schema: z.ZodType<Rule>, text: string): str
   const read = readRawRule(schema, text);
   return 'problem' in read ? read.problem : undefined;
 }
+
+type Condition = { field?: unknown; operator?: unknown; value?: unknown };
+type Group = { conditions?: unknown };
+
+const REPOSITORY_FORMATS: Record<string, string> = {
+  github: 'GitHub repositories are owner/repo, such as mastra-ai/mastra.',
+  gitlab: 'GitLab projects are group/project, such as acme/platform/api.',
+};
+
+/**
+ * A hint when a group tests `source.repository` against a bare name while it also limits cards
+ * to GitHub or GitLab, whose repositories always have an owner: that condition never matches.
+ */
+export function repositoryHint(rule: unknown): string | undefined {
+  if (!rule || typeof rule !== 'object') return undefined;
+  const entries: unknown = (rule as Group).conditions;
+  if (!Array.isArray(entries)) return undefined;
+  const conditions = entries.filter((entry): entry is Condition => !!entry && typeof entry === 'object');
+  const integration = conditions.find(
+    condition =>
+      (condition.field === 'source.integration' || condition.field === 'source.provider') &&
+      condition.operator === 'equals' &&
+      typeof condition.value === 'string' &&
+      condition.value.trim().toLowerCase() in REPOSITORY_FORMATS,
+  );
+  const bare = conditions.some(
+    condition =>
+      condition.field === 'source.repository' &&
+      typeof condition.value === 'string' &&
+      condition.value.trim() !== '' &&
+      !condition.value.includes('/'),
+  );
+  if (integration && bare) return REPOSITORY_FORMATS[String(integration.value).trim().toLowerCase()];
+  for (const entry of conditions) {
+    const hint = repositoryHint(entry);
+    if (hint) return hint;
+  }
+  return undefined;
+}
