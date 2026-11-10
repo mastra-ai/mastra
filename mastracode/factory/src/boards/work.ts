@@ -296,7 +296,10 @@ const NON_PULL_REQUEST_PHASES: ReadonlySet<string> = new Set(['triage', 'plannin
  */
 export function workPullRequestCardRejection(isPullRequest: boolean, toStage: string): string | undefined {
   if (!isPullRequest && toStage === 'pr-review')
-    return 'PR review holds only pull request cards; this work item goes to Review after Building.';
+    return (
+      'PR review holds only pull request cards; this work item goes to Review after Building. ' +
+      'It stays in Review while its pull request is open, and the merge moves it to Done.'
+    );
   if (!isPullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
   return `A pull request card is reviewed on the Work board; it cannot enter ${toStage}. Move it to pr-review, done, or canceled.`;
 }
