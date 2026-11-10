@@ -99,6 +99,7 @@ import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
 import { assertStoredAgentAccess } from './agent-access';
 import { assertWriteAccess, getCallerAuthorId, matchesAuthorFilter, resolveAuthorFilter } from './authorship';
+import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -1213,6 +1214,21 @@ export async function getAgentFromSystem({
   assertStoredAgentAccess({ agent, agentId, requestContext, access, fromStore });
 
   return agent;
+}
+
+/**
+ * Swapping or resetting a stored agent's in-memory model changes it for every caller, so it needs the same edit access
+ * as `PATCH /stored/agents/:id`; public visibility only grants execute. Code agents are not owner-scoped.
+ */
+function assertStoredAgentEditAccess(agent: Agent, agentId: string, requestContext: RequestContext): void {
+  if (agent.source !== 'stored') return;
+  assertWriteAccess({
+    requestContext,
+    resource: 'stored-agents',
+    resourceId: agentId,
+    action: 'edit',
+    record: (agent.toRawConfig() ?? {}) as OwnedRecord,
+  });
 }
 
 async function getAgentForModelListMutation({
@@ -4131,6 +4147,7 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, agentId, modelId, provider }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      assertStoredAgentEditAccess(agent, agentId, requestContext);
 
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
@@ -4160,6 +4177,7 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, agentId }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      assertStoredAgentEditAccess(agent, agentId, requestContext);
 
       agent.__resetToOriginalModel();
 

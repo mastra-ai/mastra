@@ -58,6 +58,7 @@ const USERS: Record<string, User> = {
   grantee: { id: 'grantee', role: 'grantee' },
   scheduler: { id: 'scheduler', role: 'scheduler' },
   carol: { id: 'carol', role: 'editor' },
+  dave: { id: 'dave', role: 'operator' },
 };
 
 const ROLES: RoleDefinition[] = [
@@ -70,6 +71,8 @@ const ROLES: RoleDefinition[] = [
   { id: 'admin', name: 'Admin', permissions: ['*'] },
   { id: 'grantee', name: 'Grantee', permissions: ['*:read', '*:execute', `stored-agents:read:${PRIVATE}`] },
   { id: 'scheduler', name: 'Scheduler', permissions: ['*:read', '*:execute', 'schedules:write'] },
+  // Can change agents' runtime model, but owns no stored agents.
+  { id: 'operator', name: 'Operator', permissions: ['*:read', '*:execute', 'agents:write'] },
   // A second builder: can write, publish and delete stored agents, but only their own.
   {
     id: 'editor',
@@ -440,6 +443,22 @@ describe('stored agent visibility on /api/agents', () => {
       expect(afterDelete.text).not.toContain(PRIVATE_WS);
       expect(afterDelete.text).not.toContain('alice-secret-workspace');
     }
+  });
+
+  it("changing a stored agent's live model needs edit access to it, not just execute", async () => {
+    // Public lets dave run alice's agent, but swapping its shared in-memory model would change it for everyone.
+    for (const path of [`/agents/${PUBLIC}/model`, `/agents/${PUBLIC}/model/reset`]) {
+      const denied = await http('dave', 'POST', path, { provider: 'openai', modelId: 'gpt-4o' });
+      expect(denied, path).toMatchObject({ status: 404, json: { error: 'Not found' } });
+    }
+    // Code agents and legacy unowned stored agents keep working as before.
+    for (const id of ['helper', LEGACY]) {
+      expect(
+        (await http('dave', 'POST', `/agents/${id}/model`, { provider: 'openai', modelId: 'gpt-4o' })).status,
+      ).toBe(200);
+      expect((await http('dave', 'POST', `/agents/${id}/model/reset`)).status).toBe(200);
+    }
+    expect((await http('admin', 'POST', `/agents/${PUBLIC}/model/reset`)).status).toBe(200);
   });
 
   it('GET /agents lists every visible stored agent when there are more than 100', async () => {
