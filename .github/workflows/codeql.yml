@@ -90,8 +90,9 @@ jobs:
             fi
           }
 
-          # The newest earlier scan of main that finished gives both the previous state and the
-          # cutoff for "new": alerts created after it ended were created by this scan.
+          # The newest earlier scan of main that finished gives the previous state. The newest
+          # earlier scan that fully passed is the cutoff for "new": alerts created after it ended
+          # have not been reported yet, including any a partly failed scan uploaded since.
           previous=''
           since=''
           if ! runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/codeql.yml/runs" \
@@ -102,8 +103,10 @@ jobs:
           fi
           while read -r id ended; do
             [ -n "$id" ] || continue
-            previous=$(job_state "$id")
-            if [ -n "$previous" ]; then
+            state=$(job_state "$id")
+            [ -n "$state" ] || continue
+            previous=${previous:-$state}
+            if [ "$state" = "success" ]; then
               since=$ended
               break
             fi
