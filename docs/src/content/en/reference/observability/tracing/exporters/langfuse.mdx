@@ -15,7 +15,7 @@ Sends Tracing data to Langfuse for observability.
 ## Constructor
 
 ```typescript oxfmt:false
-new LangfuseExporter(config: LangfuseExporterConfig)
+new LangfuseExporter(config?: LangfuseExporterConfig)
 ```
 
 ## `LangfuseExporterConfig`
@@ -31,6 +31,7 @@ interface LangfuseExporterConfig extends BaseExporterConfig {
   flushInterval?: number
   environment?: string
   release?: string
+  resourceAttributes?: DetectedResourceAttributes
 }
 ```
 
@@ -97,9 +98,15 @@ Extends `BaseExporterConfig`, which includes:
     required: false,
   },
   {
+    name: 'resourceAttributes',
+    type: 'DetectedResourceAttributes',
+    description: 'OpenTelemetry resource attributes, such as service.version. Values here override the defaults.',
+    required: false,
+  },
+  {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
-    description: "Logger level (default: 'warn')",
+    description: "Logger level (default: 'info')",
     required: false,
   },
 ]}

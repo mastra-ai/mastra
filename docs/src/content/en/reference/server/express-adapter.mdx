@@ -203,7 +203,8 @@ Available properties on `res.locals`:
 | `registeredTools` | Tools registered with the adapter |
 | `taskStore` | Task store for A2A operations |
 | `customRouteAuthConfig` | Per-route auth overrides |
-| `user` | Authenticated user (if auth configured) |
+
+When auth is configured, read the authenticated user from the request context with `res.locals.requestContext.get('user')`.
 
 ## Adding middleware
 
