@@ -668,7 +668,7 @@ function generateIndexPage(grouped: GroupedProviders): string {
 
   // Link each provider's markdown page so agents reading /models/llms.txt can reach any provider.
   const providerLinks = [...grouped.popular, ...grouped.other]
-    .map(provider => `  - [${provider.name}](https://mastra.ai/models/providers/${provider.id})`)
+    .map(provider => `  - [${provider.name}](/models/providers/${provider.id})`)
     .join('\n');
 
   return `---
