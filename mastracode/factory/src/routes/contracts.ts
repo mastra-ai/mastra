@@ -239,6 +239,7 @@ export const updateProjectBodySchema = z
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
+    /** @deprecated Ignored. The review skill decides whether to publish its test check. */
     reviewTestChecksEnabled: z.boolean().optional(),
     selfReviewEnabled: z.boolean().optional(),
   })

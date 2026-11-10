@@ -647,8 +647,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               403,
             );
           }
-          // Plans are approved per board (`exitTool.autoApprove`); the old project switch is ignored.
-          const { autoApprovePlans: _ignored, ...input } = parsedBody.data;
+          // Retired project switches an old client may still send: plans are approved per board
+          // (`exitTool.autoApprove`), and the review skill decides whether to publish its test check.
+          const { autoApprovePlans: _plans, reviewTestChecksEnabled: _testChecks, ...input } = parsedBody.data;
           const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },

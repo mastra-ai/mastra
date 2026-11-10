@@ -144,7 +144,8 @@ import { migrateSessionResources, privatizeOwnerResourceSessions } from './sessi
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
-import { createSourceControlTools } from './session/source-control-tools.js';
+import type { ReviewedChangeRequest } from './session/source-control-tools.js';
+import { createSourceControlTools, resolveReviewedChangeRequest } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -581,6 +582,7 @@ export class MastraFactory {
   #sessionResourceMigration: Promise<boolean> | undefined;
   #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
   #prepareStartedAt: number | undefined;
+  #reviewedChangeRequest: ((requestContext: RequestContext) => Promise<ReviewedChangeRequest | undefined>) | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -695,6 +697,34 @@ export class MastraFactory {
       result[await writes.upsert(scope, input, writer)].push(scope);
     }
     return result;
+  }
+
+  /**
+   * The change request the run behind `requestContext` reviews, for a tool you
+   * pass through `tools`. `undefined` unless the run is a Review run bound to a
+   * change request; throws when that change request is no longer open.
+   *
+   * ```typescript
+   * const factory = new MastraFactory({
+   *   tools: {
+   *     publish_test_check: createTool({
+   *       id: 'publish_test_check',
+   *       inputSchema: z.object({ headSha: z.string(), status: z.enum(['success', 'failure']), summary: z.string() }),
+   *       execute: async (input, { requestContext }) => {
+   *         const reviewed = await factory.reviewedChangeRequest(requestContext!);
+   *         if (!reviewed) throw new Error('Only a Review run can publish a test check.');
+   *         return reviewed.publishCommitCheck({ ...input, name: 'Review / tests', title: input.summary });
+   *       },
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  async reviewedChangeRequest(requestContext: RequestContext): Promise<ReviewedChangeRequest | undefined> {
+    if (!this.#reviewedChangeRequest) {
+      throw new Error('MastraFactory.reviewedChangeRequest() needs prepare() first.');
+    }
+    return this.#reviewedChangeRequest(requestContext);
   }
 
   /**
@@ -1599,6 +1629,19 @@ export class MastraFactory {
           ]
         : [],
     );
+    this.#reviewedChangeRequest = requestContext =>
+      resolveReviewedChangeRequest({
+        requestContext,
+        providers: sourceControlToolProviders,
+        boundChangeRequestId: async () => {
+          const resolution = await resolveFactorySessionAddress({ requestContext, storage: workItemsStorage });
+          if (!resolution) return undefined;
+          const binding = resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+          if (binding?.role !== REVIEW_CONTEXT) return undefined;
+          const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+          return item ? boundChangeRequestNumber(await toBoardSource(boards).load(binding), item) : undefined;
+        },
+      });
     const connectToolsProjectId = this.#config.tools === undefined ? platformConnectProjectId() : undefined;
     const sessionTools =
       this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
@@ -1846,11 +1889,6 @@ export class MastraFactory {
                 requestContext,
                 providers: sourceControlToolProviders,
                 audit: auditDomain,
-                testChecksEnabled: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.reviewTestChecksEnabled ?? false;
-                },
                 ...(workItemsStorage
                   ? {
                       selfReviewApprovedHead: () =>
@@ -1860,20 +1898,6 @@ export class MastraFactory {
                           projects: factoryProjectsStorage,
                           boards,
                         }),
-                      boundChangeRequestId: async () => {
-                        const resolution = await resolveFactorySessionAddress({
-                          requestContext,
-                          storage: workItemsStorage,
-                        });
-                        if (!resolution) return undefined;
-                        const binding =
-                          resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                        if (binding?.role !== REVIEW_CONTEXT) return undefined;
-                        const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                        return item
-                          ? boundChangeRequestNumber(await toBoardSource(boards).load(binding), item)
-                          : undefined;
-                      },
                     }
                   : {}),
               }),

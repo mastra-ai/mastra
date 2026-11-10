@@ -486,6 +486,8 @@ Work declares `intake` resting; `triage`, `planning`, `execute` and `pr-review` 
 | Building | `factory-build` in `work`, as a goal (up to 20 runs) | Builds the approved plan, runs its gates and pushes, then opens the change request and moves the card to Review. |
 | Review   | `factory-review` in `review`                         | Grants `factory_record_review_verdict` and `factory_review_source`.                                              |
 
+The review skills post their test results in a `## Factory test report` comment on the change request. Factory gives sessions no tool to publish a commit check; an app that wants one passes its own tool and builds it on `factory.reviewedChangeRequest()` (see [Mastra Connect and your own tools in sessions](#mastra-connect-and-your-own-tools-in-sessions)). Earlier releases had a per-project `reviewTestChecksEnabled` setting; `PATCH /web/factory/projects/:id` still accepts it for one release and ignores it.
+
 #### Self-review is a board's choice
 
 Work has no self-review phase: Building opens the change request itself. Self-review stays a capability any board can add. A working phase in the `review` context that grants only `factory_record_review_verdict` (not `factory_review_source`), and that the build phase can move into, is the board's self-review phase ([the pull request loop on any board](#the-pull-request-loop-on-any-board)). There `factory-self-review` tests the builder's pushed branch before any change request exists: requesting changes sends the card back to the build phase, approving opens the change request from the approved head and moves the card to the board's pull request review phase, and at its round limit it parks the card in the board's first phase. While the project's self-review setting is on, a change request opened from the build phase is refused until self-review approves. The setting, and the self-review switch on the board, only show on a board that has such a phase.
@@ -1322,6 +1324,42 @@ const mcp = new MCPClient({ servers: { tickets: { url: new URL('https://tickets.
 const factory = new MastraFactory({
   // ...
   tools: await mcp.listTools(),
+});
+```
+
+To keep the Connect default next to your own tools, call `platformConnectTools(projectId)` from your `tools` function.
+
+A tool can act on the change request a Review run reviews: `factory.reviewedChangeRequest(requestContext)` returns its provider, repository, number, current head and branch, or `undefined` outside a Review run bound to a change request. Its `publishCommitCheck()` publishes a commit check on the reviewed head through the project's source-control connection, and refuses, publishing nothing, when the head moved, the change request is no longer open, or the provider can't publish commit checks. A review skill you write can call a tool like this one to report its test run:
+
+```typescript
+import { createTool } from '@mastra/core/tools';
+import { MastraFactory, platformConnectTools } from '@mastra/factory';
+import { z } from 'zod';
+
+const publishTestCheck = createTool({
+  id: 'publish_test_check',
+  description: 'Publish the test results as a commit check on the reviewed head.',
+  inputSchema: z.object({
+    headSha: z.string().regex(/^[0-9a-f]{40}$/i),
+    status: z.enum(['in-progress', 'success', 'failure', 'neutral', 'cancelled']),
+    title: z.string(),
+    summary: z.string(),
+  }),
+  execute: async (input, { requestContext }) => {
+    const reviewed = await factory.reviewedChangeRequest(requestContext!);
+    if (!reviewed) throw new Error('Only a Review run can publish a test check.');
+    return reviewed.publishCommitCheck({ ...input, name: 'Review / tests' });
+  },
+});
+
+const factory: MastraFactory = new MastraFactory({
+  // ...
+  tools: async ({ requestContext }) => ({
+    ...(process.env.MASTRA_PROJECT_ID
+      ? await platformConnectTools(process.env.MASTRA_PROJECT_ID)({ requestContext })
+      : {}),
+    publish_test_check: publishTestCheck,
+  }),
 });
 ```
 
