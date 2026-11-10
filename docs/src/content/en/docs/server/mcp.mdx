@@ -62,7 +62,7 @@ The endpoint uses stateless Streamable HTTP and speaks both MCP `2026-07-28` and
 
 ## Tools
 
-The server groups tools into three toolsets. Agents and workflows are reached through operation tools that take the id as an argument. The tool list stays the same size however many agents you add.
+The server groups tools into toolsets. This section covers `agents`, `workflows`, and `tools`; see [Memory, observability, and agent builder](#memory-observability-and-agent-builder) for the others. Agents and workflows are reached through operation tools that take the id as an argument. The tool list stays the same size however many agents you add.
 
 | Toolset | Tools | Backing HTTP route |
 | - | - | - |
@@ -97,7 +97,7 @@ This adds `agent_support-agent` and `workflow_refund` next to the operation tool
 
 ## Choose what to expose
 
-Use `include` and `exclude` to select primitives by id. Each entry matches both a primitive's own `id` and the key it's registered under in `new Mastra({ ... })`, so `deleteAccountTool` and `delete-account` select the same tool. `exclude` wins over `include`. Excluded primitives are hidden from the tool list, and calling one by either name fails as not found. The selection only affects MCP. The HTTP routes are unchanged.
+Use `include` and `exclude` to select primitives by id. Each entry matches both a primitive's own `id` and the key it's registered under in `new Mastra({ ... })`, so `deleteAccountTool` and `delete-account` select the same tool. `exclude` wins over `include`. Excluded primitives are hidden from the tool list, and calling one by either name fails as not found. This includes passing an excluded agent's id to the memory tools. Observability tools aren't filtered: their results can still include traces, logs, and scores from excluded primitives. The selection only affects MCP. The HTTP routes are unchanged.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -133,6 +133,47 @@ The tool list is filtered per caller. Agents and workflows appear when the calle
 Thread and run ownership work like the HTTP API: a user can't continue another user's thread or resume another user's workflow run.
 
 The inbound bearer token isn't passed to tools as an argument and isn't forwarded to other servers. Tools receive the same `RequestContext` as the equivalent HTTP request.
+
+## Memory, observability, and agent builder
+
+These toolsets are on by default. Each appears only when the server can back it, and each tool calls the HTTP route listed for it with the same permission and ownership checks.
+
+| Toolset | Tools | Served when |
+| - | - | - |
+| `memory` | `list_threads`, `get_thread`, `list_messages`, `search_memory`, `get_memory_status`, `get_observations`, `create_thread`, `update_thread`, `clone_thread`, `save_messages` | An agent has memory, or stored agents are configured |
+| `observability` | `query_traces`, `aggregate_traces`, `query_spans`, `aggregate_spans`, `query_threads`, `get_trace_query_fields`, `get_trace_query_values`, `get_trace`, `get_span`, `get_trace_trajectory`, `list_logs`, `list_traces` | Storage has an observability domain |
+| `observability_analytics` | `analyze_metrics`, `analyze_scores`, `analyze_feedback`, `list_metric_names`, `list_scores`, `list_feedback` | Storage has an observability domain |
+| `stored_agents` | `list_available_models`, `list_stored_agents`, `get_stored_agent`, `create_stored_agent`, `update_stored_agent` | The [editor](/docs/studio/editor) and an agents storage domain are configured |
+
+- Memory tools take `agentId` and `threadId`. `resourceId` defaults to the caller when `server.auth` maps users to resources with `mapUserToResourceId`, and a caller can't read or write another resource's threads, messages, or Observational Memory. Without that mapping, a supplied `resourceId` is used as is, as on the HTTP API.
+- Observability tools depend on what the storage supports. A store with trace queries, such as DuckDB, serves `query_traces` and the other query tools; a store without them serves `list_traces` instead. Tools for logs, metrics, scores, and feedback appear only when the store implements them.
+- `get_trace` returns the light trace: every span's ids, parent, name, type, timing, status, and entity. Call `get_span` for one span's input, output, and attributes. List and trace results are kept under about 40,000 characters. A cut result says how to get the rest: a smaller page size, or `get_trace` with the returned `nextOffset`. A single item that's still too big, such as a message with an inline image, comes back with its long values cut and marked; `get_span` returns a span in full. `get_observations` cuts an oversized record the same way.
+- `analyze_metrics`, `analyze_scores`, and `analyze_feedback` take an `op` of `aggregate`, `breakdown`, `timeseries`, or `percentiles`. Each op runs the matching `/observability/<source>/<op>` route.
+- `create_stored_agent` and `update_stored_agent` publish the change by default, so the agent can be called with `call_agent` right away. Pass `autoPublish: false` to keep a draft. The `agentId` argument of `call_agent` lists only the agents that existed when the client fetched the tool list, so a client must list the tools again before it can call a newly created agent.
+
+In read-only mode, the query and aggregate tools stay available because their routes need `observability:read`, even though they're `POST` routes. Memory and stored-agent writes are removed. `get_observations` stays, without its `waitForPending` option, because waiting runs a route that needs `memory:write`. Callers without `memory:write` also get `get_observations` without that option.
+
+:::warning
+
+Observability data isn't scoped to the caller. Anyone with `observability:read` can read every user's traces, logs, scores, and feedback, over MCP and over HTTP. The default `viewer` role includes it through `*:read`. Leave out the observability toolsets, or remove `observability:read` from roles that shouldn't see other users' data:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcp: { toolsets: ['agents', 'workflows', 'tools', 'memory', 'stored_agents'] },
+  },
+})
+```
+
+:::
+
+### Agents creating agents
+
+`create_stored_agent` lets an MCP client create agents that other clients can then call. It needs `stored-agents:write`. A created agent's `visibility` (private by default) controls who can read and edit its stored configuration through the `stored_agents` tools. It doesn't limit who can call the agent: any user who can call agents can call it with `call_agent`, the same as over HTTP. When the agent builder restricts models, the MCP tools accept only allowed models for the agent's model, including each conditional variant, for each enabled entry of the fallback `modelList`, for the memory models (the Observational Memory observer and reflector models and the title model), and for the `model` of every input and output processor step, at any depth of the processor graph. They also reject anything that would run on a default model the policy can't check: `observationalMemory: true`, an Observational Memory config without a `model`, memory left out on create (which the agent builder fills with Observational Memory on its default model), or a processor that needs a model, such as `moderation`, without one. Set an allowed `model` instead. If the agent builder's policy can't be loaded, the tools return an error instead of saving unchecked. `list_available_models` returns the allowed models. The HTTP route doesn't apply this check. Tool allowlists aren't checked when an agent is saved, so a created agent can use any tool the server has. Its tools run with the permissions of the user who calls it.
+
+Observational Memory starts observing only after a thread reaches its token threshold, 30,000 tokens by default. For a short demo, set a lower `observation.messageTokens` so the agent learns from a few messages. Observational Memory processes messages in the background, so right after `call_agent`, call `get_observations` with `waitForPending: true` to wait (up to 30 seconds) for it to finish before reading.
 
 ## OAuth discovery
 
@@ -245,7 +286,7 @@ The endpoint doesn't return `403` with `error="insufficient_scope"` yet. A calle
 
 - Workflows run synchronously within the MCP request. Long-running workflows are bounded by your server's request timeout.
 - There's no per-primitive opt-out on the `Agent`, `Workflow`, or tool constructors yet. Use `server.mcp.include` and `server.mcp.exclude`.
-- Memory, observability, and stored-agent management tools aren't part of the built-in server yet.
+- Working memory, deleting threads or stored agents, and scorer and workspace management aren't exposed.
 
 ## Related
 
