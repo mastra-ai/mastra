@@ -9,7 +9,7 @@ import type { BoardPhaseDefinition } from './define-board.js';
 import { workLaneForRole, workStageCarries } from './legacy-plan-role.js';
 import { startsInAutoPhase } from './phase-automation.js';
 import { phaseRunDecision } from './phase-runner.js';
-import { createBoardRegistry } from './registry.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import type { InstalledBoard } from './registry.js';
 import {
   boardDefinitionOf,
@@ -19,6 +19,7 @@ import {
   storedBoardInputSchema,
 } from './stored-board.js';
 import { workSeedWithSelfReview } from './work-migrations.js';
+import { workSeedWithTriage } from './work-seeds.js';
 import { workBoard } from './work.js';
 
 const GO = {
@@ -307,8 +308,9 @@ function entering(
 }
 
 /** The built-in Work board's stored definition with `edit` applied to one phase. */
+/** A project's stored Work, as most projects hold it: with Triage ({@link workSeedWithTriage}), one phase edited. */
 function editWork(key: string, edit: (phase: StoredPhaseInput) => StoredPhaseInput): StoredBoardInput {
-  const definition = boardDefinitionOf(workBoard);
+  const definition = workSeedWithTriage();
   return { ...definition, phases: definition.phases.map(phase => (phase.key === key ? edit(phase) : phase)) };
 }
 
@@ -330,8 +332,9 @@ describe('stored boards with code behaviour', () => {
     const decision = phaseRunDecision(edited, 'triage', entering(edited, 'triage'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
     expect(decision?.arguments).toContain('Shipyard: check the changelog.');
-    // The code board itself is untouched.
-    expect(phaseRunDecision(workBoard, 'triage', entering(workBoard, 'triage'))?.arguments).not.toContain('Shipyard');
+    // The unedited row is untouched.
+    const unedited = compileStoredBoard(workSeedWithTriage(), workBoard);
+    expect(phaseRunDecision(unedited, 'triage', entering(unedited, 'triage'))?.arguments).not.toContain('Shipyard');
   });
 
   it("keeps the code board's source-closed phases and runs the stored Planning runner", () => {
@@ -454,7 +457,7 @@ describe('stored boards with code behaviour', () => {
   });
 
   it('accepts every edit code behaviour can honour, including a new phase', () => {
-    const definition = boardDefinitionOf(workBoard);
+    const definition = workSeedWithTriage();
     const [intake, ...rest] = definition.phases;
     const edited: StoredBoardInput = {
       ...definition,
@@ -661,7 +664,7 @@ describe('serving a stored row that fell out of step with code', () => {
     const service = new FactoryTransitionService({
       configVersion: 'stale-row',
       storage,
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
     });
 
     const moved = await service.transition({
@@ -821,13 +824,7 @@ describe('the reviewer seat on an edited Work board', () => {
   it("waits for a person once an edit stops an older Work's self-review starting on its own", () => {
     // An older project's self-review phase starts on its own for a card with no pull request yet.
     const older = compileStoredBoard(workSeedWithSelfReview(), workBoard);
-    expect(
-      startsInAutoPhase(
-        createBoardRegistry({ boards: [older], includeDefaultBoards: false }),
-        card('work', 'review'),
-        review,
-      ),
-    ).toBe(true);
+    expect(startsInAutoPhase(boardRegistryOf([older]), card('work', 'review'), review)).toBe(true);
     const seed = workSeedWithSelfReview();
     const edited = compileStoredBoard(
       {
@@ -838,13 +835,7 @@ describe('the reviewer seat on an edited Work board', () => {
       },
       workBoard,
     );
-    expect(
-      startsInAutoPhase(
-        createBoardRegistry({ boards: [edited], includeDefaultBoards: false }),
-        card('work', 'review'),
-        review,
-      ),
-    ).toBe(false);
+    expect(startsInAutoPhase(boardRegistryOf([edited]), card('work', 'review'), review)).toBe(false);
   });
 
   it('does not treat a stored board phase keyed pr-review as the reviewer seat', () => {
@@ -857,12 +848,6 @@ describe('the reviewer seat on an edited Work board', () => {
         { key: 'fixed', name: 'Fixed', kind: 'terminal' },
       ],
     });
-    expect(
-      startsInAutoPhase(
-        createBoardRegistry({ boards: [bugs], includeDefaultBoards: false }),
-        card('bugs', 'pr-review'),
-        review,
-      ),
-    ).toBe(false);
+    expect(startsInAutoPhase(boardRegistryOf([bugs]), card('bugs', 'pr-review'), review)).toBe(false);
   });
 });

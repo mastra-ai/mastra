@@ -2,8 +2,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardTransitionPolicy } from '../boards/index.js';
-import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
-import { createPolicyTestRegistry, selfReviewWorkBoard } from '../boards/test-utils.js';
+import { boardRegistryOf, defineBoard, workBoard } from '../boards/index.js';
+import { createPolicyTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactoryTransitionTools } from './tools.js';
@@ -101,7 +101,7 @@ describe('factory_transition_work_item', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'release-v1',
-      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      boards: boardRegistryOf([board]),
     });
     const prepared = await storage.prepareRunStart({
       orgId: 'org-1',
@@ -239,7 +239,11 @@ describe('factory_transition_work_item', () => {
 
   it('lets a triage agent send an open non-bug back to Intake without recording a classification', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards: createTriageWorkRegistry(),
+    });
     const prepared = await prepareBoundItem(storage, 'github-issue', 'triage');
     const triaging = await service.transition({
       orgId: 'org-1',
@@ -417,7 +421,7 @@ describe('factory_transition_work_item', () => {
       requestContext: requestContext(),
       storage,
       transitionService: service,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const tool = tools.factory_transition_work_item as ExecutableTool;
     expect(tool).toBeDefined();
@@ -445,7 +449,7 @@ describe('factory_transition_work_item', () => {
         requestContext: requestContext(),
         storage,
         transitionService: service,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
     ).resolves.toEqual({});
   });
@@ -770,7 +774,7 @@ describe('factory_transition_work_item', () => {
             shipped: { name: 'Shipped', kind: 'terminal' },
           },
         });
-        const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+        const boards = boardRegistryOf([board]);
         const storage = (await createFactoryStorageForTests()).workItems;
         const prepared = await storage.prepareRunStart({
           orgId: 'org-1',

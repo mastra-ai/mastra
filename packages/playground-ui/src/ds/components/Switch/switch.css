@@ -1,0 +1,51 @@
+/* State-change motion lives in CSS so the switch does not need React state just
+ * to time a visual-only settling effect. Base UI swaps `data-checked` and
+ * `data-unchecked`; distinct animation names make each direction restart. */
+
+@keyframes switch-thumb-settle-on {
+  0% {
+    transform: scaleY(1);
+  }
+
+  48% {
+    transform: scaleY(0.8);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes switch-thumb-settle-off {
+  0% {
+    transform: scaleY(1);
+  }
+
+  48% {
+    transform: scaleY(0.8);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+.switch-thumb-motion {
+  transform: scaleY(1);
+  transform-origin: center;
+}
+
+.switch-thumb-motion[data-checked] {
+  animation: switch-thumb-settle-on 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.switch-thumb-motion[data-unchecked] {
+  animation: switch-thumb-settle-off 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-thumb-motion[data-checked],
+  .switch-thumb-motion[data-unchecked] {
+    animation: none;
+  }
+}
