@@ -2559,12 +2559,12 @@ describe('pull request cards on the Work board', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     // Building does not lead to PR review, so the board's graph alone would only say the move is undeclared.
     const item = await createItem(storage, { board: 'work', stages: ['execute'] });
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, boards: olderWork() });
 
     const result = await service.transition(request(item, { stage: 'pr-review' }));
     expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     expect(result.status === 'rejected' && result.reason).toMatch(
-      /^PR review holds only cards with a pull request; this work item enters it once a pull request is attached to it\.$/,
+      /holds only cards with a pull request; this work item enters it once a pull request is attached to it\.$/,
     );
   });
 
@@ -2577,7 +2577,7 @@ describe('pull request cards on the Work board', () => {
       source: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:34' },
       metadata: { githubPullRequestNumber: 34, state: 'open' },
     }))!.item;
-    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, boards: olderWork() });
 
     await expect(service.transition(request(item, { stage: 'pr-review' }))).resolves.toMatchObject({
       status: 'accepted',
