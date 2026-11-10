@@ -184,7 +184,7 @@ describe('work board self-review', () => {
     expect(approved).toMatchObject({ type: 'invokeSkill', role: 'work' });
     expect(approved?.prompt).toContain(`at branch head ${'b'.repeat(40)}. Open the pull request now`);
     expect(approved?.prompt).toContain('All checks passed');
-    expect(approved?.prompt).toContain("then include the self-review's checks table");
+    expect(approved?.prompt).toContain("then include the self-review's checks table with the head SHA it tested");
     expect(result({ selfReviewVerdict: 'request changes' })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve', openPullRequestNumber: 7 })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve' }, 'work')).toBeUndefined();
