@@ -347,6 +347,9 @@ function toRecord(row: BoardRow, phases: PhaseRow[]): StoredBoardRecord {
   };
 }
 
+/** Runs inside a board write's transaction, before the board is written. */
+export type BoardWriteStep = (ops: FactoryStorageOps) => Promise<void>;
+
 /** A compare-and-set inside a write lost to a concurrent writer; the write is retried from fresh reads. */
 class ConcurrentBoardWrite extends Error {}
 
@@ -402,8 +405,13 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return readStoredBoard(this.ops, scope, key);
   }
 
-  /** Creates a board through the API. */
-  async create(scope: StoredBoardScope, input: StoredBoardInput, actor: string): Promise<StoredBoardRecord> {
+  /** Creates a board through the API. `before` runs in the same transaction, once the key is known to be free. */
+  async create(
+    scope: StoredBoardScope,
+    input: StoredBoardInput,
+    actor: string,
+    before?: BoardWriteStep,
+  ): Promise<StoredBoardRecord> {
     await ensureVersionRow(this.ops, scope);
     try {
       return await this.#write(scope, async ops => {
@@ -411,6 +419,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         if (rows.some(row => row.board_key === input.key)) {
           throw new StoredBoardError('board_exists', `Board "${input.key}" already exists in this project.`);
         }
+        await before?.(ops);
         await insertBoard(ops, scope, input, { position: nextPosition(rows), actor });
         return { result: undefined, changed: true };
       }).then(async () => (await this.get(scope, input.key))!);
@@ -428,11 +437,12 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     scope: StoredBoardScope,
     key: string,
     input: Omit<StoredBoardInput, 'key'>,
-    options: { expectedRevision: number; actor: string },
+    options: { expectedRevision: number; actor: string; before?: BoardWriteStep },
   ): Promise<StoredBoardRecord> {
     await this.#write(scope, async ops => {
       const row = await findBoard(ops, scope, key);
       checkRevision(row, key, options.expectedRevision);
+      await options.before?.(ops);
       await writeBoard(ops, scope, row, { key, ...input }, options.actor);
       return { result: undefined, changed: true };
     });
@@ -451,12 +461,18 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
    * deleted: that project chose its boards, and Work is never added beside or after them. The
    * `intoEmpty` boards (an app's, for every project) go first into a project with no boards, so
    * Factory's own under the same key, or in `onlyIntoEmpty`, then stay out. `actor` is recorded
-   * as the inserted boards' creator.
+   * as the inserted boards' creator. `before` runs in the same
+   * transaction ahead of each board it inserts.
    */
   async seedBoards(
     scope: StoredBoardScope,
     boards: readonly StoredBoardInput[],
-    options: { actor?: string; onlyIntoEmpty?: readonly string[]; intoEmpty?: readonly StoredBoardInput[] } = {},
+    options: {
+      actor?: string;
+      onlyIntoEmpty?: readonly string[];
+      intoEmpty?: readonly StoredBoardInput[];
+      before?: (ops: FactoryStorageOps, key: string) => Promise<void>;
+    } = {},
   ): Promise<string[]> {
     const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
     if (marker?.seeded_boards && boards.every(board => marker.seeded_boards!.includes(board.key))) return [];
@@ -465,6 +481,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       skipSeeded: true,
       onlyIntoEmpty: options.onlyIntoEmpty ?? [],
       intoEmpty: options.intoEmpty ?? [],
+      before: options.before,
     });
   }
 
@@ -474,12 +491,36 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   }
 
   /**
+   * Rewrites the board stored under `seed.key` to `seed` at its next revision when `when` says the
+   * row is nobody's: one an earlier release seeded for a board Factory no longer has, under a key
+   * the app now defines. `before` runs in the same transaction. Returns whether it rewrote the row.
+   */
+  async adoptSeed(
+    scope: StoredBoardScope,
+    seed: StoredBoardInput,
+    options: { when: (row: StoredBoardRecord) => boolean; before?: BoardWriteStep },
+  ): Promise<boolean> {
+    return this.#write(scope, async ops => {
+      const stored = await readStoredBoard(ops, scope, seed.key);
+      if (!stored || !options.when(stored)) return { result: false, changed: false };
+      await options.before?.(ops);
+      await writeBoard(ops, scope, await findBoard(ops, scope, seed.key), seed, DEFAULT_INTAKE_ROUTE_ACTOR);
+      return { result: true, changed: true };
+    });
+  }
+
+  /**
    * Inserts a board into the project unless one is stored under its key, and records the key as
    * stored, so seeding never adds it again. Unlike seeding, it inserts a key the project deleted.
-   * Returns whether it inserted the board.
+   * Returns whether it inserted the board. `before` runs in the same transaction when it does.
    */
-  async insertIfMissing(scope: StoredBoardScope, board: StoredBoardInput, actor: string): Promise<boolean> {
-    return (await this.#insertOnce(scope, [board], { actor, skipSeeded: false })).length > 0;
+  async insertIfMissing(
+    scope: StoredBoardScope,
+    board: StoredBoardInput,
+    actor: string,
+    before?: BoardWriteStep,
+  ): Promise<boolean> {
+    return (await this.#insertOnce(scope, [board], { actor, skipSeeded: false, before })).length > 0;
   }
 
   async #insertOnce(
@@ -490,6 +531,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       skipSeeded: boolean;
       onlyIntoEmpty?: readonly string[];
       intoEmpty?: readonly StoredBoardInput[];
+      before?: (ops: FactoryStorageOps, key: string) => Promise<void>;
     },
   ): Promise<string[]> {
     await ensureVersionRow(this.ops, scope);
@@ -506,6 +548,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       for (const board of candidates) {
         if (present.has(board.key) || (options.skipSeeded && seeded.has(board.key))) continue;
         if (present.size > 0 && options.onlyIntoEmpty?.includes(board.key)) continue;
+        await options.before?.(ops, board.key);
         await insertBoard(ops, scope, board, { position: position++, actor: options.actor });
         present.add(board.key);
         inserted.push(board.key);

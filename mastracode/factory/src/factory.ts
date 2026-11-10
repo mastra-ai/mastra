@@ -37,7 +37,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
-import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
@@ -988,6 +988,8 @@ export class MastraFactory {
         ...(storage.isDomainReady('work-items')
           ? {
               reviewBoardInUse: (scope: StoredBoardScope) => workItemsStorage.reviewBoardInUse(scope),
+              releaseReviewCards: (ops: FactoryStorageOps, scope: StoredBoardScope) =>
+                workItemsStorage.releaseReviewCards(ops, scope, { open: 'move' }),
               occupiedPhases: occupiedPhasesOf(workItemsStorage),
             }
           : {}),

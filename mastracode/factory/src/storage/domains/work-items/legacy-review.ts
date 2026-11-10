@@ -8,13 +8,26 @@ import { FACTORY_BOARD_ITEMS_SCHEMA, WORK_ITEMS_SCHEMA } from './work-item-schem
  * still holds a card stored on it that isn't Done or Canceled ({@link readReviewBoardInUse});
  * there its cards stay on Review. In every other project it is redundant: reads present its
  * rows as Work cards, with the old `review` phase shown as Work's `pr-review`, and the next
- * ordinary write stores the Work placement. Rows are never rewritten in bulk.
+ * ordinary write stores the Work placement. The rows are rewritten together only when the project
+ * gets a board of its own under the key ({@link releaseLegacyReviewCards}).
  */
 export const LEGACY_REVIEW_BOARD = 'review';
 
 export interface ReviewBoardScope {
   orgId: string;
   factoryProjectId: string;
+}
+
+/** A board can't take the key `review` yet: the retired Review board still holds open cards. */
+export class ReviewBoardInUseError extends Error {
+  override name = 'ReviewBoardInUseError';
+  constructor(readonly cards: number) {
+    super(
+      `The retired Review board still has ${cards} open ${cards === 1 ? 'card' : 'cards'}; move or finish ${
+        cards === 1 ? 'it' : 'them'
+      } before a board takes the key "review".`,
+    );
+  }
 }
 
 /** Answers whether a project still uses the Review board, reading through the caller's `ops`. */
@@ -64,6 +77,51 @@ export async function readReviewBoardInUse(
 }
 
 const REVIEW_IN_USE_PAGE = 100;
+
+type ReviewRow = { id: string; board: string | null; stages: string[] | null; stage_history: unknown };
+
+/**
+ * Stores the Work placement of every card stored on `review`, the way an ordinary write to such a
+ * card does, so a board about to take the key starts with none of the retired Review board's
+ * cards. `open` says what happens to cards that aren't Done or Canceled: `refuse` throws
+ * {@link ReviewBoardInUseError} and writes nothing, `move` takes them to Work too. Returns how
+ * many rows it rewrote.
+ */
+export async function releaseLegacyReviewCards(
+  ops: FactoryStorageOps,
+  scope: ReviewBoardScope,
+  tables: { split: boolean; legacy: boolean },
+  open: 'refuse' | 'move',
+): Promise<number> {
+  const where: CollectionWhere = {
+    org_id: scope.orgId,
+    factory_project_id: scope.factoryProjectId,
+    board: LEGACY_REVIEW_BOARD,
+  };
+  const found: Array<{ collection: string; rows: ReviewRow[] }> = [];
+  for (const collection of [
+    ...(tables.split ? [FACTORY_BOARD_ITEMS_SCHEMA.name] : []),
+    ...(tables.legacy ? [WORK_ITEMS_SCHEMA.name] : []),
+  ]) {
+    found.push({ collection, rows: await ops.findMany<ReviewRow>(collection, where) });
+  }
+  if (open === 'refuse') {
+    // A card not copied to the split tables yet is in both; count it once.
+    const stillOpen = new Set(found.flatMap(({ rows }) => rows.filter(openOnReview).map(row => row.id)));
+    if (stillOpen.size > 0) throw new ReviewBoardInUseError(stillOpen.size);
+  }
+  let rewritten = 0;
+  for (const { collection, rows } of found) {
+    for (const row of rows) {
+      rewritten += await ops.updateMany(
+        collection,
+        { id: row.id, board: LEGACY_REVIEW_BOARD },
+        normalizeLegacyReviewColumns({ ...row, stages: row.stages ?? [] }, {}),
+      );
+    }
+  }
+  return rewritten;
+}
 
 /**
  * Work's keys, for rows written when Work was the only board: they carry no board, or Work's,

@@ -43,6 +43,7 @@ import {
   LEGACY_TRIAGE_PHASE,
   LEGACY_WORK_BOARD,
   readReviewBoardInUse,
+  releaseLegacyReviewCards,
 } from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
@@ -1381,6 +1382,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   reviewBoardInUse(scope: ReviewBoardScope): Promise<boolean> {
     return this.#reviewInUse(this.#db, scope);
+  }
+
+  /**
+   * Leaves `review` to a board about to take it: stores the Work placement of the cards the
+   * retired Review board left there, through `ops`, so it happens in the board write's
+   * transaction. See {@link releaseLegacyReviewCards} for `open`.
+   */
+  async releaseReviewCards(
+    ops: FactoryStorageOps,
+    scope: ReviewBoardScope,
+    { open }: { open: 'refuse' | 'move' },
+  ): Promise<void> {
+    const rewritten = await releaseLegacyReviewCards(
+      ops,
+      scope,
+      // Legacy cards not copied yet still count.
+      { split: !this.#legacyMode, legacy: this.#legacyMode || this.#split.pending },
+      open,
+    );
+    // An open card that moved was listed on Review until now.
+    if (rewritten > 0) await bumpBoardVersions(ops, [scope]);
   }
 
   constructor() {

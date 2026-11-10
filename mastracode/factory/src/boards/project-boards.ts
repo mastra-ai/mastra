@@ -32,7 +32,7 @@ const REVIEW_SEED_PHASES = boardDefinitionOf(reviewBoard).phases.map(({ key, nam
  * Whether `row` is the Review board as Factory seeded it: written once by Factory, never
  * revised, and shaped like the seed. The actor alone is not proof, as any caller can pass it.
  */
-function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
+export function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
   if (row.revision !== 1 || row.createdBy !== DEFAULT_INTAKE_ROUTE_ACTOR) return false;
   if (row.updatedBy !== DEFAULT_INTAKE_ROUTE_ACTOR || row.name !== reviewBoard.name) return false;
   const phases = [...row.phases].sort((a, b) => a.position - b.position);
@@ -48,13 +48,13 @@ function isUntouchedReviewSeed(row: StoredBoardRecord): boolean {
 }
 
 /**
- * Whether a project has a board of its own under `review`: an app board, or a stored row other
- * than the seed an earlier release left behind. Cards stored on it are its own; anywhere else they
- * are the retired Review board's.
+ * Whether a project has a board of its own under `review`: a stored row other than the seed an
+ * earlier release left behind. Cards stored on it are its own; anywhere else they are the retired
+ * Review board's. An app that defines the board owns it in a project from when its row is stored
+ * there. Without stored boards (`stored: false`) the app's boards are served as they are.
  */
 export function ownReviewBoard(codeRegistry: BoardRegistry, { stored = true } = {}): ReviewBoardInUse {
-  if (codeRegistry.has(LEGACY_REVIEW_BOARD)) return async () => true;
-  if (!stored) return async () => false;
+  if (!stored) return async () => codeRegistry.has(LEGACY_REVIEW_BOARD);
   return async (ops, scope) => {
     const row = await readStoredBoard(ops, scope, LEGACY_REVIEW_BOARD);
     return row !== null && !isUntouchedReviewSeed(row);
@@ -152,6 +152,11 @@ export interface ProjectBoardCacheOptions {
    * a project is served Review alongside its boards; without this, no project is.
    */
   reviewBoardInUse?: (scope: StoredBoardScope) => Promise<boolean>;
+  /**
+   * Stores the Work placement of every card the retired Review board left on `review`, through
+   * `ops`. Run in the transaction that stores an app's board under that key in a project.
+   */
+  releaseReviewCards?: (ops: FactoryStorageOps, scope: StoredBoardScope) => Promise<void>;
   recheckMs?: number;
   now?: () => number;
   warn?: (message: string) => void;
@@ -212,12 +217,14 @@ export class ProjectBoardCache implements ProjectBoardSource {
   /** Boards the app upserted for every project, which a project with no boards gets before Factory's. */
   readonly #appBoards = new Map<string, StoredBoardInput>();
   readonly #reviewBoardInUse: ProjectBoardCacheOptions['reviewBoardInUse'];
+  readonly #releaseReviewCards: ProjectBoardCacheOptions['releaseReviewCards'];
   readonly #occupiedPhases: ProjectBoardCacheOptions['occupiedPhases'];
 
   constructor(options: ProjectBoardCacheOptions) {
     this.codeRegistry = options.codeRegistry;
     this.#storage = options.storage;
     this.#reviewBoardInUse = options.reviewBoardInUse;
+    this.#releaseReviewCards = options.releaseReviewCards;
     this.#occupiedPhases = options.occupiedPhases;
     this.#projects = options.projects;
     this.#codeSkills = options.codeSkills ?? [];
@@ -402,10 +409,23 @@ export class ProjectBoardCache implements ProjectBoardSource {
     try {
       // Read before seeding records Work's key: a project whose list lacked it has no Work of Factory's.
       const seeded = await this.#storage.seededBoardKeys(scope);
+      const release = this.#releaseReviewCards;
+      const review = this.#seeds.get(LEGACY_REVIEW_BOARD);
       if (this.#seeds.size > 0 || this.#appBoards.size > 0) {
         await this.#storage.seedBoards(scope, this.seeds(), {
           onlyIntoEmpty: this.#onlyIntoEmpty(),
           intoEmpty: [...this.#appBoards.values()],
+          // An app's board under `review` starts without the cards the retired Review board left there.
+          before: async (ops, board) => {
+            if (board === LEGACY_REVIEW_BOARD) await release?.(ops, scope);
+          },
+        });
+      }
+      // The row an earlier release seeded for the retired board becomes the app's board.
+      if (review) {
+        await this.#storage.adoptSeed(scope, review, {
+          when: isUntouchedReviewSeed,
+          before: ops => release?.(ops, scope) ?? Promise.resolve(),
         });
       }
       await this.#migrate(scope, seeded);
@@ -476,6 +496,11 @@ export class ProjectBoardCache implements ProjectBoardSource {
     // Work and app boards keep their code order, each served from its row.
     for (const code of this.codeRegistry.values()) {
       const row = byKey.get(code.id);
+      // Still the retired board's seed: the app's board is served once its row replaces it.
+      if (row && code.id === LEGACY_REVIEW_BOARD && isUntouchedReviewSeed(row)) {
+        details.delete(code.id);
+        continue;
+      }
       if (!row) {
         details.delete(code.id);
         // Stored once and deleted since, or not stored because storing failed.
@@ -502,8 +527,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
     }
     // A board of the project's own under the retired Review board's key is served like any other.
     const reviewRow = byKey.get(LEGACY_REVIEW_BOARD);
-    const ownsReview =
-      this.codeRegistry.has(LEGACY_REVIEW_BOARD) || (reviewRow !== undefined && !isUntouchedReviewSeed(reviewRow));
+    const ownsReview = reviewRow !== undefined && !isUntouchedReviewSeed(reviewRow);
     // Served from code and never stored, so nobody edits a board on its way out.
     if (reviewInUse && !ownsReview) {
       boards.push(reviewBoard);

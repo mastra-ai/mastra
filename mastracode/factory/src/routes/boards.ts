@@ -28,7 +28,7 @@ export interface BoardRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   projects: FactoryProjectsStorage;
   /** Read to refuse edits that would strand cards. */
-  workItems: Pick<WorkItemsStorage, 'listShared'>;
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'releaseReviewCards'>;
   storage: StoredBoardsStorage;
   /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
   boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
