@@ -66,6 +66,12 @@ import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
+// GitHub installation tokens live 60 minutes and minted access is cached for
+// up to 5, so replace an installed token well before it can expire. An
+// installed org PAT does not expire this way and is never age-refreshed.
+const GITHUB_TOKEN_REFRESH_AFTER_MS = 45 * 60_000;
+const isGithubTokenStale = (registration: { tokenIssuedAt: number; patInstalled: boolean }): boolean =>
+  !registration.patInstalled && Date.now() - registration.tokenIssuedAt >= GITHUB_TOKEN_REFRESH_AFTER_MS;
 /** The Factory UI renders plans only from `.artifacts/`, so every session writes them there. */
 export const FACTORY_PLANS_DIR = '.artifacts/plans';
 const FACTORY_WORKSPACE_TOOLS = createMastraCodeWorkspaceTools(false, FACTORY_PLANS_DIR);
@@ -680,9 +686,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
-    inject: (token: string) => void;
+    inject: (token: string, pat?: boolean) => void;
     patKind: GithubPatKind;
     ghToken: string;
+    // Whether `ghToken` is an org PAT rather than a minted installation token.
+    patInstalled: boolean;
+    // When `ghToken` was installed. Minted installation tokens expire after
+    // an hour, so reconcile and reconnect re-mint once it is stale.
+    tokenIssuedAt: number;
     generation: number;
     tokenReplacementPending: boolean;
   };
@@ -815,6 +826,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
         })
       : createSessionSetupHook(runSetupOn, session.id, repoFullName, projectRepository.setupCommand ?? undefined);
+    // Replaces the installed minted token once it is stale, so `gh` and the
+    // `gh auth git-credential` helper never run with an expired GH_TOKEN. An
+    // installed org PAT is never stale. Returns whether a fresh token was injected.
+    const refreshStaleGithubToken = async (): Promise<boolean> => {
+      const registration = githubTokenInjectors.get(workspaceId);
+      if (!githubProvider || !registration || !isGithubTokenStale(registration)) return false;
+      // Let an in-flight reconcile settle the role before choosing a credential.
+      await githubTokenReconciliations.get(workspaceId)?.catch(() => {});
+      if (githubTokenInjectors.get(workspaceId) !== registration || !isGithubTokenStale(registration)) return false;
+      const { ghToken, generation } = registration;
+      const token = await getRepositoryToken();
+      // A reconcile during the mint may have switched role or installed a PAT.
+      if (
+        githubTokenInjectors.get(workspaceId) !== registration ||
+        registration.generation !== generation ||
+        registration.ghToken !== ghToken
+      ) {
+        return false;
+      }
+      registration.inject(token);
+      return true;
+    };
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -885,17 +918,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // reconcileGithubToken owns role/generation and the active context's
         // injector, so replacing them here would reauthorize the stale
         // constructing context and reject the current one.
-        existingRegistration.inject = freshToken => {
+        existingRegistration.inject = (freshToken, pat = false) => {
           if (!target.setEnv) {
             throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
           }
           target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           existingRegistration.ghToken = freshToken;
+          existingRegistration.patInstalled = pat;
+          existingRegistration.tokenIssuedAt = Date.now();
         };
+        // A minted token may have expired while the VM was away; re-mint it
+        // instead of reinstalling it over the fresh one setup just used.
         // Install through inject (not optional-chained setEnv) so a provider
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
-        existingRegistration.inject(existingRegistration.ghToken);
+        // A failed mint keeps the reconnect usable with the current token.
+        const refreshed = await refreshStaleGithubToken().catch(() => false);
+        if (!refreshed) {
+          // Reinstalling the same credential must not reset its age.
+          const { tokenIssuedAt } = existingRegistration;
+          existingRegistration.inject(existingRegistration.ghToken, existingRegistration.patInstalled);
+          existingRegistration.tokenIssuedAt = tokenIssuedAt;
+        }
         await finishStart();
         return;
       }
@@ -905,20 +949,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
       const patKind = await resolveGithubPatKind();
-      const ghCliToken =
-        (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind)) ??
-        (await getRepositoryToken());
+      const ghCliPat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
+      const ghCliToken = ghCliPat ?? (await getRepositoryToken());
       target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
       const tokenRegistration: GithubTokenRegistration = {
-        inject: freshToken => {
+        inject: (freshToken, pat = false) => {
           if (!target.setEnv) {
             throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
           }
           target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           tokenRegistration.ghToken = freshToken;
+          tokenRegistration.patInstalled = pat;
+          tokenRegistration.tokenIssuedAt = Date.now();
         },
         patKind,
         ghToken: ghCliToken,
+        patInstalled: ghCliPat !== null,
+        tokenIssuedAt: Date.now(),
         generation: 0,
         tokenReplacementPending: false,
       };
@@ -966,6 +1013,32 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
+          // A turn can outlive the token installed when the workspace was
+          // resolved, so check its age before every command and background
+          // spawn. Best-effort: a failed re-mint leaves the current token in
+          // place. Concurrent callers share one refresh.
+          let commandRefresh: Promise<unknown> | undefined;
+          const refreshBeforeCommand = () =>
+            (commandRefresh ??= refreshStaleGithubToken()
+              .catch(() => {})
+              .finally(() => {
+                commandRefresh = undefined;
+              }));
+          const executeCommand = sandbox.executeCommand?.bind(sandbox);
+          if (executeCommand) {
+            sandbox.executeCommand = async (...args) => {
+              await refreshBeforeCommand();
+              return executeCommand(...args);
+            };
+          }
+          const processes = sandbox.processes;
+          if (processes) {
+            const spawn = processes.spawn.bind(processes);
+            processes.spawn = async (...args) => {
+              await refreshBeforeCommand();
+              return spawn(...args);
+            };
+          }
           // Attached inside the construction closure, so exactly once per
           // instance: `constructSessionEntry` runs on every open and would
           // stack a wrapper per call. Factory's setup runs first: a hook the
@@ -1182,12 +1255,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return 'default';
       }
     };
-    const githubTokenInjector = (registered: GithubTokenRegistration, generation: number) => (token: string) => {
-      if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
-        throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-      }
-      registered.inject(token);
-    };
+    const githubTokenInjector =
+      (registered: GithubTokenRegistration, generation: number) => (token: string, pat?: boolean) => {
+        if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
+          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+        }
+        registered.inject(token, pat);
+      };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       registerGithubTokenInjector(requestContext, githubTokenInjector(registered, registered.generation));
       registerGithubPatKind(requestContext, registered.patKind);
@@ -1234,13 +1308,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registered.tokenReplacementPending = true;
           }
 
-          let token = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
-          if (!token && registered.tokenReplacementPending) token = await getRepositoryToken();
+          const pat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
+          let token = pat;
+          if (!token && (registered.tokenReplacementPending || isGithubTokenStale(registered))) {
+            token = await getRepositoryToken();
+          }
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (token && token !== registered.ghToken) {
             try {
-              registered.inject(token);
+              registered.inject(token, token === pat);
             } catch (error) {
               if (registered.tokenReplacementPending) throw error;
               // Same-role rotations and reviewer upgrades remain best-effort.

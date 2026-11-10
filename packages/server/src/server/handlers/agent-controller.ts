@@ -746,6 +746,10 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
           });
 
           const abortCleanup = () => cleanup(controller);
+          if (abortSignal?.aborted) {
+            abortCleanup();
+            return;
+          }
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
           scheduleHeartbeat();
         },

@@ -311,13 +311,43 @@ const { output } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. This transport index is unavailable through public stream chunks and callbacks. Only pass an offset when another integration already tracks the transport position.
+The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. A chunk read from the run log carries the index of its event as `chunk.index`, on `stream()`, `observe()`, and the HTTP `/stream` and `/observe` endpoints. To resume after a dropped connection, pass `index + 1` of the last chunk that has an index, or omit `offset` if nothing arrived. Lifecycle events take an index but produce no chunk, so indexes have gaps and a chunk count isn't a valid offset.
+
+Some chunks carry no `index`. The client builds `object` chunks itself rather than reading them from the log. An `abort` chunk is sent beside the `finish` of the same run-log entry, and only the `finish` carries the index, so a client that reconnects between the two gets the `abort` again.
+
+A run that used a structuring model publishes its `object-result` to the run log, so that chunk carries an `index` and replays like any other. A core `observe()` caller holding the schema can also rebuild structured output from replayed text, but gets `object-result` only when it replays the text that produced it. HTTP `/observe` replays the log and doesn't rebuild it. To rebuild it after a reconnect, observe without an `offset` and skip chunks whose `index` you already processed. That replay also rebuilds `object` chunks you already received, and they have no `index` to skip by. Each `object` chunk is a snapshot of the object so far, so keep the latest one. Indexes come from the replay cache, so a chunk whose cache write failed, or any chunk when caching is off, has no `index`, so no offset can resume at it. Omitting `offset` replays whatever the transport itself retains, such as a Redis stream, and can repeat chunks you already received. The paragraphs below cover offsets past the end and transports without numeric offsets.
+
+`index` is additive and `offset` keeps its meaning, so code that already passes a log position, or replays from `0`, needs no change. Code that passed a count of chunks received should switch to the last `index + 1`.
+
+The following example records the resume offset while streaming and passes it to `observe()` after a reconnect:
+
+```typescript
+let offset: number | undefined
+const { output } = await durableAgent.stream(messages, { runId })
+for await (const chunk of output.fullStream) {
+  if (chunk.index === undefined) continue
+  offset = chunk.index + 1
+}
+
+// After a dropped connection:
+const { output: resumed } = await durableAgent.observe(runId, { offset })
+```
 
 A non-zero offset can skip earlier events. Aggregated values are built only from chunks delivered to that observer. If the offset skips earlier text deltas, `output.text` is partial and structured output may be incomplete or fail validation or parsing.
 
-When the PubSub transport supports numeric offsets, an offset beyond the highest retained index replays nothing and also skips live events with lower indexes. The observer receives events only when the published index reaches the requested offset. If the index counter restarts below that offset, the observer can wait indefinitely. On a transport without numeric offset support, providing an offset starts with new live events and doesn't replay cached events. Replay is limited to events still available in the configured cache. Events can't be replayed when caching is disabled, `shouldCache` excludes the run topic, a cache write fails, or retained events have been cleared.
+When the PubSub transport supports numeric offsets, the observer receives numbered events only when the published index reaches the requested offset. An offset beyond the highest retained index replays nothing and also skips live events with lower indexes.
 
-An evented agent (`createEventedAgent()`) on a cross-process PubSub, such as Redis Streams, numbers its events only when every process shares the server cache. Configure a shared cache such as `RedisServerCache` on the `Mastra` instance. With the default in-memory server cache, events aren't numbered, so an offset can't skip them: the observer can receive events from before the offset again, and Mastra logs a warning.
+An event without an `index`, such as one whose cache write failed, is delivered as it arrives whatever the offset.
+
+If the retained log expires or is cleared and numbering restarts at `0` while an observer is attached, that observer resyncs to the new log and receives its events, including ones below the requested offset. Detection is best effort. If the cache can't be read at that moment, or the new log has numbered past the observer's position before its first event arrives, the observer can miss the restart and skip those events instead. An observer that reconnects after the restart with an offset from the old log can't tell the logs apart and skips the new log's events below that offset, so omit `offset` to replay the new log.
+
+On a transport without numeric offset support, such as `RedisStreamsPubSub` with caching off, `observe()` with any offset, including `0`, starts with new live events and doesn't replay retained events. This is the same in core and over HTTP `/observe`. Omit `offset` to replay them. (HTTP `/observe` on a plain `Agent` replays the retained events instead, which can repeat events already received.)
+
+Indexed replay is limited to events still available in the configured cache. The cache has nothing to replay when caching is disabled, `shouldCache` excludes the run topic, or retained events have been cleared. Omitting `offset` then replays only what the transport itself retains, if anything.
+
+A failed cache write loses only that event from the cache. It has no `index`, and the events written before and after it still replay when the cache numbers and appends an event in one step. The in-memory and Valkey caches always do. `RedisServerCache` does while Redis scripting works, and switches to two steps when the client has no `eval` or Redis Cluster rejects the script with `CROSSSLOT`. A custom cache that keeps the default `listPushIndexed()` also takes two steps. A two-step cache can leave a gap that makes offset replay skip later events, so replay such a log without an `offset` and skip indexes already processed. Cache replay can't recover an event the cache never stored. A transport that retains it, such as `RedisStreamsPubSub`, can still deliver it without an `index`.
+
+An evented agent (`createEventedAgent()`) on a cross-process PubSub, such as Redis Streams, can use the default in-memory server cache when its steps run in the process that started the run. That process numbers the events. Use a shared cache such as `RedisServerCache` on the `Mastra` instance when steps run in another process, such as a dedicated worker started with `workers: true`. That process can't share the in-memory counter, so its events aren't numbered and an offset can't skip them. Mastra logs a warning in the worker when this happens. Also use a shared cache when an observer reconnects through another process, such as a different server replica, because it can't replay from the starting process's in-memory cache.
 
 By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
 
@@ -586,7 +616,7 @@ The server's `POST /agents/:agentId/recover` route returns ownership, already-in
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Take the run over even while another execution holds it. That execution loses the run and stops, and streams for the run drop the events it still publishes. Its writes are rejected when the storage adapter supports [run fencing](/docs/harness/durable-agents#run-ownership).',
+      'Take the run over even while another execution holds it. That execution loses the run and stops, and streams for the run drop the events it still publishes. Its writes are rejected when the storage adapter supports [run fencing](/docs/harness/durable-agents#run-ownership). Tools still running in that execution can finish, so the same tool call can run twice. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).',
   },
 ]}
 />

@@ -18,13 +18,14 @@ import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
 import { providerDisplayName } from '../provider-display-name.js';
+import { secretKeyMismatchHint } from '../secret-encryption.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
 import type { RouteAuth } from './route.js';
-import { ensureReadyWithBackoff } from './storage-init-backoff.js';
+import { ensureReadyWithBackoff, lastInitError } from './storage-init-backoff.js';
 
 /**
  * OAuth credentials are stored under the credential id, which differs from the
@@ -113,7 +114,10 @@ export async function resolveCredentialContext({
       response: c.json(
         {
           error: 'credentials_unavailable',
-          message: 'Tenant credential storage is unavailable — the app database is not configured or failed to start.',
+          message: `Provider credentials are unavailable. ${
+            secretKeyMismatchHint(credentials && lastInitError(credentials)) ??
+            'The app database is not configured or failed to start. The server log line "[factory] model credential storage is unavailable" has the cause.'
+          }`,
         },
         503,
       ),

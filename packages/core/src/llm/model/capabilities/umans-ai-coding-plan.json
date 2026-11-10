@@ -27,16 +27,7 @@
     "umans-qwen3.6-35b-a3b"
   ],
   "reasoning": {
-    "umans-glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "umans-kimi-k3": [
-      {
-        "type": "toggle"
-      },
+    "umans-coder": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -46,6 +37,15 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "umans-qwen3.6-35b-a3b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "umans-deepseek-v4.1-flash": [
@@ -75,13 +75,19 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-qwen3.6-35b-a3b": [
+    "umans-glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "umans-kimi-k3": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "umans-flash": [
@@ -91,12 +97,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "umans-coder": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

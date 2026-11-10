@@ -27,6 +27,8 @@ export interface AvailableModelsFilter {
 
 export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
+  serverVersions: () => ['server-versions'] as const,
+  serverStatus: () => ['server-status'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
@@ -81,6 +83,7 @@ export const queryKeys = {
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
+  connectTools: () => ['connect-tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssuesAll: () => ['jira', 'issues'] as const,
   jiraIssues: (factoryProjectId: string | undefined) =>

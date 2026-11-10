@@ -31,13 +31,19 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
     "deepseek/deepseek-v4-pro-0813": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash-latest": [
+    "deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -49,13 +55,7 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4.1-flash-1017": [
+    "deepseek/deepseek-v4-flash-latest": [
       {
         "type": "effort",
         "values": ["high", "max"]

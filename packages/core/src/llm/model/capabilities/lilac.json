@@ -8,12 +8,12 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/kimi-k2.6": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
       }
     ],
-    "google/gemma-4-31b-it": [
+    "moonshotai/kimi-k2.6": [
       {
         "type": "toggle"
       }

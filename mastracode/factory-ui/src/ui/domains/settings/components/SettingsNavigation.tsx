@@ -6,6 +6,7 @@ import {
   BookOpen,
   Bot,
   Brain,
+  Bug,
   Building2,
   Cable,
   CircleUserRound,
@@ -14,6 +15,7 @@ import {
   Palette,
   SlidersHorizontal,
   SquareKanban,
+  Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -57,8 +59,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'connections',
         label: SETTINGS_SECTION_LABELS.connections,
         icon: Cable,
-        searchText:
-          'personal organization connections connected accounts slack integrations github gitlab tokens pat mcp claude chatgpt',
+        searchText: 'personal organization connections connected accounts slack integrations github gitlab tokens pat',
       },
     ],
   },
@@ -85,6 +86,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.skills,
         icon: BookOpen,
         searchText: 'skills factory triage plan review agent instructions prompts stages',
+      },
+      {
+        id: 'tools',
+        label: SETTINGS_SECTION_LABELS.tools,
+        icon: Wrench,
+        searchText: 'tools mastra connect connections integrations sessions platform project approval',
       },
       {
         id: 'behavior',
@@ -124,6 +131,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Building2,
         searchText:
           'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
+      },
+      {
+        id: 'debug',
+        label: SETTINGS_SECTION_LABELS.debug,
+        icon: Bug,
+        searchText: 'debug versions packages release build node mastra core factory installed running',
       },
     ],
   },

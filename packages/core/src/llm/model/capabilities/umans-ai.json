@@ -25,16 +25,7 @@
     "umans-kimi-k3"
   ],
   "reasoning": {
-    "umans-glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "umans-kimi-k3": [
-      {
-        "type": "toggle"
-      },
+    "umans-coder": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -73,6 +64,21 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "umans-glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "umans-kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "umans-flash": [
       {
         "type": "toggle"
@@ -80,12 +86,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "umans-coder": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }
