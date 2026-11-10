@@ -588,9 +588,12 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               steps: state.accumulatedSteps,
             },
           });
-          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
-            lastStep.text = finishResult.outputText;
-            finalText = finishResult.outputText;
+          const { outputText } = finishResult;
+          let textRewritten = false;
+          if (lastStep && outputText !== undefined) {
+            lastStep.text = outputText;
+            finalText = outputText;
+            textRewritten = true;
           }
 
           const tripwire = finishResult.tripwire;
@@ -731,6 +734,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
+              ...(textRewritten && { textRewritten }),
             });
           }
 

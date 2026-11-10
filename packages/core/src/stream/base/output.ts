@@ -1927,9 +1927,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
                   // A step rejected by a tripwire keeps its empty text, so durable runs don't
                   // return a rejected reply (#26048).
-                  if (self.#options.resolveFinalPromises && self.#status !== 'canceled') {
+                  if (chunk.payload.textRewritten === true && self.#status !== 'canceled') {
                     // Durable producers run processOutputResult after the last step-finish was
-                    // streamed, and write its result onto the run's last step.
+                    // streamed. When it changed the reply, they write the result onto the run's
+                    // last step; otherwise the buffered text stands (a failed step's record is
+                    // empty while the stream already delivered its partial text).
                     const finalizedText = chunk.payload.output?.steps?.at(-1)?.text;
                     const lastStep = self.#bufferedSteps.at(-1);
                     if (lastStep && typeof finalizedText === 'string') lastStep.text = finalizedText;

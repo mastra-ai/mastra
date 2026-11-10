@@ -1092,11 +1092,13 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 steps,
               },
             });
-            const { processedOutputText } = finishResult;
-            if (lastStep && processedOutputText !== undefined) {
-              lastStep.text = processedOutputText;
-              steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: processedOutputText };
-              finalText = processedOutputText;
+            const { outputText } = finishResult;
+            let textRewritten = false;
+            if (lastStep && outputText !== undefined) {
+              lastStep.text = outputText;
+              steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: outputText };
+              finalText = outputText;
+              textRewritten = true;
             }
 
             const tripwire = finishResult.tripwire;
@@ -1158,6 +1160,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
                 messages: finishMessages,
+                ...(textRewritten && { textRewritten }),
               });
             }
 
