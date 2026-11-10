@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { IMastraLogger } from '../logger';
 import { MastraCompositeStore } from './base';
 import type { StorageMastraRef } from './base';
 import { InMemoryDB } from './domains/inmemory-db';
@@ -602,5 +603,77 @@ describe('MastraCompositeStore.__registerMastra', () => {
 
     expect(() => a.__registerMastra(mastra)).not.toThrow();
     expect(getMastra(a)).toBe(mastra);
+  });
+});
+
+describe('MastraCompositeStore.__setLogger', () => {
+  const makeLogger = () =>
+    ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) as unknown as IMastraLogger;
+  const getLogger = (target: unknown) => (target as { logger?: IMastraLogger }).logger;
+  const setParent = (store: MastraCompositeStore, parent: MastraCompositeStore) =>
+    ((store as unknown as { parentDefault?: MastraCompositeStore }).parentDefault = parent);
+
+  it('cascades the logger to every domain store', () => {
+    const store = new InMemoryStore({ id: 'store' });
+    const logger = makeLogger();
+
+    store.__setLogger(logger);
+
+    const domains = Object.values(store.stores ?? {}).filter(Boolean);
+    expect(domains.length).toBeGreaterThan(0);
+    for (const domain of domains) {
+      expect(getLogger(domain)).toBe(logger);
+    }
+  });
+
+  it('cascades the logger to parent composites and their domains', () => {
+    const parent = new InMemoryStore({ id: 'parent' });
+    const composite = new MastraCompositeStore({ id: 'composite', default: parent });
+    const logger = makeLogger();
+
+    composite.__setLogger(logger);
+
+    expect(getLogger(composite)).toBe(logger);
+    expect(getLogger(parent)).toBe(logger);
+    expect(getLogger(parent.stores!.memory)).toBe(logger);
+    expect(getLogger(composite.stores!.memory)).toBe(logger);
+  });
+
+  it('terminates on a parent cycle and updates both composites', () => {
+    const a = new MastraCompositeStore({ id: 'a', default: new InMemoryStore({ id: 'a-inner' }) });
+    const b = new MastraCompositeStore({ id: 'b', default: new InMemoryStore({ id: 'b-inner' }) });
+    setParent(a, b);
+    setParent(b, a);
+    const logger = makeLogger();
+
+    expect(() => a.__setLogger(logger)).not.toThrow();
+    expect(getLogger(a)).toBe(logger);
+    expect(getLogger(b)).toBe(logger);
+  });
+
+  it('sets the logger once on a domain shared by several composites', () => {
+    const shared = new InMemoryStore({ id: 'shared' });
+    const composite = new MastraCompositeStore({
+      id: 'composite',
+      default: shared,
+      domains: { memory: shared.stores!.memory },
+    });
+    const memory = shared.stores!.memory!;
+    const spy = vi.spyOn(memory, '__setLogger');
+
+    composite.__setLogger(makeLogger());
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies a child logger per component when the logger supports it', () => {
+    const store = new InMemoryStore({ id: 'store' });
+    const child = makeLogger();
+    const logger = { ...makeLogger(), child: vi.fn(() => child) } as unknown as IMastraLogger;
+
+    store.__setLogger(logger);
+
+    expect(getLogger(store.stores!.memory)).toBe(child);
+    expect((logger as unknown as { child: ReturnType<typeof vi.fn> }).child).toHaveBeenCalled();
   });
 });

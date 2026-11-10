@@ -1,4 +1,5 @@
 import { MastraBase } from '../base';
+import type { IMastraLogger } from '../logger';
 
 import type {
   AgentsStorage,
@@ -518,6 +519,33 @@ export class MastraCompositeStore extends MastraBase {
       } else {
         seen.add(target);
       }
+    };
+    if (this.parentDefault) cascade(this.parentDefault);
+    if (this.parentEditor) cascade(this.parentEditor);
+    if (this.stores) {
+      for (const domain of Object.values(this.stores)) cascade(domain);
+    }
+  }
+
+  /**
+   * Set the logger on this storage adapter and cascade it to all owned domain
+   * stores and parent composites, so domain-level logging honors the logger
+   * configured on Mastra (including `logger: false`).
+   * @internal
+   */
+  override __setLogger(logger: IMastraLogger, seen: Set<unknown> = new Set<unknown>()): void {
+    if (seen.has(this)) return;
+    seen.add(this);
+    super.__setLogger(logger);
+    const cascade = (target: unknown) => {
+      if (!target || typeof target !== 'object' || seen.has(target)) return;
+      if (target instanceof MastraCompositeStore) {
+        target.__setLogger(logger, seen);
+        return;
+      }
+      seen.add(target);
+      const fn = (target as { __setLogger?: (l: IMastraLogger) => void }).__setLogger;
+      if (typeof fn === 'function') fn.call(target, logger);
     };
     if (this.parentDefault) cascade(this.parentDefault);
     if (this.parentEditor) cascade(this.parentEditor);
