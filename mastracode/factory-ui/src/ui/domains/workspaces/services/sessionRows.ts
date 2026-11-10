@@ -5,11 +5,11 @@ import {
   cardContextSessions,
   cardThreadSession,
   changeRequestNumberForItem,
-  contextLabel,
   externalLinkLabel,
   pullRequestStatusForItem,
   sourceMetadata,
 } from '../../factory/boardItems';
+import type { PullRequestStatus } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
@@ -52,6 +52,7 @@ export function sessionOwners(rows: readonly SessionListRow[]): SessionOwner[] {
 export interface SessionPullRequest {
   number?: number;
   provider: ChangeRequestProvider;
+  status: PullRequestStatus;
   knownMerged: boolean;
 }
 
@@ -76,15 +77,19 @@ export interface SessionListRow {
   ownedByViewer: boolean;
   canRegenerateTitle: boolean;
   item?: WorkItem;
-  /** The card this session belongs to, set with `contextLabel` for a card's own sessions. */
+  /** The card this session belongs to, set for a card's own sessions. */
   itemId?: string;
-  /** The context the card runs this session in, named for the sidebar (`Triage`, `Work`). */
-  contextLabel?: string;
   threadId?: string;
   pullRequest?: SessionPullRequest;
   pinned: boolean;
   /** Every session of the card a card row stands for, so unpinning it clears a pin carried from another of them. */
   cardSessionIds?: readonly string[];
+  /** The card's other sessions, listed under its row when child sessions are revealed. */
+  childRows?: readonly SessionListRow[];
+  /** A card row's carried status (waiting or working wins across its sessions), for grouping when its children are revealed. */
+  cardStatus?: SessionActivityStatus;
+  /** What a child row is named in the sidebar: the phase its session ran in. */
+  phaseLabel?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -165,6 +170,7 @@ function sessionPullRequest(pullRequest: WorkItem | undefined): SessionPullReque
   return {
     number: changeRequestNumberForItem(pullRequest),
     provider: pullRequest.source === 'gitlab-pr' ? 'gitlab' : 'github',
+    status: pullRequestStatusForItem(pullRequest),
     knownMerged: sourceMetadata(pullRequest).merged === true || sourceMetadata(pullRequest).state === 'merged',
   };
 }
@@ -199,7 +205,6 @@ export function buildFactorySessionRow({
   pinned,
   viewer,
 }: FactorySessionRowInput): SessionListRow {
-  const phases = item && boards?.find(board => board.id === itemBoard(item))?.phases;
   const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
   const ownedByViewer = isOwnedByViewer(session, viewer);
   return {
@@ -222,7 +227,7 @@ export function buildFactorySessionRow({
     ownedByViewer,
     canRegenerateTitle: ownedByViewer && session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX),
     item,
-    ...(item && context !== undefined ? { itemId: item.id, contextLabel: contextLabel(context, phases) } : {}),
+    ...(item && context !== undefined ? { itemId: item.id } : {}),
     threadId,
     pullRequest: sessionPullRequest(pullRequest),
     pinned,
@@ -233,33 +238,49 @@ export function buildFactorySessionRow({
 
 const CARRIED_STATUSES: readonly SessionActivityStatus[] = ['waiting', 'working'];
 
-/** The row a card lists: the session it opens, else the first of its sessions in the order the card lists them. */
-function cardRow(
+/**
+ * A card's sessions in the order it lists them: the session it opens first, then
+ * the rest in card order, then any the card no longer lists.
+ */
+function orderCardRows(
   cardRows: readonly SessionListRow[],
   boards: readonly InstalledBoardInfo[] | undefined,
-): SessionListRow {
+): SessionListRow[] {
   const item = cardRows[0].item;
-  if (!item) return cardRows[0];
+  if (!item) return [...cardRows];
   const phases = boards?.find(board => board.id === itemBoard(item))?.phases;
   const stage = item.stages[0] ?? '';
   const opened = cardThreadSession(item, phases, stage)?.sessionId;
-  const order = cardContextSessions(item, phases, stage).map(entry => entry.ref.sessionId);
+  const sessions = cardContextSessions(item, phases, stage);
   const rank = (row: SessionListRow) => {
     if (row.session.sessionId === opened) return -1;
-    const index = order.indexOf(row.session.sessionId);
-    return index === -1 ? order.length : index;
+    const index = sessions.findIndex(entry => entry.ref.sessionId === row.session.sessionId);
+    return index === -1 ? sessions.length : index;
   };
-  return cardRows.toSorted((a, b) => rank(a) - rank(b))[0];
+  const phaseLabel = (row: SessionListRow) =>
+    sessions.find(entry => entry.ref.sessionId === row.session.sessionId)?.label;
+  // The card's own row keeps its name; the sessions under it are named by phase.
+  return cardRows
+    .toSorted((a, b) => rank(a) - rank(b))
+    .map((row, index) => (index === 0 ? row : { ...row, phaseLabel: phaseLabel(row) }));
+}
+
+export interface OneRowPerCardOptions {
+  /** List the card's other sessions under its row instead of folding them into it. */
+  revealChildSessions?: boolean;
 }
 
 /**
- * A card lists one row, for its current session. The row takes on what any of
- * the card's sessions shows (running, waiting on you, pinned, open), so work in
- * another context isn't hidden.
+ * A card lists one row, for its current session. With child sessions hidden the
+ * row takes on what any of the card's sessions shows (running, waiting on you),
+ * so work in another context isn't hidden, and is open while any of them is;
+ * revealed, each session shows its own state. The row is pinned while any of
+ * the card's sessions is.
  */
 export function oneRowPerCard(
   rows: readonly SessionListRow[],
   boards: readonly InstalledBoardInfo[] | undefined,
+  { revealChildSessions = false }: OneRowPerCardOptions = {},
 ): SessionListRow[] {
   const rowsByCard = new Map<string, SessionListRow[]>();
   for (const row of rows) {
@@ -269,16 +290,23 @@ export function oneRowPerCard(
   return rows.flatMap(row => {
     const cardRows = row.itemId === undefined ? undefined : rowsByCard.get(row.itemId);
     if (!cardRows || cardRows.length === 1) return [row];
-    const shown = cardRow(cardRows, boards);
+    const [shown, ...others] = orderCardRows(cardRows, boards);
     if (shown !== row) return [];
+    const shared = {
+      pinned: cardRows.some(candidate => candidate.pinned),
+      cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
+    };
     const carried = CARRIED_STATUSES.find(status => cardRows.some(candidate => candidate.status === status));
+    // Listed, each session shows its own state and the open one highlights.
+    if (revealChildSessions) {
+      return [{ ...shown, ...shared, cardStatus: carried ?? shown.status, childRows: others }];
+    }
     return [
       {
         ...shown,
+        ...shared,
         status: carried ?? shown.status,
         active: cardRows.some(candidate => candidate.active),
-        pinned: cardRows.some(candidate => candidate.pinned),
-        cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
       },
     ];
   });
@@ -364,5 +392,5 @@ function pullRequestMergeTarget({ session, threadId, pullRequest }: SessionListR
 }
 
 export function pullRequestMergeTargets(rows: readonly SessionListRow[]): WorkspacePullRequestTarget[] {
-  return rows.flatMap(pullRequestMergeTarget);
+  return rows.flatMap(row => [row, ...(row.childRows ?? [])]).flatMap(pullRequestMergeTarget);
 }

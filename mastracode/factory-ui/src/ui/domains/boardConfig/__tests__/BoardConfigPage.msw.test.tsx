@@ -263,8 +263,11 @@ describe('Board configuration', () => {
     await user.click(review);
     expect(review).toHaveAttribute('aria-pressed', 'true');
     // Moves Factory's code makes stay on; the one allowed here can be turned off again.
-    expect(moves().getByRole('button', { name: 'Triage (locked)' })).toHaveAttribute('aria-disabled', 'true');
+    expect(moves().getByRole('button', { name: 'Intake (locked)' })).toHaveAttribute('aria-disabled', 'true');
     expect(review).not.toHaveAttribute('aria-disabled');
+    // Triage is a stored phase, not one of Work's code phases, so its move is on but can be turned off.
+    const triage = moves().getByRole('button', { name: 'Triage', pressed: true });
+    expect(triage).not.toHaveAttribute('aria-disabled');
 
     // New cards land in the first phase, so it stays put.
     configNav().getByRole('link', { name: 'Intake' }).focus();

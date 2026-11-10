@@ -1,9 +1,9 @@
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { reviewBoard } from '../../boards/review.js';
-import { autoStartingBoards, createTestBoard, selfReviewWorkBoard } from '../../boards/test-utils.js';
+import { autoStartingBoards, createTestBoard, createTriageWorkRegistry, selfReviewWorkBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -291,7 +291,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
         : new LibSQLFactoryStorage({ id: 'github-provider-ingest', url: ':memory:' }),
     );
     const { github, sourceControl, integrationStorage, workItems, projects, project, storage } = seeded;
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const configVersion = 'provider-split';
     const service = new GithubRules({
       github, sourceControl, integrationStorage, projects, storage: workItems, boards, configVersion,
@@ -425,7 +425,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const sender = input.sender ?? 'factory-app[bot]';
@@ -566,7 +566,7 @@ describe('GithubRules', () => {
     expect(before).toMatchObject([{ decision, workItemId: item.id }]);
     const restarted = new GithubRules({
       ...options,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'replacement-config',
     });
     await expect(restarted.ingest(ingress)).resolves.toEqual({ status: 'replayed' });
@@ -683,7 +683,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'custom-github-v2',
     });
     await expect(service.ingest(issueClosed('custom-close', 'completed'))).resolves.toEqual({ status: 'committed' });
@@ -706,7 +706,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -730,7 +730,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -751,7 +751,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -776,7 +776,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -871,7 +871,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -907,7 +907,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -943,7 +943,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -962,7 +962,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
 
@@ -991,7 +991,7 @@ describe('GithubRules', () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const card = await createLinkedIssue(workItems, project.id, ['intake']);
     const configVersion = 'factory-config-v1';
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const service = new GithubRules({
       github,
       sourceControl,
@@ -1039,7 +1039,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1066,7 +1066,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1087,7 +1087,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1121,7 +1121,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1153,7 +1153,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1176,7 +1176,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1195,7 +1195,7 @@ describe('GithubRules', () => {
     const transitionService = new FactoryTransitionService({
       storage: workItems,
       configVersion,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const service = new GithubRules({
       github,
@@ -1204,13 +1204,13 @@ describe('GithubRules', () => {
       projects,
       storage: workItems,
       configVersion,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       transitionService,
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-guard',
     });
 
@@ -1229,7 +1229,7 @@ describe('GithubRules', () => {
   it('keeps a trusted post-Factory issue in Intake without queueing a run', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const configVersion = 'trusted-arrival-intake';
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const service = new GithubRules({
       github,
       sourceControl,
@@ -1265,7 +1265,7 @@ describe('GithubRules', () => {
     const transitionService = new FactoryTransitionService({
       storage: workItems,
       configVersion,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const service = new GithubRules({
       github,
@@ -1273,7 +1273,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
@@ -1352,7 +1352,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
       primeCredentials,
       prepareBinding: async ({ record, item, role }) => {
@@ -1527,7 +1527,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1559,7 +1559,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -1567,10 +1567,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       // The project's default `pull-requests` intake route sends the trusted request to review.
       intakeRoutes: storedBoards,
       ownerId: 'worker-1',
@@ -1636,7 +1636,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -1644,10 +1644,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       // The project's default `pull-requests` intake route sends the trusted request to review.
       intakeRoutes: storedBoards,
       ownerId: 'worker-1',
@@ -1694,7 +1694,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1740,7 +1740,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1775,7 +1775,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1880,7 +1880,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -1943,7 +1943,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -1951,10 +1951,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
 
@@ -2034,7 +2034,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -2042,10 +2042,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
 
@@ -2129,10 +2129,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
     // The dispatcher polls on its own timer, so its tick can land as soon as
@@ -2156,7 +2156,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
 
@@ -2218,7 +2218,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2291,7 +2291,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const metadataOf = async (id: string) =>
@@ -2406,7 +2406,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const opened = pullRequest('opened', 'delivery-open-redelivered');
@@ -2456,7 +2456,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const opened = pullRequest('opened', 'delivery-open-next');
@@ -2487,7 +2487,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
 
@@ -2531,7 +2531,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2619,7 +2619,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2686,7 +2686,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2732,7 +2732,7 @@ describe('GithubRules', () => {
     const transitionService = new FactoryTransitionService({
       storage: workItems,
       configVersion,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const service = new GithubRules({
       github,
@@ -2740,7 +2740,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion,
     });
 
@@ -2832,7 +2832,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
 
@@ -2912,7 +2912,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -2992,7 +2992,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const pullRequest = {
@@ -3108,7 +3108,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3169,7 +3169,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3222,7 +3222,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3230,10 +3230,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
 
@@ -3287,7 +3287,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3295,10 +3295,10 @@ describe('GithubRules', () => {
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
       }),
       storage: workItems,
-      boards: autoStartingBoards(createBoardRegistry()),
+      boards: autoStartingBoards(createTriageWorkRegistry()),
       ownerId: 'worker-1',
     });
     await service.ingest(pullRequest('opened', 'poll:repository-1:pull-request:17'));
@@ -3338,7 +3338,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3563,7 +3563,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3615,7 +3615,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3695,7 +3695,7 @@ describe('GithubRules', () => {
         integrationStorage,
         projects,
         storage: workItems,
-        boards: createBoardRegistry(),
+        boards: createTriageWorkRegistry(),
         configVersion: 'factory-config-v1',
       });
       const merged = pullRequest('closed', 'delivery-merged-branch', true);
@@ -3744,7 +3744,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const opened = pullRequest('opened', 'delivery-own-branch-link');
@@ -3787,7 +3787,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const opened = pullRequest('opened', 'delivery-other-repo-branch');
@@ -3837,7 +3837,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -3894,7 +3894,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
 
@@ -4099,7 +4099,8 @@ describe('GithubRules with intake routes', () => {
    */
   async function setupIntake(permission: string, { withDefaultRoute = false } = {}) {
     const base = await setup(permission);
-    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    // The route targets Triage, which Work keeps in projects stored before new projects' Work dropped it.
+    const boards = createTriageWorkRegistry(createTestBoard());
     const configVersion = 'intake-routes';
     const service = new GithubRules({
       github: base.github,
@@ -4256,7 +4257,7 @@ describe('GithubRules with outside work in Intake', () => {
   }) {
     const base = await setup(input.permission);
     const configVersion = 'outside-work';
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const number = input.source === 'issue' ? 42 : 17;
     const card = (
       await base.workItems.upsert({
@@ -4355,7 +4356,7 @@ describe('polledPullRequestEvent', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     await service.ingest(
@@ -4446,7 +4447,7 @@ describe('createGithubPullRequestReconciler', () => {
     context: Awaited<ReturnType<typeof setup>>,
     fetchPullRequest: ReturnType<typeof vi.fn>,
     fetchIssue?: ReturnType<typeof vi.fn>,
-    boards = createBoardRegistry(),
+    boards = createTriageWorkRegistry(),
   ) {
     return createGithubPullRequestReconciler(
       {
@@ -4755,7 +4756,7 @@ describe('createGithubPullRequestReconciler', () => {
       context,
       vi.fn(async () => mergedState(17)),
       undefined,
-      createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+      boardRegistryOf([createTestBoard()]),
     );
 
     await reconcile([repositoryTarget]);
@@ -4777,7 +4778,7 @@ describe('createGithubPullRequestReconciler', () => {
       projects: context.projects,
       storage: context.workItems,
       configVersion: 'factory-config-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     });
     const now = new Date('2030-01-01T00:00:00.000Z');
     await rules.ingest(reconciledClosedEvent(repositoryTarget, 17, mergedState(17)));
@@ -5442,7 +5443,7 @@ describe('GithubRules push hand-off', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'v1',
       onRepositoryPush,
     });
@@ -5469,7 +5470,7 @@ describe('GithubRules push hand-off', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'v1',
       onRepositoryPush,
     });
@@ -5482,7 +5483,7 @@ describe('GithubRules push hand-off', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'v1',
     });
     await expect(withoutHook.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
@@ -5878,7 +5879,7 @@ describe('GithubRules board events', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     return { seen, service, workItems, project };
@@ -5918,7 +5919,7 @@ describe('GithubRules board events', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     await service.ingest(issueClosed('override-closed', 'completed'));
@@ -5939,7 +5940,7 @@ describe('GithubRules board events', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     await expect(service.ingest(issueReopened('reopen-default'))).resolves.toEqual({ status: 'committed' });
@@ -6140,7 +6141,7 @@ describe('GithubRules activity signals', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
     });
     const decisions = async () =>
@@ -6216,7 +6217,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
           : new LibSQLFactoryStorage({ id: 'github-one-card', url: ':memory:' }),
       );
-      const boards = createBoardRegistry();
+      const boards = createTriageWorkRegistry();
       const configVersion = 'one-card';
       const service = new GithubRules({
         github: seeded.github,

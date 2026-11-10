@@ -55,7 +55,7 @@ function card(id: string, title: string, source: WorkItem['source'], stage: stri
     metadata: { linearProjectId: projectId, labels: ['feature'] },
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: now,
     updatedAt: now,

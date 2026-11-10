@@ -115,10 +115,18 @@ async function executeRerank({
     ...options.weights,
   };
 
+  for (const [name, weight] of Object.entries(weights)) {
+    if (!Number.isFinite(weight) || weight < 0 || weight > 1) {
+      const err = new Error(`Weights must be finite numbers between 0 and 1. Got ${name}: ${weight}`);
+      rerankSpan?.error({ error: err, endSpan: true });
+      throw err;
+    }
+  }
+
   //weights must add up to 1
   const sum = Object.values(weights).reduce((acc: Big, w: number) => acc.plus(w.toString()), new Big(0));
   if (!sum.eq(1)) {
-    const err = new Error(`Weights must add up to 1. Got ${sum} from ${weights}`);
+    const err = new Error(`Weights must add up to 1. Got ${sum} from ${JSON.stringify(weights)}`);
     rerankSpan?.error({ error: err, endSpan: true });
     throw err;
   }

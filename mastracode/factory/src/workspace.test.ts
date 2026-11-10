@@ -463,6 +463,18 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
   });
 
+  it('formats Linear triage comments in Linear markdown instead of HTML', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
+    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
+    const phase5 = triage.slice(triage.indexOf('## Phase 5'));
+
+    // Linear shows raw HTML as text, so neither the marker nor <details> may reach it.
+    expect(phase1).toContain('post the pending summary with `linear_create_comment`, leaving out the');
+    expect(triage).toContain('a `+++ Details` line opens it and a lone `+++` line closes it');
+    expect(phase5).toContain('in the Linear form the output contract describes');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
