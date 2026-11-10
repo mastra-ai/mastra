@@ -32,7 +32,7 @@ import type { MiddlewareHandler } from 'hono';
 
 import { isOAuthCredentialExpired } from '../storage/domains/credentials/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
-import { getAuthProviderId, getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.js';
+import { getAuthProviderId, getTenantCredentialsStorage, storedScopeFor, tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
 /** How long a hydrated snapshot is considered fresh. */
@@ -85,7 +85,7 @@ export class TenantCredentialStore implements CredentialStore {
     if (!storage) return; // Keep the last tenant-scoped snapshot.
     const records = await storage.listCredentials(this.#orgId, this.#userId);
     const next = new Map<string, AuthCredential>();
-    const storageScope = this.#scope === 'factory' ? 'org' : 'user';
+    const storageScope = storedScopeFor(this.#scope);
     for (const record of records.filter(r => r.scope === storageScope)) {
       next.set(record.provider, record.credential);
     }
@@ -128,12 +128,7 @@ export class TenantCredentialStore implements CredentialStore {
       return undefined;
     }
 
-    const resolved = await storage.resolveCredential(
-      this.#orgId,
-      this.#userId,
-      provider,
-      this.#scope === 'factory' ? 'org' : 'user',
-    );
+    const resolved = await storage.resolveCredential(this.#orgId, this.#userId, provider, storedScopeFor(this.#scope));
     if (!resolved) {
       this.#snapshot.delete(provider);
       return undefined;
@@ -166,12 +161,7 @@ export class TenantCredentialStore implements CredentialStore {
     const storage = await getTenantCredentialsStorage(this.#credentials);
     if (!storage) return undefined;
     const served = this.#snapshot.get(provider);
-    const resolved = await storage.resolveCredential(
-      this.#orgId,
-      this.#userId,
-      provider,
-      this.#scope === 'factory' ? 'org' : 'user',
-    );
+    const resolved = await storage.resolveCredential(this.#orgId, this.#userId, provider, storedScopeFor(this.#scope));
     if (resolved?.credential.type !== 'oauth') return undefined;
     const rejectedAccess = served?.type === 'oauth' ? served.access : resolved.credential.access;
     return this.#refreshOAuth(

@@ -480,13 +480,13 @@ describe('factory_switch_session_model with stored credentials', () => {
       apiKey: id,
       models: [`${id}-1`],
     });
-    await env.seed.customProviders.upsert({ owner: { orgId: 'org-1' }, createdBy: 'owner', input: endpoint('acme') });
-    await env.seed.customProviders.upsert({
+    await env.seed.customProviders.create({ owner: { orgId: 'org-1' }, createdBy: 'owner', input: endpoint('acme') });
+    await env.seed.customProviders.create({
       owner: { orgId: 'org-1', userId: 'user-1' },
       createdBy: 'user-1',
       input: endpoint('mine'),
     });
-    await env.seed.customProviders.upsert({
+    await env.seed.customProviders.create({
       owner: { orgId: 'org-1', userId: 'someone-else' },
       createdBy: 'someone-else',
       input: endpoint('theirs'),

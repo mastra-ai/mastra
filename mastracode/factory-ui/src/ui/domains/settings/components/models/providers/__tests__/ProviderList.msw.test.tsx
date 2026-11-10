@@ -352,12 +352,12 @@ describe('ProviderList custom endpoints', () => {
     });
     await user.click(within(form).getByRole('button', { name: 'Add' }));
 
-    // Without sign-in there is one list, so no scope is sent.
     await waitFor(() =>
       expect(postBody).toEqual({
         name: 'my-llm',
         url: 'https://api.example.com/v1',
         models: ['model-a', 'model-b'],
+        scope: 'user',
       }),
     );
     expect(await findCustomRow('my-llm')).toBeInTheDocument();
@@ -391,7 +391,7 @@ describe('ProviderList custom endpoints', () => {
     server.use(
       http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
         postBody = await request.json();
-        return HttpResponse.json({ ok: true, provider: { ...myLlm, url: 'https://moved.example.com/v1' } });
+        return HttpResponse.json({ ok: true, provider: { ...myLlm, url: 'https://api.example.com/v2' } });
       }),
     );
     const user = userEvent.setup();
@@ -401,17 +401,45 @@ describe('ProviderList custom endpoints', () => {
     const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
     const url = within(form).getByPlaceholderText('https://api.example.com/v1');
     await user.clear(url);
-    await user.type(url, 'https://moved.example.com/v1');
+    await user.type(url, 'https://api.example.com/v2');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(postBody).toEqual({
         name: 'my-llm',
-        url: 'https://moved.example.com/v1',
+        url: 'https://api.example.com/v2',
         models: ['model-a', 'model-b'],
         previousId: 'my-llm',
+        scope: 'user',
       }),
     );
+  });
+
+  it('keeps the form open and asks for the key when the server needs it again', async () => {
+    stubProviders([]);
+    stubCustomProviders([myLlm]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, () =>
+        HttpResponse.json(
+          {
+            error: 'api_key_required',
+            message: 'Enter the API key again: the saved key is only kept while the URL stays on the same host.',
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    const url = within(form).getByPlaceholderText('https://api.example.com/v1');
+    await user.clear(url);
+    await user.type(url, 'https://elsewhere.example.com/v1');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    expect(await within(form).findByText(/Enter the API key again/)).toBeInTheDocument();
   });
 
   it('removes an endpoint from its row menu', async () => {
@@ -431,7 +459,7 @@ describe('ProviderList custom endpoints', () => {
 
     await pickCustomRowAction(user, 'my-llm', 'Remove');
 
-    await waitFor(() => expect(removedWith).toBe(''));
+    await waitFor(() => expect(removedWith).toBe('?scope=user'));
     await waitFor(() => expect(screen.queryByText('my-llm')).not.toBeInTheDocument());
   });
 });

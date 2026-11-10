@@ -25,7 +25,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import type { CustomProviderOwner, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
-import { hasOrganization, tenantOrgId } from './provider-credentials.js';
+import { tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
 /** How long a hydrated snapshot is considered fresh. */
@@ -43,11 +43,9 @@ const LOCAL_ORG = 'local';
  * resolution, the settings routes and the model catalogs all decide through
  * this function, so what a user sees in Settings is what their models use.
  *
- * - No-auth mode has one shared list.
- * - An account without an organization has one list of its own.
- * - An organization member uses the organization's list for Factory-scoped
- *   work and their own list for personal work. The two never mix, the same
- *   way provider credentials are scoped.
+ * Scoped exactly like provider credentials: Factory-scoped work uses the
+ * organization's list, personal work the account's own, and the two never
+ * mix. No-auth mode has one shared list.
  */
 export function customProviderOwner(
   tenant: { orgId?: string; userId: string; credentialScope?: CredentialScope } | undefined,
@@ -56,8 +54,7 @@ export function customProviderOwner(
   if (!authEnabled) return { orgId: LOCAL_ORG };
   if (!tenant) return undefined;
   const orgId = tenantOrgId(tenant);
-  if (!hasOrganization(tenant) || tenant.credentialScope === 'factory') return { orgId };
-  return { orgId, userId: tenant.userId };
+  return tenant.credentialScope === 'factory' ? { orgId } : { orgId, userId: tenant.userId };
 }
 
 class OrgCustomProvidersSnapshot {

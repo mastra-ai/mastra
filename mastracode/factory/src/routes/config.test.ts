@@ -869,12 +869,12 @@ describe('GET /web/config/models', () => {
 
   it('appends the caller org custom provider models from the DB', async () => {
     const seed = await createFactoryStorageForTests();
-    await seed.customProviders.upsert({
+    await seed.customProviders.create({
       owner: { orgId: 'org1' },
       createdBy: 'user-a',
       input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk', models: ['fast-1'] },
     });
-    await seed.customProviders.upsert({
+    await seed.customProviders.create({
       owner: { orgId: 'org2' },
       createdBy: 'user-b',
       input: { providerId: 'other', name: 'Other', url: 'https://other.dev/v1', models: ['m-1'] },
@@ -912,13 +912,13 @@ describe('GET /web/config/models', () => {
       url: `https://${name.toLowerCase()}.dev/v1`,
       models: ['m'],
     });
-    await seed.customProviders.upsert({ owner: { orgId: 'org1' }, createdBy: 'admin', input: endpoint('Shared') });
-    await seed.customProviders.upsert({
+    await seed.customProviders.create({ owner: { orgId: 'org1' }, createdBy: 'admin', input: endpoint('Shared') });
+    await seed.customProviders.create({
       owner: { orgId: 'org1', userId: 'user-a' },
       createdBy: 'user-a',
       input: endpoint('Mine'),
     });
-    await seed.customProviders.upsert({
+    await seed.customProviders.create({
       owner: { orgId: 'org1', userId: 'user-b' },
       createdBy: 'user-b',
       input: endpoint('Theirs'),
@@ -1679,10 +1679,10 @@ describe('OM routes with a tenant', () => {
       (await (await buildApp(null, { withCustomProviders: true }).request('/web/config/om')).json()).config.observer;
 
     // Personal work never runs on the organization's endpoints.
-    await seed.customProviders.upsert({ owner: { orgId: 'org1' }, createdBy: 'admin', input: acme });
+    await seed.customProviders.create({ owner: { orgId: 'org1' }, createdBy: 'admin', input: acme });
     expect(await observer()).toMatchObject({ model: 'acme/fast-1', providerStatus: 'unavailable' });
 
-    await seed.customProviders.upsert({ owner: { orgId: 'org1', userId: 'user-a' }, createdBy: 'user-a', input: acme });
+    await seed.customProviders.create({ owner: { orgId: 'org1', userId: 'user-a' }, createdBy: 'user-a', input: acme });
     expect(await observer()).toMatchObject({
       model: 'acme/fast-1',
       effectiveModelId: 'acme/fast-1',
@@ -2038,24 +2038,14 @@ describe('custom provider routes', () => {
     ]);
   });
 
-  // These accounts have one list, the one they had before personal endpoints
-  // existed, and nobody to ask for admin rights.
-  it('keeps one list for an account without an organization, whatever scope it names', async () => {
-    await seed.customProviders.upsert({
-      owner: { orgId: 'user:solo' },
-      createdBy: 'solo',
-      input: { providerId: 'older', name: 'Older', url: 'https://older.example.com/v1', models: ['m'] },
-    });
-
+  // Scoped exactly like keys: an account without an organization has its own
+  // list, and an organization list only an admin can change.
+  it('scopes an account without an organization like its keys', async () => {
     expect((await postProvider(buildApp(soloUser), providerBody)).status).toBe(200);
-    expect((await postProvider(buildApp(soloUser), sharedBody)).status).toBe(200);
+    expect((await postProvider(buildApp(soloUser), sharedBody)).status).toBe(403);
 
-    expect(await listCustomProviders(soloUser)).toMatchObject([
-      { name: 'My LLM', scope: 'user' },
-      { name: 'Older', scope: 'user' },
-      { name: 'Team LLM', scope: 'user' },
-    ]);
-    expect(await seed.customProviders.list({ orgId: 'user:solo' })).toHaveLength(3);
+    expect(await listCustomProviders(soloUser)).toMatchObject([{ name: 'My LLM', scope: 'user' }]);
+    expect(await ownList(soloUser)).toHaveLength(1);
   });
 
   it('refuses a name that belongs to a built-in provider', async () => {
@@ -2066,18 +2056,63 @@ describe('custom provider routes', () => {
     expect(await ownList(userA)).toEqual([]);
   });
 
-  it('keeps the saved key when an edit sends none', async () => {
+  // Adding under a name already in use used to replace that endpoint and
+  // inherit its saved key.
+  it('refuses to add an endpoint under a name already in use', async () => {
+    await postProvider(buildApp(admin), sharedBody);
+
+    const { apiKey: _apiKey, ...withoutKey } = sharedBody;
+    const res = await postProvider(buildApp(admin), { ...withoutKey, url: 'https://evil.example.com/v1' });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('provider_name_taken');
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toMatchObject([
+      { url: 'https://llm.example.com/v1', apiKey: 'sk-team' },
+    ]);
+  });
+
+  it('keeps the saved key when an edit sends none and the host stays the same', async () => {
     const { provider } = await (await postProvider(buildApp(userA), providerBody)).json();
     const { apiKey: _apiKey, ...withoutKey } = providerBody;
 
     const edited = await postProvider(buildApp(userA), {
       ...withoutKey,
-      url: 'https://moved.example.com/v1',
+      url: 'https://llm.example.com/v2',
       previousId: provider.id,
     });
 
-    expect((await edited.json()).provider).toMatchObject({ url: 'https://moved.example.com/v1', hasApiKey: true });
-    expect(await ownList(userA)).toMatchObject([{ url: 'https://moved.example.com/v1', apiKey: 'sk-x' }]);
+    expect((await edited.json()).provider).toMatchObject({ url: 'https://llm.example.com/v2', hasApiKey: true });
+    expect(await ownList(userA)).toMatchObject([{ url: 'https://llm.example.com/v2', apiKey: 'sk-x' }]);
+  });
+
+  // The saved key is never shown, so keeping it across a host change would
+  // let whoever edits the endpoint send it to their own server.
+  it('asks for the key again when an edit moves an endpoint to another host', async () => {
+    const { provider } = await (await postProvider(buildApp(admin), sharedBody)).json();
+    const { apiKey: _apiKey, ...withoutKey } = sharedBody;
+
+    const res = await postProvider(buildApp(admin), {
+      ...withoutKey,
+      url: 'https://evil.example.com/v1',
+      previousId: provider.id,
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('api_key_required');
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toMatchObject([
+      { url: 'https://llm.example.com/v1', apiKey: 'sk-team' },
+    ]);
+  });
+
+  it('reports an edit or a removal of an endpoint that is not there', async () => {
+    const edited = await postProvider(buildApp(userA), { ...providerBody, previousId: 'missing' });
+    expect(edited.status).toBe(404);
+
+    // The organization's endpoint is not in the caller's own list, the default.
+    await postProvider(buildApp(admin), sharedBody);
+    const removed = await buildApp(admin).request('/web/config/custom-providers/team-llm', { method: 'DELETE' });
+    expect(removed.status).toBe(404);
+    expect(await seed.customProviders.list({ orgId: 'org1' })).toHaveLength(1);
   });
 
   it('renames via previousId without leaving the old row behind', async () => {

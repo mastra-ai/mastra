@@ -17,11 +17,9 @@ interface DraftState {
 
 export interface CustomProviderFormProps {
   provider?: CustomProviderInfo;
-  /** Where a new provider is saved. Omitted without sign-in, where there is one list. */
+  /** Where the provider is saved. Omitted without sign-in, where there is one list. */
   scope?: CustomProviderInfo['scope'];
   requireModels?: boolean;
-  /** Draws its own border. Off inside a surface that already frames it, such as a dialog. */
-  framed?: boolean;
   onCancel?: () => void;
   onSaved?: (provider: CustomProviderInfo) => void;
 }
@@ -30,12 +28,11 @@ export function CustomProviderForm({
   provider,
   scope,
   requireModels = false,
-  framed = true,
   onCancel,
   onSaved,
 }: CustomProviderFormProps) {
   const saveMutation = useSaveCustomProvider();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>();
   const [draft, setDraft] = useState<DraftState>({
     name: provider?.name ?? '',
     url: provider?.url ?? '',
@@ -70,7 +67,7 @@ export function CustomProviderForm({
       ...(scope ? { scope } : {}),
     };
 
-    setError(null);
+    setError(undefined);
     try {
       const result = await saveMutation.mutateAsync(body);
       onSaved?.(result.provider);
@@ -80,7 +77,7 @@ export function CustomProviderForm({
   };
 
   return (
-    <div className={framed ? 'border-border flex flex-col gap-3 rounded-lg border p-3' : 'flex flex-col gap-3'}>
+    <div className="flex flex-col gap-3">
       {error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
@@ -106,7 +103,7 @@ export function CustomProviderForm({
         />
       </Field>
       <Field className="gap-1">
-        <FieldLabel>API key {provider ? '(leave blank to keep)' : '(optional)'}</FieldLabel>
+        <FieldLabel>API key {provider ? '(leave blank to keep, unless the host changes)' : '(optional)'}</FieldLabel>
         <Input
           type="password"
           size="sm"

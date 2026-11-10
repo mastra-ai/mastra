@@ -33,6 +33,8 @@ export interface ProviderConnection {
   orgKeyAdmin: boolean;
   /** The scope new connections are saved at. Absent without sign-in, where there is one store. */
   credentialScope?: ProviderCredentialScope;
+  /** Whether the caller may add connections at this scope: always, except organization ones for non-admins. */
+  canWriteAtScope: boolean;
   signInProviders: ProviderInfo[];
   keyProviders: ProviderInfo[];
   provider?: ProviderInfo;
@@ -151,8 +153,14 @@ export function useProviderConnection({
     }
   };
 
+  const canWriteAtScope = scope !== 'org' || orgKeyAdmin;
   const canConfigure = (chosen: ProviderInfo, method?: ProviderConnectionMethod) =>
-    scope !== 'org' || !authEnabled || orgKeyAdmin || isConfigured(chosen, method);
+    canWriteAtScope || isConfigured(chosen, method);
+  // A custom endpoint is set up in its own form, never by pasting a key, so it
+  // is only offered where it is already saved.
+  const offeredForKey = (candidate: ProviderInfo) =>
+    !(hidesDeploymentKeys && candidate.source === 'deployment') &&
+    (candidate.custom ? isConfigured(candidate) : offersApiKey(candidate));
 
   return {
     isPending:
@@ -163,15 +171,9 @@ export function useProviderConnection({
     authEnabled,
     orgKeyAdmin,
     credentialScope,
+    canWriteAtScope,
     signInProviders: providers.filter(candidate => candidate.oauth?.supported === true),
-    keyProviders: providers.filter(
-      candidate =>
-        !(hidesDeploymentKeys && candidate.source === 'deployment') &&
-        // A custom endpoint is set up in its own form, never by pasting a key,
-        // so it is only offered where it already exists.
-        !(candidate.custom && !isConfigured(candidate)) &&
-        offersApiKey(candidate),
-    ),
+    keyProviders: providers.filter(offeredForKey),
     provider,
     connected: provider ? isConfigured(provider, selection?.method) : false,
     method: selection?.method,

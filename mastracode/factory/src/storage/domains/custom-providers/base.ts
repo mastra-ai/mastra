@@ -36,13 +36,32 @@ export interface CustomProviderRecord {
   updatedAt: Date;
 }
 
-export interface UpsertCustomProviderInput {
+export interface CustomProviderInput {
   providerId: string;
   name: string;
   url: string;
-  /** Omit to keep the key already saved on the provider. */
+  /** On an edit, omit to keep the saved key. */
   apiKey?: string;
   models: string[];
+}
+
+/**
+ * The outcome of a create or an edit. A refusal leaves storage unchanged:
+ * - `name_taken`: the owner already has a provider with this id.
+ * - `not_found`: the provider being edited no longer exists.
+ * - `api_key_required`: the edit moves a provider with a saved key to another
+ *   host without giving a key, which would send the saved key there.
+ */
+export type CustomProviderWrite =
+  | { saved: CustomProviderRecord }
+  | { refused: 'name_taken' | 'not_found' | 'api_key_required' };
+
+function sameOrigin(left: string, right: string): boolean {
+  try {
+    return new URL(left).origin === new URL(right).origin;
+  } catch {
+    return false;
+  }
 }
 
 const COLUMNS: CollectionSchema['columns'] = {
@@ -156,23 +175,6 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     };
   }
 
-  /**
-   * The stored form of the key a write should end up with: the new key when
-   * one is given, otherwise the key already saved on the provider being edited
-   * (under its previous id when it is being renamed).
-   */
-  async #apiKeyToStore(
-    rows: OwnerRows,
-    input: UpsertCustomProviderInput,
-    previousProviderId: string | undefined,
-  ): Promise<string | null> {
-    if (input.apiKey !== undefined) return this.encryption.encrypt(input.apiKey);
-    const find = (providerId: string) =>
-      this.#db.findOne<CustomProviderDbRow>(rows.collection, { ...rows.where, provider_id: providerId });
-    const edited = (previousProviderId && (await find(previousProviderId))) || (await find(input.providerId));
-    return edited?.api_key ?? null;
-  }
-
   async #migrateApiKey(collection: string, id: string): Promise<void> {
     await this.#db.updateAtomic<CustomProviderDbRow>(collection, { id }, async row => {
       if (row.api_key === null) return null;
@@ -182,103 +184,20 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Create or replace one of the owner's providers by provider id. An absent
-   * `apiKey` keeps the saved key, so editing a name, URL or model list never
-   * drops it. `previousProviderId` renames the provider: the common path is a
-   * single atomic in-place update of the old row; renaming onto an id that
-   * already exists overwrites the target first and removes the old row last,
-   * so no interleaving or failure can lose the provider.
+   * Add a provider to the owner's list. Never replaces one: a name the owner
+   * already uses, including one a concurrent create just took, is refused.
    */
-  async upsert({
+  async create({
     owner,
     createdBy,
     input,
-    previousProviderId,
   }: {
     owner: CustomProviderOwner;
     createdBy: string;
-    input: UpsertCustomProviderInput;
-    previousProviderId?: string;
-  }): Promise<CustomProviderRecord> {
-    const now = new Date();
+    input: CustomProviderInput;
+  }): Promise<CustomProviderWrite> {
     const rows = ownerRows(owner);
-    const apiKey = await this.#apiKeyToStore(rows, input, previousProviderId);
-    const renameFrom = previousProviderId && previousProviderId !== input.providerId ? previousProviderId : undefined;
-
-    if (renameFrom) {
-      const target = await this.#db.findOne<CustomProviderDbRow>(rows.collection, {
-        ...rows.where,
-        provider_id: input.providerId,
-      });
-      if (!target) {
-        // In-place rename: one atomic write with no delete/insert gap, so a
-        // failure can never drop the provider (and `created_at`/`created_by`
-        // are preserved). If a concurrent create grabs the new id between the
-        // lookup and this update, the unique index rejects the update and the
-        // old row stays intact — the request fails cleanly and a retry
-        // converges on the rename-onto-existing path below.
-        const renamed = await this.#db.updateAtomic<CustomProviderDbRow>(
-          rows.collection,
-          { ...rows.where, provider_id: renameFrom },
-          () => ({
-            provider_id: input.providerId,
-            name: input.name,
-            url: input.url,
-            api_key: apiKey,
-            models: input.models,
-            updated_at: now,
-          }),
-        );
-        if (renamed) return this.#toRecord(renamed);
-        // Old row already gone — fall through to a plain create of the new id.
-      }
-      // Rename onto an existing id: overwrite the target below, then delete
-      // the old row last — a failure in the gap leaves a redundant duplicate
-      // (recoverable by re-submitting or deleting) instead of losing data.
-    }
-
-    const record = await this.#write({ rows, createdBy, input, apiKey, now });
-    if (renameFrom) {
-      await this.#db.deleteMany(rows.collection, { ...rows.where, provider_id: renameFrom });
-    }
-    return record;
-  }
-
-  /**
-   * Update-first, then insert-and-catch-unique-violation (see `queue_health`):
-   * concurrent creates of the same provider both succeed (last write wins on
-   * the single row) instead of one failing on the unique index, and a row
-   * deleted mid-flight is recreated rather than reported as a stale success.
-   */
-  async #write({
-    rows,
-    createdBy,
-    input,
-    apiKey,
-    now,
-  }: {
-    rows: OwnerRows;
-    createdBy: string;
-    input: UpsertCustomProviderInput;
-    apiKey: string | null;
-    now: Date;
-  }): Promise<CustomProviderRecord> {
-    const updateExisting = () =>
-      this.#db.updateAtomic<CustomProviderDbRow>(
-        rows.collection,
-        { ...rows.where, provider_id: input.providerId },
-        () => ({
-          name: input.name,
-          url: input.url,
-          api_key: apiKey,
-          models: input.models,
-          updated_at: now,
-        }),
-      );
-
-    const updated = await updateExisting();
-    if (updated) return this.#toRecord(updated);
-
+    const now = new Date();
     try {
       const row = await this.#db.insertOne<CustomProviderDbRow>(rows.collection, {
         ...rows.where,
@@ -286,18 +205,61 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
         provider_id: input.providerId,
         name: input.name,
         url: input.url,
-        api_key: apiKey,
+        api_key: input.apiKey === undefined ? null : await this.encryption.encrypt(input.apiKey),
         models: input.models,
         created_at: now,
         updated_at: now,
       });
-      return this.#toRecord(row);
+      return { saved: await this.#toRecord(row) };
     } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      // Lost the insert race — apply this write to the winning row.
-      const row = await updateExisting();
-      if (!row) throw error;
-      return this.#toRecord(row);
+      if (error instanceof UniqueViolationError) return { refused: 'name_taken' };
+      throw error;
+    }
+  }
+
+  /**
+   * Edit one of the owner's providers, renaming it when `input.providerId`
+   * differs from `providerId`. One atomic write, so the key decision is made
+   * against the row as it is at that moment: an omitted key keeps the saved
+   * one, but only while the URL stays on the same host.
+   */
+  async update({
+    owner,
+    providerId,
+    input,
+  }: {
+    owner: CustomProviderOwner;
+    providerId: string;
+    input: CustomProviderInput;
+  }): Promise<CustomProviderWrite> {
+    const rows = ownerRows(owner);
+    let keyRequired = false;
+    try {
+      const row = await this.#db.updateAtomic<CustomProviderDbRow>(
+        rows.collection,
+        { ...rows.where, provider_id: providerId },
+        async current => {
+          if (input.apiKey === undefined && current.api_key !== null && !sameOrigin(current.url, input.url)) {
+            keyRequired = true;
+            return null;
+          }
+          return {
+            provider_id: input.providerId,
+            name: input.name,
+            url: input.url,
+            api_key: input.apiKey === undefined ? current.api_key : await this.encryption.encrypt(input.apiKey),
+            models: input.models,
+            updated_at: new Date(),
+          };
+        },
+      );
+      if (!row) return { refused: 'not_found' };
+      if (keyRequired) return { refused: 'api_key_required' };
+      return { saved: await this.#toRecord(row) };
+    } catch (error) {
+      // Renamed onto a name the owner already uses.
+      if (error instanceof UniqueViolationError) return { refused: 'name_taken' };
+      throw error;
     }
   }
 

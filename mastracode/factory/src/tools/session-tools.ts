@@ -140,10 +140,11 @@ export function createFactorySessionTools(
     const orgId = policy.tenant.orgId ?? scope.orgId;
     const customProviders = tenantCatalog.customProviders;
     // The list model resolution uses for this session, so the tool never
-    // offers a custom model the session cannot run.
+    // offers a custom model the session cannot run. A tenant catalog only
+    // exists with sign-in on.
     const customProviderOwnerForSession = customProviderOwner(
       { orgId, userId: policy.tenant.userId, credentialScope: modelScope },
-      true,
+      /* authEnabled */ true,
     );
     const usable = (
       await buildModelCatalog({

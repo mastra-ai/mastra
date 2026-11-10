@@ -22,6 +22,7 @@ import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/cr
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
+  CredentialScope as StoredCredentialScope,
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
@@ -47,6 +48,8 @@ import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
   resolveCredentialContext,
+  runScopeFor,
+  storedScopeFor,
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
@@ -258,9 +261,6 @@ export async function listProviders({
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
 }
 
-/** The settings scope a custom provider is saved at: the caller's own, or their organization's. */
-export type CustomProviderScope = 'user' | 'org';
-
 /** A user-defined OpenAI-compatible provider, with key presence (never the key). */
 export interface CustomProviderInfo {
   id: string;
@@ -268,13 +268,14 @@ export interface CustomProviderInfo {
   url: string;
   hasApiKey: boolean;
   models: string[];
-  scope: CustomProviderScope;
+  /** Saved for the caller (`user`) or for their organization (`org`), like a provider key. */
+  scope: StoredCredentialScope;
 }
 
-/** A stored custom provider and the settings scope the caller reaches it at. */
+/** A stored custom provider and the settings scope it is saved at. */
 export interface ScopedCustomProvider {
   record: CustomProviderRecord;
-  scope: CustomProviderScope;
+  scope: StoredCredentialScope;
 }
 
 /** Redact a stored custom-provider row for the client (key presence only). */
@@ -294,10 +295,8 @@ interface CustomProvidersContext {
   storage: CustomProvidersStorage;
   /** The account making the request, recorded as the creator of what it adds. */
   userId: string;
-  /** The caller's own list. The only list in no-auth mode and for an account without an organization. */
-  own: CustomProviderOwner;
-  /** The organization's list, when the caller is a member of one. */
-  organization?: CustomProviderOwner;
+  /** The list behind each Settings scope. No-auth mode has only the one shared list, under `user`. */
+  lists: { user: CustomProviderOwner; org?: CustomProviderOwner };
 }
 
 /**
@@ -316,19 +315,17 @@ async function resolveCustomProvidersContext({
 }): Promise<CustomProvidersContext | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
-  const ownerAt = (credentialScope: CredentialTenant['credentialScope']) =>
-    customProviderOwner(tenant && { ...tenant, credentialScope }, tenant !== undefined || auth.enabled());
-  const own = ownerAt('user');
-  if (!own) return { response: c.json({ error: 'unauthorized' }, 401) };
+  const listAt = (scope: StoredCredentialScope) =>
+    customProviderOwner(tenant && { ...tenant, credentialScope: runScopeFor(scope) }, auth.enabled());
+  const user = listAt('user');
+  if (!user) return { response: c.json({ error: 'unauthorized' }, 401) };
   if (customProviders) {
     try {
       await customProviders.ensureReady();
       return {
         storage: customProviders,
         userId: tenant?.userId ?? 'local',
-        own,
-        // An owner with no member id is already the shared list.
-        organization: own.userId === undefined ? undefined : ownerAt('factory'),
+        lists: auth.enabled() ? { user, org: listAt('org') } : { user },
       };
     } catch {
       // fall through to the unavailable response
@@ -347,13 +344,13 @@ async function resolveCustomProvidersContext({
 
 /** Every custom provider the caller can reach in Settings, with the scope each is saved at. */
 async function listScopedCustomProviders(ctx: CustomProvidersContext): Promise<ScopedCustomProvider[]> {
-  const [own, organization] = await Promise.all([
-    ctx.storage.list(ctx.own),
-    ctx.organization ? ctx.storage.list(ctx.organization) : [],
+  const [user, org] = await Promise.all([
+    ctx.storage.list(ctx.lists.user),
+    ctx.lists.org ? ctx.storage.list(ctx.lists.org) : [],
   ]);
   return [
-    ...own.map(record => ({ record, scope: 'user' as const })),
-    ...organization.map(record => ({ record, scope: 'org' as const })),
+    ...user.map(record => ({ record, scope: 'user' as const })),
+    ...org.map(record => ({ record, scope: 'org' as const })),
   ];
 }
 
@@ -377,14 +374,22 @@ async function listCustomProvidersInEffect({
   const ctx = await resolveCustomProvidersContext({ c, auth, customProviders });
   if ('response' in ctx) return [];
   if (!tenant) return (await listScopedCustomProviders(ctx)).map(({ record }) => record);
-  const owner = customProviderOwner(tenant, true);
+  const owner = customProviderOwner(tenant, auth.enabled());
   return owner ? ctx.storage.list(owner) : [];
 }
 
-/** Validate + coerce a request body into a CustomProviderSetting. */
-function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error: string } {
+/** A validated custom-provider save request. */
+interface CustomProviderSave extends CustomProviderSetting {
+  /** The id of the provider being edited. Absent when adding one. */
+  previousId?: string;
+  /** Where to save it. Anything but `org` means the caller's own list, like provider keys. */
+  scope: StoredCredentialScope;
+}
+
+/** Validate + coerce a request body into a custom-provider save. */
+function parseCustomProviderBody(body: unknown): CustomProviderSave | { error: string } {
   if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
-  const b = body as Record<string, unknown>;
+  const b: Record<string, unknown> = { ...body };
   const name = typeof b.name === 'string' ? b.name.trim() : '';
   if (!name) return { error: 'Missing required field: name' };
   const url = typeof b.url === 'string' ? b.url.trim() : '';
@@ -401,8 +406,24 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
   const models = Array.isArray(b.models)
     ? b.models.filter((m): m is string => typeof m === 'string' && m.trim().length > 0).map(m => m.trim())
     : [];
-  return { name, url, apiKey, models };
+  const previousId = typeof b.previousId === 'string' && b.previousId ? b.previousId : undefined;
+  return { name, url, apiKey, models, previousId, scope: b.scope === 'org' ? 'org' : 'user' };
 }
+
+/** What each storage refusal tells the client. */
+const CUSTOM_PROVIDER_REFUSALS = {
+  name_taken: {
+    status: 409,
+    error: 'provider_name_taken',
+    message: 'You already have a provider with this name. Choose another name.',
+  },
+  not_found: { status: 404, error: 'custom_provider_not_found', message: 'This provider no longer exists.' },
+  api_key_required: {
+    status: 400,
+    error: 'api_key_required',
+    message: 'Enter the API key again: the saved key is only kept while the URL stays on the same host.',
+  },
+} as const;
 
 /**
  * Providers whose credentials can only come from the server process. Amazon
@@ -620,8 +641,8 @@ export async function listSessionScopedCredentials({
   userId: string;
   modelScope: 'factory' | 'user';
 }): Promise<CredentialRecord[]> {
-  const storageScope = modelScope === 'factory' ? 'org' : 'user';
-  return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === storageScope);
+  const storedScope = storedScopeFor(modelScope);
+  return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === storedScope);
 }
 
 /** Per-user default model context for the current request. */
@@ -875,16 +896,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
     /**
      * The list a custom-provider write addresses. Changing the organization's
-     * list takes an admin, as org-wide keys do. A caller with no organization
-     * has only their own list, whatever scope the request names.
+     * list takes an admin, as org-wide keys do. No-auth mode has one list,
+     * whatever scope the request names.
      */
     const resolveCustomProviderWrite = async (c: Context, ctx: CustomProvidersContext, scope: unknown) => {
-      const organization = scope === 'org' ? ctx.organization : undefined;
-      if (!organization) return { owner: ctx.own, scope: 'user' as const };
-      if (!(await auth.isOrganizationAdmin(c, organization.orgId))) {
+      if (scope !== 'org' || !ctx.lists.org) return { owner: ctx.lists.user, scope: 'user' as const };
+      if (!(await auth.isOrganizationAdmin(c, ctx.lists.org.orgId))) {
         return { response: c.json({ error: 'organization_admin_required' }, 403) };
       }
-      return { owner: organization, scope: 'org' as const };
+      return { owner: ctx.lists.org, scope: 'org' as const };
     };
 
     const resolveSessionModelContext = async (
@@ -982,9 +1002,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         await options.factoryProjects.ensureReady();
         const project = await options.factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });
         if (!project) return { response: c.json({ error: 'factory_project_not_found' }, 404) };
-        const scope = effectiveModelScope(project.modelScope, 'run') === 'factory' ? 'org' : 'user';
-        tenantCredentials = tenantCredentials.filter(record => record.scope === scope);
-        customProviderTenant = { ...tenant, credentialScope: scope === 'org' ? 'factory' : 'user' };
+        const credentialScope = effectiveModelScope(project.modelScope, 'run');
+        tenantCredentials = tenantCredentials.filter(record => record.scope === storedScopeFor(credentialScope));
+        customProviderTenant = { ...tenant, credentialScope };
       } else if (tenantCredentials) {
         tenantCredentials = tenantCredentials.filter(record => record.scope === 'user');
       }
@@ -1211,19 +1231,22 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const parsed = parseCustomProviderBody(body);
           if ('error' in parsed) return c.json({ error: parsed.error }, 400);
-          const fields = body as Record<string, unknown>;
-          // `previousId` lets a rename remove the old entry as well as any name clash.
-          const previousId = typeof fields.previousId === 'string' ? fields.previousId : undefined;
-          const target = await resolveCustomProviderWrite(loose(c), ctx, fields.scope);
+          const target = await resolveCustomProviderWrite(loose(c), ctx, parsed.scope);
           if ('response' in target) return target.response;
-          const providerId = getCustomProviderId(parsed.name);
+          const input = {
+            providerId: getCustomProviderId(parsed.name),
+            name: parsed.name,
+            url: parsed.url,
+            apiKey: parsed.apiKey,
+            models: parsed.models,
+          };
           try {
             // A custom provider that took a built-in provider's id would
             // silently replace it for everyone using this list. No-auth mode
             // is single-user and its catalog already lists these providers.
             const takesBuiltInId =
-              auth.tenant(loose(c)) !== undefined &&
-              (await controller.listAvailableModels()).some(model => model.provider === providerId);
+              auth.enabled() &&
+              (await controller.listAvailableModels()).some(model => model.provider === input.providerId);
             if (takesBuiltInId) {
               return c.json(
                 {
@@ -1233,20 +1256,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 409,
               );
             }
-            const record = await ctx.storage.upsert({
-              owner: target.owner,
-              createdBy: ctx.userId,
-              input: {
-                providerId,
-                name: parsed.name,
-                url: parsed.url,
-                apiKey: parsed.apiKey,
-                models: parsed.models,
-              },
-              previousProviderId: previousId,
-            });
+            const write = parsed.previousId
+              ? await ctx.storage.update({ owner: target.owner, providerId: parsed.previousId, input })
+              : await ctx.storage.create({ owner: target.owner, createdBy: ctx.userId, input });
+            if ('refused' in write) {
+              const { status, error, message } = CUSTOM_PROVIDER_REFUSALS[write.refused];
+              return c.json({ error, message }, status);
+            }
             onCustomProvidersChanged({ orgId: target.owner.orgId });
-            return c.json({ ok: true, provider: toCustomProviderInfo({ record, scope: target.scope }) });
+            return c.json({ ok: true, provider: toCustomProviderInfo({ record: write.saved, scope: target.scope }) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1267,7 +1285,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const target = await resolveCustomProviderWrite(loose(c), ctx, c.req.query('scope'));
           if ('response' in target) return target.response;
           try {
-            await ctx.storage.delete({ owner: target.owner, providerId: id });
+            if (!(await ctx.storage.delete({ owner: target.owner, providerId: id }))) {
+              const { status, error, message } = CUSTOM_PROVIDER_REFUSALS.not_found;
+              return c.json({ error, message }, status);
+            }
             onCustomProvidersChanged({ orgId: target.owner.orgId });
             return c.json({ ok: true });
           } catch (error) {
@@ -1337,7 +1358,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 credentialTenant = {
                   orgId: tenantOrgId(tenant),
                   userId: tenant.userId,
-                  credentialScope: scope.data === 'user' ? 'user' : 'factory',
+                  credentialScope: runScopeFor(scope.data),
                 };
               }
             } else if (allTenantCredentials && factoryProjectId && tenant) {
@@ -1345,12 +1366,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               await options.factoryProjects.ensureReady();
               const project = await options.factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });
               if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
-              const credentialScope = project.modelScope === 'user' ? 'user' : 'org';
-              tenantCredentials = allTenantCredentials.filter(record => record.scope === credentialScope);
+              const storedScope = project.modelScope === 'user' ? 'user' : 'org';
+              tenantCredentials = allTenantCredentials.filter(record => record.scope === storedScope);
               credentialTenant = {
                 orgId: tenantOrgId(tenant),
                 userId: tenant.userId,
-                credentialScope: credentialScope === 'user' ? 'user' : 'factory',
+                credentialScope: runScopeFor(storedScope),
               };
             }
             const customProviders = options.customProviders;

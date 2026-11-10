@@ -14,6 +14,7 @@
  * is rejected when auth is enabled and falls back to local otherwise.
  */
 
+import type { CredentialScope as RunCredentialScope } from '@mastra/code-sdk/agents/credential-resolver';
 import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
@@ -21,6 +22,7 @@ import { providerDisplayName } from '../provider-display-name.js';
 import { secretKeyMismatchHint } from '../secret-encryption.js';
 import type {
   CredentialRecord,
+  CredentialScope as StoredCredentialScope,
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
@@ -99,13 +101,17 @@ export function tenantOrgId(tenant: { orgId?: string; userId: string }): string 
 }
 
 /**
- * Whether the tenant belongs to an organization other people can be in. An
- * account without one is keyed by the synthetic `user:<id>` org, which only
- * that account ever resolves to, so "the organization's" and "my own" are the
- * same thing there.
+ * Settings save credentials, and custom providers, for the account (`user`)
+ * or its organization (`org`). A run reads one of the two: the organization's
+ * for Factory-scoped work (`factory`), the account's own otherwise.
  */
-export function hasOrganization(tenant: { orgId?: string; userId: string }): boolean {
-  return !tenantOrgId(tenant).startsWith('user:');
+export function storedScopeFor(runScope: RunCredentialScope): StoredCredentialScope {
+  return runScope === 'factory' ? 'org' : 'user';
+}
+
+/** The run credential scope that reads what Settings saved at `storedScope`. */
+export function runScopeFor(storedScope: StoredCredentialScope): RunCredentialScope {
+  return storedScope === 'org' ? 'factory' : 'user';
 }
 
 /**

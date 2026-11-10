@@ -37,8 +37,8 @@ export function useSaveCustomProvider() {
 
 export interface RemoveCustomProviderArgs {
   id: string;
-  /** The scope the provider is saved at. Omitted without sign-in, where there is one list. */
-  scope?: CustomProviderInfo['scope'];
+  /** The scope the provider is saved at. */
+  scope: CustomProviderInfo['scope'];
 }
 
 export function useRemoveCustomProvider() {
@@ -46,7 +46,7 @@ export function useRemoveCustomProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, scope }: RemoveCustomProviderArgs) =>
-      client.del<OkResponse>(`/web/config/custom-providers/${encodeURIComponent(id)}${scope ? `?scope=${scope}` : ''}`),
+      client.del<OkResponse>(`/web/config/custom-providers/${encodeURIComponent(id)}?scope=${scope}`),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),

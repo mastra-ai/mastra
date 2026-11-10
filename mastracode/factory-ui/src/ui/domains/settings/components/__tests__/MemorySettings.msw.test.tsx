@@ -33,10 +33,7 @@ const omConfig = (observationThreshold: number): OMConfigInfo => ({
 });
 
 function stubProviders(providers: ProviderInfo[]) {
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })),
-    http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
-  );
+  server.use(http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })));
 }
 
 function renderMemory(modelScope: FactoryModelScope = 'hybrid') {

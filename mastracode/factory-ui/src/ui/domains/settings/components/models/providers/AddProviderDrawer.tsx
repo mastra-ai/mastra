@@ -10,7 +10,6 @@ import {
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { ServerCog } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
@@ -26,7 +25,7 @@ import {
   signInRequest,
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
-import { ProviderOptionRow } from './ProviderRows';
+import { CustomEndpointIcon, OptionRow, ProviderOptionRow } from './ProviderRows';
 
 function matchesSearch(provider: ProviderInfo, query: string): boolean {
   return (
@@ -139,25 +138,18 @@ export function AddProviderDrawer({
             </Txt>
           )}
           {/* Outside the searched list: the way out when no provider matches. */}
-          <div className="border-border flex min-h-12 shrink-0 items-center gap-3 rounded-lg border py-2 pr-2 pl-3">
-            <ServerCog aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <Txt as="span" variant="caption" className="truncate">
-                Custom endpoint
-              </Txt>
-              <Txt as="span" variant="meta" tone="muted">
-                Any OpenAI-compatible API
-              </Txt>
-            </span>
-            <Button
-              size="sm"
-              aria-label="Add a custom endpoint"
-              disabled={startingProvider !== undefined}
-              onClick={onAddCustomProvider}
-            >
-              Add
-            </Button>
-          </div>
+          <ul className="border-border shrink-0 rounded-lg border">
+            <OptionRow icon={<CustomEndpointIcon />} title="Custom endpoint" detail="Any OpenAI-compatible API">
+              <Button
+                size="sm"
+                aria-label="Add a custom endpoint"
+                disabled={startingProvider !== undefined}
+                onClick={onAddCustomProvider}
+              >
+                Add
+              </Button>
+            </OptionRow>
+          </ul>
           {startOAuthMutation.error && (
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {startOAuthMutation.error.message}

@@ -52,7 +52,6 @@ beforeEach(() => {
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
     http.get(PROVIDERS_URL, () => HttpResponse.json(settingsProviders)),
-    http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(settingsDefaultModel)),
     http.get(OM_URL, () => HttpResponse.json({ config: settingsMemory })),
   );

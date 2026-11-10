@@ -153,19 +153,21 @@ export function ModelProviderPicker({
         </TabContent>
         <TabContent value="custom">
           <div className="pt-2">
-            {connection.credentialScope === 'org' && !connection.orgKeyAdmin ? (
+            {connection.canWriteAtScope ? (
+              <div className="border-border rounded-lg border p-3">
+                <CustomProviderForm
+                  requireModels
+                  scope={connection.credentialScope}
+                  onSaved={provider => {
+                    connection.chooseCustomProvider(provider.id);
+                    onPreviewProvider?.(provider.id, 'api_key');
+                  }}
+                />
+              </div>
+            ) : (
               <Txt variant="caption" tone="muted">
                 {ORG_SCOPE_MEMBER_REASON}
               </Txt>
-            ) : (
-              <CustomProviderForm
-                requireModels
-                scope={connection.credentialScope}
-                onSaved={provider => {
-                  connection.chooseCustomProvider(provider.id);
-                  onPreviewProvider?.(provider.id, 'api_key');
-                }}
-              />
             )}
           </div>
         </TabContent>

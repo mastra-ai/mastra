@@ -84,13 +84,13 @@ describe('registerCustomProvidersSource (tenant mode)', () => {
   const member = { workosId: USER, organizationId: ORG };
 
   beforeEach(async () => {
-    await seed.customProviders.upsert({ owner: { orgId: ORG }, createdBy: 'admin', input: endpoint('Shared') });
-    await seed.customProviders.upsert({
+    await seed.customProviders.create({ owner: { orgId: ORG }, createdBy: 'admin', input: endpoint('Shared') });
+    await seed.customProviders.create({
       owner: { orgId: ORG, userId: USER },
       createdBy: USER,
       input: endpoint('Mine'),
     });
-    await seed.customProviders.upsert({
+    await seed.customProviders.create({
       owner: { orgId: ORG, userId: OTHER_USER },
       createdBy: OTHER_USER,
       input: endpoint('Theirs'),
@@ -144,7 +144,7 @@ describe('registerCustomProvidersSource (tenant mode)', () => {
     await app.request('/ok');
     expect(resolveCustomProviders(ctx)).toHaveLength(1);
 
-    await seed.customProviders.upsert({ owner: { orgId: ORG, userId: USER }, createdBy: USER, input: ACME });
+    await seed.customProviders.create({ owner: { orgId: ORG, userId: USER }, createdBy: USER, input: ACME });
     invalidateCustomProvidersSnapshots({ orgId: ORG });
     await app.request('/ok');
 
@@ -194,26 +194,31 @@ describe('custom providers saved in Settings', () => {
 });
 
 describe('registerCustomProvidersSource (account without an organization)', () => {
-  // These accounts are keyed by a synthetic `user:<id>` org nobody else can
-  // be in, so they keep the single list they had before personal providers.
-  it('uses the same list for personal and Factory-scoped work', async () => {
+  // These accounts are keyed by a synthetic `user:<id>` org and scoped exactly
+  // like their keys: their own list for personal work, the org's for the rest.
+  it("uses the account's own list for personal work and the org list for Factory-scoped work", async () => {
     const solo = { workosId: 'solo' };
-    await seed.customProviders.upsert({ owner: { orgId: 'user:solo' }, createdBy: 'solo', input: ACME });
+    await seed.customProviders.create({
+      owner: { orgId: 'user:solo', userId: 'solo' },
+      createdBy: 'solo',
+      input: endpoint('Mine'),
+    });
+    await seed.customProviders.create({ owner: { orgId: 'user:solo' }, createdBy: 'solo', input: endpoint('Older') });
     registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
 
     await buildApp(solo, true).request('/ok');
 
-    expect(resolveCustomProviders(tenantContext(solo))).toEqual([ACME_PROVIDER]);
-    expect(resolveCustomProviders(await policyContext(solo, 'factory'))).toEqual([ACME_PROVIDER]);
-    // Policy contexts carry the synthetic org id explicitly; same list.
-    const explicit = { workosId: 'solo', organizationId: 'user:solo' };
-    expect(resolveCustomProviders(await policyContext(explicit, 'user'))).toEqual([ACME_PROVIDER]);
+    const names = (ctx: RequestContext) => resolveCustomProviders(ctx)?.map(provider => provider.name);
+    expect(names(tenantContext(solo))).toEqual(['Mine']);
+    expect(names(await policyContext(solo, 'factory'))).toEqual(['Older']);
+    // Policy contexts carry the synthetic org id explicitly; same lists.
+    expect(names(await policyContext({ workosId: 'solo', organizationId: 'user:solo' }, 'user'))).toEqual(['Mine']);
   });
 });
 
 describe('primeCustomProvidersForRequestContext', () => {
   it('primes the run owner org for a wake with no inbound request', async () => {
-    await seed.customProviders.upsert({ owner: { orgId: ORG, userId: USER }, createdBy: USER, input: ACME });
+    await seed.customProviders.create({ owner: { orgId: ORG, userId: USER }, createdBy: USER, input: ACME });
     registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
     const ctx = tenantContext({ workosId: USER, organizationId: ORG });
 
@@ -223,7 +228,7 @@ describe('primeCustomProvidersForRequestContext', () => {
   });
 
   it('primes nothing without a run owner', async () => {
-    await seed.customProviders.upsert({ owner: { orgId: ORG, userId: USER }, createdBy: USER, input: ACME });
+    await seed.customProviders.create({ owner: { orgId: ORG, userId: USER }, createdBy: USER, input: ACME });
     registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
 
     await primeCustomProvidersForRequestContext(new RequestContext());
@@ -234,7 +239,7 @@ describe('primeCustomProvidersForRequestContext', () => {
 
 describe('registerCustomProvidersSource (no-auth mode)', () => {
   it('serves the sentinel local org rows, tenant or not', async () => {
-    await seed.customProviders.upsert({ owner: { orgId: 'local' }, createdBy: 'local', input: ACME });
+    await seed.customProviders.create({ owner: { orgId: 'local' }, createdBy: 'local', input: ACME });
     registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: false });
 
     await buildApp(null, false).request('/ok');

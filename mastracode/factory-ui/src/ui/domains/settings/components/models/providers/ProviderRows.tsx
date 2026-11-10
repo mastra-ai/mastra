@@ -1,8 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Status } from '@mastra/playground-ui/components/StatusIndicators';
+import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box, Plus } from 'lucide-react';
+import { Box, Plus, ServerCog } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
@@ -53,6 +55,77 @@ export function ProviderRowsSkeleton() {
   );
 }
 
+function RowTitle({ title, detail }: { title: string; detail: string | undefined }) {
+  return (
+    <span className="flex min-w-0 flex-1 flex-col">
+      <Txt as="span" variant="caption" className="truncate">
+        {title}
+      </Txt>
+      {detail && (
+        <Txt as="span" variant="meta" tone="muted" className="truncate">
+          {detail}
+        </Txt>
+      )}
+    </span>
+  );
+}
+
+/** A provider connected at a scope in a provider list: what it is, its status and its actions. */
+export function ConnectedRow({
+  icon,
+  title,
+  detail,
+  status,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  detail?: string;
+  status: StatusPresentation;
+  /** The row's actions. A row without any keeps the column so statuses line up. */
+  children?: ReactNode;
+}) {
+  return (
+    <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
+      {icon}
+      <RowTitle title={title} detail={detail} />
+      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
+        <Status presentation={status} />
+      </Txt>
+      {children ?? <span aria-hidden="true" className="size-control-sm shrink-0" />}
+    </li>
+  );
+}
+
+/** One choice in the Add provider drawer: what it is, an optional note, and the ways to add it. */
+export function OptionRow({
+  icon,
+  title,
+  detail,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  detail: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">
+      {icon}
+      <RowTitle title={title} detail={detail} />
+      {children}
+    </li>
+  );
+}
+
+export function ProviderIcon({ provider }: { provider: string }) {
+  return <ProviderBrandIcon provider={provider} fallback={<Box className="text-muted-foreground size-4" />} />;
+}
+
+export function CustomEndpointIcon() {
+  return <ServerCog aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />;
+}
+
 export function ProviderOptionRow({
   provider,
   label,
@@ -63,19 +136,8 @@ export function ProviderOptionRow({
   children: ReactNode;
 }) {
   return (
-    <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">
-      <ProviderBrandIcon provider={provider} fallback={<Box className="text-muted-foreground size-4" />} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="caption" className="truncate">
-          {providerDisplayName(provider)}
-        </Txt>
-        {label && (
-          <Txt as="span" variant="meta" tone="muted">
-            {label}
-          </Txt>
-        )}
-      </span>
+    <OptionRow icon={<ProviderIcon provider={provider} />} title={providerDisplayName(provider)} detail={label}>
       {children}
-    </li>
+    </OptionRow>
   );
 }

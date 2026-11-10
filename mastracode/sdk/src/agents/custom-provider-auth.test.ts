@@ -204,6 +204,21 @@ describe('custom provider credentials', () => {
     });
   });
 
+  describe('the model router key lookup', () => {
+    // The router asks with its gateway-qualified id. Reading the gateway id
+    // as the provider id would look up the wrong provider's key.
+    it('reads the provider from a gateway-qualified model id', async () => {
+      writeAuthJson({ 'apikey:openai': { type: 'api_key', key: 'sk-saved-openai' } });
+      const gateway = createGateway([
+        { name: 'Acme', url: 'http://127.0.0.1:9/v1', apiKey: 'acme-secret', models: ['model-x'] },
+        { name: 'MastraCode', url: 'http://127.0.0.1:9/v1', apiKey: 'decoy', models: ['m'] },
+      ]);
+
+      expect(await gateway.getApiKey('mastracode/acme/model-x')).toBe('acme-secret');
+      expect(await gateway.getApiKey('mastracode/openai/gpt-test')).toBe('sk-saved-openai');
+    });
+  });
+
   describe('an endpoint with its own key', () => {
     it('receives that key', async () => {
       const endpoint = await startEndpoint();

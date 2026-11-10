@@ -476,7 +476,8 @@ export class MastraCodeGateway extends MastraModelGateway {
   }
 
   async getApiKey(modelId: string): Promise<string> {
-    const providerId = stripMastraGatewayPrefix(modelId).split('/', 1)[0];
+    // The model router passes its gateway-qualified id (`mastracode/<provider>/<model>`).
+    const { providerId } = parseGatewayRouterId(stripMastraGatewayPrefix(modelId), this);
     if (this.#routeThroughMastraGateway) return this.#mastraGatewayApiKey ?? '';
     if (!providerId) return '';
     const customProvider = this.#customProvider(providerId);

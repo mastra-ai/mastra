@@ -111,7 +111,6 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           <CustomProviderRow
             key={provider.id}
             provider={provider}
-            requestScope={requestScope}
             disabled={actionsDisabled}
             onEdit={() => setCustomProviderDraft(provider)}
           />
@@ -154,8 +153,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
       {customProviderDraft && (
         <CustomProviderDialog
           provider={customProviderDraft === 'new' ? undefined : customProviderDraft}
-          credentialScope={scope}
-          requestScope={requestScope}
+          scope={scope}
           onClose={() => setCustomProviderDraft(undefined)}
         />
       )}
