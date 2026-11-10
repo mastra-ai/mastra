@@ -2415,6 +2415,21 @@ export function createDurableToolCallStep() {
           ...consumeDelegationBailSignal(),
         };
       } catch (error) {
+        // The deadline took the run while a call that returned in time was still being mapped or
+        // processed: save it as cut off, never with its unprocessed result or as a failure.
+        if (
+          recordedAtStepEnd &&
+          registryEntry?.executionFence?.deadlineError &&
+          ownership?.isLost() &&
+          !registryEntry.settledToolResults?.some(settled => settled.toolCallId === toolCallId)
+        ) {
+          (registryEntry.settledToolResults ??= []).push({
+            toolCallId,
+            toolName,
+            args: cleanedArgs,
+            outcome: { kind: 'result', result: TOOL_ABORT_NOTICE },
+          });
+        }
         ownership?.throwIfLost();
         if (mappingFailure?.error === error) {
           return {

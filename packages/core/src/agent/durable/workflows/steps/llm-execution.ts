@@ -2961,6 +2961,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
             }
             // The step processors ran over the streamed text and it is in the list; a deadline no longer cuts it off.
+            // Publish the accepted step first, in the same tick, so a deadline before the mapping step's snapshot
+            // still saves it (and never both the snapshot and the cut-off text). A rejected response is rolled
+            // back below, so the step-start snapshot stays.
+            if (registryEntry?.timeoutTotalMs && !processOutputStepTripwire) {
+              registryEntry.completedStepsState = JSON.parse(JSON.stringify(messageList.serialize()));
+            }
             if (registryEntry) registryEntry.streamedStepText = undefined;
 
             const retryRequested = processOutputStepTripwire?.options?.retry === true;

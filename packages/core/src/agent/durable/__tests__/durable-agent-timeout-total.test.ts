@@ -767,6 +767,95 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
+  it.each(['toModelOutput', 'processToolResult'] as const)(
+    'saves a tool call still in %s at the total deadline as cut off',
+    async stage => {
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      const runId = `timeout-slow-${stage}-run`;
+      const threadId = `timeout-slow-${stage}-thread`;
+      let pendingAtDeadline = false;
+      // Returns inside the grace window the save waits for, after the deadline took the run.
+      const waitPastDeadline = async () => {
+        const signal = globalRunRegistry.get(runId)?.abortSignal;
+        if (!signal) throw new Error('Missing timeout signal');
+        await new Promise<void>(resolve => {
+          if (signal.aborted) return resolve();
+          signal.addEventListener(
+            'abort',
+            () => {
+              pendingAtDeadline = true;
+              resolve();
+            },
+            { once: true },
+          );
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+      };
+      const agent = createDurableAgent({
+        agent: new Agent({
+          id: `timeout-slow-${stage}`,
+          name: `Timeout slow ${stage}`,
+          instructions: 'Call the tool.',
+          memory,
+          model: toolCallingModel('lookup'),
+          ...(stage === 'processToolResult'
+            ? {
+                outputProcessors: [
+                  {
+                    id: 'slow-result',
+                    processToolResult: async ({ result }: any) => {
+                      await waitPastDeadline();
+                      return result;
+                    },
+                  } as any,
+                ],
+              }
+            : {}),
+          tools: {
+            lookup: createTool({
+              id: 'lookup',
+              description: 'Returns right away',
+              inputSchema: z.object({}),
+              execute: async () => 'Found NYC',
+              ...(stage === 'toModelOutput'
+                ? {
+                    toModelOutput: async () => {
+                      await waitPastDeadline();
+                      return { type: 'text' as const, value: 'MAPPED' };
+                    },
+                  }
+                : {}),
+            }),
+          },
+        }),
+        pubsub,
+      });
+      new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+      const result = await agent.stream('hello', {
+        runId,
+        memory: { thread: threadId, resource: 'timeout-resource' },
+        modelSettings: { timeout: { totalMs: 300 } },
+      });
+      try {
+        const chunks = await drain(result.fullStream);
+        expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+        expect(pendingAtDeadline).toBe(true);
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId });
+          expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+          const saved = JSON.stringify(messages);
+          // The call completed, so it is neither saved as failed nor with its unprocessed result.
+          expect(saved).toContain(TOOL_ABORT_NOTICE);
+          expect(saved).not.toContain('Found NYC');
+          expect(saved).not.toContain('Tool result processing failed');
+        });
+      } finally {
+        result.cleanup();
+      }
+    },
+  );
+
   it('saves a resumed run at its total deadline', async () => {
     const storage = new InMemoryStore();
     const memory = new MockMemory({ storage });
