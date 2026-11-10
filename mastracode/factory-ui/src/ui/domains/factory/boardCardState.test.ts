@@ -184,12 +184,12 @@ describe('status row', () => {
   it('says a card triage left in Intake waits on a person', () => {
     expect(boardCardState({ held: true }).status).toEqual({
       kind: 'held',
-      label: 'Triaged and waiting for you',
+      label: 'Held for your go-ahead',
     });
     // A suggested run cannot start until the card is accepted, so the hold is the live question.
     expect(boardCardState({ held: true, proposal: { label: 'Build', decisionId: 'decision-9' } }).status).toEqual({
       kind: 'held',
-      label: 'Triaged and waiting for you',
+      label: 'Held for your go-ahead',
     });
     // Anything the server is doing outranks the standing hold.
     expect(boardCardState({ held: true, preparing: 'Starting…' }).status).toEqual({

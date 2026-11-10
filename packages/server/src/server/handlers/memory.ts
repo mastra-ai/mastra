@@ -84,8 +84,9 @@ interface MemoryContext extends Context {
 
 /**
  * Enforces thread access on a gateway thread before its observational memory is read.
- * Returns false when the thread doesn't exist: gateway OM is thread-scoped and keyed by thread id,
- * so a record without its thread (new chat, or mid-deletion) has no owner to check against.
+ * Returns false when the thread doesn't exist: the gateway only serves OM through thread paths, so a
+ * record behind a missing thread (new chat, or mid-deletion) has no owner to check against. Unlike
+ * local storage there is no resource-only lookup to fall back to, even for the deprecated resource scope.
  */
 async function enforceGatewayThreadAccess({
   gwClient,
