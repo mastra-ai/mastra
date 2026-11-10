@@ -41,8 +41,6 @@ export class MastraRouteGuard implements CanActivate {
       const user = await this.authService.authenticate(request, {
         requestContext: this.requestContext.requestContext,
         bearerOnly: matchResult.route.authTransport === 'bearer',
-        // Routes that set `requiresAuth: true` (the built-in MCP endpoint) stay protected even on an `auth.public` path.
-        requiresAuth: matchResult.route.requiresAuth,
         response: context.switchToHttp().getResponse<Response>(),
         // As on the other adapters, a route that requires auth is not opened by a public path.
         requiresAuth: matchResult.route.requiresAuth,
