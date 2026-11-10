@@ -67,7 +67,11 @@ const MEDIA_SIGNATURES: Record<string, (head: Buffer) => boolean> = {
  * A file or image in a tool result is different: when the provider answers 400
  * that a file part is invalid (OpenAI's `invalid_file`, Anthropic's media type
  * mismatch), it would fail every later call too. So that part is replaced with
- * a note in the stored history, and the model is called once more.
+ * a note in the stored history, and the model is called once more. The error
+ * often doesn't say which part it means, so a part is only replaced when the
+ * error points at it in the request, when it is the only file in the request,
+ * or when its bytes are not the type it is labelled with. Otherwise the stored
+ * history is left alone.
  *
  * Part of the default error processors of every agent; `errorProcessorDefaults: false` turns it off.
  */
@@ -84,11 +88,10 @@ export class UnsupportedFileHandler implements Processor<'unsupported-file-handl
     // Only once: if the call fails again after the files are replaced, the note didn't fix it.
     if (retryCount > 0) return;
     // A tool result's file or image the provider called invalid would fail every later call too, so it leaves the history.
-    // The error rarely says which part it means. With a user file the model may not read in the request, only a tool
-    // part whose bytes contradict its type is taken; otherwise the user-file fallback below handles the rejection.
-    if (isRejectedPartError(error) && omitRejectedToolMedia(messageList, !hasUnreadableFile(messageList))) {
-      return { retry: true };
-    }
+    // Only a part shown to be the rejected one goes. When none is, the history stays as it is, and the user-file
+    // fallback below handles the error or it surfaces.
+    const rejectedPartError = rejectedPartErrorOf(error);
+    if (rejectedPartError && omitRejectedToolMedia(messageList, rejectedPartError)) return { retry: true };
     const mediaType = rejectedMediaTypeOf(error);
     if (mediaType) {
       if (!hasFile(messageList)) return;
@@ -187,13 +190,15 @@ function apiCallErrorOf(error: unknown): { statusCode?: unknown } | undefined {
   return undefined;
 }
 
-function isRejectedPartError(error: unknown): boolean {
-  const apiError = apiCallErrorOf(error) as
-    | { statusCode?: unknown; message?: unknown; responseBody?: unknown }
-    | undefined;
-  if (apiError?.statusCode !== 400) return false;
+/** What the handler reads of a provider 400 that says a file or image part of the request is invalid. */
+type RejectedPartError = { message?: unknown; responseBody?: unknown; requestBodyValues?: unknown };
+
+/** The API error in `error`, when it is a 400 in which the provider says a file or image part is invalid. */
+function rejectedPartErrorOf(error: unknown): RejectedPartError | undefined {
+  const apiError = apiCallErrorOf(error) as (RejectedPartError & { statusCode?: unknown }) | undefined;
+  if (apiError?.statusCode !== 400) return undefined;
   const texts = [apiError.message, apiError.responseBody].filter(text => typeof text === 'string');
-  return texts.some(text => REJECTED_PART_PATTERNS.some(pattern => pattern.test(text)));
+  return texts.some(text => REJECTED_PART_PATTERNS.some(pattern => pattern.test(text))) ? apiError : undefined;
 }
 
 type ToolMediaItem = { type: 'media' | 'image-data' | 'file-data'; data: string; mediaType?: string };
@@ -208,27 +213,31 @@ function toolModelOutputOf(part: MastraToolInvocationPart): { type: 'content'; v
     : undefined;
 }
 
+/** Whether a tool result's content item is a file or image given inline. */
 function isToolMediaItem(item: unknown): item is ToolMediaItem {
   const { type, data } = (item ?? {}) as { type?: unknown; data?: unknown };
   return (type === 'media' || type === 'image-data' || type === 'file-data') && typeof data === 'string';
 }
 
+/** The base64 of inline file data, without the prefix of a `data:` URL. */
+const base64Of = (data: string) => (data.startsWith('data:') ? data.slice(data.indexOf(',') + 1) : data);
+
 /** False when the bytes show the item is not the media type it is labelled with. Types without a signature pass. */
 function matchesItsMediaType({ data, mediaType = '' }: ToolMediaItem): boolean {
   const matches = MEDIA_SIGNATURES[normalizedMediaType(mediaType)];
   if (!matches) return true;
-  const base64 = data.startsWith('data:') ? data.slice(data.indexOf(',') + 1) : data;
   // 1368 base64 characters are 1 KiB of bytes, enough to find `%PDF-` anywhere in the first 1 KiB.
-  return matches(Buffer.from(base64.slice(0, 1368), 'base64'));
+  return matches(Buffer.from(base64Of(data).slice(0, 1368), 'base64'));
 }
 
 /**
- * Replaces, in the stored history, the tool-result file or image the provider rejected with a text note, and
- * returns whether it replaced any. The error rarely says which part it means, so this takes every part whose
- * bytes don't match its media type, or else (when `allowNewest`) the newest one: the call before it went through
- * without that part.
+ * Replaces, in the stored history, the tool-result files and images shown to be the ones the provider rejected with
+ * a text note, and returns whether it replaced any. The error often doesn't say which part it means, so a part is
+ * taken only on evidence: the error points at it in the request, it is the only file in the request, or its bytes
+ * are not the media type it is labelled with. Never by position: a wrong guess would stay in the history while the
+ * rejected file is sent again.
  */
-function omitRejectedToolMedia(messageList: MessageList, allowNewest: boolean): boolean {
+function omitRejectedToolMedia(messageList: MessageList, error: RejectedPartError): boolean {
   const found: { part: MastraToolInvocationPart; index: number; item: ToolMediaItem }[] = [];
   for (const message of messageList.get.all.db()) {
     if (message.role !== 'assistant') continue;
@@ -239,8 +248,11 @@ function omitRejectedToolMedia(messageList: MessageList, allowNewest: boolean): 
       });
     }
   }
-  const mislabeled = found.filter(({ item }) => !matchesItsMediaType(item));
-  const omitted = mislabeled.length > 0 ? mislabeled : allowNewest ? found.slice(-1) : [];
+  const rejected = rejectedPayloadOf(error);
+  const named = rejected === undefined ? [] : found.filter(({ item }) => base64Of(item.data) === rejected);
+  // The rejected file is not in a tool result, like one a user sent, so the tool results stay.
+  if (rejected !== undefined && named.length === 0) return false;
+  const omitted = [...new Set([...named, ...found.filter(({ item }) => !matchesItsMediaType(item))])];
   for (const part of new Set(omitted.map(({ part }) => part))) {
     const output = toolModelOutputOf(part)!;
     const value = output.value.map((item, index) =>
@@ -259,6 +271,109 @@ function omitRejectedToolMedia(messageList: MessageList, allowNewest: boolean): 
   }
   return omitted.length > 0;
 }
+
+/**
+ * The base64 of the one file or image the error is about, read from the request the provider rejected: the media
+ * block at the path the error names (Anthropic starts its message with one, like `messages.2.content.0.content.1`;
+ * OpenAI gives one in `param`), or the only media block under that path. `null` when that block has no inline
+ * base64, like an image URL. `undefined` when the request is unknown or no single file can be told apart.
+ */
+function rejectedPayloadOf(error: RejectedPartError): string | null | undefined {
+  const body = jsonOf(error.requestBodyValues);
+  if (!isRecord(body)) return undefined;
+  const scope = requestNodeAt(body, errorPathOf(error, body));
+  if (scope === undefined) return undefined;
+  const payloads = new Set(mediaBlocksIn(scope).map(block => payloadOf(block)));
+  return payloads.size === 1 ? [...payloads][0] : undefined;
+}
+
+/** A path into the request in an error message, followed by a colon: `messages.2.content.0.image.source.base64:`. */
+const REQUEST_PATH = /([A-Za-z_]\w*(?:\.\w+|\[\d+\])+):/g;
+
+/** The keys of the path the error names in the request, from OpenAI's `param` or the start of Anthropic's message. */
+function errorPathOf(error: RejectedPartError, body: Record<string, unknown>): string[] {
+  const response = jsonOf(error.responseBody);
+  const param = isRecord(response) && isRecord(response.error) ? response.error.param : undefined;
+  const texts = [error.message, error.responseBody].filter((text): text is string => typeof text === 'string');
+  const paths = [
+    ...(typeof param === 'string' ? [param] : []),
+    ...texts.flatMap(text => [...text.matchAll(REQUEST_PATH)].map(match => match[1]!)),
+  ];
+  const keyLists = paths.map(path => path.split(/[.[\]]+/).filter(Boolean));
+  return keyLists.find(([first]) => first !== undefined && first in body) ?? [];
+}
+
+/**
+ * The node of the request `path` leads to, or the media block on the way. A key the node doesn't have ends the walk
+ * there, unless it is the node's type, as Anthropic names the block type in its paths (`content.1.image.source`).
+ * `undefined` when an index is past the end of a list: the path is not about this request.
+ */
+function requestNodeAt(body: Record<string, unknown>, path: string[]): unknown {
+  let node: unknown = body;
+  for (const key of path) {
+    if (isMediaBlock(node)) return node;
+    if (Array.isArray(node) && /^\d+$/.test(key)) {
+      if (Number(key) >= node.length) return undefined;
+      node = node[Number(key)];
+    } else if (isRecord(node) && key in node) {
+      node = node[key];
+    } else if (!isRecord(node) || node.type !== key) {
+      break;
+    }
+  }
+  return node;
+}
+
+/** Content block types that carry a file or image: Anthropic's, OpenAI Responses' and OpenAI Chat Completions'. */
+const MEDIA_BLOCK_TYPES: ReadonlySet<unknown> = new Set([
+  'image',
+  'document',
+  'file',
+  'image_url',
+  'input_image',
+  'input_file',
+  'input_audio',
+]);
+
+/** Whether a node of a provider request is a content block that carries a file or image. Google's have no type. */
+function isMediaBlock(node: unknown): node is Record<string, unknown> {
+  return isRecord(node) && (MEDIA_BLOCK_TYPES.has(node.type) || 'inlineData' in node || 'fileData' in node);
+}
+
+/** Every media block in a node of a provider request. */
+function mediaBlocksIn(node: unknown): Record<string, unknown>[] {
+  if (isMediaBlock(node)) return [node];
+  if (Array.isArray(node)) return node.flatMap(mediaBlocksIn);
+  return isRecord(node) ? Object.values(node).flatMap(mediaBlocksIn) : [];
+}
+
+/** The inline base64 in a media block: a `data:` URL, or a `data` field like Anthropic's `source.data`. */
+function payloadOf(node: unknown, key?: string): string | null {
+  if (typeof node === 'string') return node.startsWith('data:') ? base64Of(node) : key === 'data' ? node : null;
+  const entries: [string | undefined, unknown][] = Array.isArray(node)
+    ? node.map(child => [undefined, child])
+    : isRecord(node)
+      ? Object.entries(node)
+      : [];
+  for (const [childKey, child] of entries) {
+    const payload = payloadOf(child, childKey);
+    if (payload !== null) return payload;
+  }
+  return null;
+}
+
+/** A provider request or response body: the AI SDK keeps the request as an object and the response as text. */
+function jsonOf(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const rejectedPartNote = (mediaType?: string) =>
   `[file omitted${mediaType ? ` (${mediaType})` : ''}: the provider rejected it as invalid; read it as text or check its type]`;

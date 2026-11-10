@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import { APICallError, UnsupportedFunctionalityError } from '@ai-sdk/provider-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -421,6 +423,11 @@ describe('UnsupportedFileHandler, for a file or image in a tool result the provi
   const HTML = Buffer.from(
     '<!DOCTYPE html><html><title>429 Too Many Requests</title><h1>429 Too Many Requests</h1></html>',
   );
+  // Both start with a PDF header. The provider can't parse the first one; the second one is fine.
+  const CORRUPT_PDF = Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R\n\x00\x00 truncated');
+  const PDF = Buffer.from(
+    '%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\ntrailer << /Root 1 0 R >>\n%%EOF\n',
+  );
   const NOTE = (mediaType: string) =>
     `[file omitted (${mediaType}): the provider rejected it as invalid; read it as text or check its type]`;
 
@@ -459,14 +466,66 @@ describe('UnsupportedFileHandler, for a file or image in a tool result the provi
       isRetryable: false,
     });
 
+  /**
+   * The error the provider's own AI SDK package throws when the API answers 400 with `body` to `prompt`. Unlike the
+   * errors above, it carries the request as the provider received it, which the error's path points into.
+   */
+  async function providerError(provider: 'anthropic' | 'openai', prompt: LanguageModelV2Prompt, body: unknown) {
+    const fetch = async () =>
+      new Response(JSON.stringify(body), { status: 400, headers: { 'content-type': 'application/json' } });
+    const model =
+      provider === 'anthropic'
+        ? createAnthropic({ apiKey: 'test-key', fetch })('claude-sonnet-4-5')
+        : createOpenAI({ apiKey: 'test-key', fetch }).responses('gpt-5');
+    return model.doGenerate({ prompt }).then(
+      () => new Error('the provider accepted the request'),
+      (error: Error) => error,
+    );
+  }
+  const OPENAI_INVALID_FILE = {
+    error: {
+      message: 'The file you uploaded is badly formatted or corrupted. Please fix the file and try again.',
+      type: 'invalid_request_error',
+      param: 'input',
+      code: 'invalid_file',
+    },
+  };
+  const anthropicMismatchAt = (path: string) => ({
+    type: 'error',
+    error: {
+      type: 'invalid_request_error',
+      message: `${path}: The image was specified using the image/png media type, but the image appears to be a image/webp image`,
+    },
+  });
+
+  /** The tool results' content as stored in memory, which later turns are built from. */
+  const storedModelOutputs = async (recall: ReturnType<typeof createViewAgent>['recall']) =>
+    (await recall())
+      .flatMap(message => message.content.parts)
+      .flatMap(part =>
+        part.type === 'tool-invocation'
+          ? [(part.providerMetadata?.mastra as { modelOutput?: { value: ToolItem[] } }).modelOutput]
+          : [],
+      );
+  const viewOutput = ({ path, bytes, mediaType }: ViewedFile) => ({
+    type: 'content',
+    value: [
+      { type: 'text', text: path },
+      { type: 'media', data: bytes.toString('base64'), mediaType },
+    ],
+  });
+
   /** An agent whose model views `files` with a `view` tool on its first call, then answers `ok`. */
-  function createViewAgent(files: ViewedFile[], reject: Rejection) {
+  function createViewAgent(
+    files: ViewedFile[],
+    reject: (prompt: LanguageModelV2Prompt) => Error | undefined | Promise<Error | undefined>,
+  ) {
     const prompts: LanguageModelV2Prompt[] = [];
     // First call: view every file. Once the results are in: reject them, or answer `ok`.
-    const respond = (prompt: LanguageModelV2Prompt) => {
+    const respond = async (prompt: LanguageModelV2Prompt) => {
       prompts.push(prompt);
       const viewed = prompt.some(message => message.role === 'tool');
-      const error = viewed ? reject(prompt) : undefined;
+      const error = viewed ? await reject(prompt) : undefined;
       if (error) throw error;
       return viewed
         ? { content: [{ type: 'text' as const, text: 'ok' }], finishReason: 'stop' as const }
@@ -481,9 +540,9 @@ describe('UnsupportedFileHandler, for a file or image in a tool result the provi
           };
     };
     const model = new MockLanguageModelV2({
-      doGenerate: async ({ prompt }) => ({ ...respond(prompt), usage, warnings: [] }),
+      doGenerate: async ({ prompt }) => ({ ...(await respond(prompt)), usage, warnings: [] }),
       doStream: async ({ prompt }) => {
-        const { content, finishReason } = respond(prompt);
+        const { content, finishReason } = await respond(prompt);
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start' as const, warnings: [] },
@@ -557,14 +616,7 @@ describe('UnsupportedFileHandler, for a file or image in a tool result the provi
         expect(toolMedia(prompts[2]!)).toEqual([]);
         expect(toolTexts(prompts[2]!)).toEqual([viewed.path, NOTE(viewed.mediaType)]);
 
-        const storedOutputs = (await recall())
-          .flatMap(message => message.content.parts)
-          .flatMap(part =>
-            part.type === 'tool-invocation'
-              ? [(part.providerMetadata?.mastra as { modelOutput?: { value: ToolItem[] } }).modelOutput]
-              : [],
-          );
-        expect(storedOutputs).toEqual([
+        expect(await storedModelOutputs(recall)).toEqual([
           {
             type: 'content',
             value: [
@@ -583,7 +635,15 @@ describe('UnsupportedFileHandler, for a file or image in a tool result the provi
         { path: 'diagram.png', bytes: PNG, mediaType: 'image/png' },
         { path: 'screenshot.png', bytes: WEBP, mediaType: 'image/png' },
       ],
-      prompt => (holds(prompt, WEBP, 'image/png') ? anthropicMismatch() : undefined),
+      // Anthropic's path to the second tool result's image.
+      prompt =>
+        holds(prompt, WEBP, 'image/png')
+          ? providerError(
+              'anthropic',
+              prompt,
+              anthropicMismatchAt('messages.2.content.1.tool_result.content.1.image.source.base64'),
+            )
+          : undefined,
     );
 
     const result = await agent.generate('Look at the files', { memory: MEMORY });
@@ -593,6 +653,49 @@ describe('UnsupportedFileHandler, for a file or image in a tool result the provi
     expect(toolMedia(prompts[2]!)).toEqual([{ type: 'media', data: PNG.toString('base64'), mediaType: 'image/png' }]);
     expect(toolTexts(prompts[2]!)).toEqual(['diagram.png', 'screenshot.png', NOTE('image/png')]);
   });
+
+  it('replaces a file whose type matches when it is the only file in the request', async () => {
+    const viewed = { path: 'scan.pdf', bytes: CORRUPT_PDF, mediaType: 'application/pdf' };
+    const { agent, prompts, recall } = createViewAgent([viewed], prompt =>
+      holds(prompt, CORRUPT_PDF, 'application/pdf') ? providerError('openai', prompt, OPENAI_INVALID_FILE) : undefined,
+    );
+
+    const result = await agent.generate('Look at the file', { memory: MEMORY });
+
+    expect(result.text).toBe('ok');
+    expect(prompts).toHaveLength(3);
+    expect(toolTexts(prompts[2]!)).toEqual(['scan.pdf', NOTE('application/pdf')]);
+    expect(await storedModelOutputs(recall)).toEqual([
+      {
+        type: 'content',
+        value: [
+          { type: 'text', text: 'scan.pdf' },
+          { type: 'text', text: NOTE('application/pdf') },
+        ],
+      },
+    ]);
+  });
+
+  it.each(['generate', 'stream'] as const)(
+    'leaves the history alone when the error does not say which of two valid-looking files it means (%s)',
+    async mode => {
+      const files = [
+        { path: 'scan.pdf', bytes: CORRUPT_PDF, mediaType: 'application/pdf' },
+        { path: 'report.pdf', bytes: PDF, mediaType: 'application/pdf' },
+      ];
+      const { agent, prompts, recall } = createViewAgent(files, prompt =>
+        holds(prompt, CORRUPT_PDF, 'application/pdf')
+          ? providerError('openai', prompt, OPENAI_INVALID_FILE)
+          : undefined,
+      );
+
+      await expect(run(agent, mode, 'Look at the files')).rejects.toThrow('badly formatted or corrupted');
+
+      // No retry: replacing either file would be a guess, and a wrong guess would stay in the history.
+      expect(prompts).toHaveLength(2);
+      expect(await storedModelOutputs(recall)).toEqual(files.map(viewOutput));
+    },
+  );
 
   it('tries again only once, so a rejection the note does not fix still fails', async () => {
     const { agent, prompts } = createViewAgent([{ path: 'screenshot.png', bytes: WEBP, mediaType: 'image/png' }], () =>
