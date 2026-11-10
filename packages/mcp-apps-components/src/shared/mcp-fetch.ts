@@ -16,6 +16,8 @@ type ToolRoute = {
   rows?: string;
   /** Takes the opened query's filters. */
   filtered?: boolean;
+  /** No tool returns a full trace; it's assembled from the light trace and `get_span` per span. */
+  fullTrace?: boolean;
 };
 
 const input = (_match: RegExpMatchArray, args: Args) => args;
@@ -66,6 +68,13 @@ const ROUTES: ToolRoute[] = [
     args: match => ({ traceId: decodeURIComponent(match[1]!) }),
   },
   { method: 'GET', path: /^\/observability\/traces(\/light)?$/, tool: 'list_traces', args: input },
+  {
+    method: 'GET',
+    path: /^\/observability\/traces\/([^/]+)$/,
+    tool: 'get_span',
+    args: match => ({ traceId: decodeURIComponent(match[1]!) }),
+    fullTrace: true,
+  },
   { method: 'GET', path: /^\/observability\/scores$/, tool: 'list_scores', args: input },
   { method: 'GET', path: /^\/observability\/feedback$/, tool: 'list_feedback', args: input },
 ];
@@ -138,6 +147,24 @@ async function lightTrace(app: App, traceId: string): Promise<unknown> {
   return { traceId, spans };
 }
 
+/** Span details fetched at once: enough to keep a long trace quick without flooding the host. */
+const FULL_TRACE_CONCURRENCY = 8;
+
+async function fullTrace(app: App, traceId: string): Promise<unknown> {
+  const { spans } = (await lightTrace(app, traceId)) as { spans: { spanId: string }[] };
+  const full: unknown[] = new Array(spans.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < spans.length) {
+      const index = next++;
+      const { span } = (await call(app, 'get_span', { traceId, spanId: spans[index]!.spanId })) as { span: unknown };
+      full[index] = span;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(FULL_TRACE_CONCURRENCY, spans.length) }, worker));
+  return { traceId, spans: full };
+}
+
 /**
  * A `fetch` for `MastraClient` that serves Studio's observability requests from the built-in MCP server's
  * tools, over the host's connection. Requests no tool serves get a 404, which Studio treats as unsupported.
@@ -155,6 +182,7 @@ export function createMcpFetch(app: App, getOpened: () => OpenedTraceFilter | un
       let args = route.args(match, method === 'GET' ? queryArgs(url.searchParams) : raw);
       if (route.filtered) args = withOpenedFilter(args, getOpened());
       try {
+        if (route.fullTrace) return json(await fullTrace(app, args.traceId as string));
         if (route.tool === 'get_trace') return json(await lightTrace(app, args.traceId as string));
         const result = await callPage(app, route, args);
         if (route.tool === 'get_observability_capabilities') {
