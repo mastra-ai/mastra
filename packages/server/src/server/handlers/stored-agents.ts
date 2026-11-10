@@ -1110,13 +1110,20 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       mastra.getEditor()?.agent.clearCache(storedAgentId);
 
       // The agent registered its workspace on first use. With the record gone, GET /workspaces can't check who may
-      // see it, so unregister it.
-      if (typeof mastra.listWorkspaces === 'function') {
-        for (const [workspaceId, entry] of Object.entries(mastra.listWorkspaces())) {
-          if (entry.source === 'agent' && entry.agentId === storedAgentId) {
-            await mastra.removeWorkspace(workspaceId);
+      // see it, so unregister it. The record is already gone, so a cleanup failure is logged rather than failing the
+      // delete.
+      try {
+        if (typeof mastra.listWorkspaces === 'function') {
+          for (const [workspaceId, entry] of Object.entries(mastra.listWorkspaces())) {
+            if (entry.source === 'agent' && entry.agentId === storedAgentId) {
+              await mastra.removeWorkspace(workspaceId);
+            }
           }
         }
+      } catch (cleanupError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to unregister workspace of deleted agent', { storedAgentId, error: cleanupError });
       }
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
