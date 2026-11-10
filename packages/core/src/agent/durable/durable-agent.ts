@@ -51,7 +51,10 @@ import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput } from '../signals';
 import { AgentStreamBus } from '../streams/bus';
+import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
+import type { ResponseMessagesReplay } from '../streams/response-messages';
 import type { AgentStreamsConfig } from '../streams/types';
+import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -111,6 +114,7 @@ import type {
 } from './stream-adapter';
 import type {
   AgentAbortEventData,
+  AgentChunkEventData,
   AgentStreamEvent,
   AgentStepFinishEventData,
   DurableAgentStepFinishResult,
@@ -5498,9 +5502,38 @@ export class DurableAgent<
     let subscribed = true;
     let activityVersion = 0;
 
+    // Step-finish events carry only the response messages that changed; rebuild the full list so
+    // the frames match what the run's own stream reports. A reader starting at an offset first
+    // rebuilds it from the events it skips.
+    let responseMessages: ResponseMessagesReplay = { messages: [] };
+    const offset = options.offset;
+    if (offset !== undefined && offset > 0 && this.pubsub.supportsOffsets) {
+      try {
+        const skipped = (await this.pubsub.getHistory(topic, 0)).filter(
+          event => typeof event.index === 'number' && event.index < offset,
+        );
+        responseMessages = replayResponseMessages(skipped);
+      } catch (error) {
+        this.logger.warn(`[DurableAgent] Couldn't read run ${runId}'s history before offset ${offset}`, { error });
+      }
+    }
+
     const deliver = (event: AgentStreamEvent) => {
       activityVersion++;
       if (!subscribed || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
+      const chunk = event.type === AgentStreamEventTypes.CHUNK ? (event.data as AgentChunkEventData) : undefined;
+      if (chunk?.type === 'step-finish' && chunk.payload) {
+        event = {
+          ...event,
+          data: {
+            ...chunk,
+            payload: withRebuiltResponseMessages(
+              responseMessages,
+              chunk.payload as unknown as AgentStreamStepFinishPayload,
+            ),
+          },
+        };
+      }
       // Keep `index`: the observe route forwards it on each frame so clients can resume at index + 1.
       onEvent(event);
     };
