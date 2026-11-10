@@ -25,7 +25,7 @@ import { SCENARIO_MODEL_ID } from '../types';
 
 const PROMPT_MARKER = 'PROMPT-MARKER-7f3c';
 const WRITER_MARKER = 'WRITER-INSTRUCTIONS-91ad';
-/** More steps than RESPONSE_MESSAGES_FULL_LIST_INTERVAL, so runs include a periodic whole list. */
+/** Enough steps that producers resend the whole response list mid-run. */
 const TOOL_STEPS = 9;
 
 /** A bus that, like Redis, only ever hands readers JSON copies of what was published. */
@@ -138,15 +138,22 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
     const run: any = await agent.stream('Look it all up.', { maxSteps: 12 });
     try {
       await (run.output ?? run).consumeStream();
-      const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
+      const history = await waitForTerminal(runBus(agent), run.runId);
+      const log = JSON.stringify(history);
       const first = occurrences(log, 'RESULT-0');
       const last = occurrences(log, `RESULT-${TOOL_STEPS - 1}`);
+      // A whole list resent before the last tool's step repeats the first result only. The producer
+      // resends it once the diffs since the previous one add up to its size.
+      const stepFinishes = history.filter(event => event.data?.type === 'step-finish');
+      const resentBeforeLast = stepFinishes
+        .slice(1, TOOL_STEPS - 1)
+        .filter(event => event.data.payload._durableResponseMessagesDiff?.from === 0).length;
       if (isDurableEngineVariant(engine)) {
         // Known gap: DurableAgent and EventedAgent still send the whole list on every step.
-        expect(first).toBeGreaterThan(last + 1);
+        expect(first).toBeGreaterThan(last + 2);
       } else {
-        // Once more for the whole list resent every RESPONSE_MESSAGES_FULL_LIST_INTERVAL steps.
-        expect(first).toBe(last + 1);
+        expect(resentBeforeLast).toBeLessThanOrEqual(3);
+        expect(first).toBe(last + resentBeforeLast);
       }
     } finally {
       run.cleanup?.();

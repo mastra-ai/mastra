@@ -3,13 +3,6 @@ import type { StepFinishPayload } from '../../stream/types';
 type ResponseMessage = NonNullable<StepFinishPayload['messages']>['nonUser'][number];
 
 /**
- * Every this many step-finish events, a producer sends its whole list
- * (`from: 0`), so a reader that missed a diff (a lost delivery, a live-only
- * transport that joined mid-run) recovers within that many steps.
- */
-export const RESPONSE_MESSAGES_FULL_LIST_INTERVAL = 8;
-
-/**
  * A step's response messages as published on a run's stream topic: the run's
  * list from index `from` on, replacing whatever a reader holds from there.
  * Earlier entries can change between steps (a step's assistant message grows,
@@ -33,35 +26,62 @@ export interface ResponseMessagesCursor {
   producer: string;
   seq: number;
   fingerprints: string[];
+  /** Size of the last whole list it sent (JSON characters). */
+  wholeListSize?: number;
+  /** Size of the diffs it sent since then. */
+  sentSinceWholeList?: number;
 }
 
 /**
  * The diff to publish for `messages`, the run's response messages so far, and
- * the cursor to keep for the next one. The first diff of a producer, and every
- * {@link RESPONSE_MESSAGES_FULL_LIST_INTERVAL}th one, holds the whole list.
+ * the cursor to keep for the next one.
+ *
+ * A producer's first diff holds the whole list (`from: 0`), and so does the
+ * next one once the diffs sent since the last whole list add up to its size.
+ * A reader that missed a diff (a lost delivery, a live-only transport that
+ * joined mid-run) recovers at the next whole list, while whole lists cost at
+ * most about as much as the diffs: the log stays proportional to the run's
+ * messages instead of growing with the square of its steps.
  */
 export function diffResponseMessages(
   cursor: ResponseMessagesCursor | { producer: string },
   messages: ResponseMessage[],
 ): { diff: ResponseMessagesDiff; cursor: ResponseMessagesCursor } {
   const fingerprints = messages.map(message => hashString(JSON.stringify(message) ?? ''));
-  const seq = 'seq' in cursor ? cursor.seq + 1 : 0;
   const hash = listHash(fingerprints);
   const { producer } = cursor;
+  const sent = 'seq' in cursor ? cursor : undefined;
+  const seq = sent ? sent.seq + 1 : 0;
+  const wholeList = !sent || (sent.sentSinceWholeList ?? 0) >= (sent.wholeListSize ?? 0);
   let from = 0;
-  if ('seq' in cursor && seq % RESPONSE_MESSAGES_FULL_LIST_INTERVAL !== 0) {
-    const sent = cursor.fingerprints;
-    while (from < sent.length && from < fingerprints.length && sent[from] === fingerprints[from]) from++;
+  if (!wholeList) {
+    while (
+      from < sent!.fingerprints.length &&
+      from < fingerprints.length &&
+      sent!.fingerprints[from] === fingerprints[from]
+    ) {
+      from++;
+    }
   }
+  const size = fingerprints.slice(from).reduce((total, fingerprint) => total + fingerprintSize(fingerprint), 0);
   const diff: ResponseMessagesDiff = {
     producer,
     seq,
     from,
-    ...(from > 0 ? { base: listHash((cursor as ResponseMessagesCursor).fingerprints) } : {}),
+    ...(from > 0 ? { base: listHash(sent!.fingerprints) } : {}),
     hash,
     messages: messages.slice(from),
   };
-  return { diff, cursor: { producer, seq, fingerprints } };
+  return {
+    diff,
+    cursor: {
+      producer,
+      seq,
+      fingerprints,
+      wholeListSize: wholeList ? size : sent!.wholeListSize,
+      sentSinceWholeList: wholeList ? 0 : (sent!.sentSinceWholeList ?? 0) + size,
+    },
+  };
 }
 
 /** The response messages a reader rebuilt from the diffs it applied. */
@@ -138,6 +158,11 @@ export function replayResponseMessages(
 
 function listHash(fingerprints: string[]): string {
   return hashString(fingerprints.join(','));
+}
+
+/** The length of the JSON a fingerprint was taken of. */
+function fingerprintSize(fingerprint: string): number {
+  return Number(fingerprint.slice(fingerprint.lastIndexOf(':') + 1)) || 0;
 }
 
 /** 53-bit string hash (cyrb53) with the length, to tell values apart without keeping them. */

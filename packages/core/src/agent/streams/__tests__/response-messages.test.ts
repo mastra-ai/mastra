@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  applyResponseMessages,
-  diffResponseMessages,
-  replayResponseMessages,
-  RESPONSE_MESSAGES_FULL_LIST_INTERVAL,
-} from '../response-messages';
+import { applyResponseMessages, diffResponseMessages, replayResponseMessages } from '../response-messages';
 import type { ResponseMessagesCursor, ResponseMessagesDiff, ResponseMessagesReplay } from '../response-messages';
 
 const assistant = (text: string) => ({ role: 'assistant' as const, content: [{ type: 'text' as const, text }] });
@@ -12,6 +7,8 @@ const tool = (id: string) => ({
   role: 'tool' as const,
   content: [{ type: 'tool-result' as const, toolCallId: id, toolName: 'lookup', output: { type: 'text', value: id } }],
 });
+/** A first message large enough that the next few diffs don't add up to a whole list. */
+const opening = assistant('x'.repeat(400));
 
 /** Publishes `lists` (the run's response messages at each step-finish) as one producer would. */
 function publish(lists: any[][], producer = 'segment-1'): ResponseMessagesDiff[] {
@@ -26,36 +23,43 @@ function publish(lists: any[][], producer = 'segment-1'): ResponseMessagesDiff[]
 const read = (replay: ResponseMessagesReplay, diff: ResponseMessagesDiff) =>
   applyResponseMessages(replay, { _durableResponseMessagesDiff: diff });
 
+/** Lists that grow by one same-size message per step. */
+const growing = (count: number) =>
+  Array.from({ length: count }, (_, i) =>
+    Array.from({ length: i + 1 }, (_, j) => assistant(`a${String(j).padStart(3, '0')}`)),
+  );
+
 describe('response message diffs', () => {
   const steps = [
-    [assistant('a1'), tool('t1')],
-    [assistant('a1'), tool('t1'), assistant('a2'), tool('t2')],
+    [opening, assistant('a1'), tool('t1')],
+    [opening, assistant('a1'), tool('t1'), assistant('a2'), tool('t2')],
     // The step's assistant message grew and a message was appended.
-    [assistant('a1'), tool('t1'), assistant('a2 edited'), tool('t2'), assistant('a3')],
+    [opening, assistant('a1'), tool('t1'), assistant('a2 edited'), tool('t2'), assistant('a3')],
     // A retried attempt was rolled back: the list got shorter.
-    [assistant('a1'), tool('t1')],
-    [assistant('a1'), tool('t1')],
+    [opening, assistant('a1'), tool('t1')],
+    [opening, assistant('a1'), tool('t1')],
   ];
 
   it('sends each message once and rebuilds every step list', () => {
     const diffs = publish(steps);
     expect(diffs.map(diff => [diff.from, diff.messages.length])).toEqual([
-      [0, 2],
-      [2, 2],
-      [2, 3],
-      [2, 0],
-      [2, 0],
+      [0, 3],
+      [3, 2],
+      [3, 3],
+      [3, 0],
+      [3, 0],
     ]);
     const replay: ResponseMessagesReplay = { messages: [] };
     expect(diffs.map(diff => read(replay, diff))).toEqual(steps);
   });
 
-  it('resends the whole list at a fixed interval', () => {
-    const lists = Array.from({ length: RESPONSE_MESSAGES_FULL_LIST_INTERVAL * 2 + 1 }, (_, i) =>
-      Array.from({ length: i + 1 }, (_, j) => assistant(`a${j}`)),
-    );
-    const fullLists = publish(lists).flatMap((diff, i) => (diff.from === 0 ? [i] : []));
-    expect(fullLists).toEqual([0, RESPONSE_MESSAGES_FULL_LIST_INTERVAL, RESPONSE_MESSAGES_FULL_LIST_INTERVAL * 2]);
+  it('resends the whole list once the diffs since the last one add up to its size', () => {
+    const diffs = publish(growing(20));
+    expect(diffs.flatMap((diff, i) => (diff.from === 0 ? [i] : []))).toEqual([0, 2, 6, 14]);
+    // Whole lists cost about as much as the diffs, so the total stays proportional to the run.
+    const wholeListMessages = diffs.filter(diff => diff.from === 0).reduce((n, diff) => n + diff.messages.length, 0);
+    const diffMessages = diffs.filter(diff => diff.from > 0).reduce((n, diff) => n + diff.messages.length, 0);
+    expect(wholeListMessages).toBeLessThanOrEqual(diffMessages + 20);
   });
 
   it('reports a step-finish delivered twice and ignores a late one', () => {
@@ -75,10 +79,10 @@ describe('response message diffs', () => {
     const first = diffResponseMessages(cursor, steps[0]!);
     cursor = first.cursor;
     const stepTwo = diffResponseMessages(cursor, steps[1]!);
-    const retried = [assistant('a1'), tool('t1'), assistant('other')];
+    const retried = [opening, assistant('a1'), tool('t1'), assistant('other')];
     const stepTwoAgain = diffResponseMessages(cursor, retried);
     const stepThree = diffResponseMessages(stepTwoAgain.cursor, [...retried, assistant('x')]);
-    expect(stepThree.diff.from).toBe(3);
+    expect(stepThree.diff.from).toBe(4);
 
     const replay: ResponseMessagesReplay = { messages: [] };
     read(replay, first.diff);
@@ -89,15 +93,15 @@ describe('response message diffs', () => {
   });
 
   it('reports nothing after a missed diff until the next whole list', () => {
-    const lists = Array.from({ length: RESPONSE_MESSAGES_FULL_LIST_INTERVAL + 1 }, (_, i) =>
-      Array.from({ length: i + 1 }, (_, j) => assistant(`a${j}`)),
-    );
+    const lists = growing(7);
     const diffs = publish(lists);
     const replay: ResponseMessagesReplay = { messages: [] };
-    read(replay, diffs[0]!);
-    // diffs[1] is lost, so nothing until the producer's next whole list can be placed.
-    for (const diff of diffs.slice(2, -1)) expect(read(replay, diff)).toBeUndefined();
-    expect(read(replay, diffs.at(-1)!)).toEqual(lists.at(-1));
+    for (const diff of diffs.slice(0, 3)) read(replay, diff);
+    // diffs[3] is lost, so nothing until the producer's next whole list (diffs[6]) can be placed.
+    expect(read(replay, diffs[4]!)).toBeUndefined();
+    expect(read(replay, diffs[5]!)).toBeUndefined();
+    expect(diffs[6]!.from).toBe(0);
+    expect(read(replay, diffs[6]!)).toEqual(lists[6]);
   });
 
   it('never applies a diff to another producer’s list', () => {
@@ -127,6 +131,7 @@ describe('response message diffs', () => {
       data: { type: 'step-finish', payload: { _durableResponseMessagesDiff: diff } },
     }));
     const replay = replayResponseMessages(events.slice(0, 2));
+    expect(diffs[2]!.from).toBeGreaterThan(0);
     expect(read(replay, diffs[2]!)).toEqual(steps[2]);
   });
 });
