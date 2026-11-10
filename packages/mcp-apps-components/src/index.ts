@@ -11,8 +11,10 @@ export {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
   createObservabilityDashboardInputSchema,
   createObservabilityDraftSchemas,
+  createObservabilityWidgetInputSchema,
   observabilityDashboardInputSchema,
   observabilityDashboardOutputSchema,
+  observabilityWidgetInputSchema,
   toObservabilityDashboard,
   toObservabilityWidget,
 } from './observability-dashboard';

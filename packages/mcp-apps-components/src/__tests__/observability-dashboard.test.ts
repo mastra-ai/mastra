@@ -10,14 +10,16 @@ import {
   applyCompatLayer,
 } from '@mastra/schema-compat';
 import { afterEach, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { strictDashboardDefinitionSchema, strictDashboardWidgetSchema } from '../dashboards';
 import {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
   createObservabilityDashboardInputSchema,
   createObservabilityDraftSchemas,
+  createObservabilityWidgetInputSchema,
   observabilityDashboardInputSchema,
   observabilityDashboardOutputSchema,
+  observabilityWidgetInputSchema,
   toObservabilityDashboard,
   toObservabilityWidget,
 } from '../observability-dashboard';
@@ -546,7 +548,7 @@ it('saves a widget with the id the model gave it, as a widget that renders', asy
   expect(strictDashboardWidgetSchema.safeParse(stored).error?.issues).toBeUndefined();
 });
 
-it('throws the issues of a widget draft at their paths in the draft', () => {
+it("throws a widget draft's issues at their paths in the draft, as the error's cause", () => {
   const draft = {
     ...chartDraft,
     timeseries: {
@@ -562,10 +564,40 @@ it('throws the issues of a widget draft at their paths in the draft', () => {
     error = e;
   }
 
-  expect(error).toBeInstanceOf(z.ZodError);
-  expect((error as z.ZodError).issues.map(issue => issue.path.join('.'))).toContain('timeseries.series.1.value.const');
+  expect((error as Error).message).toMatch(/^The widget is invalid:/);
+  const cause = (error as Error).cause;
+  expect(cause).toBeInstanceOf(z.ZodError);
+  expect((cause as z.ZodError).issues.map(issue => issue.path.join('.'))).toContain('timeseries.series.1.value.const');
 });
 
 it('refuses to build schemas offering no kind', () => {
   expect(() => createObservabilityDraftSchemas({}, { kinds: [] })).toThrow('`kinds` must name at least one');
+});
+
+it('converts one widget as a dashboard converts it, with a fresh id and the full width when left out', () => {
+  const { id: _id, span: _span, ...draft } = draftOf(agentRunsChart);
+
+  const widget = toObservabilityWidget(draft);
+  const { dashboard } = toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draft] }] } });
+
+  expect(widget).toEqual({ ...dashboard.rows[0]!.widgets[0], id: expect.any(String) });
+  expect(widget.id).not.toBe(dashboard.rows[0]!.widgets[0]!.id);
+  expect(widget.span).toBe(12);
+  expect(toObservabilityWidget(draftOf(agentRunsKpi))).toEqual(agentRunsKpi);
+});
+
+it("refuses a widget that doesn't check, saying where from the widget", () => {
+  const draft = { title: 'Spend', table: { groupBy: ['model'], columns: [] } } as never;
+
+  expect(observabilityWidgetInputSchema.safeParse(draft).success).toBe(false);
+  expect(() => toObservabilityWidget(draft)).toThrow(/^The widget is invalid:[\s\S]*table/);
+  expect(() => toObservabilityWidget({ title: 'Two kinds', kpis: {}, table: {} } as never)).toThrow(/exactly one of/);
+});
+
+it("limits one widget's metric names to the catalog, as the dashboard schema does", () => {
+  const schema = createObservabilityWidgetInputSchema({ metricNames: ['mastra_agent_duration_ms'] });
+
+  expect(metricNamesIn(z.toJSONSchema(schema, { io: 'input' }))).toEqual(['"enum":["mastra_agent_duration_ms"]']);
+  expect(schema.safeParse(draftOf(agentRunsKpi)).success).toBe(true);
+  expect(metricNamesIn(z.toJSONSchema(observabilityWidgetInputSchema, { io: 'input' }))).toEqual([]);
 });

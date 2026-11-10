@@ -504,3 +504,36 @@ describe('bounded result contract', () => {
     expect(spanQueryResponseSchema.safeParse({ spans: [], page: { next: null } }).success).toBe(true);
   });
 });
+
+describe('span text search', () => {
+  it('normalizes case and outer whitespace without interpreting punctuation or inner spaces', () => {
+    expect(planSpanQuery({ timeRange, textSearch: '  Error  50%_\\path  ', where })).toMatchObject({
+      textSearch: 'error  50%_\\path',
+      where: planSpanQuery({ timeRange, where }).where,
+    });
+  });
+
+  it.each(['', '   ', 'ab', '😀😀', 'x'.repeat(257), null, 123])('rejects invalid search input: %j', textSearch => {
+    expect(() => parseSpanQueryRequest({ timeRange, textSearch })).toThrow();
+  });
+
+  it.each(['abc', '😀😀😀', 'x'.repeat(256)])('accepts bounded search input', textSearch => {
+    expect(parseSpanQueryRequest({ timeRange, textSearch }).textSearch).toBe(textSearch);
+  });
+
+  it('binds pagination to search while allowing equivalent case and whitespace', () => {
+    const plan = planSpanQuery({ timeRange, textSearch: ' ERROR ' });
+    const after = encodeSpanQueryCursor(plan, values);
+    expect(planSpanQuery({ timeRange, textSearch: 'error', page: { after, limit: 5 } }).cursor).toEqual({
+      ...values,
+      sortValue: '2026-10-01T12:00:00.000Z',
+    });
+    for (const textSearch of ['timeout', undefined]) {
+      expect(() => planSpanQuery({ timeRange, textSearch, page: { after } })).toThrow(TraceQueryCursorError);
+    }
+    const noSearchCursor = encodeSpanQueryCursor(planSpanQuery({ timeRange }), values);
+    expect(() => planSpanQuery({ timeRange, textSearch: 'error', page: { after: noSearchCursor } })).toThrow(
+      TraceQueryCursorError,
+    );
+  });
+});

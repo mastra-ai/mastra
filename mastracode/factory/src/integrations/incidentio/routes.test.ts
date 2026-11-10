@@ -182,7 +182,7 @@ describe('issues route', () => {
   });
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'incidentio', sourceId, factoryProjectId, board });
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'incidentio', sourceId, factoryProjectId });
 
   it('rejects unauthenticated users', async () => {
     expect((await buildApp(null).request('/web/incidentio/issues')).status).toBe(401);
@@ -262,7 +262,6 @@ describe('issues route', () => {
           sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
         }),
       ],
-      intakeBoards: { [INCIDENTIO_FOLLOW_UPS_SOURCE_ID]: 'work' },
     });
   });
 
@@ -309,7 +308,6 @@ describe('issue detail route', () => {
       integrationId: 'incidentio',
       sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
       factoryProjectId: projectA,
-      board: 'work',
     });
     vi.spyOn(incidentio.intake, 'getIssue').mockResolvedValue(followUpDetail);
 

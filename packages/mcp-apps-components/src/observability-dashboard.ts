@@ -918,18 +918,18 @@ export type ObservabilityDashboardInput = {
 };
 
 /**
- * The opening tool's input schema, with metric names limited to `catalog.metricNames`, so the
- * model can only name metrics that have data. With no names, or more than
- * `OBSERVABILITY_CATALOG_MAX_METRIC_NAMES`, metric names stay free strings. Build it again when the
- * catalog changes: the schema is a snapshot.
+ * The input schema of one widget, as written in a dashboard's `rows[].widgets[]`, for a tool that
+ * adds a single widget. Metric names are limited to `catalog.metricNames` as in
+ * `createObservabilityDashboardInputSchema`. Build it again when the catalog changes: the schema is a
+ * snapshot.
  */
-export function createObservabilityDashboardInputSchema(
+export function createObservabilityWidgetInputSchema(
   catalog: ObservabilityCatalog = {},
-): z.ZodType<ObservabilityDashboardInput> {
-  return inputSchemaOf(createObservabilityDraftSchemas(catalog).dashboard);
+): z.ZodType<ObservabilityWidgetDraft> {
+  return createObservabilityDraftSchemas(catalog).widget;
 }
 
-const inputSchemaOf = (dashboard: ObservabilityDraftSchemas['dashboard']) =>
+const dashboardInputSchemaOf = (dashboard: ObservabilityDraftSchemas['dashboard']) =>
   z.object({
     dashboard,
     datePreset: z
@@ -940,31 +940,29 @@ const inputSchemaOf = (dashboard: ObservabilityDraftSchemas['dashboard']) =>
       ),
   }) as z.ZodType<ObservabilityDashboardInput>;
 
+/**
+ * The opening tool's input schema, with metric names limited to `catalog.metricNames`, so the
+ * model can only name metrics that have data. With no names, or more than
+ * `OBSERVABILITY_CATALOG_MAX_METRIC_NAMES`, metric names stay free strings. Build it again when the
+ * catalog changes: the schema is a snapshot.
+ */
+export function createObservabilityDashboardInputSchema(
+  catalog: ObservabilityCatalog = {},
+): z.ZodType<ObservabilityDashboardInput> {
+  return dashboardInputSchemaOf(createObservabilityDraftSchemas(catalog).dashboard);
+}
+
 const draftSchemas = createObservabilityDraftSchemas();
+
+/** One widget's input schema, with free metric names; `createObservabilityWidgetInputSchema` lists the project's. */
+export const observabilityWidgetInputSchema = draftSchemas.widget;
 
 /**
  * The opening tool's input schema. It spells out each built-in kind's options and checks them as
  * the widget's renderer does, so a model writing the dashboard sees them and gets actionable errors.
  * Metric names are free strings; `createObservabilityDashboardInputSchema` lists the project's.
  */
-export const observabilityDashboardInputSchema = inputSchemaOf(draftSchemas.dashboard);
-
-/**
- * The stored widget for `draft`: each value's reads gathered into its view's queries, its `id` kept,
- * or a fresh UUID when it has none. Throws the `ZodError` from checking `draft` against
- * `createObservabilityDraftSchemas().widget`, whose issue paths point into the draft (e.g.
- * `timeseries.series.1.value`). It checks against the default schemas, so it allows every kind and
- * metric name: a tool whose input schema came from `createObservabilityDraftSchemas` with a catalog
- * or `kinds` has already applied them, but elsewhere check `draft` against your own schemas first.
- * Check the widget's place in a dashboard (unique ids, the widget count) with the whole definition.
- */
-export function toObservabilityWidget(draft: ObservabilityWidgetDraft): DashboardWidget {
-  draftSchemas.widget.parse(draft);
-  // Converted as given, so a draft passed as written gets no defaults written in. A tool's `execute` gets
-  // the parsed draft, with core's read defaults (e.g. a trace read's `groupBy: []`) already filled; core
-  // fills the same ones on read, so the stored widget means the same either way.
-  return toWidget(draft);
-}
+export const observabilityDashboardInputSchema = dashboardInputSchemaOf(draftSchemas.dashboard);
 
 /** The opening tool's output schema, which the app reads as `structuredContent`. */
 export const observabilityDashboardOutputSchema: z.ZodType<ObservabilityDashboardOpened> = z.object({
@@ -996,4 +994,30 @@ export function toObservabilityDashboard(input: ObservabilityDashboardInput): Ob
   const parsed = dashboardDefinitionSchema.safeParse(definition);
   if (!parsed.success) throw new Error(`The dashboard is invalid: ${z.prettifyError(parsed.error)}`);
   return { dashboard: definition, ...(datePreset ? { datePreset } : {}) };
+}
+
+/**
+ * The stored widget for `draft`, converted as in `toObservabilityDashboard`: its reads gathered into
+ * each view's queries, its `id` kept or a fresh UUID when it has none, and the full width when it has
+ * no span. Throws when `draft` doesn't pass `observabilityWidgetInputSchema`, or the widget doesn't
+ * validate; the error's `cause` is the `ZodError`, whose issue paths point into the draft (e.g.
+ * `timeseries.series.1.value`). It checks against the default schemas, so it allows every kind and
+ * metric name: a tool whose input schema came from `createObservabilityDraftSchemas` with a catalog
+ * or `kinds` has already applied them, but elsewhere check `draft` against your own schemas first.
+ * Check the widget's place in a dashboard (unique ids, the widget count) with the whole definition.
+ */
+export function toObservabilityWidget(draft: ObservabilityWidgetDraft): DashboardWidget {
+  const checked = observabilityWidgetInputSchema.safeParse(draft);
+  if (!checked.success) {
+    throw new Error(`The widget is invalid: ${z.prettifyError(checked.error)}`, { cause: checked.error });
+  }
+  // Converted as given, so a draft passed as written gets no defaults written in. A tool's `execute` gets
+  // the parsed draft, with core's read defaults (e.g. a trace read's `groupBy: []`) already filled; core
+  // fills the same ones on read, so the stored widget means the same either way.
+  const widget = toWidget(draft);
+  const parsed = dashboardWidgetSchema.safeParse(widget);
+  if (!parsed.success) {
+    throw new Error(`The widget is invalid: ${z.prettifyError(parsed.error)}`, { cause: parsed.error });
+  }
+  return widget;
 }

@@ -219,7 +219,7 @@ describe('chat run errors', () => {
     ).toBeVisible();
 
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
-    await user.click(await screen.findByRole('option', { name: /gpt-5\.4/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4(?! Mini)/ }));
 
     await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
   });
@@ -278,7 +278,7 @@ describe('chat run errors', () => {
       expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
 
       await user.click(await screen.findByRole('button', { name: 'Change model' }));
-      await user.click(await screen.findByRole('option', { name: /claude-opus-4-5/ }));
+      await user.click(await screen.findByRole('option', { name: /Claude Opus 4\.5/ }));
 
       await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
     },

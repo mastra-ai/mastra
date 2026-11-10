@@ -42,7 +42,7 @@ describe('SettingsNavigation', () => {
         .map(link => link.textContent);
     expect(linksIn('Account')).toEqual(['My account', 'Preferences', 'Connections']);
     expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Skills', 'Tools', 'Behavior']);
-    expect(linksIn('Factory')).toEqual(['Repositories', 'Work Intake', 'Work board', 'Manage Factory']);
+    expect(linksIn('Factory')).toEqual(['Repositories', 'Work Intake', 'Boards', 'Manage Factory', 'Debug']);
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
   });

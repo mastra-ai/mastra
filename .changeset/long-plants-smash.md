@@ -2,21 +2,9 @@
 '@mastra/mcp-apps-components': minor
 ---
 
-Added `createObservabilityDraftSchemas` and `toObservabilityWidget`, so tools that save dashboards can give a model the same detailed schema the observability dashboard tool uses, instead of an open object it has to guess the shape of.
+Added `createObservabilityDraftSchemas`, so tools that save dashboards can build the widget and dashboard schemas from one catalog, and offer a model only the choices they accept.
 
-`createObservabilityDraftSchemas(catalog, options)` returns a `widget` and a `dashboard` schema. Pass `kinds` to offer only some widget kinds, and `dashboardFilters: false` to leave `defaults.filters` out. What you leave out is missing from the JSON schema the model sees. Both functions are exported from `@mastra/mcp-apps-components/dashboards`, which doesn't load the bundled apps.
-
-**Before**
-
-```ts
-const addWidget = createTool({
-  id: 'addWidget',
-  inputSchema: z.object({ widget: z.record(z.string(), z.unknown()) }),
-  execute: async ({ widget }) => saveWidget(checkByHand(widget)),
-});
-```
-
-**After**
+`createObservabilityDraftSchemas(catalog, options)` returns a `widget` and a `dashboard` schema. Pass `kinds` to offer only some widget kinds, and `dashboardFilters: false` to leave `defaults.filters` out. What you leave out is missing from the JSON schema the model sees, and rejected if the model writes it anyway. The draft schemas and converters are also exported from `@mastra/mcp-apps-components/dashboards`, which doesn't load the bundled apps.
 
 ```ts
 import { createObservabilityDraftSchemas, toObservabilityWidget } from '@mastra/mcp-apps-components/dashboards';
@@ -31,6 +19,6 @@ const addWidget = createTool({
 });
 ```
 
-Invalid widgets are rejected with paths into what the model wrote, such as `timeseries.series.1.value`. Converted widgets pass `strictDashboardWidgetSchema`.
+Invalid widgets are rejected with paths into what the model wrote, such as `timeseries.series.1.value`. When `toObservabilityWidget` throws, the error's `cause` is the `ZodError` with those paths. Converted widgets pass `strictDashboardWidgetSchema`.
 
-The dashboard tool's input schema is now about 28% smaller, because metric and score filters are written out once instead of at every read. The tool also now rejects a widget whose tabs share a label, which used to open as an error card.
+The widget and dashboard input schemas are about 28% smaller, because metric and score filters are written out once instead of at every read. They also now reject a widget whose tabs share a label, which used to open as an error card.

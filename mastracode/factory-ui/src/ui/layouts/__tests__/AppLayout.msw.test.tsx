@@ -1,4 +1,5 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -151,6 +152,99 @@ describe('AppLayout', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Page B' })).toBeInTheDocument());
     expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebarBeforeNavigation);
+  });
+
+  it('shows a startup problem as a banner above every page', async () => {
+    stubFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () =>
+        HttpResponse.json({
+          problems: [
+            {
+              code: 'secret_key_mismatch',
+              title: 'Factory needs its encryption key',
+              message: 'This deployment is using a different one than before.',
+              fix: 'Set `FACTORY_CREDENTIAL_ENCRYPTION_KEY` and redeploy.',
+              docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
+            },
+          ],
+        }),
+      ),
+    );
+    renderApp();
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByRole('heading', { name: 'Factory needs its encryption key.' })).toBeInTheDocument();
+    expect(within(alert).getByText('This deployment is using a different one than before.')).toBeInTheDocument();
+    expect(within(alert).getByText('FACTORY_CREDENTIAL_ENCRYPTION_KEY').tagName).toBe('CODE');
+    expect(within(alert).getByRole('button', { name: 'Copy FACTORY_CREDENTIAL_ENCRYPTION_KEY' })).toBeInTheDocument();
+    expect(within(alert).getByRole('link', { name: 'Read the docs' })).toHaveAttribute(
+      'href',
+      'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
+    );
+    // Nothing to retry: only a redeploy fixes it, so the copy button is the only control.
+    expect(within(alert).getAllByRole('button')).toHaveLength(1);
+    // Pages and the sidebar still render under the banner, so settings stay reachable.
+    expect(screen.getByRole('heading', { name: 'Page A' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('link', { name: 'go-b' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Page B' })).toBeInTheDocument());
+    expect(screen.getByRole('alert')).toBe(alert);
+  });
+
+  it('still shows the startup problem when the first status check fails', async () => {
+    stubFactory();
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'internal' }, { status: 500 });
+        return HttpResponse.json({
+          problems: [{ code: 'secret_key_mismatch', title: 'Factory needs its encryption key', message: 'm' }],
+        });
+      }),
+    );
+    renderApp();
+
+    expect(
+      await screen.findByRole('heading', { name: 'Factory needs its encryption key.' }, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(calls).toBe(2);
+  });
+
+  it('shows the page as usual when the server has no status endpoint', async () => {
+    stubFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+    );
+    renderApp();
+
+    expect(await screen.findByRole('heading', { name: 'Page A' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows the startup problem once the tab regains focus after a redeploy with a bad key', async () => {
+    stubFactory();
+    let problems: unknown[] = [];
+    server.use(http.get(`${TEST_BASE_URL}/web/status`, () => HttpResponse.json({ problems })));
+    renderApp();
+    expect(await screen.findByRole('heading', { name: 'Page A' })).toBeInTheDocument();
+
+    problems = [
+      {
+        code: 'secret_key_mismatch',
+        title: 'Factory needs its encryption key',
+        message: 'This deployment is using a different one than before.',
+      },
+    ];
+    try {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+
+      expect(await screen.findByRole('heading', { name: 'Factory needs its encryption key.' })).toBeInTheDocument();
+    } finally {
+      focusManager.setFocused(undefined);
+    }
   });
 
   it('leaves retired Factory pages out of the sidebar', async () => {

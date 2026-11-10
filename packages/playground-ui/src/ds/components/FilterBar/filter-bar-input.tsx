@@ -340,9 +340,10 @@ function FilterBarInputImpl({
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
             comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
+            groupId === undefined && 'max-w-80 grow basis-32',
             'focus-within:bg-fill-hover',
             inputFocusBorderWithin,
-            step === 'field' ? 'min-w-40' : 'min-w-28',
+            step === 'field' ? 'min-w-32' : 'min-w-24',
             className,
           )}
         >

@@ -12,6 +12,8 @@ import type { WidgetIssue } from './dashboard-views';
 export {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
   createObservabilityDraftSchemas,
+  createObservabilityWidgetInputSchema,
+  observabilityWidgetInputSchema,
   toObservabilityWidget,
 } from './observability-dashboard';
 export type {
