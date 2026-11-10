@@ -23,6 +23,34 @@ const LEGACY = 'legacy-unowned';
 const PRIVATE_WS = 'alice-private-ws';
 const REPLY = 'hello from the mock model';
 
+const thread = { resourceId: 'bob', threadId: 'bob-thread' };
+// Signals target a run that doesn't exist, so the public-twin calls never start a run that would outlive the test.
+const missingRun = { runId: 'some-run' };
+const RUN_CONTROL_ROUTES: [string, (id: string) => string, unknown][] = [
+  ['POST', id => `/agents/${id}/observe`, { runId: 'some-run' }],
+  ['POST', id => `/agents/${id}/runs/some-run/abort`, {}],
+  ['POST', id => `/agents/${id}/threads/abort`, thread],
+  ['POST', id => `/agents/${id}/threads/signals/cancel`, { ...thread, signalIds: ['s1'] }],
+  ['POST', id => `/agents/${id}/threads/subscribe`, thread],
+  ['POST', id => `/agents/${id}/signals`, { ...missingRun, signal: { type: 'user-message', contents: 'hi' } }],
+  ['POST', id => `/agents/${id}/send-message`, { ...missingRun, message: 'say hi' }],
+  ['POST', id => `/agents/${id}/queue-message`, { ...missingRun, message: 'say hi' }],
+  ['POST', id => `/agents/${id}/queue-signal`, { ...missingRun, signal: { type: 'user-message', contents: 'hi' } }],
+  [
+    'POST',
+    id => `/agents/${id}/stream-until-idle`,
+    { messages: 'say hi', memory: { thread: 'bob-thread', resource: 'bob' } },
+  ],
+  ['GET', id => `/agents/${id}/suspended-runs`, undefined],
+  ['POST', id => `/agents/${id}/resume-stream`, { runId: 'some-run', resumeData: {} }],
+  ['POST', id => `/agents/${id}/resume-stream-until-idle`, { runId: 'some-run', resumeData: {} }],
+  ['POST', id => `/agents/${id}/recover`, { runId: 'some-run' }],
+  ['POST', id => `/agents/${id}/approve-tool-call`, { runId: 'some-run', toolCallId: 't1' }],
+  ['POST', id => `/agents/${id}/decline-tool-call`, { runId: 'some-run', toolCallId: 't1' }],
+  ['POST', id => `/agents/${id}/clone`, {}],
+  ['POST', id => `/agents/${id}/instructions/enhance`, { instructions: 'x', comment: 'y' }],
+];
+
 const USERS: Record<string, User> = {
   alice: { id: 'alice', role: 'builder' },
   bob: { id: 'bob', role: 'member' },
@@ -265,6 +293,31 @@ describe('stored agent visibility on /api/agents', () => {
       expect(denied.json).toEqual({ error: 'Not found' });
       const owner = await http('alice', 'GET', `/agents/${PRIVATE}/skills/missing`);
       expect(owner.json).not.toEqual({ error: 'Not found' });
+    });
+
+    // The run-control routes (observe/abort/signals/messages/resume/recover/...) resolve the agent before looking up
+    // the run or thread, so bob gets the access-denied 404 ("Not found") instead of the route's own result, and the
+    // same request on the public twin gets past the check. The thread subscription never ends, so only its status is
+    // read; every other response is drained so no run outlives the test.
+    it.each(RUN_CONTROL_ROUTES)('bob gets the access-denied 404 on %s %s', async (method, path, body) => {
+      const call = async (id: string) => {
+        const response = await fetch(`${server.url}/api${path(id)}`, {
+          method,
+          headers: { authorization: 'Bearer bob', ...(body ? { 'content-type': 'application/json' } : {}) },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+        if (path(id).endsWith('/subscribe') && response.status !== 404) {
+          await response.body?.cancel();
+          return { status: response.status };
+        }
+        const text = await response.text();
+        return { status: response.status, json: response.status === 404 ? JSON.parse(text) : undefined };
+      };
+      reply();
+
+      expect(await call(PRIVATE)).toEqual({ status: 404, json: { error: 'Not found' } });
+      expect(llm.getRequests()).toHaveLength(0);
+      expect(await call(PUBLIC)).not.toEqual({ status: 404, json: { error: 'Not found' } });
     });
 
     it('a user who can create schedules cannot schedule it', async () => {

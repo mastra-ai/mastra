@@ -66,4 +66,40 @@ describe('getAgentFromSystem callers', () => {
 
     expect(found).toEqual(Object.fromEntries(Object.entries(allowed).map(([file, { count }]) => [file, count])));
   });
+
+  /**
+   * Every route that takes an `:agentId` must resolve it through a visibility-checked path, so a new agent route (e.g.
+   * a run-control route) can't hand a private stored agent to another user. Routes that check access another way are
+   * listed with why; a new one fails until it's reviewed.
+   */
+  it('resolve the agent of every :agentId route through a visibility-checked path', () => {
+    const checked =
+      /getAgentFromSystem\(|handleAgentMessageRoute\(|getAgentForModelListMutation\(|handler: \w+\.handler/;
+    const allowed: Record<string, string> = {
+      'a2a.ts /.well-known/:agentId/agent-card.json': 'getAgentCardByIdHandler calls getAgentFromSystem (read)',
+      'a2a.ts /a2a/:agentId': 'getAgentExecutionHandler calls getAgentFromSystem (execute)',
+      'agent-versions.ts /stored/agents/:agentId/versions': 'assertVersionAccess (read/write) on the stored record',
+      'agent-versions.ts /stored/agents/:agentId/versions/:versionId': 'assertVersionAccess',
+      'agent-versions.ts /stored/agents/:agentId/versions/:versionId/activate': 'assertVersionAccess',
+      'agent-versions.ts /stored/agents/:agentId/versions/:versionId/restore': 'assertVersionAccess',
+      'agent-versions.ts /stored/agents/:agentId/versions/compare': 'assertVersionAccess',
+      'agents.ts /agents/:agentId/streamVNext': 'deprecated: always throws, never resolves the agent',
+      'agents.ts /agents/:agentId/stream/vnext/ui': 'deprecated: always throws, never resolves the agent',
+      'channels.ts /channels/:platform/:agentId/reconcile': 'assertChannelAgentWriteAccess on the stored record',
+      'channels.ts /channels/:platform/:agentId/disconnect': 'assertChannelAgentWriteAccess on the stored record',
+    };
+    const unchecked = new Set<string>();
+
+    for (const file of readdirSync(__dirname)) {
+      if (!file.endsWith('.ts') || file.endsWith('.test.ts')) continue;
+      const source = readFileSync(join(__dirname, file), 'utf8');
+      for (const route of source.split('createRoute(').slice(1)) {
+        const body = route.split('\nexport ')[0]!;
+        const path = /path: '([^']*:agentId[^']*)'/.exec(body)?.[1];
+        if (path && !checked.test(body)) unchecked.add(`${file} ${path}`);
+      }
+    }
+
+    expect([...unchecked].sort()).toEqual(Object.keys(allowed).sort());
+  });
 });
