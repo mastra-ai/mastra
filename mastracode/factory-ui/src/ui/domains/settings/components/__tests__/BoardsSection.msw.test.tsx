@@ -40,7 +40,7 @@ function serve(board: StoredBoardResponse | (() => StoredBoardResponse)) {
       return HttpResponse.json(typeof board === 'function' ? board() : board);
     }),
     http.get(SKILLS_URL, () => HttpResponse.json(skills)),
-    http.get(CATALOG_URL, () => HttpResponse.json({ boards: [] })),
+    http.get(CATALOG_URL, () => HttpResponse.json({ boards: [workBoardInfo] })),
     http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: [], canEdit: true })),
   );
   return read;
@@ -643,6 +643,43 @@ describe('BoardsSection', () => {
         expect(screen.getByRole('status', { name: 'Closes to' })).toHaveTextContent(
           /^\/factories\/fp-1\/boards\/docs$/,
         );
+      });
+    });
+
+    describe('a project with no boards', () => {
+      it('says so instead of reading a board, and lets an admin create the first', async () => {
+        serveProject({ work: false });
+        const user = userEvent.setup();
+        renderSection();
+
+        expect(await screen.findByText('No boards installed.')).toBeInTheDocument();
+        expect(screen.queryByText('Board not found.')).not.toBeInTheDocument();
+        await user.click(await screen.findByRole('button', { name: 'New board' }));
+        expect(await screen.findByRole('region', { name: 'New board' })).toBeInTheDocument();
+      });
+
+      it('closes Settings to the Factory after its last board is deleted', async () => {
+        const stored = [bugs];
+        serveProject({ work: false, stored });
+        server.use(
+          http.delete(`${CATALOG_URL}/bugs`, () => {
+            stored.length = 0;
+            return new HttpResponse(null, { status: 204 });
+          }),
+          http.get(CATALOG_URL, () =>
+            HttpResponse.json({ boards: stored.map(({ board }) => catalogInfo(compileStoredBoard(board))) }),
+          ),
+        );
+        const user = userEvent.setup();
+        renderSection('', '/factories/fp-1/boards/bugs');
+
+        await user.click(await screen.findByRole('button', { name: 'Delete board' }));
+        await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete board' }));
+
+        expect(await screen.findByText('No boards installed.')).toBeInTheDocument();
+        expect(screen.queryByText('Board not found.')).not.toBeInTheDocument();
+        expect(screen.getByRole('status', { name: 'Closes to' })).toHaveTextContent(/^\/factories\/fp-1$/);
+        expect(location()).toHaveTextContent(/\/factories\/fp-1\/settings\/board$/);
       });
     });
 

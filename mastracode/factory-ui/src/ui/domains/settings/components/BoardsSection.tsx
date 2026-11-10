@@ -354,18 +354,19 @@ export function BoardsSection({ factoryId }: { factoryId?: string }) {
   const [params, setParams] = useSearchParams();
   const catalog = useBoardCatalog(factoryId);
   const boards = orderedBoards(catalog.data ?? []);
-  // The Work board unless the project has none: then its first board.
+  // The Work board unless the project has none: then its first board, if it has any.
   const first = (without?: string) =>
     boards.find(board => board.id === DEFAULT_BOARD_ID && board.id !== without)?.id ??
-    boards.find(board => board.id !== without)?.id ??
-    DEFAULT_BOARD_ID;
+    boards.find(board => board.id !== without)?.id;
   const picked = params.get('board');
-  const selected = picked ?? first();
+  // A project can have no boards at all: there is none to read then.
+  const none = picked === null && catalog.data?.length === 0;
+  const selected = picked ?? first() ?? DEFAULT_BOARD_ID;
   const canEdit = useCanEditBoards(factoryId);
   // A link to the new-board form shows the Work board to someone who may not create one.
   const creating = canEdit && params.has('new');
   // Which board to open with is not known until the boards are.
-  const waiting = creating || (picked === null && catalog.isPending);
+  const waiting = creating || none || (picked === null && catalog.isPending);
   const query = useBoardQuery(waiting ? undefined : factoryId, selected);
   const data = query.data;
   const id = useId();
@@ -375,12 +376,14 @@ export function BoardsSection({ factoryId }: { factoryId?: string }) {
     setParams(target.new ? { new: '1' } : target.board ? { board: target.board } : {}, { replace: true, state });
   const showAfterDelete = (deleted: string) => {
     const from = (location.state as { from?: Location } | null)?.from;
-    // The page Settings was opened from is gone with the board: return to a board that is left instead.
+    // The page Settings was opened from is gone with the board: return to a board that is left
+    // instead, or to the Factory when that was its last.
     const gone = factoryId !== undefined && from?.pathname === boardPath(factoryId, deleted);
     const next = first(deleted);
+    const pathname = next === undefined ? `/factories/${factoryId}` : boardPath(factoryId ?? '', next);
     show(
-      next === DEFAULT_BOARD_ID ? {} : { board: next },
-      gone ? { from: { ...from, pathname: boardPath(factoryId, next), search: '', hash: '' } } : location.state,
+      next === undefined || next === DEFAULT_BOARD_ID ? {} : { board: next },
+      gone ? { from: { ...from, pathname, search: '', hash: '' } } : location.state,
     );
   };
 
@@ -419,7 +422,8 @@ export function BoardsSection({ factoryId }: { factoryId?: string }) {
               </Select>
             </Field>
           )}
-          {query.isPending && (
+          {none && <Notice variant="info">No boards installed.</Notice>}
+          {!none && query.isPending && (
             <Txt tone="muted" as="p" variant="caption" role="status">
               Loading the board…
             </Txt>
