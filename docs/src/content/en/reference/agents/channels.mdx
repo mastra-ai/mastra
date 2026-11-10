@@ -447,6 +447,9 @@ npm install @json-render/chat
 `@mastra/core` loads `@json-render/chat` at runtime, so `mastra build` and `mastra deploy` don't pick it up on their own. Add it to [`bundler.dynamicPackages`](/reference/core/mastra-class) so it's included in the build output:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { supportAgent } from './agents/support-agent'
+
 export const mastra = new Mastra({
   agents: { supportAgent },
   bundler: { dynamicPackages: ['@json-render/chat'] },
