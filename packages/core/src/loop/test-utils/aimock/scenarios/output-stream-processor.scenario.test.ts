@@ -9,6 +9,7 @@ import { createTool } from '../../../../tools';
 import {
   describeForAllEngines,
   isDurableEngineVariant,
+  runApprovalScenario,
   runLoopScenario,
   useLoopScenarioAimock,
 } from '../aimock-scenario';
@@ -193,6 +194,50 @@ describeForAllEngines('Support agent output stream processors', engine => {
       },
     });
     expect(await output.text).toBe('It was the Visa on file. — Acme Support');
+  });
+
+  // Technical: after a tool approval the resumed run's buffered text still includes the
+  // pre-approval narration. The processOutputResult rewrite must still be the returned text,
+  // as on the plain Agent. (COR-1414)
+  it('a refund approved mid-reply returns the signed answer', async () => {
+    const signReply: Processor = {
+      id: 'signature',
+      processOutputResult: ({ messages }) => {
+        const textPart = messages.at(-1)?.content.parts.findLast(p => p.type === 'text') as
+          | { text: string }
+          | undefined;
+        if (textPart) textPart.text += ' — Acme Support';
+        return messages;
+      },
+    };
+    const issueRefund = createTool({
+      id: 'issueRefund',
+      description: 'Refund an order.',
+      inputSchema: z.object({ orderId: z.string() }),
+      execute: async () => ({ refunded: true }),
+    });
+
+    const { output } = await runApprovalScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Please refund order #4821.',
+      tools: { issueRefund },
+      stopWhen: stepCountIs(5),
+      decision: () => true,
+      agentOutputProcessors: [signReply],
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'Let me refund that.',
+            toolCalls: [{ id: 'call_1', name: 'issueRefund', arguments: { orderId: '4821' } }],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Your refund is on its way.' });
+      },
+    });
+
+    expect(await output.text).toBe('Your refund is on its way. — Acme Support');
   });
 
   // Technical: abort() from processOutputStream on the first text delta ends the run as a
