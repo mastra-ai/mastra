@@ -38,7 +38,8 @@ export interface SubscribeToPullRequestInput {
 
 /** A thread's subscriptions, found by the session that owns it or (for older callers) by its resource. */
 export type ThreadSubscriptionTarget =
-  { orgId: string; sessionId: string; threadId: string } | { orgId: string; resourceId: string; threadId: string };
+  | { orgId: string; sessionId: string; threadId: string }
+  | { orgId: string; resourceId: string; threadId: string };
 
 export interface PullRequestSubscriptionTarget {
   orgId: string;
@@ -111,7 +112,10 @@ export async function listPullRequestSubscriptionsForThread(
   }
   const rows = await storage.subscriptions.listByThread(input.resourceId, input.threadId);
   const matching = rows.filter(
-    row => row.orgId === input.orgId && row.resourceId === input.resourceId && row.threadId === input.threadId,
+    row =>
+      row.orgId === input.orgId &&
+      row.resourceId === input.resourceId &&
+      row.threadId === input.threadId,
   );
   if (matching.length > 0) return matching;
   // A user session is addressed by its own id (its thread is its session), but

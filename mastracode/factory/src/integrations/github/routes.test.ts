@@ -2703,11 +2703,8 @@ describe('Factory session routes', () => {
 
   it('explains that a session with no conversation cannot be named', async () => {
     seedMaterializedProject();
-    const controller = {
-      queryThreadById: vi.fn(async () => null),
-      queryThreads: vi.fn(async () => []),
-      generateThreadTitle: vi.fn(),
-    } as any;
+    const controller = { queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
     const app = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
@@ -2721,11 +2718,8 @@ describe('Factory session routes', () => {
 
   it('does not name a session belonging to another user', async () => {
     seedMaterializedProject();
-    const controller = {
-      queryThreadById: vi.fn(async () => null),
-      queryThreads: vi.fn(),
-      generateThreadTitle: vi.fn(),
-    } as any;
+    const controller = { queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
     const ownerApp = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;

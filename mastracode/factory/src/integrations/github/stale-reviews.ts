@@ -73,14 +73,10 @@ export async function dismissStaleFactoryReviews(
     reviews.push(...page.reviews);
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
-  const stale = selectStaleFactoryReviews(
-    reviews,
-    {
-      reviewId: decision.approvingReviewId,
-      author: decision.approvingAuthor,
-    },
-    isFactoryAuthor,
-  );
+  const stale = selectStaleFactoryReviews(reviews, {
+    reviewId: decision.approvingReviewId,
+    author: decision.approvingAuthor,
+  }, isFactoryAuthor);
   for (const review of stale) {
     await versionControl.dismissReview({
       ...ref,

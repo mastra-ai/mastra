@@ -164,5 +164,6 @@ export async function recordFactoryPullRequestProvenance(
         parentWorkItemId: input.item.id,
       });
     }
-  } catch {}
+  } catch {
+  }
 }

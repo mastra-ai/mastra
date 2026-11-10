@@ -324,7 +324,8 @@ async function harness(
       execute: (input: unknown, context: unknown) => Promise<unknown>;
     };
     const verdict = tools.factory_record_review_verdict as
-      { execute: (input: unknown, context: unknown) => Promise<unknown> } | undefined;
+      | { execute: (input: unknown, context: unknown) => Promise<unknown> }
+      | undefined;
     return {
       tools,
       /** The agent's own move, through the tool it is given. */
@@ -422,7 +423,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull reques
       expect(await h.card(id)).toMatchObject({ board: loop.board, stages: [loop.completed] });
     });
 
-    it('sends the card back to rest when its pull request closes unmerged', async () => {
+    it("sends the card back to rest when its pull request closes unmerged", async () => {
       const h = await harness(backend, loop);
       const id = await cardInBuild(h);
       await h.authored(id);

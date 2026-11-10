@@ -97,8 +97,7 @@ export function createGithubIssueReconciler(
             const issueNumber = reconcilableIssueNumber(item, repository);
             if (!issueNumber) continue;
             carded.add(issueNumber);
-            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(item), item)?.kind === 'terminal')
-              continue;
+            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(item), item)?.kind === 'terminal') continue;
             let list = itemsByNumber.get(issueNumber);
             if (!list) {
               list = [];
@@ -196,8 +195,7 @@ export function createGithubIssueReconciler(
             if (
               state.labels !== undefined &&
               items.some(
-                item =>
-                  Array.isArray(item.workItem.metadata?.labels) && !sameStrings(item.workItem.labels, state.labels),
+                item => Array.isArray(item.workItem.metadata?.labels) && !sameStrings(item.workItem.labels, state.labels),
               )
             ) {
               await rules.ingest(reconciledIssueRelabeledEvent(repository, issueNumber, state));

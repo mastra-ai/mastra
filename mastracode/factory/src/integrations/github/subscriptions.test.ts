@@ -46,7 +46,7 @@ describe('GitHub signal subscription store', () => {
     expect(await listPullRequestSubscriptionsForThread(baseInput, storage)).toHaveLength(1);
   });
 
-  it("finds a thread's subscriptions by its session, not by the resource sessions share", async () => {
+  it('finds a thread\'s subscriptions by its session, not by the resource sessions share', async () => {
     const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions.js');
     await subscribeToPullRequest(
       { ...baseInput, resourceId: 'factory-project', sessionId: 'run-a', threadId: 'run-a' },
@@ -145,7 +145,10 @@ describe('GitHub signal subscription store', () => {
     const { listPullRequestSubscriptions, listPullRequestSubscriptionsForThread, subscribeToPullRequest } =
       await import('./subscriptions.js');
     await subscribeToPullRequest(baseInput, storage);
-    await subscribeToPullRequest({ ...baseInput, sessionId: 'session-b', threadId: 'thread-b' }, storage);
+    await subscribeToPullRequest(
+      { ...baseInput, sessionId: 'session-b', threadId: 'thread-b' },
+      storage,
+    );
 
     const forChangeRequest = await listPullRequestSubscriptions(baseInput, storage);
     const forThread = await listPullRequestSubscriptionsForThread(baseInput, storage);

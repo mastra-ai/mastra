@@ -86,9 +86,7 @@ export async function getBranchHead(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `GitHub rejected the head lookup for ${input.repository.slug}@${input.branch} (${response.status}).`,
-    );
+    throw new Error(`GitHub rejected the head lookup for ${input.repository.slug}@${input.branch} (${response.status}).`);
   }
 
   const sha = (await response.text()).trim();

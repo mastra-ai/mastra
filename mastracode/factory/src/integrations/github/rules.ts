@@ -22,12 +22,7 @@ import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { cardLabels } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import {
-  deploymentOwnsEvent,
-  routeEventDecision,
-  selectEventRule,
-  withoutRouteEvent,
-} from '../../rules/event-rules.js';
+import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -145,10 +140,7 @@ function parseFactoryReviewCommand(
  * a session is not woken by what it wrote.
  */
 export function activitySignalFor(
-  context: Pick<
-    FactoryGithubRuleContext,
-    'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'issueComment'
-  >,
+  context: Pick<FactoryGithubRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'issueComment'>,
 ): FactorySignalActivityDecision | undefined {
   const event =
     context.event === 'issueCommentCreated'
@@ -178,10 +170,7 @@ export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 
       return { type: 'work_item.reopened' };
     case 'issueClosed': {
       const stateReason = context.issue?.stateReason;
-      return {
-        type: 'work_item.closed',
-        reason: closeReason(stateReason === 'not_planned' || stateReason === 'duplicate'),
-      };
+      return { type: 'work_item.closed', reason: closeReason(stateReason === 'not_planned' || stateReason === 'duplicate') };
     }
     default:
       return undefined;
@@ -1148,8 +1137,7 @@ export class GithubRules {
         const recordedState = reviewCard ? reviewCard.workItem.state : attached?.state;
         const stillOpen =
           companionStatus === 'replayed'
-            ? (reviewCard !== undefined || attached !== undefined) &&
-              !['closed', 'merged'].includes(recordedState ?? '')
+            ? (reviewCard !== undefined || attached !== undefined) && !['closed', 'merged'].includes(recordedState ?? '')
             : !['closed', 'merged'].includes(recordedState ?? '');
         if (!stillOpen) return;
         // Only a pull request the card wrote is the one it has out. One filed there because it
@@ -1159,7 +1147,9 @@ export class GithubRules {
         const ownedByCard =
           home?.reason === 'authored' ||
           (home === undefined &&
-            (attached === undefined || pullRequestFactoryAuthored || cardOwnsBranch(authoringItem, headBranch)));
+            (attached === undefined ||
+              pullRequestFactoryAuthored ||
+              cardOwnsBranch(authoringItem, headBranch)));
         if (!ownedByCard) return;
         // The head comes along so a head recorded for an earlier pull
         // request cannot mark this one's verdict outdated.
@@ -1339,10 +1329,7 @@ export class GithubRules {
       return { card: input.matchedItem, reason: 'authored' };
     }
     if (!input.authorTrusted) return undefined;
-    for (const issueNumber of closingIssueNumbers(input.body, {
-      provider: 'github',
-      repository: input.repositoryName,
-    })) {
+    for (const issueNumber of closingIssueNumbers(input.body, { provider: 'github', repository: input.repositoryName })) {
       const card = items.find(
         item =>
           (item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) ||
@@ -1876,14 +1863,10 @@ export function createGithubPullRequestReconciler(
           for (const item of items) {
             const unansweredAuthor = authorAwaitingTrust(item, repository);
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
-            if (
-              item.externalSource?.type !== 'pull-request' &&
-              !isTerminalWorkItem(toBoardSource(options.boards).forProject(item), item)
-            ) {
+            if (item.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(toBoardSource(options.boards).forProject(item), item)) {
               for (const source of pullRequestSources(item)) {
                 const number = attachedPullRequestNumber(source, repository);
-                if (number !== undefined && !['closed', 'merged'].includes(source.state ?? ''))
-                  attachedOpen.add(number);
+                if (number !== undefined && !['closed', 'merged'].includes(source.state ?? '')) attachedOpen.add(number);
               }
             }
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
@@ -1973,8 +1956,7 @@ export function createGithubPullRequestReconciler(
           if (state.state !== 'closed') continue;
           const cleanupFailures = new Set<string>();
           for (const card of cards) {
-            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(card), card)?.kind !== 'terminal')
-              continue;
+            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(card), card)?.kind !== 'terminal') continue;
             try {
               await options.storage.supersedeDecisionsForWorkItem({
                 orgId: card.orgId,
