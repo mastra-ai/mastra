@@ -1875,6 +1875,9 @@ importers:
       '@vercel/analytics':
         specifier: ^2.0.1
         version: 2.0.1(react@19.3.1)
+      algoliasearch:
+        specifier: ^5.53.0
+        version: 5.61.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -5499,6 +5502,9 @@ importers:
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0

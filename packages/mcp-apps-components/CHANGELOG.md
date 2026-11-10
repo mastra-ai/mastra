@@ -1,5 +1,70 @@
 # @mastra/mcp-apps-components
 
+## 0.1.0-alpha.5
+
+### Minor Changes
+
+- Added `createObservabilityDraftSchemas`, so tools that save dashboards can build the widget and dashboard schemas from one catalog, and offer a model only the choices they accept. ([#29832](https://github.com/mastra-ai/mastra/pull/29832))
+
+  `createObservabilityDraftSchemas(catalog, options)` returns a `widget` and a `dashboard` schema. Pass `kinds` to offer only some widget kinds, and `dashboardFilters: false` to leave `defaults.filters` out. What you leave out is missing from the JSON schema the model sees, and rejected if the model writes it anyway. The draft schemas and converters are also exported from `@mastra/mcp-apps-components/dashboards`, which doesn't load the bundled apps.
+
+  ```ts
+  import { createObservabilityDraftSchemas, toObservabilityWidget } from '@mastra/mcp-apps-components/dashboards';
+
+  const schemas = createObservabilityDraftSchemas({ metricNames }, { kinds: ['kpis', 'timeseries', 'table'] });
+
+  const addWidget = createTool({
+    id: 'addWidget',
+    inputSchema: schemas.widget,
+    // Keeps the widget's id when the model gives one
+    execute: async widget => saveWidget(toObservabilityWidget(widget)),
+  });
+  ```
+
+  Invalid widgets are rejected with paths into what the model wrote, such as `timeseries.series.1.value`. When `toObservabilityWidget` throws, the error's `cause` is the `ZodError` with those paths. Converted widgets pass `strictDashboardWidgetSchema`.
+
+  The widget and dashboard input schemas are about 28% smaller, because metric and score filters are written out once instead of at every read. They also now reject a widget whose tabs share a label, which used to open as an error card.
+
+- Added `createObservabilityWidgetInputSchema`, `observabilityWidgetInputSchema` and `toObservabilityWidget`, so a tool that adds one widget to a saved dashboard accepts the same widget a model writes for `showObservabilityDashboard`, checked and converted the same way. ([#29913](https://github.com/mastra-ai/mastra/pull/29913))
+
+  ```ts
+  import { createObservabilityWidgetInputSchema, toObservabilityWidget } from '@mastra/mcp-apps-components';
+
+  const widgetSchema = createObservabilityWidgetInputSchema({ metricNames });
+  const widget = toObservabilityWidget({
+    title: 'Model spend',
+    table: { groupBy: ['model'], columns: [/* ... */] },
+  });
+  ```
+
+- Added `@mastra/mcp-apps-components/dashboards`, a strict schema for storing dashboard definitions. Unlike core's `dashboardDefinitionSchema`, it only accepts definitions the dashboard renderer can draw: built-in widget kinds only, each view's options checked against its kind, `columns` only on table views, and each kind's own checks run at both org and project scope. Every problem is a zod issue with a path. Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have, point at the view, such as `rows.0.widgets.1.views.0`, and their message says what's wrong. ([#29802](https://github.com/mastra-ai/mastra/pull/29802))
+
+  **Before**
+
+  ```ts
+  import { dashboardDefinitionEnvelopeSchema } from '@mastra/core/storage/dashboards';
+
+  dashboardDefinitionEnvelopeSchema.parse(body.definition);
+  const definition = body.definition as Record<string, unknown>;
+  ```
+
+  **After**
+
+  ```ts
+  import { strictDashboardDefinitionSchema } from '@mastra/mcp-apps-components/dashboards';
+  import type { StrictDashboardDefinition } from '@mastra/mcp-apps-components/dashboards';
+
+  // In the service that stores dashboards, on every write
+  const definition: StrictDashboardDefinition = strictDashboardDefinitionSchema.parse(body.definition);
+  ```
+
+  Use `strictDashboardWidgetSchema` to check a single widget. Call both in the code that stores dashboards, not in a request-body schema: their input type is `unknown` and their JSON schema is empty, so keep core's schema there for request types and API docs. The subpath doesn't load the package's bundled apps.
+
+### Patch Changes
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+
 ## 0.1.0-alpha.4
 
 ### Patch Changes

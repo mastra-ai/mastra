@@ -1,5 +1,16 @@
 # @mastra/rag
 
+## 2.7.3-alpha.1
+
+### Patch Changes
+
+- `rerank` and `rerankWithScorer` now throw a clear error when `topK` is not a nonnegative integer (for example `-1`, `1.5`, `NaN`, or `Infinity`), instead of silently returning a surprising number of results. `topK: 0` still returns an empty list. ([#29761](https://github.com/mastra-ai/mastra/pull/29761))
+
+  The vector query and graph RAG tools now round a fractional `topK` down (for example `2.5` becomes `2`), and fall back to the default when the result is below 1, so a fractional value from the model keeps returning results.
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+
 ## 2.7.3-alpha.0
 
 ### Patch Changes

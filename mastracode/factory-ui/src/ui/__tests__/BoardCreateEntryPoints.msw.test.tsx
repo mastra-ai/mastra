@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { storedWorkBoard } from '../domains/settings/components/__tests__/fixtures/work-board';
+import { storedWorkBoard } from '../domains/boardConfig/__tests__/fixtures/work-board';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -87,31 +87,46 @@ describe('Board entry points', () => {
 
     await user.click(await (await boardsNav()).findByRole('link', { name: 'New board' }));
 
-    expect(await screen.findByRole('region', { name: 'New board' })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/settings/board`);
-    expect(router.state.location.search).toBe('?new=1');
+    expect(await screen.findByRole('form', { name: 'New board' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/new-board`);
   });
 
-  it("takes an admin from a board to that board's editor", async () => {
+  it("takes an admin from a board to that board's settings", async () => {
     stubFactory({ admin: true });
     const user = userEvent.setup();
     const router = renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Edit board' }));
+    await user.click(await screen.findByRole('link', { name: 'Configure board' }));
 
-    expect(await screen.findByRole('region', { name: 'Planning phase' })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/settings/board`);
-    expect(router.state.location.search).toBe('?board=work');
+    expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Work');
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/config`);
   });
 
-  it('offers a member who is not an admin neither', async () => {
+  it('sends old Settings › Boards links to the new-board form and to the board they named', async () => {
+    stubFactory({ admin: true });
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/settings/board?new=1`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    expect(await screen.findByRole('form', { name: 'New board' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/new-board`);
+
+    await router.navigate(`/factories/${FACTORY_ID}/settings/board?board=work`);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/config`));
+    expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Work');
+  });
+
+  it('offers a member who is not an admin no new board, and shows them the board settings read-only', async () => {
     stubFactory({ admin: false });
+    const user = userEvent.setup();
     renderWorkBoard();
 
     const nav = await boardsNav();
     expect(await nav.findByRole('link', { name: 'Work' })).toBeInTheDocument();
-    await screen.findByRole('button', { name: 'Automation settings' });
+    await user.click(await screen.findByRole('link', { name: 'Configure board' }));
+    expect(await screen.findByText('Only organization admins can change this board.')).toBeInTheDocument();
     expect(nav.queryByRole('link', { name: 'New board' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit board' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add phase' })).not.toBeInTheDocument();
   });
 });

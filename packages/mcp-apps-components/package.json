@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-apps-components",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "Prebuilt MCP Apps, ready to register as MCP server app resources",
   "license": "Apache-2.0",
   "type": "module",
@@ -69,6 +69,7 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/playground-ui": "workspace:*",
     "@mastra/react": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/core": "2.4.0",
     "@modelcontextprotocol/ext-apps": "^2.0.3",

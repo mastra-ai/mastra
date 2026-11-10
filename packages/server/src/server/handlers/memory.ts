@@ -65,6 +65,7 @@ import {
   toLocalMessage,
   toLocalOMRecord,
 } from './gateway-memory-client';
+import type { GatewayMemoryClient } from './gateway-memory-client';
 import {
   validateBody,
   getEffectiveResourceId,
@@ -79,6 +80,35 @@ interface MemoryContext extends Context {
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext;
+}
+
+/**
+ * Enforces thread access on a gateway thread before its observational memory is read.
+ * Returns false when the thread doesn't exist: gateway OM is thread-scoped and keyed by thread id,
+ * so a record without its thread (new chat, or mid-deletion) has no owner to check against.
+ */
+async function enforceGatewayThreadAccess({
+  gwClient,
+  mastra,
+  requestContext,
+  threadId,
+  effectiveResourceId,
+}: {
+  gwClient: GatewayMemoryClient;
+  mastra: Context['mastra'];
+  requestContext?: RequestContext;
+  threadId: string;
+  effectiveResourceId: string;
+}): Promise<boolean> {
+  const result = await gwClient.getThread(threadId);
+  await enforceThreadAccess({
+    mastra,
+    requestContext,
+    threadId,
+    thread: result ? toLocalThread(result.thread) : null,
+    effectiveResourceId,
+  });
+  return !!result;
 }
 
 interface SearchResult {
@@ -474,6 +504,9 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+
       // Check if this is a gateway agent first
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
@@ -494,25 +527,46 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
               }
             | undefined;
 
-          if (resourceId && threadId) {
+          if (effectiveResourceId && effectiveThreadId) {
+            let threadResult: Awaited<ReturnType<typeof gwClient.getThread>> | undefined;
             try {
-              const { record } = await gwClient.getObservationRecord(threadId, resourceId);
-              if (record) {
-                omStatus = {
-                  enabled: true,
-                  hasRecord: true,
-                  originType: record.originType,
-                  lastObservedAt: record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-                  tokenCount: record.totalTokensObserved,
-                  observationTokenCount: record.observationTokenCount,
-                  isObserving: record.isObserving,
-                  isReflecting: record.isReflecting,
-                };
-              } else {
-                omStatus = { enabled: true, hasRecord: false };
-              }
+              threadResult = await gwClient.getThread(effectiveThreadId);
             } catch {
+              // Ownership can't be verified, so skip the record lookup and keep status best-effort
               omStatus = { enabled: true };
+            }
+            if (threadResult !== undefined) {
+              await enforceThreadAccess({
+                mastra,
+                requestContext,
+                threadId: effectiveThreadId,
+                thread: threadResult ? toLocalThread(threadResult.thread) : null,
+                effectiveResourceId,
+              });
+            }
+            if (threadResult === null) {
+              // A thread-scoped record without its thread has no owner to check against
+              omStatus = { enabled: true, hasRecord: false };
+            } else if (threadResult) {
+              try {
+                const { record } = await gwClient.getObservationRecord(effectiveThreadId, effectiveResourceId);
+                if (record) {
+                  omStatus = {
+                    enabled: true,
+                    hasRecord: true,
+                    originType: record.originType,
+                    lastObservedAt: record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+                    tokenCount: record.totalTokensObserved,
+                    observationTokenCount: record.observationTokenCount,
+                    isObserving: record.isObserving,
+                    isReflecting: record.isReflecting,
+                  };
+                } else {
+                  omStatus = { enabled: true, hasRecord: false };
+                }
+              } catch {
+                omStatus = { enabled: true };
+              }
             }
           } else {
             omStatus = { enabled: true };
@@ -541,11 +595,16 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
 
         if (agent) {
           const omConfig = await getOMConfigFromAgent(agent, requestContext);
-          const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
           let threadMissing = false;
-          if (omConfig?.enabled && effectiveResourceId && threadId) {
-            const thread = await memory.getThreadById({ threadId });
-            await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
+          if (omConfig?.enabled && effectiveResourceId && effectiveThreadId) {
+            const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+            await enforceThreadAccess({
+              mastra,
+              requestContext,
+              threadId: effectiveThreadId,
+              thread,
+              effectiveResourceId,
+            });
             // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
             threadMissing = !thread && omConfig.scope !== 'resource';
           }
@@ -553,7 +612,7 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
             omStatus = { enabled: true, hasRecord: false };
           } else if (omConfig?.enabled && effectiveResourceId) {
             // For resource-scoped OM, lookup by resourceId only (threadId=null)
-            const omThreadId = omConfig.scope === 'resource' ? undefined : threadId;
+            const omThreadId = omConfig.scope === 'resource' ? undefined : effectiveThreadId;
             // Get OM status from the agent's memory storage (not mastra.getStorage())
             try {
               const memoryStore = await memory.storage.getStore('memory');
@@ -679,6 +738,9 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, threadId, from, to, offset, limit, requestContext }) => {
     try {
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+
       // Verify agent has OM enabled
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
@@ -691,17 +753,33 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       // Gateway OM: proxy to gateway API
       const gwClient = (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
       if (gwClient) {
-        if (resourceId && threadId) {
+        if (
+          effectiveResourceId &&
+          effectiveThreadId &&
+          (await enforceGatewayThreadAccess({
+            gwClient,
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId,
+            effectiveResourceId,
+          }))
+        ) {
           const [recordResult, historyResult] = await Promise.all([
-            gwClient.getObservationRecord(threadId, resourceId),
-            gwClient.getObservationHistory(threadId, { resourceId, limit: historyLimit, from, to, offset }),
+            gwClient.getObservationRecord(effectiveThreadId, effectiveResourceId),
+            gwClient.getObservationHistory(effectiveThreadId, {
+              resourceId: effectiveResourceId,
+              limit: historyLimit,
+              from,
+              to,
+              offset,
+            }),
           ]);
           return {
             record: recordResult.record ? toLocalOMRecord(recordResult.record) : null,
             history: historyResult.records?.length > 0 ? historyResult.records.map(toLocalOMRecord) : undefined,
           };
         }
-        // No threadId or resourceId yet (e.g. /chat/new) — return empty
+        // No threadId or resourceId yet (e.g. /chat/new), or the thread is gone — return empty
         return { record: null, history: undefined };
       }
 
@@ -727,13 +805,12 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Memory storage is not initialized' });
       }
 
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       if (!effectiveResourceId) {
         throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
       }
-      if (threadId) {
-        const thread = await memory.getThreadById({ threadId });
-        await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
+      if (effectiveThreadId) {
+        const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+        await enforceThreadAccess({ mastra, requestContext, threadId: effectiveThreadId, thread, effectiveResourceId });
         // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
         if (!thread && omConfig.scope !== 'resource') {
           return { record: null, history: undefined };
@@ -741,7 +818,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       }
 
       // For resource-scoped OM, lookup by resourceId only (threadId=null)
-      const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
+      const omThreadId = omConfig.scope === 'resource' ? null : (effectiveThreadId ?? null);
 
       // Get current record
       const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);
@@ -777,6 +854,9 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, threadId, requestContext }: MemoryContext) => {
     try {
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
@@ -785,14 +865,24 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       // Gateway proxy: poll the gateway OM record until buffering flags clear
       const gwClient = (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
       if (gwClient) {
-        if (resourceId && threadId) {
+        if (
+          effectiveResourceId &&
+          effectiveThreadId &&
+          (await enforceGatewayThreadAccess({
+            gwClient,
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId,
+            effectiveResourceId,
+          }))
+        ) {
           const maxWaitMs = 30_000;
           const pollIntervalMs = 1_000;
           const deadline = Date.now() + maxWaitMs;
 
           let record: ReturnType<typeof toLocalOMRecord> | null = null;
           while (Date.now() < deadline) {
-            const result = await gwClient.getObservationRecord(threadId, resourceId);
+            const result = await gwClient.getObservationRecord(effectiveThreadId, effectiveResourceId);
             record = result.record ? toLocalOMRecord(result.record) : null;
             if (!record || (!record.isBufferingObservation && !record.isBufferingReflection)) {
               break;
@@ -830,13 +920,12 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Memory storage is not initialized' });
       }
 
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       if (!effectiveResourceId) {
         throw new HTTPException(400, { message: 'resourceId is required' });
       }
-      if (threadId) {
-        const thread = await memory.getThreadById({ threadId });
-        await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
+      if (effectiveThreadId) {
+        const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+        await enforceThreadAccess({ mastra, requestContext, threadId: effectiveThreadId, thread, effectiveResourceId });
         // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
         if (!thread && omConfig.scope !== 'resource') {
           return { record: null };
@@ -844,9 +933,9 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       }
 
       // Block until buffering completes (30s timeout)
-      await (omProcessor as any).waitForBuffering(threadId, effectiveResourceId);
+      await (omProcessor as any).waitForBuffering(effectiveThreadId, effectiveResourceId);
 
-      const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
+      const omThreadId = omConfig.scope === 'resource' ? null : (effectiveThreadId ?? null);
       const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);
 
       return { record: record ?? null };
