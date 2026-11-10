@@ -25,6 +25,8 @@ import type { z } from 'zod';
 
 const FENCE_OPEN = '```spec';
 const FENCE_CLOSE = '```';
+/** The state key core's ProcessorRunner reads to send a second part after the one returned (`stream-reprocess.ts`). */
+const REPROCESS_PART_KEY = '__mastraReprocessPart';
 
 export interface JsonRenderProcessorOptions {
   /** The catalog the model composes interfaces from. */
@@ -128,7 +130,8 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
     const parts: SpecDataPart[] = [];
     let text = '';
 
-    const endLine = () => {
+    /** `last`: the text block ended on this line, so no newline follows it. */
+    const endLine = (last = false) => {
       const line = split.line;
       const trimmed = line.trim();
       split.line = '';
@@ -148,11 +151,11 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
         if (edited) parts.push({ type: 'flat', spec: uiState ? { ...edited, state: uiState } : edited });
       }
       if (patch) parts.push({ type: 'patch', patch });
-      else if (!split.inFence) text += `${line}\n`;
+      else if (!split.inFence) text += last ? line : `${line}\n`;
     };
 
     if (part.type === 'text-end') {
-      if (split.holding) endLine();
+      if (split.holding) endLine(true);
       state.split = undefined;
     } else {
       for (const char of part.payload.text) {
@@ -176,8 +179,12 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
     }
 
     for (const data of parts) await writer?.custom({ type: SPEC_DATA_PART_TYPE, data });
-    if (part.type === 'text-end') return part;
-    return text ? { ...part, payload: { ...part.payload, text } } : null;
+    if (part.type !== 'text-end') return text ? { ...part, payload: { ...part.payload, text } } : null;
+    if (!text) return part;
+    // Text held to the end of the block goes out before the block closes. Only one
+    // part can be returned, so the runner sends the text-end after it.
+    state[REPROCESS_PART_KEY] = part;
+    return { type: 'text-delta', runId: part.runId, from: part.from, payload: { id: part.payload.id, text } };
   }
 
   /** Sends a reply whose interface cannot render back to the model, with what is wrong. */

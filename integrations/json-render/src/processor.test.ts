@@ -2,7 +2,7 @@ import { buildSpecFromParts } from '@json-render/react';
 import { createTool } from '@mastra/core/tools';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { chat, modelSaw, modelWriting, specBlock, weatherCard } from './test-utils';
+import { chat, modelSaw, modelWriting, specBlock, weatherCard } from './__tests__/test-utils';
 
 describe('JsonRenderProcessor', () => {
   it('streams the spec the model writes as data-spec parts and keeps only the prose as text', async () => {
@@ -23,6 +23,32 @@ describe('JsonRenderProcessor', () => {
         .join(''),
     ).toBe('Here is the weather.\nEnjoy!');
     expect(buildSpecFromParts(parts as any)).toEqual(weatherCard);
+  });
+
+  it.each([
+    { ending: 'inline code', reply: 'Use `x`' },
+    { ending: 'a closing code fence', reply: 'Run this:\n```bash\nnpm test\n```' },
+    { ending: 'a line starting with {', reply: 'The config is:\n{"a": 1}' },
+    { ending: 'braces inside a line', reply: 'The config is {"a": 1}' },
+  ])('keeps a reply that ends in $ending, with no newline after it', async ({ reply }) => {
+    const { model } = modelWriting(reply);
+
+    const { streamed, messages } = await chat(model, 'Hi');
+
+    const text = streamed.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text);
+    expect(text.join('')).toBe(reply);
+    const types = streamed.map(chunk => chunk.type);
+    expect(types.lastIndexOf('text-end')).toBeGreaterThan(types.lastIndexOf('text-delta'));
+    const saved = messages.find(message => message.role === 'assistant')!.content.parts as {
+      type: string;
+      text?: string;
+    }[];
+    expect(
+      saved
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join(''),
+    ).toBe(reply);
   });
 
   it.each([
