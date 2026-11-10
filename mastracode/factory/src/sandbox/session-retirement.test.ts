@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxContext, ProviderStatus, WorkspaceSandbox } from '@mastra/core/workspace';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   __clearSessionEnvironmentsForTests,
   recordSessionEnvironment,
 } from '../session/environment-state-processor.js';
+import { SessionCredentialsStorage } from '../storage/domains/session-credentials/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -209,6 +211,58 @@ describe('SessionRetirementCoordinator detached sandboxes', () => {
     expect(calls).toEqual([`destroy:${session.id}:vm-1`]);
     expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
     expect(peekSessionSandbox(session.id)).toBeUndefined();
+  });
+
+  it('removes the session credentials when a session is deleted or only retired', async () => {
+    for (const deleteSession of [true, false]) {
+      const backend = new LibSQLFactoryStorage({ id: 'retirement-credentials', url: ':memory:' });
+      const credentials = backend.registerDomain(new SessionCredentialsStorage());
+      await backend.init();
+      const storage = new SourceControlStorageInMemory();
+      seedRepositoryLink(storage);
+      const session = await seedSession(storage);
+      const scope = { orgId: session.orgId, sessionId: session.sessionId };
+      const request = await credentials.createRequest({
+        ...scope,
+        factoryProjectId: null,
+        threadId: 'thread-1',
+        ownerUserId: session.userId,
+        name: 'FAKE_API_KEY',
+        purpose: 'integration tests',
+      });
+      await credentials.fulfillRequest({
+        requestId: request.id,
+        submittedBy: session.userId,
+        value: 'fake-value',
+        allowSandbox: true,
+      });
+      expect(await credentials.list(scope)).toHaveLength(1);
+
+      await new SessionRetirementCoordinator({
+        sandbox: fakeFactorySandbox([]),
+        purgeSessionData: input => credentials.purgeSession(input),
+      }).retireSession({ sourceControl: storage, orgId: session.orgId, sessionId: session.sessionId, deleteSession });
+
+      expect(await credentials.list(scope)).toEqual([]);
+      expect(await credentials.getRequest(request.id)).toBeNull();
+      await backend.close();
+    }
+  });
+
+  it('still deletes the row when purging session data fails', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    const warn = vi.fn();
+
+    await new SessionRetirementCoordinator({
+      sandbox: fakeFactorySandbox([]),
+      warn,
+      purgeSessionData: () => Promise.reject(new Error('storage down')),
+    }).retireSession({ sourceControl: storage, orgId: 'org-1', sessionId: session.sessionId, deleteSession: true });
+
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
+    expect(warn).toHaveBeenCalledWith('Factory session data could not be purged on retirement', expect.anything());
   });
 
   it('does not construct a sandbox for a session that never materialized', async () => {

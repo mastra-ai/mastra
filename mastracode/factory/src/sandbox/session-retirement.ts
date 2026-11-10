@@ -16,6 +16,8 @@ type WarningLogger = (message: string, details: Record<string, unknown>) => void
 
 export interface SessionRetirementCoordinatorOptions {
   invalidateSession?: (sessionId: string) => Promise<void> | void;
+  /** Drops session-scoped data (such as stored credentials) once the session is retired or deleted. */
+  purgeSessionData?: (session: { orgId: string; sessionId: string }) => Promise<void> | void;
   /**
    * The deploy's sandbox configuration. Used to destroy a deleted session's
    * VM by identity when this process never attached to it (after a restart,
@@ -77,6 +79,7 @@ function boundedError(error: unknown): string {
  */
 export class SessionRetirementCoordinator {
   readonly #invalidateSession: NonNullable<SessionRetirementCoordinatorOptions['invalidateSession']>;
+  readonly #purgeSessionData: SessionRetirementCoordinatorOptions['purgeSessionData'];
   readonly #sandbox: FactorySandbox | undefined;
   readonly #warn: WarningLogger;
   readonly #destroyTimeoutMs: number;
@@ -84,6 +87,7 @@ export class SessionRetirementCoordinator {
 
   constructor(options: SessionRetirementCoordinatorOptions = {}) {
     this.#invalidateSession = options.invalidateSession ?? (() => {});
+    this.#purgeSessionData = options.purgeSessionData;
     this.#sandbox = options.sandbox;
     this.#warn = options.warn ?? ((message, details) => console.warn(`[Mastra Factory] ${message}`, details));
     this.#destroyTimeoutMs = options.destroyTimeoutMs ?? DEFAULT_DESTROY_TIMEOUT_MS;
@@ -180,12 +184,25 @@ export class SessionRetirementCoordinator {
       await this.#teardownSessionSandbox(input, session);
     } finally {
       await this.#invalidate(session);
+      await this.#purge(session);
 
       if (input.deleteSession) {
         // Refs first: clearing again is a no-op, but refs on a deleted row would dangle forever.
         await input.workItems?.clearSessionReferences({ orgId: input.orgId, sessionId: input.sessionId });
         await input.sourceControl.sessions.delete(session.id);
       }
+    }
+  }
+
+  async #purge(session: SourceControlSession): Promise<void> {
+    try {
+      await this.#purgeSessionData?.({ orgId: session.orgId, sessionId: session.sessionId });
+    } catch (error) {
+      this.#warn('Factory session data could not be purged on retirement', {
+        orgId: session.orgId,
+        sessionId: session.sessionId,
+        error: boundedError(error),
+      });
     }
   }
 
