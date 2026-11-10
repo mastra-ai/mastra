@@ -170,6 +170,15 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
     assert.match(JSON.stringify(result.issues), /Malformed/);
   }
   assert.equal(normalizeMail(message('dA==')).text, 't');
+  const part = (data: Uint8Array) => message(Buffer.from(data).toString('base64url')).payload;
+  for (const rejected of [Buffer.alloc(65535, 98), Buffer.alloc(65520, 0xff)]) {
+    const accepted = normalizeMail({
+      payload: { parts: [part(Buffer.from('first')), part(rejected), part(Buffer.from('last valid text'))] },
+    });
+    assert.equal(accepted.text, 'first\n\nlast valid text', 'Rejected parts must leave room for later valid text.');
+    assert.match(accepted.status, /truncated|partial/);
+  }
+
   const large = normalizeMail(message(Buffer.alloc(65537, 97).toString('base64url')));
   assert.equal(large.truncated, true);
   assert.equal(large.status, 'truncated');

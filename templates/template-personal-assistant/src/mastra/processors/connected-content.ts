@@ -108,13 +108,15 @@ export function normalizeMail(value: unknown) {
         throw Error();
       const decoded = Buffer.from(encoded, 'base64url');
       if (decoded.toString('base64url') !== encoded.replace(/=+$/, '')) throw Error();
-      bytes += decoded.length + (texts.length ? 2 : 0);
-      if (bytes > 65536) {
+      const nextBytes = bytes + decoded.length + (texts.length ? 2 : 0);
+      if (nextBytes > 65536) {
         result.issues.push('Text exceeds the 65536-byte limit.');
         result.truncated = true;
         continue;
       }
-      texts.push(new TextDecoder('utf-8', { fatal: true }).decode(decoded));
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(decoded);
+      texts.push(text);
+      bytes = nextBytes;
     } catch {
       result.issues.push('Malformed base64url or UTF-8 text.');
     }
