@@ -62,7 +62,7 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVec
   private mergeClauses(clauses: VectorizeVectorFilter[]): VectorizeVectorFilter {
     // A Map, so field names like `constructor` are never read from Object.prototype.
     const merged = new Map<string, Record<string, unknown>>();
-    for (const clause of clauses) {
+    for (const clause of this.flattenAndClauses(clauses)) {
       if (clause === null || clause === undefined) continue;
       if (typeof clause !== 'object' || Array.isArray(clause)) {
         throw new Error('Vectorize $and clause must be a filter object');
@@ -88,6 +88,14 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVec
       Object.defineProperty(result, field, { value: condition, enumerable: true, writable: true, configurable: true });
     }
     return result as VectorizeVectorFilter;
+  }
+
+  /** Expands clauses that are themselves only `{ $and: [...] }`, such as a user filter written as one. */
+  private flattenAndClauses(clauses: VectorizeVectorFilter[]): VectorizeVectorFilter[] {
+    return clauses.flatMap(clause => {
+      const nested = this.topLevelAndClauses(clause);
+      return nested ? this.flattenAndClauses(nested) : [clause];
+    });
   }
 
   private translateNode(node: VectorizeVectorFilter, currentPath: string = ''): any {

@@ -256,6 +256,20 @@ describe('VectorizeFilterTranslator', () => {
       expect(Object.getOwnPropertyDescriptor(translated, field)?.value).toEqual({ $eq: 'a' });
     });
 
+    it('flattens a user filter that is itself an $and inside the scope $and', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, { $and: [{ mode: 'work' }, { team: 'alpha' }] }] };
+      expect(translator.translate(filter)).toEqual({
+        resource_id: { $eq: 'u' },
+        mode: { $eq: 'work' },
+        team: { $eq: 'alpha' },
+      });
+    });
+
+    it('keeps the same-field rule across nested $and clauses', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, { $and: [{ resource_id: { $in: ['u', 'v'] } }] }] };
+      expect(() => translator.translate(filter)).toThrow(/Vectorize/);
+    });
+
     it('treats empty, null and undefined clauses as no condition', () => {
       const filter: any = { $and: [{ resource_id: 'u' }, {}, null, undefined] };
       expect(translator.translate(filter)).toEqual({ resource_id: { $eq: 'u' } });
