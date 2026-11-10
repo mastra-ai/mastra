@@ -38,7 +38,7 @@ function seededRoutes(): IntakeRouteInfo[] {
 
 /**
  * The project's intake routes behind the real route API's rules: writes check the revision they
- * name, and a new route goes just ahead of the seeded catch-all.
+ * name, and a new route goes just ahead of the seeded catch-all, bumping its revision.
  */
 function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
   const state = { routes, requests: [] as { method: string; path: string; body?: unknown }[] };
@@ -69,7 +69,10 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       };
       const last = state.routes.at(-1);
       const catchAll = last?.createdBy === 'factory' && last.when === null && last.enabled;
-      state.routes = catchAll ? [...state.routes.slice(0, -1), route, last] : [...state.routes, route];
+      // Moving the catch-all down a slot is a write to it, so its revision goes up, as in storage.
+      state.routes = catchAll
+        ? [...state.routes.slice(0, -1), route, { ...last, revision: last.revision + 1 }]
+        : [...state.routes, route];
       return HttpResponse.json({ intakeRoute: route }, { status: 201 });
     }),
     http.patch<{ id: string }>(`${ROUTES_URL}/:id`, async ({ params, request }) => {

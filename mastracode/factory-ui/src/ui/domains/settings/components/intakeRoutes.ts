@@ -116,6 +116,25 @@ export function sendNewCardsTo(
   const catchAllName = `Everything else goes to ${boardName(to)} › ${landing}`.slice(0, MAX_ROUTE_NAME);
   const writes: IntakeRouteWrite[] = [];
 
+  // The catch-all goes first: each route created after it moves it down a slot, which bumps
+  // its revision, so a later patch would name a revision it no longer has.
+  if (!catchAll) {
+    writes.push({
+      kind: 'create',
+      route: { name: catchAllName, when: null, target: { boardKey: to.id, phaseKey: to.initialPhase } },
+    });
+  } else if (catchAll.target.boardKey !== to.id || catchAll.target.phaseKey !== to.initialPhase) {
+    writes.push({
+      kind: 'update',
+      id: catchAll.id,
+      patch: {
+        name: catchAllName,
+        target: { boardKey: to.id, phaseKey: to.initialPhase },
+        expectedRevision: catchAll.revision,
+      },
+    });
+  }
+
   if (from && from.id !== to.id) {
     for (const route of routes) {
       if (route.target.boardKey !== from.id || route.on.includes('work_item.created') || route.target.joinClosedIssue)
@@ -143,21 +162,5 @@ export function sendNewCardsTo(
     }
   }
 
-  if (!catchAll) {
-    writes.push({
-      kind: 'create',
-      route: { name: catchAllName, when: null, target: { boardKey: to.id, phaseKey: to.initialPhase } },
-    });
-  } else if (catchAll.target.boardKey !== to.id || catchAll.target.phaseKey !== to.initialPhase) {
-    writes.push({
-      kind: 'update',
-      id: catchAll.id,
-      patch: {
-        name: catchAllName,
-        target: { boardKey: to.id, phaseKey: to.initialPhase },
-        expectedRevision: catchAll.revision,
-      },
-    });
-  }
   return writes;
 }
