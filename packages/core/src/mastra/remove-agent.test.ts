@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
+import { ToolCallFilter } from '../processors';
 import { Mastra } from './index';
 
 describe('Mastra.removeAgent', () => {
@@ -177,5 +178,18 @@ describe('Mastra.removeAgent', () => {
 
     // Verify cache entry is also cleared
     expect(cache.has('cached-agent-id-2')).toBe(false);
+  });
+  it("drops the removed agent's processor configurations, and re-adds them when it is registered again", () => {
+    const create = (id: string) =>
+      new Agent({ id, name: id, instructions: 'x', model: 'openai/gpt-4o', inputProcessors: [new ToolCallFilter()] });
+    const mastra = new Mastra({ logger: false, agents: { kept: create('kept'), removed: create('removed') } });
+    const configured = () => mastra.getProcessorConfigurations('tool-call-filter').map(c => c.agentId);
+    expect(configured()).toEqual(['kept', 'removed']);
+
+    mastra.removeAgent('removed');
+    expect(configured()).toEqual(['kept']);
+
+    mastra.addAgent(create('removed'), 'removed');
+    expect(configured()).toEqual(['kept', 'removed']);
   });
 });
