@@ -151,6 +151,7 @@ export interface MessageEmbeddingRows {
 // including apps that never embed anything.
 let hasherPromise: ReturnType<typeof xxhash> | undefined;
 
+/** 64-bit xxhash of `text` as hex: the text hash stored in the embedded-messages record. */
 async function hash64(text: string): Promise<string> {
   hasherPromise ??= xxhash().catch(error => {
     // Let the next call try again instead of caching the failure.
@@ -178,6 +179,7 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   return results;
 }
 
+/** System messages and transient signals are never stored, so they never get vector rows. */
 function isEmbeddable(message: MastraDBMessage): boolean {
   return message.role !== 'system' && !isTransientSignalMessage(message);
 }
@@ -285,16 +287,23 @@ export function resolveMaxChunkChars({
   return DEFAULT_MESSAGE_EMBEDDING_MAX_CHUNK_CHARS;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UNSIGNED_INTEGER_PATTERN = /^\d{1,15}$/;
+
 /**
- * Vector row id for one chunk of a message. Chunk 0 keeps the message id, which is the id the
- * `SemanticRecall` processor has always written, so existing rows are replaced instead of
- * duplicated. Later chunks get a UUIDv8 derived from the message id and chunk index: stable
- * across writers and retries, and a UUID because some stores (Qdrant) reject other string ids.
+ * Vector row id for one chunk of a message. Chunk 0 keeps the message id when it is a UUID (the
+ * default) or a small unsigned integer: that is the id the `SemanticRecall` processor has always
+ * written, so existing rows are replaced instead of duplicated. Every other chunk, and chunk 0 of
+ * a message with any other id (custom id generators, client-supplied ids), gets a UUIDv8 derived
+ * from the message id and chunk index. Derived ids are stable across writers and retries, and are
+ * UUIDs because some stores (Qdrant) reject any other string id.
  *
  * @internal
  */
 export async function messageVectorId(messageId: string, chunkIndex: number): Promise<string> {
-  if (chunkIndex === 0) return messageId;
+  if (chunkIndex === 0 && (UUID_PATTERN.test(messageId) || UNSIGNED_INTEGER_PATTERN.test(messageId))) {
+    return messageId;
+  }
 
   const digest = await globalThis.crypto.subtle.digest(
     'SHA-256',

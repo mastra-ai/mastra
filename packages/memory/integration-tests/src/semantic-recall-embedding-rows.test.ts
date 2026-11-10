@@ -26,6 +26,10 @@ const CUSTOM_INDEX = 'custom_recall_index';
 const axis = (text: string) =>
   /ZEBRA/i.test(text) ? [1, 0, 0, 0] : /GIRAFFE/i.test(text) ? [0, 1, 0, 0] : [0, 0, 1, 0];
 
+/**
+ * The keyword embedder as an AI SDK v2 model. Records every embedded text, can be told to fail,
+ * and can declare an input window through `maxInputTokens`.
+ */
 function keywordEmbedder({ maxInputTokens }: { maxInputTokens?: number } = {}) {
   const embedded: string[] = [];
   let failing = false;
@@ -237,6 +241,7 @@ describe.each(['plain', 'durable'] as const)('Semantic recall embedder failure o
 });
 
 describe('Memory message rows', () => {
+  /** A Memory with semantic recall on a fresh thread, plus a factory for user messages on it. */
   async function setup({ maxChunkChars, maxInputTokens }: { maxChunkChars?: number; maxInputTokens?: number } = {}) {
     const storage = new LibSQLStore({ id: randomUUID(), url: ':memory:' });
     const { vector, writes } = countingVector();
@@ -339,6 +344,29 @@ describe('Memory message rows', () => {
 
     // One row for the user message and one for the reply, not one per character.
     expect(await readRows(vector)).toHaveLength(2);
+  });
+
+  it('saves a message with a custom id to a store that accepts only UUID or integer ids', async () => {
+    const { memory, vector, message } = await setup({ maxChunkChars: 40 });
+    // Qdrant's rule: a point id must be an unsigned integer or a UUID.
+    const upsert = vector.upsert.bind(vector);
+    vector.upsert = (async (args: Parameters<LibSQLVector['upsert']>[0]) => {
+      const invalid = (args.ids ?? []).filter(
+        id => !/^\d+$/.test(id) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id),
+      );
+      if (invalid.length > 0) throw new Error(`not a valid point ID: ${invalid.join(', ')}`);
+      return upsert(args);
+    }) as LibSQLVector['upsert'];
+    const custom = message('zebra stripes '.repeat(20).trim(), 'msg-abc123');
+
+    await memory.saveMessages({ messages: [custom] });
+    const first = await readRows(vector);
+    await memory.saveMessages({ messages: [custom] });
+    const second = await readRows(vector);
+
+    expect(first.length).toBeGreaterThan(1);
+    expect(first.every(row => row.metadata?.message_id === 'msg-abc123')).toBe(true);
+    expect(second.map(row => row.id).sort()).toEqual(first.map(row => row.id).sort());
   });
 
   it('leaves one row when an edit shortens a long message', async () => {

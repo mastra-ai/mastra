@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageList } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
 import { createSignal } from '../../agent/signals';
+import { messageVectorId } from '../../memory/message-embeddings';
 import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
-import type { MastraEmbeddingModel, MastraVector } from '../../vector';
 
+import type { MastraEmbeddingModel, MastraVector } from '../../vector';
 import { globalEmbeddingCache } from './embedding-cache';
 import { SemanticRecall } from './semantic-recall';
 
@@ -1098,7 +1099,7 @@ describe('SemanticRecall', () => {
           [0.1, 0.2, 0.3],
           [0.4, 0.5, 0.6],
         ],
-        ids: ['msg-user-1', 'msg-assistant-1'],
+        ids: [await messageVectorId('msg-user-1', 0), await messageVectorId('msg-assistant-1', 0)],
         metadata: [
           {
             message_id: 'msg-user-1',
@@ -1149,8 +1150,8 @@ describe('SemanticRecall', () => {
       expect(longCalls).toHaveLength(1);
       expect(longCalls[0]![0].values.length).toBeGreaterThan(1);
       const { ids } = upsert.mock.calls[0]![0];
-      expect(ids[0]).toBe('msg-long');
-      expect(ids).not.toContain('msg-broken');
+      expect(ids[0]).toBe(await messageVectorId('msg-long', 0));
+      expect(ids).not.toContain(await messageVectorId('msg-broken', 0));
     });
 
     it('should skip system messages when creating embeddings', async () => {
@@ -1230,7 +1231,7 @@ describe('SemanticRecall', () => {
 
       expect(mockVector.upsert).toHaveBeenCalledWith({
         vectors: [[0.1, 0.2, 0.3]],
-        ids: ['msg-user-1'],
+        ids: [await messageVectorId('msg-user-1', 0)],
         metadata: [
           {
             message_id: 'msg-user-1',
@@ -1317,7 +1318,7 @@ describe('SemanticRecall', () => {
 
       expect(mockVector.upsert).toHaveBeenCalledWith({
         vectors: [[0.1, 0.2, 0.3]],
-        ids: ['msg-valid-1'],
+        ids: [await messageVectorId('msg-valid-1', 0)],
         metadata: expect.arrayContaining([
           expect.objectContaining({
             message_id: 'msg-valid-1',
@@ -1721,7 +1722,7 @@ describe('SemanticRecall', () => {
           [0.1, 0.2, 0.3],
           [0.4, 0.5, 0.6],
         ],
-        ids: ['msg-assistant-1', 'msg-user-1'],
+        ids: [await messageVectorId('msg-assistant-1', 0), await messageVectorId('msg-user-1', 0)],
         metadata: expect.arrayContaining([
           expect.objectContaining({
             message_id: 'msg-assistant-1',

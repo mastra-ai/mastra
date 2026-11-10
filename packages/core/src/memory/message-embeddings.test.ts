@@ -12,11 +12,14 @@ import {
 } from './message-embeddings';
 
 const UUID_V8 = /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+// Message ids are UUIDs by default; tests that need another shape say so.
+const MESSAGE_ID = '0b9c3f5e-6a2d-4c1e-9f3a-2d7b8e1c4a55';
 
+/** A stored user message with one text part, overridable per test. */
 function message(overrides: Partial<MastraDBMessage> & { text?: string } = {}): MastraDBMessage {
   const { text = 'hello there', ...rest } = overrides;
   return {
-    id: 'msg-1',
+    id: MESSAGE_ID,
     role: 'user',
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     threadId: 'thread-1',
@@ -29,15 +32,23 @@ function message(overrides: Partial<MastraDBMessage> & { text?: string } = {}): 
 const embed = vi.fn(async (chunks: string[]) => ({ embeddings: chunks.map(chunk => [chunk.length, 1, 0]) }));
 
 describe('messageVectorId', () => {
-  it('keeps the message id for the first chunk, so rows written before chunk ids existed are replaced', async () => {
-    expect(await messageVectorId('msg-1', 0)).toBe('msg-1');
+  it('keeps a UUID or integer message id for the first chunk, so rows written before chunk ids existed are replaced', async () => {
+    expect(await messageVectorId(MESSAGE_ID, 0)).toBe(MESSAGE_ID);
+    expect(await messageVectorId('42', 0)).toBe('42');
+  });
+
+  it('derives a UUID for the first chunk of any other message id, which Qdrant would reject', async () => {
+    const id = await messageVectorId('msg-abc123', 0);
+    expect(id).toMatch(UUID_V8);
+    expect(await messageVectorId('msg-abc123', 0)).toBe(id);
+    expect(await messageVectorId('msg-abc123', 1)).not.toBe(id);
   });
 
   it('derives a stable UUID for later chunks, distinct per message and chunk', async () => {
-    const first = await messageVectorId('msg-1', 1);
+    const first = await messageVectorId(MESSAGE_ID, 1);
     expect(first).toMatch(UUID_V8);
-    expect(await messageVectorId('msg-1', 1)).toBe(first);
-    expect(await messageVectorId('msg-1', 2)).not.toBe(first);
+    expect(await messageVectorId(MESSAGE_ID, 1)).toBe(first);
+    expect(await messageVectorId(MESSAGE_ID, 2)).not.toBe(first);
     expect(await messageVectorId('msg-2', 1)).not.toBe(first);
   });
 });
@@ -110,11 +121,11 @@ describe('buildMessageEmbeddingRows', () => {
     const second = await buildMessageEmbeddingRows({ items: [{ message: long }], embed, maxChunkChars: 100 });
 
     expect(first.ids.length).toBeGreaterThan(1);
-    expect(first.ids[0]).toBe('msg-1');
+    expect(first.ids[0]).toBe(MESSAGE_ID);
     expect(first.ids.slice(1).every(id => UUID_V8.test(id))).toBe(true);
     expect(second.ids).toEqual(first.ids);
     expect(first.vectors).toHaveLength(first.ids.length);
-    expect(first.metadata.every(row => row.message_id === 'msg-1')).toBe(true);
+    expect(first.metadata.every(row => row.message_id === MESSAGE_ID)).toBe(true);
   });
 
   it('skips a message the run already embedded into the same index, and embeds it again once its text changes', async () => {
@@ -132,7 +143,7 @@ describe('buildMessageEmbeddingRows', () => {
       ...options,
       items: [{ message: message({ text: 'rewritten by a later processor' }) }],
     });
-    expect(edited.ids).toEqual(['msg-1']);
+    expect(edited.ids).toEqual([MESSAGE_ID]);
     expect(edited.metadata[0]!.content).toBe('rewritten by a later processor');
   });
 
@@ -157,7 +168,7 @@ describe('buildMessageEmbeddingRows', () => {
       embeddedMessages,
       indexName: 'memory_messages',
     });
-    expect(memoryIndex.ids).toEqual(['msg-1']);
+    expect(memoryIndex.ids).toEqual([MESSAGE_ID]);
   });
 
   it('reads thread metadata only when something will be written', async () => {
@@ -185,7 +196,7 @@ describe('buildMessageEmbeddingRows', () => {
     expect(rows.documents).toEqual(['hello there']);
     expect(rows.metadata[0]).toMatchObject({
       projectId: 'p1',
-      message_id: 'msg-1',
+      message_id: MESSAGE_ID,
       thread_id: 'thread-run',
       resource_id: 'resource-run',
       role: 'user',
@@ -211,7 +222,7 @@ describe('buildMessageEmbeddingRows', () => {
       indexName: 'i',
     });
 
-    expect(rows.ids).toEqual(['ok']);
+    expect(rows.metadata.map(row => row.message_id)).toEqual(['ok']);
     expect(rows.embeddedEntries.map(([key]) => key)).toEqual(['i\u0000ok']);
     expect(onEmbedError).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'rate limited' }),
@@ -269,7 +280,7 @@ describe('buildMessageEmbeddingRows', () => {
       items: [{ message: message({ text: 'old' }) }, { message: message({ text: 'new' }) }],
       maxChunkChars: 100,
     });
-    expect(rows.ids).toEqual(['msg-1']);
+    expect(rows.ids).toEqual([MESSAGE_ID]);
     expect(rows.documents).toEqual(['new']);
   });
 
@@ -299,6 +310,10 @@ describe('upsertMessageVectors', () => {
     const upsert = vi.fn();
     const rows = await buildMessageEmbeddingRows({ items: [{ message: message() }], maxChunkChars: 100 });
     await upsertMessageVectors({ upsert } as unknown as MastraVector, 'index', rows);
-    expect(upsert.mock.calls[0]![0]).toMatchObject({ indexName: 'index', ids: ['msg-1'], documents: ['hello there'] });
+    expect(upsert.mock.calls[0]![0]).toMatchObject({
+      indexName: 'index',
+      ids: [MESSAGE_ID],
+      documents: ['hello there'],
+    });
   });
 });
