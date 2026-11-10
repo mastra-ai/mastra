@@ -38,8 +38,19 @@ export const CARD_TABLES: ReadonlySet<string> = new Set([
   'work_items',
 ]);
 
+const DECISIONS = 'factory_deferred_decisions';
+
 /** What a board shows beside its cards; a write here moves no card, so the card list stays cached. */
-export const DECISION_TABLES: ReadonlySet<string> = new Set(['factory_deferred_decisions']);
+export const DECISION_TABLES: ReadonlySet<string> = new Set([DECISIONS]);
+
+/**
+ * Pending or leased, a decision reads the same on a board: it is waiting to run. Claiming it, renewing
+ * its lease every few seconds and handing it back therefore show nothing, and report nothing.
+ */
+function waitsToRun(collection: string, row: unknown): boolean {
+  if (collection !== DECISIONS || typeof row !== 'object' || row === null || !('status' in row)) return false;
+  return row.status === 'pending' || row.status === 'leased';
+}
 
 const scopeKey = (scope: BoardScope) => `${scope.orgId}\u0000${scope.factoryProjectId ?? ''}`;
 
@@ -77,18 +88,21 @@ export function trackBoardWrites(
         case 'updateAtomic':
           return async (collection: string, where: unknown, updater: (row: unknown) => unknown, ...args: unknown[]) => {
             let patched = false;
+            let waited = false;
             const row = await value.call(
               target,
               collection,
               where,
               async (current: unknown) => {
+                waited = waitsToRun(collection, current);
                 const patch = await updater(current);
                 patched = patch != null;
                 return patch;
               },
               ...args,
             );
-            if (tables.has(collection) && patched) await report(scopeOfRow(row));
+            const stillWaits = waited && waitsToRun(collection, row);
+            if (tables.has(collection) && patched && !stillWaits) await report(scopeOfRow(row));
             return row;
           };
         case 'insertOne':

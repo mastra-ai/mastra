@@ -13,7 +13,6 @@ import { createHash } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
-import { isStatusEventDecision } from '../../../rules/event-rules.js';
 import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import { splitCardMetadata, workItemProviderAdapter } from '../../../work-items/providers/index.js';
@@ -988,16 +987,6 @@ function decisionRowPayload(decision: unknown): Record<string, unknown> {
   return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
 }
 
-/**
- * A route move is claimed and handed back every few seconds while its card's run is in flight.
- * Claimed from `pending` it shows nothing new until it moves the card, and that move announces itself.
- */
-function claimShowsOnBoard(table: string, row: GovernanceDbRow): boolean {
-  if (table !== 'factory_deferred_decisions') return false;
-  const routeMoveStillWaiting = row.status === 'pending' && isStatusEventDecision(decisionRowPayload(row.decision));
-  return !routeMoveStillWaiting;
-}
-
 function safeJsonParse(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -1315,17 +1304,8 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
   };
 }
 
-/** The project whose attention list a write just changed. */
-export interface FactoryAttentionScope {
-  orgId: string;
-  factoryProjectId: string;
-}
-
 /** The project whose board a committed card or decision write just changed. */
-export interface FactoryBoardScope {
-  orgId: string;
-  factoryProjectId: string;
-}
+export type FactoryBoardScope = Required<BoardScope>;
 
 /** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
@@ -1340,7 +1320,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   readonly #listCache = new Map<string, { version: string; takenAt: number; items: Card[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
-  #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
   #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
@@ -1364,15 +1343,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   constructor() {
     super('work-items');
-  }
-
-  /**
-   * Wired once at boot. Every write below that changes what this project's
-   * attention list projects announces it here — the one place a new such write
-   * has to remember, since clients stop polling while their stream is up.
-   */
-  onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
-    this.#attentionChanged = listener;
   }
 
   /**
@@ -1801,10 +1771,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     map: (row: GovernanceDbRow) => T,
     accept?: (row: GovernanceDbRow) => boolean,
   ): Promise<T[]> {
-    let shown = new BoardScopes();
     const claim = () =>
-      this.storage.withTransaction(async ops => {
-        shown = new BoardScopes();
+      this.#withTransaction(async ops => {
         // Bounded candidate window: only rows in claimable/expirable statuses,
         // oldest first. Terminal rows (sent/succeeded/failed) accumulate over a
         // deployment's lifetime and must never be scanned per dispatch tick.
@@ -1848,9 +1816,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
               if (!currentClaimable && !currentExpired) return null;
               didClaim = true;
-              if (claimShowsOnBoard(table, current)) {
-                shown.add({ orgId: current.org_id, factoryProjectId: current.factory_project_id });
-              }
               return {
                 status: 'leased',
                 attempts: Number(current.attempts) + 1,
@@ -1867,10 +1832,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         } while (!exhausted && claimed.length < input.limit);
         return claimed;
       });
-    const leased = await claim();
-    // A claim leaves its rows leased: no card moved and nothing became claimable, so only shown boards hear of it.
-    for (const scope of shown.values()) this.#announceBoard(scope);
-    return leased;
+    return claim();
   }
 
   async #renewLease(
@@ -1879,8 +1841,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     leaseExpiresAt: Date,
   ): Promise<boolean> {
     let renewed = false;
-    // Untracked: a renewal only pushes the expiry out, which no board shows, every few seconds per run.
-    await super.ops.updateAtomic<GovernanceDbRow>(
+    await this.#db.updateAtomic<GovernanceDbRow>(
       table,
       { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
       current => {
@@ -2885,10 +2846,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
     let postponed = false;
-    // Untracked by boards: a route move handed back shows nothing new, but the dispatcher needs the wake to retry it.
-    const row = await trackClaimableWrites(super.ops, scope =>
-      this.#claimableWork(scope),
-    ).updateAtomic<GovernanceDbRow>(
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
       'factory_deferred_decisions',
       { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
       current => {
@@ -2909,11 +2867,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
-    if (!row) return null;
-    const record = toDeferredDecision(row);
-    // A retryable failure surfaces nothing; only a terminal one mints an item.
-    if (input.terminal) this.#attentionChanged(record);
-    return record;
+    return row ? toDeferredDecision(row) : null;
   }
 
   /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
@@ -2938,10 +2892,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
-    if (!proposed || !row) return null;
-    const record = toDeferredDecision(row);
-    this.#attentionChanged(record);
-    return record;
+    return proposed && row ? toDeferredDecision(row) : null;
   }
 
   /**
@@ -2957,7 +2908,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
     approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const approved = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let settled = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2985,8 +2936,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
       return record;
     });
-    if (approved) this.#attentionChanged(approved);
-    return approved;
   }
 
   /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
@@ -3048,7 +2997,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
     patch: Partial<GovernanceDbRow>,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const settled = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let updated = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3063,8 +3012,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       await ops.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
       return toDeferredDecision(row);
     });
-    if (settled) this.#attentionChanged(settled);
-    return settled;
   }
 
   async #supersedeFailedDecision({
@@ -3078,7 +3025,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string;
     now: Date;
   }): Promise<FactoryDeferredDecisionRecord | null> {
-    const resolved = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let resolved = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3099,8 +3046,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (resolved) this.#attentionChanged(resolved);
-    return resolved;
   }
 
   async supersedeTerminalDecisionsForWorkItem(input: {
@@ -3179,7 +3124,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const retriedRecord = await this.#withTransaction(async ops => {
+    return this.#withTransaction(async ops => {
       let retried = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -3213,8 +3158,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (retriedRecord) this.#attentionChanged(retriedRecord);
-    return retriedRecord;
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */
@@ -4076,7 +4019,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const candidate = await this.#cards(this.#db, { transaction: false }).findOne(where);
     if (!candidate) return null;
 
-    const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
       const existing = await this.#cards(ops, { transaction: true }).findOne(where);
       if (!existing) return null;
       const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
@@ -4096,7 +4039,5 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return toWorkItem(existing);
     });
-    if (removed) this.#attentionChanged(removed);
-    return removed;
   }
 }

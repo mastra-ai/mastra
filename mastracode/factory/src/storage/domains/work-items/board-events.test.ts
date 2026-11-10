@@ -1,7 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
-import { WorkItemsStorage } from './base.js';
+import { factoryDecisionAttentionIdentity, WorkItemsStorage } from './base.js';
 import type { FactoryBoardScope, FactoryDeferredDecisionRecord } from './base.js';
 
 const SCOPE = { orgId: 'org1', factoryProjectId: 'p1' };
@@ -74,6 +74,23 @@ function leaseOf(decision: FactoryDeferredDecisionRecord) {
   return { id: decision.id, orgId: decision.orgId, factoryProjectId: decision.factoryProjectId, ownerId: 'worker-1' };
 }
 
+async function failForGood(
+  storage: WorkItemsStorage,
+  claimed: FactoryDeferredDecisionRecord,
+  failureCode: 'session_unavailable' | 'skill_delivery_ambiguous',
+): Promise<FactoryDeferredDecisionRecord> {
+  const failed = await storage.failDeferredDecision({
+    ...leaseOf(claimed),
+    now: NOW,
+    availableAt: NOW,
+    lastError: 'nope',
+    failureCode,
+    terminal: true,
+  });
+  if (!failed) throw new Error('Expected a failed decision');
+  return failed;
+}
+
 describe('board announcements', () => {
   it('announces a new card once a board refetching on it would see the card', async () => {
     const { storage, announced, titlesAtAnnounce } = await makeStorage();
@@ -94,14 +111,14 @@ describe('board announcements', () => {
     expect(announced).toEqual([SCOPE]);
   });
 
-  it('announces a decision as it is claimed, fails for a retry, and completes', async () => {
+  it('stays quiet as a waiting decision is claimed, then announces its failure and its completion', async () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);
     await queueDecision(storage, workItemId, 'run');
     announced.length = 0;
 
     const claimed = await claim(storage);
-    expect(announced).toEqual([SCOPE]);
+    expect(announced).toEqual([]);
 
     await storage.failDeferredDecision({
       ...leaseOf(claimed),
@@ -111,7 +128,7 @@ describe('board announcements', () => {
       failureCode: 'session_unavailable',
       terminal: false,
     });
-    expect(announced).toEqual([SCOPE, SCOPE]);
+    expect(announced).toEqual([SCOPE]);
 
     const reclaimed = await claim(storage);
     announced.length = 0;
@@ -148,10 +165,10 @@ describe('board announcements', () => {
     expect(wakes).toEqual([SCOPE]);
   });
 
-  it('announces a route move claimed again after a failure, since its retry warning clears', async () => {
+  it('announces a decision claimed again after a failure, since its retry warning clears', async () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);
-    await queueDecision(storage, workItemId, 'close', routeClose('close'));
+    await queueDecision(storage, workItemId, 'retry');
     const claimed = await claim(storage);
     await storage.failDeferredDecision({
       ...leaseOf(claimed),
@@ -166,6 +183,96 @@ describe('board announcements', () => {
     await claim(storage);
 
     expect(announced).toEqual([SCOPE]);
+  });
+
+  it('announces a run parked for approval, then its approval', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'park');
+    const claimed = await claim(storage);
+    announced.length = 0;
+
+    const proposed = await storage.proposeDeferredDecision(leaseOf(claimed), NOW);
+    expect(announced).toEqual([SCOPE]);
+
+    if (!proposed) throw new Error('Expected a proposed decision');
+    await storage.approveDeferredDecision(SCOPE.orgId, SCOPE.factoryProjectId, proposed.id, NOW, 'u');
+    expect(announced).toEqual([SCOPE, SCOPE]);
+  });
+
+  it('announces a failure nobody will retry, then its return to the queue', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'requeue');
+    const claimed = await claim(storage);
+    announced.length = 0;
+
+    const failed = await failForGood(storage, claimed, 'session_unavailable');
+    expect(announced).toEqual([SCOPE]);
+
+    await storage.retryDeferredDecision(SCOPE.orgId, SCOPE.factoryProjectId, failed.id, NOW);
+    expect(announced).toEqual([SCOPE, SCOPE]);
+  });
+
+  it('refuses to requeue a failure a rerun cannot fix, and stays quiet', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'ambiguous');
+    const failed = await failForGood(storage, await claim(storage), 'skill_delivery_ambiguous');
+    announced.length = 0;
+
+    await expect(storage.retryDeferredDecision(SCOPE.orgId, SCOPE.factoryProjectId, failed.id, NOW)).resolves.toBe(
+      null,
+    );
+
+    expect(await storage.getDeferredDecision(SCOPE.orgId, SCOPE.factoryProjectId, failed.id)).toMatchObject({
+      status: 'failed',
+      failureCode: 'skill_delivery_ambiguous',
+      deliveryGeneration: failed.deliveryGeneration,
+    });
+    expect(announced).toEqual([]);
+  });
+
+  it('announces a superseded proposal, and nothing when none matched', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'supersede');
+    await storage.proposeDeferredDecision(leaseOf(await claim(storage)), NOW);
+    announced.length = 0;
+
+    await storage.supersedeDecisionsForWorkItem({ ...SCOPE, workItemId, supersededAt: NOW });
+    expect(announced).toEqual([SCOPE]);
+
+    await storage.supersedeDecisionsForWorkItem({ ...SCOPE, workItemId, supersededAt: NOW });
+    expect(announced).toEqual([SCOPE]);
+  });
+
+  it('announces a deleted card', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    announced.length = 0;
+
+    await storage.delete({ orgId: SCOPE.orgId, id: workItemId });
+
+    expect(announced).toEqual([SCOPE]);
+  });
+
+  it('keeps a read receipt to itself: nobody else’s board changed', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'receipt');
+    const failed = await failForGood(storage, await claim(storage), 'session_unavailable');
+    announced.length = 0;
+
+    await storage.setAttentionReceipt({
+      ...SCOPE,
+      userId: 'u',
+      identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
+      action: 'read',
+      now: NOW,
+    });
+
+    expect(announced).toEqual([]);
   });
 
   it('keeps the shared card list cached across a decision write, which moves no card', async () => {
