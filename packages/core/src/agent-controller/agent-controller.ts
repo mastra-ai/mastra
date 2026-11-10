@@ -1832,7 +1832,7 @@ export class AgentController<TState = {}> {
   async getCurrentModelAuthStatus(session: Session<TState>): Promise<ModelAuthStatus> {
     const modelId = session.model.get();
     if (!modelId) return { hasAuth: true };
-    return this.getModelAuthStatus(modelId);
+    return this.#resolveModelAuthStatus(modelId);
   }
 
   /**
@@ -1843,6 +1843,10 @@ export class AgentController<TState = {}> {
    * `hasAuth: false`.
    */
   async getModelAuthStatus(modelId: string): Promise<ModelAuthStatus> {
+    return this.#resolveModelAuthStatus(modelId);
+  }
+
+  async #resolveModelAuthStatus(modelId: string): Promise<ModelAuthStatus> {
     // hasAuth returns false for expected missing-auth/missing-gateway cases.
     // It rethrows unexpected gateway failures (token exchange errors, network
     // bugs) — catch those here so the UI auth-status endpoint stays stable

@@ -11,7 +11,13 @@
  * final result via `result`.
  */
 import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
-import type { AgentController, AgentControllerEvent, AvailableModel, Session } from '@mastra/core/agent-controller';
+import type {
+  AgentController,
+  AgentControllerEvent,
+  AvailableModel,
+  ModelAuthStatus,
+  Session,
+} from '@mastra/core/agent-controller';
 import { getProviderConfig, parseModelString } from '@mastra/core/llm';
 
 import { MODEL_FALLBACK_STATE_KEY } from '../auth/account-rotation-processor.js';
@@ -167,6 +173,31 @@ function apiKeyHint(apiKeyEnvVar: string | string[] | undefined): string {
 }
 
 /**
+ * Resolve a model's credentials without the model catalog or the session's current model.
+ *
+ * `AgentController.getModelAuthStatus` is newer than the oldest `@mastra/core` this package
+ * supports. Older cores only have `getCurrentModelAuthStatus(session)`, which reads nothing from
+ * the session but `model.get()`, so they get a session view that holds just the model id.
+ * Failures count as no credentials, as they do in core.
+ */
+async function resolveModelAuth<TState extends Record<string, unknown>>(
+  controller: AgentController<TState>,
+  modelId: string,
+): Promise<ModelAuthStatus> {
+  // Typed by hand so this compiles against core declarations with or without the method.
+  const newerCore = controller as Omit<AgentController<TState>, 'getModelAuthStatus'> & {
+    getModelAuthStatus?(modelId: string): Promise<ModelAuthStatus>;
+  };
+  try {
+    if (typeof newerCore.getModelAuthStatus === 'function') return await newerCore.getModelAuthStatus(modelId);
+    const modelOnly = { model: { get: () => modelId } } as unknown as Session<TState>;
+    return await controller.getCurrentModelAuthStatus(modelOnly);
+  } catch {
+    return { hasAuth: false };
+  }
+}
+
+/**
  * Check a selected model against the model catalog before the run changes any session state.
  *
  * The catalog is built from live gateway fetches (models.dev and others), and a failed fetch only
@@ -199,7 +230,7 @@ async function checkModel<TState extends Record<string, unknown>>(
     return { ok: false, reason: 'unknown' };
   }
 
-  const auth = await controller.getModelAuthStatus(modelId);
+  const auth = await resolveModelAuth(controller, modelId);
   if (!auth.hasAuth) {
     return { ok: false, reason: 'no-key', keyHint: apiKeyHint(auth.apiKeyEnvVar ?? providerConfig.apiKeyEnvVar) };
   }
