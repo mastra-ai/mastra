@@ -27,6 +27,7 @@ import { diffResponseMessages } from '../../streams/response-messages';
 import type { ResponseMessagesCursor } from '../../streams/response-messages';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
 import {
+  getExecutionClaim,
   isExecutionFenceError,
   isForeignExecutionContext,
   watchExecutionLoss,
@@ -701,13 +702,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // `output.steps[i].response.messages` match the regular loop (#26780). Only the part that
         // changed since the previous step-finish is sent; readers rebuild the list. The cursor
         // travels with the iteration state, so a step on another worker continues it, and each
-        // claim generation starts over with the whole list.
+        // execution of the run (each claim: start, resume, recovery) starts over with the whole list.
         let nextCursor: ResponseMessagesCursor | undefined;
         try {
           const list = createRunMessageList({ mastra: rt.mastra }).deserialize(
             (transcript ?? (await openMessageListState(params, state))).read(),
           );
-          const producer = `${state.runId}:${currentRunGeneration(state.runId) ?? 0}`;
+          const producer =
+            getExecutionClaim(params.requestContext, state.runId)?.executionId ??
+            `${state.runId}:${currentRunGeneration(state.runId) ?? 0}`;
           const cursor =
             state.responseMessagesCursor?.producer === producer ? state.responseMessagesCursor : { producer };
           const { diff, cursor: next } = diffResponseMessages(cursor, list.get.response.aiV5.model());
@@ -722,6 +725,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           if (nextCursor) state.responseMessagesCursor = nextCursor;
         } catch (error) {
           rt.logger?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
+          // The event may have reached the log anyway: number the next one after it, and make it
+          // the whole list so readers don't need to know which list this one gave.
+          if (nextCursor) state.responseMessagesCursor = { ...nextCursor, fingerprints: [] };
         }
       };
 
