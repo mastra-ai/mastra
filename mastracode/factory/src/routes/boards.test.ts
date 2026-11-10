@@ -108,6 +108,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       }),
       storage: domains.boards,
       projects: domains.projects,
+      // As MastraFactory wires it: a project still using the retired Review board keeps it.
+      reviewBoardInUse: scope => domains.workItems.reviewBoardInUse(scope),
       recheckMs: RECHECK_MS,
       now: () => clock.now,
       warn: () => {},
@@ -207,12 +209,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     return (response.body.boards as Array<Record<string, any>>).find(board => board.id === key);
   }
 
-  it('refuses creating over a built-in or app board, deleting the Work board, and changing the legacy Review board, and stores nothing else', async () => {
+  it("refuses creating over a built-in or app board, deleting the Work board, and any write under the retired Review board's key, and stores nothing else", async () => {
     const { a, scope, base, replicaA } = await setup();
     const refused = (key: string, message: string) => ({ status: 409, body: { error: 'code_board', message } });
     const deleteMessage = (key: string) =>
       `Board "${key}" is defined in code and can't be deleted; reset it to its default instead.`;
     const createMessage = (key: string) => `Board "${key}" is defined in code and can't be created over here.`;
+    // The project's first load stores its Work and app boards.
+    await getBoard(replicaA.send, base, 'work');
 
     expect(await replicaA.send('DELETE', `${base}/work?expectedRevision=1`)).toEqual(
       refused('work', deleteMessage('work')),
@@ -223,17 +227,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'work' })).toEqual(
       refused('work', createMessage('work')),
     );
-    expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual(
-      refused('review', createMessage('review')),
-    );
-    const review = await getBoard(replicaA.send, base, 'review');
-    const reviewChanged = `Board "review" is defined in code and can't be changed here.`;
+    // The retired Review board's key stays reserved: its stored cards read as Work.
+    const reserved = {
+      status: 409,
+      body: {
+        error: 'reserved_board',
+        message: 'Board "review" is reserved for the retired Review board.',
+      },
+    };
+    expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual(reserved);
     expect(
-      await replicaA.send('PATCH', `${base}/review`, { name: 'Renamed', phases: review.phases, expectedRevision: 1 }),
-    ).toEqual(refused('review', reviewChanged));
-    expect(await replicaA.send('POST', `${base}/review/reset`, { expectedRevision: 1 })).toEqual(
-      refused('review', reviewChanged),
-    );
+      await replicaA.send('PATCH', `${base}/review`, {
+        name: 'Renamed',
+        phases: bugsBoard.phases,
+        expectedRevision: 1,
+      }),
+    ).toEqual(reserved);
+    expect(await replicaA.send('POST', `${base}/review/reset`, { expectedRevision: 1 })).toEqual(reserved);
+    expect(await replicaA.send('DELETE', `${base}/review?expectedRevision=1`)).toEqual(reserved);
 
     // The project's first load stored its Work and app boards; no refusal wrote anything.
     expect((await a.boards.list(scope)).map(row => [row.key, row.revision])).toEqual([
@@ -241,7 +252,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       ['release', 1],
     ]);
     expect((await catalogBoard(replicaA.send, base, 'work'))!.name).toBe('Work');
-    expect((await catalogBoard(replicaA.send, base, 'review'))!.editable).toBe(false);
+    expect(await catalogBoard(replicaA.send, base, 'review')).toBeUndefined();
   });
 
   it("deletes an app board like the project's own boards, and doesn't store it again on a later load or restart", async () => {
@@ -255,7 +266,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const restarted = replica(a, orgId);
     for (const send of [replicaA.send, restarted.send]) {
       const catalog = await send('GET', base);
-      expect((catalog.body.boards as Array<{ id: string }>).map(board => board.id)).toEqual(['work', 'review']);
+      expect((catalog.body.boards as Array<{ id: string }>).map(board => board.id)).toEqual(['work']);
       expect(catalog.body.problems).toBeUndefined();
       expect(await send('GET', `${base}/release`)).toMatchObject({ status: 404, body: { error: 'board_not_found' } });
     }
@@ -322,7 +333,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['work', 'release']);
   });
 
-  it('lists the Work and app boards as editable, the legacy Review board as read-only, and boards the project created as editable', async () => {
+  it('lists the Work and app boards and the boards the project created, all editable', async () => {
     const { base, replicaA } = await setup();
     expect((await replicaA.send('POST', base, bugsBoard)).status).toBe(201);
     const catalog = await replicaA.send('GET', base);
@@ -330,13 +341,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       (catalog.body.boards as Array<Record<string, unknown>>).map(board => [board.id, board.source, board.editable]),
     ).toEqual([
       ['work', 'builtin', true],
-      ['review', 'builtin', false],
       ['release', 'app', true],
       ['bugs', 'stored', true],
     ]);
   });
 
-  it('returns the Work and app boards the project stored, editable at revision 1, and the Review board read-only', async () => {
+  it('returns the Work and app boards the project stored, editable at revision 1, and no Review board', async () => {
     const { a, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
     const { description, ...definition } = boardDefinitionOf(workBoard);
@@ -356,10 +366,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const version = await a.boards.readVersion(scope);
     await getBoard(replicaA.send, base, 'work');
     expect(await a.boards.readVersion(scope)).toBe(version);
-    expect(await getBoard(replicaA.send, base, 'review')).toMatchObject({
-      revision: null,
-      source: 'builtin',
-      editable: false,
+    expect(await replicaA.send('GET', `${base}/review`)).toMatchObject({
+      status: 404,
+      body: { error: 'board_not_found' },
     });
     expect(work.phases.map(phase => [phase.key, phase.name, phase.kind])).toEqual(
       Object.entries(workBoard.phases).map(([key, phase]) => [key, phase.name, phase.kind]),
@@ -375,24 +384,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       editable: true,
       revision: 1,
     });
-    // What the code behaviour holds fixed, so an editor can show it read-only.
+    // What the code behaviour holds fixed, so an editor can show it read-only: only the moves Work's
+    // code makes. Runners and exit tools are plain stored fields, so nothing locks them.
     const read = await replicaA.send('GET', `${base}/work`);
     expect(read.body).toMatchObject({
       canEdit: true,
       board: {
         codeBehaviour: {
-          intake: {
-            handlers: false,
-            exitToolId: null,
-            requiredNextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
-          },
-          triage: { handlers: true, exitToolId: null },
-          planning: { handlers: true, exitToolId: 'submit_plan' },
-          'pr-review': { handlers: true, exitToolId: null },
-          canceled: { handlers: false, exitToolId: null },
+          intake: { requiredNextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'] },
+          triage: { requiredNextPhases: ['intake', 'planning', 'done', 'canceled'] },
+          planning: { requiredNextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'] },
+          'pr-review': { requiredNextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'] },
+          canceled: { requiredNextPhases: ['intake', 'pr-review'] },
         },
       },
     });
+    for (const locks of Object.values(read.body.board.codeBehaviour as Record<string, object>)) {
+      expect(Object.keys(locks)).toEqual(['requiredNextPhases']);
+    }
   });
 
   it("lets an admin edit the Work board's automation, which another replica serves after the recheck window", async () => {
@@ -469,25 +478,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
           nextPhases: phase.nextPhases?.filter(next => next !== 'planning'),
         })),
       },
-      editPhase(work, 'triage', phase => ({ ...phase, runner: { ...phase.runner, context: 'work' } })),
-      editPhase(work, 'planning', phase => ({ ...phase, exitTool: { id: 'finish_plan', autoApprove: false } })),
       editPhase(work, 'planning', phase => ({
         ...phase,
+        // The exit tool's next phase must be one of nextPhases, so it goes too.
+        exitTool: { id: 'submit_plan', autoApprove: false },
         nextPhases: phase.nextPhases?.filter(next => next !== 'execute'),
       })),
-      editPhase(work, 'execute', phase => ({ ...phase, exitTool: { id: 'finish_build', autoApprove: false } })),
+      editPhase(work, 'done', phase => ({ ...phase, kind: 'resting' })),
     ];
     const messages = [
       /"planning" has code behaviour on board "work"; it can't be removed\./,
-      /keep runner\.context/,
-      /waits for exit tool "submit_plan"; keep exitTool\.id\./,
       /moves cards from it to "execute"; keep it in nextPhases\./,
-      /move cards on without an exit tool; leave exitTool unset\./,
+      /Phase "done" must stay terminal; its code behaviour depends on it\./,
     ];
     for (const [index, body] of cases.entries()) {
       const response = await replicaA.send('PATCH', `${base}/work`, body);
       expect(response.status).toBe(422);
-      expect(response.body.error).toBe('code_behaviour');
+      expect(response.body.error, JSON.stringify(response.body)).toBe('code_behaviour');
       expect(response.body.message).toMatch(messages[index]!);
       expect(response.body.conflicts).toContainEqual(expect.stringMatching(messages[index]!));
     }
@@ -496,14 +503,34 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(removal.body.conflicts).toContainEqual(
       'Phase "triage": Factory\'s code moves cards from it to "planning"; keep it in nextPhases.',
     );
-    const both = editPhase({ ...cases[1]!, revision: 1 }, 'planning', phase => ({
-      ...phase,
-      exitTool: { id: 'finish_plan', autoApprove: false },
-    }));
+    const both = editPhase({ ...cases[1]!, revision: 1 }, 'done', phase => ({ ...phase, kind: 'resting' }));
     expect((await replicaA.send('PATCH', `${base}/work`, both)).body.conflicts).toHaveLength(2);
 
     expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1 });
     expect(await a.boards.readVersion(scope)).toBe(version);
+  });
+
+  it("lets an admin change Work's runners and exit tools, which no code handler holds any more", async () => {
+    const { a, scope, base, replicaA } = await setup();
+    const edits: Array<[string, (phase: StoredPhaseInput) => StoredPhaseInput]> = [
+      ['triage', phase => ({ ...phase, runner: { ...phase.runner, context: 'work' } })],
+      ['planning', phase => ({ ...phase, exitTool: { id: 'finish_plan', autoApprove: false } })],
+      ['execute', phase => ({ ...phase, exitTool: { id: 'finish_build', autoApprove: false } })],
+    ];
+    for (const [index, [key, edit]] of edits.entries()) {
+      // Each edit starts from the board as the previous one saved it.
+      const work = await getBoard(replicaA.send, base, 'work');
+      const saved = await replicaA.send('PATCH', `${base}/work`, {
+        ...editPhase(work, key, edit),
+        expectedRevision: index + 1,
+      });
+      expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+    }
+    const stored = (await a.boards.get(scope, 'work'))!;
+    expect(stored.revision).toBe(edits.length + 1);
+    expect(stored.phases.find(phase => phase.key === 'triage')!.runner).toMatchObject({ context: 'work' });
+    expect(stored.phases.find(phase => phase.key === 'planning')!.exitTool).toMatchObject({ id: 'finish_plan' });
+    expect(stored.phases.find(phase => phase.key === 'execute')!.exitTool).toMatchObject({ id: 'finish_build' });
   });
 
   it("serves an app board's row as the project's own board once the app stops defining it", async () => {
@@ -839,6 +866,52 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       bugsBoard.phases.map(phase => (phase.key === 'fixing' ? { ...phase, name: 'Patching' } : phase)),
     );
     expect(renamed.status).toBe(200);
+  });
+
+  describe('the retired Review board', () => {
+    const pullRequestCard = (stage: string) => ({
+      title: 'PR 17',
+      board: 'review',
+      stages: [stage],
+      externalSource: { integrationId: 'github', type: 'pull-request' as const, externalId: 'github-pr:17' },
+    });
+
+    it('serves it, read-only, to a project that still has an open card on it, and lists the card there', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('review') });
+
+      const catalog = await replicaA.send('GET', base);
+      expect(
+        (catalog.body.boards as Array<Record<string, unknown>>).map(board => [board.id, board.source, board.editable]),
+      ).toEqual([
+        ['work', 'builtin', true],
+        ['release', 'app', true],
+        ['review', 'builtin', false],
+      ]);
+      const cards = await replicaA.send('GET', `/web/factory/projects/${scope.factoryProjectId}/work-items`);
+      expect(cards).toMatchObject({
+        status: 200,
+        body: { workItems: [{ id: item.id, board: 'review', stages: ['review'] }] },
+      });
+      // The key stays reserved: nobody stores a board over it.
+      expect((await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).status).toBe(409);
+      expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['work', 'release']);
+    });
+
+    it('serves it to no project whose cards there are all finished, and shows those cards on Work', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('done') });
+
+      expect(await replicaA.send('GET', `${base}/review`)).toMatchObject({
+        status: 404,
+        body: { error: 'board_not_found' },
+      });
+      const cards = await replicaA.send('GET', `/web/factory/projects/${scope.factoryProjectId}/work-items`);
+      expect(cards).toMatchObject({
+        status: 200,
+        body: { workItems: [{ id: item.id, board: 'work', stages: ['done'] }] },
+      });
+    });
   });
 
   it('refuses deleting a board that still has cards', async () => {

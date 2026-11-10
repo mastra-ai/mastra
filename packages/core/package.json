@@ -1,13 +1,12 @@
 {
   "name": "@mastra/core",
-  "version": "1.83.0-alpha.2",
+  "version": "1.83.0-alpha.4",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "LICENSE.md",
     "./**/*.d.ts"
   ],
   "exports": {
@@ -923,6 +922,7 @@
     "yaml": "^2.9.1"
   },
   "peerDependencies": {
+    "@json-render/chat": "^0.22.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
@@ -967,6 +967,7 @@
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
+    "@json-render/chat": "^0.22.0",
     "@modelcontextprotocol/server": "2.4.0",
     "@openrouter/ai-sdk-provider": "^0.7.5",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.5.4",
@@ -1021,5 +1022,10 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "peerDependenciesMeta": {
+    "@json-render/chat": {
+      "optional": true
+    }
   }
 }

@@ -11,9 +11,8 @@ import { jiraBindingsFor } from './routing';
 import type { Factory } from './routing';
 
 function projectNote(bindings: IntakeSourceBinding[]): string | undefined {
-  const active = bindings.filter(binding => binding.board);
-  if (active.length === 0) return "Not routed. This project's issues won't be picked up.";
-  if (active.length > 1) return 'Labelled factories take matching issues first, in the order they were added.';
+  if (bindings.length === 0) return "Not routed. This project's issues won't be picked up.";
+  if (bindings.length > 1) return 'Labelled factories take matching issues first, in the order they were added.';
   return undefined;
 }
 

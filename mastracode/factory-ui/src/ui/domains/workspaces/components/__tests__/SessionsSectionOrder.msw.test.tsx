@@ -47,8 +47,9 @@ function reviewCard(session: FactoryUserSession, pullRequestNumber: number, merg
       externalId: `pr-${pullRequestNumber}`,
     },
     parentWorkItemId: null,
+    board: 'work',
     title: `Review #${pullRequestNumber}`,
-    stages: ['review'],
+    stages: ['pr-review'],
     stageHistory: [],
     sessions: {
       review: {
@@ -108,8 +109,8 @@ function renderSection(openSessionId?: string) {
 
 async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
   await waitForMutationsIdle(client);
-  const group = await screen.findByRole('region', { name: 'Review sessions' });
-  const rows = await within(group).findAllByRole('link', { name: /^Reviewing: factory\/pr-\d+$/ });
+  const group = await screen.findByRole('region', { name: 'Work sessions' });
+  const rows = await within(group).findAllByRole('link', { name: /^Review: factory\/pr-\d+$/ });
   return rows.map(row => row.getAttribute('aria-label'));
 }
 
@@ -133,9 +134,9 @@ describe('Sessions sidebar order', () => {
     const { client } = renderSection();
 
     expect(await reviewRowLabels(client)).toEqual([
-      'Reviewing: factory/pr-102',
-      'Reviewing: factory/pr-101',
-      'Reviewing: factory/pr-103',
+      'Review: factory/pr-102',
+      'Review: factory/pr-101',
+      'Review: factory/pr-103',
     ]);
   });
 
@@ -151,7 +152,7 @@ describe('Sessions sidebar order', () => {
 
     const { client } = renderSection();
 
-    expect(await reviewRowLabels(client)).toEqual(['Reviewing: factory/pr-302', 'Reviewing: factory/pr-301']);
+    expect(await reviewRowLabels(client)).toEqual(['Review: factory/pr-302', 'Review: factory/pr-301']);
   });
 
   it('keeps a merged session up top while its agent waits on an answer', async () => {
@@ -167,7 +168,7 @@ describe('Sessions sidebar order', () => {
 
     const { client } = renderSection();
 
-    expect(await reviewRowLabels(client)).toEqual(['Reviewing: factory/pr-402', 'Reviewing: factory/pr-401']);
+    expect(await reviewRowLabels(client)).toEqual(['Review: factory/pr-402', 'Review: factory/pr-401']);
     expect(screen.getByRole('status', { name: /^factory\/pr-402 waiting on you$/i })).toBeInTheDocument();
   });
 
@@ -181,9 +182,9 @@ describe('Sessions sidebar order', () => {
     const { client } = renderSection(oldest.sessionId);
 
     expect(await reviewRowLabels(client)).toEqual([
-      'Reviewing: factory/pr-403',
-      'Reviewing: factory/pr-402',
-      'Reviewing: factory/pr-401',
+      'Review: factory/pr-403',
+      'Review: factory/pr-402',
+      'Review: factory/pr-401',
     ]);
   });
 
@@ -200,12 +201,12 @@ describe('Sessions sidebar order', () => {
     const { client } = renderSection(oldest.sessionId);
 
     expect(await reviewRowLabels(client)).toEqual([
-      'Reviewing: factory/pr-507',
-      'Reviewing: factory/pr-506',
-      'Reviewing: factory/pr-505',
-      'Reviewing: factory/pr-504',
-      'Reviewing: factory/pr-503',
-      'Reviewing: factory/pr-501',
+      'Review: factory/pr-507',
+      'Review: factory/pr-506',
+      'Review: factory/pr-505',
+      'Review: factory/pr-504',
+      'Review: factory/pr-503',
+      'Review: factory/pr-501',
     ]);
   });
 
@@ -243,19 +244,19 @@ describe('Sessions sidebar order', () => {
 
     const rendered = renderSection();
     expect(await reviewRowLabels(rendered.client)).toEqual([
-      'Reviewing: factory/pr-601',
-      'Reviewing: factory/pr-604',
-      'Reviewing: factory/pr-602',
-      'Reviewing: factory/pr-603',
+      'Review: factory/pr-601',
+      'Review: factory/pr-604',
+      'Review: factory/pr-602',
+      'Review: factory/pr-603',
     ]);
 
     await pickSessionProperty(user, 'Sort', 'Last updated');
 
     const byLastUpdate = [
-      'Reviewing: factory/pr-601',
-      'Reviewing: factory/pr-603',
-      'Reviewing: factory/pr-604',
-      'Reviewing: factory/pr-602',
+      'Review: factory/pr-601',
+      'Review: factory/pr-603',
+      'Review: factory/pr-604',
+      'Review: factory/pr-602',
     ];
     expect(await reviewRowLabels(rendered.client)).toEqual(byLastUpdate);
     rendered.unmount();
