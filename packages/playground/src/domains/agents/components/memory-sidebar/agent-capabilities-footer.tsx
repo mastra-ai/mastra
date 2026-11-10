@@ -151,7 +151,12 @@ function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
   });
   const enabled = hasConfiguredMemory(memory);
 
-  const settledStatus = enabled ? (memory?.memoryType === 'gateway' ? 'Gateway' : 'On') : 'Off';
+  const hostedLabel = { gateway: 'Gateway', platform: 'Platform' } as const;
+  const settledStatus = enabled
+    ? memory?.memoryType && memory.memoryType !== 'local'
+      ? hostedLabel[memory.memoryType]
+      : 'On'
+    : 'Off';
   const status = isLoading ? 'Checking' : settledStatus;
 
   return (

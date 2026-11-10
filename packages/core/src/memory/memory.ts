@@ -28,6 +28,8 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   StorageCopyThreadOutput,
+  ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -442,6 +444,17 @@ https://mastra.ai/en/docs/memory/overview`,
 
     await this.vector.createIndex(createParams);
     return { indexName };
+  }
+
+  /**
+   * Reports this memory's Observational Memory to Studio when OM runs somewhere Studio can't look
+   * into on its own, such as a hosted memory service. Return `null` (the default) when OM, if
+   * any, runs in this process as the agent's `observational-memory` processor.
+   *
+   * @experimental
+   */
+  getObservationalMemoryInspector(): ObservationalMemoryInspector | null {
+    return null;
   }
 
   public getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
@@ -1324,4 +1337,43 @@ https://mastra.ai/en/docs/memory/overview`,
 
     return result;
   }
+}
+
+/** @experimental */
+export interface ObservationalMemoryInspectorConfig {
+  scope: 'thread' | 'resource';
+  /** Unobserved message tokens that trigger an observation. */
+  messageTokens: number | { min: number; max: number };
+  /** Observation tokens that trigger a reflection. */
+  observationTokens: number | { min: number; max: number };
+  shareTokenBudget?: boolean;
+  observationModel?: string;
+  reflectionModel?: string;
+  observationModelRouting?: Array<{ upTo: number; model: string }>;
+  reflectionModelRouting?: Array<{ upTo: number; model: string }>;
+}
+
+/**
+ * Read-only view of an agent's Observational Memory, for Studio. Each place OM can run
+ * (in-process processor, hosted memory service) provides one. @experimental
+ */
+export interface ObservationalMemoryInspector {
+  /** Where OM runs, as Studio labels it (`local`, `platform`, ...). */
+  readonly kind: string;
+  /** OM settings, or `null` when OM is off. */
+  getConfig(): Promise<ObservationalMemoryInspectorConfig | null>;
+  /**
+   * Memory settings Studio should show in place of `getMergedThreadConfig()`, when that config
+   * doesn't describe what actually runs (e.g. history is assembled remotely).
+   */
+  getDisplayConfig?(): Partial<MemoryConfigInternal>;
+  /** The current record (`null` before the first observation) and, with `historyLimit`, its generations newest first. */
+  getRecord(args: {
+    threadId: string | null;
+    resourceId: string;
+    historyLimit?: number;
+    historyOptions?: ObservationalMemoryHistoryOptions;
+  }): Promise<{ record: ObservationalMemoryRecord | null; history?: ObservationalMemoryRecord[] }>;
+  /** Resolves once background buffering for the thread has settled. */
+  waitForBuffering(args: { threadId: string | null; resourceId: string }): Promise<void>;
 }
