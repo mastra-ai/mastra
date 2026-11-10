@@ -646,9 +646,101 @@ function extractAction(
 
 const DELEGATED_OFFICE_PROVIDER_IDS = new Set(['microsoft-excel', 'microsoft-powerpoint', 'microsoft-word']);
 
-// Nango shares these actions with client-credentials templates. Adapt only the
-// customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
+function templateShapeChanged(action: ExtractedAction, what: string): Error {
+  return new Error(
+    `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${what}); the upstream template shape changed.`,
+  );
+}
+
+/** Replaces the single match of `pattern`; zero or several matches mean the template drifted. */
+function replaceExactlyOnce(
+  text: string,
+  pattern: RegExp,
+  replacement: string,
+  action: ExtractedAction,
+  what: string,
+): string {
+  const matches = text.match(new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`)) ?? [];
+  if (matches.length !== 1) throw templateShapeChanged(action, what);
+  return text.replace(pattern, replacement);
+}
+
+/**
+ * The live Fireflies API returns `summary.keywords` as a list of strings and
+ * `speakers[].id` as a number, but the pinned template only accepts strings, so
+ * most real transcripts failed to parse (#29401). Accept both shapes from the
+ * provider and keep the tool's string output, the way the template already
+ * treats `action_items` and sentence `speaker_id`. Remove once the pinned
+ * template accepts these shapes.
+ */
+function adaptFirefliesGetTranscript(action: ExtractedAction): ExtractedAction {
+  const statementRewrites: Readonly<Record<string, (statement: string) => string[]>> = {
+    ProviderSummarySchema: statement => [
+      replaceExactlyOnce(
+        statement,
+        /(action_items:\s*z\.union\(\[\s*z\.string\(\),\s*z\.array\(z\.string\(\)\),?\s*\]\)\.nullish\(\)),?/,
+        '$1,\n    keywords: z.union([z.string(), z.array(z.string())]).nullish(),',
+        action,
+        'ProviderSummarySchema keywords',
+      ),
+    ],
+    SpeakerSchema: statement => [
+      statement,
+      'const ProviderSpeakerSchema = SpeakerSchema.extend({\n    id: z.union([z.string(), z.number()]).nullish(),\n});',
+    ],
+    TranscriptSchema: statement => [
+      replaceExactlyOnce(
+        statement,
+        /speakers:\s*z\.array\(\s*SpeakerSchema\s*\)\.nullish\(\)/,
+        'speakers: z.array(ProviderSpeakerSchema).nullish()',
+        action,
+        'TranscriptSchema speakers',
+      ),
+    ],
+    normalizeActionItems: statement => [
+      statement,
+      "function normalizeKeywords(keywords: string | string[]): string {\n    return Array.isArray(keywords) ? keywords.join(', ') : keywords;\n}",
+      'function normalizeSpeaker(speaker: z.infer<typeof ProviderSpeakerSchema>): z.infer<typeof SpeakerSchema> {\n    return { ...speaker, id: speaker.id != null ? String(speaker.id) : speaker.id };\n}',
+    ],
+  };
+
+  const rewriteCounts = new Map<string, number>();
+  const moduleStatements = action.moduleStatements.flatMap(statement => {
+    const name = /^(?:const|function)\s+(\w+)\b/.exec(statement)?.[1];
+    const rewrite = name && Object.hasOwn(statementRewrites, name) ? statementRewrites[name] : undefined;
+    if (!name || !rewrite) return [statement];
+    rewriteCounts.set(name, (rewriteCounts.get(name) ?? 0) + 1);
+    return rewrite(statement);
+  });
+  for (const name of Object.keys(statementRewrites)) {
+    if (rewriteCounts.get(name) !== 1) throw templateShapeChanged(action, `${name} declaration`);
+  }
+
+  let execBody = replaceExactlyOnce(
+    action.execBody,
+    /(action_items:\s*transcript\.summary\.action_items\s*!=\s*null\s*\?\s*normalizeActionItems\(\s*transcript\.summary\.action_items\s*\)\s*:\s*transcript\.summary\.action_items),?/,
+    '$1,\n                keywords:\n                    transcript.summary.keywords != null\n                        ? normalizeKeywords(transcript.summary.keywords)\n                        : transcript.summary.keywords,',
+    action,
+    'summary keywords normalization',
+  );
+  execBody = replaceExactlyOnce(
+    execBody,
+    /speakers:\s*transcript\.speakers\s*\?\?\s*undefined/,
+    'speakers: transcript.speakers ? transcript.speakers.map(normalizeSpeaker) : undefined',
+    action,
+    'speakers normalization',
+  );
+
+  return { ...action, moduleStatements, execBody };
+}
+
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
+  if (action.candidate.providerId === 'fireflies' && action.candidate.actionSlug === 'get-transcript') {
+    return adaptFirefliesGetTranscript(action);
+  }
+
+  // Nango shares these actions with client-credentials templates. Adapt only the
+  // customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
   if (
     !DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) ||
     action.candidate.actionSlug !== 'get-user-drive'

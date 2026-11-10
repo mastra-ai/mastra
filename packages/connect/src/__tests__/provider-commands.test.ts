@@ -53,6 +53,95 @@ const action = createAction({
 export default action;
 `;
 
+const firefliesGetTranscriptTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ id: z.string() });
+
+const SummarySchema = z.object({
+  keywords: z.string().nullish(),
+  action_items: z.string().nullish(),
+});
+
+const ProviderSummarySchema = SummarySchema.extend({
+  action_items: z.union([z.string(), z.array(z.string())]).nullish(),
+});
+
+const SpeakerSchema = z.object({
+  id: z.string().nullish(),
+  name: z.string().nullish(),
+});
+
+const TranscriptSchema = z.object({
+  id: z.string(),
+  summary: ProviderSummarySchema.nullable().optional(),
+  speakers: z.array(SpeakerSchema).nullish(),
+});
+
+const OutputSchema = z.object({
+  id: z.string(),
+  summary: SummarySchema.optional(),
+  speakers: z.array(SpeakerSchema).optional(),
+});
+
+function normalizeActionItems(actionItems: string | string[]): string {
+  return Array.isArray(actionItems) ? actionItems.join('\\n') : actionItems;
+}
+
+const action = createAction({
+  description: 'Get a transcript.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.post({ endpoint: '/graphql', data: { id: input.id } });
+    const transcript = TranscriptSchema.parse(response.data);
+    return {
+      id: transcript.id,
+      summary: transcript.summary
+        ? {
+            ...transcript.summary,
+            action_items:
+              transcript.summary.action_items != null
+                ? normalizeActionItems(transcript.summary.action_items)
+                : transcript.summary.action_items,
+          }
+        : undefined,
+      speakers: transcript.speakers ?? undefined,
+    };
+  },
+});
+
+export default action;
+`;
+
+// Fireflies templates whose shape no longer matches the generator override.
+const firefliesDriftTemplates: ReadonlyArray<readonly [string, string]> = [
+  [
+    'fireflies-drift-summary',
+    firefliesGetTranscriptTemplate.replace(
+      'action_items: z.union([z.string(), z.array(z.string())]).nullish(),',
+      'action_items: z.array(z.string()).nullish(),',
+    ),
+  ],
+  [
+    'fireflies-drift-speakers',
+    firefliesGetTranscriptTemplate.replace('speakers: z.array(SpeakerSchema).nullish(),', ''),
+  ],
+  [
+    'fireflies-drift-normalize',
+    firefliesGetTranscriptTemplate.replace(
+      'speakers: transcript.speakers ?? undefined,',
+      'speakers: transcript.speakers,',
+    ),
+  ],
+  [
+    'fireflies-drift-helper',
+    firefliesGetTranscriptTemplate.replace('function normalizeActionItems', 'function normalizeItems'),
+  ],
+];
+
 const imageActionTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -469,6 +558,10 @@ describe('maintainer provider commands', () => {
     writeFileSync(resolve(microsoftExcelActionDir, 'list-users.ts'), graphCursorTemplate);
     symlinkSync('microsoft-excel-oauth2-cc', resolve(integrationsDir, 'microsoft-excel'), 'dir');
 
+    const firefliesActionDir = resolve(integrationsDir, 'fireflies', 'actions');
+    mkdirSync(firefliesActionDir, { recursive: true });
+    writeFileSync(resolve(firefliesActionDir, 'get-transcript.ts'), firefliesGetTranscriptTemplate);
+
     const openaiActionDir = resolve(integrationsDir, 'openai', 'actions');
     mkdirSync(openaiActionDir, { recursive: true });
     writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
@@ -813,6 +906,58 @@ export default action;
     expect(clientCredentialsTool).toContain('endpoint: `/v1.0/users/${encodeURIComponent(input.userId)}/drive`');
     expect(clientCredentialsTool).not.toContain("'/v1.0/me/drive'");
   });
+
+  it('adapts the Fireflies transcript template to keyword lists and numeric speaker ids', async () => {
+    await addProvider({ providerId: 'fireflies', localId: 'fireflies', yes: true, expectedTemplateSha: templateSha });
+
+    const tool = readFileSync(resolve(packageRoot, 'src/providers/fireflies/tools/get-transcript.ts'), 'utf8');
+    expect(tool).toMatch(
+      /ProviderSummarySchema = SummarySchema\.extend\(\{[^}]*keywords: z\.union\(\[z\.string\(\), z\.array\(z\.string\(\)\)\]\)\.nullish\(\)/,
+    );
+    expect(tool).toMatch(
+      /const ProviderSpeakerSchema = SpeakerSchema\.extend\(\{\s*id: z\.union\(\[z\.string\(\), z\.number\(\)\]\)\.nullish\(\),?\s*\}\)/,
+    );
+    expect(tool).toMatch(
+      /TranscriptSchema = z\.object\(\{[^}]*speakers: z\.array\(ProviderSpeakerSchema\)\.nullish\(\)/,
+    );
+    // The tool's output contract keeps string keywords and string speaker ids.
+    expect(tool).toMatch(/OutputSchema = z\.object\(\{[^}]*speakers: z\.array\(SpeakerSchema\)\.optional\(\)/);
+    expect(tool).toContain('function normalizeKeywords(');
+    expect(tool).toContain('function normalizeSpeaker(');
+    expect(tool).toMatch(/keywords:\s*transcript\.summary\.keywords != null\s*\? normalizeKeywords\(/);
+    expect(tool).toMatch(
+      /speakers: transcript\.speakers\s*\? transcript\.speakers\.map\(normalizeSpeaker\)\s*: undefined/,
+    );
+  });
+
+  it.each(firefliesDriftTemplates)(
+    'refuses to generate Fireflies when the transcript template drifts (%s)',
+    async (_name, driftTemplate) => {
+      expect(driftTemplate).not.toBe(firefliesGetTranscriptTemplate);
+      const templatesRoot = resolve(packageRoot, '.templates');
+      const templatePath = resolve(templatesRoot, 'integrations/fireflies/actions/get-transcript.ts');
+      const commitFixture = (message: string) => {
+        execFileSync('git', ['add', '.'], { cwd: templatesRoot });
+        execFileSync(
+          'git',
+          ['-c', 'user.name=Mastra Tests', '-c', 'user.email=tests@mastra.ai', 'commit', '-qm', message],
+          { cwd: templatesRoot },
+        );
+        return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: templatesRoot, encoding: 'utf8' }).trim();
+      };
+
+      writeFileSync(templatePath, driftTemplate);
+      const driftSha = commitFixture('drift');
+      try {
+        await expect(
+          addProvider({ providerId: 'fireflies', localId: 'fireflies', yes: true, expectedTemplateSha: driftSha }),
+        ).rejects.toThrow(/Unable to adapt fireflies\/get-transcript .*the upstream template shape changed/);
+      } finally {
+        writeFileSync(templatePath, firefliesGetTranscriptTemplate);
+        templateSha = commitFixture('restore');
+      }
+    },
+  );
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
     await addProvider({
