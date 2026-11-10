@@ -176,14 +176,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       { on: ['pull_request.merged'], target: { phaseKey: 'done' }, problems: [] },
       { on: ['pull_request.closed'], target: { phaseKey: 'canceled' }, problems: [] },
       { on: ['pull_request.closed'], target: { phaseKey: 'intake' }, problems: [] },
-      { on: ['pull_request.synchronized'], target: { phaseKey: 'pr-review' }, allowWorkingPhase: true, problems: [] },
-      {
-        on: ['pull_request.review_requested'],
-        target: { phaseKey: 'pr-review' },
-        allowWorkingPhase: true,
-        problems: [],
-      },
+      { on: ['pull_request.synchronized'], target: { phaseKey: 'pr-review' }, problems: [] },
+      { on: ['pull_request.review_requested'], target: { phaseKey: 'pr-review' }, problems: [] },
     ]);
+    for (const event of events) expect(event).not.toHaveProperty('allowWorkingPhase');
     expect(events).toHaveLength(8);
     expect(closesIssue).toMatchObject({
       name: CLOSES_ISSUE_INTAKE_ROUTE.name,
@@ -409,22 +405,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(created).toMatchObject({
       status: 201,
-      body: { intakeRoute: { on: ['work_item.closed'], allowWorkingPhase: false, when: canceled, problems: [] } },
+      body: { intakeRoute: { on: ['work_item.closed'], when: canceled, problems: [] } },
     });
     const route = created.body.intakeRoute as Route;
     const bare = (await replicaA.send('POST', base, { name: 'New cards', target: WORK })).body.intakeRoute;
-    expect(bare).toMatchObject({ on: ['work_item.created'], allowWorkingPhase: false });
+    expect(bare).toMatchObject({ on: ['work_item.created'] });
 
     const reopened = await replicaA.send('PATCH', `${base}/${route.id}`, {
       on: ['work_item.reopened'],
       when: null,
       target: { boardKey: 'work', phaseKey: 'triage' },
-      allowWorkingPhase: true,
       expectedRevision: 1,
     });
+    // A route may name a working phase such as Triage: the phase's own start decides whether a run starts.
     expect(reopened).toMatchObject({
       status: 200,
-      body: { intakeRoute: { on: ['work_item.reopened'], allowWorkingPhase: true, revision: 2 } },
+      body: { intakeRoute: { on: ['work_item.reopened'], target: { phaseKey: 'triage' }, revision: 2 } },
     });
     // A route that places new cards still can't name a terminal phase, whether it is created that way or narrowed to it.
     expect(
@@ -442,6 +438,42 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(
       await replicaA.send('PATCH', `${base}/${route.id}`, { on: ['work_item.created'], expectedRevision: 3 }),
     ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
+  });
+
+  it('accepts and ignores the retired allowWorkingPhase on create and edit, and never sends it back', async () => {
+    const { base, replicaA } = await setup();
+    const created = await replicaA.send('POST', base, {
+      name: 'Reopened back to Triage',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'triage' },
+      allowWorkingPhase: true,
+    });
+    expect(created).toMatchObject({ status: 201, body: { intakeRoute: { revision: 1 } } });
+    expect(created.body.intakeRoute).not.toHaveProperty('allowWorkingPhase');
+    const route = created.body.intakeRoute as Route;
+
+    // Sent alone it changes nothing: the route comes back at the same revision.
+    const alone = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      allowWorkingPhase: false,
+      expectedRevision: 1,
+    });
+    expect(alone).toMatchObject({ status: 200, body: { intakeRoute: { id: route.id, revision: 1 } } });
+    expect(alone.body.intakeRoute).not.toHaveProperty('allowWorkingPhase');
+    expect(
+      await replicaA.send('PATCH', `${base}/${route.id}`, { allowWorkingPhase: true, expectedRevision: 7 }),
+    ).toMatchObject({ status: 409, body: { error: 'revision_mismatch' } });
+
+    const renamed = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      name: 'Reopened issues are triaged again',
+      allowWorkingPhase: true,
+      expectedRevision: 1,
+    });
+    expect(renamed).toMatchObject({
+      status: 200,
+      body: { intakeRoute: { name: 'Reopened issues are triaged again', revision: 2 } },
+    });
+    expect(renamed.body.intakeRoute).not.toHaveProperty('allowWorkingPhase');
+    for (const listed of await list(replicaA.send, base)) expect(listed).not.toHaveProperty('allowWorkingPhase');
   });
 
   it('refuses a route that joins pull requests to their issue on any event but an arrival', async () => {

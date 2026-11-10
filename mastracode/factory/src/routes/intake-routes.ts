@@ -199,7 +199,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
       this.#route(contracts.intakeRouteCreate, async c => {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
-        const input = await this.#body(c, contracts.intakeRouteCreate.bodySchema);
+        const { allowWorkingPhase: _ignored, ...input } = await this.#body(c, contracts.intakeRouteCreate.bodySchema);
         await this.#checkTarget(scope, { target: input.target, on: input.on ?? DEFAULT_ROUTE_EVENTS });
         const route = await storage.createIntakeRoute(scope, input, scope.userId);
         await this.#audit(c, scope, 'created', [route]);
@@ -210,7 +210,23 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
         const id = this.#routeId(c);
-        const { expectedRevision, ...patch } = await this.#body(c, contracts.intakeRouteUpdate.bodySchema);
+        const {
+          expectedRevision,
+          allowWorkingPhase: _ignored,
+          ...patch
+        } = await this.#body(c, contracts.intakeRouteUpdate.bodySchema);
+        if (Object.values(patch).every(value => value === undefined)) {
+          // Only the ignored `allowWorkingPhase` was sent: nothing changes, the route comes back as it is.
+          const current = await storage.getIntakeRoute(scope, id);
+          if (!current) throw new Refusal(404, { error: 'intake_route_not_found' });
+          if (current.revision !== expectedRevision) {
+            throw new Refusal(409, {
+              error: 'revision_mismatch',
+              message: `Intake route "${current.name}" is at revision ${current.revision}, not ${expectedRevision}; reload it and try again.`,
+            });
+          }
+          return this.#respond(c, scope, current);
+        }
         if (patch.target || patch.on) {
           // Narrowing or widening `on` changes which targets are allowed, so check the route as it will be.
           const current = await storage.getIntakeRoute(scope, id);

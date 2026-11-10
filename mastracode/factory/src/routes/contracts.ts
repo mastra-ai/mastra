@@ -113,9 +113,12 @@ const intakeRouteFields = {
       const problem = routeEventsProblem(on, null);
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     }),
-  /** Lets an event move an existing card into a working phase, such as Triage. */
-  allowWorkingPhase: z.boolean(),
 };
+/**
+ * @deprecated Ignored and never stored: a route moves a card into any phase, and the phase's own
+ * `autoStart` decides whether its run starts. Accepted for one release so older clients keep working.
+ */
+const ignoredAllowWorkingPhase = z.boolean().optional();
 export const intakeRouteInputSchema = z
   .object({
     name: intakeRouteFields.name,
@@ -123,7 +126,7 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
+    allowWorkingPhase: ignoredAllowWorkingPhase,
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -134,7 +137,7 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
+    allowWorkingPhase: ignoredAllowWorkingPhase,
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -160,7 +163,6 @@ const intakeRouteSchema = z.object({
   when: intakeRouteWhenSchema.nullable(),
   target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
   on: z.array(z.enum(STATUS_EVENTS)),
-  allowWorkingPhase: z.boolean(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),

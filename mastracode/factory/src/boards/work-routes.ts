@@ -87,7 +87,6 @@ export const PULL_REQUEST_UPDATED_ROUTE: StoredIntakeRouteInput = {
   name: 'Pushes to a reviewed pull request re-review it',
   on: ['pull_request.synchronized'],
   target: { boardKey: 'work', phaseKey: 'pr-review' },
-  allowWorkingPhase: true,
 };
 
 /** A maintainer asking Factory to review a pull request again sends it to Review. */
@@ -95,7 +94,6 @@ export const PULL_REQUEST_REVIEW_REQUESTED_ROUTE: StoredIntakeRouteInput = {
   name: 'Requested reviews go to Review',
   on: ['pull_request.review_requested'],
   target: { boardKey: 'work', phaseKey: 'pr-review' },
-  allowWorkingPhase: true,
 };
 
 /**

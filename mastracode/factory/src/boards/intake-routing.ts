@@ -10,7 +10,6 @@ import { boardFlow, boardForWorkItem, hasPullRequest } from './semantics.js';
 export type IntakeRoutesReader = Pick<StoredBoardsStorage, 'listIntakeRoutes'>;
 
 type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'>;
-type EventRoute = IntakeRoute & Pick<StoredIntakeRouteRecord, 'allowWorkingPhase'>;
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
 export function placesNewCards(route: Pick<StoredIntakeRouteRecord, 'on'>): boolean {
@@ -200,12 +199,12 @@ export function routesHandleEvent(
  * leaves the card where it is.
  */
 export function resolveEventRoute(
-  routes: readonly EventRoute[],
+  routes: readonly IntakeRoute[],
   event: BoardEventFacts,
   cardFacts: RuleFacts,
   board: InstalledBoard,
   carriesPullRequest = false,
-): { phase: string; routeId: string; allowWorkingPhase: boolean } | undefined {
+): { phase: string; routeId: string } | undefined {
   const facts: RuleFacts = {
     ...cardFacts,
     'event.type': event.type,
@@ -216,7 +215,7 @@ export function resolveEventRoute(
     if (!evaluateRuleGroup(route.when, facts)) continue;
     const phase = route.target.phaseKey ?? board.initialPhase;
     if (board.phaseKind(phase) === undefined || !placementTakesCard(board, phase, facts, carriesPullRequest)) continue;
-    return { phase, routeId: route.id, allowWorkingPhase: route.allowWorkingPhase };
+    return { phase, routeId: route.id };
   }
   return undefined;
 }

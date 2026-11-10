@@ -65,7 +65,7 @@ export interface FactoryTransitionRequest {
    * may name any phase on the card's board regardless of the board's next phases; it enters a
    * working phase only when the route allows it.
    */
-  eventRoute?: { routeId: string; allowWorkingPhase: boolean };
+  eventRoute?: { routeId: string };
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -470,20 +470,6 @@ export class FactoryTransitionService {
         transitionId,
         'invalid_transition',
         `The ${board.name} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
-      );
-    }
-
-    if (
-      request.eventRoute &&
-      !request.eventRoute.allowWorkingPhase &&
-      fromStage !== request.stage &&
-      board.isWorking(request.stage)
-    ) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'approval_required',
-        `Intake route ${request.eventRoute.routeId} moves cards into ${board.phases[request.stage]?.name ?? request.stage}, a working phase, only when the route allows working phases.`,
       );
     }
 
