@@ -79,14 +79,15 @@ jobs:
           fi
 
           # Prints "<analyze> <notified> <checked_from>" for a run or attempt: analyze is failure,
-          # success, or ignored when it was cancelled or unreadable; notified is yes when its
-          # notify job passed, which means it read the alerts it was due to report; checked_from
-          # is when that notify job started, before it read the alerts (- when unknown).
+          # success, ignored when it was cancelled, or unreadable when its jobs could not be read;
+          # notified is yes when its notify job passed, which means it read the alerts it was due
+          # to report; checked_from is when that notify job started, before it read the alerts
+          # (- when unknown).
           run_state() {
             local jobs conclusions analyze=ignored notified=no checked_from
             if ! jobs=$(gh api --paginate "$1/jobs?per_page=100" \
               --jq '.jobs[] | "\(.name)\t\(.conclusion)\t\(.started_at // "-")"' 2>/dev/null); then
-              echo "ignored no -"
+              echo "unreadable no -"
               return 0
             fi
             conclusions=$(awk -F'\t' '$1 ~ /^Analyze/ {print $2}' <<< "$jobs")
@@ -109,14 +110,14 @@ jobs:
           for ((attempt = GITHUB_RUN_ATTEMPT - 1; attempt >= 1; attempt--)); do
             candidates+="$base/$GITHUB_RUN_ID/attempts/$attempt"$'\n'
           done
-          runs_read=true
+          history_read=true
           if runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/codeql.yml/runs" \
             -f branch=main -f status=completed -F per_page=30 \
             --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"$base/\(.id)\""); then
             candidates+="$runs"$'\n'
           else
             echo "::warning::Could not read earlier scans."
-            runs_read=false
+            history_read=false
           fi
 
           # The newest finished scan whose notify job passed gives the previous state, for failure
@@ -136,6 +137,13 @@ jobs:
             [ -n "$path" ] || continue
             earlier=yes
             read -r analyze notified checked_from <<< "$(run_state "$path")"
+            # A scan whose jobs could not be read may be the one that announced the current
+            # state, so the scans before it cannot stand in for it.
+            if [ "$analyze" = "unreadable" ]; then
+              echo "::warning::Could not read the jobs of $path."
+              history_read=false
+              break
+            fi
             case "$analyze" in success | failure) ;; *) continue ;; esac
             [ "$notified" = "yes" ] || continue
             previous=${previous:-$analyze}
@@ -145,14 +153,18 @@ jobs:
             fi
           done <<< "$candidates"
           if [ -z "$previous" ]; then
-            if [ "$runs_read" = "true" ]; then previous=none; else previous=unknown; fi
+            if [ "$history_read" = "true" ]; then previous=none; else previous=unknown; fi
           fi
           echo "Previous scan: $previous; earlier scans: $earlier; new alerts counted from: ${since:-n/a}; this scan: $RESULT"
 
-          # When this scan passed but its alerts could not be checked, this job fails so the
-          # next scan does not use this one as its cutoff and reports them instead.
+          # When earlier scans or this scan's alerts could not be read, this job fails so the
+          # next scan does not take this one as the announced state or the cutoff, and reports
+          # what this one may have missed.
           checked=true
           lines=()
+          if [ "$history_read" != "true" ]; then
+            checked=false
+          fi
           if [ "$RESULT" != "success" ]; then
             if [ "$previous" != "failure" ]; then
               lines+=(":rotating_light: The CodeQL scan of main failed. <$RUN_URL|View the run>.")
@@ -161,10 +173,9 @@ jobs:
             if [ "$previous" = "failure" ]; then
               lines+=(":white_check_mark: The CodeQL scan of main is passing again.")
             fi
-            if [ "$runs_read" != "true" ]; then
-              checked=false
-            # With no earlier scan to compare against, the first scan only sets the cutoff.
-            elif [ -n "$since" ] || [ "$earlier" = "yes" ]; then
+            # With no earlier scan to compare against, the first scan only sets the cutoff; with
+            # unreadable history this job already fails, so the next scan checks the alerts.
+            if [ "$history_read" = "true" ] && { [ -n "$since" ] || [ "$earlier" = "yes" ]; }; then
               if new=$(gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/code-scanning/alerts" \
                 -f ref=refs/heads/main -f state=open -f tool_name=CodeQL -F per_page=100 \
                 --jq ".[] | select(.created_at >= \"$since\") | .number"); then
