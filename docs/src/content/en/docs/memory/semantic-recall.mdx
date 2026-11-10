@@ -311,6 +311,8 @@ The default is 16,384 characters, about 4,096 tokens of English text, which fits
 
 When you don't set `maxChunkChars` and the embedder declares its input limit, Memory derives the chunk size from that limit. [FastEmbed](#using-fastembed-local) models declare their 512-token window, so they need no configuration.
 
+Each chunk row's ID comes from the message ID, so saving a message again replaces its rows. If you save a message again with shorter text through `memory.saveMessages()`, rows for chunks past the new end stay searchable until the message is updated with `memory.updateMessages()` or deleted.
+
 Set `maxChunkChars` on the `Memory` constructor. Memory options passed per request, such as `memory.options` in `agent.stream()`, don't change it, so API callers can't force many small chunks.
 
 ## Server-side embeddings
