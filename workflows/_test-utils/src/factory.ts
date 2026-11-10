@@ -590,6 +590,8 @@ export function createWorkflowTestSuite(config: WorkflowTestConfig) {
     const context: WorkflowTestContext = {
       createWorkflow: factory.createWorkflow,
       createStep: factory.createStep,
+      createTool: factory.createTool,
+      Agent: factory.Agent,
       mapVariable,
       cloneStep,
       cloneWorkflow,
