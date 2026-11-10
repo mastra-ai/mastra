@@ -102,6 +102,22 @@ function assertExperimentDeletionAvailable(): void {
 }
 
 /**
+ * `compareExperiments` only applies organizationId/projectId when core advertises
+ * `experiment-comparison-tenancy`. The server peer range still allows older cores
+ * that accept the arguments and ignore them, which would return another tenant's
+ * results. Scoped requests fail closed on those cores. Unscoped comparison is unchanged.
+ */
+function assertScopedExperimentComparisonAvailable(organizationId?: string, projectId?: string): void {
+  if (typeof organizationId !== 'string' && typeof projectId !== 'string') return;
+  if (!coreFeatures.has('experiment-comparison-tenancy')) {
+    throw new HTTPException(501, {
+      message:
+        'Scoped experiment comparison requires a newer @mastra/core that enforces organizationId and projectId. Upgrade @mastra/core alongside @mastra/server.',
+    });
+  }
+}
+
+/**
  * Recovers the caller-provided request context for a dataset item.
  *
  * Server adapters overwrite the body's `requestContext` field with the live
@@ -1303,18 +1319,22 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   path: '/datasets/:datasetId/compare',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   bodySchema: compareExperimentsBodySchema,
   responseSchema: comparisonResponseSchema,
   summary: 'Compare two to ten experiments',
   description: 'Compares two to ten experiments item by item against a baseline experiment',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, experimentIds, baselineId }) => {
+  handler: async ({ mastra, datasetId, experimentIds, baselineId, ...params }) => {
     assertDatasetsAvailable();
+    const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+    // Before any read: an older core would compare by id and ignore this scope.
+    assertScopedExperimentComparisonAvailable(organizationId, projectId);
     try {
       // Validate dataset exists
-      await mastra.datasets.get({ id: datasetId });
-      return await mastra.datasets.compareExperiments({ experimentIds, baselineId });
+      await mastra.datasets.get({ id: datasetId, organizationId, projectId });
+      return await mastra.datasets.compareExperiments({ experimentIds, baselineId, organizationId, projectId });
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });

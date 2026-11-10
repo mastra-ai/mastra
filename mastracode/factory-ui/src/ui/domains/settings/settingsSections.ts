@@ -9,10 +9,8 @@ export type SettingsSection =
   | 'connections'
   | 'repositories'
   | 'intake'
-  | 'board'
   | 'models'
   | 'memory'
-  | 'skills'
   | 'tools'
   | 'behavior'
   | 'debug';
@@ -24,10 +22,8 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   connections: 'Connections',
   repositories: 'Repositories',
   intake: 'Work Intake',
-  board: 'Boards',
   models: 'Models',
   memory: 'Memory',
-  skills: 'Skills',
   tools: 'Tools',
   behavior: 'Behavior',
   debug: 'Debug',

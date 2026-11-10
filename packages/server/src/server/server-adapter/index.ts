@@ -19,11 +19,13 @@ import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
+import { CustomRouteMatcher } from '../auth/custom-route-matcher';
 import {
   authorizeAuthenticatedUser,
   coreAuthMiddleware,
   findMatchingCustomRoute,
   isCustomRoutePublic,
+  isProtectedCustomRoute,
   pathMatchesPattern,
 } from '../auth/helpers';
 import {
@@ -521,6 +523,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         executionCtx?: ExecutionContext,
       ) => Promise<Response>)
     | null = null;
+  /** Mirrors the custom-route app's router so auth can ask which route a request runs. */
+  private customRouteMatcher: CustomRouteMatcher<{
+    method: string;
+    path: string;
+    handlerCount: number;
+    route: HonoCustomApiRoute;
+  }> | null = null;
 
   /**
    * Whether custom (non-schema) API routes were registered. Adapters use this
@@ -768,6 +777,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       request?: Request;
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
+      /** Overrides the server's custom route auth map for this check. */
+      customRouteAuthConfig?: Map<string, boolean>;
     },
   ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     // Determine which auth config to use based on request type
@@ -811,7 +822,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       getHeader: context.getHeader,
       mastra: this.mastra,
       authConfig: authConfig as any,
-      customRouteAuthConfig: this.customRouteAuthConfig,
+      customRouteAuthConfig: context.customRouteAuthConfig ?? this.customRouteAuthConfig,
       requestContext: context.requestContext,
       rawRequest:
         context.request ??
@@ -1200,6 +1211,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     });
 
     // Register each custom route
+    const matcherEntries: Array<{ method: string; path: string; handlerCount: number; route: HonoCustomApiRoute }> = [];
     for (const route of routes) {
       const handler =
         'handler' in route && route.handler
@@ -1215,6 +1227,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       }
 
       const allHandlers = [...middlewares, handler];
+      matcherEntries.push({ method: route.method, path: route.path, handlerCount: allHandlers.length, route });
       if (route.method === 'ALL') {
         app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
       } else {
@@ -1230,7 +1243,78 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // alive after the response is sent. Without this third arg, serverless
     // runtimes freeze the invocation on return and kill any in-flight work.
     this.customRouteHandler = async (request, env, executionCtx) => app.fetch(request, env, executionCtx);
+    this.customRouteMatcher = new CustomRouteMatcher(matcherEntries);
     return true;
+  }
+
+  /**
+   * Returns the custom route the custom-route app will run for `url` (the same URL
+   * passed to `handleCustomRouteRequest`), with its decoded path params, or
+   * undefined if none will.
+   */
+  protected matchCustomRoute(
+    url: string,
+    method: string,
+  ): { route: HonoCustomApiRoute; params: Record<string, string> } | undefined {
+    if (!this.customRouteMatcher) return undefined;
+    try {
+      const match = this.customRouteMatcher.matchUrl(url, method);
+      return match ? { route: match.entry.route, params: match.params } : undefined;
+    } catch {
+      // The custom-route app can't parse or route this request either.
+      return undefined;
+    }
+  }
+
+  /**
+   * Works out what auth applies to a request before it's forwarded to the
+   * custom-route app. The route that decides is the one the app will dispatch
+   * `dispatchUrl` to, not the route the outer framework matched, because the two
+   * routers can disagree on precedence, case, trailing slashes and encoding.
+   *
+   * `requestPath` is the path passed to `checkRouteAuth`. When the dispatched route
+   * requires auth, the returned `customRouteAuthConfig` marks that path protected so
+   * the auth middleware can't skip auth on it. `fallbackRoute` is used when the app
+   * won't dispatch the request (it 404s and nothing runs); pass the framework's own
+   * route when there is one so its auth still applies.
+   */
+  protected resolveCustomRouteAuth(
+    dispatchUrl: string,
+    method: string,
+    requestPath: string,
+    fallbackRoute?: HonoCustomApiRoute,
+  ): {
+    match?: { route: HonoCustomApiRoute; params: Record<string, string> };
+    requiresAuth: boolean;
+    serverRoute: ServerRoute;
+    customRouteAuthConfig?: Map<string, boolean>;
+  } {
+    const match = this.matchCustomRoute(dispatchUrl, method);
+    const route = match?.route ?? fallbackRoute;
+
+    const requiresAuth = route
+      ? (this.customRouteAuthConfig?.get(`${route.method}:${route.path}`) ?? route.requiresAuth !== false)
+      : isProtectedCustomRoute(requestPath, method, this.customRouteAuthConfig);
+
+    const serverRoute: ServerRoute = {
+      method: (route?.method ?? method) as any,
+      path: route?.path ?? requestPath,
+      responseType: 'json',
+      handler: async () => {},
+      // An explicit requiresAuth: true keeps its meaning; otherwise the auth middleware
+      // decides from the path, which the map below forces to protected.
+      requiresAuth: requiresAuth ? (route?.requiresAuth === true ? true : undefined) : false,
+      requiresPermission: route?.requiresPermission,
+      fga: route?.fga,
+    };
+
+    let customRouteAuthConfig: Map<string, boolean> | undefined;
+    if (requiresAuth) {
+      customRouteAuthConfig = new Map(this.customRouteAuthConfig ?? []);
+      customRouteAuthConfig.set(`${method.toUpperCase()}:${requestPath}`, true);
+    }
+
+    return { match, requiresAuth, serverRoute, customRouteAuthConfig };
   }
 
   /**

@@ -2,7 +2,6 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -987,25 +986,17 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       (this.app as ElysiaApp)[method](customNormalizedPath, async (ctx: any) => {
         const path = new URL(ctx.request.url).pathname;
         const requestMethod = ctx.request.method;
-        const matchedRoute = findMatchingCustomRoute(
-          path,
-          requestMethod,
-          this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
-        );
-        const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, requestMethod, this.customRouteAuthConfig);
+        // Check auth against the custom route the custom-route app will actually run for
+        // this URL, which can differ from the route Elysia matched.
+        const {
+          match: matchedRoute,
+          requiresAuth: shouldRunCustomRouteAuth,
+          serverRoute,
+          customRouteAuthConfig,
+        } = this.resolveCustomRouteAuth(ctx.request.url, requestMethod, path, route);
         const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
         if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
-          const serverRoute: ServerRoute = {
-            method: (matchedRoute?.route.method ?? requestMethod) as any,
-            path: matchedRoute?.route.path ?? path,
-            responseType: 'json',
-            handler: async () => {},
-            requiresAuth: matchedRoute?.route.requiresAuth,
-            requiresPermission: matchedRoute?.route.requiresPermission,
-            fga: matchedRoute?.route.fga,
-          };
-
           if (shouldRunCustomRouteAuth) {
             const authError = await this.checkRouteAuth(serverRoute, {
               path,
@@ -1015,6 +1006,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
               requestContext: ctx.requestContext,
               request: ctx.request,
               buildAuthorizeContext: () => ctx,
+              customRouteAuthConfig,
             });
 
             if (authError) {

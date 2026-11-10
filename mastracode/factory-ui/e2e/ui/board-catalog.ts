@@ -83,7 +83,14 @@ export function catalogInfo(board: InstalledBoard, extra: Partial<InstalledBoard
       title: phase.name,
       kind: phase.kind,
       nextPhases: [...phase.nextPhases],
-      ...(phase.kind === 'working' ? { context: phase.runner.context, role: phase.runner.context } : {}),
+      ...(phase.kind === 'working'
+        ? {
+            context: phase.runner.context,
+            role: phase.runner.context,
+            ...(phase.runner.skill ? { skill: phase.runner.skill } : {}),
+            ...(phase.runner.goal ? { goal: { ...phase.runner.goal } } : {}),
+          }
+        : {}),
       transitions: (board.transitions[id] ?? []).map(({ outcome, to }) => ({ outcome, to })),
     })),
     ...extra,

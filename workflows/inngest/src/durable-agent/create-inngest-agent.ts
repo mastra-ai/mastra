@@ -2288,8 +2288,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
       Object.defineProperty(output, 'fullStream', {
         configurable: true,
-        get() {
-          const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
+        get(this: typeof output) {
+          // `this` is the real instance (the destructurable proxy reads getters
+          // with its target as receiver); the proxy itself can't reach private fields.
+          const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
           return new ReadableStream<ChunkType<TOutput>>({
             async pull(controller) {
               let result: Awaited<ReturnType<typeof reader.read>>;

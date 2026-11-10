@@ -223,6 +223,9 @@ export class MastraAuthStudio
    */
   private pendingResponseHeaders = new WeakMap<Request, Record<string, string>>();
 
+  /** The request's current sealed cookie once a shared API call renewed it: the inbound one's refresh token is spent. */
+  private renewedSessionCookies = new WeakMap<Request, string>();
+
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
     const explicitSharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL;
@@ -843,6 +846,9 @@ export class MastraAuthStudio
       createdAt: new Date(),
     });
     this.pendingResponseHeaders.set(rawRequest, reissued);
+    // Later platform calls for this request must send the renewed session:
+    // the old one's refresh token is used up.
+    this.renewedSessionCookies.set(rawRequest, rotatedValue);
   }
 
   /**
@@ -857,6 +863,31 @@ export class MastraAuthStudio
     if (!headers) return undefined;
     this.pendingResponseHeaders.delete(rawRequest);
     return headers;
+  }
+
+  /**
+   * Call the shared API as the request's signed-in user. The shared API acts on the
+   * session's active organization, not the pinned one. A renewed session cookie is
+   * queued for {@link consumePendingResponseHeaders} and sent by later calls for the
+   * same request. Returns `null` when the request has no session.
+   */
+  async fetchAsRequestUser(request: Request, path: string, init: RequestInit = {}): Promise<Response | null> {
+    const sessionCookie = this.renewedSessionCookies.get(request) ?? this.getSessionIdFromRequest(request);
+    if (!sessionCookie) return null;
+    const headers = new Headers(init.headers);
+    headers.set('Cookie', `${COOKIE_NAME}=${sessionCookie}`);
+    const res = await fetch(`${this.sharedApiUrl}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal ?? AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
+    });
+    const rotatedCookie = this.readRotatedCookie(res, sessionCookie);
+    if (rotatedCookie) {
+      // The old cookie's refresh token is used up, so a user cached against it would fail the next refresh.
+      this.verifiedCredentials.delete(await this.verificationKey('cookie', sessionCookie));
+      this.forwardRotatedCookie(rotatedCookie, request);
+    }
+    return res;
   }
 
   /**

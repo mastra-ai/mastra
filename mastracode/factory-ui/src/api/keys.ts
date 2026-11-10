@@ -133,6 +133,7 @@ export const queryKeys = {
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
+  mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
   availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
@@ -212,3 +213,6 @@ export const queryKeys = {
       ...(limit === undefined ? [] : [limit]),
     ] as const,
 } as const;
+
+export const cardMoveMutationKey = (factoryProjectId: string | undefined) =>
+  ['factory', 'transition-work-item', factoryProjectId] as const;
