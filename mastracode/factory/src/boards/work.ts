@@ -261,7 +261,7 @@ export function openApprovedChangeRequest(context: FactoryToolResultRuleContext)
       `Self-review approved this work${head ? ` at branch head ${head}` : ''}. Open the ${changeRequest} now from that ` +
       `exact head; do not push new commits first (a new head needs another self-review). In the ${changeRequest} ` +
       "body, say in two or three plain sentences what changed and why, then include the self-review's checks table " +
-      'with the head SHA it tested, and its follow-ups. Add no other sections.' +
+      'with the head SHA it tested, its **Not run** note when present, and its follow-ups. Add no other sections.' +
       (summary ? `\n\nSelf-review report:\n${summary}` : '') +
       `\n\n${untrustedSourceReference(context.item)}`,
   } as const;
