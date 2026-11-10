@@ -140,6 +140,7 @@ Fill the placeholders as follows:
 - `<dots>` shows the rating at a glance. Severity uses four dots: `●○○○` low, `●●○○` medium, `●●●○` high, `●●●●` critical. Confidence, effort, and impact use three: `●○○` low, `●●○` medium, `●●●` high. Always follow the dots with the word.
 - Each rating reason is at most 12 words.
 - Keep everything else in the one collapsed **Details** block. Only the ratings table, the summary, the next step, and open questions stay visible. Every line in Details has to earn its place: cut anything a planner would not act on.
+- On GitHub, link every file or `file:line` reference to the code at the commit you investigated: `[`stream.ts:42`](https://github.com/<owner>/<repo>/blob/<full SHA>/src/stream.ts#L42)`. Use the full SHA, not a branch name, so the link keeps pointing at the code you read. Link issues, PRs, and commits you mention too.
 - Use no alerts or emoji, and no tables other than the ratings table.
 
 Severity guide:

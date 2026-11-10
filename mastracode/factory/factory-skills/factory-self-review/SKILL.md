@@ -44,7 +44,7 @@ Write the findings argument of the verdict call as Markdown the builder (on requ
 
 1. **Result** line: `Approved`, `Changes requested`, or `Verification incomplete`, followed by the full head SHA.
 2. **Checks on this head**: the same table format as the Factory test report in `factory-review` (Check / Result / Tests, ✅ Passed or ❌ Failed, no raw exit codes), with a `New tests on base code` row when you proved the tests catch the bug, and a one-line **Not run:** note when a planned check could not run.
-3. On request changes: a numbered list of discrete **Required changes**, each a blocking finding with a `file:line` pointer and the reason in one sentence. Each must be something the builder can act on in the next round.
+3. On request changes: a numbered list of discrete **Required changes**, each a blocking finding with a `file:line` pointer (linked to that line at the reviewed head when the repository is on GitHub or GitLab, since the report can end up in the change request body) and the reason in one sentence. Each must be something the builder can act on in the next round.
 4. **Follow-ups**: a separate list of non-blocking findings, one line each; omit it when there are none. They are never required work; on approve they carry into the change request body.
 5. On approve: the one-line adversarial check record.
 
