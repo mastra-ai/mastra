@@ -35,11 +35,10 @@ describe('agent memory storage diagnostics', () => {
     expect(memory!.storage).toBeDefined();
   });
 
-  it('still diagnoses genuinely missing storage for a standalone agent', async () => {
-    const agent = agentWithMemory('standalone-without-storage', new Memory());
-    const memory = await agent.getMemory();
+  it('explains direct storage configuration for bare memory without an agent', () => {
+    const memory = new Memory();
 
-    expect(() => memory!.storage).toThrow('Memory requires a storage provider');
-    expect(() => memory!.storage).toThrow('If this memory belongs to an agent that should inherit storage');
+    expect(() => memory.storage).toThrow('Memory requires a storage provider');
+    expect(() => memory.storage).toThrow('Standalone agents must configure storage directly on Memory');
   });
 });
