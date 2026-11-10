@@ -216,7 +216,7 @@ describe('session link', () => {
       view({
         state: state({ phase: 'completed', head: HEAD, session: SESSION }),
         repository: 'mastra-ai/mastra',
-        stats: { verdict: 'approved', reviewedHeadSha: HEAD },
+        stats: { verdict: 'approve', reviewedHeadSha: HEAD },
       }),
     );
     expect(done).toContain(`· [Factory session](${SESSION})</sub>`);

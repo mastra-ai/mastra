@@ -578,6 +578,12 @@ describe('GitHub subscription entry points', () => {
           expect.objectContaining({ body: `<!-- mastra-factory-triage -->\nFinal\n\n${footer}` }),
         );
       }
+      const quoted =
+        '<!-- mastra-factory-triage -->\nThe footer marker is `<!-- mastra-factory-session -->`.\n\nDetails';
+      await upsertFactoryTriageComment(authenticatedRequestContext(), { issueNumber: 7, body: quoted }, githubStub);
+      expect(mocks.upsertTriageComment).toHaveBeenLastCalledWith(
+        expect.objectContaining({ body: `${quoted}\n\n${footer}` }),
+      );
     } finally {
       vi.unstubAllEnvs();
     }

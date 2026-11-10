@@ -250,14 +250,15 @@ export async function unsubscribeCurrentSessionFromPullRequest(
 
 const SESSION_FOOTER_MARKER = '<!-- mastra-factory-session -->';
 
+const SESSION_FOOTER = new RegExp(`\n*${SESSION_FOOTER_MARKER}\\s*<sub>\\[Factory session\\]\\([^)\\s]*\\)</sub>\\s*$`);
+
 /**
  * The triage handoff with the link to the session that wrote it as its last
  * line. The host adds it, so every pending and final handoff carries it no
  * matter what the agent wrote; a footer already in the body is replaced.
  */
 export function withSessionFooter(body: string, sessionUrl: string | undefined): string {
-  const marker = body.indexOf(SESSION_FOOTER_MARKER);
-  const content = (marker < 0 ? body : body.slice(0, marker)).trimEnd();
+  const content = body.replace(SESSION_FOOTER, '').trimEnd();
   if (!sessionUrl) return content;
   return `${content}\n\n${SESSION_FOOTER_MARKER}\n<sub>[Factory session](${sessionUrl})</sub>\n`;
 }
