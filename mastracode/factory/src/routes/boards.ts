@@ -5,7 +5,7 @@
  * the built-in Work board and app boards in each project once, and they are edited under their own
  * key; their code behaviour stays attached, so an edit it can't honour is refused
  * (`code_behaviour`), and reset rewrites Factory's current definition at the next revision. They
- * can't be created over, and Work can't be deleted. The legacy Review board stays read-only. The
+ * can't be created over, and Work can't be deleted. The retired Review board's key is reserved. The
  * writes themselves are `BoardWrites`.
  */
 
@@ -16,7 +16,7 @@ import type { Context } from 'hono';
 import { BoardWriteError, BoardWrites, issueMessage } from '../boards/board-writes.js';
 import type { BoardWriter } from '../boards/board-writes.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
-import { boardDefinitionOf, codeBehaviourOf } from '../boards/stored-board.js';
+import { codeBehaviourOf } from '../boards/stored-board.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { StoredBoardScope, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -98,25 +98,6 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     const project = await this.deps.boards.describe(scope);
     const details = project.details.get(key);
     const code = this.deps.boards.codeRegistry.get(key);
-    const seed = this.deps.boards.seedFor(key);
-    if (code && !seed) {
-      const { description, ...definition } = boardDefinitionOf(code);
-      return c.json(
-        {
-          board: {
-            ...definition,
-            description: description ?? null,
-            revision: null,
-            source: details?.source ?? 'app',
-            editable: false,
-            codeBehaviour: codeBehaviourOf(code),
-            problems: details?.problems ?? [],
-          },
-          canEdit: false,
-        },
-        status,
-      );
-    }
     const row = await this.deps.storage.get(scope, key);
     if (!row) return c.json({ error: 'board_not_found', message: `Board "${key}" does not exist.` }, 404);
     // A board that failed to load, or a stored row its code board hides, is a project problem.

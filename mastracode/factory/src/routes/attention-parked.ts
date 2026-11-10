@@ -35,7 +35,7 @@ interface ReceiptedParkedSession {
   receipt: FactoryAttentionReceiptRecord | undefined;
 }
 
-function parkedRunLabel(toolName: string): string {
+export function parkedRunLabel(toolName: string): string {
   return toolName === 'submit_plan' ? 'Plan waiting for review' : 'Agent is waiting for an answer';
 }
 

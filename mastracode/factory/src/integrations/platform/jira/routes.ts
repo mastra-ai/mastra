@@ -257,7 +257,6 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
               selectedIds,
             })
           : null;
-        const intakeBoards = projectScope?.intakeBoards ?? null;
         const scopes = projectScope?.scopes ?? unfilteredJiraScopes(selectedIds);
         if (scopes.length === 0) {
           return c.json({ issues: [], nextCursor: null });
@@ -282,13 +281,12 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId || null,
           }));
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
+          if (factoryProjectId && projectScope && options.ingestFactoryIssues) {
             await options.ingestFactoryIssues({
               orgId: resolved.tenant.orgId,
               userId: resolved.tenant.userId,
               factoryProjectId,
               issues: issuePayload.map(issue => ({ ...issue, site: issue.site ?? null })),
-              intakeBoards,
             });
           }
           return c.json({ issues: issuePayload, nextCursor });
@@ -334,7 +332,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
           externalSource: { type: 'issue', externalId: issueRef },
         });
         const sourceId = dispatch?.sourceId;
-        if (!dispatch || !sourceId || !(sourceId in projectScope.intakeBoards)) {
+        if (!dispatch || !sourceId || !projectScope.sourceIds.includes(sourceId)) {
           return c.json({ error: 'issue_not_found' }, 404);
         }
 

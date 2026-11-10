@@ -9,50 +9,58 @@
      reads these names off `ds/tokens/fonts.ts`) and a later role cleanly replaces
      an earlier one.
 
-     500 is the weight ceiling for general application-shell roles: hierarchy
-     comes from size and tone. Factory card titles are the exception: their 550
-     and 600 weights preserve the existing emphasis of work-item and candidate
-     titles when those styles move into shared roles. */
+     Two weights carry the application shell: regular (465) for anything read,
+     strong (515) for anything that labels or heads something. Hierarchy comes
+     from size and tone, not more weights. Regular is 465 rather than 400
+     because 400 reads thin at UI sizes on a dark surface; 465/515 read most
+     naturally in Mona Sans when compared side by side with 450/500 and
+     475/525. `font-normal` and `font-medium` resolve to the same two
+     tokens, so inline emphasis stays on the scale. Factory card titles are the
+     exception: their 550 and 600 weights preserve the existing emphasis of
+     work-item and candidate titles. */
+  --font-weight-normal: 465;
+  --font-weight-medium: 515;
+
   /* Large welcome pages share a responsive headline and introduction. */
   --text-hero: clamp(2rem, 3.9vw, 3.25rem);
   --text-hero--line-height: 110%;
-  --text-hero--font-weight: 500;
+  --text-hero--font-weight: var(--font-weight-medium);
   --text-hero--letter-spacing: 0.01em;
 
   --text-lead: clamp(1rem, 1.5vw, 1.25rem);
   --text-lead--line-height: 140%;
-  --text-lead--font-weight: 400;
+  --text-lead--font-weight: var(--font-weight-normal);
   --text-lead--letter-spacing: 0.01em;
 
   --text-display-lg: 1.75rem;
   --text-display-lg--line-height: 127%;
-  --text-display-lg--font-weight: 500;
+  --text-display-lg--font-weight: var(--font-weight-medium);
   --text-display-lg--letter-spacing: -0.01em;
 
   --text-display: 1.375rem; /* 22px — onboarding hero */
   --text-display--line-height: 127%;
-  --text-display--font-weight: 500;
+  --text-display--font-weight: var(--font-weight-medium);
   --text-display--letter-spacing: -0.01em;
 
   --text-title: 1.125rem; /* 18px — page title */
   --text-title--line-height: 133%;
-  --text-title--font-weight: 500;
+  --text-title--font-weight: var(--font-weight-medium);
 
   --text-heading: 1rem; /* 16px — page and panel headings */
   --text-heading--line-height: 150%;
-  --text-heading--font-weight: 500;
+  --text-heading--font-weight: var(--font-weight-medium);
 
   --text-subheading: 0.875rem; /* 14px — sections and cards inside a page */
   --text-subheading--line-height: 143%;
-  --text-subheading--font-weight: 500;
+  --text-subheading--font-weight: var(--font-weight-medium);
 
   --text-body: 0.875rem; /* 14px — prose and descriptions */
   --text-body--line-height: 143%;
-  --text-body--font-weight: 400;
+  --text-body--font-weight: var(--font-weight-normal);
 
   --text-label: 0.8125rem; /* 13px — control labels, nav items, buttons */
   --text-label--line-height: 150%;
-  --text-label--font-weight: 500;
+  --text-label--font-weight: var(--font-weight-medium);
 
   --text-card-title: 0.8125rem;
   --text-card-title--line-height: 150%;
@@ -71,31 +79,31 @@
 
   --text-body-sm: 0.8125rem; /* 13px — dense body: table cells and field values */
   --text-body-sm--line-height: 150%;
-  --text-body-sm--font-weight: 400;
+  --text-body-sm--font-weight: var(--font-weight-normal);
 
-  /* Menus use a weight between body copy and button labels, with their own
-     tracking so they do not inherit the trigger's text style. */
+  /* Menus read at the regular weight, with their own tracking so they do not
+     inherit the trigger's text style. */
   --text-menu: 0.8125rem;
   --text-menu--line-height: 1.25rem;
-  --text-menu--font-weight: 450;
+  --text-menu--font-weight: var(--font-weight-normal);
   --text-menu--letter-spacing: -0.01em;
 
   --text-column: 0.75rem; /* 12px — column headers and small strong labels */
   --text-column--line-height: 150%;
-  --text-column--font-weight: 500;
+  --text-column--font-weight: var(--font-weight-medium);
 
   --text-caption: 0.75rem; /* 12px — secondary and supporting copy */
   --text-caption--line-height: 150%;
-  --text-caption--font-weight: 400;
+  --text-caption--font-weight: var(--font-weight-normal);
 
   --text-eyebrow: 0.75rem; /* 12px — small-caps section labels */
   --text-eyebrow--line-height: 150%;
-  --text-eyebrow--font-weight: 500;
+  --text-eyebrow--font-weight: var(--font-weight-medium);
   --text-eyebrow--letter-spacing: 0.08em;
 
   --text-meta: 0.625rem; /* 10px — badges, keycaps, micro labels */
   --text-meta--line-height: 160%;
-  --text-meta--font-weight: 500;
+  --text-meta--font-weight: var(--font-weight-medium);
   --text-meta--letter-spacing: 0.02em;
 
   /*
