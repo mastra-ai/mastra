@@ -1,32 +1,28 @@
 name: CodeQL
 
 # Replaces GitHub's "default setup" scan, which ran on every PR and was the longest
-# check (median ~25 min). The scan now runs on the Changesets release PR and weekly.
+# check (median ~25 min). PRs are no longer scanned: a PR scan only reports alerts on
+# the lines that PR changed, while scans of main are what fill the Security tab. This
+# scans main twice a day (and on demand) and posts to Slack when the scan finds new
+# open alerts on main, or when the scan itself fails.
 # Default setup must be switched off in Settings > Code security before this merges;
 # GitHub refuses to run both.
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   schedule:
-    - cron: '23 5 * * 1'
+    - cron: '41 3 * * *'
+    - cron: '41 15 * * *'
+  workflow_dispatch:
 
 concurrency:
-  group: codeql-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: codeql-${{ github.ref }}
 
 permissions: {}
 
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    # A fork can pick any branch name, so the release PR head must also live in this repository
-    # (same guard as prebuild.yml and lint.yml).
-    if: >-
-      github.repository == 'mastra-ai/mastra' &&
-      (github.event_name == 'schedule' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      startsWith(github.head_ref, 'changeset-release/')))
+    if: github.repository == 'mastra-ai/mastra'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -55,3 +51,108 @@ jobs:
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           category: /language:${{ matrix.language }}
+
+  notify:
+    name: Notify Slack of CodeQL results
+    needs: analyze
+    # Only scans of main in this repository alert; a manual run on another branch does not.
+    if: always() && github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      security-events: read
+    steps:
+      - name: Compare with the previous scan of main
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.analyze.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ALERTS_URL: ${{ github.server_url }}/${{ github.repository }}/security/code-scanning?query=is%3Aopen+branch%3Amain+tool%3ACodeQL
+        run: |
+          # A cancelled scan was stopped by hand; leave the alert state unchanged.
+          if [ "$RESULT" = "cancelled" ] || [ "$RESULT" = "skipped" ]; then
+            echo "Scan was $RESULT; not alerting."
+            exit 0
+          fi
+
+          # Prints failure, success, or nothing when the run was cancelled or unreadable.
+          job_state() {
+            local conclusions
+            conclusions=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$1/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name | startswith("Analyze")) | .conclusion' 2>/dev/null) || return 0
+            if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
+              echo failure
+            elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
+              echo success
+            fi
+          }
+
+          # The newest earlier scan of main that finished gives both the previous state and the
+          # cutoff for "new": alerts created after it ended were created by this scan.
+          previous=''
+          since=''
+          if ! runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/codeql.yml/runs" \
+            -f branch=main -f status=completed -F per_page=30 \
+            --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"\(.id) \(.updated_at)\""); then
+            echo "::warning::Could not read earlier scans; alerting on failure only."
+            previous=unknown
+          fi
+          while read -r id ended; do
+            [ -n "$id" ] || continue
+            previous=$(job_state "$id")
+            if [ -n "$previous" ]; then
+              since=$ended
+              break
+            fi
+          done <<< "$runs"
+          previous=${previous:-none}
+          echo "Previous scan: $previous (ended ${since:-n/a}); this scan: $RESULT"
+
+          lines=()
+          if [ "$RESULT" != "success" ]; then
+            if [ "$previous" != "failure" ]; then
+              lines+=(":rotating_light: The CodeQL scan of main failed. <$RUN_URL|View the run>.")
+            fi
+          else
+            if [ "$previous" = "failure" ]; then
+              lines+=(":white_check_mark: The CodeQL scan of main is passing again.")
+            fi
+            # With no earlier scan there is nothing to compare against, so the first scan never alerts.
+            if [ -n "$since" ]; then
+              if new=$(gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/code-scanning/alerts" \
+                -f ref=refs/heads/main -f state=open -f tool_name=CodeQL -F per_page=100 \
+                --jq ".[] | select(.created_at > \"$since\") | .number"); then
+                count=$(grep -c . <<< "$new" || true)
+                echo "New open alerts on main since $since: $count"
+                if [ "$count" -gt 0 ]; then
+                  lines+=(":rotating_light: CodeQL found $count new open alert(s) on main. <$ALERTS_URL|Review them>.")
+                fi
+              else
+                echo "::warning::Could not read code scanning alerts; not reporting new alerts."
+              fi
+            fi
+          fi
+
+          if [ "${#lines[@]}" -eq 0 ]; then
+            echo "No change since the previous scan; not alerting."
+            exit 0
+          fi
+          printf 'text=%s\n' "${lines[*]}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Slack action
+        if: steps.state.outputs.text != ''
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - name: Post to Slack
+        if: steps.state.outputs.text != ''
+        uses: ./.github/actions/slack-alert
+        with:
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          text: ${{ steps.state.outputs.text }}
