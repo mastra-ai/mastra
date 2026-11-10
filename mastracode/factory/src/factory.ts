@@ -643,7 +643,10 @@ export class MastraFactory {
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
    * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use` when cards
-   * sit in a phase it removes, `project_not_found`).
+   * sit in a phase it removes, `board_in_use` when the key is `review` and the retired Review board
+   * still has an open card in the project, `project_not_found`). Projects are written one at a
+   * time and the call stops at the first one that refuses: the projects before it keep the board,
+   * so fix what was refused and run it again.
    * Available after `prepare()`.
    *
    * @example

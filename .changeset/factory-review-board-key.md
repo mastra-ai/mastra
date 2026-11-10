@@ -17,3 +17,5 @@ await factory.upsertBoard(
   { projects: 'all' },
 );
 ```
+
+With `projects: 'all'` the call stops at the first project where the retired Review board still has an open card. The projects before it keep the board, so finish or move those cards and run it again.
