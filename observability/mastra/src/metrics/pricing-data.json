@@ -19912,9 +19912,9 @@
       },
       "minimax/MiniMax-M3.1-Flash": {
         "cost": {
-          "input": 0.075,
-          "output": 0.3,
-          "cache_read": 0.0075
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.015
         }
       },
       "mistral/codestral-2508": {
@@ -20237,25 +20237,11 @@
           "cache_read": 0.1
         }
       },
-      "nebius/deepseek-ai/DeepSeek-V4-Flash-0731": {
-        "cost": {
-          "input": 0.14,
-          "output": 0.28,
-          "cache_read": 0.14
-        }
-      },
       "nebius/deepseek-ai/DeepSeek-V4-Pro-0813": {
         "cost": {
           "input": 1.32,
           "output": 3.96,
           "cache_read": 1.32
-        }
-      },
-      "nebius/deepseek-ai/DeepSeek-V4.1-Flash": {
-        "cost": {
-          "input": 0.3,
-          "output": 1.2,
-          "cache_read": 0.3
         }
       },
       "nebius/deepseek-ai/DeepSeek-V4.1-Flash-1017": {
@@ -29954,9 +29940,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.04,
-          "output": 0.15,
-          "cache_read": 0.01
+          "input": 0.017,
+          "output": 0.052,
+          "cache_read": 0.009
         }
       },
       "google/gemma-4-31b-it": {
@@ -30150,9 +30136,9 @@
       },
       "meta-llama/llama-4-maverick": {
         "cost": {
-          "input": 0.1875,
-          "output": 0.6525,
-          "cache_read": 0.05
+          "input": 0.35,
+          "output": 1,
+          "cache_read": 0.17
         }
       },
       "meta-llama/llama-4-scout": {
@@ -30492,6 +30478,13 @@
           "input": 0.075,
           "output": 0.25,
           "cache_read": 0.015
+        }
+      },
+      "nex-agi/nex-n2.6": {
+        "cost": {
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.03
         }
       },
       "nousresearch/hermes-4-405b": {
@@ -31895,7 +31888,7 @@
       "~moonshotai/kimi-latest": {
         "cost": {
           "input": 0.1824,
-          "output": 10.5572,
+          "output": 9.3388,
           "cache_read": 0.18
         }
       },
@@ -32324,6 +32317,13 @@
           "input": 0.076,
           "output": 0.153,
           "cache_read": 0.014
+        }
+      },
+      "deepseek-v4-flash-0731": {
+        "cost": {
+          "input": 0.44,
+          "output": 1.32,
+          "cache_read": 0.04
         }
       },
       "deepseek-v4-pro": {
@@ -34828,6 +34828,13 @@
           "cache_read": 0.1
         }
       },
+      "canopywave/deepseek-v4-flash-0731": {
+        "cost": {
+          "input": 0.44,
+          "output": 1.32,
+          "cache_read": 0.04
+        }
+      },
       "canopywave/glm-5.2": {
         "cost": {
           "input": 1.4,
@@ -36346,6 +36353,13 @@
           "input": 3,
           "output": 15,
           "cache_read": 0.3
+        }
+      },
+      "runware/kimi-k3.1-pro": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.2
         }
       },
       "sakana/fugu-max": {
@@ -39721,6 +39735,29 @@
   },
   "meta": {
     "models": {
+      "muse-ember-1.0": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.004,
+          "tiers": [
+            {
+              "input": 0.3,
+              "output": 1.5,
+              "cache_read": 0.012,
+              "tier": {
+                "type": "context",
+                "size": 200000
+              }
+            }
+          ],
+          "context_over_200k": {
+            "input": 0.3,
+            "output": 1.5,
+            "cache_read": 0.012
+          }
+        }
+      },
       "muse-spark-1.1": {
         "cost": {
           "input": 1.25,
@@ -41391,20 +41428,6 @@
           "cache_read": 1.75
         }
       },
-      "TEE/qwen2.5-vl-72b-instruct": {
-        "cost": {
-          "input": 0.7,
-          "output": 0.7,
-          "cache_read": 0.35
-        }
-      },
-      "TEE/qwen3.5-397b-a17b": {
-        "cost": {
-          "input": 0.55,
-          "output": 3.5,
-          "cache_read": 0.225
-        }
-      },
       "TEE/qwen3.6-27b": {
         "cost": {
           "input": 0.32,
@@ -41664,6 +41687,14 @@
           "cache_write": 12.5
         }
       },
+      "anthropic/claude-fable-5.2": {
+        "cost": {
+          "input": 10,
+          "output": 50,
+          "cache_read": 0.25,
+          "cache_write": 12.5
+        }
+      },
       "anthropic/claude-fable-latest": {
         "cost": {
           "input": 10,
@@ -41676,14 +41707,16 @@
         "cost": {
           "input": 1,
           "output": 5,
-          "cache_read": 0.1
+          "cache_read": 0.1,
+          "cache_write": 1.25
         }
       },
       "anthropic/claude-haiku-4.5:thinking": {
         "cost": {
           "input": 1,
           "output": 5,
-          "cache_read": 0.1
+          "cache_read": 0.1,
+          "cache_write": 1.25
         }
       },
       "anthropic/claude-haiku-5.5": {
@@ -41730,112 +41763,128 @@
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.1:thinking": {
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.1:thinking:1024": {
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.1:thinking:32768": {
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.1:thinking:8192": {
         "cost": {
           "input": 15,
           "output": 75,
-          "cache_read": 1.5
+          "cache_read": 1.5,
+          "cache_write": 18.75
         }
       },
       "anthropic/claude-opus-4.5": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.5:thinking": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6:thinking": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6:thinking:low": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6:thinking:max": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.6:thinking:medium": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.7": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.7:thinking": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.8": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-4.8:thinking": {
         "cost": {
           "input": 5,
           "output": 25,
-          "cache_read": 0.5
+          "cache_read": 0.5,
+          "cache_write": 6.25
         }
       },
       "anthropic/claude-opus-5": {
@@ -41866,28 +41915,32 @@
         "cost": {
           "input": 3,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.3,
+          "cache_write": 3.75
         }
       },
       "anthropic/claude-sonnet-4.5:thinking": {
         "cost": {
           "input": 3,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.3,
+          "cache_write": 3.75
         }
       },
       "anthropic/claude-sonnet-4.6": {
         "cost": {
           "input": 3,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.3,
+          "cache_write": 3.75
         }
       },
       "anthropic/claude-sonnet-4.6:thinking": {
         "cost": {
           "input": 3,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.3,
+          "cache_write": 3.75
         }
       },
       "anthropic/claude-sonnet-5": {
@@ -42759,9 +42812,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.034,
-          "output": 0.102,
-          "cache_read": 0.017
+          "input": 0.037,
+          "output": 0.11,
+          "cache_read": 0.018
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42773,9 +42826,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.034,
-          "output": 0.102,
-          "cache_read": 0.017
+          "input": 0.037,
+          "output": 0.11,
+          "cache_read": 0.018
         }
       },
       "google/gemma-4-31b-it": {
@@ -43073,8 +43126,8 @@
       },
       "meta-llama/llama-4-maverick": {
         "cost": {
-          "input": 0.1875,
-          "output": 0.6525,
+          "input": 0.15,
+          "output": 0.6,
           "cache_read": 0.05
         }
       },
@@ -44416,14 +44469,16 @@
         "cost": {
           "input": 0.4,
           "output": 2.4,
-          "cache_read": 0.04
+          "cache_read": 0.04,
+          "cache_write": 0.5
         }
       },
       "qwen/qwen3.5-plus:thinking": {
         "cost": {
           "input": 0.4,
           "output": 2.4,
-          "cache_read": 0.04
+          "cache_read": 0.04,
+          "cache_write": 0.5
         }
       },
       "qwen/qwen3.6-27b": {
@@ -44846,9 +44901,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -45188,9 +45243,9 @@
       },
       "z-ai/glm-4.6:thinking": {
         "cost": {
-          "input": 0.5,
-          "output": 2,
-          "cache_read": 0.1
+          "input": 0.55,
+          "output": 2.2,
+          "cache_read": 0.11
         }
       },
       "z-ai/glm-4.6v": {
@@ -52904,9 +52959,9 @@
       },
       "minimax/minimax-m3.1-flash": {
         "cost": {
-          "input": 0.075,
-          "output": 0.3,
-          "cache_read": 0.0075
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.015
         }
       },
       "mistralai/codestral-2508": {
@@ -53135,6 +53190,13 @@
           "input": 0.075,
           "output": 0.25,
           "cache_read": 0.015
+        }
+      },
+      "nex-agi/nex-n2.6": {
+        "cost": {
+          "input": 0.12,
+          "output": 0.4,
+          "cache_read": 0.024
         }
       },
       "nousresearch/hermes-4-405b": {
@@ -55156,7 +55218,7 @@
       "~moonshotai/kimi-latest": {
         "cost": {
           "input": 0.1824,
-          "output": 10.5572,
+          "output": 9.3388,
           "cache_read": 0.18
         }
       },

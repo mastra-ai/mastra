@@ -105,31 +105,10 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
+    "deepseek-ai/DeepSeek-V4-Pro": [
       {
-        "type": "toggle"
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-R1": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Pro/zai-org/GLM-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "tencent/Hunyuan-A13B-Instruct": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V3.1-Terminus": [
@@ -137,10 +116,9 @@
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
+    "deepseek-ai/DeepSeek-V3.2": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-V4-Flash": [
@@ -156,26 +134,7 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.5-27B": [
+    "Qwen/Qwen3-32B": [
       {
         "type": "toggle"
       },
@@ -192,17 +151,47 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
+    "Qwen/Qwen3.5-9B": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-9B": [
+    "Qwen/Qwen3.5-122B-A10B": [
       {
         "type": "toggle"
       },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.6-27B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-4B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -229,7 +218,7 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-32B": [
+    "Qwen/Qwen3.5-27B": [
       {
         "type": "toggle"
       },
@@ -239,9 +228,13 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-122B-A10B": [
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       },
       {
         "type": "budget_tokens",
@@ -259,30 +252,31 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-4B": [
+    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-V3.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-R1": [
       {
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.6-27B": [
+    "Pro/zai-org/GLM-5": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "tencent/Hunyuan-A13B-Instruct": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "zai-org/GLM-5.3": [
@@ -300,6 +294,12 @@
     "zai-org/GLM-4.5V": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
