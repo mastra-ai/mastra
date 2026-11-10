@@ -111,14 +111,14 @@ describe('board announcements', () => {
     expect(announced).toEqual([SCOPE]);
   });
 
-  it('stays quiet as a waiting decision is claimed, then announces its failure and its completion', async () => {
+  it('announces a decision as it is claimed, fails, is claimed again and completes', async () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);
     await queueDecision(storage, workItemId, 'run');
     announced.length = 0;
 
     const claimed = await claim(storage);
-    expect(announced).toEqual([]);
+    expect(announced).toEqual([SCOPE]);
 
     await storage.failDeferredDecision({
       ...leaseOf(claimed),
@@ -128,12 +128,12 @@ describe('board announcements', () => {
       failureCode: 'session_unavailable',
       terminal: false,
     });
-    expect(announced).toEqual([SCOPE]);
+    expect(announced).toEqual([SCOPE, SCOPE]);
 
     const reclaimed = await claim(storage);
-    announced.length = 0;
+    expect(announced).toEqual([SCOPE, SCOPE, SCOPE]);
     await storage.completeDeferredDecision(leaseOf(reclaimed), NOW);
-    expect(announced).toEqual([SCOPE]);
+    expect(announced).toEqual([SCOPE, SCOPE, SCOPE, SCOPE]);
   });
 
   it('keeps a lease renewal silent: nothing a board shows moved', async () => {
@@ -149,7 +149,8 @@ describe('board announcements', () => {
     expect(announced).toEqual([]);
   });
 
-  it('keeps a route move waiting on its card run silent, yet still wakes the dispatcher for its next try', async () => {
+  // The rules page shows a claimed decision as running, so a read taken while it was claimed must be corrected.
+  it('announces a route move handed back to wait on its card run, and wakes the dispatcher for its next try', async () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);
     await queueDecision(storage, workItemId, 'close', routeClose('close'));
@@ -161,28 +162,8 @@ describe('board announcements', () => {
     const postponed = await storage.postponeDeferredDecision(leaseOf(claimed), new Date(NOW.getTime() + 10_000), NOW);
 
     expect(postponed?.status).toBe('pending');
-    expect(announced).toEqual([]);
+    expect(announced).toEqual([SCOPE, SCOPE]);
     expect(wakes).toEqual([SCOPE]);
-  });
-
-  it('announces a decision claimed again after a failure, since its retry warning clears', async () => {
-    const { storage, announced } = await makeStorage();
-    const workItemId = await seedWorkItem(storage);
-    await queueDecision(storage, workItemId, 'retry');
-    const claimed = await claim(storage);
-    await storage.failDeferredDecision({
-      ...leaseOf(claimed),
-      now: NOW,
-      availableAt: NOW,
-      lastError: 'nope',
-      failureCode: 'session_unavailable',
-      terminal: false,
-    });
-    announced.length = 0;
-
-    await claim(storage);
-
-    expect(announced).toEqual([SCOPE]);
   });
 
   it('announces a run parked for approval, then its approval', async () => {

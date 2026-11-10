@@ -44,12 +44,12 @@ const DECISIONS = 'factory_deferred_decisions';
 export const DECISION_TABLES: ReadonlySet<string> = new Set([DECISIONS]);
 
 /**
- * Pending or leased, a decision reads the same on a board: it is waiting to run. Claiming it, renewing
- * its lease every few seconds and handing it back therefore show nothing, and report nothing.
+ * A decision that stays leased shows the same everywhere: only its lease moved. Renewing that lease
+ * every few seconds therefore reports nothing; every other decision write does.
  */
-function waitsToRun(collection: string, row: unknown): boolean {
+function isLeased(collection: string, row: unknown): boolean {
   if (collection !== DECISIONS || typeof row !== 'object' || row === null || !('status' in row)) return false;
-  return row.status === 'pending' || row.status === 'leased';
+  return row.status === 'leased';
 }
 
 const scopeKey = (scope: BoardScope) => `${scope.orgId}\u0000${scope.factoryProjectId ?? ''}`;
@@ -88,21 +88,21 @@ export function trackBoardWrites(
         case 'updateAtomic':
           return async (collection: string, where: unknown, updater: (row: unknown) => unknown, ...args: unknown[]) => {
             let patched = false;
-            let waited = false;
+            let wasLeased = false;
             const row = await value.call(
               target,
               collection,
               where,
               async (current: unknown) => {
-                waited = waitsToRun(collection, current);
+                wasLeased = isLeased(collection, current);
                 const patch = await updater(current);
                 patched = patch != null;
                 return patch;
               },
               ...args,
             );
-            const stillWaits = waited && waitsToRun(collection, row);
-            if (tables.has(collection) && patched && !stillWaits) await report(scopeOfRow(row));
+            const leaseOnly = wasLeased && isLeased(collection, row);
+            if (tables.has(collection) && patched && !leaseOnly) await report(scopeOfRow(row));
             return row;
           };
         case 'insertOne':
