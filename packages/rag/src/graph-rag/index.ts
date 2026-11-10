@@ -129,8 +129,8 @@ export class GraphRAG {
   /**
    * Rebuild a GraphRAG instance from a snapshot produced by `serialize()`.
    *
-   * @throws if the snapshot version is unsupported, a node embedding does not
-   * match the snapshot dimension, or an edge references an unknown node.
+   * @throws if the snapshot version is unsupported, a node ID is duplicated,
+   * a node embedding does not match the snapshot dimension, or an edge references an unknown node.
    */
   static deserialize(snapshot: GraphRAGSnapshot): GraphRAG {
     if (snapshot?.version !== GRAPH_RAG_SNAPSHOT_VERSION) {
@@ -140,6 +140,9 @@ export class GraphRAG {
     const graph = new GraphRAG(snapshot.dimension, snapshot.threshold);
 
     for (const node of snapshot.nodes ?? []) {
+      if (graph.nodes.has(node.id)) {
+        throw new Error(`Duplicate node id in snapshot: ${node.id}`);
+      }
       // Route through addNode so embedding presence and dimension are validated
       // at load time rather than failing later inside query().
       graph.addNode({

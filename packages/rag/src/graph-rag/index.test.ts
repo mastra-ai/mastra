@@ -470,6 +470,23 @@ describe('GraphRAG', () => {
       expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Node must have an embedding');
     });
 
+    it('should reject duplicate snapshot node IDs instead of replacing the original node (#29689)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: 'a', content: 'Original', embedding: [1, 0] });
+      const snapshot = graph.serialize();
+      snapshot.nodes.push({ id: 'a', content: 'Replacement', embedding: [0, 1] });
+
+      expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Duplicate node id in snapshot: a');
+    });
+
+    it('should still allow updating an existing node through addNode', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: 'a', content: 'Original', embedding: [1, 0] });
+      graph.addNode({ id: 'a', content: 'Replacement', embedding: [0, 1] });
+
+      expect(graph.getNodes()).toEqual([{ id: 'a', content: 'Replacement', embedding: [0, 1] }]);
+    });
+
     it('should reject an edge referencing an unknown node', () => {
       const snapshot = buildGraph().serialize();
       snapshot.edges.push({ source: '0', target: 'missing', weight: 1, type: 'semantic' });
