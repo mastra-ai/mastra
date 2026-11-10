@@ -22,10 +22,19 @@ import { SettingsSubsection } from './SettingsSubsection';
 
 const WORK_BOARD = 'work';
 const MAX_INSTRUCTIONS = 1000;
+const MAX_OBJECTIVE = 2000;
+const MAX_GOAL_RUNS = 50;
 const NO_SKILL = '__none__';
 
 type CardRule = NonNullable<StoredPhaseInfo['autoStartWhen']>;
 type CodeBehaviour = NonNullable<StoredBoardInfo['codeBehaviour']>[string];
+type PhaseTool = NonNullable<StoredPhaseInfo['tools']>[number];
+
+/** The Factory tools a phase can grant the session working its cards. */
+const PHASE_TOOLS: { id: PhaseTool; label: string }[] = [
+  { id: 'factory_record_review_verdict', label: 'Record a review verdict' },
+  { id: 'factory_review_source', label: 'Review the source of a change request' },
+];
 
 /** The card facts a phase rule can test (`CARD_RULE_FIELDS`), as the rule builder's field tree. */
 const CARD_FACTS: RuleBuilderProps['schema'] = {
@@ -38,6 +47,7 @@ const CARD_FACTS: RuleBuilderProps['schema'] = {
         labels: { type: 'string', title: 'Labels' },
         title: { type: 'string', title: 'Title' },
         author: { type: 'string', title: 'Author' },
+        pullRequest: { type: 'number', title: 'Open pull request' },
       },
     },
     author: { type: 'object', title: 'Author', properties: { trusted: { type: 'boolean', title: 'Trusted' } } },
@@ -214,6 +224,11 @@ function PhaseEditor({
   const required = new Set(code?.requiredNextPhases ?? []);
   const instructions = phase.runner?.instructions ?? '';
   const exitToolId = phase.exitTool?.id ?? '';
+  const goal = phase.runner?.goal;
+  const objective = goal?.objective ?? '';
+  const tools = phase.tools ?? [];
+  const skillOptions =
+    phase.runner?.skill && !skills.includes(phase.runner.skill) ? [phase.runner.skill, ...skills] : skills;
   const setRunner = (runner: Partial<NonNullable<StoredPhaseInfo['runner']>>) => {
     const merged = { ...phase.runner, ...runner };
     const cleaned = Object.fromEntries(Object.entries(merged).filter(([, value]) => value != null && value !== ''));
@@ -231,14 +246,7 @@ function PhaseEditor({
             {phase.key}
           </Txt>
           <Badge>{phase.kind}</Badge>
-          {code?.handlers && <Badge>Code behaviour</Badge>}
         </div>
-        {code?.handlers && (
-          <Txt as="p" variant="caption" tone="muted">
-            Factory runs this phase&apos;s work in code, so its runner context, skill and exit tool are fixed, and so
-            are the moves code makes from it. Its instructions, automation and other next phases are yours to change.
-          </Txt>
-        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field>
             <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
@@ -267,15 +275,15 @@ function PhaseEditor({
                 <FieldLabel htmlFor={`${id}-skill`}>Skill</FieldLabel>
                 <Select
                   value={phase.runner?.skill ?? NO_SKILL}
-                  disabled={disabled || code?.handlers}
+                  disabled={disabled}
                   onValueChange={value => setRunner({ skill: value === NO_SKILL ? undefined : String(value) })}
                 >
                   <SelectTrigger id={`${id}-skill`} size="sm" aria-label={`${phase.name} skill`}>
-                    {phase.runner?.skill ?? (code?.handlers ? 'Chosen by code' : 'None')}
+                    {phase.runner?.skill ?? 'None'}
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NO_SKILL}>None</SelectItem>
-                    {skills.map(skill => (
+                    {skillOptions.map(skill => (
                       <SelectItem key={skill} value={skill}>
                         {skill}
                       </SelectItem>
@@ -289,7 +297,7 @@ function PhaseEditor({
                   id={`${id}-context`}
                   value={phase.runner?.context ?? ''}
                   placeholder="work"
-                  disabled={disabled || code?.handlers}
+                  disabled={disabled}
                   onChange={event => setRunner({ context: event.target.value })}
                 />
               </Field>
@@ -308,6 +316,46 @@ function PhaseEditor({
                 onChange={event => setRunner({ instructions: event.target.value })}
               />
             </Field>
+            <Field invalid={objective.length > MAX_OBJECTIVE}>
+              <FieldLabel htmlFor={`${id}-goal`}>Goal</FieldLabel>
+              <FieldDescription>
+                The agent keeps working until a judge finds this objective met, so say when it is done and when it
+                should wait for a person. Leave empty for a single run. {objective.length}/{MAX_OBJECTIVE}
+              </FieldDescription>
+              <Textarea
+                id={`${id}-goal`}
+                value={objective}
+                maxLength={MAX_OBJECTIVE}
+                rows={4}
+                disabled={disabled}
+                onChange={event => {
+                  const text = event.target.value;
+                  setRunner({ goal: text.trim() ? { ...goal, objective: text } : undefined });
+                }}
+              />
+            </Field>
+            {goal && (
+              <Field>
+                <FieldLabel htmlFor={`${id}-goal-runs`}>Goal runs</FieldLabel>
+                <FieldDescription>
+                  How many runs the goal gets before it pauses for a person, from 1 to {MAX_GOAL_RUNS}. Leave empty for
+                  Factory&apos;s default.
+                </FieldDescription>
+                <Input
+                  id={`${id}-goal-runs`}
+                  type="number"
+                  min={1}
+                  max={MAX_GOAL_RUNS}
+                  value={goal.maxRuns ?? ''}
+                  disabled={disabled}
+                  onChange={event => {
+                    const runs = Number.parseInt(event.target.value, 10);
+                    const { maxRuns: _maxRuns, ...rest } = goal;
+                    setRunner({ goal: Number.isInteger(runs) ? { ...rest, maxRuns: runs } : rest });
+                  }}
+                />
+              </Field>
+            )}
 
             <Field orientation="horizontal" className="items-start gap-4">
               <div className="flex flex-1 flex-col gap-1">
@@ -340,17 +388,11 @@ function PhaseEditor({
 
             <Field>
               <FieldLabel htmlFor={`${id}-exit-tool`}>Exit tool</FieldLabel>
-              <FieldDescription>
-                {code?.exitToolId
-                  ? 'Factory waits for this tool in code, so it stays.'
-                  : code?.handlers
-                    ? 'Factory moves cards on from this phase in code, without an exit tool.'
-                    : 'The tool whose success ends the phase. Leave empty for none.'}
-              </FieldDescription>
+              <FieldDescription>The tool whose success ends the phase. Leave empty for none.</FieldDescription>
               <Input
                 id={`${id}-exit-tool`}
                 value={exitToolId}
-                disabled={disabled || code?.exitToolId != null || code?.handlers}
+                disabled={disabled}
                 onChange={event => {
                   const value = event.target.value.trim();
                   onChange({ ...phase, exitTool: value ? { ...phase.exitTool, id: value } : null });
@@ -373,6 +415,7 @@ function PhaseEditor({
                     onChange({
                       ...phase,
                       exitTool: {
+                        ...phase.exitTool,
                         id: exitToolId,
                         autoApprove: checked,
                         autoApproveWhen: checked ? phase.exitTool?.autoApproveWhen : undefined,
@@ -392,12 +435,47 @@ function PhaseEditor({
                 onChange={(rule, problem) => {
                   onChange({
                     ...phase,
-                    exitTool: { id: exitToolId, autoApprove: true, autoApproveWhen: rule ?? undefined },
+                    exitTool: {
+                      ...phase.exitTool,
+                      id: exitToolId,
+                      autoApprove: true,
+                      autoApproveWhen: rule ?? undefined,
+                    },
                   });
                   onRuleProblem('autoApproveWhen', problem);
                 }}
               />
             )}
+            <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+              <legend>
+                <Txt as="span" variant="caption" tone="ink">
+                  Factory tools
+                </Txt>
+              </legend>
+              <Txt as="p" variant="caption" tone="muted">
+                Given to the session that works the card in this phase, in its runner context.
+              </Txt>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {PHASE_TOOLS.map(tool => (
+                  <label key={tool.id} className="flex items-center gap-2">
+                    <Checkbox
+                      aria-label={`${phase.name}: ${tool.label}`}
+                      checked={tools.includes(tool.id)}
+                      disabled={disabled}
+                      onCheckedChange={checked => {
+                        const chosen = PHASE_TOOLS.map(({ id: key }) => key).filter(key =>
+                          key === tool.id ? checked === true : tools.includes(key),
+                        );
+                        onChange({ ...phase, tools: chosen.length > 0 ? chosen : null });
+                      }}
+                    />
+                    <Txt as="span" variant="caption">
+                      {tool.label}
+                    </Txt>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           </>
         )}
 
@@ -564,13 +642,17 @@ function BoardEditor({
 }
 
 function instructionsTooLong(draft: Draft): boolean {
-  return draft.phases.some(phase => (phase.runner?.instructions?.length ?? 0) > MAX_INSTRUCTIONS);
+  return draft.phases.some(
+    phase =>
+      (phase.runner?.instructions?.length ?? 0) > MAX_INSTRUCTIONS ||
+      (phase.runner?.goal?.objective.length ?? 0) > MAX_OBJECTIVE,
+  );
 }
 
 /**
- * The project's Work board as stored: its phases' names, automation, runner instructions
- * and next phases. Organization admins edit it or reset it to Factory's default; what the
- * board's code behaviour depends on stays read-only.
+ * The project's Work board as stored: each phase's name, runner (skill, context, instructions,
+ * goal), automation, exit tool, Factory tools and next phases. Organization admins edit it or reset it to Factory's default; the moves the
+ * board's code makes stay checked.
  */
 export function WorkBoardSection({ factoryId }: { factoryId?: string }) {
   const query = useBoardQuery(factoryId, WORK_BOARD);

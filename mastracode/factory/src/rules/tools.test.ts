@@ -1,8 +1,9 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { BoardTransitionPolicy } from '../boards/index.js';
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
-import { createLifecycleTestRegistry } from '../boards/test-utils.js';
+import { createPolicyTestRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactoryTransitionTools } from './tools.js';
@@ -255,7 +256,9 @@ describe('factory_transition_work_item', () => {
     const context = requestContext();
     const tool = (await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service }))
       .factory_transition_work_item as ExecutableTool & { description: string };
-    expect(tool.description).toContain('to intake');
+    // Tools follow the phase, not the role: triage's routing guidance lives in the factory-triage skill.
+    expect(tool.description).not.toContain('classification');
+    expect(tool.description).toContain('factory-phase signal');
     const input = {
       stage: 'intake',
       expectedRevision: (triaging as { revision: number }).revision,
@@ -545,11 +548,11 @@ describe('factory_transition_work_item', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({
-        planning: {
-          issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Submit a plan first.' }) },
-        },
-      }),
+      boards: createPolicyTestRegistry(context =>
+        context.toStage === 'planning'
+          ? { type: 'reject', code: 'forbidden', reason: 'Submit a plan first.' }
+          : undefined,
+      ),
     });
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
@@ -566,11 +569,11 @@ describe('factory_transition_work_item', () => {
   it('deduplicates repeated execution of one immutable bound tool call', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareBoundItem(storage);
-    const onEnter = vi.fn(() => undefined);
+    const policy = vi.fn<BoardTransitionPolicy>(() => undefined);
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({ planning: { issue: { onEnter } } }),
+      boards: createPolicyTestRegistry(policy),
     });
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
@@ -581,7 +584,7 @@ describe('factory_transition_work_item', () => {
     const replay = await execute(tool, context, input, 'immutable-call');
 
     expect(replay).toEqual(first);
-    expect(onEnter).toHaveBeenCalledTimes(1);
+    expect(policy).toHaveBeenCalledTimes(1);
   });
 
   it('moves a PR binding on Work and ignores linked-card presence for Work authority', async () => {
@@ -688,6 +691,112 @@ describe('factory_transition_work_item', () => {
       });
       return prepared.item.id;
     }
+
+    describe("follows the card's phase, not the session's role", () => {
+      const verdict = { verdict: 'approve', reviewedHeadSha: 'abc1234def000000000000000000000000000000' };
+      const build = (
+        storage: WorkItemsStorage,
+        boards?: Parameters<typeof createFactoryTransitionTools>[0]['boards'],
+      ) =>
+        createFactoryTransitionTools({
+          requestContext: requestContext(),
+          storage,
+          transitionService: { transition: vi.fn() } as never,
+          ...(boards ? { boards } : {}),
+        });
+
+      it('grants the verdict tool to the session reviewing the card in PR review, not to its builder', async () => {
+        const reviewer = (await createFactoryStorageForTests()).workItems;
+        await reviewingItem(reviewer);
+        expect(await build(reviewer)).toHaveProperty('factory_record_review_verdict');
+
+        const builder = (await createFactoryStorageForTests()).workItems;
+        const prepared = await prepareBoundItem(builder, 'github-pr', 'work');
+        await builder.update({
+          orgId: 'org-1',
+          id: prepared.item.id,
+          userId: 'user-1',
+          patch: { stages: ['pr-review'] },
+        });
+        expect(await build(builder)).not.toHaveProperty('factory_record_review_verdict');
+      });
+
+      it('takes the verdict tool away on the next turn once the card moves to a phase without it', async () => {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const id = await reviewingItem(storage);
+        expect(await build(storage)).toHaveProperty('factory_record_review_verdict');
+
+        await storage.update({ orgId: 'org-1', id, userId: 'user-1', patch: { stages: ['intake'] } });
+        expect(await build(storage)).not.toHaveProperty('factory_record_review_verdict');
+      });
+
+      it('refuses a verdict when the card moved between building the tools and the call', async () => {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const id = await reviewingItem(storage);
+        const context = requestContext();
+        const tools = await createFactoryTransitionTools({
+          requestContext: context,
+          storage,
+          transitionService: { transition: vi.fn() } as never,
+        });
+        await storage.update({ orgId: 'org-1', id, userId: 'user-1', patch: { stages: ['intake'] } });
+
+        await expect(execute(tools.factory_record_review_verdict as ExecutableTool, context, verdict)).rejects.toThrow(
+          'does not review the card in its current phase (intake)',
+        );
+        expect((await storage.get({ orgId: 'org-1', id }))?.metadata).not.toHaveProperty('reviewVerdict');
+      });
+
+      it('grants nothing to a review session in a review phase that does not list the tool', async () => {
+        const board = defineBoard({
+          id: 'release',
+          name: 'Release',
+          initialPhase: 'queued',
+          phases: {
+            queued: { name: 'Queued', kind: 'resting', nextPhases: ['checking', 'approving'] },
+            checking: { name: 'Checking', kind: 'working', runner: { context: 'review' }, nextPhases: ['shipped'] },
+            approving: {
+              name: 'Approving',
+              kind: 'working',
+              runner: { context: 'review' },
+              tools: ['factory_record_review_verdict'],
+              nextPhases: ['shipped'],
+            },
+            shipped: { name: 'Shipped', kind: 'terminal' },
+          },
+        });
+        const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const prepared = await storage.prepareRunStart({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: PROJECT_ID,
+          workItem: {
+            input: {
+              board: 'release',
+              title: 'Release',
+              stages: ['checking'],
+              externalSource: { integrationId: 'github', type: 'issue', externalId: 'release:1' },
+              metadata: { authorTrusted: true },
+            },
+          },
+          role: 'review',
+          session: { sessionId: 'resource-1', branch: 'release', threadId: 'thread-1' },
+          resourceId: 'resource-1',
+          kickoffKey: 'release-1',
+          kickoffMessage: null,
+        });
+        expect(await build(storage, boards)).not.toHaveProperty('factory_record_review_verdict');
+
+        await storage.update({
+          orgId: 'org-1',
+          id: prepared.item.id,
+          userId: 'user-1',
+          patch: { stages: ['approving'] },
+        });
+        expect(await build(storage, boards)).toHaveProperty('factory_record_review_verdict');
+      });
+    });
 
     it('records the verdict on a card in PR review and leaves it there', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
@@ -832,22 +941,18 @@ describe('factory_transition_work_item', () => {
       ).toBeUndefined();
     });
 
-    it('rejects a verdict for a card that is no longer in PR review', async () => {
+    it('offers no verdict tool for a card that is no longer in PR review', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       await reviewingItem(storage, 'done');
-      const context = requestContext();
       const tools = await createFactoryTransitionTools({
-        requestContext: context,
+        requestContext: requestContext(),
         storage,
         transitionService: { transition: vi.fn() } as never,
       });
 
-      await expect(
-        execute(tools.factory_record_review_verdict as ExecutableTool, context, {
-          verdict: 'approve',
-          reviewedHeadSha: 'abc1234def000000000000000000000000000000',
-        }),
-      ).rejects.toThrow('Only a card in PR review records a verdict');
+      // Done grants no tools, so the reviewer's session loses the verdict tool with the move.
+      expect(tools).not.toHaveProperty('factory_record_review_verdict');
+      expect(tools).toHaveProperty('factory_transition_work_item');
     });
 
     it('is offered only to review bindings and bounds its input', async () => {

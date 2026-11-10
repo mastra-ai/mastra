@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
-import { createLifecycleTestRegistry } from '../boards/test-utils.js';
+import { createPolicyTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
@@ -461,14 +461,11 @@ describe('FactoryStartCoordinator', () => {
     const transitionService = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({
-        execute: {
-          issue: {
-            onEnter: async () => {
-              bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
-            },
-          },
-        },
+      boards: createPolicyTestRegistry(async context => {
+        if (context.toStage === 'execute') {
+          bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
+        }
+        return undefined;
       }),
     });
     const { controller, sendMessage } = makeController();
@@ -685,9 +682,9 @@ describe('FactoryStartCoordinator', () => {
     const transitionService = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({
-        execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
-      }),
+      boards: createPolicyTestRegistry(context =>
+        context.toStage === 'execute' ? { type: 'reject', code: 'forbidden', reason: 'Blocked' } : undefined,
+      ),
     });
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(

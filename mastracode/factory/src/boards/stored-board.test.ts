@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleItemContext, FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
+import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { BoardDefinitionError, codeBoardOf, declarationOf, defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { workLaneForRole, workStageCarries } from './legacy-plan-role.js';
 import { startsInAutoPhase } from './phase-automation.js';
+import { phaseRunDecision } from './phase-runner.js';
 import { createBoardRegistry } from './registry.js';
 import type { InstalledBoard } from './registry.js';
 import {
@@ -264,11 +265,10 @@ function asCodeBoard(input: StoredBoardInput) {
   };
 }
 
-/** A card entering `stage` of `board` from `source`, as a phase's `onEnter` handler sees it. */
+/** A card entering `stage` of `board` from its first phase, as the transition service sees it. */
 function entering(
   board: InstalledBoard,
   stage: string,
-  source: FactoryRuleSource,
   item: Partial<FactoryRuleItemContext> = {},
 ): FactoryStageRuleContext {
   return {
@@ -298,7 +298,7 @@ function entering(
     },
     board: board.id,
     itemRevision: 1,
-    source,
+    source: 'issue',
     stage,
     fromStage: board.initialPhase,
     toStage: stage,
@@ -317,7 +317,7 @@ const EFFORT_LOW = {
 };
 
 describe('stored boards with code behaviour', () => {
-  it("runs the code board's declared handlers with the stored runner instructions", async () => {
+  it('starts the stored runner with its edited instructions', () => {
     const edited = compileStoredBoard(
       editWork('triage', phase => ({
         ...phase,
@@ -326,30 +326,44 @@ describe('stored boards with code behaviour', () => {
       workBoard,
     );
 
-    const decision = await edited.rules.triage?.issue?.onEnter?.(entering(edited, 'triage', 'issue'));
+    const decision = phaseRunDecision(edited, 'triage', entering(edited, 'triage'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
-    expect(decision?.type === 'invokeSkill' && decision.arguments).toContain('Shipyard: check the changelog.');
+    expect(decision?.arguments).toContain('Shipyard: check the changelog.');
     // The code board itself is untouched.
-    const code = await workBoard.rules.triage?.issue?.onEnter?.(entering(workBoard, 'triage', 'issue'));
-    expect(code?.type === 'invokeSkill' && code.arguments).not.toContain('Shipyard');
+    expect(phaseRunDecision(workBoard, 'triage', entering(workBoard, 'triage'))?.arguments).not.toContain('Shipyard');
   });
 
-  it("keeps the code board's phase handlers, tool rules and source-closed phases", async () => {
+  it("keeps the code board's source-closed phases and runs the stored Planning runner", () => {
     const edited = compileStoredBoard(
       editWork('planning', phase => ({ ...phase, name: 'Plan it' })),
       workBoard,
     );
 
     expect(edited.phases.planning.name).toBe('Plan it');
-    const plan = await edited.rules.planning?.issue?.onEnter?.(entering(edited, 'planning', 'issue'));
-    expect(plan).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
-    expect(edited.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
-    expect(edited.tools.factory_record_review_verdict?.onResult).toBe(
-      workBoard.tools.factory_record_review_verdict?.onResult,
-    );
+    expect(phaseRunDecision(edited, 'planning', entering(edited, 'planning'))).toMatchObject({
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-plan',
+    });
+    expect(edited.tools).toEqual({});
     expect(edited.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
-    expect(edited.rules['pr-review']?.pullRequest?.onEnter).toBe(workBoard.rules['pr-review']?.pullRequest?.onEnter);
     expect(codeBoardOf(edited)).toBe(workBoard);
+  });
+
+  it('runs an edited runner skill and context, with no code handler to take precedence', () => {
+    const edited = compileStoredBoard(
+      editWork('triage', phase => ({
+        ...phase,
+        runner: { skill: 'shipyard-triage', context: 'work', instructions: 'Label it first.' },
+      })),
+      workBoard,
+    );
+
+    expect(phaseRunDecision(edited, 'triage', entering(edited, 'triage'))).toMatchObject({
+      role: 'work',
+      skillName: 'shipyard-triage',
+      arguments: 'Work item (https://github.com/acme/app/issues/3)\n\nLabel it first.',
+    });
   });
 
   it('starts runs on their own only for cards the edited start condition matches', () => {
@@ -394,16 +408,14 @@ describe('stored boards with code behaviour', () => {
     expect(conflicts({ ...definition, phases: [triage!, intake!, ...rest] })[0]).toBe(
       'Cards on board "work" start in "intake"; keep it the first phase.',
     );
-    expect(conflicts(editWork('triage', phase => ({ ...phase, runner: { context: 'work' } })))).toEqual([
-      'Phase "triage" runs its code handlers in the "triage" context; keep runner.context.',
-    ]);
+    // Runners and exit tools are plain stored fields: code no longer runs handlers that need them.
+    expect(conflicts(editWork('triage', phase => ({ ...phase, runner: { context: 'work' } })))).toEqual([]);
     expect(
       conflicts(editWork('planning', phase => ({ ...phase, runner: { context: 'work', skill: 'my-plan' } }))),
-    ).toEqual(['Phase "planning" code handlers choose the skill; leave runner.skill unset.']);
-    expect(conflicts(editWork('planning', phase => ({ ...phase, exitTool: { id: 'ship_it' } })))).toEqual([
-      'Phase "planning" code behaviour waits for exit tool "submit_plan"; keep exitTool.id.',
-    ]);
-    expect(conflicts(editWork('planning', phase => ({ ...phase, exitTool: undefined })))).toHaveLength(1);
+    ).toEqual([]);
+    expect(conflicts(editWork('planning', phase => ({ ...phase, exitTool: { id: 'ship_it' } })))).toEqual([]);
+    expect(conflicts(editWork('planning', phase => ({ ...phase, exitTool: undefined })))).toEqual([]);
+    expect(conflicts(editWork('execute', phase => ({ ...phase, exitTool: { id: 'submit_plan' } })))).toEqual([]);
     // An approved plan moves the card to Building in code, and a merged pull request closes its card.
     expect(
       conflicts(
@@ -415,10 +427,6 @@ describe('stored boards with code behaviour', () => {
         editWork('pr-review', phase => ({ ...phase, nextPhases: ['intake', 'planning', 'execute', 'canceled'] })),
       ),
     ).toEqual(['Phase "pr-review": Factory\'s code moves cards from it to "done"; keep it in nextPhases.']);
-    // An exit tool would hold back the moves Building's code makes.
-    expect(conflicts(editWork('execute', phase => ({ ...phase, exitTool: { id: 'submit_plan' } })))).toEqual([
-      'Phase "execute" code handlers move cards on without an exit tool; leave exitTool unset.',
-    ]);
 
     const outcomes = defineBoard({
       id: 'outcomes',
@@ -441,7 +449,7 @@ describe('stored boards with code behaviour', () => {
         },
         outcomes,
       ),
-    ).toEqual(['Phase "doing" outcome "shipped" moves cards to "done"; keep it in nextPhases.']);
+    ).toEqual(['Phase "doing": Factory\'s code moves cards from it to "done"; keep it in nextPhases.']);
   });
 
   it('accepts every edit code behaviour can honour, including a new phase', () => {
@@ -487,13 +495,13 @@ describe('stored boards with code behaviour', () => {
   it('refuses to compile a conflicting edit against its code board', () => {
     expect(() =>
       compileStoredBoard(
-        editWork('triage', phase => ({ ...phase, runner: { context: 'work' } })),
+        editWork('done', phase => ({ ...phase, kind: 'resting', nextPhases: ['pr-review'] })),
         workBoard,
       ),
     ).toThrow(BoardDefinitionError);
   });
 
-  it('merges an app board with outcomes and exit handlers the same way', async () => {
+  it("ignores an app board's outcomes and exit handlers, keeping the outcome's target as a move", () => {
     const exited: string[] = [];
     const app = defineBoard({
       id: 'release',
@@ -529,15 +537,14 @@ describe('stored boards with code behaviour', () => {
       app,
     );
 
-    expect(edited.transitions.shipping).toEqual([{ outcome: 'shipped', to: 'live' }]);
+    expect(edited.transitions.shipping).toEqual([{ outcome: null, to: 'live' }]);
     expect(edited.startsAutomatically('shipping')).toBe(true);
-    const run = await edited.rules.shipping?.manual?.onEnter?.(
-      entering(edited, 'shipping', 'manual', { source: 'manual' }),
-    );
+    const run = phaseRunDecision(edited, 'shipping', entering(edited, 'shipping', { source: 'manual' }));
     expect(run).toMatchObject({ type: 'invokeSkill', role: 'release', skillName: 'ship-release' });
-    expect(run?.type === 'invokeSkill' && run.arguments).toContain('Tag it.');
-    await edited.rules.shipping?.manual?.onExit?.(entering(edited, 'shipping', 'manual', { source: 'manual' }));
-    expect(exited).toEqual(['shipping']);
+    expect(run?.arguments).toContain('Tag it.');
+    expect(edited.phases.shipping).not.toHaveProperty('onExit');
+    expect(edited.phases.shipping).not.toHaveProperty('outcomes');
+    expect(exited).toEqual([]);
     expect(codeBoardOf(edited)).toBe(app);
   });
 
@@ -582,15 +589,14 @@ describe('serving a stored row that fell out of step with code', () => {
     expect(problems).toEqual([]);
     expect(boardDefinitionOf(board)).toEqual(boardDefinitionOf(strict));
     expect(board.transitions).toEqual(strict.transitions);
-    expect(Object.keys(board.rules)).toEqual(Object.keys(strict.rules));
-    expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
+    expect(board.tools).toEqual(strict.tools);
     expect(board.events).toEqual(strict.events);
     expect(board.sourceClosed).toEqual(strict.sourceClosed);
     expect(codeBoardOf(board)).toBe(workBoard);
-    // #28876: the row's runner instructions reach Work's triage handler.
-    const triage = await board.rules.triage?.issue?.onEnter?.(entering(board, 'triage', 'issue'));
+    // #28876: the row's runner instructions reach the run Triage starts.
+    const triage = phaseRunDecision(board, 'triage', entering(board, 'triage'));
     expect(triage).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
-    expect(triage?.type === 'invokeSkill' && triage.arguments).toContain('Shipyard: check the changelog.');
+    expect(triage?.arguments).toContain('Shipyard: check the changelog.');
   });
 
   it('serves a stored Work row without a transition policy, since Work no longer declares one (#29815)', () => {
@@ -602,19 +608,13 @@ describe('serving a stored row that fell out of step with code', () => {
     expect(compileStoredBoard(row, workBoard).transitionPolicy).toBeUndefined();
   });
 
-  it("serves a row missing a phase newer code declares, keeping the tool rules that hold Planning's approval", async () => {
+  it("serves a row missing a phase newer code declares, keeping the exit tool that holds Planning's approval", () => {
     const declaration = declarationOf(workBoard)!;
     const newer = defineBoard({
       ...declaration,
       phases: {
         ...declaration.phases,
-        testing: {
-          name: 'Testing',
-          kind: 'working',
-          runner: { context: 'work' },
-          nextPhases: ['done'],
-          onEnter: { issue: () => undefined },
-        },
+        testing: { name: 'Testing', kind: 'working', runner: { context: 'work' }, nextPhases: ['done'] },
       },
     } as Parameters<typeof defineBoard>[0]);
     const row = boardDefinitionOf(workBoard);
@@ -622,17 +622,20 @@ describe('serving a stored row that fell out of step with code', () => {
     expect(() => compileStoredBoard(row, newer)).toThrow(BoardDefinitionError);
     const { board, problems } = mergeCodeBehaviour(row, newer);
 
-    expect(problems).toEqual([
-      'Phase "testing" isn\'t on stored board "work", so its code behaviour doesn\'t run.',
-      `Board "work" keeps its code tool rules (${Object.keys(workBoard.tools).join(', ')}), but can't move cards where they lead: phase "testing" isn't stored.`,
-    ]);
-    // The exit-tool approval guard keys off these rules: without them, a rule or agent could move
-    // a card from Planning into Building without an approved plan.
-    expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
+    // Nothing in code runs from the missing phase, so the row serves as stored.
+    expect(problems).toEqual([]);
+    // The exit-tool approval guard keys off the stored exit tool: without it, a rule or agent could
+    // move a card from Planning into Building without an approved plan.
+    expect(board.phases.planning.kind === 'working' && board.phases.planning.exitTool).toMatchObject({
+      id: 'submit_plan',
+    });
     expect(board.phases).not.toHaveProperty('testing');
     expect(board.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
-    const plan = await board.rules.planning?.issue?.onEnter?.(entering(board, 'planning', 'issue'));
-    expect(plan).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
+    expect(phaseRunDecision(board, 'planning', entering(board, 'planning'))).toMatchObject({
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-plan',
+    });
     expect(codeBoardOf(board)).toBe(newer);
   });
 
@@ -642,7 +645,7 @@ describe('serving a stored row that fell out of step with code', () => {
       ...declaration,
       phases: {
         ...declaration.phases,
-        testing: { name: 'Testing', kind: 'working', runner: { context: 'work' }, onEnter: { issue: () => undefined } },
+        testing: { name: 'Testing', kind: 'working', runner: { context: 'work' } },
       },
     } as Parameters<typeof defineBoard>[0]);
     const { board } = mergeCodeBehaviour(boardDefinitionOf(workBoard), newer);
@@ -676,36 +679,37 @@ describe('serving a stored row that fell out of step with code', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
   });
 
-  it('serves a phase whose runner context changed without its code handlers, and keeps the other phases', async () => {
-    const row = editWork('triage', phase => ({ ...phase, runner: { context: 'work' } }));
+  it('serves a phase whose runner context changed and starts its run in that context', () => {
+    const row = editWork('triage', phase => ({ ...phase, runner: { ...phase.runner, context: 'work' } }));
 
     const { board, problems } = mergeCodeBehaviour(row, workBoard);
 
-    expect(problems).toEqual([
-      'Phase "triage" runs without its code behaviour: Phase "triage" runs its code handlers in the "triage" context; keep runner.context.',
-    ]);
-    expect(board.rules.triage).toBeUndefined();
+    expect(problems).toEqual([]);
     expect(board.roleForPhase('triage')).toBe('work');
-    const plan = await board.rules.planning?.issue?.onEnter?.(entering(board, 'planning', 'issue'));
-    expect(plan).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
-    expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
+    expect(phaseRunDecision(board, 'triage', entering(board, 'triage'))).toMatchObject({
+      role: 'work',
+      skillName: 'factory-triage',
+    });
+    expect(phaseRunDecision(board, 'planning', entering(board, 'planning'))).toMatchObject({
+      skillName: 'factory-plan',
+    });
   });
 
-  it("serves a board whose Done is no longer terminal without sourceClosed, and keeps Work's other behaviour", async () => {
+  it("serves a board whose Done is no longer terminal without sourceClosed, and keeps Work's other behaviour", () => {
     const row = editWork('done', phase => ({ ...phase, kind: 'resting', nextPhases: ['pr-review'] }));
 
     const { board, problems } = mergeCodeBehaviour(row, workBoard);
 
     expect(problems).toEqual([
-      'Phase "done" runs without its code behaviour: Phase "done" must stay terminal; its code behaviour depends on it.',
       'Board "work" doesn\'t move cards when their source closes: phase "done" isn\'t terminal.',
     ]);
     expect(board.phaseKind('done')).toBe('resting');
-    expect(board.rules.done).toBeUndefined();
     expect(board.sourceClosed).toBeUndefined();
-    const plan = await board.rules.planning?.issue?.onEnter?.(entering(board, 'planning', 'issue'));
-    expect(plan).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
-    expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
+    expect(phaseRunDecision(board, 'planning', entering(board, 'planning'))).toMatchObject({
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-plan',
+    });
     expect(codeBoardOf(board)).toBe(workBoard);
   });
 
@@ -713,6 +717,7 @@ describe('serving a stored row that fell out of step with code', () => {
     const row = editWork('planning', phase => ({
       ...phase,
       nextPhases: workBoard.phases.planning.nextPhases.filter(next => next !== 'execute'),
+      exitTool: undefined,
     }));
 
     const { board, problems } = mergeCodeBehaviour(row, workBoard);
@@ -721,11 +726,10 @@ describe('serving a stored row that fell out of step with code', () => {
       'Board "work" doesn\'t let phase "planning" move cards to "execute", so Factory\'s code can\'t make that move.',
     ]);
     expect(board.allowsTransition('planning', 'execute')).toBe(false);
-    expect(board.rules.planning?.issue?.onEnter).toBeTypeOf('function');
+    expect(phaseRunDecision(board, 'planning', entering(board, 'planning'))?.skillName).toBe('factory-plan');
   });
 
   describe('an app board with outcomes and exit handlers', () => {
-    const exited: string[] = [];
     const app = defineBoard({
       id: 'release',
       name: 'Release',
@@ -737,12 +741,7 @@ describe('serving a stored row that fell out of step with code', () => {
           kind: 'working',
           runner: { skill: 'ship-release', context: 'release' },
           outcomes: { shipped: 'live' },
-          onExit: {
-            manual: context => {
-              exited.push(context.stage);
-              return undefined;
-            },
-          },
+          onExit: { manual: () => undefined },
         },
         live: { name: 'Live', kind: 'terminal' },
       },
@@ -763,47 +762,41 @@ describe('serving a stored row that fell out of step with code', () => {
       ],
     });
 
-    it("drops an outcome whose target the row no longer has, and keeps the phase's handlers", async () => {
-      exited.length = 0;
+    it("serves a row that no longer has an outcome's target with the moves it stores", () => {
       const { board, problems } = mergeCodeBehaviour(
         withShipping(phase => phase),
         app,
       );
 
-      expect(problems).toEqual([
-        'Phase "shipping" runs without its code outcome "shipped": phase "live" isn\'t stored.',
-      ]);
+      expect(problems).toEqual([]);
       expect(board.transitions.shipping).toEqual([{ outcome: null, to: 'archived' }]);
-      await board.rules.shipping?.manual?.onExit?.(entering(board, 'shipping', 'manual', { source: 'manual' }));
-      expect(exited).toEqual(['shipping']);
+      expect(board.phases.shipping).not.toHaveProperty('onExit');
       expect(codeBoardOf(board)).toBe(app);
     });
 
-    it("drops an outcome whose move the row doesn't allow, instead of allowing it again", () => {
+    it("reports an outcome's move the row doesn't allow, instead of allowing it again", () => {
       const row = withShipping(phase => phase);
       row.phases.push({ key: 'live', name: 'Live', kind: 'terminal' });
 
       const { board, problems } = mergeCodeBehaviour(row, app);
 
       expect(problems).toEqual([
-        'Phase "shipping" runs without its code outcome "shipped": the board doesn\'t let it move cards to "live".',
+        'Board "release" doesn\'t let phase "shipping" move cards to "live", so Factory\'s code can\'t make that move.',
       ]);
       expect(board.allowsTransition('shipping', 'live')).toBe(false);
       expect(board.transitions.shipping).toEqual([{ outcome: null, to: 'archived' }]);
     });
 
-    it('serves the phase without its handlers or outcomes once its skill changed', () => {
+    it('runs the stored skill once it changed', () => {
       const { board, problems } = mergeCodeBehaviour(
         withShipping(phase => ({ ...phase, runner: { skill: 'ship-it-fast', context: 'release' } })),
         app,
       );
 
-      expect(problems).toEqual([
-        'Phase "shipping" runs without its code behaviour: Phase "shipping" code handlers run with skill "ship-release"; keep runner.skill.',
-      ]);
-      expect(board.phases.shipping).not.toHaveProperty('onExit');
-      expect(board.phases.shipping).not.toHaveProperty('outcomes');
-      expect(board.rules.shipping?.manual?.onExit).toBeUndefined();
+      expect(problems).toEqual([]);
+      expect(phaseRunDecision(board, 'shipping', entering(board, 'shipping', { source: 'manual' }))?.skillName).toBe(
+        'ship-it-fast',
+      );
     });
   });
 });
@@ -824,9 +817,11 @@ describe('the reviewer seat on an edited Work board', () => {
     skillName: 'factory-self-review',
   } as const;
 
-  it("starts self-review on its own once Work's Review phase starts on its own", () => {
+  it('waits for a person once an edit stops Review starting on its own', () => {
+    // The default Review phase starts self-review on its own for a card with no pull request yet.
+    expect(startsInAutoPhase(createBoardRegistry(), card('work', 'review'), review)).toBe(true);
     const edited = compileStoredBoard(
-      editWork('review', phase => ({ ...phase, autoStart: true })),
+      editWork('review', phase => ({ ...phase, autoStart: false, autoStartWhen: undefined })),
       workBoard,
     );
     expect(
@@ -835,9 +830,7 @@ describe('the reviewer seat on an edited Work board', () => {
         card('work', 'review'),
         review,
       ),
-    ).toBe(true);
-    // The default Review phase still waits for a person.
-    expect(startsInAutoPhase(createBoardRegistry(), card('work', 'review'), review)).toBe(false);
+    ).toBe(false);
   });
 
   it('does not treat a stored board phase keyed pr-review as the reviewer seat', () => {

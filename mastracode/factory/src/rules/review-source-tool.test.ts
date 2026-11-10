@@ -184,6 +184,26 @@ describe('factory_review_source', () => {
     expect(tools.factory_review_source).toBeUndefined();
   });
 
+  it('is not offered to a review session in self-review, a phase that does not grant it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareReviewItem(storage, { type: 'issue', externalId: 'github-issue:7' });
+    const [card] = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    await storage.update({ orgId: 'org-1', id: card!.id, userId: 'user-1', patch: { stages: ['review'] } });
+
+    const tools = await createReviewSourceTool({ requestContext: requestContext(), storage, uiOrigin: PUBLIC_ORIGIN });
+    expect(tools.factory_review_source).toBeUndefined();
+  });
+
+  it('is withdrawn once the reviewed card leaves PR review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareReviewItem(storage);
+    const build = () => createReviewSourceTool({ requestContext: requestContext(), storage, uiOrigin: PUBLIC_ORIGIN });
+    expect((await build()).factory_review_source).toBeDefined();
+
+    await storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages: ['intake'] } });
+    expect((await build()).factory_review_source).toBeUndefined();
+  });
+
   it('is not offered when the UI origin is unset — matches Slack, which omits the deep-link rather than falling back to the API origin', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareReviewItem(storage, { author: 'octocat' });

@@ -389,7 +389,7 @@ describe('bundled Factory skill assets', () => {
 
     expect(assetNames).toEqual([
       'configure-factory-rules',
-      'factory-complete-issue',
+      'factory-build',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
       'factory-plan',
@@ -472,7 +472,11 @@ describe('bundled Factory skill assets', () => {
       // Terminal batched handoff + governed terminal call, never a mid-run human gate.
       // Review passes end by recording the verdict; the card stays in Reviewing.
       expect(prose).toContain(
-        skillName.includes('review') ? 'factory_record_review_verdict' : 'factory_transition_work_item',
+        skillName.includes('review')
+          ? 'factory_record_review_verdict'
+          : skillName === 'factory-plan'
+            ? 'submit_plan'
+            : 'factory_transition_work_item',
       );
       expect(prose).toContain('as an assumption');
       expect(prose).toContain('Never wait for or solicit human input mid-run');
@@ -579,7 +583,42 @@ describe('bundled Factory skill assets', () => {
 
     const plan = await read('factory-plan');
     expect(plan).toContain('if this conversation already contains a triage/understanding pass');
-    expect(plan).toContain('Do not call `submit_plan`');
+    // Planning holds the card until submit_plan comes back approved; then the planner moves it.
+    expect(plan).toContain('make `submit_plan` your terminal step');
+    expect(plan).toContain('Moving the card before then is refused.');
+    expect(plan).toContain(
+      'When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item`',
+    );
+    // One instruction for an approved plan: report, then move (no "report and stop").
+    expect(plan).not.toContain('report the plan headline and stop');
+
+    // Building runs as a goal: it may ask a person, but only through ask_user, and hands off by
+    // the project's self-review setting.
+    const build = await read('factory-build');
+    expect(build).toContain('only with `ask_user`');
+    expect(build).toContain('**Self-review on:** do not open a pull or merge request. Move the card to Review');
+    expect(build).toContain('**Self-review off:** open the change request');
+    expect(build).toContain('Then move the card to PR review (`stage: "pr-review"`)');
+    expect(build).toContain('**Before moving to Done:**');
+    // A push to an open change request sends the card back to PR review so it is reviewed again.
+    expect(build).toContain('push to that branch, then move the card to PR review');
+    // Both hand-offs that leave the card in Building say it the way Building's goal counts as done.
+    expect(
+      build.match(
+        /say it is tracked on its own card and that a person should confirm it is reviewed there, and leave this card where it is/g,
+      ),
+    ).toHaveLength(2);
+    // Only this session's change request: another author's on the same card is never pushed to.
+    expect(build).toContain('belongs to someone else: never push to it');
+    // A manual card's change request is not under Sources: look it up by branch first.
+    expect(build).toContain('look for a change request already open from your branch');
+    // PR review takes the card only once the change request is attached: self-review retries.
+    const selfReview = await read('factory-self-review');
+    expect(selfReview).toContain('wait briefly (`sleep 20`)');
+    // A change request that never attaches is reviewed on its own card.
+    expect(selfReview).toContain(
+      'say it is tracked on its own card and that a person should confirm it is reviewed there',
+    );
 
     const review = await read('factory-review');
     expect(review).toContain('Verdict: approve');
@@ -3678,7 +3717,7 @@ describe('FactorySkillSource layering', () => {
     const names = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(names).toEqual([
       'configure-factory-rules',
-      'factory-complete-issue',
+      'factory-build',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
       'factory-plan',
@@ -3697,12 +3736,7 @@ describe('FactorySkillSource layering', () => {
     const reviewSkill = path.join(mount, 'factory-review', 'SKILL.md');
 
     const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
-    expect(hiddenNames).toEqual([
-      'configure-factory-rules',
-      'factory-complete-issue',
-      'factory-plan',
-      'factory-triage',
-    ]);
+    expect(hiddenNames).toEqual(['configure-factory-rules', 'factory-build', 'factory-plan', 'factory-triage']);
     for (const name of REVIEW_ONLY_FACTORY_SKILLS) {
       expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);
       await expect(source.readdir(path.join(mount, name))).rejects.toThrow('ENOENT');

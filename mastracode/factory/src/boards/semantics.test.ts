@@ -87,7 +87,7 @@ describe('workItemPhaseSemantics', () => {
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
         stages: ['pr-review'],
       }),
-    ).toEqual({ kind: 'working', role: 'work' });
+    ).toEqual({ kind: 'working', role: 'review' });
   });
 
   it('is undefined for multi-stage rows', () => {
@@ -112,8 +112,9 @@ describe('resolveBoardToolRule', () => {
     });
     const boards = createBoardRegistry({ boards: [release] });
     expect(resolveBoardToolRule(boards, 'release', 'ship_it')).toBe(onResult);
-    expect(resolveBoardToolRule(boards, 'work', 'factory_record_review_verdict')).toBeTypeOf('function');
-    expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeTypeOf('function');
+    // Work declares no tool rules: Planning's exit tool moves the card instead.
+    expect(resolveBoardToolRule(boards, 'work', 'factory_record_review_verdict')).toBeUndefined();
+    expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'review', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'release', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'work', 'ship_it')).toBeUndefined();

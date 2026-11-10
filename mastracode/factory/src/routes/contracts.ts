@@ -73,18 +73,11 @@ const storedBoardResponseSchema = z.object({
     editable: z.boolean(),
     /**
      * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
-     * phase stays with its kind, phases with code handlers keep their runner context and skill,
-     * the exit tool id stays, and the moves code makes from it stay in nextPhases. Null for stored boards.
+     * phase stays with its kind and the moves code makes from it stay in nextPhases. Null for
+     * stored boards.
      */
     codeBehaviour: z
-      .record(
-        z.string(),
-        z.object({
-          handlers: z.boolean(),
-          exitToolId: z.string().nullable(),
-          requiredNextPhases: z.array(z.string()),
-        }),
-      )
+      .record(z.string(), z.object({ requiredNextPhases: z.array(z.string()) }))
       .nullable()
       .optional(),
     /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
@@ -821,6 +814,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
               role: z.string().optional(),
               /** The skill the phase's runner starts when a card enters it (`runner.skill`). */
               skill: z.string().optional(),
+              /** The objective the phase's runs pursue as a goal (`runner.goal`). */
+              goal: z.object({ objective: z.string(), maxRuns: z.number().optional() }).optional(),
               autoStart: z.boolean().optional(),
               /** Cards the phase starts on its own for; absent means every card. */
               autoStartWhen: cardRuleGroupSchema.optional(),
@@ -832,6 +827,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
                   autoApproveWhen: cardRuleGroupSchema.optional(),
                 })
                 .optional(),
+              /** Factory tools the phase grants the session working the card there. */
+              tools: z.array(z.string()).optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),

@@ -38,6 +38,9 @@ export function externalSourceForWorkItem(
 
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
+
+/** Request-changes rounds from self-review before the card parks in Intake for a person. */
+export const SELF_REVIEW_ROUND_LIMIT = 3;
 export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 
 // The label only holds a card at rest: once a person moves it into a working lane, the
@@ -262,8 +265,6 @@ export interface FactoryRulePhaseContext {
   role?: string;
   /** Phases the card may move to from here. */
   nextPhases: readonly string[];
-  /** Outcome names the phase declares, e.g. `approved` or `canceled`; empty when it declares none. */
-  outcomes: readonly string[];
 }
 
 export interface FactoryRuleContextBase {
@@ -286,8 +287,6 @@ export interface FactoryStageRuleContext extends FactoryBoundRuleContext {
   stage: FactoryRuleStage;
   fromStage: FactoryRuleStage;
   toStage: FactoryRuleStage;
-  /** Project switch: Work items get an independent self-review before the change request opens. Unset means off. */
-  selfReviewEnabled?: boolean;
 }
 
 export interface FactoryToolResultRuleContext extends FactoryBoundRuleContext {
@@ -577,11 +576,6 @@ export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
 ) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
 
-export interface FactoryBoardRuleLeaf {
-  onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
-  onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
-}
-
 export type FactoryRuleRejectionCode =
   | 'forbidden'
   | 'invalid_transition'
@@ -719,6 +713,11 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
    * Without it, an agent's own move into a phase of its role starts nothing.
    */
   startsAfterOwnMove?: boolean;
+  /**
+   * Pursue the run's work as a goal: the session's thread holds `objective` until the card
+   * leaves the phase, and the agent's goal judge keeps the run going until it is met.
+   */
+  goal?: { objective: string; maxRuns?: number };
 }
 
 /**

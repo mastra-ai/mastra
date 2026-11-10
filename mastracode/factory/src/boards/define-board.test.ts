@@ -56,7 +56,7 @@ describe('defineBoard', () => {
     },
   );
 
-  it('normalizes linear and outcome transitions', () => {
+  it('normalizes linear and outcome transitions into unnamed moves', () => {
     const board = defineBoard({
       id: 'release',
       title: 'Release',
@@ -74,11 +74,12 @@ describe('defineBoard', () => {
     });
 
     expect(board.transitions.prepare).toEqual([{ outcome: null, to: 'verify' }]);
+    // Outcome names are gone: only their targets survive, as allowed moves.
     expect(board.transitions.verify).toEqual([
-      { outcome: 'approved', to: 'done' },
-      { outcome: 'rejected', to: 'prepare' },
+      { outcome: null, to: 'done' },
+      { outcome: null, to: 'prepare' },
     ]);
-    expect(board.rules).toEqual({});
+    expect(board).not.toHaveProperty('rules');
     expect(board.allowsTransition('prepare', 'verify')).toBe(true);
     expect(board.allowsTransition('prepare', 'done')).toBe(false);
     expect(board.allowsTransition('verify', 'verify')).toBe(true);
@@ -89,37 +90,28 @@ describe('defineBoard', () => {
     expect(board.allowsTransition('prepare', 'done')).toBe(false);
   });
 
-  it('clones and freezes the public phase and rule graphs', () => {
-    const originalHandler = () => undefined;
-    const replacementHandler = () => ({ type: 'notify', message: 'mutated' }) as const;
+  it('clones and freezes the public phase graph, keeping no declared handlers', () => {
     const phases = {
       start: {
         title: 'Start',
         kind: 'resting',
-        outcomes: { approved: 'done' },
-        onEnter: { manual: originalHandler },
+        nextPhases: ['done'],
+        onEnter: { manual: () => undefined },
       },
       done: { title: 'Done', kind: 'terminal' },
     } as const;
     const board = defineBoard({ id: 'immutable', title: 'Immutable', initialPhase: 'start', phases });
 
     expect(Object.isFrozen(board.phases.start)).toBe(true);
-    expect(Object.isFrozen(board.phases.start.outcomes)).toBe(true);
-    expect(Object.isFrozen(board.phases.start.onEnter)).toBe(true);
-    expect(Object.isFrozen(board.rules.start)).toBe(true);
-    expect(Object.isFrozen(board.rules.start?.manual)).toBe(true);
+    expect(Object.isFrozen(board.phases.start.nextPhases)).toBe(true);
+    expect(board.phases.start).not.toHaveProperty('onEnter');
 
-    expect(Reflect.set(phases.start.outcomes, 'approved', 'start')).toBe(true);
-    expect(Reflect.set(phases.start.onEnter, 'manual', replacementHandler)).toBe(true);
-    expect(board.phases.start.outcomes?.approved).toBe('done');
-    expect(board.phases.start.onEnter?.manual).toBe(originalHandler);
-    expect(board.rules.start?.manual?.onEnter).toBe(originalHandler);
+    expect(Reflect.set(phases.start.nextPhases, 0, 'start')).toBe(true);
+    expect(board.phases.start.nextPhases).toEqual(['done']);
 
     expect(Reflect.set(board.phases.start, 'title', 'Mutated')).toBe(false);
     expect(Reflect.set(board.phases.start, 'kind', 'working')).toBe(false);
-    expect(Reflect.set(board.phases.start.outcomes!, 'approved', 'start')).toBe(false);
-    expect(Reflect.set(board.rules.start!, 'manual', {})).toBe(false);
-    expect(Reflect.set(board.rules.start!.manual!, 'onEnter', replacementHandler)).toBe(false);
+    expect(Reflect.set(board.phases.start.nextPhases, 0, 'start')).toBe(false);
   });
 
   it('rejects definitions whose transitions target missing phases', () => {
@@ -240,7 +232,7 @@ describe('defineBoard', () => {
       intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
       triage: ['intake', 'planning', 'done', 'canceled'],
       planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
-      execute: ['review', 'planning', 'done', 'canceled'],
+      execute: ['review', 'pr-review', 'planning', 'done', 'canceled'],
       review: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
       'pr-review': ['intake', 'planning', 'execute', 'done', 'canceled'],
       done: ['pr-review'],
@@ -252,22 +244,30 @@ describe('defineBoard', () => {
         expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(from === to || flow[from]!.includes(to));
       }
     }
-    expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
-    expect(workBoard.rules.intake?.gitlabIssue?.onEnter).toBeUndefined();
-    expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
-    expect(workBoard.rules.triage?.linearIssue?.onEnter).toBeTypeOf('function');
-    expect(workBoard.rules.planning?.manual?.onEnter).toBeTypeOf('function');
-    expect(workBoard.rules.execute?.issue?.onEnter).toBeTypeOf('function');
-    expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
-    // PR review runs on a pull request's own card and on an issue card its pull request is attached to.
-    for (const source of ['pullRequest', 'gitlabPullRequest', 'issue', 'gitlabIssue'] as const) {
-      expect(workBoard.rules['pr-review']?.[source]?.onEnter, source).toBeTypeOf('function');
-    }
+    // Each working phase starts its stored runner's skill, for every source; Intake and Done run nothing.
+    const skills = Object.fromEntries(
+      Object.entries(workBoard.phases).map(([key, phase]) => [
+        key,
+        phase.kind === 'working' ? phase.runner.skill : null,
+      ]),
+    );
+    expect(skills).toEqual({
+      intake: null,
+      triage: 'factory-triage',
+      planning: 'factory-plan',
+      execute: 'factory-build',
+      review: 'factory-self-review',
+      'pr-review': 'factory-review',
+      done: null,
+      canceled: null,
+    });
     expect(workBoard.phaseKind('intake')).toBe('resting');
     expect(workBoard.roleForPhase('triage')).toBe('triage');
     expect(workBoard.roleForPhase('planning')).toBe('work');
     expect(workBoard.roleForPhase('execute')).toBe('work');
-    expect(workBoard.roleForPhase('review')).toBe('work');
+    // The independent reviewer works the card in Review and PR review.
+    expect(workBoard.roleForPhase('review')).toBe('review');
+    expect(workBoard.roleForPhase('pr-review')).toBe('review');
     // The first phase of the `work` context; a run started on a resting Work card uses its role's lane instead.
     expect(workBoard.phaseForRole('work')).toBe('planning');
     expect(workBoard.isTerminal('done')).toBe(true);
@@ -289,7 +289,7 @@ describe('defineBoard', () => {
       'triage',
       'work',
       'work',
-      'work',
+      'review',
     ]);
   });
 
@@ -332,8 +332,9 @@ describe('defineBoard tool-result rules', () => {
     expect(() => define({ ship_it: () => undefined })).toThrow(BoardDefinitionError);
   });
 
-  it('declares Work’s submit_plan and review-verdict rules', () => {
-    expect(Object.keys(workBoard.tools)).toEqual(['submit_plan', 'factory_record_review_verdict']);
+  it('declares no tool rules on Work: Planning holds the card until its exit tool approves the plan', () => {
+    expect(workBoard.tools).toEqual({});
+    expect(workBoard.phases.planning).toMatchObject({ exitTool: { id: 'submit_plan', autoApprove: false } });
   });
 });
 

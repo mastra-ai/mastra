@@ -1,5 +1,4 @@
 import { compileBoardDefinition } from './define-board.js';
-import { reviewPullRequest } from './pull-request-review.js';
 
 /**
  * The retired Review board, served only to projects that still use it (see
@@ -19,9 +18,9 @@ export const reviewBoard = compileBoardDefinition({
     review: {
       name: 'Reviewing',
       kind: 'working',
-      runner: { context: 'review' },
+      runner: { context: 'review', skill: 'factory-review' },
+      tools: ['factory_record_review_verdict', 'factory_review_source'],
       nextPhases: ['intake', 'done', 'canceled'],
-      onEnter: { pullRequest: reviewPullRequest, gitlabPullRequest: reviewPullRequest },
     },
     done: {
       name: 'Done',

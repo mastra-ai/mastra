@@ -1,5 +1,6 @@
 import type { BoardRegistry } from '../boards/index.js';
-import { autoApprovedExitTool } from '../boards/phase-automation.js';
+import { autoApprovedExitTool, exitToolSucceeded } from '../boards/phase-automation.js';
+import { phaseRunDecision } from '../boards/phase-runner.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { boardForWorkItem, hasPullRequest } from '../boards/semantics.js';
@@ -9,7 +10,6 @@ import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../st
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { resolveFactoryStageRules } from './resolve.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleActor,
@@ -51,9 +51,9 @@ export interface FactoryTransitionRequest {
   ingress: { type: 'human' | 'agent' | 'toolResult' | 'github' | 'rule'; identity: string; transitionId?: string };
   cause: string;
   causalChain?: readonly FactoryRuleCausalEntry[];
-  /** Internal materialization path: evaluate only the destination onEnter leaf even when already at that stage. */
+  /** Internal materialization path: start the destination phase's runner even when already at that stage. */
   initialEntry?: boolean;
-  /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
+  /** Starts the stage's runner again when the item already holds that stage, to restart work the entry invalidated. */
   reenter?: boolean;
   /** Internal proof that this move consumes an approved `submit_plan` result. */
   planApproved?: true;
@@ -119,8 +119,6 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     item: Card;
   }) => Promise<void> | void;
-  /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
-  selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
 
 function rejection(
@@ -247,7 +245,6 @@ export class FactoryTransitionService {
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
-  readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
@@ -259,7 +256,6 @@ export class FactoryTransitionService {
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
-    this.#selfReviewEnabled = options.selfReviewEnabled;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -502,30 +498,28 @@ export class FactoryTransitionService {
         (async () => {
           // Plans are approved without a person only where the card's phase auto-approves submit_plan.
           const plansAutoApproved = autoApprovedExitTool(boards, item) === 'submit_plan';
-          // When the board's own rule for a phase's exit tool moves the card on success, that
-          // result is the handoff to the next working phase (for submit_plan, only an approved
-          // plan). Anyone but a person needs it, unless the tool is auto-approved for this card.
+          // A phase with an exit tool holds the card until the tool succeeds (for submit_plan, with
+          // an approved plan; autoApprove only decides whether it approves itself). Then the agent,
+          // or the board's own rule for the tool, moves the card. A person can move it any time.
           const fromPhase = board.phases[fromStage];
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
             request.actor.type !== 'human' &&
             !request.eventRoute &&
             exitTool &&
-            board.tools[exitTool.id] &&
             fromStage !== request.stage &&
             entersWorking &&
-            !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id)
+            !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id) &&
+            !exitToolSucceeded(item, fromStage, exitTool.id)
           ) {
-            if (autoApprovedExitTool(boards, item) !== exitTool.id) {
-              return {
-                outcome: 'rejected' as const,
-                code: 'approval_required',
-                reason:
-                  exitTool.id === 'submit_plan'
-                    ? `A person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
-                    : `${fromPhase!.name} ends when ${exitTool.id} succeeds, and that moves the card. A person can also move it from the Factory board or a chat they are signed in to.`,
-              };
-            }
+            return {
+              outcome: 'rejected' as const,
+              code: 'approval_required',
+              reason:
+                exitTool.id === 'submit_plan'
+                  ? `${fromPhase!.name} ends when submit_plan comes back with an approved plan; until then the card stays here. Call submit_plan and wait for a person to approve the plan (or for it to be approved automatically), then move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
+                  : `${fromPhase!.name} ends when ${exitTool.id} succeeds; until then the card stays here. A person can also move it from the Factory board or a chat they are signed in to.`,
+            };
           }
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
@@ -544,35 +538,16 @@ export class FactoryTransitionService {
           if (policy?.type === 'reject') {
             return { outcome: 'rejected' as const, code: policy.code, reason: policy.reason };
           }
-          const selfReviewEnabled =
-            request.board === 'work' && this.#selfReviewEnabled
-              ? await this.#selfReviewEnabled({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-              : false;
-          const decisions: FactoryCommitDecision[] = [];
-          for (const rule of resolveFactoryStageRules(boards, {
-            board: request.board,
-            source,
-            fromStage,
-            toStage: request.stage,
+          const run = phaseRunDecision(board, request.stage, contextBase, {
             initialEntry: request.initialEntry,
             reenter: request.reenter,
-          })) {
-            const context: FactoryStageRuleContext = Object.freeze({
-              ...contextBase,
-              selfReviewEnabled,
-              stage: rule.phase === 'exit' ? fromStage : request.stage,
-            });
-            const raw = await rule.handler(context);
-            if (raw === undefined) continue;
-            const decision = validateFactoryRuleDecision(raw, context.causalChain.length);
-            if (decision.type === 'reject') {
-              return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
-            }
-            assertFactoryDecisionTarget(decision, boards, itemBoard);
-            if (startsRun(decision) && runAlreadyUnderway(request, decision)) continue;
-            decisions.push(decision);
-          }
-          const validated = validateFactoryRuleDecisions(decisions);
+          });
+          const validated = validateFactoryRuleDecisions(run ? [run] : [], contextBase.causalChain.length).filter(
+            decision => {
+              assertFactoryDecisionTarget(decision, boards, itemBoard);
+              return !(startsRun(decision) && runAlreadyUnderway(request, decision));
+            },
+          );
           if (humanMove) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');

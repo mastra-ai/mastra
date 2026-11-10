@@ -18,9 +18,9 @@ Do not guess a file path. Factory deployments can assemble `MastraFactory` from 
 
 ## Preserve the public shape
 
-Installed board definitions exclusively own lifecycle handlers: use `phases.<phase>.onEnter.<source>` and `phases.<phase>.onExit.<source>` in `defineBoard()`. Sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Work installs automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
+A phase starts its work only through its stored `runner` (`skill`, `context`, `instructions`, `goal`); `onEnter`, `onExit` and `outcomes` in `defineBoard()` are ignored with a warning. Work installs automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
 
-Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work, set `includeDefaultBoards: false` and install a same-ID board, preferably using the exported `workBoard` phases as the starting point. The Review board is retired: its pull requests live in Work's PR review phase, and `review` can't be used as a board ID. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares `submit_plan`, and custom boards inherit nothing.
+Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work, set `includeDefaultBoards: false` and install a same-ID board, preferably using the exported `workBoard` phases as the starting point. The Review board is retired: its pull requests live in Work's PR review phase, and `review` can't be used as a board ID. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares none, and custom boards inherit nothing.
 
 By default, every integration arrival stays in its routed board's initial phase (Intake for Work) without starting or suggesting a run. This applies to GitHub, GitLab, Linear, Jira, and incident.io; explicit trusted GitHub review requests without an existing card go directly to PR review. Do not restore default arrival automation on the built-in boards.
 
@@ -54,9 +54,9 @@ backlog: {
 },
 ```
 
-Read `src/boards/work.ts` for Work's topology (no skipping Planning, Building only through an approved plan, self-review returns to Building or parks in Intake) and `src/boards/pull-request-review.ts` for its PR review phase. Whether work is finished is the agent's instructions, not the board's: say when to move a card to Done in the phase's skill or `runner.instructions`.
+Read `src/boards/work.ts` for Work's topology (no skipping Planning, Building only through an approved plan, self-review returns to Building or parks in Intake) and `factory-skills/factory-review/SKILL.md` for its PR review phase. Whether work is finished is the agent's instructions, not the board's: say when to move a card to Done in the phase's skill or `runner.instructions`.
 
-A working phase whose `exitTool` has a board tool rule (`tools[exitTool.id]`) leaves through that tool: anyone but a person asking to move the card on to another working phase is rejected unless the exit tool is auto-approved for the card. Work's Planning uses `submit_plan` with `autoApprove: false`, so every plan waits for a person. To approve plans without a person on your own board, set `exitTool.autoApprove` (optionally with `autoApproveWhen`); there is no project setting.
+A working phase with an `exitTool` holds the card until that tool succeeds (for `submit_plan`, with an approved plan) in the session working the card there: until then anyone but a person asking to move the card on to another working phase is rejected with `approval_required`. Once it succeeded, the agent moves the card with `factory_transition_work_item` (or a board tool rule for the tool moves it). `autoApprove`/`autoApproveWhen` only decide whether the tool approves itself or waits for a person. Work's Planning uses `submit_plan` with `autoApprove: false`, so every plan waits for a person. To approve plans without a person on your own board, set `exitTool.autoApprove` (optionally with `autoApproveWhen`); there is no project setting.
 
 `transitionPolicy` is deprecated: it still runs for boards that set it and logs one warning per board. Do not add new policies; express the flow with `nextPhases` and `exitTool`. Factory no longer records triage classification or acceptance: Work's triage agent sends open non-bugs back to Intake, and a person moving the card on is the approval. Custom boards inherit none of Work's rules through phase or role names.
 
@@ -82,7 +82,7 @@ Keep the remaining limits explicit: `factory-ui` still uses built-in stages and 
 
 ## Change a built-in handler
 
-Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. To replace a board-owned handler, set `includeDefaultBoards: false` and install a same-ID board with the desired handler. For Work's `submit_plan` tool-result rule, declare `tools.submit_plan.onResult` on the replacement `work` board. The stock handler lives in `src/boards/work-tool-rules.ts`.
+Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. To replace a board-owned handler, set `includeDefaultBoards: false` and install a same-ID board with the desired handler. Work declares no tool-result rules; to have a tool's result move a card on your replacement `work` board, declare `tools.<tool>.onResult` there.
 
 Before changing a built-in handler:
 

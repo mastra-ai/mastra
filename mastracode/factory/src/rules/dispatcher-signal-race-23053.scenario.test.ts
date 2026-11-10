@@ -23,7 +23,7 @@ import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createLifecycleTestRegistry } from '../boards/test-utils.js';
+import { commitDecisions, createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -123,31 +123,17 @@ async function mountFactory() {
       },
     })
   ).item;
-  const boards = createLifecycleTestRegistry({
-    execute: {
-      issue: {
-        onEnter: () => ({
-          type: 'invokeSkill',
-          role: 'work',
-          prompt: 'Work the card.',
-          idempotencyKey: 'execute-23053',
-        }),
-      },
-    },
-  });
+  const boards = createLifecycleTestRegistry();
   const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
-  const moved = await transitionService.transition({
-    orgId: 'org-1',
+  // The scenario is the dispatcher's retry, not how the run was queued: the move commits a prompt run directly.
+  const moved = await commitDecisions(storage, {
     factoryProjectId: PROJECT_ID,
     workItemId: item.id,
-    board: 'work',
     stage: 'execute',
-    expectedRevision: item.revision,
-    actor: { type: 'system', id: 'factory-rule-dispatcher' },
-    ingress: { type: 'rule', identity: 'move-23053' },
-    cause: 'rule_decision',
+    ingress: 'move-23053',
+    decisions: [{ type: 'invokeSkill', role: 'work', prompt: 'Work the card.', idempotencyKey: 'execute-23053' }],
   });
-  expect(moved.status).toBe('accepted');
+  expect(moved.status).toBe('committed');
   await storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',

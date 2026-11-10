@@ -22,6 +22,7 @@ import { workBoard } from './work.js';
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 const RECHECK_MS = 1000;
 
+/** The app board's code behaviour: a tool result rule, which Factory keeps serving from code. */
 const shipped = () => undefined;
 
 /** An app board as `MastraFactory({ boards })` receives it; `names` changes its phase names between "releases". */
@@ -37,10 +38,10 @@ function appBoard(id: string, names: { queued?: string; shipping?: string } = {}
         kind: 'working',
         runner: { context: 'work' },
         nextPhases: ['shipped'],
-        onEnter: { manual: shipped },
       },
       shipped: { name: 'Shipped', kind: 'terminal' },
     },
+    tools: { ship_it: { onResult: shipped } },
   });
 }
 
@@ -57,17 +58,16 @@ function appBoardWithTesting(id: string): InstalledBoard {
         kind: 'working',
         runner: { context: 'work' },
         nextPhases: ['testing'],
-        onEnter: { manual: shipped },
       },
       testing: {
         name: 'Testing',
         kind: 'working',
         runner: { context: 'work' },
         nextPhases: ['shipped'],
-        onEnter: { manual: shipped },
       },
       shipped: { name: 'Shipped', kind: 'terminal' },
     },
+    tools: { ship_it: { onResult: shipped } },
   });
 }
 
@@ -166,9 +166,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const described = await boards.describe(scope);
     const work = described.registry.get('work')!;
     expect(work.name).toBe('Our work');
-    expect(work.rules.planning?.issue?.onEnter).toBeTypeOf('function');
-    expect(work.rules.triage?.issue?.onEnter).toBeTypeOf('function');
-    expect(work.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan!.onResult);
+    expect(work.phases.planning!.runner?.skill).toBe('factory-plan');
+    expect(work.phases.triage!.runner?.skill).toBe('factory-triage');
+    expect(work.sourceClosed).toEqual(workBoard.sourceClosed);
     expect(described.details.get('work')).toMatchObject({ problems: [] });
   });
 
@@ -199,9 +199,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(work).not.toBe(workBoard);
     expect(codeBoardOf(work)).toBe(workBoard);
     expect(work.phases.planning!.autoStartWhen).toEqual(EFFORT_LOW);
-    expect(work.rules.planning?.issue?.onEnter).toBeTypeOf('function');
-    expect(work.rules.triage?.issue?.onEnter).toBeTypeOf('function');
-    expect(work.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan!.onResult);
+    expect(work.phases.planning!.runner?.skill).toBe('factory-plan');
+    expect(work.phases.triage!.runner?.skill).toBe('factory-triage');
+    expect(work.sourceClosed).toEqual(workBoard.sourceClosed);
     expect(described.details.get('work')).toEqual({ source: 'builtin', editable: true, problems: [] });
 
     now = RECHECK_MS - 1;
@@ -225,9 +225,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
 
     expect(described.registry.get('work')!.name).toBe('Older default');
     expect(codeBoardOf(described.registry.get('work')!)).toBe(workBoard);
-    expect(described.registry.get('work')!.rules.triage?.issue?.onEnter).toBeTypeOf('function');
+    expect(described.registry.get('work')!.phases.triage!.runner?.skill).toBe('factory-triage');
     expect(described.registry.get('release')!.name).toBe('Older default');
-    expect(described.registry.get('release')!.rules.shipping?.manual?.onEnter).toBe(shipped);
+    expect(described.registry.get('release')!.tools.ship_it?.onResult).toBe(shipped);
     expect(described.details.get('release')).toEqual({ source: 'app', editable: true, problems: [] });
     expect((await a.boards.list(scope)).map(row => [row.key, row.revision, row.name])).toEqual([
       ['work', 1, 'Older default'],
@@ -262,8 +262,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(release.name).toBe('Our releases');
     expect(codeBoardOf(release)).toBe(newer);
     expect(Object.keys(release.phases)).toEqual(['queued', 'shipping', 'shipped']);
-    expect(release.rules.shipping?.manual?.onEnter).toBe(shipped);
-    const problem = 'Phase "testing" isn\'t on stored board "release", so its code behaviour doesn\'t run.';
+    expect(release.tools.ship_it?.onResult).toBe(shipped);
+    const problem =
+      'Board "release" keeps its code tool rules (ship_it), but can\'t move cards where they lead: phase "testing" isn\'t stored.';
     expect(described.details.get('release')).toEqual({ source: 'app', editable: true, problems: [problem] });
     expect(described.problems).toEqual([problem]);
     expect(warnings).toEqual([expect.stringContaining(problem)]);
@@ -291,7 +292,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const release = described.registry.get('release')!;
     expect(release.name).toBe('Our releases');
     expect(release.phases.shipping!.name).toBe('Shipping');
-    expect(release.rules.shipping?.manual?.onEnter).toBe(shipped);
+    expect(release.tools.ship_it?.onResult).toBe(shipped);
     expect(described.details.get('release')).toMatchObject({ problems: [] });
   });
 
@@ -305,7 +306,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const release = described.registry.get('release')!;
     expect(release.phases.shipping!.name).toBe('Shipping');
     expect(codeBoardOf(release)).toBe(release);
-    expect(release.rules.shipping?.manual?.onEnter).toBeUndefined();
+    expect(release.tools.ship_it?.onResult).toBeUndefined();
     expect(described.details.get('release')).toEqual({ source: 'stored', editable: true, problems: [] });
     expect(described.problems).toEqual([]);
   });
@@ -324,7 +325,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const described = await restarted.describe(scope);
 
     expect(described.registry.get('release')!.phases.shipping!.name).toBe('Shipping');
-    expect(described.registry.get('release')!.rules.shipping?.manual?.onEnter).toBe(shipped);
+    expect(described.registry.get('release')!.tools.ship_it?.onResult).toBe(shipped);
     expect(described.details.get('release')).toMatchObject({ problems: [] });
     expect((await a.boards.list(scope)).map(row => [row.key, row.revision])).toEqual(revisions);
     expect(await a.boards.readVersion(scope)).toBe(version);
@@ -365,7 +366,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const served = described.registry.get('release')!;
     expect(served.name).toBe('Stored release');
     expect(codeBoardOf(served)).toBe(release);
-    expect(served.rules.shipping?.manual?.onEnter).toBe(shipped);
+    expect(served.tools.ship_it?.onResult).toBe(shipped);
     expect(described.registry.has('review')).toBe(false);
     expect(described.details.get('release')).toEqual({ source: 'app', editable: true, problems: [] });
     expect(described.registry.has('bugs')).toBe(true);
