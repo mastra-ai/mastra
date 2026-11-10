@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 2.9.0-alpha.2
+
+### Patch Changes
+
+- Fixed tools rebuilt with `toolsFromDefinitions()` or `toolFromDefinition()` connecting without the call's `requestContext`. The handshake a cached tool opens on its first execution now reaches the server's custom `fetch` with that call's `requestContext`, so servers that authenticate every request accept it. A tool call that reconnects still sends the new handshake with its `requestContext`, but server logs on the new connection are no longer labelled with it. Fixes #29531. ([#29539](https://github.com/mastra-ai/mastra/pull/29539))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+
 ## 2.9.0-alpha.1
 
 ### Patch Changes

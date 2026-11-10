@@ -1,5 +1,30 @@
 # @mastra/code-sdk
 
+## 1.19.0-alpha.5
+
+### Patch Changes
+
+- `mastra/...` models now run on the Mastra Gateway key stored with a Factory tenant's model credentials, and fall back to the server-wide `MASTRA_GATEWAY_API_KEY` only when the tenant has none, so an organization with its own key pays from its own Mastra account. Web search on those models follows the same key. When a model runs through the Mastra Gateway, its key no longer reaches a custom provider named like the model's provider (for example `Anthropic`) or Moonshot's own API. ([#29183](https://github.com/mastra-ai/mastra/pull/29183))
+
+- Added `AuthStorage.removeStoredApiKey(provider)`, the counterpart of `setStoredApiKey()`. It removes the stored key and undoes its environment variable export, so a removed key stops authenticating models right away instead of at the next restart. If the variable held another key before, such as the one the process was started with, that key is restored. ([#29432](https://github.com/mastra-ai/mastra/pull/29432))
+
+  ```typescript
+  import { AuthStorage } from '@mastra/code-sdk/auth/storage';
+
+  const authStorage = new AuthStorage();
+  authStorage.setStoredApiKey('anthropic', 'sk-ant-...', 'ANTHROPIC_API_KEY');
+
+  // Removes the saved key and gives ANTHROPIC_API_KEY back its previous value, or unsets it.
+  authStorage.removeStoredApiKey('anthropic');
+  ```
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`1ac251b`](https://github.com/mastra-ai/mastra/commit/1ac251ba65b5417507d811f18f32c26868e30bb8), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`ec8d9b8`](https://github.com/mastra-ai/mastra/commit/ec8d9b8e7b8c259d96e1f1b2f7be4082cf13fb57), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`6644a82`](https://github.com/mastra-ai/mastra/commit/6644a8274880f217ed7930d2e115e68056a565d6), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd), [`6563e7a`](https://github.com/mastra-ai/mastra/commit/6563e7abfc5afa8ede43c668be018edeabe8db65), [`92f9771`](https://github.com/mastra-ai/mastra/commit/92f9771a0fefaf6e23541ac702850da63bfe4ef9)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/client-js@1.60.0-alpha.5
+  - @mastra/memory@1.41.1-alpha.2
+  - @mastra/libsql@1.30.0-alpha.2
+  - @mastra/mcp@2.9.0-alpha.2
+
 ## 1.19.0-alpha.4
 
 ### Patch Changes

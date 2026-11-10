@@ -1,5 +1,17 @@
 # @mastra/koa
 
+## 1.7.27-alpha.5
+
+### Patch Changes
+
+- Fixed auth checks for custom API routes so they always follow the route that actually handles the request. Previously, overlapping routes, letter case, `HEAD` requests or percent-encoded paths could make auth check a different route than the one that ran, so a protected route could run without auth (for example, a `HEAD` request to a protected `GET` route, or `/%61dmin` for a protected `/admin`). ([#29325](https://github.com/mastra-ai/mastra/pull/29325))
+
+  Requests are now matched the way the custom route handler matches them: the first registered route that matches wins, paths are case-sensitive, trailing slashes count, and `HEAD` uses the `GET` route. Auth, permission and FGA checks use that route and its path params. If a path is registered as protected, or no custom route matches, it is not treated as public.
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`ce76df9`](https://github.com/mastra-ai/mastra/commit/ce76df95d5d942940de7d5453fcbd38b7df5ea83), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/server@1.83.0-alpha.5
+
 ## 1.7.27-alpha.4
 
 ### Patch Changes

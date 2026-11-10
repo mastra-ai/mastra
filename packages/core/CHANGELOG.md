@@ -1,5 +1,39 @@
 # @mastra/core
 
+## 1.83.0-alpha.5
+
+### Patch Changes
+
+- Fixed a stale tool-approval click in one chat thread aborting a live run in another thread when both threads share a controller session. The click is now treated as stale without switching the session's thread. ([#29478](https://github.com/mastra-ai/mastra/pull/29478))
+
+- Experiment comparison now respects organization and project scoping. `mastra.datasets.compareExperiments` accepts `organizationId` and `projectId`, and the compare route passes them through, so experiments from another tenant are reported as not found. ([#29479](https://github.com/mastra-ai/mastra/pull/29479))
+
+  ```ts
+  const comparison = await mastra.datasets.compareExperiments({
+    experimentIds: ['exp-baseline', 'exp-candidate'],
+    organizationId: 'org_123',
+    projectId: 'proj_456',
+  });
+  ```
+
+  A scoped compare against an older `@mastra/core` that ignores those arguments is rejected. Comparisons that omit organization and project are unchanged.
+
+- Fixed `untilIdle` streams answering twice when the model had already answered with a background tool's result. This happened with an awaited background tool and with a deferred task that finished while the run was still going. A task whose result the model hasn't answered yet still gets its follow-up turn. ([#29848](https://github.com/mastra-ai/mastra/pull/29848))
+
+- Fixed Knowledge writes slowing down for agents that hold many scopes. A write now looks up held scopes in one query and skips the ones already in place, instead of writing every held scope on every write. ([#29775](https://github.com/mastra-ai/mastra/pull/29775))
+
+- Fixed durable and evented agents returning the original model text after an output processor rewrote the final reply. `text` and `generate()` now return the final reply as `processOutputResult` left it, including a reply it emptied, as a regular Agent does. Earlier step texts in `steps` and the returned response messages are unchanged. ([#29849](https://github.com/mastra-ai/mastra/pull/29849))
+
+- Improved how fast `AgentController.listAvailableModels()` answers. Once the models.dev and Netlify catalogs have downloaded, calls reuse them instead of downloading both again every 10 seconds. The first call still waits for both downloads. ([#29432](https://github.com/mastra-ai/mastra/pull/29432))
+
+  - Model lists stay complete when a catalog download fails. The last downloaded models are kept. A catalog that has never downloaded is retried on a later call, which waits for it.
+  - Catalogs older than 5 minutes refresh in the background, so calls never wait for them.
+  - A slow or unreachable catalog no longer delays the other one.
+  - Saved or removed API keys and custom providers still show up within 10 seconds, or on the next call after `invalidateAvailableModelsCache()`. That call rechecks configured gateways and API keys and answers from the saved catalogs while they download again in the background.
+  - Use counts are up to date on every call.
+
+- Fixed `run.restart()` on evented workflows failing with "This workflow run was not active" when a nested workflow had already finished before the restart. The parent now reuses the nested workflow's saved result and continues from the next step, as the default engine does. A nested workflow that had failed now fails the parent with its own error. ([#29855](https://github.com/mastra-ai/mastra/pull/29855))
+
 ## 1.83.0-alpha.4
 
 ### Minor Changes
