@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
+import { sliceSafe } from '../../utils/slice-by-tokens';
 import { WORKSPACE_TOOLS } from '../constants';
 import { UnsupportedGrepPatternError } from '../errors';
 import type { FilesystemGrepResult } from '../filesystem';
@@ -379,7 +380,7 @@ Usage:
                 if (columnIndex !== undefined) {
                   let lineContent = line;
                   if (lineContent.length > MAX_LINE_LENGTH) {
-                    lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+                    lineContent = sliceSafe(lineContent, 0, MAX_LINE_LENGTH) + '...';
                   }
                   outputLines.push(`${filePath}:${i + 1}:${columnIndex + 1}: ${lineContent}`);
                 } else {
@@ -391,7 +392,7 @@ Usage:
             for (const match of fileMatches) {
               let lineContent = getLine(match.lineIndex) ?? '';
               if (lineContent.length > MAX_LINE_LENGTH) {
-                lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+                lineContent = sliceSafe(lineContent, 0, MAX_LINE_LENGTH) + '...';
               }
               outputLines.push(`${filePath}:${match.lineIndex + 1}:${match.columnIndex + 1}: ${lineContent}`);
             }
