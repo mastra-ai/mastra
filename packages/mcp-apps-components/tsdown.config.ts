@@ -9,7 +9,7 @@ const RAW = '?raw';
 // package imports each app's page with `?raw`, which inlines the HTML as a string, so it carries no
 // file reference that bundling could break.
 export default defineConfig({
-  entry: ['src/index.ts', 'src/host.ts'],
+  entry: ['src/index.ts', 'src/host.ts', 'src/dashboards.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
@@ -17,8 +17,8 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
-  // The entry's dashboard schemas use the kind option modules from `@mastra/playground-ui`, which
-  // stays bundled (a devDependency); `@mastra/core` is a peer, as for `@mastra/mcp`.
+  // The dashboard schemas (the main entry's and `dashboards`) use the kind option modules from
+  // `@mastra/playground-ui`, which stays bundled (a devDependency); `@mastra/core` is a peer, as for `@mastra/mcp`.
   deps: {
     alwaysBundle: ['@mastra/playground-ui'],
   },
