@@ -23,7 +23,6 @@ function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): 
     when: null,
     target: { boardKey, phaseKey: null, joinClosedIssue: false },
     on: ['work_item.created'],
-    allowWorkingPhase: false,
     revision: 1,
     createdBy: 'user-1',
     createdAt: '2026-11-01T00:00:00.000Z',
@@ -64,7 +63,7 @@ function renderBoard(
       '*/web/factory/projects/:id/intake-routes',
       typeof intakeRoutes === 'function'
         ? intakeRoutes
-        : () => HttpResponse.json({ intakeRoutes } satisfies IntakeRouteListResponse),
+        : () => HttpResponse.json({ intakeRoutes, canEdit: false } satisfies IntakeRouteListResponse),
     ),
     http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
     http.get('*/web/intake/config', () =>
@@ -161,7 +160,10 @@ describe('custom-only board routing', () => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, () =>
       fail
         ? HttpResponse.json({ error: 'Intake routes are unavailable' }, { status: 500 })
-        : HttpResponse.json({ intakeRoutes: [intakeRouteTo('release')] } satisfies IntakeRouteListResponse),
+        : HttpResponse.json({
+            intakeRoutes: [intakeRouteTo('release')],
+            canEdit: false,
+          } satisfies IntakeRouteListResponse),
     );
     await waitForMutationsIdle(client);
 
@@ -181,9 +183,7 @@ describe('custom-only board routing', () => {
   it('offers intake setup while the only selected source feeds another project', async () => {
     const { client } = renderBoard(undefined, undefined, undefined, [], {
       sourceIds: ['team-1'],
-      bindings: [
-        { integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'fp-other', board: 'work', labels: null },
-      ],
+      bindings: [{ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'fp-other', labels: null }],
     });
     await waitForMutationsIdle(client);
 
@@ -198,9 +198,7 @@ describe('custom-only board routing', () => {
   it("offers no intake setup while a selected source feeds one of this project's boards", async () => {
     const { client } = renderBoard(undefined, undefined, undefined, [], {
       sourceIds: ['team-1'],
-      bindings: [
-        { integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'fp-1', board: 'work', labels: null },
-      ],
+      bindings: [{ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'fp-1', labels: null }],
     });
     await waitForMutationsIdle(client);
 

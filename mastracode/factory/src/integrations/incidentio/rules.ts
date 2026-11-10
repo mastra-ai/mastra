@@ -55,7 +55,7 @@ export interface IncidentioIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** incident.io source the follow-up was read from; resolves the bound board via `intakeBoards`. */
+  /** incident.io source the follow-up was read from. */
   sourceId?: string | null;
 }
 
@@ -73,8 +73,6 @@ export interface IncidentioRulesIngress {
   userId: string;
   factoryProjectId: string;
   issues: IncidentioIssueIngress[];
-  /** Board id per bound incident.io source id, from the project's intake bindings. */
-  intakeBoards?: Readonly<Record<string, string>>;
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
@@ -137,8 +135,6 @@ export class IncidentioRules {
     }
 
     const event = isClosed ? 'followUpClosed' : 'followUpObserved';
-    const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.#boards(input).get(boundBoardId) : undefined;
     const context: FactoryIncidentioRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -166,7 +162,7 @@ export class IncidentioRules {
             ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...withIntakeTarget(this.#boards(input), boundBoard),
+      ...withIntakeTarget(this.#boards(input)),
       event,
       issue,
     };

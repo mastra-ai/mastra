@@ -173,9 +173,9 @@ export type SessionListEntry =
   | { kind: 'card'; itemId: string; title: string; rows: SessionListRow[] };
 
 /**
- * Gathers a card's sessions under one entry for the card, at the place of its
- * first row, so each is told apart by its context. A card with one session
- * still gets its entry, so the row reads as that context.
+ * Gathers a card's rows under one entry for the card, at the place of its
+ * first row, each named by its context. The sidebar lists one row per card
+ * (`oneRowPerCard`), which still gets its entry so it reads as that context.
  */
 export function nestCardSessions(rows: readonly SessionListRow[]): SessionListEntry[] {
   const entries: SessionListEntry[] = [];

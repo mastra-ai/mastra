@@ -615,7 +615,6 @@ describe('Board card buttons move the card', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
       http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
         HttpResponse.json({ issues: [gitlabCandidateIssue], nextCursor: null }),
       ),

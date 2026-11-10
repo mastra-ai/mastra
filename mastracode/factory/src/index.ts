@@ -79,3 +79,6 @@ export type {
   IntegrationHooks,
   IntegrationTools,
 } from './integrations/base.js';
+export type { ReviewedChangeRequest, PublishReviewedCommitCheckInput } from './session/source-control-tools.js';
+export type { CommitCheck, CommitCheckStatus } from './capabilities/version-control.js';
+export { platformConnectTools } from './integrations/platform/connect/session-tools.js';

@@ -135,8 +135,6 @@ export interface StoredIntakeRouteInput {
   target: IntakeRouteTarget;
   /** The status events the route handles; unset handles new cards (`work_item.created`). */
   on?: StatusEvent[];
-  /** Lets an event move an existing card into a working phase, such as Triage. Off by default. */
-  allowWorkingPhase?: boolean;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -149,7 +147,6 @@ export interface StoredIntakeRouteRecord {
   when: RuleGroup | null;
   target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
   on: StatusEvent[];
-  allowWorkingPhase: boolean;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -182,6 +179,7 @@ export {
   PULL_REQUEST_UPDATED_ROUTE,
   PULL_REQUEST_REVIEW_REQUESTED_ROUTE,
   CLOSES_ISSUE_INTAKE_ROUTE,
+  CATCH_ALL_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTES,
 } from '../../../boards/work-routes.js';
 
@@ -254,7 +252,6 @@ interface IntakeRouteRow extends Record<string, unknown> {
   phase_key: string | null;
   /** Null on rows written before routes named events: they place new cards. */
   on_events: StatusEvent[] | null;
-  allow_working_phase: boolean | null;
   join_closed_issue: boolean | null;
   revision: number;
   created_by: string;
@@ -564,7 +561,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return row ? toIntakeRouteRecord(row) : null;
   }
 
-  /** Adds a route after the project's last one. */
+  /**
+   * Adds a route after the project's last one. A route that places new cards goes just ahead of the
+   * first route that takes every new card instead, since after it it would never place one.
+   */
   async createIntakeRoute(
     scope: StoredBoardScope,
     input: StoredIntakeRouteInput,
@@ -581,12 +581,15 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           `A project can have at most ${MAX_INTAKE_ROUTES} intake routes; delete one first.`,
         );
       }
-      await insertIntakeRoute(ops, scope, {
-        id,
-        input,
-        position: rows.reduce((max, row) => Math.max(max, row.position), -1) + 1,
-        actor,
-      });
+      const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
+      await insertIntakeRoute(ops, scope, { id, input, position, actor });
+      const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
+        ? rows.findIndex(catchesEveryNewCard)
+        : -1;
+      if (ahead >= 0) {
+        const added = (await readIntakeRoutes(ops, scope)).find(row => row.id === id)!;
+        await placeIntakeRoutes(ops, rows.toSpliced(ahead, 0, added), actor);
+      }
     });
     return (await this.getIntakeRoute(scope, id))!;
   }
@@ -604,7 +607,6 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
       await updateIntakeRouteRow(ops, row, {
         ...(patch.on !== undefined && { on_events: patch.on }),
-        ...(patch.allowWorkingPhase !== undefined && { allow_working_phase: patch.allowWorkingPhase }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),
@@ -891,13 +893,22 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     when: row.when_condition,
     target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
     on: routeEvents(row),
-    allowWorkingPhase: row.allow_working_phase ?? false,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
   };
+}
+
+/** Whether `row` places every new card that reaches it, as the seeded "Everything else" route does. */
+function catchesEveryNewCard(row: IntakeRouteRow): boolean {
+  return (
+    row.enabled &&
+    row.when_condition === null &&
+    (row.on_events ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created') &&
+    !row.join_closed_issue
+  );
 }
 
 async function readIntakeRoutes(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<IntakeRouteRow[]> {
@@ -956,7 +967,6 @@ async function insertIntakeRoute(
     board_key: route.input.target.boardKey,
     phase_key: route.input.target.phaseKey ?? null,
     on_events: route.input.on ?? null,
-    allow_working_phase: route.input.allowWorkingPhase ?? false,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
     revision: 1,
     created_by: route.actor,

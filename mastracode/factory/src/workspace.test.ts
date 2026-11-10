@@ -688,6 +688,13 @@ describe('bundled Factory skill assets', () => {
       expect(skill).toContain('**The head must not have moved.**');
       expect(skill).toContain('If the head moved, do not publish');
     }
+    // Factory offers no test check tool; the test report comment carries the results.
+    for (const name of ['factory-review', 'factory-rereview', 'factory-gitlab-review', 'factory-gitlab-rereview']) {
+      const skill = await read(name);
+      expect(skill).not.toContain('source_control_publish_test_check');
+      expect(skill).not.toContain('The check URL');
+      expect(skill).toContain('`Verification incomplete` naming the drift');
+    }
     // Existing review signal (bot and human) must be collected from every
     // source — submitted reviews, unresolved inline threads with their
     // metadata, and top-level comments — and dispositioned, and a confirmed

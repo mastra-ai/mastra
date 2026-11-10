@@ -88,7 +88,6 @@ describe('ProjectRoutes', () => {
         integrationId: 'jira',
         sourceId: '10000',
         factoryProjectId,
-        board: 'work',
         labels,
       });
     await bind(platform.id, null);
@@ -164,6 +163,38 @@ describe('ProjectRoutes', () => {
     const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
     expect(updated.name).toBe('Renamed');
     expect(updated).not.toHaveProperty('autoApprovePlans');
+  });
+
+  it('accepts and ignores the retired reviewTestChecksEnabled switch from an old client', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const patch = (body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // The review skill decides whether to publish its test check, so the old toggle
+    // gets a 200 and changes nothing.
+    const alone = await patch({ reviewTestChecksEnabled: true });
+    expect(alone.status).toBe(200);
+    expect(((await alone.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty(
+      'reviewTestChecksEnabled',
+    );
+
+    const mixed = await patch({ name: 'Renamed', reviewTestChecksEnabled: false });
+    expect(mixed.status).toBe(200);
+    const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
+    expect(updated.name).toBe('Renamed');
+    expect(updated).not.toHaveProperty('reviewTestChecksEnabled');
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).not.toHaveProperty('reviewTestChecksEnabled');
   });
 
   it('requires an organization and scopes project access by organization', async () => {

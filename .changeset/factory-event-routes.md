@@ -4,13 +4,12 @@
 
 Added board events to intake routes. You can now decide what happens to an existing card when its issue closes or reopens, and the session working a card now hears about new comments and edits.
 
-**Routes handle status events.** A route names the events it handles in `on`: `work_item.created` (the default, where a new card lands), `work_item.closed` and `work_item.reopened`. Close and reopen routes can test `event.type` and `event.reason` (`completed` or `canceled`). When a route matches, the card moves to its phase as a system move. The move is recorded in the card's history and audit log, waits for a run in flight (except into a terminal phase) without holding a dispatch slot, and skips the board's `nextPhases`, so a reopened card can leave Done. A move into a working phase such as Triage needs `allowWorkingPhase: true` on the route. A move into a terminal phase aborts a session still running on the card at once, as closes always have. When an issue is closed and reopened before Factory applies the close, the last status wins and the card stays where it was. A route move clears the card's armed autonomy, so a reopened card waits for a person or auto-run before it works again.
+**Routes handle status events.** A route names the events it handles in `on`: `work_item.created` (the default, where a new card lands), `work_item.closed` and `work_item.reopened`. Close and reopen routes can test `event.type` and `event.reason` (`completed` or `canceled`). When a route matches, the card moves to its phase as a system move. The move is recorded in the card's history and audit log, waits for a run in flight (except into a terminal phase) without holding a dispatch slot, and skips the board's `nextPhases`, so a reopened card can leave Done. A move into a terminal phase aborts a session still running on the card at once, as closes always have. When an issue is closed and reopened before Factory applies the close, the last status wins and the card stays where it was. A route move clears the card's armed autonomy, so a reopened card waits for a person or auto-run before it works again.
 
 ```bash
 # Send every reopened issue back to Triage, to run again, instead of Intake.
 curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$REOPENED_ROUTE" -H 'content-type: application/json' -d '{
   "target": { "boardKey": "work", "phaseKey": "triage" },
-  "allowWorkingPhase": true,
   "expectedRevision": 1
 }'
 ```
