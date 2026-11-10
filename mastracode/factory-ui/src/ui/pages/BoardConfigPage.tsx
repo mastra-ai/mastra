@@ -9,6 +9,7 @@ import { Link } from 'react-router';
 import { BoardRequestError, useBoardQuery } from '../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useShownDraft } from '../domains/boardConfig/BoardDraftProvider';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { BoardConfigEditor } from '../domains/boardConfig/components/BoardConfigEditor';
 import { BoardConfigHeader } from '../domains/boardConfig/components/BoardConfigHeader';
@@ -32,7 +33,9 @@ export function BoardConfigPage() {
   const skills = useFactorySkillsQuery(factory.id);
 
   const board = query.data?.board;
-  const savedPhase = phaseKey ? board?.phases.find(phase => phase.key === phaseKey) : undefined;
+  // Phases added but not yet saved have pages too.
+  const shownDraft = useShownDraft(factory.id, boardId, board);
+  const shownPhase = phaseKey ? shownDraft?.phases.find(phase => phase.key === phaseKey) : undefined;
   const generalPath = boardConfigPath(factory.id, boardId);
 
   const slots = useSidebarHeaderSlots({
@@ -40,7 +43,7 @@ export function BoardConfigPage() {
       sidebarHidden && board ? (
         <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
           <Crumb as={Link} to={boardPath(factory.id, boardId)}>
-            {board.name}
+            {shownDraft?.name || board.name}
           </Crumb>
           {phaseKey ? (
             <Crumb as={Link} to={generalPath}>
@@ -51,9 +54,9 @@ export function BoardConfigPage() {
               Configure
             </Crumb>
           )}
-          {savedPhase && (
+          {shownPhase && (
             <Crumb as="span" isCurrent>
-              {savedPhase.name}
+              {shownPhase.name}
             </Crumb>
           )}
         </Breadcrumb>
@@ -61,7 +64,7 @@ export function BoardConfigPage() {
   });
 
   const header =
-    query.isSuccess && (!phaseKey || savedPhase) ? (
+    query.isSuccess && (!phaseKey || shownPhase) ? (
       <div className={cn(COLUMN, 'pb-8')}>
         <BoardConfigHeader
           key={`${boardId}:${query.data.board.revision ?? 'code'}`}

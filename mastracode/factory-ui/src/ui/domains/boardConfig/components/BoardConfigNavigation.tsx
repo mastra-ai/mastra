@@ -1,15 +1,7 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  BookOpen,
-  Check,
-  ChevronDown,
-  GitPullRequest,
-  GripVertical,
-  SlidersHorizontal,
-  SquareKanban,
-} from 'lucide-react';
+import { BookOpen, Check, ChevronDown, GripVertical, Plus, SlidersHorizontal, SquareKanban } from 'lucide-react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { ComponentProps, KeyboardEvent, PointerEvent, ReactNode } from 'react';
@@ -22,10 +14,11 @@ import { useOverlays } from '../../../lib/overlays';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
-import { useBoardDraft, useBoardDraftName } from '../BoardDraftProvider';
-import { boardConfigPath, boardSkillsPath } from '../boardConfigPaths';
+import { useBoardDraft, useShownDraft } from '../BoardDraftProvider';
+import { boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
 import type { BoardConfigLocation } from '../boardConfigPaths';
 import { movePhase } from '../boardDraft';
+import { AddPhaseButton } from './AddPhaseButton';
 
 /**
  * The factory's skills no phase runs, then the board switcher and the open board's pages: General, then one
@@ -60,23 +53,27 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills }: 
         ) : query.isError ? (
           <p role="alert">Unable to load phases.</p>
         ) : (
-          <PhaseList factoryId={factoryId} boardId={boardId} phaseKey={phaseKey} response={query.data} />
+          <PhaseList
+            factoryId={factoryId}
+            boardId={boardId}
+            phaseKey={phaseKey}
+            skills={skills}
+            response={query.data}
+          />
         )}
       </section>
     </nav>
   );
 }
 
-const boardIcon = (boardId: string) => (boardId === 'review' ? GitPullRequest : SquareKanban);
-
 /** Names the board being configured, and opens another board's configuration in its place. */
 function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: string }) {
   const catalog = useBoardCatalog(factoryId);
-  const board = useBoardQuery(factoryId, boardId).data?.board;
-  const name = useBoardDraftName(factoryId, boardId, board);
+  const response = useBoardQuery(factoryId, boardId).data;
+  const board = response?.board;
+  const name = useShownDraft(factoryId, boardId, board)?.name;
   const boards = catalog.data ? orderedBoards(catalog.data) : [];
   const title = name || boards.find(other => other.id === boardId)?.title || 'Board';
-  const Icon = boardIcon(boardId);
   const overlays = useOverlays();
 
   return (
@@ -88,26 +85,32 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
         size="sm"
         className="w-full min-w-0 justify-start gap-2"
       >
-        <Icon aria-hidden />
+        <SquareKanban aria-hidden />
         <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1 truncate text-left">
           {title}
         </Txt>
         <ChevronDown aria-hidden size={14} className="text-muted-foreground shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
-        {boards.map(other => {
-          const OtherIcon = boardIcon(other.id);
-          return (
-            <DropdownMenu.Item
-              key={other.id}
-              render={<Link to={boardConfigPath(factoryId, other.id)} onClick={() => overlays.close('sidebar')} />}
-            >
-              <OtherIcon />
-              <span className="min-w-0 flex-1 truncate">{other.id === boardId ? title : other.title}</span>
-              {other.id === boardId && <Check aria-label="Open board" />}
+        {boards.map(other => (
+          <DropdownMenu.Item
+            key={other.id}
+            render={<Link to={boardConfigPath(factoryId, other.id)} onClick={() => overlays.close('sidebar')} />}
+          >
+            <SquareKanban />
+            <span className="min-w-0 flex-1 truncate">{other.id === boardId ? title : other.title}</span>
+            {other.id === boardId && <Check aria-label="Open board" />}
+          </DropdownMenu.Item>
+        ))}
+        {response?.canEdit && (
+          <>
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item render={<Link to={newBoardPath(factoryId)} onClick={() => overlays.close('sidebar')} />}>
+              <Plus />
+              New board
             </DropdownMenu.Item>
-          );
-        })}
+          </>
+        )}
       </DropdownMenu.Content>
     </DropdownMenu>
   );
@@ -122,13 +125,16 @@ function PhaseList({
   factoryId,
   boardId,
   phaseKey,
+  skills,
   response,
 }: BoardConfigLocation & {
   response: StoredBoardResponse;
 }) {
   const { board, canEdit } = response;
-  const sortable = canEdit === true && board.editable === true && board.phases.length > 2;
-  const { draft, setDraft } = useBoardDraft(factoryId, boardId, board);
+  const { draft, locked, setDraft } = useBoardDraft(factoryId, boardId, board);
+  const editable = canEdit === true && board.editable === true;
+  // The skills page has no save bar to keep a reorder made there.
+  const sortable = editable && !skills && !locked && draft.phases.length > 2;
   const [drag, setDrag] = useState<Drag>();
   const [announcement, setAnnouncement] = useState('');
 
@@ -169,8 +175,9 @@ function PhaseList({
       let to = from;
       rows.forEach((row, index) => {
         const middle = row.top + row.height / 2;
-        if (index > from && center > middle) to = index;
-        if (index > 0 && index < from && center < middle) to = Math.min(to, index);
+        // Inclusive, since the clamp stops the row's center right on the end rows' middles.
+        if (index > from && center >= middle) to = index;
+        if (index > 0 && index < from && center <= middle) to = Math.min(to, index);
       });
       current = { from, to, offset };
       setDrag(current);
@@ -235,6 +242,7 @@ function PhaseList({
           );
         })}
       </Sidebar.NavList>
+      {editable && <AddPhaseButton factoryId={factoryId} boardId={boardId} board={board} disabled={locked} />}
       <span role="status" className="sr-only">
         {announcement}
       </span>

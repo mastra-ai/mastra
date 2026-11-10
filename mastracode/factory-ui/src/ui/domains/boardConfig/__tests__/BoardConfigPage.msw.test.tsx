@@ -5,10 +5,12 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
+import { releaseBoard as releaseBoardInfo, workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type {
+  BoardCatalogResponse,
   FactorySkillInfo,
   FactorySkillsResponse,
   ReplaceBoardBody,
@@ -17,63 +19,21 @@ import type {
   StoredPhaseInfo,
 } from '../../../../api/types';
 import { createAppRoutes } from '../../../router';
+import {
+  BOARD_URL,
+  BUILT_IN_SKILLS,
+  FACTORY_ID,
+  PROJECT_URL,
+  renderAt,
+  serveBoard,
+  stubFactory,
+} from './fixtures/factory-app';
 import { storedWorkBoard } from './fixtures/work-board';
 
-const FACTORY_ID = 'fp-1';
-const PROJECT_URL = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`;
-const BOARD_URL = `${PROJECT_URL}/boards/work`;
 const EFFORT_LOW = {
   operator: 'AND',
   conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
 } as const;
-
-function stubFactory(factory: Record<string, unknown> = {}) {
-  const project = { id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, ...factory };
-  const patches: unknown[] = [];
-  server.use(
-    http.get(`${TEST_BASE_URL}/auth/me`, () =>
-      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({
-        projects: [{ ...project, repositories: [listedRepository('repo-1', 'acme/app', { sandboxWorkdir: '/repo' })] }],
-      }),
-    ),
-    http.patch(PROJECT_URL, async ({ request }) => {
-      const body = (await request.json()) as Record<string, unknown>;
-      patches.push(body);
-      Object.assign(project, body);
-      return HttpResponse.json({ project });
-    }),
-    http.get(`${PROJECT_URL}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.get(`${PROJECT_URL}/metrics`, () => HttpResponse.json({ error: 'unavailable' }, { status: 500 })),
-    http.get(`${TEST_BASE_URL}/web/factory/skills`, () =>
-      HttpResponse.json({ skills: BUILT_IN_SKILLS, canEdit: true } satisfies FactorySkillsResponse),
-    ),
-    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
-    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/repo-1/ensure`, () => HttpResponse.json({ ok: true })),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
-      HttpResponse.json({ categories: {}, tools: {} }),
-    ),
-  );
-  return patches;
-}
-
-function serveBoard(board: StoredBoardResponse | (() => StoredBoardResponse), url = BOARD_URL) {
-  server.use(http.get(url, () => HttpResponse.json(typeof board === 'function' ? board() : board)));
-}
-
-function renderAt(path: string) {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
-  return { ...renderWithProviders(<RouterProvider router={router} />), router };
-}
 
 function configNav() {
   return within(screen.getByRole('navigation', { name: 'Board configuration' }));
@@ -87,21 +47,46 @@ async function openPhase(name: string) {
   return user;
 }
 
-/** The built-in skills a real server always lists. */
-const BUILT_IN_SKILLS: FactorySkillInfo[] = [
-  'factory-triage',
-  'factory-plan',
-  'factory-self-review',
-  'factory-review',
-  'factory-rereview',
-  'factory-gitlab-review',
-  'factory-gitlab-rereview',
-  'factory-complete-issue',
-].map(name => ({ name, description: `The ${name} skill`, content: `# ${name}`, builtIn: true }));
+const RELEASE_URL = `${PROJECT_URL}/boards/release`;
+const RELEASE_PHASES: StoredPhaseInfo[] = [
+  { key: 'queued', name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
+  {
+    key: 'drafting',
+    name: 'Drafting',
+    kind: 'working',
+    runner: { skill: 'release-notes', context: 'release' },
+    nextPhases: ['published'],
+  },
+  { key: 'published', name: 'Published', kind: 'terminal', nextPhases: [] },
+];
+const releaseBoard = (board: Partial<StoredBoardInfo> = {}): StoredBoardResponse => ({
+  board: {
+    key: 'release',
+    name: 'Release Preview',
+    description: null,
+    phases: RELEASE_PHASES,
+    revision: 3,
+    source: 'stored',
+    editable: true,
+    codeBehaviour: null,
+    problems: [],
+    ...board,
+  },
+  canEdit: true,
+});
+
+function serveCatalog() {
+  server.use(
+    http.get(`${PROJECT_URL}/boards`, () =>
+      HttpResponse.json({ boards: [workBoardInfo, releaseBoardInfo] } satisfies BoardCatalogResponse),
+    ),
+  );
+}
 
 describe('Board configuration', () => {
   it('opens from the board toolbar and the sidebar row, and goes back to the board', async () => {
     stubFactory();
+    serveCatalog();
     serveBoard(storedWorkBoard());
     const user = userEvent.setup();
     const { router } = renderAt(`/factories/${FACTORY_ID}/work`);
@@ -118,30 +103,25 @@ describe('Board configuration', () => {
     await user.click(screen.getByRole('button', { name: 'Back to Work: Board settings' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
 
-    serveBoard(
-      storedWorkBoard({ key: 'review', name: 'Review', revision: null, editable: false }),
-      `${PROJECT_URL}/boards/review`,
-    );
-    await user.click(await screen.findByRole('link', { name: 'Configure Review' }));
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review/config`);
+    serveBoard(releaseBoard({ source: 'app', editable: false, revision: null, codeBehaviour: {} }), RELEASE_URL);
+    await user.click(await screen.findByRole('link', { name: 'Configure Release Preview' }));
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/release/config`);
     expect(await screen.findByText("This board is defined in code, so it can't be changed here.")).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back to Review: Board settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to Release Preview: Board settings' })).toBeInTheDocument();
   });
 
   it('opens settings for the board in view from the Boards header, then switches to another board', async () => {
     stubFactory();
-    serveBoard(
-      storedWorkBoard({ key: 'review', name: 'Review', revision: null, editable: false }),
-      `${PROJECT_URL}/boards/review`,
-    );
-    const { router } = renderAt(`/factories/${FACTORY_ID}/review`);
+    serveCatalog();
+    serveBoard(releaseBoard(), RELEASE_URL);
+    const { router } = renderAt(`/factories/${FACTORY_ID}/boards/release`);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('link', { name: 'Board settings' }));
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review/config`);
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/release/config`);
 
     serveBoard(storedWorkBoard());
-    await user.click(await configNav().findByRole('button', { name: 'Board: Review' }));
+    await user.click(await configNav().findByRole('button', { name: 'Board: Release Preview' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Work' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/config`));
     expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Work');
@@ -214,12 +194,11 @@ describe('Board configuration', () => {
     renderAt(`/factories/${FACTORY_ID}/work/config`);
 
     const user = await openPhase('Planning');
-    // What the code behaviour depends on stays read-only.
+    // Factory's code depends on Planning staying a working phase, so its kind can't change.
     expect(screen.getByRole('img', { name: /^Working\./ })).toBeInTheDocument();
-    // Code-owned settings read as text, with no field to type into.
-    expect(screen.getByText('submit_plan')).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'Planning exit tool' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'Planning session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Phase kind' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Planning exit tool' })).toHaveValue('submit_plan');
+    expect(screen.getByRole('textbox', { name: 'Planning session' })).toHaveValue('work');
     // Factory's code moves Planning cards to Building, so that move stays on.
     const moves = within(screen.getByRole('list', { name: 'Allowed moves from Planning' }));
     const building = moves.getByRole('button', { name: 'Building (locked)', pressed: true });
@@ -292,12 +271,12 @@ describe('Board configuration', () => {
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
     configNav().getByRole('link', { name: 'Review' }).focus();
     await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
-    expect(await screen.findByText('Review moved to position 4 of 8.')).toBeInTheDocument();
+    expect(await screen.findByText('Review moved to position 4 of 7.')).toBeInTheDocument();
     expect(
       configNav()
         .getAllByRole('link')
         .map(link => link.textContent),
-    ).toEqual(['Skills', 'General', 'Intake', 'Triage', 'Plan', 'Review', 'Building', 'PR review', 'Done', 'Canceled']);
+    ).toEqual(['Skills', 'General', 'Intake', 'Triage', 'Plan', 'Review', 'Building', 'Done', 'Canceled']);
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
@@ -306,15 +285,14 @@ describe('Board configuration', () => {
       'intake',
       'triage',
       'planning',
-      'review',
-      'execute',
       'pr-review',
+      'execute',
       'done',
       'canceled',
     ]);
     expect(body.phases.find(phase => phase.key === 'planning')).toMatchObject({
       name: 'Plan',
-      nextPhases: ['intake', 'triage', 'execute', 'review', 'done', 'canceled'],
+      nextPhases: ['intake', 'triage', 'execute', 'pr-review', 'done', 'canceled'],
     });
   });
 
@@ -326,8 +304,8 @@ describe('Board configuration', () => {
         HttpResponse.json(
           {
             error: 'code_behaviour',
-            message: 'Phase "planning" code handlers choose the skill; leave runner.skill unset.',
-            conflicts: ['Phase "planning" code handlers choose the skill; leave runner.skill unset.'],
+            message: 'Phase "done" must stay terminal; its code behaviour depends on it.',
+            conflicts: ['Phase "done" must stay terminal; its code behaviour depends on it.'],
           },
           { status: 422 },
         ),
@@ -348,7 +326,7 @@ describe('Board configuration', () => {
     await user.paste(JSON.stringify(EFFORT_LOW));
     await user.click(screen.getByRole('button', { name: 'Save' }));
     const alert = await screen.findByRole('alert');
-    expect(within(alert).getByText(/leave runner\.skill unset/)).toBeInTheDocument();
+    expect(within(alert).getByText(/must stay terminal/)).toBeInTheDocument();
   });
 
   it('asks before leaving the board with unsaved changes', async () => {
@@ -438,16 +416,6 @@ describe('Board configuration', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
-  it('shows the skill Done runs when an issue card arrives', async () => {
-    stubFactory();
-    serveBoard(storedWorkBoard());
-    renderAt(`/factories/${FACTORY_ID}/work/config/done`);
-
-    expect(await screen.findByRole('heading', { name: "When an issue's card arrives" })).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Edit factory-complete-issue' })).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
   it("edits a phase's skill in place, without touching the board draft", async () => {
     stubFactory();
     serveBoard(storedWorkBoard());
@@ -492,61 +460,8 @@ describe('Board configuration', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
-  it('turns factory automation on from a built-in board, one switch at a time', async () => {
-    const patches = stubFactory({ autoApprovePlans: true });
-    serveBoard(storedWorkBoard());
-    const user = userEvent.setup();
-    const { client } = renderAt(`/factories/${FACTORY_ID}/work/config`);
-
-    const autoRun = await screen.findByRole('switch', { name: 'Auto-start runs' });
-    // The retired plan auto-approval switch stays gone, even for projects that still have it on.
-    expect(screen.queryByRole('switch', { name: 'Auto-approve plans' })).not.toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Self-review before pull requests' })).not.toBeChecked();
-    expect(screen.getByRole('switch', { name: 'Publish review test checks' })).not.toBeChecked();
-
-    await user.click(autoRun);
-    await waitForMutationsIdle(client);
-    await user.click(screen.getByRole('switch', { name: 'Self-review before pull requests' }));
-    await waitForMutationsIdle(client);
-    await user.click(screen.getByRole('switch', { name: 'Publish review test checks' }));
-    await waitForMutationsIdle(client);
-
-    expect(patches).toEqual([{ autoRunEnabled: true }, { selfReviewEnabled: true }, { reviewTestChecksEnabled: true }]);
-    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeChecked();
-    // Automation saves on its own; there is no board draft to save.
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
-  });
-
   describe('a custom board', () => {
-    const RELEASE_URL = `${PROJECT_URL}/boards/release`;
-    const RELEASE_PHASES: StoredPhaseInfo[] = [
-      { key: 'queued', name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
-      {
-        key: 'drafting',
-        name: 'Drafting',
-        kind: 'working',
-        runner: { skill: 'release-notes', context: 'release' },
-        nextPhases: ['published'],
-      },
-      { key: 'published', name: 'Published', kind: 'terminal', nextPhases: [] },
-    ];
-    const releaseBoard = (board: Partial<StoredBoardInfo> = {}): StoredBoardResponse => ({
-      board: {
-        key: 'release',
-        name: 'Release Preview',
-        description: null,
-        phases: RELEASE_PHASES,
-        revision: 3,
-        source: 'stored',
-        editable: true,
-        codeBehaviour: null,
-        problems: [],
-        ...board,
-      },
-      canEdit: true,
-    });
-
-    it('saves a stored board to its own address, with no factory automation on it', async () => {
+    it('saves a stored board to its own address', async () => {
       stubFactory();
       serveBoard(releaseBoard(), RELEASE_URL);
       const saved = vi.fn<(body: ReplaceBoardBody) => void>();
@@ -560,7 +475,6 @@ describe('Board configuration', () => {
       const { client } = renderAt(`/factories/${FACTORY_ID}/boards/release/config`);
 
       expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Release Preview');
-      expect(screen.queryByRole('switch', { name: 'Auto-start runs' })).not.toBeInTheDocument();
       expect(configNav().getByRole('link', { name: 'Drafting' })).toHaveAttribute(
         'href',
         `/factories/${FACTORY_ID}/boards/release/config/drafting`,
@@ -572,7 +486,7 @@ describe('Board configuration', () => {
       await waitForMutationsIdle(client);
 
       expect(saved).toHaveBeenCalledOnce();
-      const body = saved.mock.calls[0]![0];
+      const body = saved.mock.calls[0][0];
       expect(body.expectedRevision).toBe(3);
       expect(body.phases.find(phase => phase.key === 'drafting')?.runner).toEqual({
         skill: 'release-notes',

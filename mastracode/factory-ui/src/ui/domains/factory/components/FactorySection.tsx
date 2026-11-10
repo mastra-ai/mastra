@@ -1,12 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, GitPullRequest, Settings2, SquareKanban } from 'lucide-react';
+import { Brain, Plus, Settings2, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
+import { useCanEditBoards } from '../../../../hooks/useIntakeRoutes';
+import { boardConfigPath, newBoardPath } from '../../boardConfig/boardConfigPaths';
 import { boardPath, orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
@@ -18,6 +19,8 @@ export function FactorySection() {
   const catalog = useBoardCatalog(factoryId);
   const overlays = useOverlays();
   const { pathname } = useLocation();
+  // Only organization admins may add a board; the server refuses everyone else.
+  const canAddBoard = useCanEditBoards(factoryId);
 
   if (!factoryId) return null;
   const boards = catalog.data ? orderedBoards(catalog.data) : [];
@@ -65,7 +68,7 @@ export function FactorySection() {
               <FactoryLink
                 key={board.id}
                 to={rememberedBoardPath(factoryId, board.id)}
-                icon={board.id === 'review' ? GitPullRequest : SquareKanban}
+                icon={SquareKanban}
                 label={board.title}
                 action={
                   <Button
@@ -84,6 +87,7 @@ export function FactorySection() {
               />
             ))
           )}
+          {canAddBoard && <FactoryLink to={newBoardPath(factoryId)} icon={Plus} label="New board" />}
         </Sidebar.NavList>
       </section>
       {features.data?.knowledge ? (

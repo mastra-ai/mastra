@@ -15,11 +15,10 @@ const SKILL_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/skills/:name`;
 
 const bundled = { origin: 'bundled', builtIn: true } as const;
 
-/** Skills the built-in boards run (their settings show them), plus two no board runs. */
+/** Skills the Work board's phases run (their settings show them), plus two no board runs. */
 const skills: FactorySkillInfo[] = [
   { name: 'factory-triage', description: 'Triage an issue', content: '# Triage', ...bundled },
   { name: 'factory-plan', description: 'Plan the work', content: '# Plan', ...bundled },
-  { name: 'factory-complete-issue', description: 'Close a finished issue', content: '# Complete', ...bundled },
   { name: 'factory-review', description: 'Review a pull request', content: '# Review', ...bundled },
   {
     name: 'configure-factory-rules',
@@ -96,8 +95,8 @@ describe('FactorySkillsSection', () => {
 
     expect(await screen.findByRole('button', { name: /^configure-factory-rules/ })).toBeInTheDocument();
     expect(card('changelog-lint')).toBeInTheDocument();
-    // Board phases' skills are on their phase pages, including the one Done runs.
-    for (const name of ['factory-triage', 'factory-plan', 'factory-complete-issue', 'factory-review']) {
+    // Board phases' skills are on their phase pages.
+    for (const name of ['factory-triage', 'factory-plan', 'factory-review']) {
       expect(screen.queryByText(name)).not.toBeInTheDocument();
     }
   });
@@ -135,14 +134,14 @@ describe('FactorySkillsSection', () => {
     expect(await screen.findByText('Every skill runs in a board phase.')).toBeInTheDocument();
   });
 
-  it("still hides the built-in boards' skills when the installed boards can't be loaded", async () => {
+  it("lists every skill, saying why, when the installed boards can't be loaded", async () => {
     serve();
     server.use(http.get(BOARDS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
     renderSection();
 
     expect(await screen.findByText(/Installed boards could not be loaded/)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^configure-factory-rules/ })).toBeInTheDocument();
-    expect(screen.queryByText('factory-plan')).not.toBeInTheDocument();
+    expect(card('factory-plan')).toBeInTheDocument();
   });
 
   it('marks a skill the runtime cannot load as failed and keeps its body readable', async () => {

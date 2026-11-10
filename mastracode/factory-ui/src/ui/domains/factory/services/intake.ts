@@ -91,8 +91,6 @@ export interface IntakeSourceBinding {
   integrationId: string;
   sourceId: string;
   factoryProjectId: string;
-  /** Installed board the source feeds; `null` keeps the built-in routing (issues → Work, PRs → Review). */
-  board: string | null;
   /**
    * Jira only: labels whose issues this factory takes; `null` takes every issue no other factory's
    * labels claim. Absent from servers that predate label filters, which means `null`.
@@ -107,7 +105,6 @@ export interface IntakeBindingWrite {
   integrationId: string;
   sourceId: string;
   factoryProjectId: string | null;
-  board: string | null;
   labels?: string[] | null;
 }
 
@@ -164,60 +161,6 @@ export async function fetchIntakeBindings(baseUrl: string): Promise<IntakeSource
   return requestIntakeBindings(baseUrl);
 }
 
-/** One GitHub label routed to an installed board within a Factory project. */
-export interface IntakeLabelRoute {
-  factoryProjectId: string;
-  integrationId: string;
-  /** Normalized (trimmed, lower-cased) label name. */
-  label: string;
-  board: string;
-}
-
-/** Route a label to a board, or clear it with `board: null`. */
-export interface IntakeLabelRouteWrite {
-  integrationId: string;
-  label: string;
-  board: string | null;
-}
-
-async function requestIntakeLabelRoutes(
-  baseUrl: string,
-  query: string,
-  init?: RequestInit,
-): Promise<IntakeLabelRoute[]> {
-  const res = await fetch(`${baseUrl}/web/intake/label-routes${query}`, {
-    headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
-    credentials: 'include',
-    ...init,
-  });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    throw new Error(message);
-  }
-  const { routes } = (await res.json()) as { routes?: IntakeLabelRoute[] };
-  return routes ?? [];
-}
-
-/** Read the label → board routes of one Factory project. */
-export async function fetchIntakeLabelRoutes(baseUrl: string, factoryProjectId: string): Promise<IntakeLabelRoute[]> {
-  return requestIntakeLabelRoutes(baseUrl, `?factoryProjectId=${encodeURIComponent(factoryProjectId)}`);
-}
-
-/** Route a label to a board, or clear it with `board: null`. Resolves to the project's routes. */
-export async function saveIntakeLabelRoute(
-  baseUrl: string,
-  route: IntakeLabelRouteWrite & { factoryProjectId: string },
-): Promise<IntakeLabelRoute[]> {
-  return requestIntakeLabelRoutes(baseUrl, '', { method: 'PUT', body: JSON.stringify(route) });
-}
-
 /**
  * Route one source to a Factory project, or clear it with `factoryProjectId: null`. Jira sources
  * can feed several factories, each with its own `labels` filter (omitted keeps the current one);
@@ -251,7 +194,6 @@ export function withIntakeBinding(bindings: IntakeSourceBinding[], write: Intake
     integrationId: write.integrationId,
     sourceId: write.sourceId,
     factoryProjectId: write.factoryProjectId,
-    board: write.board,
     labels: write.labels === undefined ? (current?.labels ?? null) : write.labels,
   };
   return current ? bindings.map(binding => (binding === current ? next : binding)) : [...bindings, next];
@@ -268,21 +210,4 @@ export function withoutIntakeBinding(
       binding.sourceId !== target.sourceId ||
       binding.factoryProjectId !== target.factoryProjectId,
   );
-}
-
-/** `routes` as they read once `write` is saved; an edited route keeps its place. */
-export function withIntakeLabelRoute(
-  routes: IntakeLabelRoute[],
-  write: IntakeLabelRouteWrite & { factoryProjectId: string },
-): IntakeLabelRoute[] {
-  const label = write.label.trim().toLowerCase();
-  const isRoute = (route: IntakeLabelRoute) => route.integrationId === write.integrationId && route.label === label;
-  if (write.board === null) return routes.filter(route => !isRoute(route));
-  const next = {
-    factoryProjectId: write.factoryProjectId,
-    integrationId: write.integrationId,
-    label,
-    board: write.board,
-  };
-  return routes.some(isRoute) ? routes.map(route => (isRoute(route) ? next : route)) : [...routes, next];
 }

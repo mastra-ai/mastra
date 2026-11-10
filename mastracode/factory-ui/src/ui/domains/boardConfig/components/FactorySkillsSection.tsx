@@ -15,20 +15,10 @@ import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
-import { codeSkillsOfBoard } from '../codeSkills';
 
-/** Used while the installed boards are unknown: the built-in boards are the usual install. */
-const BUILT_IN_BOARD_IDS = ['work', 'review'];
-
-/** Skills some board's settings already show: the ones its phases name, plus the ones Factory's code runs there. */
+/** Skills some board's settings already show: the ones its phases run. None while the boards are unknown. */
 function boardSkillNames(boards: InstalledBoardInfo[] | undefined): Set<string> {
-  if (boards === undefined) return new Set(BUILT_IN_BOARD_IDS.flatMap(codeSkillsOfBoard));
-  return new Set(
-    boards.flatMap(board => [
-      ...codeSkillsOfBoard(board.id),
-      ...board.phases.flatMap(phase => (phase.skill ? [phase.skill] : [])),
-    ]),
-  );
+  return new Set((boards ?? []).flatMap(board => board.phases.flatMap(phase => (phase.skill ? [phase.skill] : []))));
 }
 
 function SkillContent({ content }: { content: string }) {

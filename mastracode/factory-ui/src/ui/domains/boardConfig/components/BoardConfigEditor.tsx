@@ -5,28 +5,27 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { BookOpen, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link, useBlocker, useLocation } from 'react-router';
+import { Link, useBlocker, useNavigate } from 'react-router';
 
 import type { FactorySkillInfo, StoredBoardResponse } from '../../../../api/types';
-import { useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
+import { useDeleteBoardMutation, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { boardPath, orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { boardConfigPath, boardSkillsPath, parseBoardConfigPath } from '../boardConfigPaths';
 import { useBoardDraft } from '../BoardDraftProvider';
-import { draftChanged, phaseHasProblem } from '../boardDraft';
-import { BoardAutomationSection } from './BoardAutomationSection';
+import { canRemovePhase, draftChanged, phaseHasProblem, rawRuleKey, removePhase } from '../boardDraft';
+import type { RuleField } from '../boardDraft';
+import { AddPhaseButton } from './AddPhaseButton';
+import { IntakeNote } from './IntakeNote';
 import { PhaseConfig } from './PhaseConfig';
-import type { RuleField } from './PhaseConfig';
 
-/** Rules typed as JSON that don't parse yet, for the page they were typed on. They go when the page does. */
-interface RawRuleProblems {
-  locationKey: string;
-  problems: Partial<Record<RuleField, string>>;
-}
+const RULE_FIELDS: RuleField[] = ['autoStartWhen', 'autoApproveWhen'];
 
 function errorText(error: BoardRequestError) {
   return error.conflicts.length > 0 ? error.conflicts.join(' ') : error.message;
@@ -57,18 +56,23 @@ export function BoardConfigEditor({
   onReload: () => void;
 }) {
   const { board, canEdit } = response;
-  const location = useLocation();
-  const { draft, setDraft, discard } = useBoardDraft(factory.id, boardId, board);
-  const [raw, setRaw] = useState<RawRuleProblems>({ locationKey: location.key, problems: {} });
+  const { draft, rawRules, locked, setDraft, setRawRule, discard } = useBoardDraft(factory.id, boardId, board);
+  const catalog = useBoardCatalog(factory.id);
+  const navigate = useNavigate();
   const save = useSaveBoardMutation(factory.id, boardId);
   const reset = useResetBoardMutation(factory.id, boardId);
+  const remove = useDeleteBoardMutation(factory.id, boardId, () => {
+    discard();
+    // The deleted board is gone from the catalog by now; Work, or the first board left, shows next.
+    const next = orderedBoards(catalog.data ?? []).find(other => other.id !== boardId);
+    void navigate(next ? boardPath(factory.id, next.id) : `/factories/${factory.id}`, { replace: true });
+  });
 
   const readOnly = !canEdit || !board.editable;
-  const changed = !readOnly && draftChanged(draft, board);
-  const rawProblems = raw.locationKey === location.key ? raw.problems : {};
-  const phasesToFix = draft.phases.filter(
-    phase => phaseHasProblem(phase) || (phase.key === phaseKey && Object.values(rawProblems).some(Boolean)),
-  );
+  // JSON typed into a rule editor counts as an edit even before it parses: leaving would lose it.
+  const changed = !readOnly && (draftChanged(draft, board) || Object.keys(rawRules).length > 0);
+  const phasesToFix = draft.phases.filter(phase => phaseHasProblem(phase, rawRules));
+  const nameMissing = draft.name.trim() === '';
   const stale = save.error?.code === 'revision_mismatch';
 
   const blocker = useBlocker(({ nextLocation }) => {
@@ -96,24 +100,34 @@ export function BoardConfigEditor({
   } else if (phase) {
     body = (
       <PhaseConfig
+        // Each phase gets its own editors, so state one phase's editors hold never shows on another's page.
+        key={phase.key}
         phase={phase}
         phases={draft.phases}
-        code={board.codeBehaviour?.[phase.key]}
+        requiredNextPhases={board.codeBehaviour?.[phase.key]?.requiredNextPhases ?? []}
         skills={skills}
         skillsEditable={skillsEditable}
         factoryId={factory.id}
         boardId={boardId}
-        disabled={readOnly}
+        disabled={readOnly || locked}
+        rawRules={{
+          autoStartWhen: rawRules[rawRuleKey(phase.key, 'autoStartWhen')],
+          autoApproveWhen: rawRules[rawRuleKey(phase.key, 'autoApproveWhen')],
+        }}
+        onRawRule={(field, text) => setRawRule(rawRuleKey(phase.key, field), text)}
+        onRemove={
+          readOnly || locked || !canRemovePhase(draft.phases, phase.key, board.codeBehaviour)
+            ? undefined
+            : () => {
+                for (const field of RULE_FIELDS) setRawRule(rawRuleKey(phase.key, field), undefined);
+                setDraft(current => ({ ...current, phases: removePhase(current.phases, phase.key) }));
+                void navigate(generalPath);
+              }
+        }
         onChange={next =>
           setDraft(current => ({
             ...current,
             phases: current.phases.map(candidate => (candidate.key === next.key ? next : candidate)),
-          }))
-        }
-        onRuleProblem={(field, problem) =>
-          setRaw(current => ({
-            locationKey: location.key,
-            problems: { ...(current.locationKey === location.key ? current.problems : {}), [field]: problem },
           }))
         }
       />
@@ -141,6 +155,7 @@ export function BoardConfigEditor({
                 ))}
               </ul>
             </SettingsContainer>
+            {!readOnly && <AddPhaseButton factoryId={factory.id} boardId={boardId} board={board} disabled={locked} />}
           </SettingsSubsection>
         )}
         {sidebarHidden && (
@@ -160,16 +175,9 @@ export function BoardConfigEditor({
           </SettingsSubsection>
         )}
 
-        {(boardId === 'work' || boardId === 'review') && (
-          <BoardAutomationSection
-            factoryProjectId={factory.id}
-            autoRunEnabled={factory.autoRunEnabled ?? false}
-            reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
-            selfReviewEnabled={factory.selfReviewEnabled ?? false}
-          />
-        )}
+        {boardId !== DEFAULT_BOARD_ID && <IntakeNote factoryId={factory.id} />}
 
-        {board.source !== 'stored' && !readOnly && board.revision != null && (
+        {board.source !== 'stored' && !readOnly && (
           <SettingsSubsection title="Default">
             <SettingsContainer>
               <SettingsRow label="Reset to default" description="Go back to Factory's version of this board.">
@@ -203,15 +211,51 @@ export function BoardConfigEditor({
             )}
           </SettingsSubsection>
         )}
+
+        {board.source !== 'builtin' && !readOnly && (
+          <SettingsSubsection title="Delete">
+            <SettingsContainer>
+              <SettingsRow label="Delete board" description="A board that still has cards cannot be deleted.">
+                <AlertDialog>
+                  <AlertDialog.Trigger
+                    render={
+                      <Button size="sm" variant="destructive" disabled={remove.isPending}>
+                        Delete
+                      </Button>
+                    }
+                  />
+                  <AlertDialog.Content>
+                    <AlertDialog.Header>
+                      <AlertDialog.Title>Delete {board.name}?</AlertDialog.Title>
+                      <AlertDialog.Description>
+                        The board and its phases are removed from this project.
+                      </AlertDialog.Description>
+                    </AlertDialog.Header>
+                    <AlertDialog.Footer>
+                      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+                      <AlertDialog.Action onClick={() => remove.mutate(board.revision ?? 0)}>Delete</AlertDialog.Action>
+                    </AlertDialog.Footer>
+                  </AlertDialog.Content>
+                </AlertDialog>
+              </SettingsRow>
+            </SettingsContainer>
+            {remove.error && (
+              <Notice variant="destructive" role="alert">
+                <Notice.Message>The board was not deleted. {errorText(remove.error)}</Notice.Message>
+              </Notice>
+            )}
+          </SettingsSubsection>
+        )}
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-8 pb-4">
-      {!canEdit && <Notice variant="info">Only organization admins can change this board.</Notice>}
-      {canEdit && !board.editable && (
+      {!board.editable ? (
         <Notice variant="info">This board is defined in code, so it can't be changed here.</Notice>
+      ) : (
+        !canEdit && <Notice variant="info">Only organization admins can change this board.</Notice>
       )}
       {!phase && board.problems.length > 0 && (
         <Notice variant="warning" title="This board has problems">
@@ -239,9 +283,11 @@ export function BoardConfigEditor({
           )}
           <div className="flex items-center gap-3">
             <Txt variant="body-sm" tone="muted" className="min-w-0 flex-1" role="status">
-              {phasesToFix.length > 0
-                ? `Fix ${phasesToFix.map(candidate => candidate.name).join(', ')} to save.`
-                : 'Unsaved changes'}
+              {nameMissing
+                ? 'Name the board to save.'
+                : phasesToFix.length > 0
+                  ? `Fix ${phasesToFix.map(candidate => candidate.name || candidate.key).join(', ')} to save.`
+                  : 'Unsaved changes'}
             </Txt>
             <Button size="sm" variant="ghost" disabled={save.isPending} onClick={discard}>
               Discard
@@ -249,7 +295,7 @@ export function BoardConfigEditor({
             <Button
               size="sm"
               variant="primary"
-              disabled={save.isPending || phasesToFix.length > 0}
+              disabled={save.isPending || nameMissing || phasesToFix.length > 0}
               onClick={() =>
                 save.mutate({
                   name: draft.name,

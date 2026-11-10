@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import type { ReactNode } from 'react';
@@ -7,6 +8,8 @@ import type { ReactNode } from 'react';
 import type { StoredBoardResponse, StoredPhaseInfo } from '../../../../api/types';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { useBoardDraft } from '../BoardDraftProvider';
+import { kindLocked, rawRuleKey, withKind } from '../boardDraft';
+import type { PhaseKind } from '../boardDraft';
 import { InlineText } from './InlineText';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -15,6 +18,8 @@ const KINDS: Record<StoredPhaseInfo['kind'], { label: string; meaning: string }>
   working: { label: 'Working', meaning: 'An agent works on each card here, following the steps below.' },
   terminal: { label: 'Terminal', meaning: 'Cards are finished here. Their agent sessions stop.' },
 };
+
+const KIND_ORDER: readonly PhaseKind[] = ['resting', 'working', 'terminal'];
 
 /** A short label that explains itself on hover or focus. */
 function Explained({ label, meaning, children }: { label: string; meaning: string; children: ReactNode }) {
@@ -55,8 +60,8 @@ export function BoardConfigHeader({
   response: StoredBoardResponse;
 }) {
   const { board, canEdit } = response;
-  const readOnly = !canEdit || !board.editable;
-  const { draft, setDraft } = useBoardDraft(factoryId, boardId, board);
+  const { draft, locked, setDraft, setRawRule } = useBoardDraft(factoryId, boardId, board);
+  const readOnly = !canEdit || !board.editable || locked;
   const phase = phaseKey ? draft.phases.find(candidate => candidate.key === phaseKey) : undefined;
   if (phaseKey && !phase) return null;
 
@@ -65,8 +70,21 @@ export function BoardConfigHeader({
       ...current,
       phases: current.phases.map(candidate => (candidate.key === phaseKey ? { ...candidate, ...patch } : candidate)),
     }));
+  const setKind = (kind: PhaseKind) => {
+    if (!phase) return;
+    // The rules belong to the old kind, so JSON typed for them goes too.
+    setRawRule(rawRuleKey(phase.key, 'autoStartWhen'), undefined);
+    setRawRule(rawRuleKey(phase.key, 'autoApproveWhen'), undefined);
+    setDraft(current => ({
+      ...current,
+      phases: current.phases.map(candidate =>
+        candidate.key === phase.key ? withKind(candidate, kind, current.phases) : candidate,
+      ),
+    }));
+  };
   const name = phase ? phase.name : draft.name;
-  const description = phase?.description ?? '';
+  const description = (phase ? phase.description : draft.description) ?? '';
+  const kindEditable = phase !== undefined && !readOnly && !kindLocked(draft.phases, phase.key, board.codeBehaviour);
 
   return (
     <PageHeader>
@@ -85,7 +103,26 @@ export function BoardConfigHeader({
       </PageHeader.Title>
       {(phase || board.revision != null) && (
         <PageHeader.Meta beside>
-          {phase ? (
+          {phase && kindEditable ? (
+            <Select
+              value={phase.kind}
+              onValueChange={value => {
+                const kind = KIND_ORDER.find(candidate => candidate === value);
+                if (kind) setKind(kind);
+              }}
+            >
+              <SelectTrigger size="sm" aria-label="Phase kind">
+                {KINDS[phase.kind].label}
+              </SelectTrigger>
+              <SelectContent>
+                {KIND_ORDER.map(kind => (
+                  <SelectItem key={kind} value={kind}>
+                    {KINDS[kind].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : phase ? (
             <Explained label={KINDS[phase.kind].label} meaning={KINDS[phase.kind].meaning}>
               <Badge>{KINDS[phase.kind].label}</Badge>
             </Explained>
@@ -99,18 +136,22 @@ export function BoardConfigHeader({
           )}
         </PageHeader.Meta>
       )}
-      {phase && (description || !readOnly) && (
+      {(description || !readOnly) && (
         <PageHeader.Description>
           <InlineText
             value={description}
-            label="Phase description"
+            label={phase ? 'Phase description' : 'Board description'}
             placeholder="Add a description"
             multiline
             readOnly={readOnly}
             variant="caption"
             tone="muted"
             className="zoom-safe-text w-full"
-            onChange={next => setPhase({ description: next || null })}
+            onChange={next =>
+              phase
+                ? setPhase({ description: next || null })
+                : setDraft(current => ({ ...current, description: next || null }))
+            }
           />
         </PageHeader.Description>
       )}

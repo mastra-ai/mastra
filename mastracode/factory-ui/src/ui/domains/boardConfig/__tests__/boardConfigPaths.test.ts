@@ -5,7 +5,7 @@ import { boardConfigPath, boardSkillsPath, parseBoardConfigPath } from '../board
 describe('board config paths', () => {
   it('nests a board configuration under the board it configures', () => {
     expect(boardConfigPath('fp-1', 'work')).toBe('/factories/fp-1/work/config');
-    expect(boardConfigPath('fp-1', 'review', 'pr-review')).toBe('/factories/fp-1/review/config/pr-review');
+    expect(boardConfigPath('fp-1', 'review', 'pr-review')).toBe('/factories/fp-1/boards/review/config/pr-review');
     expect(boardConfigPath('fp-1', 'release notes', 'draft')).toBe(
       '/factories/fp-1/boards/release%20notes/config/draft',
     );
@@ -50,5 +50,11 @@ describe('board config paths', () => {
     expect(parseBoardConfigPath('/factories/fp-1/settings/board')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/work/config/planning/extra')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/work/skills/extra')).toBeUndefined();
+    expect(parseBoardConfigPath('/factories/fp-1/review/config')).toBeUndefined();
+  });
+
+  it('ignores a path whose encoding is broken, rather than failing the page that reads it', () => {
+    expect(parseBoardConfigPath('/factories/fp-1/boards/%E0%A4%A/config')).toBeUndefined();
+    expect(parseBoardConfigPath('/factories/fp-1/work/config/%E0%A4%A')).toBeUndefined();
   });
 });

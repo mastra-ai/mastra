@@ -1,7 +1,14 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem, isTerminalWorkItem } from '../boards/index.js';
+import {
+  awaitsAcceptance,
+  boardFlow,
+  boardForWorkItem,
+  isTerminalWorkItem,
+  pullRequestSourceNumber,
+  pullRequestSources,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -102,15 +109,25 @@ export async function findWorkItem(
   if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
   const items = await workItems.listShared(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
-  // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
+  // Issue and PR numbers share a space on GitHub; prefer the issue's card.
   const workCards = matches.filter(item => item.externalSource?.type !== 'pull-request');
   // Hand-filed card numbers and issue numbers from several repositories can repeat; refuse to guess.
-  if (workCards.length > 1) {
-    const candidates = workCards.map(item => `${item.id} (${item.title})`).join(', ');
-    throw new Error(`#${number} matches more than one work item; use its id instead: ${candidates}.`);
-  }
+  refuseAmbiguous(number, workCards);
   const match = workCards[0] ?? matches[0];
-  return match ? structuredClone(match) : null;
+  if (match) return structuredClone(match);
+  // A pull request attached to an issue's card is found through that card. Pull request numbers
+  // repeat across repositories too.
+  const carriers = items.filter(item =>
+    pullRequestSources(item).some(source => pullRequestSourceNumber(source) === Number(number)),
+  );
+  refuseAmbiguous(number, carriers);
+  return carriers[0] ? structuredClone(carriers[0]) : null;
+}
+
+function refuseAmbiguous(number: string, items: readonly Card[]): void {
+  if (items.length <= 1) return;
+  const candidates = items.map(item => `${item.id} (${item.title})`).join(', ');
+  throw new Error(`#${number} matches more than one work item; use its id instead: ${candidates}.`);
 }
 
 export function workItemNotFound(ref: string): Error {
@@ -166,17 +183,20 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = 
   };
 }
 
-const PAST_TRIAGE = new Set(['planning', 'execute', 'review']);
-
 /**
- * Held: a Work card triage left in Intake (or whose source asks for approval), until a person
- * moves it on. A card that has been past Triage since (parked by self-review, or dragged back)
- * resumes instead, matching the board's held state.
+ * Held: a card triage left resting (or whose source asks for approval), until a person moves it
+ * on. A card that has been past triage since (parked by self-review, or dragged back) resumes
+ * instead, matching the board's held state.
  */
-function isHeld(item: Card): boolean {
-  if (boardForWorkItem(item) !== 'work' || item.stages[0] !== 'intake') return false;
-  if (needsApproval(item)) return true;
-  return item.sessions.triage !== undefined && !item.stageHistory.some(entry => PAST_TRIAGE.has(entry.stage));
+function isHeld(boards: BoardRegistry, item: Card): boolean {
+  const board = boards.get(boardForWorkItem(item));
+  const stage = item.stages.length === 1 ? item.stages[0]! : undefined;
+  if (!board || !stage || board.phaseKind(stage) !== 'resting') return false;
+  if (needsApproval(item, phase => awaitsAcceptance(board, phase))) return true;
+  const triage = boardFlow(board).triage;
+  const triageRole = triage ? board.roleForPhase(triage) : undefined;
+  if (!triageRole || item.sessions[triageRole] === undefined) return false;
+  return !item.stageHistory.some(entry => entry.stage !== triage && board.isWorking(entry.stage));
 }
 
 const listInputSchema = z
@@ -410,7 +430,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           incidents.flatMap(group => group.shown),
         );
         const proposals = decisions.filter(decision => decision.status === 'proposed');
-        const held = items.filter(isHeld);
+        const held = items.filter(item => isHeld(boards, item));
         const unplaced = await cardsWithoutRepository(
           items.filter(item => !item.externalSource && !isTerminalWorkItem(boards, item)),
         );

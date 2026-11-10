@@ -385,6 +385,20 @@ describe('Sidebar minimum width raised at runtime', () => {
 
     expect(widthOf(scope)).toBe('400px');
   });
+
+  it('keeps the width the user chose when it first opens on a view that needs more room', () => {
+    window.localStorage.setItem('sidebar:width', '240');
+    mockMatchMedia(false);
+    const view = render(<SidebarAt minWidth={320} />);
+    const scope = getSidebarScope();
+    expect(widthOf(scope)).toBe('320px');
+
+    view.rerender(<SidebarAt minWidth={200} />);
+
+    expect(widthOf(scope)).toBe('240px');
+    expect(screen.getByRole('separator').getAttribute('aria-valuenow')).toBe('240');
+    expect(window.localStorage.getItem('sidebar:width')).toBe('240');
+  });
 });
 
 describe('Sidebar dragging the resize handle', () => {

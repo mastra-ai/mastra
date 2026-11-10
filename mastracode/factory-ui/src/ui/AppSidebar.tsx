@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router';
 
 import { useBoardQuery } from '../hooks/useBoardEditor';
 import { BoardConfigNavigation } from './domains/boardConfig/components/BoardConfigNavigation';
-import { useBoardDraftName } from './domains/boardConfig/BoardDraftProvider';
+import { useShownDraft } from './domains/boardConfig/BoardDraftProvider';
 import { useBoardConfigRoute } from './domains/boardConfig/hooks/useBoardConfigRoute';
 import type { BoardConfigLocation } from './domains/boardConfig/boardConfigPaths';
 import { rememberedBoardPath } from './domains/factory/services/boardViews';
@@ -78,7 +78,7 @@ function MainNavigation() {
 
 function BoardConfigView(location: BoardConfigLocation) {
   const board = useBoardQuery(location.factoryId, location.boardId).data?.board;
-  const name = useBoardDraftName(location.factoryId, location.boardId, board);
+  const name = useShownDraft(location.factoryId, location.boardId, board)?.name;
 
   return (
     <Sidebar.NavStack.View

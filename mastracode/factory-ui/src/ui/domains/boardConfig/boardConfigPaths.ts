@@ -23,19 +23,27 @@ export function boardSkillsPath(factoryId: string, boardId: string): string {
   return `${boardPath(factoryId, boardId)}/skills`;
 }
 
-const BOARD_CONFIG_PATH =
-  /^\/factories\/([^/]+)\/(?:(work|review)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills))\/?$/;
+/** The form that creates a board. Not under `boards/`, where `new` could be a board key. */
+export function newBoardPath(factoryId: string): string {
+  return `/factories/${factoryId}/new-board`;
+}
+
+const BOARD_CONFIG_PATH = /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills))\/?$/;
 
 /** Reads a board configuration path, so the sidebar outside the page outlet knows what is open. */
 export function parseBoardConfigPath(pathname: string): BoardConfigLocation | undefined {
   const match = BOARD_CONFIG_PATH.exec(pathname);
   if (!match) return undefined;
   const [, factoryId, builtinBoard, customBoard, phaseKey, skills] = match;
-  const boardId = builtinBoard ?? decodeURIComponent(customBoard ?? '');
-  return {
-    factoryId: decodeURIComponent(factoryId ?? ''),
-    boardId,
-    ...(phaseKey ? { phaseKey: decodeURIComponent(phaseKey) } : {}),
-    ...(skills ? { skills: true as const } : {}),
-  };
+  // A hand-typed URL can carry a broken escape; it then names no board page.
+  try {
+    return {
+      factoryId: decodeURIComponent(factoryId ?? ''),
+      boardId: builtinBoard ?? decodeURIComponent(customBoard ?? ''),
+      ...(phaseKey ? { phaseKey: decodeURIComponent(phaseKey) } : {}),
+      ...(skills ? { skills: true } : {}),
+    };
+  } catch {
+    return undefined;
+  }
 }
