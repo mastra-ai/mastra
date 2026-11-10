@@ -91,6 +91,7 @@ export const scheduleTiming = timingInput.transform((input, context) => {
   }
 });
 
+/** Reject sub-minute recurring work, including legacy rows checked before native dispatch. */
 function requireSafeCadence(cron: string) {
   const fields = cron.trim().split(/\s+/);
   // Native five-field cron already has minute granularity. A fixed seconds field preserves it.
@@ -98,6 +99,7 @@ function requireSafeCadence(cron: string) {
     throw new Error('Recurring schedules require at least 60 seconds between occurrences; use a fixed seconds field.');
 }
 
+/** Require a remaining native occurrence for new or explicitly updated timing. */
 function requireFuture(timing: z.output<typeof scheduleTiming>) {
   try {
     computeNextFireAt(timing.cron, { timezone: timing.timezone });
@@ -172,21 +174,25 @@ const schema = z
   .strict()
   .pipe(actions);
 
+/** Manage identified owner schedules and prepare approval-preserving native dispatches. */
 export function createScheduleOperations(config: AssistantConfig, getAgent: () => Agent) {
   const mastra = () => {
     const instance = getAgent().getMastraInstance();
     if (!instance) throw new Error('Schedules require the assistant runtime.');
     return instance;
   };
+  /** Resolve owner identity while preserving infrastructure failures. */
   async function findThread(threadId?: string, resourceId?: string) {
     const stored = await findOwnerThread(getAgent(), config.ownerId, threadId, resourceId);
     return stored?.id ?? null;
   }
+  /** Require an existing owner conversation before schedule operations. */
   async function thread(threadId?: string, resourceId?: string) {
     const value = await findThread(threadId, resourceId);
     if (!value) throw new Error('Schedules require an owner-backed conversation.');
     return value;
   }
+  /** Verify schedule ownership, reusing thread reads only within the current operation. */
   async function owned(
     schedule: AnySchedule | null,
     threads?: Map<string, Promise<string | null>>,
@@ -207,11 +213,13 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
     if (!(await thread)) return null;
     return schedule as AgentSchedule;
   }
+  /** Reject missing or foreign schedules before exposing their state. */
   async function requireOwned(schedule: AnySchedule | null) {
     const value = await owned(schedule);
     if (!value) throw new Error('Schedule not found in this assistant owner scope.');
     return value;
   }
+  /** Check route visibility while retaining unavailable-storage semantics. */
   async function canRead(scheduleId: string) {
     try {
       return (await owned(await mastra().schedules.get(scheduleId))) !== null;
@@ -219,6 +227,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
       throw new Error('Schedule storage is unavailable.');
     }
   }
+  /** Return the owned schedule and bounded native occurrence history. */
   async function inspect(schedule: AnySchedule) {
     const value = await requireOwned(schedule);
     const store = await mastra().getStorage()?.getStore('schedules');
@@ -228,6 +237,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
       detail,
     };
   }
+  /** Count active and paused schedules under the serialized mutation lock. */
   async function requireCapacity(excludeId?: string) {
     const all = await Promise.all(
       ['active', 'paused'].map(status =>

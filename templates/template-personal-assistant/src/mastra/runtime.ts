@@ -10,6 +10,7 @@ import { createExecutionBudget } from './execution';
 import { createPersonalAssistant } from './agents/personal-assistant';
 import { createAssistantServer } from './server';
 
+/** Compose native storage, owner memory, shared model limits, schedules and HTTP protection. */
 export function createAssistant(
   config: AssistantConfig,
   model: ConstructorParameters<typeof ModelRouterLanguageModel>[0] = { id: config.model },

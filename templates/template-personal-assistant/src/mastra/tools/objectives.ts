@@ -14,6 +14,7 @@ A proposed external action, a pending or declined approval, or a partial provide
 Choose continue only when useful work can proceed without inventing missing information or bypassing approval.
 Give a specific reason identifying completed evidence or the remaining work/checkpoint.`;
 
+/** Require a stored owner conversation and native thread-state persistence before progress changes. */
 async function ownedThread(agent: Agent, ownerId: string, threadId?: string, resourceId?: string) {
   if (!threadId || resourceId !== ownerId)
     throw new Error('Objective and task operations require an owner-backed conversation.');
@@ -24,6 +25,7 @@ async function ownedThread(agent: Agent, ownerId: string, threadId?: string, res
   return { threadId, resourceId: ownerId, store };
 }
 
+/** Manage native objectives without resetting usage or discarding unused evaluation allowances. */
 export function createObjectiveTool(config: AssistantConfig, getAgent: () => Agent) {
   const allowance = z.number().int().min(1).max(config.maxGoalEvaluations);
   const actions = z.discriminatedUnion('action', [
@@ -115,6 +117,7 @@ export function createObjectiveTool(config: AssistantConfig, getAgent: () => Age
 
 // Bind native tool hooks to identity validated by the state-signal callback for this run.
 // Native task tools and storage retain ownership of the task lifecycle.
+/** Preserve unfinished tasks and persist actionable status when a bounded run cannot finish. */
 export function createProgressProtection(config: AssistantConfig, getAgent: () => Agent) {
   const contexts = new WeakMap<object, { threadId: string; resourceId: string }>();
   const taskTools = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);

@@ -1,11 +1,13 @@
 import type { Processor } from '@mastra/core/processors';
 
+/** Read provider envelope objects without coercing scalar results. */
 function object(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 }
 
+/** Decode bounded full plain-text MIME content and selected message metadata; disclose omissions. */
 export function normalizeMail(value: unknown) {
   const source = object(value);
   const result = {
@@ -134,6 +136,7 @@ export function normalizeMail(value: unknown) {
   return result;
 }
 
+/** Normalize successful Gmail envelopes while preserving native cancellation notices. */
 export const connectedContentProcessor = {
   id: 'connected-content',
   processToolResult({ toolName, toolCallId, args, result, messageList }) {

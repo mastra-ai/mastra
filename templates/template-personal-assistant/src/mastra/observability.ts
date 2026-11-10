@@ -31,6 +31,7 @@ const operationalFields = new Set([
   'claimId',
   'category',
 ]);
+/** Keep only explicitly permitted operational metadata in logs and traces. */
 function operational(value?: object) {
   return (
     value &&
@@ -65,6 +66,7 @@ const minimize: SpanOutputProcessor = {
 
 // Native schedule workers also log outside prepare (including failed trigger persistence).
 // Sanitize before ConsoleLogger writes or exports, and preserve that policy in native children.
+/** Filter application diagnostics while retaining safe execution identifiers. */
 export class AssistantLogger extends ConsoleLogger {
   private adapter?: LoggerAdapterContext;
   constructor(options: ConsoleLoggerOptions = {}) {
@@ -128,6 +130,7 @@ export class AssistantLogger extends ConsoleLogger {
   }
 }
 
+/** Persist filtered native traces and enable Platform export only when explicitly configured. */
 export function createObservability(config: AssistantConfig) {
   return new Observability({
     configs: {

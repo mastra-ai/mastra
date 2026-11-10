@@ -5,10 +5,12 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { z } from 'zod';
 import type { AssistantConfig } from './config';
 
+/** Inspect option objects without interpreting message contents. */
 function asObject(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
+/** Preserve the exact status-tool exception while denying direct protected-tool execution. */
 const protectDirectExecution: MiddlewareHandler = async (c, next) => {
   if (c.req.method !== 'POST') return next();
   const denied = () =>
@@ -59,6 +61,7 @@ const protectDirectExecution: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
+/** Protect owner API access and validate every supported execution-option location. */
 export function createAssistantServer(
   config: AssistantConfig,
   schedules: { canRead(scheduleId: string): Promise<boolean> },

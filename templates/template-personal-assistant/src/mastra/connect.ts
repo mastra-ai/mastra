@@ -10,10 +10,12 @@ export const reviewedReadTools: ReadonlySet<string> = new Set([
   'notion_get_page_as_markdown',
 ]);
 
+/** Require native approval for every connected key outside the reviewed read registry. */
 export function requiresApproval(key: string) {
   return !reviewedReadTools.has(key);
 }
 
+/** Refresh owner-scoped Connect tools and report unavailable providers without exposing credentials. */
 export function createConnections(config: AssistantConfig) {
   const configured = config.connect !== undefined;
   const resolver = config.connect
@@ -33,6 +35,7 @@ export function createConnections(config: AssistantConfig) {
       ? 'Connections have not been refreshed.'
       : 'Connect is not configured. Local capabilities remain available.',
   };
+  /** Refresh discovery before each run so stale tools cannot silently retain permissions. */
   async function resolve() {
     if (!resolver) return {};
     try {

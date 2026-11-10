@@ -8,6 +8,7 @@ export function createExecutionBudget(config: AssistantConfig) {
   let tokens = 0;
   let active = 0;
 
+  /** Reserve calls and conservative text-work capacity before any provider request. */
   function reserve(options: Record<string, unknown>) {
     const now = Date.now();
     if (now - windowStarted >= 3600000) {
@@ -60,6 +61,7 @@ export function createExecutionBudget(config: AssistantConfig) {
       return this.guarded(options, request => super.doStream(request));
     }
 
+    /** Release concurrency on provider failure, stream completion or caller cancellation. */
     private async guarded(
       options: Parameters<ModelRouterLanguageModel['doStream']>[0],
       dispatch: (

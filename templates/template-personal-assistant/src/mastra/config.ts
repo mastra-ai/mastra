@@ -79,6 +79,7 @@ const configuration = z.object({
     .optional(),
 });
 
+/** Validate runtime settings without returning model or Connect credentials. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const settings = { ...env };
   if (!settings.AGENT_MODEL?.trim()) delete settings.AGENT_MODEL;

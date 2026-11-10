@@ -9,6 +9,7 @@ import type { JudgeModel } from '../tools/objectives';
 import { createScheduleOperations } from '../tools/schedules';
 import { connectedContentProcessor } from '../processors/connected-content';
 
+/** Build one native assistant with persistent progress and separately protected connected writes. */
 export function createPersonalAssistant(
   config: AssistantConfig,
   memory: Memory,
