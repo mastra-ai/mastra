@@ -2,7 +2,7 @@ import type { StatusPresentation } from '@mastra/playground-ui/components/Status
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import type { CustomProviderInfo, OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
+import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import { useCustomProvidersQuery } from '../../../../../../hooks/use-custom-providers';
 import { useCancelProviderOAuth, useProvidersQuery } from '../../../../../../hooks/use-providers';
 import { MastraGatewayCreditsNotice } from '../../../../workspaces/components/MastraGatewayCreditsNotice';
@@ -31,6 +31,9 @@ const SIGN_IN_EXPIRED_STATUS: StatusPresentation = {
   tone: 'error',
   description: 'Could not renew this sign-in. Sign in again to keep using it.',
 };
+
+/** The custom endpoint dialog: adding one, or editing the one with this id. */
+type CustomProviderDialogState = { mode: 'add' } | { mode: 'edit'; id: string };
 
 interface ActiveOAuthSession {
   provider: string;
@@ -63,13 +66,19 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
   const [addOpen, setAddOpen] = useState(false);
   const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
-  const [customProviderDraft, setCustomProviderDraft] = useState<CustomProviderInfo | 'new'>();
+  const [customProviderDialog, setCustomProviderDialog] = useState<CustomProviderDialogState>();
 
   // Custom endpoints have their own rows and their own form, so the built-in
   // list and its key actions never see them.
   const providers = (providersQuery.data ?? []).filter(provider => !provider.custom);
   const connections = connectedProviders(providers, scope);
   const customProviders = (customProvidersQuery.data ?? []).filter(provider => provider.scope === scope);
+  const editedProvider =
+    customProviderDialog?.mode === 'edit'
+      ? customProviders.find(provider => provider.id === customProviderDialog.id)
+      : undefined;
+  // An endpoint removed while its dialog is open closes the dialog.
+  const customProviderDialogOpen = customProviderDialog?.mode === 'add' || editedProvider !== undefined;
   const error = providersQuery.error ?? customProvidersQuery.error;
 
   const openOAuth = (provider: string, session: OAuthStartResponse) => {
@@ -84,7 +93,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
 
   const openCustomProviderDialog = () => {
     setAddOpen(false);
-    setCustomProviderDraft('new');
+    setCustomProviderDialog({ mode: 'add' });
   };
 
   const closeOAuth = () => {
@@ -113,7 +122,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
             key={provider.id}
             provider={provider}
             disabled={actionsDisabled}
-            onEdit={() => setCustomProviderDraft(provider)}
+            onEdit={() => setCustomProviderDialog({ mode: 'edit', id: provider.id })}
           />
         ))}
       </ProviderRows>
@@ -152,11 +161,11 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           onClose={() => setKeyDialogProvider(undefined)}
         />
       )}
-      {customProviderDraft && (
+      {customProviderDialogOpen && (
         <CustomProviderDialog
-          provider={customProviderDraft === 'new' ? undefined : customProviderDraft}
+          provider={editedProvider}
           scope={scope}
-          onClose={() => setCustomProviderDraft(undefined)}
+          onClose={() => setCustomProviderDialog(undefined)}
         />
       )}
       {activeOAuth && (

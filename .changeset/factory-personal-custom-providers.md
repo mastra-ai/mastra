@@ -8,7 +8,7 @@ Added personal custom providers. A custom OpenAI-compatible endpoint is now save
 - **Organization endpoints** are used by work that runs on the organization's credentials. Adding, editing or removing one now requires an organization admin.
 - Custom endpoints are added from the **Add provider** dialog and listed with the other providers. The separate "Custom providers" section is gone.
 - Editing an endpoint without retyping its API key keeps the saved key, as long as the URL stays on the same host. Moving it to another host asks for the key again.
-- Adding an endpoint under a name that is already in use, or under the name of a built-in provider, is refused instead of replacing the existing one.
+- Adding an endpoint under a name that is already in use is refused instead of replacing the existing one. So are names reserved for a built-in provider, its sign-in, or the Mastra Gateway (for example "OpenAI", "OpenAI Codex" or "Mastra Gateway").
 
 **Before you upgrade**
 

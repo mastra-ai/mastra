@@ -202,6 +202,19 @@ describe('custom provider credentials', () => {
       expect(customEndpoint.authorizations).toEqual([]);
       expect(mastraGateway.authorizations.length).toBeGreaterThan(0);
     });
+
+    // With the gateway disconnected, a model saved as `mastra/acme/…` must not
+    // quietly start running on whatever custom endpoint is named Acme.
+    it('never goes to a custom endpoint with the same id, even without a gateway key', async () => {
+      const customEndpoint = await startEndpoint();
+      writeSettings({
+        customProviders: [{ name: 'Acme', url: customEndpoint.url, apiKey: 'acme-secret', models: ['model-x'] }],
+      });
+
+      await sendPrompt('mastra/acme/model-x').catch(() => {});
+
+      expect(customEndpoint.authorizations).toEqual([]);
+    });
   });
 
   describe('the model router key lookup', () => {

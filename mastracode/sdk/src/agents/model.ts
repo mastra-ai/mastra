@@ -315,7 +315,10 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
     thinkingLevel: options?.thinkingLevel,
     anthropicPromptCacheScope: options?.anthropicPromptCacheScope,
-    customProviders,
+    // A `mastra/...` model was chosen for the gateway. Without a gateway key it
+    // falls back to the built-in provider, never to a custom endpoint that
+    // happens to share the provider id.
+    customProviders: isMastraGatewayModel ? [] : customProviders,
     credentialStore,
   });
 

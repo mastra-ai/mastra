@@ -42,7 +42,8 @@ function isGateway(provider: ProviderInfo): boolean {
 }
 
 function takesApiKey(provider: ProviderInfo): boolean {
-  return provider.source !== 'deployment' && !isGateway(provider);
+  // Custom endpoints are added through their own form, never by pasting a key.
+  return provider.source !== 'deployment' && !isGateway(provider) && !provider.custom;
 }
 
 function connectionLabel(provider: ProviderInfo, scope: CredentialScope): string | undefined {

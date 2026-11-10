@@ -137,6 +137,23 @@ describe('registerCustomProvidersSource (tenant mode)', () => {
     expect(resolveCustomProviders()).toEqual([]);
   });
 
+  // A run between two model calls reads the snapshot without a request to
+  // prime it. Another member's save must not leave it with no providers.
+  it("keeps serving the organization's providers to running work while a save reloads them", async () => {
+    const factoryRun = await policyContext(member, 'factory');
+    await buildApp(member, true).request('/ok');
+    expect(resolveCustomProviders(factoryRun)?.map(provider => provider.name)).toEqual(['Shared']);
+
+    await seed.customProviders.create({
+      owner: { orgId: ORG, userId: OTHER_USER },
+      createdBy: OTHER_USER,
+      input: ACME,
+    });
+    invalidateCustomProvidersSnapshots({ orgId: ORG });
+
+    expect(resolveCustomProviders(factoryRun)?.map(provider => provider.name)).toEqual(['Shared']);
+  });
+
   it('invalidation makes a write visible on the next prime, before the TTL', async () => {
     const app = buildApp(member, true);
     const ctx = tenantContext(member);

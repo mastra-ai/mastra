@@ -2345,6 +2345,24 @@ describe('custom provider routes', () => {
     expect(await ownList(userA)).toEqual([]);
   });
 
+  // Each of these ids already means something to model resolution or the
+  // pickers. This server's catalog lists only Anthropic, as when models.dev
+  // has not loaded, so "OpenAI" is caught by the static registry.
+  it.each([
+    ['OpenAI', 'a built-in provider missing from a catalog that failed to load'],
+    ['Mastra', 'the Mastra Gateway catalog, listed per tenant'],
+    ['Mastra Gateway', 'the id the gateway key is saved under'],
+    ['MastraCode', "the MastraCode gateway's namespace"],
+    ['OpenAI Codex', 'the id OpenAI sign-ins are saved under'],
+    ['Kimi for Coding', 'an older id rewritten to another provider before lookup'],
+  ])('refuses the name "%s": %s', async name => {
+    const res = await postProvider(buildApp(userA), { ...providerBody, name });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('provider_name_taken');
+    expect(await ownList(userA)).toEqual([]);
+  });
+
   // Adding under a name already in use used to replace that endpoint and
   // inherit its saved key.
   it('refuses to add an endpoint under a name already in use', async () => {

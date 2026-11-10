@@ -1,5 +1,5 @@
 import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
-import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
+import { MASTRACODE_GATEWAY_ID, MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { MIN_OBSERVATION_THRESHOLD } from '@mastra/code-sdk/constants';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
@@ -8,9 +8,9 @@ import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/o
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { GOOGLE_VERTEX_GATEWAY_ID } from '@mastra/code-sdk/providers/google-vertex-gateway';
-import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
+import { MASTRA_GATEWAY_PREFIX, normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { getModelReasoningOptions, MastraGateway } from '@mastra/core/llm';
+import { getModelReasoningOptions, MastraGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
@@ -150,6 +150,27 @@ export interface ModelCatalog {
 }
 
 type CatalogModel = Awaited<ReturnType<ModelCatalog['listAvailableModels']>>[number];
+
+/**
+ * Whether a custom provider may not take `providerId`, because it already
+ * means something to model resolution or to the provider pickers: a provider
+ * Factory ships with (even if its catalog failed to load), the id its
+ * credentials are saved under, an older id rewritten before lookup, or a
+ * gateway's own namespace. A custom provider there would be shadowed,
+ * rerouted, or shown to others as that provider.
+ */
+async function isReservedProviderId(controller: ModelCatalog, providerId: string): Promise<boolean> {
+  if (normalizeLegacyProviderId(providerId) !== providerId) return true;
+  const catalog = await controller.listAvailableModels();
+  const knownIds = [
+    MASTRA_GATEWAY_CATALOG_PROVIDER,
+    MASTRA_GATEWAY_PROVIDER,
+    MASTRACODE_GATEWAY_ID,
+    ...Object.keys(PROVIDER_REGISTRY),
+    ...catalog.map(model => model.provider),
+  ];
+  return knownIds.some(id => id === providerId || getAuthProviderId(id) === providerId);
+}
 
 /**
  * The controller's model catalog, plus the Mastra Gateway's models for tenant
@@ -451,7 +472,7 @@ const CUSTOM_PROVIDER_REFUSALS = {
   name_taken: {
     status: 409,
     error: 'provider_name_taken',
-    message: 'You already have a provider with this name. Choose another name.',
+    message: 'A provider with this name already exists here. Choose another name.',
   },
   not_found: { status: 404, error: 'custom_provider_not_found', message: 'This provider no longer exists.' },
   api_key_required: {
@@ -938,6 +959,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         ? c.json({ error: error.message }, error.status)
         : c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
+    // Model resolution reads the per-org snapshot; the model catalog reads custom
+    // providers through the gateway and caches them. Refresh both after a write.
+    const customProvidersChanged = (orgId: string) => {
+      onCustomProvidersChanged({ orgId });
+      controller.invalidateAvailableModelsCache?.();
+    };
 
     /**
      * The list a custom-provider write addresses. Changing the organization's
@@ -947,7 +974,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const resolveCustomProviderWrite = async (c: Context, ctx: CustomProvidersContext, scope: unknown) => {
       if (scope !== 'org' || !ctx.lists.org) return { owner: ctx.lists.user, scope: 'user' as const };
       if (!(await auth.isOrganizationAdmin(c, ctx.lists.org.orgId))) {
-        return { response: c.json({ error: 'organization_admin_required' }, 403) };
+        return {
+          response: c.json(
+            {
+              error: 'organization_admin_required',
+              message: 'Only organization admins can change org-wide providers.',
+            },
+            403,
+          ),
+        };
       }
       return { owner: ctx.lists.org, scope: 'org' as const };
     };
@@ -1341,14 +1376,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // A custom provider that took a built-in provider's id would
             // silently replace it for everyone using this list. No-auth mode
             // is single-user and its catalog already lists these providers.
-            const takesBuiltInId =
-              auth.enabled() &&
-              (await controller.listAvailableModels()).some(model => model.provider === input.providerId);
-            if (takesBuiltInId) {
+            if (auth.enabled() && (await isReservedProviderId(controller, input.providerId))) {
               return c.json(
                 {
                   error: 'provider_name_taken',
-                  message: `"${parsed.name}" is already a built-in provider. Choose another name.`,
+                  message: `"${parsed.name}" is reserved for a built-in provider. Choose another name.`,
                 },
                 409,
               );
@@ -1360,7 +1392,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               const { status, error, message } = CUSTOM_PROVIDER_REFUSALS[write.refused];
               return c.json({ error, message }, status);
             }
-            onCustomProvidersChanged({ orgId: target.owner.orgId });
+            customProvidersChanged(target.owner.orgId);
             return c.json({ ok: true, provider: toCustomProviderInfo({ record: write.saved, scope: target.scope }) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1386,7 +1418,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               const { status, error, message } = CUSTOM_PROVIDER_REFUSALS.not_found;
               return c.json({ error, message }, status);
             }
-            onCustomProvidersChanged({ orgId: target.owner.orgId });
+            customProvidersChanged(target.owner.orgId);
             return c.json({ ok: true });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

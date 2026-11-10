@@ -63,6 +63,8 @@ class OrgCustomProvidersSnapshot {
   #organization: MastraCodeCustomProvider[] = [];
   #members = new Map<string, MastraCodeCustomProvider[]>();
   #fetchedAt = 0;
+  /** Bumped by every write, so a load that started before it can't count as fresh. */
+  #generation = 0;
   #hydrating: Promise<void> | undefined;
 
   constructor(orgId: string, storage: CustomProvidersStorage) {
@@ -70,13 +72,31 @@ class OrgCustomProvidersSnapshot {
     this.#storage = storage;
   }
 
-  /** Hydrate the snapshot when stale; coalesces concurrent callers. */
-  async ensureFresh(now = Date.now()): Promise<void> {
-    if (now - this.#fetchedAt < SNAPSHOT_TTL_MS) return;
-    this.#hydrating ??= this.#hydrate().finally(() => {
-      this.#hydrating = undefined;
-    });
-    await this.#hydrating;
+  #isStale(): boolean {
+    return Date.now() - this.#fetchedAt >= SNAPSHOT_TTL_MS;
+  }
+
+  /**
+   * Hydrate the snapshot when stale; coalesces concurrent callers. Loads again
+   * if a write lands while a load is in flight, so callers never settle for
+   * rows read before that write.
+   */
+  async ensureFresh(): Promise<void> {
+    while (this.#isStale()) {
+      this.#hydrating ??= this.#hydrate().finally(() => {
+        this.#hydrating = undefined;
+      });
+      await this.#hydrating;
+    }
+  }
+
+  /**
+   * After a write: load again on the next read, but keep serving the current
+   * rows meanwhile, so runs already using these providers don't lose them.
+   */
+  markStale(): void {
+    this.#generation += 1;
+    this.#fetchedAt = 0;
   }
 
   /**
@@ -85,6 +105,7 @@ class OrgCustomProvidersSnapshot {
    * snapshot, so any owner in the org must be servable without a second query.
    */
   async #hydrate(): Promise<void> {
+    const generation = this.#generation;
     await this.#storage.ensureReady();
     const organization: MastraCodeCustomProvider[] = [];
     const members = new Map<string, MastraCodeCustomProvider[]>();
@@ -95,20 +116,18 @@ class OrgCustomProvidersSnapshot {
         apiKey: record.apiKey ?? undefined,
         models: record.models,
       };
-      if (record.userId === null) {
-        organization.push(provider);
-      } else {
-        members.set(record.userId, [...(members.get(record.userId) ?? []), provider]);
-      }
+      const owned = record.userId === null ? organization : (members.get(record.userId) ?? []);
+      owned.push(provider);
+      if (record.userId !== null) members.set(record.userId, owned);
     }
     this.#organization = organization;
     this.#members = members;
-    this.#fetchedAt = Date.now();
+    if (generation === this.#generation) this.#fetchedAt = Date.now();
   }
 
   /** Sync by contract; kicks a background re-hydrate when the snapshot is stale. */
   get(owner: CustomProviderOwner): MastraCodeCustomProvider[] {
-    if (Date.now() - this.#fetchedAt >= SNAPSHOT_TTL_MS) {
+    if (this.#isStale()) {
       void this.ensureFresh().catch(() => {});
     }
     return owner.userId === undefined ? this.#organization : (this.#members.get(owner.userId) ?? []);
@@ -146,6 +165,8 @@ export function registerCustomProvidersSource({
   authEnabled: boolean;
 }): void {
   registered = { storage, authEnabled };
+  // Snapshots read the storage they were created with.
+  orgSnapshots.clear();
   setCustomProvidersSource(tenant => {
     const owner = customProviderOwner(tenant, authEnabled);
     if (!owner) return [];
@@ -154,11 +175,11 @@ export function registerCustomProvidersSource({
 }
 
 /**
- * Drop the org's cached snapshot after a custom provider write so the change
- * is visible to the next model call immediately instead of after the TTL.
+ * After a custom provider write, reload the org's snapshot on its next read
+ * instead of after the TTL, so the change reaches the next request at once.
  */
 export function invalidateCustomProvidersSnapshots(tenant: { orgId: string }): void {
-  orgSnapshots.delete(tenant.orgId);
+  orgSnapshots.get(tenant.orgId)?.markStale();
 }
 
 /** Test hook: clear registration and cached org snapshots. */
