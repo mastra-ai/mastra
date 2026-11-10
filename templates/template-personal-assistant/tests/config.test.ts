@@ -449,3 +449,32 @@ test('hosted configuration refuses local fallback insecure storage and ambiguous
   ])
     assert.throws(() => loadConfig({ OPENAI_API_KEY: 'example-key', ...override }), /ASSISTANT_RUNTIME/);
 });
+
+test('Platform model selection accepts gateway models without a direct provider key', () => {
+  const selected = loadConfig({ AGENT_MODEL: '  mastra/openai/gpt-5.4  ' });
+  assert.equal(selected.model, 'mastra/openai/gpt-5.4');
+  assert.equal(
+    selected.judgeModel,
+    selected.model,
+    'The default judge must use the same available gateway credentials.',
+  );
+  assert.equal(loadConfig({ ASSISTANT_MODEL: 'mastra/openai/gpt-6-luna' }).model, 'mastra/openai/gpt-6-luna');
+  assert.equal(
+    loadConfig({ AGENT_MODEL: 'mastra/anthropic/claude-sonnet-4-6' }).model,
+    'mastra/anthropic/claude-sonnet-4-6',
+  );
+  assert.equal(
+    loadConfig({ AGENT_MODEL: 'mastra/openai/gpt-5.4', ASSISTANT_MODEL: 'openai/gpt-6-luna' }).model,
+    'mastra/openai/gpt-5.4',
+  );
+  assert.equal(
+    loadConfig({ OPENAI_API_KEY: 'example', AGENT_MODEL: ' ', ASSISTANT_MODEL: 'openai/gpt-5.4' }).model,
+    'openai/gpt-5.4',
+  );
+  assert.throws(() => loadConfig({ AGENT_MODEL: 'openai/gpt-5.4' }), /OPENAI_API_KEY/);
+  assert.throws(
+    () => loadConfig({ AGENT_MODEL: 'mastra/openai/gpt-5.4', ASSISTANT_JUDGE_MODEL: 'openai/gpt-6-luna' }),
+    /OPENAI_API_KEY/,
+  );
+  assert.throws(() => loadConfig({ AGENT_MODEL: 'private-invalid-model' }), /AGENT_MODEL/);
+});

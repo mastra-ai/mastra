@@ -15,20 +15,19 @@ export const explicitTimezone = z
     }
   }, 'Provide an explicit IANA timezone.');
 
+const modelId = z
+  .string()
+  .trim()
+  .regex(/^(?:openai\/[a-zA-Z0-9][a-zA-Z0-9._:-]*|mastra\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9][a-zA-Z0-9._:-]*)$/);
 const configuration = z.object({
-  OPENAI_API_KEY: z.string().trim().min(1),
+  OPENAI_API_KEY: z.string().trim().min(1).optional(),
+  AGENT_MODEL: modelId.optional(),
   ASSISTANT_OWNER_ID: z
     .string()
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/)
     .default('local-owner'),
-  ASSISTANT_MODEL: z
-    .string()
-    .regex(/^openai\/[a-zA-Z0-9][a-zA-Z0-9._:-]*$/)
-    .default('openai/gpt-6-luna'),
-  ASSISTANT_JUDGE_MODEL: z
-    .string()
-    .regex(/^openai\/[a-zA-Z0-9][a-zA-Z0-9._:-]*$/)
-    .default('openai/gpt-6-luna'),
+  ASSISTANT_MODEL: modelId.default('openai/gpt-6-luna'),
+  ASSISTANT_JUDGE_MODEL: modelId.optional(),
   ASSISTANT_MAX_GOAL_EVALUATIONS: z.coerce.number().int().min(1).max(20).default(5),
   ASSISTANT_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(20),
   ASSISTANT_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).max(32768).optional(),
@@ -76,6 +75,8 @@ const configuration = z.object({
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const settings = { ...env };
+  if (!settings.AGENT_MODEL?.trim()) delete settings.AGENT_MODEL;
+  if (!settings.OPENAI_API_KEY?.trim()) delete settings.OPENAI_API_KEY;
   for (const name of ['MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY']) {
     if (settings[name] === '') delete settings[name];
   }
@@ -91,6 +92,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error(`Invalid assistant configuration: check ${settings}.`);
   }
   const value = result.data;
+  const model = value.AGENT_MODEL ?? value.ASSISTANT_MODEL;
+  const judgeModel = value.ASSISTANT_JUDGE_MODEL ?? model;
+  if ([model, judgeModel].some(id => id.startsWith('openai/')) && !value.OPENAI_API_KEY)
+    throw new Error('Invalid assistant configuration: check OPENAI_API_KEY.');
   const token = value.MASTRA_PLATFORM_ACCESS_TOKEN || value.MASTRA_PLATFORM_SECRET_KEY;
   if (Boolean(value.MASTRA_PROJECT_ID) !== Boolean(token)) {
     throw new Error(
@@ -169,14 +174,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
           toolKeys: value.ASSISTANT_CONNECT_TOOLS,
         }
       : undefined,
-    model: value.ASSISTANT_MODEL as `openai/${string}`,
+    model: model as `openai/${string}` | `mastra/${string}/${string}`,
     maxSteps: value.ASSISTANT_MAX_STEPS,
     modelSettings:
       value.ASSISTANT_MAX_OUTPUT_TOKENS === undefined
         ? undefined
         : { maxOutputTokens: value.ASSISTANT_MAX_OUTPUT_TOKENS },
     modelMaxRetries: value.ASSISTANT_MODEL_MAX_RETRIES,
-    judgeModel: value.ASSISTANT_JUDGE_MODEL as `openai/${string}`,
+    judgeModel: judgeModel as `openai/${string}` | `mastra/${string}/${string}`,
     maxGoalEvaluations: value.ASSISTANT_MAX_GOAL_EVALUATIONS,
     timezone: value.ASSISTANT_TIMEZONE,
   };
