@@ -199,7 +199,7 @@ Reviewed head: <full 40-character SHA>
 <details>
 <summary>Review notes</summary>
 
-- **Tests:** <The test report's first line, linked to the report.>
+- **Tests:** <The test report's result line (the line after its heading), linked to the report.>
 - **Last review:** <Each prior-pass finding the push addressed, refuted, or made obsolete, by subject and `file:line`, with the commit or evidence in a few words.>
 - **Earlier reviews:** <Reviewer, subject, `file:line`: addressed or refuted, with the evidence in a few words.>
 - **Why approve:** <The strongest case for request changes, and why it fails.>
