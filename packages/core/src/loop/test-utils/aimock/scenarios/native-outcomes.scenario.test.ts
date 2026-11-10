@@ -342,7 +342,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     async () => {
       const { observability, ended } = capture();
       const llm = getMock();
-      // The title model answers only after the deadline has passed.
+      // The title model answers only after the deadline has passed. The test waits for its
+      // request to finish so it cannot reach the shared aimock server during a later test.
+      const titleCalls: Promise<unknown>[] = [];
       const titleModel = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` }).chat('title-model');
       const slowTitleModel: typeof titleModel = {
         ...titleModel,
@@ -350,13 +352,15 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
         provider: titleModel.provider,
         modelId: titleModel.modelId,
         supportedUrls: titleModel.supportedUrls,
-        doGenerate: async options => {
-          await new Promise(resolve => setTimeout(resolve, 2500));
-          return titleModel.doGenerate(options);
+        doGenerate: options => {
+          const call = new Promise(resolve => setTimeout(resolve, 2500)).then(() => titleModel.doGenerate(options));
+          titleCalls.push(call.catch(() => {}));
+          return call;
         },
-        doStream: async options => {
-          await new Promise(resolve => setTimeout(resolve, 2500));
-          return titleModel.doStream(options);
+        doStream: options => {
+          const call = new Promise(resolve => setTimeout(resolve, 2500)).then(() => titleModel.doStream(options));
+          titleCalls.push(call.catch(() => {}));
+          return call;
         },
       };
       const memory = new MockMemory({ options: { generateTitle: { model: slowTitleModel, emitEvent: true } } });
@@ -382,6 +386,8 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
           llm.on({ endpoint: 'chat' }, { content: 'quick answer' });
         },
       });
+      await expect.poll(() => titleCalls.length, { timeout: 8000 }).toBeGreaterThan(0);
+      await Promise.all(titleCalls);
       expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
       expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
     },
