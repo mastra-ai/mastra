@@ -1092,7 +1092,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 steps,
               },
             });
-            if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
+            const textRewritten = !!lastStep && finishResult.outputTextChanged;
+            if (lastStep && finishResult.outputTextChanged) {
               lastStep.text = finishResult.outputText;
               steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
               finalText = finishResult.outputText;
@@ -1157,6 +1158,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
                 messages: finishMessages,
+                ...(textRewritten && { textRewritten }),
               });
             }
 

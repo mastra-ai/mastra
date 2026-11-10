@@ -759,6 +759,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               output: data.output,
               stepResult: data.stepResult,
               ...(data.messages ? { messages: data.messages } : {}),
+              ...(data.textRewritten ? { textRewritten: true } : {}),
             },
           } as ChunkType<OUTPUT>);
           safeClose(controller);
