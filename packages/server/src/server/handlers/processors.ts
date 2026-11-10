@@ -1,7 +1,9 @@
+import type { Mastra } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MessageInput } from '@mastra/core/agent/message-list';
 import { isProcessorWorkflow } from '@mastra/core/processors';
 import type { Processor, ProcessorWorkflow } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -12,7 +14,9 @@ import {
   executeProcessorResponseSchema,
 } from '../schemas/processors';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { listAgentsVisibleTo } from './agent-access';
+import { assertStoredAgentAccess } from './agent-access';
+import { assertReadAccess } from './authorship';
+import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
 
 // ============================================================================
@@ -86,6 +90,52 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
   return phases;
 }
 
+/**
+ * Returns a filter that drops processor configurations of stored agents the caller can't read. An agent adds its
+ * configurations when it is attached to Mastra, which also happens to sub-agents that aren't in the registry, so an
+ * agent that isn't registered is decided from its stored record. One with no record is a code sub-agent or another
+ * agent built in code, visible to everyone like registered code agents. `Mastra.removeAgent` drops the configurations
+ * of the agents it removes, so evicted and deleted stored agents leave none behind.
+ */
+function createProcessorConfigurationFilter(mastra: Mastra, requestContext: RequestContext) {
+  const agents = mastra.listAgents() || {};
+  const decided = new Map<string, Promise<boolean>>();
+
+  const isVisible = async (agentId: string): Promise<boolean> => {
+    try {
+      const agent = agents[agentId];
+      if (agent) {
+        assertStoredAgentAccess({ agent, agentId, requestContext, access: 'read' });
+        return true;
+      }
+      const agentsStore = await mastra.getStorage()?.getStore('agents');
+      const record = await agentsStore?.getById(agentId);
+      if (record) {
+        assertReadAccess({
+          requestContext,
+          resource: 'stored-agents',
+          resourceId: agentId,
+          record: record as OwnedRecord,
+        });
+      }
+      return true;
+    } catch (error) {
+      if (error instanceof HTTPException) return false;
+      throw error;
+    }
+  };
+
+  return async <TConfig extends { agentId: string }>(configs: TConfig[]): Promise<TConfig[]> => {
+    const visible = await Promise.all(
+      configs.map(c => {
+        if (!decided.has(c.agentId)) decided.set(c.agentId, isVisible(c.agentId));
+        return decided.get(c.agentId)!;
+      }),
+    );
+    return configs.filter((_, i) => visible[i]);
+  };
+}
+
 export const LIST_PROCESSORS_ROUTE = createRoute({
   method: 'GET',
   path: '/processors',
@@ -99,9 +149,7 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
     try {
       const processors = mastra.listProcessors() || {};
       const processorConfigurations = mastra.listProcessorConfigurations();
-      // Same filter as GET /processors/:processorId: leave out stored agents the caller can't see.
-      const allAgents = mastra.listAgents() || {};
-      const visibleAgents = listAgentsVisibleTo(allAgents, requestContext);
+      const visibleConfigurations = createProcessorConfigurationFilter(mastra, requestContext);
       const result: Record<
         string,
         {
@@ -127,9 +175,7 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
         const phases = detectProcessorPhases(processor);
 
         // Get agent configurations for this processor
-        const configs = (processorConfigurations.get(processorId) || []).filter(
-          c => !(c.agentId in allAgents) || c.agentId in visibleAgents,
-        );
+        const configs = await visibleConfigurations(processorConfigurations.get(processorId) || []);
         const agentIds = [...new Set(configs.map(c => c.agentId))];
         const configurations = configs.map(c => ({ agentId: c.agentId, type: c.type }));
 
@@ -184,12 +230,11 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
       const phases = detectProcessorPhases(processorEntry);
 
       // Get agent configurations for this processor
-      // Hydrated stored agents register their configurations too; leave out those the caller can't see.
-      const allAgents = mastra.listAgents() || {};
-      const agents = listAgentsVisibleTo(allAgents, requestContext);
-      const configs = mastra
-        .getProcessorConfigurations(processorId)
-        .filter(c => !(c.agentId in allAgents) || c.agentId in agents);
+      const agents = mastra.listAgents() || {};
+      const configs = await createProcessorConfigurationFilter(
+        mastra,
+        requestContext,
+      )(mastra.getProcessorConfigurations(processorId));
       const configurations = configs.map(c => ({
         agentId: c.agentId,
         agentName: agents[c.agentId]?.name || c.agentId,
