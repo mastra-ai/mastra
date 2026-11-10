@@ -79,12 +79,15 @@ jobs:
           fi
 
           # Prints "<analyze> <notified>" for a run or attempt: analyze is failure, success, or
-          # nothing when it was cancelled or unreadable; notified is yes when its notify job
+          # ignored when it was cancelled or unreadable; notified is yes when its notify job
           # passed, which means it read the alerts it was due to report.
           run_state() {
-            local jobs analyze='' notified=no
-            jobs=$(gh api --paginate "$1/jobs?per_page=100" \
-              --jq '.jobs[] | "\(.name)\t\(.conclusion)"' 2>/dev/null) || return 0
+            local jobs conclusions analyze=ignored notified=no
+            if ! jobs=$(gh api --paginate "$1/jobs?per_page=100" \
+              --jq '.jobs[] | "\(.name)\t\(.conclusion)"' 2>/dev/null); then
+              echo "ignored no"
+              return 0
+            fi
             conclusions=$(awk -F'\t' '$1 ~ /^Analyze/ {print $2}' <<< "$jobs")
             if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
               analyze=failure
@@ -123,7 +126,7 @@ jobs:
           while read -r path ended; do
             [ -n "$path" ] || continue
             read -r analyze notified <<< "$(run_state "$path")"
-            [ -n "$analyze" ] || continue
+            case "$analyze" in success | failure) ;; *) continue ;; esac
             previous=${previous:-$analyze}
             if [ "$analyze" = "success" ] && [ "$notified" = "yes" ] && [ -n "$ended" ]; then
               since=$ended
