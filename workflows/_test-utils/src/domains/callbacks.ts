@@ -11,6 +11,8 @@ import { MockRegistry } from '../mock-registry';
 
 export function createCallbackTests(context: DurableAgentTestContext) {
   const { createAgent, eventPropagationDelay } = context;
+  // Poll rather than sleep: callbacks fire after the run settles, which can lag on a loaded runner.
+  const callbackTimeout = Math.max(eventPropagationDelay * 10, 4000);
 
   describe('callbacks', () => {
     it('should invoke onFinish callback when streaming completes', async () => {
@@ -30,10 +32,7 @@ export function createCallbackTests(context: DurableAgentTestContext) {
         },
       });
 
-      // Wait for workflow to complete
-      await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
-
-      expect(finishData).not.toBeNull();
+      await vi.waitFor(() => expect(finishData).not.toBeNull(), { timeout: callbackTimeout });
       cleanup();
     });
 
@@ -54,10 +53,7 @@ export function createCallbackTests(context: DurableAgentTestContext) {
         },
       });
 
-      // Wait for error to propagate
-      await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
-
-      expect(errorReceived).not.toBeNull();
+      await vi.waitFor(() => expect(errorReceived).not.toBeNull(), { timeout: callbackTimeout });
       cleanup();
     });
 
