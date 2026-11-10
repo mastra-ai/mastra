@@ -69,12 +69,15 @@ export function sandboxBuildContext(
 
 /**
  * Replace every Build value that appears in provider or command output with
- * `***`. Longest first, so a value that contains another is masked whole.
+ * `***`. Each value is also matched without its edge whitespace, since output
+ * often drops a pasted trailing space or newline. Longest first, so a value
+ * that contains another is masked whole.
  */
 export function maskSandboxEnvValues(text: string, env: Record<string, string> | undefined): string {
   if (!env) return text;
+  const values = new Set(Object.values(env).flatMap(value => [value, value.trim()]));
   let masked = text;
-  for (const value of Object.values(env).sort((a, b) => b.length - a.length)) {
+  for (const value of [...values].sort((a, b) => b.length - a.length)) {
     if (value) masked = masked.replaceAll(value, '***');
   }
   return masked;

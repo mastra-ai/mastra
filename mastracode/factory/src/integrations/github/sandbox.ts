@@ -1166,7 +1166,9 @@ async function runLifecycleCommand(
   if (result.exitCode !== 0) {
     // The message is stored as build status and shown in the UI, so mask any
     // Build value the command printed.
-    const detail = maskSandboxEnvValues(result.stderr.trim() || result.stdout.trim(), options.env).slice(-1800);
+    // Mask before trimming: a value with an edge newline or space would no longer match once trimmed.
+    const output = result.stderr.trim() ? result.stderr : result.stdout;
+    const detail = maskSandboxEnvValues(output, options.env).trim().slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,

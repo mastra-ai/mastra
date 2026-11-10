@@ -252,6 +252,23 @@ describe('sandbox env on a real LocalSandbox', () => {
       expect((error as Error).message).toBe('Setup command failed (exit 3): auth failed for *** (also ***)');
     });
 
+    it('masks Build values with edge whitespace, whether the output keeps it or not', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: dir, isolation: 'none' });
+      onTestFinished(() => sandbox._destroy());
+      await sandbox._start();
+      // The first value is printed with its trailing newline last; the second is printed without its trailing space.
+      const failing = 'printf "auth failed for %s; " "${SPACED% }" >&2; printf "token %s" "$NEWLINE" >&2; exit 3';
+
+      const error = await runSetupCommand(sandbox as Parameters<typeof runSetupCommand>[0], dir, failing, {
+        SPACED: 'spaced-secret ',
+        NEWLINE: 'newline-secret\n',
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(SetupCommandError);
+      expect((error as Error).message).not.toMatch(/spaced-secret|newline-secret/);
+      expect((error as Error).message).toBe('Setup command failed (exit 3): auth failed for ***; token ***');
+    });
+
     it('skips setup, and so the Build variables, when the setup marker matches', async () => {
       const store = await makeStore();
       await store.set(ORG, PROJECT, { name: 'PROOF_BUILD', value: 'build-value', appliesTo: 'build' }, 'u');
