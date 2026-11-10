@@ -25,6 +25,8 @@ import type {
 import type { Agent } from '../agent';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
+import { applyResponseMessages, replayResponseMessages } from '../streams/response-messages';
+import type { ResponseMessagesReplay } from '../streams/response-messages';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, shouldRejectStream } from './constants';
 import type {
@@ -624,6 +626,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
 
+  /** The run's response messages, rebuilt from the step-finish events this reader has seen. */
+  let responseMessagesReplay: ResponseMessagesReplay = { messages: [] };
+
   let pendingRejection: Error | undefined;
   // Ends this reader's stream with an error, then fires onError once.
   const deliverError = async (error: Error, delivery?: AgentErrorEventData['delivery'], index?: number) => {
@@ -703,12 +708,21 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorName = typeof errPayload?.error?.name === 'string' ? errPayload.error.name : undefined;
             lastErrorCause = errPayload?.error ?? errPayload;
           }
-          if ((chunk as any).type === 'step-finish') {
-            const metadata = (chunk as any).payload?.metadata;
+          if (chunk.type === 'step-finish' && chunk.payload) {
+            // The event is shared with other readers and the replay cache: rewrite a copy.
+            const { _durableResponseMessagesDiff, ...payload } = chunk.payload as Record<string, any>;
+            const metadata = payload.metadata;
             // A JSON-serializing pubsub delivers the response timestamp as an ISO string.
             if (typeof metadata?.timestamp === 'string') {
-              metadata.timestamp = new Date(metadata.timestamp);
+              payload.metadata = { ...metadata, timestamp: new Date(metadata.timestamp) };
             }
+            // Rebuild the run's response messages so far; when this reader missed an earlier part,
+            // fall back to the messages it has (a durable caller's live list) rather than guess.
+            const responseMessages = applyResponseMessages(responseMessagesReplay, chunk.payload as any);
+            if (_durableResponseMessagesDiff || responseMessages) {
+              payload._durableResponseMessages = responseMessages ?? messageList.get.response.aiV5.model();
+            }
+            (chunk as { payload: unknown }).payload = payload;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           const delivery = onChunkDelivery.then(() => onChunk?.(chunk as ChunkType<OUTPUT>));
@@ -1046,12 +1060,28 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       // Use indexed replay when supported. Transports without numeric offsets
       // must live-tail so resume/recovery does not replay pre-resume events.
       const topic = AGENT_STREAM_TOPIC(runId);
-      const subscribePromise =
+      // Step-finish events carry only the response messages that changed, so a reader starting
+      // mid-log first rebuilds the list from the events it skips.
+      const replaySkipped =
+        typeof offset === 'number' && offset > 0 && pubsub.supportsOffsets
+          ? pubsub
+              .getHistory(topic, 0)
+              .then(history => {
+                responseMessagesReplay = replayResponseMessages(
+                  history.filter(event => typeof event.index === 'number' && event.index < offset),
+                );
+              })
+              .catch(error => {
+                logError(`[DurableAgentStream] Failed to read ${topic} history before offset ${offset}:`, error);
+              })
+          : Promise.resolve();
+      const subscribePromise = replaySkipped.then(() =>
         offset === undefined
           ? pubsub.subscribeWithReplay(topic, subscribedCallback)
           : offset === 'latest' || !pubsub.supportsOffsets
             ? pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' })
-            : pubsub.subscribeFromOffset(topic, offset, subscribedCallback);
+            : pubsub.subscribeFromOffset(topic, offset, subscribedCallback),
+      );
 
       subscribePromise
         .then(() => {

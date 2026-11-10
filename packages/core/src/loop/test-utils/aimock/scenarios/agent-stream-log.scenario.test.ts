@@ -124,6 +124,73 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
     }
   }, 30_000);
 
+  // Technical: every step-finish carried the run's response messages so far, so the first tool's
+  // output was stored once per later step. Step-finish events now send only what changed.
+  // DurableAgent and EventedAgent still send the full list on every step.
+  const itOnPlainAgentsForMessages = isDurableEngineVariant(engine) ? it.fails : it;
+  itOnPlainAgentsForMessages(
+    'stores an early tool result as often as the last one',
+    async () => {
+      const llm = getMock();
+      scriptToolLoop(llm);
+      const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup } });
+      const run: any = await agent.stream('Look it all up.', { maxSteps: 10 });
+      try {
+        await (run.output ?? run).consumeStream();
+        const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
+        expect(occurrences(log, 'RESULT-0')).toBe(occurrences(log, `RESULT-${TOOL_STEPS - 1}`));
+      } finally {
+        run.cleanup?.();
+        if (engine !== 'inngest') await mastra.shutdown();
+      }
+    },
+    30_000,
+  );
+
+  // Technical: an observer that starts at an offset skips the step-finish events that carried the
+  // earlier response messages; it rebuilds them from the run's log before following it.
+  it('gives an observer resuming mid-run the full response messages of each step', async () => {
+    const llm = getMock();
+    scriptToolLoop(llm);
+    const { agent, mastra } = await createSharedAgent(llm, {
+      engine,
+      tools: { lookup },
+      ...(engine === 'inngest' ? {} : { pubsub: new JsonPubSub(), cache: new JsonCache() }),
+    });
+    const live: any[] = [];
+    const run: any = await agent.stream('Look it all up.', {
+      maxSteps: 10,
+      onStepFinish: (step: any) => {
+        live.push(step);
+      },
+    });
+    try {
+      await (run.output ?? run).consumeStream();
+      const history = await waitForTerminal(runBus(agent), run.runId);
+      const stepFinishes = history.filter(event => event.data?.type === 'step-finish');
+      const offset = stepFinishes[2].index + 1;
+
+      const observed: any[] = [];
+      const observation: any = await agent.observe(run.runId, {
+        offset,
+        onStepFinish: (step: any) => {
+          observed.push(step);
+        },
+      });
+      for await (const _chunk of observation.fullStream) {
+        // drain
+      }
+
+      expect(observed.map(step => step.response.messages)).toEqual(
+        live.slice(3).map(step => JSON.parse(JSON.stringify(step.response.messages))),
+      );
+      expect(JSON.stringify(observed.at(-1).response.messages)).toContain('RESULT-0');
+    } finally {
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
+
   // Technical: a delegated agent's chunks are forwarded inside `tool-output` chunks, and its own
   // step-start / step-finish / finish carried its prompt like the parent's did.
   // Durable engines still publish them as-is: their callers read their own run back from the

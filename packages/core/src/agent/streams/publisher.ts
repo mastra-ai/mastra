@@ -12,6 +12,8 @@ import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
 import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
+import { diffResponseMessages } from './response-messages';
+import type { ResponseMessagesCursor, ResponseMessagesDiff } from './response-messages';
 import type { AgentRunRecordTarget } from './run-records';
 import { deleteAgentRunRecord, readAgentRunRecord, writeAgentRunRecord } from './run-records';
 import { toStreamFinish, toStreamStepFinish, toStreamStepStart } from './wire';
@@ -148,6 +150,11 @@ export function createAgentStreamPublisher({
   let finished = false;
   /** Tool calls of the step in progress, which the run's messages need to tell its content apart. */
   let stepToolCallIds: string[] = [];
+  /**
+   * The response messages published so far. Each step-finish sends only what changed; a run
+   * resumed in a new publisher starts over with the full list.
+   */
+  let responseMessagesCursor: ResponseMessagesCursor | undefined;
   const readStepContent = (messageList: MessageList | undefined, toolCallIds: string[]) => {
     try {
       return messageList?.get.response.aiV5.modelContent(-1, toolCallIds);
@@ -243,7 +250,14 @@ export function createAgentStreamPublisher({
               ? undefined
               : readStepContent(messageList, stepToolCallIds);
           stepToolCallIds = [];
-          const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content));
+          let responseMessages: ResponseMessagesDiff | undefined;
+          if (chunk.payload?.messages) {
+            ({ diff: responseMessages, cursor: responseMessagesCursor } = diffResponseMessages(
+              responseMessagesCursor,
+              chunk.payload.messages.nonUser,
+            ));
+          }
+          const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content, responseMessages));
           void enqueue(() => emitChunkEvent(pubsub, runId, published));
           return;
         }
