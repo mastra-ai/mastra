@@ -1,3 +1,4 @@
+import { ToolLoopAgent } from '@internal/ai-v6';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
@@ -36,5 +37,21 @@ describe.each([
 
     expect(() => mastra.addAgent(agent, 'shared')).not.toThrow();
     expect(mastra.getAgent('shared')).toBe(agent);
+  });
+});
+
+describe('Mastra.addAgent with ToolLoopAgent inputs', () => {
+  it('keeps re-registration of the same input idempotent and rejects a different input', () => {
+    const mastra = new Mastra({ logger: false });
+    const first = new ToolLoopAgent({ model: 'openai/gpt-4o', instructions: 'First' });
+    const second = new ToolLoopAgent({ model: 'openai/gpt-4o', instructions: 'Second' });
+
+    mastra.addAgent(first, 'shared');
+    const registered = mastra.getAgent('shared');
+
+    expect(() => mastra.addAgent(first, 'shared')).not.toThrow();
+    expect(mastra.getAgent('shared')).toBe(registered);
+    expect(() => mastra.addAgent(second, 'shared')).toThrow('Agent with key shared already exists');
+    expect(mastra.getAgent('shared')).toBe(registered);
   });
 });

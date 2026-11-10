@@ -1654,7 +1654,9 @@ export class AgentController<TState = {}> {
       if (this.#applicationPubSub && !agent.hasOwnPubSub()) {
         agent.__setPubSub(mastra === this.#internalMastra ? this.#applicationPubSub : mastra.pubsub);
       }
-      mastra.addAgent(agent);
+      if (!mastra.listAgents()[agent.id]) {
+        mastra.addAgent(agent);
+      }
     }
 
     if (this.workspace && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {

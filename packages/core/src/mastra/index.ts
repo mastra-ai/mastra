@@ -871,6 +871,7 @@ export class Mastra<
 > {
   #vectors?: TVectors;
   #agents: TAgents;
+  #toolLoopRegistrations = new WeakMap<ToolLoopAgentLike, Map<string, Agent<any>>>();
   #logger: TLogger;
   #loggerAdapterOptions: LoggerAdapterOptions = { correlation: true, export: true };
   #wiredLoggers = new WeakSet<IMastraLogger>();
@@ -3008,16 +3009,20 @@ export class Mastra<
     }
 
     let mastraAgent: Agent<any, any, any>;
-    if (isToolLoopAgentLike(agent)) {
+    const toolLoopInput = isToolLoopAgentLike(agent) ? agent : undefined;
+    if (toolLoopInput) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
-      mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
+      mastraAgent = toolLoopAgentToMastraAgent(toolLoopInput, { fallbackName: key });
     } else {
       mastraAgent = agent as Agent;
     }
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      if (agents[agentKey] === mastraAgent) {
+      if (
+        agents[agentKey] === mastraAgent ||
+        (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey])
+      ) {
         return;
       }
       throw new MastraError({
@@ -3046,6 +3051,14 @@ export class Mastra<
     }
 
     agents[agentKey] = mastraAgent;
+    if (toolLoopInput) {
+      let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
+      if (!registrations) {
+        registrations = new Map();
+        this.#toolLoopRegistrations.set(toolLoopInput, registrations);
+      }
+      registrations.set(agentKey, mastraAgent);
+    }
 
     // Register configured processor workflows from the agent
     // Use .then() to handle async resolution without blocking the constructor
