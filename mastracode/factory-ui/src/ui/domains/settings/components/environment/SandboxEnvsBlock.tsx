@@ -147,7 +147,7 @@ function SandboxEnvRow({ env, disabled, mutations }: { env: SandboxEnv; disabled
         <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
           <Txt
             as="span"
-            variant="ui-sm"
+            variant="body-sm"
             tone="muted"
             className="w-40 font-mono"
             aria-label={`${env.name} value hidden`}
