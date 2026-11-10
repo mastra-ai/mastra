@@ -1206,6 +1206,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               ? snapshotBackgroundOutcomes(messageList)
               : undefined;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            const builtPrompt = inputMessages;
             // Identify OM's prompt message by its source ID and position before request
             // processors run. Equal text in real user messages is not synthetic context.
             const dbMessages = messageList.get.all.db();
@@ -1360,9 +1361,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               registryEntry.runScope ??= createRunScope();
               registryEntry.runScope.set(STEP_MODEL_MESSAGES_KEY, delegationMessages);
             }
-            const backgroundResultTaskIds = backgroundOutcomes
-              ? backgroundOutcomesInPrompt(backgroundOutcomes, inputMessages)
-              : [];
+            // A cached reply may come from a different prompt under a custom cache key, so it never
+            // counts as having answered a background result.
+            const backgroundResultTaskIds =
+              backgroundOutcomes && !cachedResponse
+                ? backgroundOutcomesInPrompt(backgroundOutcomes, builtPrompt, inputMessages)
+                : [];
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution

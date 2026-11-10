@@ -2005,6 +2005,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           downloadError = error;
           return [];
         });
+        const builtPrompt = inputMessages;
         removeTrailingAssistantGuardContinuations(messageList);
         await persistUnavailableAttachments({
           messageList,
@@ -2102,9 +2103,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : inputMessages;
           writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
         }
-        const backgroundResultTaskIds = backgroundOutcomes
-          ? backgroundOutcomesInPrompt(backgroundOutcomes, inputMessages)
-          : [];
+        // A cached reply may come from a different prompt under a custom cache key, so it never
+        // counts as having answered a background result.
+        const backgroundResultTaskIds =
+          backgroundOutcomes && !cachedResponse
+            ? backgroundOutcomesInPrompt(backgroundOutcomes, builtPrompt, inputMessages)
+            : [];
 
         if (downloadError) {
           // Use the existing error-processor and model-fallback path without calling
@@ -2134,7 +2138,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 // Reattach per-run metadata that was stripped at cache time. A cached
                 // step-start timestamp belongs to the original provider call, so omit it
                 // rather than reporting stale inference timing for the replay. Cached background
-                // task ids belong to the original run; report this request's instead.
+                // task ids belong to the original run.
                 let replayChunk = chunk;
                 if (chunk.type === 'step-start' && chunk.payload && typeof chunk.payload === 'object') {
                   const {
@@ -2142,13 +2146,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     backgroundResultTaskIds: _cachedTaskIds,
                     ...payload
                   } = chunk.payload as Record<string, unknown>;
-                  replayChunk = {
-                    ...chunk,
-                    payload: {
-                      ...payload,
-                      ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
-                    },
-                  };
+                  replayChunk = { ...chunk, payload };
                 }
                 controller.enqueue({
                   ...replayChunk,

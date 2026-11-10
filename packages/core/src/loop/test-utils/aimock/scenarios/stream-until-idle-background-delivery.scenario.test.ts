@@ -417,6 +417,75 @@ describeForAllEngines(
       },
       TEST_TIMEOUT_MS,
     );
+
+    // A request processor replaced the result before the request was sent, so the model never saw
+    // it and only the follow-up request can report it.
+    it(
+      'still reports an awaited result a request processor replaced',
+      async () => {
+        const prompt = 'Look up the invoice record with pruning.';
+        const threadId = `delivery-${engine}-pruned`;
+        const llm = getMock();
+        const pruneToolResults: Processor = {
+          id: 'prune-tool-results',
+          processLLMRequest: ({ prompt: request, stepNumber }) => {
+            if (stepNumber !== 1) return;
+            return {
+              prompt: request.map(message =>
+                message.role === 'tool'
+                  ? {
+                      ...message,
+                      content: message.content.map(part =>
+                        part.type === 'tool-result' ? { ...part, output: { type: 'text', value: 'pruned' } } : part,
+                      ),
+                    }
+                  : message,
+              ),
+            };
+          },
+        };
+        const shared = await createSharedAgent(llm, {
+          tools: { 'fetch-record': fetchRecordTool() },
+          agentBackgroundTasks: { tools: { 'fetch-record': true } },
+          backgroundTasks: BG_CONFIG,
+          memory: new MockMemory(),
+          inputProcessors: [pruneToolResults],
+          engine,
+        });
+        scriptFetchCall(llm, prompt, 'awaited');
+        llm.on(
+          {
+            endpoint: 'chat',
+            predicate: (req: unknown) => mentions(prompt)(req) && toolContents(req).length === 1 && !sawRecord(req),
+          },
+          { content: 'The record was pruned.' },
+        );
+        llm.on(
+          { endpoint: 'chat', predicate: (req: unknown) => mentions(prompt)(req) && sawRecord(req) },
+          { content: ANSWER },
+        );
+
+        const { output } = await runLoopScenario({
+          engine,
+          llm,
+          prompt,
+          sharedAgent: shared,
+          memory: new MockMemory(),
+          threadId,
+          resourceId: RESOURCE_ID,
+          maxSteps: 5,
+          streamUntilIdle: true,
+          manualStreamConsumption: true,
+          fixtures: () => {},
+        });
+        const chunks = await collect(output.fullStream as AsyncIterable<unknown>);
+
+        const requests = requestsFor(llm.getRequests(), prompt);
+        expect(requests.map(r => sawRecord(r.body))).toEqual([false, false, true]);
+        expect(answers(chunks)).toBe(1);
+      },
+      TEST_TIMEOUT_MS,
+    );
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
   { skip: ['inngest'] },
