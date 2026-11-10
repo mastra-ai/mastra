@@ -41,7 +41,7 @@ describe('processor handlers', () => {
   });
 
   // Hydrated stored agents register their processor configurations on Mastra like code agents do.
-  it("doesn't list another user's private stored agent among a processor's configurations", async () => {
+  it("doesn't list another user's private stored agent among a processor's agents", async () => {
     const mastra = createMastra();
     const processor = mastra.getProcessorById('tool-call-filter');
     for (const [id, visibility] of [
@@ -76,5 +76,19 @@ describe('processor handlers', () => {
 
     expect(await agentIds(caller('bob'))).toEqual(['alice-public', 'alice-public']);
     expect(await agentIds(caller('alice'))).toEqual(['alice-private', 'alice-private', 'alice-public', 'alice-public']);
+
+    const listed = async (requestContext: RequestContext) => {
+      const result = (await LIST_PROCESSORS_ROUTE.handler({ mastra, requestContext } as any)) as Record<
+        string,
+        { agentIds: string[]; configurations: Array<{ agentId: string }> }
+      >;
+      const entry = result['tool-call-filter']!;
+      return { agentIds: entry.agentIds, configurations: entry.configurations.map(c => c.agentId) };
+    };
+    expect(await listed(caller('bob'))).toEqual({ agentIds: ['alice-public'], configurations: ['alice-public'] });
+    expect(await listed(caller('alice'))).toEqual({
+      agentIds: ['alice-private', 'alice-public'],
+      configurations: ['alice-private', 'alice-public'],
+    });
   });
 });

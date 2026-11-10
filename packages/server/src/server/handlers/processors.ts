@@ -95,10 +95,13 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
   description: 'Returns a list of all available individual processors',
   tags: ['Processors'],
   requiresAuth: true,
-  handler: async ({ mastra }) => {
+  handler: async ({ mastra, requestContext }) => {
     try {
       const processors = mastra.listProcessors() || {};
       const processorConfigurations = mastra.listProcessorConfigurations();
+      // Same filter as GET /processors/:processorId: leave out stored agents the caller can't see.
+      const allAgents = mastra.listAgents() || {};
+      const visibleAgents = listAgentsVisibleTo(allAgents, requestContext);
       const result: Record<
         string,
         {
@@ -124,7 +127,9 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
         const phases = detectProcessorPhases(processor);
 
         // Get agent configurations for this processor
-        const configs = processorConfigurations.get(processorId) || [];
+        const configs = (processorConfigurations.get(processorId) || []).filter(
+          c => !(c.agentId in allAgents) || c.agentId in visibleAgents,
+        );
         const agentIds = [...new Set(configs.map(c => c.agentId))];
         const configurations = configs.map(c => ({ agentId: c.agentId, type: c.type }));
 
