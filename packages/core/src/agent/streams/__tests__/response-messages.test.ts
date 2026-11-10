@@ -144,9 +144,9 @@ describe('response message diffs', () => {
       data: { type: 'step-finish', payload: { _durableResponseMessagesDiff: diff } },
     });
     const replay = replayResponseMessages([
-      { type: 'chunk', data: { type: 'text-delta', payload: { _durableResponseMessagesDiff: stale } } },
-      { type: 'finish', data: { payload: { _durableResponseMessagesDiff: stale } } },
       stepFinish(current!, 2),
+      { type: 'chunk', data: { type: 'text-delta', payload: { _durableResponseMessagesDiff: stale } } },
+      { type: 'finish', data: { type: 'step-finish', payload: { _durableResponseMessagesDiff: stale } } },
       // Still publishing after the newer claim took the run over.
       stepFinish(stale!, 1),
     ]);
