@@ -29,7 +29,7 @@ This creates a `.mastra` directory containing your production-ready server. Read
 
 After building, Mastra creates the following structure:
 
-```
+```text
 .mastra/
 ├── .build/                # Intermediate build artifacts (module maps, analysis)
 └── output/
@@ -160,7 +160,15 @@ To add your own endpoints, see [Custom API Routes](/docs/server/custom-api-route
 
 By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. Shutdown gives in-flight workflow runs (including durable agent runs) the same drain window to finish before workers and pub/sub subscriptions are torn down. A durable agent run still executing after the window stops and releases its claim on the run, so the next boot can recover it right away. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
 
-Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. The HTTP drain and the workflow drain run one after the other, so keep enough time for both plus shutdown cleanup.
+Shutdown then hands back the agent thread runs the process still holds:
+
+- A run still executing is aborted, so it starts no further steps. Clients watching the thread from other processes see it end, and its partial response isn't saved.
+- A run waiting on a tool approval or suspension stays suspended and can be resumed from another process. A tool call from the same step that's still executing is aborted first, like a run still executing.
+- The thread lease is released right away, so another process can start a run on the thread without waiting for the lease to expire. Release is best-effort: if an aborted run doesn't stop in time (for example, a tool call that ignores the abort), or the lease backend doesn't answer or fails the release, the lease is kept until it expires.
+
+Handing runs back can take up to about 1.5 seconds past the drain timeout.
+
+Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. The HTTP drain and the workflow drain run one after the other, so keep enough time for both, plus about 1.5 seconds to hand back thread runs, plus shutdown cleanup.
 
 If you call `mastra.shutdown()` yourself, pass `drainTimeout` to control how long it waits for in-flight workflow runs:
 

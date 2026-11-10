@@ -1,3 +1,5 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { useItemDecisions } from '../../../factory/hooks/useBoardDecisions';
 import { starterPrompts } from '../../../factory/starterPrompts';
@@ -6,8 +8,10 @@ import { StarterCard } from './StarterCard';
 export function StarterBoard({ factoryId }: { factoryId: string }) {
   const workItems = useWorkItemsQuery(factoryId);
   const decisions = useItemDecisions(factoryId);
-  if (workItems.isPending || decisions.isPending) return null;
+  const catalog = useBoardCatalog(factoryId);
+  if (workItems.isPending || decisions.isPending || catalog.isPending) return null;
   const starters = starterPrompts({
+    board: catalog.data?.find(board => board.id === DEFAULT_BOARD_ID),
     cards: workItems.data ?? [],
     effectByItem: decisions.effectByItem,
     now: new Date(workItems.dataUpdatedAt),

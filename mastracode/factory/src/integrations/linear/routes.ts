@@ -17,9 +17,10 @@ import type { Context } from 'hono';
 
 import { isTerminalWorkItem } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
-import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
@@ -97,7 +98,7 @@ export interface MountLinearRoutesOptions {
    */
   workItems?: Pick<WorkItemsStorage, 'getByProjectSource' | 'listShared'>;
   /** Installed boards, so a held card's terminal status follows its own board. */
-  boards?: BoardRegistry;
+  boards?: BoardRegistry | ProjectBoardSource;
 }
 
 /**
@@ -192,8 +193,8 @@ async function holdsLiveCardFor(
   issueId: string | undefined,
 ) {
   if (!options.workItems) return false;
-  const isLive = (item: Card) =>
-    !(options.boards ? isTerminalWorkItem(options.boards, item) : isTerminalFactoryRuleStage(item.stages));
+  const boards = toBoardSource(options.boards);
+  const isLive = (item: Card) => !isTerminalWorkItem(boards.forProject(item), item);
   const byIdentifier = await options.workItems.getByProjectSource({
     orgId,
     factoryProjectId,

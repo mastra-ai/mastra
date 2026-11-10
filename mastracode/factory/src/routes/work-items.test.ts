@@ -189,7 +189,7 @@ describe('installed board catalog', () => {
     expect(response.status).toBe(200);
     const { boards } = await response.json();
     expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
-      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+      includeDefaultBoards ? ['work', 'release'] : ['release'],
     );
     // Deprecated `title`/`role` stay beside their replacements for older clients.
     expect(boards.at(-1)).toEqual({
@@ -197,6 +197,8 @@ describe('installed board catalog', () => {
       name: 'Release Preview',
       title: 'Release Preview',
       initialPhase: 'queued',
+      // No phase reviews or builds, so the board has no pull request loop: only its terminal phase finishes cards.
+      flow: { completed: 'shipped', canceled: 'shipped' },
       phases: [
         {
           id: 'queued',
@@ -220,6 +222,25 @@ describe('installed board catalog', () => {
         { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },
       ],
     });
+  });
+
+  it("names the phase playing each part of each board's pull request loop", async () => {
+    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry());
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    expect(body.boards[0]).toMatchObject({
+      id: 'work',
+      flow: {
+        triage: 'triage',
+        build: 'execute',
+        pullRequestReview: 'pr-review',
+        completed: 'done',
+        canceled: 'canceled',
+      },
+    });
+    // Which board is the default is DEFAULT_BOARD_ID, and the build context is the build phase's own.
+    expect(body.boards[0]).not.toHaveProperty('default');
+    expect(body.boards[0].flow).not.toHaveProperty('buildContext');
   });
 
   it('sends the conditions a phase starts and approves its exit tool under', async () => {
@@ -347,6 +368,20 @@ describe('auth and scoping', () => {
 
 // ── Create / upsert ──────────────────────────────────────────────────────
 describe('POST /web/factory/projects/:id/work-items', () => {
+  it('refuses a card filed onto the retired Review board, and files nothing', async () => {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        board: 'review',
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:7' },
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: 'invalid_board' });
+    expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId: PROJECT_ID })).toEqual([]);
+  });
+
   it('creates a work item with server-stamped history', async () => {
     const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     expect(res.status).toBe(200);

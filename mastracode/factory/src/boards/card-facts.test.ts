@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { evaluateRuleGroup } from '../rules/rule-group.js';
+import type { RuleGroup } from '../rules/rule-group.js';
 import { externallyAuthoredWorkItem } from '../rules/types.js';
 import { DEFAULT_INTAKE_ROUTE } from '../storage/domains/boards/base.js';
-import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+import type { Card, ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
 
 const SOURCES: Record<string, ExternalWorkItemSource | null> = {
@@ -70,6 +71,41 @@ describe('provider facts', () => {
       'item.author': 'provider-author',
       'author.trusted': true,
     });
+  });
+});
+
+describe('item.pullRequest', () => {
+  const pullRequest = (number: number, state: string) =>
+    ({
+      sourceType: 'pull-request',
+      state,
+      metadata: { githubPullRequestNumber: number },
+    }) as unknown as Card['workItem']['sources'][number];
+  const issueCard = (sources: Card['workItem']['sources'], metadata: Record<string, unknown> = {}) => ({
+    title: 'Fix',
+    externalSource: SOURCES['github issue']!,
+    metadata,
+    workItem: { labels: [], author: null, sources },
+  });
+  const noPullRequest: RuleGroup = {
+    operator: 'AND',
+    conditions: [{ field: 'item.pullRequest', operator: 'not_exists' }],
+  };
+
+  it('is absent while the card has no open change request', () => {
+    for (const card of [issueCard([]), issueCard([pullRequest(12, 'closed'), pullRequest(13, 'merged')])]) {
+      const facts = cardRuleFacts(card);
+      expect(facts).not.toHaveProperty('item.pullRequest');
+      expect(evaluateRuleGroup(noPullRequest, facts)).toBe(true);
+    }
+  });
+
+  it('is the open change request attached to the card, or the one Factory opened', () => {
+    const attached = cardRuleFacts(issueCard([pullRequest(12, 'closed'), pullRequest(14, 'open')]));
+    expect(attached['item.pullRequest']).toBe(14);
+    expect(evaluateRuleGroup(noPullRequest, attached)).toBe(false);
+
+    expect(cardRuleFacts(issueCard([], { openPullRequestNumber: 21 }))['item.pullRequest']).toBe(21);
   });
 });
 

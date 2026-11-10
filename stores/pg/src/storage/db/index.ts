@@ -333,12 +333,24 @@ export function generateTableSQL({
   return sql;
 }
 
+function indexColumnsSQL(columns: string[], opclass?: string): string {
+  return columns
+    .map(col => {
+      const [colName, ...modifiers] = col.includes(' DESC') || col.includes(' ASC') ? col.split(' ') : [col];
+      if (!colName) {
+        throw new Error(`Invalid column specification: ${col}`);
+      }
+      return [`"${parseSqlIdentifier(colName, 'column name')}"`, opclass, ...modifiers].filter(Boolean).join(' ');
+    })
+    .join(', ');
+}
+
 /**
  * Generates a CREATE INDEX SQL statement from index options.
  * Used by exportSchemas to produce index DDL without a database connection.
  */
 export function generateIndexSQL(options: CreateIndexOptions, schemaName?: string): string {
-  const { name, table, columns, unique = false, where, method = 'btree' } = options;
+  const { name, table, columns, unique = false, where, method = 'btree', opclass } = options;
 
   const quotedSchemaName = getSchemaName(schemaName);
   const fullTableName = getTableName({ indexName: table, schemaName: quotedSchemaName });
@@ -346,18 +358,7 @@ export function generateIndexSQL(options: CreateIndexOptions, schemaName?: strin
   const uniqueStr = unique ? 'UNIQUE ' : '';
   const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
-  const columnsStr = columns
-    .map(col => {
-      if (col.includes(' DESC') || col.includes(' ASC')) {
-        const [colName, ...modifiers] = col.split(' ');
-        if (!colName) {
-          throw new Error(`Invalid column specification: ${col}`);
-        }
-        return `"${parseSqlIdentifier(colName, 'column name')}" ${modifiers.join(' ')}`;
-      }
-      return `"${parseSqlIdentifier(col, 'column name')}"`;
-    })
-    .join(', ');
+  const columnsStr = indexColumnsSQL(columns, opclass);
 
   const whereStr = where ? ` WHERE ${where}` : '';
   const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
@@ -1115,6 +1116,7 @@ export class PgDB extends MastraBase {
       // least-privilege role finish init instead of failing with
       // "permission denied".
       if (!snapshot || !this.snapshotShowsTableConverged(snapshot, tableName)) {
+        const isNewTable = snapshot ? !snapshot.tables.has(tableName) : false;
         const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
 
         try {
@@ -1128,6 +1130,7 @@ export class PgDB extends MastraBase {
 
         if (snapshot) {
           snapshot.tables.add(tableName);
+          if (isNewTable) snapshot.createdTables.add(tableName);
           // generateTableSQL emits the declared columns plus a `Z` twin for
           // every timestamp column; record both so the alterTable pass below
           // and later domains don't re-probe for them.
@@ -1802,23 +1805,10 @@ export class PgDB extends MastraBase {
       if (snapshot?.indexes.has(name)) return;
 
       const uniqueStr = unique ? 'UNIQUE ' : '';
-      const concurrentStr = concurrent ? 'CONCURRENTLY ' : '';
+      const concurrentStr = concurrent && !this.isTableCreatedInThisInit(table) ? 'CONCURRENTLY ' : '';
       const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
-      const columnsStr = columns
-        .map(col => {
-          if (col.includes(' DESC') || col.includes(' ASC')) {
-            const [colName, ...modifiers] = col.split(' ');
-            if (!colName) {
-              throw new Error(`Invalid column specification: ${col}`);
-            }
-            const quotedCol = `"${parseSqlIdentifier(colName, 'column name')}" ${modifiers.join(' ')}`;
-            return opclass ? `${quotedCol} ${opclass}` : quotedCol;
-          }
-          const quotedCol = `"${parseSqlIdentifier(col, 'column name')}"`;
-          return opclass ? `${quotedCol} ${opclass}` : quotedCol;
-        })
-        .join(', ');
+      const columnsStr = indexColumnsSQL(columns, opclass);
 
       const whereStr = where ? ` WHERE ${where}` : '';
       const tablespaceStr = tablespace ? ` TABLESPACE ${tablespace}` : '';
@@ -1876,6 +1866,14 @@ export class PgDB extends MastraBase {
     ) {
       snapshot?.indexes.add(indexName);
     }
+  }
+
+  /**
+   * Whether `tableName` was absent when this init's snapshot was read and this
+   * init created it, so its indexes can be built without CONCURRENTLY.
+   */
+  isTableCreatedInThisInit(tableName: string): boolean {
+    return this.schemaSnapshot?.createdTables.has(tableName) ?? false;
   }
 
   private async timedIndexBuild(indexName: string, sql: string): Promise<void> {

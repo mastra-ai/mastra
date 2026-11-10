@@ -6,21 +6,16 @@ import { sessionActivityStatus, sessionBoard } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
 describe('sessionBoard', () => {
-  it('puts a pull request item from before boards existed on the review board', () => {
-    const item = testWorkItem({ board: null, source: 'github-pr' });
-
-    expect(sessionBoard(testSession('s1', { branch: 'factory/issue-3' }), item)).toBe('review');
+  it('puts a pull request item from before boards existed on Work', () => {
+    expect(sessionBoard(testWorkItem({ board: null, source: 'github-pr' }))).toBe('work');
   });
 
-  it("follows the item's custom board, not the branch", () => {
-    const item = testWorkItem({ board: 'release' });
-
-    expect(sessionBoard(testSession('s1', { branch: 'factory/pr-12' }), item)).toBe('release');
+  it("follows the item's custom board", () => {
+    expect(sessionBoard(testWorkItem({ board: 'release' }))).toBe('release');
   });
 
-  it('reads the branch only when no item is linked', () => {
-    expect(sessionBoard(testSession('s1', { branch: 'factory/pr-12' }), undefined)).toBe('review');
-    expect(sessionBoard(testSession('s1', { branch: 'factory/issue-3' }), undefined)).toBe('work');
+  it('puts a session with no linked item on Work, pull request reviews included', () => {
+    expect(sessionBoard(undefined)).toBe('work');
   });
 });
 
