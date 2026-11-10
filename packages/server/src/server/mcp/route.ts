@@ -73,6 +73,37 @@ async function loadBuiltinMCP(mastra: Mastra) {
   return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools };
 }
 
+const TRACE_VIEWER_URI = 'ui://mastra/trace-viewer';
+
+/**
+ * The MCP Apps the built-in server ships, from `@mastra/mcp-apps-components` (an optional peer dependency
+ * like `@mastra/mcp`): without it, tools carry no app link and hosts get their JSON results as before.
+ */
+async function loadBuiltinApps() {
+  try {
+    // A variable specifier: the package builds on @mastra/client-js, which builds on this one.
+    const specifier = '@mastra/mcp-apps-components';
+    const { traceViewerApp } = (await import(/* @vite-ignore */ specifier)) as {
+      traceViewerApp: { name: string; description?: string; html: string };
+    };
+    return { appResources: { [TRACE_VIEWER_URI]: traceViewerApp }, apps: { traceViewer: TRACE_VIEWER_URI } };
+  } catch (error) {
+    if (!isMissingPackage(error, '@mastra/mcp-apps-components')) throw error;
+    return undefined;
+  }
+}
+
+function isMissingPackage(error: unknown, name: string): boolean {
+  for (let current = error; current instanceof Error; current = current.cause) {
+    const code = (current as { code?: unknown }).code;
+    if ((code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') && current.message.includes(`'${name}'`)) {
+      return true;
+    }
+    if (current.message.startsWith(`No such module "${name}"`)) return true;
+  }
+  return false;
+}
+
 /** Dispatched routes see only the bearer credential, never cookies or the Studio client-type header. */
 function bearerOnly(request: Request | undefined): Request | undefined {
   if (!request) return undefined;
@@ -110,6 +141,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     }
     const config = resolveBuiltinMCPConfig(mastra, request);
     const { MCPServer, buildBuiltinMCPTools } = await loadBuiltinMCP(mastra);
+    const builtinApps = await loadBuiltinApps();
     const tools = await buildBuiltinMCPTools(
       {
         mastra,
@@ -120,6 +152,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
         abortSignal,
         request: bearerOnly(request),
         mcpRoute: BUILTIN_MCP_HTTP_ROUTE,
+        apps: builtinApps?.apps,
       },
       config,
     );
@@ -131,6 +164,8 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       title: serverInfo.title,
       instructions: serverInfo.instructions,
       tools,
+      // Served whenever installed: an app only opens from a tool the caller was given, and its own calls are tool calls.
+      appResources: builtinApps?.appResources,
       legacy: 'stateless',
       requestState: { key: getRequestStateKey() },
     });

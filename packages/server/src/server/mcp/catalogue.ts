@@ -31,7 +31,7 @@ type MCPTool = ReturnType<typeof createTool>;
 export type ToolAnnotations = { readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean };
 export type Args = Record<string, any>;
 type Execute = (args: Args, signal?: AbortSignal) => Promise<unknown>;
-type AddOptions = { annotations?: ToolAnnotations; outputSchema?: JSONSchema7 };
+type AddOptions = { annotations?: ToolAnnotations; outputSchema?: JSONSchema7; meta?: Record<string, unknown> };
 
 /** What a toolset needs to register route-backed tools. Every call goes through `dispatchRoute`. */
 export interface CatalogueKit {
@@ -39,6 +39,8 @@ export interface CatalogueKit {
   requestContext: RequestContext;
   config: ResolvedBuiltinMCPConfig;
   capabilities: BuiltinMCPCapabilities;
+  /** `ui://` URIs of the MCP Apps the server ships, keyed by app; empty without `@mastra/mcp-apps-components`. */
+  apps: BuiltinMCPApps;
   /** Whether the caller may use the route in the selected toolsets, mode, and server capabilities. */
   offered(route: ServerRoute): boolean;
   /** Whether the caller may run the route from a tool (route RBAC and read-only mode), whether or not it has its own tool. */
@@ -81,7 +83,11 @@ export interface BuiltinMCPContext {
   request?: Request;
   /** The built-in MCP route, used to check `mcp:execute` with the same RBAC provider. */
   mcpRoute: ServerRoute;
+  /** `ui://` URIs of the MCP Apps the server ships. */
+  apps?: BuiltinMCPApps;
 }
+
+export type BuiltinMCPApps = { traceViewer?: string };
 
 /** A backing route's permission is a read when every permission it accepts has the `read` action. */
 function isReadRoute(route: ServerRoute): boolean {
@@ -276,7 +282,7 @@ export async function buildBuiltinMCPTools(
     description: string,
     inputSchema: JSONSchema7,
     execute: (args: Args, signal?: AbortSignal) => Promise<unknown>,
-    options: { annotations?: ToolAnnotations; outputSchema?: JSONSchema7 } = {},
+    options: AddOptions = {},
   ) => {
     used.add(name);
     tools[name] = createTool({
@@ -284,7 +290,10 @@ export async function buildBuiltinMCPTools(
       description,
       inputSchema,
       outputSchema: options.outputSchema,
-      mcp: { annotations: options.annotations ?? annotationsFor(route) },
+      mcp: {
+        annotations: options.annotations ?? annotationsFor(route),
+        ...(options.meta ? { _meta: options.meta } : {}),
+      },
       execute: async (args, context) => execute((args ?? {}) as Args, context?.abortSignal),
     });
   };
@@ -292,7 +301,7 @@ export async function buildBuiltinMCPTools(
     route: ServerRoute,
     inputSchema: JSONSchema7,
     execute: (args: Args, signal?: AbortSignal) => Promise<unknown>,
-    options?: { annotations?: ToolAnnotations; outputSchema?: JSONSchema7 },
+    options?: AddOptions,
   ) => {
     if (offered(route)) add(route.mcp!.name, route, route.mcp!.description, inputSchema, execute, options);
   };
@@ -615,6 +624,7 @@ export async function buildBuiltinMCPTools(
     requestContext,
     config,
     capabilities,
+    apps: ctx.apps ?? {},
     offered,
     permitted,
     call,

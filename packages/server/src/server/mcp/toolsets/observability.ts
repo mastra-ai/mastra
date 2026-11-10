@@ -206,6 +206,8 @@ export function addObservabilityTools(kit: CatalogueKit) {
         const kept = (result.spans as unknown[]).length;
         return kept < page.length ? { ...result, nextOffset: offset + kept } : result;
       },
+      // Hosts with MCP Apps draw the trace with Studio's timeline; others read the JSON as before.
+      kit.apps.traceViewer ? { meta: { ui: { resourceUri: kit.apps.traceViewer } } } : undefined,
     );
     addOperation(GET_SPAN_ROUTE, object({ traceId, spanId: str('Span id.') }, ['traceId', 'spanId']), (args, signal) =>
       call(GET_SPAN_ROUTE, { pathParams: { traceId: args.traceId, spanId: args.spanId } }, signal),
