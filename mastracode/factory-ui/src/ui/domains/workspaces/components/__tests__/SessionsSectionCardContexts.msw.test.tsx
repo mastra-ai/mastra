@@ -72,7 +72,7 @@ function card(id: string, title: string, sessions: WorkItem['sessions']): WireWo
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-09-04T08:00:00.000Z',
     updatedAt: '2026-09-04T10:00:00.000Z',

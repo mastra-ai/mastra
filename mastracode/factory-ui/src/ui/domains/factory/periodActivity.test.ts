@@ -28,7 +28,7 @@ function card(id: string, createdAt: number, overrides: Partial<WorkItem> = {}):
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: new Date(createdAt).toISOString(),
     updatedAt: new Date(createdAt).toISOString(),

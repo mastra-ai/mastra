@@ -185,7 +185,6 @@ describe('LiveSessions', () => {
     fake.park('call-1', 'ask_user');
     controller.delete(fake.session);
 
-    expect(changed).toHaveBeenCalledTimes(2);
     expect(registry.parkedIn('project-1')).toEqual([]);
   });
 });

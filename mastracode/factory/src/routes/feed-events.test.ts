@@ -1,6 +1,6 @@
 /**
- * Project-scoped SSE feed channel: tenancy guards, one frame per feed
- * mutation, tenant scoping, and listener release on disconnect.
+ * Project-scoped live-board stream: tenancy guards, one frame per board
+ * change, tenant scoping, and listener release on disconnect.
  */
 
 import EventEmitter from 'node:events';
@@ -11,11 +11,11 @@ import { Hono } from 'hono';
 import { SSEStreamingApi } from 'hono/streaming';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { feedTopic, touchFeed } from '../../../feed-events.js';
-import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
-import type { TestAuthUser } from '../../../routes/test-utils.js';
-import { createFactoryStorageForTests } from '../../test-utils.js';
-import { CommentsDomain } from './domain.js';
+import { feedTopic, touchFeed } from '../feed-events.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { buildFeedEventsRoutes } from './feed-events.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import type { TestAuthUser } from './test-utils.js';
 
 type Seed = Awaited<ReturnType<typeof createFactoryStorageForTests>>;
 
@@ -23,21 +23,13 @@ const ORG = 'org-1';
 const asAlice = { workosId: 'user-alice', organizationId: ORG, name: 'Alice' };
 
 function buildApp(seed: Seed, pubsub: EventEmitterPubSub, user?: TestAuthUser) {
-  const domain = new CommentsDomain({
-    auth: fakeRouteAuth(),
-    comments: seed.comments,
-    workItems: seed.workItems,
-    projects: seed.projects,
-    channelIdentity: seed.channelIdentity,
-    pubsub,
-  });
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as never, domain.routes());
-  return { app, domain };
+  mountApiRoutes(app as never, buildFeedEventsRoutes({ auth: fakeRouteAuth(), projects: seed.projects, pubsub }));
+  return { app };
 }
 
 /** Reads the live SSE body incrementally; `stop()` cancels, which is what fires `onAbort`. */
@@ -92,13 +84,13 @@ class GatedPubSub extends EventEmitterPubSub {
 
 async function seedProjectItem(seed: Seed, { orgId = ORG, userId = 'user-alice' } = {}) {
   const project = await seed.projects.create({ orgId, userId, input: { name: 'Acme' } });
-  const { item } = await seed.workItems.upsert({
+  await seed.workItems.upsert({
     orgId,
     userId,
     factoryProjectId: project.id,
     input: { title: 'Fix login', stages: ['intake'], sessions: {}, metadata: {} },
   });
-  return { project, item };
+  return { project };
 }
 
 beforeEach(() => {
@@ -109,7 +101,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('feed events stream', () => {
+describe('board feed stream', () => {
   it('404s a project outside the caller organization with a JSON body', async () => {
     const seed = await createFactoryStorageForTests();
     const { project } = await seedProjectItem(seed, { orgId: 'other-org', userId: 'user-x' });
@@ -137,49 +129,6 @@ describe('feed events stream', () => {
     const response = await app.request(`/web/factory/projects/${project.id}/feed-events`);
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: 'unauthorized' });
-  });
-
-  it('pushes a frame for every feed mutation: create, edit and delete', async () => {
-    const seed = await createFactoryStorageForTests();
-    const { project, item } = await seedProjectItem(seed);
-    const { app, domain } = buildApp(seed, new EventEmitterPubSub(), asAlice);
-
-    const response = await app.request(`/web/factory/projects/${project.id}/feed-events`);
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toContain('text/event-stream');
-    const feed = openFeed(response);
-
-    const author = { kind: 'user' as const, id: 'user-alice', displayName: 'Alice' };
-    const created = await domain.createComment({ orgId: ORG, workItemId: item.id, author, body: 'first' });
-    if (created.status !== 'created') throw new Error(`create failed: ${created.status}`);
-
-    const editor = { userId: 'user-alice', canModerate: async () => false };
-    const edited = await domain.editComment({
-      orgId: ORG,
-      workItemId: item.id,
-      commentId: created.comment.id,
-      body: 'first, revised',
-      editor,
-    });
-    expect(edited.status).toBe('edited');
-
-    const deleted = await domain.deleteComment({
-      orgId: ORG,
-      workItemId: item.id,
-      commentId: created.comment.id,
-      editor,
-    });
-    expect(deleted.status).toBe('deleted');
-
-    await vi.waitFor(() => expect(feed.frames).toHaveLength(3));
-    expect(feed.frames.map(frame => frame.event)).toEqual(['feed', 'feed', 'feed']);
-    expect(feed.frames.map(frame => JSON.parse(frame.data))).toEqual([
-      { workItemId: item.id },
-      { workItemId: item.id },
-      { workItemId: item.id },
-    ]);
-
-    await feed.stop();
   });
 
   it('pushes one frame to a board when one of its cards changes, and none to another project', async () => {
@@ -224,7 +173,7 @@ describe('feed events stream', () => {
     // On Redis Streams an unacked event stays pending (broker PEL + client
     // in-flight map) for the life of the SSE connection — a per-tab leak.
     const seed = await createFactoryStorageForTests();
-    const { project, item } = await seedProjectItem(seed);
+    const { project } = await seedProjectItem(seed);
     const captured: EventCallback[] = [];
     class CapturingPubSub extends EventEmitterPubSub {
       override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -243,7 +192,7 @@ describe('feed events stream', () => {
         id: 'evt-1',
         type: 'factory.feed.touched',
         runId: project.id,
-        data: { workItemId: item.id },
+        data: {},
         createdAt: new Date(),
       },
       ack,
@@ -260,7 +209,7 @@ describe('feed events stream', () => {
     // invalidation for every connected tab. A failed write to one dying
     // connection must stay that connection's problem.
     const seed = await createFactoryStorageForTests();
-    const { project, item } = await seedProjectItem(seed);
+    const { project } = await seedProjectItem(seed);
     const captured: EventCallback[] = [];
     class CapturingPubSub extends EventEmitterPubSub {
       override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -283,7 +232,7 @@ describe('feed events stream', () => {
           id: 'evt-1',
           type: 'factory.feed.touched',
           runId: project.id,
-          data: { workItemId: item.id },
+          data: {},
           createdAt: new Date(),
         },
         ack,
@@ -291,29 +240,6 @@ describe('feed events stream', () => {
     ).resolves.toBeUndefined();
     expect(writeSSE).toHaveBeenCalledTimes(1);
     expect(ack).toHaveBeenCalledTimes(1);
-
-    await feed.stop();
-  });
-
-  it('carries no frame for a comment in another project', async () => {
-    const seed = await createFactoryStorageForTests();
-    const { project, item } = await seedProjectItem(seed);
-    const other = await seedProjectItem(seed);
-    const { app, domain } = buildApp(seed, new EventEmitterPubSub(), asAlice);
-    const author = { kind: 'user' as const, id: 'user-alice', displayName: 'Alice' };
-
-    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
-    expect(
-      (await domain.createComment({ orgId: ORG, workItemId: other.item.id, author, body: 'elsewhere' })).status,
-    ).toBe('created');
-    expect((await domain.createComment({ orgId: ORG, workItemId: item.id, author, body: 'here' })).status).toBe(
-      'created',
-    );
-
-    // The in-project comment is the liveness proof: the stream is open, and the
-    // foreign one still never lands on it.
-    await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
-    expect(JSON.parse(feed.frames[0]!.data)).toEqual({ workItemId: item.id });
 
     await feed.stop();
   });
@@ -357,8 +283,8 @@ describe('feed events stream', () => {
   });
 });
 
-describe('project-wide touches on the feed stream', () => {
-  it('forwards a touch that names no work item', async () => {
+describe('direct touches on the board feed stream', () => {
+  it('forwards a touch published straight to the project topic', async () => {
     const seed = await createFactoryStorageForTests();
     const { project } = await seedProjectItem(seed);
     const emitter = new EventEmitter();
