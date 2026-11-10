@@ -4,7 +4,6 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from '@mastra/schema-compat';
-import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { GENERATE_AGENT_ROUTE, GET_AGENT_BY_ID_ROUTE, getAgentFromSystem, LIST_AGENTS_ROUTE } from '../handlers/agents';
 import { EXECUTE_TOOL_ROUTE, findTool, GET_TOOL_BY_ID_ROUTE, LIST_TOOLS_ROUTE } from '../handlers/tools';
@@ -20,11 +19,53 @@ import {
 import { authorizeRoute, checkRouteRBAC, dispatchRoute } from '../server-adapter';
 import type { DispatchRouteInput, ServerContext, ServerRoute } from '../server-adapter';
 import { getEffectivePermission } from '../server-adapter/routes/permissions';
+import { getBuiltinMCPCapabilities } from './capabilities';
+import type { BuiltinMCPCapabilities } from './capabilities';
 import type { MCPPrimitiveKind, ResolvedBuiltinMCPConfig } from './config';
+import { object, str, toJSONSchema } from './schema';
+import { addMemoryTools } from './toolsets/memory';
+import { addObservabilityTools } from './toolsets/observability';
+import { addStoredAgentTools } from './toolsets/stored-agents';
 
 type MCPTool = ReturnType<typeof createTool>;
-type ToolAnnotations = { readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean };
-type Args = Record<string, any>;
+export type ToolAnnotations = { readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean };
+export type Args = Record<string, any>;
+type Execute = (args: Args, signal?: AbortSignal) => Promise<unknown>;
+type AddOptions = { annotations?: ToolAnnotations; outputSchema?: JSONSchema7 };
+
+/** What a toolset needs to register route-backed tools. Every call goes through `dispatchRoute`. */
+export interface CatalogueKit {
+  mastra: Mastra;
+  requestContext: RequestContext;
+  config: ResolvedBuiltinMCPConfig;
+  capabilities: BuiltinMCPCapabilities;
+  /** Whether the caller may use the route in the selected toolsets, mode, and server capabilities. */
+  offered(route: ServerRoute): boolean;
+  /** Whether the caller may run the route from a tool (route RBAC and read-only mode), whether or not it has its own tool. */
+  permitted(route: ServerRoute): boolean;
+  call(route: ServerRoute, input: DispatchRouteInput, signal?: AbortSignal): Promise<unknown>;
+  /** Registers a tool under an explicit name. Callers check `offered` first. */
+  add(
+    name: string,
+    route: ServerRoute,
+    description: string,
+    inputSchema: JSONSchema7,
+    execute: Execute,
+    options?: AddOptions,
+  ): void;
+  /** Registers the route's own `mcp` tool when it is offered. */
+  addOperation(route: ServerRoute, inputSchema: JSONSchema7, execute: Execute, options?: AddOptions): void;
+  /**
+   * Registers one tool backed by several routes (named by the first route's `mcp`), offered only when
+   * every route is. `execute` dispatches each call to the route it needs.
+   */
+  addCombined(routes: ServerRoute[], inputSchema: JSONSchema7, execute: Execute): void;
+  /** Agent ids the caller can see, or undefined when it cannot list agents. */
+  visibleAgentIds(): Promise<string[] | undefined>;
+  /** Throws a 404 when `id` names a primitive that include/exclude leaves out. */
+  requireSelected(kind: MCPPrimitiveKind, id: string, label: string): Promise<void>;
+  idParam(label: string, ids: string[] | undefined, listTool: string): JSONSchema7;
+}
 
 const MAX_TOOL_NAME_LENGTH = 64;
 
@@ -41,14 +82,6 @@ export interface BuiltinMCPContext {
   /** The built-in MCP route, used to check `mcp:execute` with the same RBAC provider. */
   mcpRoute: ServerRoute;
 }
-
-const object = (properties: Record<string, JSONSchema7>, required: string[] = []): JSONSchema7 => ({
-  type: 'object',
-  properties,
-  required,
-  additionalProperties: false,
-});
-const str = (description: string): JSONSchema7 => ({ type: 'string', description });
 
 /** A backing route's permission is a read when every permission it accepts has the `read` action. */
 function isReadRoute(route: ServerRoute): boolean {
@@ -110,7 +143,7 @@ function registryNames(...registries: Array<Record<string, { id?: string } | und
   return byName;
 }
 
-function toolError(status: number, body: unknown): MastraError {
+export function toolError(status: number, body: unknown): MastraError {
   const details = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
   const message = details.message ?? details.error ?? (typeof body === 'string' ? body : 'Request failed');
   const issues = Array.isArray(details.issues) ? ` ${JSON.stringify(details.issues)}` : '';
@@ -121,18 +154,6 @@ function toolError(status: number, body: unknown): MastraError {
     text: `${status} ${String(message)}${issues}`,
     details: { status },
   });
-}
-
-function toJSONSchema(schema: unknown): JSONSchema7 | undefined {
-  if (!schema) return undefined;
-  try {
-    const { $schema: _dialect, ...json } = standardSchemaToJSONSchema(toStandardSchema(schema as any), {
-      io: 'input',
-    }) as JSONSchema7;
-    return json;
-  } catch {
-    return undefined;
-  }
 }
 
 const missingDescriptionWarnings = new WeakMap<Mastra, Set<string>>();
@@ -162,6 +183,7 @@ export async function buildBuiltinMCPTools(
   config: ResolvedBuiltinMCPConfig,
 ): Promise<Record<string, MCPTool>> {
   const { mastra, requestContext } = ctx;
+  const capabilities = await getBuiltinMCPCapabilities(mastra);
   const routeContext: ServerContext = {
     mastra,
     requestContext,
@@ -176,13 +198,15 @@ export async function buildBuiltinMCPTools(
   // Every tools/call needs `mcp:execute` on top of the backing route's own permission.
   const canExecute = checkRouteRBAC(mastra, mcpExecuteRoute, requestContext) === null;
 
-  /** Whether the caller may use this route at all (route-level RBAC), in the configured toolsets and mode. */
+  /** Whether the caller may run this route from a tool: route-level RBAC and read-only mode. */
+  const permitted = (route: ServerRoute) =>
+    canExecute && (!config.readOnly || isReadRoute(route)) && checkRouteRBAC(mastra, route, requestContext) === null;
+  /** Whether the route's own tool is offered: permitted, in the configured toolsets, and supported by the server. */
   const offered = (route: ServerRoute) =>
-    canExecute &&
     Boolean(route.mcp) &&
     config.toolsets.has(route.mcp!.toolset) &&
-    (!config.readOnly || isReadRoute(route)) &&
-    checkRouteRBAC(mastra, route, requestContext) === null;
+    (route.mcp!.requires?.(capabilities) ?? true) &&
+    permitted(route);
 
   const call = async (route: ServerRoute, input: DispatchRouteInput, signal: AbortSignal | undefined) => {
     const denied = checkRouteRBAC(mastra, mcpExecuteRoute, requestContext);
@@ -281,8 +305,11 @@ export async function buildBuiltinMCPTools(
   // ---------------------------------------------------------------------------
   // Agents
 
+  let visibleAgents: Promise<Map<string, any> | undefined> | undefined;
+  const listVisibleAgents = () => (visibleAgents ??= listVisible(LIST_AGENTS_ROUTE, 'agents', { partial: 'true' }));
+
   if (config.toolsets.has('agents')) {
-    const agents = await listVisible(LIST_AGENTS_ROUTE, 'agents', { partial: 'true' });
+    const agents = await listVisibleAgents();
     const agentIds = agents ? [...agents.keys()].sort() : undefined;
 
     const callAgentOutput = object({
@@ -582,6 +609,31 @@ export async function buildBuiltinMCPTools(
       );
     }
   }
+
+  const kit: CatalogueKit = {
+    mastra,
+    requestContext,
+    config,
+    capabilities,
+    offered,
+    permitted,
+    call,
+    add,
+    addOperation,
+    addCombined: (routes, inputSchema, execute) => {
+      if (routes.every(offered))
+        add(routes[0]!.mcp!.name, routes[0]!, routes[0]!.mcp!.description, inputSchema, execute);
+    },
+    visibleAgentIds: async () => {
+      const agents = await listVisibleAgents();
+      return agents ? [...agents.keys()].sort() : undefined;
+    },
+    requireSelected,
+    idParam,
+  };
+  if (config.toolsets.has('memory')) await addMemoryTools(kit);
+  addObservabilityTools(kit);
+  if (config.toolsets.has('stored_agents')) addStoredAgentTools(kit);
 
   return tools;
 }

@@ -5,6 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, MastraMCPToolset, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
+import type { BuiltinMCPCapabilities } from '../../mcp/capabilities';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
@@ -94,6 +95,11 @@ export interface RouteMCPConfig {
   name: string;
   /** Tool description shown to MCP clients. */
   description: string;
+  /**
+   * Only offer the tool when the server supports it, for example when the observability store can run
+   * trace queries. Evaluated against capabilities computed once per process.
+   */
+  requires?: (capabilities: BuiltinMCPCapabilities) => boolean;
 }
 
 export type ServerRouteHandler<

@@ -220,8 +220,18 @@ export type StoredResourcesConfig = {
   scope?: StoredResourceScopeConfig;
 };
 
-/** Groups of tools served by the built-in MCP server. */
-export type MastraMCPToolset = 'agents' | 'workflows' | 'tools';
+/**
+ * Groups of tools served by the built-in MCP server. `memory`, `observability`, `observability_analytics`
+ * and `stored_agents` are only served when the server has memory, an observability store, or the editor.
+ */
+export type MastraMCPToolset =
+  | 'agents'
+  | 'workflows'
+  | 'tools'
+  | 'memory'
+  | 'observability'
+  | 'observability_analytics'
+  | 'stored_agents';
 
 /** Primitive ids (as registered on Mastra) selected per primitive type. */
 export type ServerMCPPrimitiveFilter = {
@@ -244,7 +254,7 @@ export type ServerMCPConfig = {
   path?: string;
   /**
    * Toolsets to serve. Clients can narrow this per request with `?toolsets=` or `X-MCP-Toolsets`.
-   * @default ['agents', 'workflows', 'tools']
+   * @default ['agents', 'workflows', 'tools', 'memory', 'observability', 'observability_analytics', 'stored_agents']
    */
   toolsets?: MastraMCPToolset[];
   /**

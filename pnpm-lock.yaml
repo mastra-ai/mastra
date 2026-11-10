@@ -7013,9 +7013,15 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/duckdb':
+        specifier: workspace:*
+        version: link:../../stores/duckdb
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
