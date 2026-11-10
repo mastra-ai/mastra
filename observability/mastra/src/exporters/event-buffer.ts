@@ -211,13 +211,17 @@ export class EventBuffer {
 
     this.#heldRetries = this.#heldRetries.filter(held => held.retryAt > until);
     this.setFirstEventTime();
-    this.#updates.push(...due.map(held => held.event));
+    for (const { event } of due) {
+      this.#byteTracker?.enqueue(event);
+      this.#updates.push(event);
+    }
   }
 
   /** Remove and return every held end. */
   takeHeldRetries(): BufferedEvent[] {
     const events = this.#heldRetries.map(held => held.event);
     this.#heldRetries = [];
+    this.releaseByteBatch(events);
     return events;
   }
 
@@ -266,11 +270,12 @@ export class EventBuffer {
     return { creates, updates };
   }
 
-  /** Retries/deferred updates remain reserved; everything else has finished or been dropped. */
+  /** Retries, deferred updates and held ends remain reserved; everything else has finished or been dropped. */
   releaseByteBatch(events: BufferedEvent[]): void {
     if (!this.#byteTracker) return;
+    const held = new Set(this.#heldRetries.map(retry => retry.event));
     for (const event of events) {
-      if (!this.#byteTracker.releaseIfUnqueued(event)) continue;
+      if (held.has(event) || !this.#byteTracker.releaseIfUnqueued(event)) continue;
       this.forgetDroppedCreates([event]);
       if (event.type === TracingEventType.SPAN_ENDED) {
         this.endFinishedSpans({

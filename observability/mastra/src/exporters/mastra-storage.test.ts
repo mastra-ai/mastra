@@ -1821,14 +1821,27 @@ class DropRecorder extends BaseExporter {
 describe.each(['batch-with-updates', 'realtime'] as const)(
   'MastraStorageExporter spans from another process (%s)',
   strategy => {
-    function openProcess(storage: InMemoryStore, maxRetries = 0, retryDelayMs = 500, maxBatchSize?: number) {
+    function openProcess(
+      storage: InMemoryStore,
+      maxRetries = 0,
+      retryDelayMs = 500,
+      maxBatchSize?: number,
+      byteBatching?: { maxBatchBytes: number },
+    ) {
       const dropRecorder = new DropRecorder();
       const observability = new Observability({
         configs: {
           default: {
             serviceName: 'span-recovery',
             exporters: [
-              new MastraStorageExporter({ strategy, maxRetries, retryDelayMs, maxBatchSize, maxBatchWaitMs: 60_000 }),
+              new MastraStorageExporter({
+                strategy,
+                maxRetries,
+                retryDelayMs,
+                maxBatchSize,
+                maxBatchWaitMs: 60_000,
+                byteBatching,
+              }),
               dropRecorder,
             ],
           },
@@ -1996,6 +2009,34 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
             { timeout: 5000 },
           );
           expect(conditionalUpdates).toHaveBeenCalledTimes(2);
+          expect(worker.drops).toEqual([]);
+        } finally {
+          await worker.mastra.shutdown();
+          await api.mastra.shutdown();
+        }
+      });
+
+      it('keeps retried ends within the byte limit when byte batching is on', async () => {
+        const storage = new InMemoryStore();
+        const api = openProcess(storage, 4, 20);
+        const worker = openProcess(storage, 4, 20, undefined, { maxBatchBytes: 1024 });
+        const observabilityStore = (await storage.getStore('observability'))!;
+        const conditionalUpdates = vi.spyOn(observabilityStore, 'batchUpdateUnendedSpans');
+        try {
+          const spans = [1, 2, 3].map(run => api.tracing.startSpan({ type: SpanType.AGENT_RUN, name: `run ${run}` }));
+          for (const span of spans) {
+            worker.tracing.rebuildSpan(structuredClone(span.exportSpan())).end({ output: 'x'.repeat(2000) });
+          }
+          await worker.tracing.flush();
+          await api.tracing.flush();
+
+          await vi.waitFor(async () => {
+            for (const span of spans) {
+              expect((await getStoredSpan(storage, span))?.endedAt).toBeInstanceOf(Date);
+            }
+          });
+          // Each end is larger than the byte limit, so no write carries more than one.
+          expect(Math.max(...conditionalUpdates.mock.calls.map(([args]) => args.records.length))).toBe(1);
           expect(worker.drops).toEqual([]);
         } finally {
           await worker.mastra.shutdown();
