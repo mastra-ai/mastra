@@ -31,6 +31,11 @@ describe('movePhase', () => {
     expect(keys(movePhase(phases, 2, 0))).toEqual(['intake', 'planning', 'triage', 'done']);
   });
 
+  it('returns the same list when the move would not change the order', () => {
+    expect(movePhase(phases, 1, 0)).toBe(phases);
+    expect(movePhase(phases, 3, 4)).toBe(phases);
+  });
+
   it('stops at the last position', () => {
     expect(keys(movePhase(phases, 1, 9))).toEqual(['intake', 'planning', 'done', 'triage']);
   });

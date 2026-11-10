@@ -60,6 +60,7 @@ export function NewBoardPage() {
   const sourceName = (value: string) => boards.find(board => board.id === value)?.title ?? 'Backlog, Doing, Done';
 
   const startFrom = async (value: string) => {
+    const previous = source;
     setSource(value);
     setCopyError(undefined);
     create.reset();
@@ -72,6 +73,8 @@ export function NewBoardPage() {
       const { board } = await queryClient.fetchQuery(storedBoardQueryOptions(baseUrl, factory.id, value));
       setPhases(draftOf(board));
     } catch (error) {
+      // The phases are still the previous source's, so the form says so.
+      setSource(previous);
       setCopyError(error instanceof Error ? error.message : 'The board could not be read.');
     } finally {
       setCopying(false);

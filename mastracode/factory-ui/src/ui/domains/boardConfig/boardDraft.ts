@@ -83,6 +83,7 @@ export function phaseHasProblem(phase: StoredPhaseInfo, rawRules: RawRules = {})
 export function movePhase(phases: StoredPhaseInfo[], from: number, to: number): StoredPhaseInfo[] {
   if (from <= 0 || from >= phases.length) return phases;
   const target = Math.min(Math.max(to, 1), phases.length - 1);
+  if (target === from) return phases;
   const next = [...phases];
   next.splice(target, 0, ...next.splice(from, 1));
   return next;

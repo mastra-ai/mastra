@@ -5,6 +5,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { BookOpen, ChevronRight } from 'lucide-react';
+import { useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router';
 
@@ -61,7 +62,10 @@ export function BoardConfigEditor({
   const navigate = useNavigate();
   const save = useSaveBoardMutation(factory.id, boardId);
   const reset = useResetBoardMutation(factory.id, boardId);
+  // discard() lands on the next render, after the navigation below asks the blocker.
+  const deleted = useRef(false);
   const remove = useDeleteBoardMutation(factory.id, boardId, () => {
+    deleted.current = true;
     discard();
     // The deleted board is gone from the catalog by now; Work, or the first board left, shows next.
     const next = orderedBoards(catalog.data ?? []).find(other => other.id !== boardId);
@@ -76,7 +80,7 @@ export function BoardConfigEditor({
   const stale = save.error?.code === 'revision_mismatch';
 
   const blocker = useBlocker(({ nextLocation }) => {
-    if (!changed) return false;
+    if (!changed || deleted.current) return false;
     const next = parseBoardConfigPath(nextLocation.pathname);
     // The skills page has no save bar, so leaving for it counts as leaving the board's settings.
     return next?.factoryId !== factory.id || next.boardId !== boardId || next.skills === true;

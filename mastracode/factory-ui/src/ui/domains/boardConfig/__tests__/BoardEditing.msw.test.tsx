@@ -242,6 +242,24 @@ describe('Creating a board', () => {
     });
   });
 
+  it('goes back to what it started from when a copy cannot be read', async () => {
+    serveProject({ stored: [storedBoard('bugs', 'Bugs')] });
+    server.use(
+      http.get(`${PROJECT_URL}/boards/bugs`, () =>
+        HttpResponse.json({ error: 'internal', message: 'Storage is down.' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderAt(`/factories/${FACTORY_ID}/new-board`);
+
+    const form = within(await screen.findByRole('form', { name: 'New board' }));
+    await user.click(form.getByRole('combobox', { name: 'Start from' }));
+    await user.click(await screen.findByRole('option', { name: 'Copy of Bugs' }));
+
+    expect(await form.findByRole('alert')).toHaveTextContent('The board was not copied');
+    expect(form.getByRole('combobox', { name: 'Start from' })).toHaveTextContent('Backlog, Doing, Done');
+  });
+
   it('copies the Work board exactly', async () => {
     const { created } = serveProject();
     const user = userEvent.setup();
@@ -416,6 +434,22 @@ describe('Deleting a board', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
     expect(deleted).toHaveBeenCalledWith('bugs', '3');
+  });
+
+  it('leaves a deleted board without asking about its unsaved changes', async () => {
+    serveProject({ stored: [storedBoard('bugs', 'Bugs')] });
+    const user = userEvent.setup();
+    const { router } = renderAt(`/factories/${FACTORY_ID}/boards/bugs/config`);
+
+    const name = await screen.findByRole('textbox', { name: 'Board name' });
+    await user.clear(name);
+    await user.type(name, 'Bug reports{Enter}');
+    expect(await screen.findByText('Unsaved changes')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 
   it('stays on a board that still has cards, saying why', async () => {
