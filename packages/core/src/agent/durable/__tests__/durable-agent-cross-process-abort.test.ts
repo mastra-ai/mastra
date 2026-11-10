@@ -241,6 +241,37 @@ describe('DurableAgent cross-process abort', () => {
     }
   });
 
+  it("does not stop a warm resume at the previous segment's deadline before its first step starts", async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const runId = 'deadline-resumed-before-first-step-run';
+    const pubsub = new EventEmitterPubSub();
+    const entry = { isPlaceholder: true } as RunRegistryEntry;
+    globalRunRegistry.set(runId, entry);
+
+    try {
+      await ensureRemoteAbortListener(pubsub, runId, undefined, { at: Date.now() + 200, timeoutMs: 200 });
+      // The resume swaps in a fresh controller on the same entry, as create-inngest-agent does,
+      // and the previous segment's deadline passes before the resumed segment's first step runs.
+      await vi.advanceTimersByTimeAsync(100);
+      const resumed = new AbortController();
+      entry.abortController = resumed;
+      entry.abortSignal = resumed.signal;
+      await vi.advanceTimersByTimeAsync(200);
+      expect(resumed.signal.aborted).toBe(false);
+
+      // The first resumed step still arms the resumed segment's own deadline.
+      await ensureRemoteAbortListener(pubsub, runId, undefined, { at: Date.now() + 1000, timeoutMs: 1000 });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(resumed.signal.aborted).toBe(true);
+      expect(isMastraTimeoutError(resumed.signal.reason)).toBe(true);
+    } finally {
+      entry.cleanup?.();
+      globalRunRegistry.delete(runId);
+      vi.useRealTimers();
+      await pubsub.close();
+    }
+  });
+
   it('stops an in-flight run from an abort request it did not raise locally, and still terminates the stream', async () => {
     const pubsub = new EventEmitterPubSub();
     const storage = new InMemoryStore();

@@ -103,8 +103,11 @@ export async function ensureRemoteAbortListener(
   };
 }
 
-/** The deadline each entry currently has armed, so a later segment can replace it. */
-const armedDeadlines = new WeakMap<RunRegistryEntry, { at: number; timer?: ReturnType<typeof setTimeout> }>();
+/** The deadline each entry currently has armed, and the controller it stops, so a later segment can replace it. */
+const armedDeadlines = new WeakMap<
+  RunRegistryEntry,
+  { at: number; controller?: AbortController; timer?: ReturnType<typeof setTimeout> }
+>();
 
 /** Arm the entry's deadline, replacing a timer armed for a different deadline. */
 function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefined): void {
@@ -117,7 +120,8 @@ function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefi
     }
     return;
   }
-  if (armed?.at === deadline.at) return;
+  // A warm resume swaps a fresh controller onto the entry, so the timer is re-armed for it too.
+  if (armed?.at === deadline.at && armed.controller === entry.abortController) return;
   if (armed) {
     clearTimeout(armed.timer);
   } else {
@@ -131,7 +135,8 @@ function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefi
       }
     };
   }
-  armedDeadlines.set(entry, { at: deadline.at, timer: armRunDeadline(entry, deadline) });
+  const controller = entry.abortController;
+  armedDeadlines.set(entry, { at: deadline.at, controller, timer: armRunDeadline(controller, deadline) });
 }
 
 /**
@@ -150,10 +155,16 @@ export function readRunDeadline(requestContext?: { get(key: string): unknown }):
   return { at: value.at, timeoutMs: value.timeoutMs };
 }
 
-/** Abort the entry's controller with the deadline's timeout error now, or when the deadline arrives. */
-function armRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline): ReturnType<typeof setTimeout> | undefined {
+/**
+ * Abort the controller with the deadline's timeout error now, or when the deadline arrives.
+ * The timer is bound to the controller it was armed for: a warm resume swaps a fresh controller
+ * onto the entry, and the previous segment's timer must not stop the resumed segment.
+ */
+function armRunDeadline(
+  controller: AbortController | undefined,
+  deadline: RunDeadline,
+): ReturnType<typeof setTimeout> | undefined {
   const expire = () => {
-    const controller = entry.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: deadline.timeoutMs }));
     }
