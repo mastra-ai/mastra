@@ -10,7 +10,7 @@ import { stageContentCount } from '../../domains/factory/boardCandidates';
 import type { BoardCandidate } from '../../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
-import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
+import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
@@ -411,16 +411,7 @@ export function BoardContent({
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
-            aside={
-              builtin && (
-                <BoardAutomationSettings
-                  factoryProjectId={factoryProjectId}
-                  autoRunEnabled={factory.autoRunEnabled ?? false}
-                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
-                  selfReviewEnabled={factory.selfReviewEnabled ?? false}
-                />
-              )
-            }
+            aside={<ConfigureBoardButton factoryId={factoryProjectId} boardId={definition.id} />}
           />
         }
       />

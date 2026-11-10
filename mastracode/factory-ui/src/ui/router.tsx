@@ -15,6 +15,7 @@ import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-rou
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
+import { boardConfigPath, boardSkillsPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
 import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 
@@ -59,6 +60,14 @@ const KnowledgePage = lazyPage(
 );
 const SettingsPage = lazyPage(
   () => import('./pages/SettingsPage').then(module => module.SettingsPage),
+  <AppPageLoader />,
+);
+const FactorySkillsPage = lazyPage(
+  () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
+  <AppPageLoader />,
+);
+const BoardConfigPage = lazyPage(
+  () => import('./pages/BoardConfigPage').then(module => module.BoardConfigPage),
   <AppPageLoader />,
 );
 const SlackConnectionPage = lazyPage(
@@ -152,6 +161,20 @@ function ConnectionsRedirect() {
   return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
 }
 
+/** Board configuration used to live in Settings; old links open the Work board's configuration. */
+function BoardSettingsRedirect() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  if (!factoryId) return null;
+  return <Navigate to={boardConfigPath(factoryId, 'work')} replace />;
+}
+
+/** Skills used to live in Settings; old links open them beside the Work board's settings. */
+function SkillsSettingsRedirect() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  if (!factoryId) return null;
+  return <Navigate to={boardSkillsPath(factoryId, 'work')} replace />;
+}
+
 function KnowledgeRoute() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
@@ -209,6 +232,12 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'review', element: <ReviewBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
+                        { path: 'work/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
+                        { path: 'review/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
+                        { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
+                        { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
+                        { path: 'review/skills', ...lazyRoute(FactorySkillsPage) },
+                        { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },
@@ -222,6 +251,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                           children: [
                             { index: true, element: <Navigate to="preferences" replace /> },
                             { path: 'connections/slack', ...lazyRoute(SlackConnectionPage) },
+                            { path: 'board', element: <BoardSettingsRedirect /> },
+                            { path: 'skills', element: <SkillsSettingsRedirect /> },
                             { path: ':section', ...lazyRoute(SettingsPage) },
                           ],
                         },

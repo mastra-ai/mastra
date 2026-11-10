@@ -134,9 +134,12 @@ export function SidebarProvider({
     if (el) el.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
   }, []);
 
+  // Bounds can change at runtime (a view that needs more room raises `minWidth`). Show the stored
+  // width within the current bounds without overwriting it, so the sidebar returns to the user's
+  // width once the bounds relax.
   useIsoLayoutEffect(() => {
-    writeCssVar(state === 'collapsed' ? safeCollapsed : widthRef.current);
-  }, [state, safeCollapsed, writeCssVar]);
+    writeCssVar(state === 'collapsed' ? safeCollapsed : clamp(widthRef.current, safeMin, safeMax));
+  }, [state, safeCollapsed, safeMin, safeMax, writeCssVar]);
 
   const persistState = React.useCallback(
     (next: SidebarState) => {
@@ -216,12 +219,13 @@ export function SidebarProvider({
   }, [disableKeyboardShortcut, toggleSidebar]);
 
   const effectiveState: SidebarState = isMobile ? 'default' : state;
+  const visibleWidth = clamp(width, safeMin, safeMax);
 
   const contextValue = React.useMemo(
     () => ({
       state: effectiveState,
       desktopState: state,
-      width,
+      width: visibleWidth,
       minWidth: safeMin,
       maxWidth: safeMax,
       collapseBelow: safeCollapseBelow,
@@ -238,7 +242,7 @@ export function SidebarProvider({
     [
       effectiveState,
       state,
-      width,
+      visibleWidth,
       safeMin,
       safeMax,
       safeCollapseBelow,
