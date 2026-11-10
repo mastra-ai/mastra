@@ -133,6 +133,11 @@ describe('SandboxEnvRoutes', () => {
         `${name}: This name is reserved by Factory.`,
       );
     }
+    for (const name of ['__proto__', 'toString', 'constructor', 'hasOwnProperty']) {
+      const response = await send('PUT', `/${name}`, { value: 'x', appliesTo: 'runtime' });
+      expect(response.status, name).toBe(400);
+      expect(((await response.json()) as { message: string }).message).toBe(`${name}: This name can't be used.`);
+    }
     expect((await send('PUT', `/${'A'.repeat(128)}`, { value: 'x', appliesTo: 'runtime' })).status).toBe(200);
     expect((await send('PUT', '/GH_TOKENS', { value: 'x', appliesTo: 'runtime' })).status).toBe(200);
   });

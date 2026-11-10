@@ -143,6 +143,16 @@ export class SandboxEnvsStorage extends FactoryStorageDomain implements SandboxE
 
   async init(): Promise<void> {
     await this.ensureCollections([SANDBOX_ENVS_SCHEMA, SANDBOX_ENV_REVISIONS_SCHEMA]);
+    // Re-encrypt values saved as plaintext or under a retired key, like the other secret domains.
+    const rows = await this.#db.findMany<SandboxEnvDbRow>(ENVS, {});
+    await Promise.all(
+      rows.map(({ id }) =>
+        this.#db.updateAtomic<SandboxEnvDbRow>(ENVS, { id }, async row => {
+          const decrypted = await this.encryption.decrypt<string>(row.value);
+          return decrypted.needsReencryption ? { value: await this.encryption.encrypt(decrypted.value) } : null;
+        }),
+      ),
+    );
   }
 
   async dangerouslyClearAll(): Promise<void> {

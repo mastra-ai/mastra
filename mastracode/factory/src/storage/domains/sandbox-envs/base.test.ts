@@ -1,3 +1,7 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
@@ -19,6 +23,28 @@ async function makeStore(encrypted = true) {
 }
 
 describe('SandboxEnvsStorage', () => {
+  it('encrypts values saved before a key was configured once Factory boots with one', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-envs-')), 'envs.db')}`;
+    const boot = async (encrypted: boolean) => {
+      const backend = new LibSQLFactoryStorage({ id: 'sandbox-envs-reencrypt-test', url });
+      const domain = backend.registerDomain(
+        new SandboxEnvsStorage(encrypted ? createFactorySecretEncryption({ primary: testKey }) : undefined),
+      );
+      await backend.init();
+      return { backend, domain };
+    };
+    const plain = await boot(false);
+    await plain.domain.set(ORG, PROJECT, { name: 'NPM_TOKEN', value: 'sentinel-secret', appliesTo: 'runtime' }, 'u');
+    await plain.backend.close();
+
+    const keyed = await boot(true);
+    onTestFinished(() => keyed.backend.close());
+    const [row] = await keyed.backend.ops.findMany<{ value: string }>('factory_sandbox_envs', {});
+    expect(row!.value.startsWith('mastra:factory-secret:v1:')).toBe(true);
+    expect(row!.value).not.toContain('sentinel-secret');
+    expect((await keyed.domain.resolve(ORG, PROJECT)).runtime).toEqual({ NPM_TOKEN: 'sentinel-secret' });
+  });
+
   it('stores values as encrypted envelopes and lists metadata only', async () => {
     const { ops, domain } = await makeStore();
     await domain.set(ORG, PROJECT, { name: 'NPM_TOKEN', value: 'sentinel-secret', appliesTo: 'both' }, 'user-1');

@@ -297,7 +297,9 @@ export const sandboxEnvNameSchema = z
   .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Use letters, digits and underscores, not starting with a digit.')
   .refine(name => !RESERVED_SANDBOX_ENV_NAMES.some(pattern => pattern.test(name)), {
     message: 'This name is reserved by Factory.',
-  });
+  })
+  // Names like `__proto__` or `toString` collide with object built-ins and would be dropped or stick around.
+  .refine(name => !(name in Object.prototype), { message: "This name can't be used." });
 export const sandboxEnvAppliesToSchema = z.enum(['build', 'runtime', 'both']);
 const sandboxEnvPathSchema = z.object({ id: uuidSchema, name: sandboxEnvNameSchema });
 export const sandboxEnvSetBodySchema = z.object({

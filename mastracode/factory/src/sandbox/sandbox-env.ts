@@ -156,14 +156,14 @@ export function attachSandboxEnvRefresh(
     setEnv(env => {
       const out = { ...env };
       for (const key of Object.keys(applied)) {
-        if (key in next) continue;
+        if (Object.hasOwn(next, key)) continue;
         const previous = shadowed.get(key);
         shadowed.delete(key);
         if (previous === undefined) delete out[key];
         else out[key] = previous;
       }
       for (const [key, value] of Object.entries(next)) {
-        if (!(key in applied)) shadowed.set(key, env[key]);
+        if (!Object.hasOwn(applied, key)) shadowed.set(key, env[key]);
         out[key] = value;
       }
       return out;
