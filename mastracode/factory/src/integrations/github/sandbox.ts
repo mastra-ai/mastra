@@ -1163,7 +1163,14 @@ async function runLifecycleCommand(
     ...(options.env && Object.keys(options.env).length > 0 ? { env: options.env } : {}),
   });
   if (result.exitCode !== 0) {
-    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
+    // The message is stored as build status and shown in the UI, so mask any
+    // Build value the command printed. Longest first, so a value containing
+    // another is masked whole.
+    let detail = result.stderr.trim() || result.stdout.trim();
+    for (const value of Object.values(options.env ?? {}).sort((a, b) => b.length - a.length)) {
+      if (value) detail = detail.replaceAll(value, '***');
+    }
+    detail = detail.slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,

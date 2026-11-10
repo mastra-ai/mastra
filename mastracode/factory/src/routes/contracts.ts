@@ -301,7 +301,11 @@ export const sandboxEnvNameSchema = z
 export const sandboxEnvAppliesToSchema = z.enum(['build', 'runtime', 'both']);
 const sandboxEnvPathSchema = z.object({ id: uuidSchema, name: sandboxEnvNameSchema });
 export const sandboxEnvSetBodySchema = z.object({
-  value: z.string().max(MAX_SANDBOX_ENV_VALUE_LENGTH),
+  value: z
+    .string()
+    .max(MAX_SANDBOX_ENV_VALUE_LENGTH)
+    // A NUL byte in an env value makes every spawn fail.
+    .refine(value => !value.includes('\0'), { message: "Values can't contain NUL characters." }),
   appliesTo: sandboxEnvAppliesToSchema,
 });
 export const sandboxEnvUpdateBodySchema = z.object({ appliesTo: sandboxEnvAppliesToSchema });

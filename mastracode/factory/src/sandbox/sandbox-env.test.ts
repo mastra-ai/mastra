@@ -7,7 +7,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { runSetupCommand } from '../integrations/github/sandbox.js';
+import { runSetupCommand, SetupCommandError } from '../integrations/github/sandbox.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import { SandboxEnvsStorage } from '../storage/domains/sandbox-envs/base.js';
 import {
@@ -235,6 +235,21 @@ describe('sandbox env on a real LocalSandbox', () => {
       expect(saw.trim()).toBe('build-value');
       expect(sandbox.getEnv()).not.toHaveProperty('PROOF_BUILD');
       expect(await print(sandbox, 'PROOF_BUILD')).toBe('');
+    });
+
+    it('masks Build values a failing setup command prints in its error', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: dir, isolation: 'none' });
+      onTestFinished(() => sandbox._destroy());
+      await sandbox._start();
+      const failing = 'echo "auth failed for $PROOF_BUILD (also $SHORT)" >&2; exit 3';
+
+      const error = await runSetupCommand(sandbox as Parameters<typeof runSetupCommand>[0], dir, failing, {
+        PROOF_BUILD: 'build-secret-value',
+        SHORT: 'build-secret',
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(SetupCommandError);
+      expect((error as Error).message).toBe('Setup command failed (exit 3): auth failed for *** (also ***)');
     });
 
     it('skips setup, and so the Build variables, when the setup marker matches', async () => {

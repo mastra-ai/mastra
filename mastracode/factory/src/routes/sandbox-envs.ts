@@ -127,7 +127,9 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
         const body = await this.#body(context);
         if ('response' in body) return body.response;
         const parsed = contracts.projectSandboxEnvSet.bodySchema.safeParse(body.body);
-        if (!parsed.success) return context.json({ error: 'invalid_sandbox_env' }, 400);
+        if (!parsed.success) {
+          return context.json({ error: 'invalid_sandbox_env', message: parsed.error.issues[0]?.message }, 400);
+        }
         const env = await this.deps.sandboxEnvs.set(
           scope.orgId,
           scope.projectId,

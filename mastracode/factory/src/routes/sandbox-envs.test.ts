@@ -137,6 +137,9 @@ describe('SandboxEnvRoutes', () => {
     expect((await send('PUT', '/BIG', { value: 'x'.repeat(32 * 1024), appliesTo: 'runtime' })).status).toBe(200);
     expect((await send('PUT', '/A', { value: 'x', appliesTo: 'always' })).status).toBe(400);
     expect((await send('PUT', '/A', { appliesTo: 'runtime' })).status).toBe(400);
+    const nul = await send('PUT', '/A', { value: 'x\0y', appliesTo: 'runtime' });
+    expect(nul.status).toBe(400);
+    expect(await nul.json()).toEqual({ error: 'invalid_sandbox_env', message: "Values can't contain NUL characters." });
     const form = await app.request(`${base}/A`, {
       method: 'PUT',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
