@@ -116,7 +116,7 @@ There is no dual-write rollback: an older Factory version sees the legacy snapsh
 
 Each project's boards live in its database, and the stored row is the board.
 
-- **Factory's boards**: the built-in Work board and the boards you pass to `new MastraFactory({ boards })` (app boards). Factory stores each in a project once: when the project is created, and in existing projects the first time a process loads them, which includes the preload at startup. Work goes only into a project that has no boards yet: a project that already holds a board, such as one your app wrote with `factory.upsertBoard()`, gets no Work from Factory. A project created now (the create call onboarding makes) gets Work without a Triage phase: Intake, Planning, Building, Review, Done and Canceled. Every other project, including one created on an older release that stores its boards only now, gets Work with Triage, as Factory always stored it, and resetting a project's Work restores the shape it was stored with. Add Triage back in Settings › Work board if you want it. The project keeps a key's board from then on. A Factory release or an app change never rewrites it (except through a [board migration](#board-migrations)), and a board the project deleted is not stored again. A key you add later is stored once in every project that hasn't had it. The retired Review board is never stored, and its `review` key is reserved: no board can be created or written under it. A project that still has open cards on it is served the code Review board, read-only (see [The retired Review board](#the-retired-review-board)).
+- **Factory's boards**: the built-in Work board and the boards you pass to `new MastraFactory({ boards })` (app boards). Factory stores each in a project once: when the project is created, and in existing projects the first time a process loads them, which includes the preload at startup. Work goes only into a project that has no boards yet: a project that already holds a board, such as one your app wrote with `factory.upsertBoard()`, gets no Work from Factory. A project created now (the create call onboarding makes) gets Work without a Triage phase: Intake, Planning, Building, Review, Done and Canceled. Every other project, including one created on an older release that stores its boards only now, gets Work with Triage, as Factory always stored it, and resetting a project's Work restores Factory's built-in Work, with Triage if Factory first stored the project's Work with it (never an app's `work` board). Add Triage back in Settings › Work board if you want it. The project keeps a key's board from then on. A Factory release or an app change never rewrites it (except through a [board migration](#board-migrations)), and a board the project deleted is not stored again. A key you add later is stored once in every project that hasn't had it. The retired Review board is never stored, and its `review` key is reserved: no board can be created or written under it. A project that still has open cards on it is served the code Review board, read-only (see [The retired Review board](#the-retired-review-board)).
 - **The project's own boards**: boards an admin created through the boards API, or that an app wrote with [`factory.upsertBoard()`](#writing-a-board-into-projects).
 
 A project's boards are the Work and app boards in code order, followed by the others. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. Existing apps need no change.
@@ -276,10 +276,47 @@ export function createFactory(storage: MastraFactoryConfig['storage']) {
 
 To migrate, move each handler's skill into the phase's `runner.skill` (its prompt into `runner.instructions` or the skill), put card context the handler read into the skill (agents get it from the [`factory-work-item` signal](#the-factory-work-item-signal)), and list outcome targets in `nextPhases`. A handler that refused a move becomes a `transitionPolicy` rejection (`nextPhases` is the only limit on where a card may go).
 
-To replace Work, write your board under the `work` key with `factory.upsertBoard()` at every startup, after `prepare()`. It replaces the Work board every existing project stored, and a project created later gets yours instead of Factory's. Work's code rules still attach by the key, so the definition passes the checks an edit of Work does. Start from the exported `workBoard` phases (`boardDefinitionOf(workBoard)` gives its stored definition):
+To replace Work, write your board under the `work` key with `factory.upsertBoard()` at every startup, after `prepare()`. It replaces the Work board every existing project stored, at that row's current revision, so edits people made to Work in Settings are discarded each time it runs; a project created later gets yours instead of Factory's. Work's code rules still attach by the key, so a board stored under `work` must keep Work's code phases and moves: Intake stays first, and Intake, Planning (`planning`), Building (`execute`), Review (`pr-review`), Done and Canceled keep their kind and every move Work makes between them, or `upsertBoard` refuses it with `code_behaviour`. Names, runners, exit tools, start conditions, added phases and added moves are free; boards under any other key have no such limit. Resetting a project's Work restores Factory's built-in Work, not yours; the next `upsertBoard` puts yours back. For example, renaming Planning, auto-starting it and adding a Blocked phase:
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
+import type { StoredBoardInput } from '@mastra/factory';
+
+const ourWorkBoard: StoredBoardInput = {
+  key: 'work',
+  name: 'Work',
+  phases: [
+    { key: 'intake', name: 'Intake', kind: 'resting', nextPhases: ['planning', 'pr-review', 'done', 'canceled'] },
+    {
+      key: 'planning',
+      name: 'Plan',
+      kind: 'working',
+      runner: { skill: 'factory-plan', context: 'work', instructions: 'Follow docs/planning.md.' },
+      autoStart: true,
+      exitTool: { id: 'submit_plan', autoApprove: false },
+      nextPhases: ['execute', 'intake', 'done', 'canceled'],
+    },
+    {
+      key: 'execute',
+      name: 'Building',
+      kind: 'working',
+      runner: { skill: 'factory-build', context: 'work' },
+      nextPhases: ['pr-review', 'planning', 'blocked', 'done', 'canceled'],
+    },
+    // Added: a phase of your own, and the moves into and out of it.
+    { key: 'blocked', name: 'Blocked', kind: 'resting', nextPhases: ['planning', 'execute', 'canceled'] },
+    {
+      key: 'pr-review',
+      name: 'Review',
+      kind: 'working',
+      runner: { skill: 'factory-review', context: 'review' },
+      tools: ['factory_record_review_verdict', 'factory_review_source'],
+      nextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'],
+    },
+    { key: 'done', name: 'Done', kind: 'terminal', nextPhases: ['pr-review'] },
+    { key: 'canceled', name: 'Canceled', kind: 'terminal', nextPhases: ['intake', 'pr-review'] },
+  ],
+};
 
 const factory = new MastraFactory({ storage });
 await factory.prepare();

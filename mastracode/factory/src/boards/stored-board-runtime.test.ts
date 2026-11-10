@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Mastra } from '@mastra/core/mastra';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -124,6 +125,17 @@ function stubModel(decide: (input: string) => ToolCall | undefined = () => undef
 }
 
 /** A board an admin added to a project; it lives only in that project's database. */
+/**
+ * The `ourWorkBoard` definition a document shows for replacing Work, evaluated as written. The tests
+ * run it so the documented migration keeps passing `upsertBoard`'s checks.
+ */
+function documentedWorkBoard(path: string): StoredBoardInput {
+  const text = readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
+  const literal = /const ourWorkBoard: StoredBoardInput = (\{[\s\S]*?\n\});\n/.exec(text)?.[1];
+  if (!literal) throw new Error(`${path} shows no ourWorkBoard definition.`);
+  return new Function(`return (${literal});`)() as StoredBoardInput;
+}
+
 const bugsBoard: StoredBoardInput = {
   key: 'bugs',
   name: 'Bugs',
@@ -1007,6 +1019,57 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             replica.factory.upsertBoard(bugsBoard, { projects: [{ orgId, factoryProjectId: randomUUID() }] }),
           ).rejects.toMatchObject({ code: 'project_not_found' });
         }, 60_000);
+
+        it.each([
+          ['the changeset', '../../../../.changeset/work-board-no-triage.md'],
+          ['the README', '../../README.md'],
+        ])(
+          "stores the Work board %s shows for replacing Work in every project, over edits, until a reset restores Factory's",
+          async (_, path) => {
+            stubModel();
+            const ourWorkBoard = documentedWorkBoard(path);
+            const orgId = `org-${randomUUID()}`;
+            const replica = await boot(await isolatedDatabase(), orgId);
+            const created = await createProject(replica, 'Onboarded');
+            const older = await createOlderProject(replica, orgId, 'Older');
+            const [createdScope, olderScope] = [created, older].map(factoryProjectId => ({ orgId, factoryProjectId }));
+            const read = await replica.send('GET', `/web/factory/projects/${created}/boards/work`);
+            const before = read.json.board as { phases: unknown[]; revision: number };
+            const edit = await replica.send('PATCH', `/web/factory/projects/${created}/boards/work`, {
+              expectedRevision: before.revision,
+              name: 'Our edit',
+              phases: before.phases,
+            });
+            expect(edit.status, JSON.stringify(edit.json)).toBe(200);
+
+            const result = await replica.factory.upsertBoard(ourWorkBoard, { projects: 'all' });
+
+            expect(result.updated).toEqual(expect.arrayContaining([createdScope, olderScope]));
+            expect(result.inserted).toEqual([]);
+            for (const scope of [createdScope, olderScope]) {
+              const row = (await replica.boards.get(scope, 'work'))!;
+              // Replaced at the row's current revision: the Settings edit is gone.
+              expect(row.name).toBe('Work');
+              expect(row.phases.map(phase => [phase.key, phase.name])).toEqual(
+                ourWorkBoard.phases.map(phase => [phase.key, phase.name]),
+              );
+            }
+            const later = await createProject(replica, 'Later');
+            expect(
+              (await replica.boards.get({ orgId, factoryProjectId: later }, 'work'))!.phases.map(p => p.key),
+            ).toEqual(ourWorkBoard.phases.map(phase => phase.key));
+
+            // Reset restores Factory's built-in Work, as Factory first stored it, not the app's board.
+            const row = (await replica.boards.get(olderScope, 'work'))!;
+            const reset = await replica.send('POST', `/web/factory/projects/${older}/boards/work/reset`, {
+              expectedRevision: row.revision,
+            });
+            expect(reset.status).toBe(200);
+            const restored = (await replica.boards.get(olderScope, 'work'))!.phases.map(phase => phase.key);
+            expect(restored).toEqual(workSeedWithTriage().phases.map(phase => phase.key));
+          },
+          60_000,
+        );
 
         it('stores the boards an app upserts for all projects in a project created later, and no Work beside them', async () => {
           stubModel();
