@@ -4297,6 +4297,34 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
+  it('leaves a plan to whoever already claimed the answer to it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-plan-claimed-elsewhere',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
+    session.claimToolSuspension.mockReturnValue({ accepted: false as const });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      boards: plansAutoApprovedBoards(),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.claimToolSuspension).toHaveBeenCalledWith('call-plan');
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+    expect(session.releaseToolResponse).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+  });
+
   it('leaves a plan parked for review and calls the kickoff done', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

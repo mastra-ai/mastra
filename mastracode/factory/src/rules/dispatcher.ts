@@ -231,10 +231,11 @@ function watchRun(
   let parked: { toolName: string; toolCallId: string } | undefined;
   let planApprovals = 0;
   // Claimed at the suspended `agent_end`, before the run-end report can say the plan waits for an answer.
-  let planClaimKey: string | undefined;
-  const releasePlanClaim = () => {
-    if (planClaimKey) session.releaseToolResponse(planClaimKey);
-    planClaimKey = undefined;
+  let planClaim: { key: string } | undefined;
+  const releasePlanClaim = (claim = planClaim) => {
+    if (!claim || claim !== planClaim) return;
+    session.releaseToolResponse(claim.key);
+    planClaim = undefined;
   };
   // Latest observational-memory failure seen on this run. The stream aborts the
   // run when observation/reflection fails, but the abort itself carries no
@@ -266,7 +267,7 @@ function watchRun(
       ) {
         releasePlanClaim();
         const claim = session.claimToolSuspension(parked.toolCallId);
-        if (claim.accepted) planClaimKey = claim.claimKey;
+        if (claim.accepted) planClaim = { key: claim.claimKey };
       }
       supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
@@ -317,16 +318,19 @@ function watchRun(
     async settle(): Promise<void> {
       let observed = await wait();
       // Past the cap the plan stays parked: the person it waits for sees it in the inbox.
+      // Without the claim someone else is already answering the plan, so their answer stands.
       if (approvePlans) {
-        while (parked?.toolName === 'submit_plan' && planApprovals < MAX_PLAN_APPROVALS) {
+        while (parked?.toolName === 'submit_plan' && planClaim && planApprovals < MAX_PLAN_APPROVALS) {
           planApprovals += 1;
           const { toolCallId } = parked;
           parked = undefined;
+          // A run that re-plans before the answer returns claims its new plan; that claim must outlive this answer.
+          const answered = planClaim;
           arm();
           try {
             await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
           } finally {
-            releasePlanClaim();
+            releasePlanClaim(answered);
           }
           observed = await wait();
         }
