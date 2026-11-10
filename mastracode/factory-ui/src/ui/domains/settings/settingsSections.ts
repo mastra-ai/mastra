@@ -24,7 +24,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   connections: 'Connections',
   repositories: 'Repositories',
   intake: 'Work Intake',
-  board: 'Work board',
+  board: 'Boards',
   models: 'Models',
   memory: 'Memory',
   skills: 'Skills',

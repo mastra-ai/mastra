@@ -165,6 +165,8 @@ export class SaveQueueManager {
         saved = await this.memory.saveMessages({
           messages: newMessages,
           memoryConfig,
+          // The SemanticRecall output processor may have embedded these already in this run.
+          embeddedMessages: messageList.getEmbeddedMessages(),
         });
       } catch (error) {
         // Nothing else writes drained messages, so a later save must retry them.

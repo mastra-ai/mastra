@@ -56,26 +56,17 @@
     "kimi-k2.5"
   ],
   "reasoning": {
-    "gpt-oss-20b": [
+    "gemini-2.5-pro": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ],
-    "claude-sonnet-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      },
+    "claude-haiku-4-5": [
       {
         "type": "budget_tokens",
         "min": 1024
-      }
-    ],
-    "gpt-5-3-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "gpt-5-5": [
@@ -84,10 +75,23 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-5-4-mini": [
+    "claude-opus-4-7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3-flash-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-2.5-flash": [
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 24576
       }
     ],
     "grok-4-3": [
@@ -96,7 +100,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-oss-120b": [
+    "gpt-5-3-codex": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -118,42 +122,38 @@
         "min": 1024
       }
     ],
-    "claude-opus-4-7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "gpt-5-4-nano": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemini-3-flash-preview": [
+    "claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemini-2.5-flash": [
+    "gpt-5-4-mini": [
       {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 24576
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
-    "gemini-2.5-pro": [
+    "gpt-oss-20b": [
       {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "claude-haiku-4-5": [
-      {
-        "type": "budget_tokens",
-        "min": 1024
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

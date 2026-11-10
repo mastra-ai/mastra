@@ -1,10 +1,10 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useLocation } from 'react-router';
 
-import { setSessionPinned } from '../hooks/usePinnedSessions';
+import { updatePinnedSessions } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
 import { useSessionVisibility } from '../hooks/useSessionVisibility';
-import { STATUS_MARKER_BY_ACTIVITY } from '../services/sessionRows';
+import { STATUS_MARKER_BY_ACTIVITY, pinnedSessionsAfter } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
 import type { UserSessionVisibility } from '../services/user-sessions';
 import { SessionNavRow } from './SessionNavRow';
@@ -51,7 +51,7 @@ export function SessionListItem({
       status={STATUS_MARKER_BY_ACTIVITY[row.status]}
       pinned={row.pinned}
       preview={{ factoryId, session: row.session, owner: row.owner, item: row.item, threadId: row.threadId }}
-      onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
+      onPinChange={pin => updatePinnedSessions(pinned => pinnedSessionsAfter(pinned, row, pin))}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}

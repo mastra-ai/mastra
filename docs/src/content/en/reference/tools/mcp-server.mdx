@@ -1290,7 +1290,7 @@ Tools can access request metadata via `context.mcp.extra` when using the HTTP tr
 
 Whatever you set on `req.auth` in your HTTP middleware becomes available as `context.mcp.extra.authInfo` in your tools and as `requestContext.get('authInfo')` in resource and prompt callbacks:
 
-```
+```text
 req.auth = { ... }  →  context.mcp.extra.authInfo = { ... }
 ```
 

@@ -37,6 +37,26 @@ export const KpiCards: Story = {
   ),
 };
 
+/** Two cards at 50rem, where groups of three or more switch to three columns: these keep two, without an empty column. */
+export const TwoKpiCardsAtMediumWidth: Story = {
+  render: args => (
+    <div className="w-200">
+      <MetricsCardGroup {...args}>
+        {kpis.slice(0, 2).map(({ label, value, ...change }) => (
+          <MetricsKpiCard key={label}>
+            <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
+            <MetricsKpiCard.ValueRow>
+              <MetricsKpiCard.Value>{value}</MetricsKpiCard.Value>
+              <MetricsKpiCard.Change comparison="vs previous 24h" {...change} />
+              <MetricsKpiCard.Prev value={change.prevValue} />
+            </MetricsKpiCard.ValueRow>
+          </MetricsKpiCard>
+        ))}
+      </MetricsCardGroup>
+    </div>
+  ),
+};
+
 export const MixedStates: Story = {
   render: args => (
     <MetricsCardGroup {...args}>
