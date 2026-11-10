@@ -765,6 +765,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
   }
 
+  /** Adapter `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.mcpOptions ?? this.mastra.getServer()?.mcpOptions;
+  }
+
   async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
@@ -842,7 +847,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
 
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
 
         await applyMcpRequestAuth({ req: rawReq, requestContext: ctx.state.requestContext, setRequestAuth });
 
@@ -883,7 +888,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         await applyMcpRequestAuth({
           req: rawReq,
           requestContext: ctx.state.requestContext,
-          setRequestAuth: this.mcpOptions?.setRequestAuth,
+          setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
         });
 
         await server.startSSE({

@@ -23,6 +23,8 @@ describe('Hono MCP Transport Routes Integration', () => {
       const adapter = new MastraServer({
         app,
         mastra,
+        // Mirrors the Mastra deployer, which forwards `server.mcpOptions` to the Hono adapter.
+        mcpOptions: mastra.getServer()?.mcpOptions,
       });
 
       // Initialize routes

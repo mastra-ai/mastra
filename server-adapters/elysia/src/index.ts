@@ -623,6 +623,11 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     return result;
   }
 
+  /** Adapter `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.mcpOptions ?? this.mastra.getServer()?.mcpOptions;
+  }
+
   async sendResponse(route: ServerRoute, response: Response, result: unknown, prefix?: string): Promise<any> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
@@ -660,7 +665,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const forwardRequest = await createForwardRequest(request);
       const { req, res } = toReqRes(forwardRequest);
 
-      const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
 
       // `toReqRes` builds a fresh IncomingMessage, so bridge the principal auth resolved.
       await applyMcpRequestAuth({ req, requestContext: request.requestContext, setRequestAuth });
@@ -703,7 +708,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       await applyMcpRequestAuth({
         req,
         requestContext: request.requestContext,
-        setRequestAuth: this.mcpOptions?.setRequestAuth,
+        setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
       });
 
       server

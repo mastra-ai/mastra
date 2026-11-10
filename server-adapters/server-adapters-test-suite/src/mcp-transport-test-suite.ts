@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { SimpleAuth } from '@mastra/core/server';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer, MCPClient } from '@mastra/mcp';
+import type { SetMcpRequestAuth } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
 import { LegacySSEFixture } from './legacy-sse-fixture';
@@ -20,7 +21,7 @@ export interface MCPTransportTestConfig {
    */
   createServer: (mastra: Mastra) => Promise<{
     /** The HTTP server instance (will be closed in afterAll) */
-    server: { close: () => void };
+    server: { close: (callback?: (err?: Error) => void) => unknown };
     /** The port the server is listening on */
     port: number;
   }>;
@@ -379,7 +380,12 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           'bob-token': { id: 'bob', name: 'Bob' },
         };
 
-        const startAuthenticatedApp = async () => {
+        // `mcpOptions` go only into the Mastra server config. Adapters must pick them up from there
+        // even when the app does not pass them to the adapter itself.
+        const startAuthenticatedApp = async (mcpOptions?: {
+          serverless?: boolean;
+          setRequestAuth?: SetMcpRequestAuth;
+        }) => {
           const whoamiServer = new MCPServer({
             name: 'whoami-server',
             version: '1.0.0',
@@ -389,7 +395,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const authMastra = new Mastra({
             logger: false,
             mcpServers: { whoami: whoamiServer },
-            server: { auth: new SimpleAuth({ tokens: users }) },
+            server: { auth: new SimpleAuth({ tokens: users }), ...(mcpOptions ? { mcpOptions } : {}) },
           });
           const { server, port: authPort } = await createServer(authMastra);
           const url = new URL(`http://localhost:${authPort}/api/mcp/${whoamiServer.id}/mcp`);
@@ -406,7 +412,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           };
           const close = async () => {
             await Promise.all(clients.map(client => client.disconnect()));
-            server.close();
+            await new Promise<void>(resolve => server.close(() => resolve()));
             await whoamiServer.close();
           };
           return { callWhoami, close };
@@ -428,6 +434,47 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
             expect(await app.callWhoami('bob-token')).toMatchObject({
               authInfo: { token: 'bob-token', clientId: 'bob' },
               user: { id: 'bob', name: 'Bob' },
+            });
+          } finally {
+            await app.close();
+          }
+        }, 30000);
+
+        it('keeps the authenticated caller in serverless mode', async () => {
+          const app = await startAuthenticatedApp({ serverless: true });
+          try {
+            expect(await app.callWhoami('alice-token')).toMatchObject({
+              authInfo: { token: 'alice-token', clientId: 'alice' },
+              user: { id: 'alice', name: 'Alice' },
+            });
+          } finally {
+            await app.close();
+          }
+        }, 30000);
+
+        it('lets a setRequestAuth hook in the Mastra server config decide what the MCP tool sees', async () => {
+          // A hook that redacts the bearer token and narrows the user. It must replace the default
+          // bridge, otherwise the raw token and full user would reach the tool.
+          const app = await startAuthenticatedApp({
+            setRequestAuth: (req, requestContext) => {
+              const user = requestContext.get('mastra__user') as { id: string };
+              (req as typeof req & { auth?: unknown }).auth = {
+                token: '',
+                clientId: `custom:${user.id}`,
+                scopes: ['mcp:custom'],
+                extra: { user: { id: user.id } },
+              };
+            },
+          });
+          try {
+            expect(await app.callWhoami('alice-token')).toEqual({
+              authInfo: {
+                token: '',
+                clientId: 'custom:alice',
+                scopes: ['mcp:custom'],
+                extra: { user: { id: 'alice' } },
+              },
+              user: { id: 'alice' },
             });
           } finally {
             await app.close();
