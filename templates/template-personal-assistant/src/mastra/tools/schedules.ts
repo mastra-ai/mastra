@@ -91,12 +91,17 @@ export const scheduleTiming = timingInput.transform((input, context) => {
   }
 });
 
+/** Identify invalid stored cadence separately from unavailable schedule dependencies. */
+class UnsafeScheduleCadenceError extends Error {}
+
 /** Reject sub-minute recurring work, including legacy rows checked before native dispatch. */
 function requireSafeCadence(cron: string) {
   const fields = cron.trim().split(/\s+/);
   // Native five-field cron already has minute granularity. A fixed seconds field preserves it.
   if (fields.length >= 6 && !/^\d{1,2}$/.test(fields[0]!))
-    throw new Error('Recurring schedules require at least 60 seconds between occurrences; use a fixed seconds field.');
+    throw new UnsafeScheduleCadenceError(
+      'Recurring schedules require at least 60 seconds between occurrences; use a fixed seconds field.',
+    );
 }
 
 /** Require a remaining native occurrence for new or explicitly updated timing. */
@@ -284,7 +289,8 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
             },
           },
         };
-      } catch {
+      } catch (error) {
+        if (error instanceof UnsafeScheduleCadenceError) throw error;
         mastra().getLogger().warn('Schedule preparation failed.', {
           category: 'schedule-preparation',
           scheduleId: schedule.id,

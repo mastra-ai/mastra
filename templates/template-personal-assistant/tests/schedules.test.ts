@@ -1495,3 +1495,50 @@ test('schedule capacity and cadence limits preserve existing owner schedules', {
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test('stored unsafe cadence records a failed cadence outcome without model dispatch', { timeout: 30000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-unsafe-stored-cadence-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    await json(
+      await app.request(`/memory/threads${query}`, 'POST', {
+        threadId: 'unsafe-stored-cadence',
+        resourceId: 'local-owner',
+        title: 'Legacy unsafe cadence',
+      }),
+    );
+    const schedule = await nativeSchedule<AgentSchedule>(app, 'create', {
+      agentId: 'personal-assistant',
+      threadId: 'unsafe-stored-cadence',
+      resourceId: 'local-owner',
+      name: 'Legacy schedule',
+      prompt: 'Do not dispatch unsafe work.',
+      cron: '* * * * * *',
+      timezone: 'UTC',
+      metadata: { personalAssistant: true },
+    });
+    await dueNow(app, schedule.id);
+    const rows = await eventually(
+      () => occurrences(app!, schedule.id),
+      values => values.some(value => value.outcome === 'failed'),
+    );
+    const failed = rows.find(value => value.outcome === 'failed')!;
+    assert.match(failed.error!, /at least 60 seconds/);
+    assert.doesNotMatch(failed.error!, /dependency unavailable/);
+    assert.equal(fixture.models.length, 0);
+    assert.equal(fixture.providerCalls.length, 0);
+    await app.stop();
+    app = undefined;
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    assert.deepEqual(
+      (await occurrences(app, schedule.id)).find(value => value.id === failed.id),
+      failed,
+    );
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
