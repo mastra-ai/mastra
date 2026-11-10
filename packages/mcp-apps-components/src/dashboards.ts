@@ -16,9 +16,10 @@ import { inScope, KIND_CHECKS, viewIssues } from './dashboard-views';
 import type { WidgetIssue } from './dashboard-views';
 
 /*
- * The stored dashboard format, checked as strictly as the dashboard renderer checks it: core's
- * `dashboardDefinitionSchema`, then each widget's kind, each view's options and each table column's
- * options, then what each kind checks beyond its schema (queries an option names, labels, ...).
+ * The stored dashboard format, checked at least as strictly as the dashboard renderer checks it:
+ * core's `dashboardDefinitionSchema`, then each widget's kind, each view's options and each table
+ * column's options, then what each kind checks beyond its schema (queries an option names, labels,
+ * ...). It also rejects columns on views that aren't tables, which the renderer ignores.
  *
  * The types are written out here rather than inferred, so this entry's declarations need nothing
  * beyond `@mastra/core` and `zod`; the package's tests check they match the kinds' own schemas.
@@ -249,7 +250,8 @@ const report = (ctx: z.RefinementCtx, issues: Issue[], prefix: PropertyKey[] = [
 /**
  * One widget as the dashboard renderer draws it: core's `dashboardWidgetSchema`, a built-in kind,
  * options that kind accepts, and nothing else it would reject, at every scope the widget shows at.
- * Paths are relative to the widget. Unique widget ids, the widget count and the size limit are the
+ * It also rejects columns on views that aren't tables: the renderer ignores them, but they usually
+ * mean the widget was written as another kind. Paths are relative to the widget. Unique widget ids, the widget count and the size limit are the
  * definition's to check, so check the whole definition with `strictDashboardDefinitionSchema` too
  * before storing it.
  *
