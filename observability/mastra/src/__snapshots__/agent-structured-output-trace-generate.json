@@ -313,7 +313,14 @@
                         "role": "user",
                         "content": "Return a list of items separated by commas"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 generate response",
+                      "toolCalls": [],
+                      "object": {
+                        "items": "test structured output"
+                      }
+                    }
                   }
                 },
                 {

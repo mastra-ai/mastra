@@ -19,6 +19,7 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -112,7 +113,7 @@ export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): stri
 export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
-  'factory-complete-issue',
+  'factory-build',
   'factory-gitlab-rereview',
   'factory-gitlab-review',
   'factory-plan',
@@ -429,7 +430,7 @@ function isActiveReviewBinding(
   runBinding: { role: string; status: string; orgId: string } | null | undefined,
   orgId: string | undefined,
 ): boolean {
-  return runBinding?.role === 'review' && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
+  return runBinding?.role === REVIEW_CONTEXT && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
 }
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];

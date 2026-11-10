@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { evaluateRuleGroup } from '../rules/rule-group.js';
+import type { RuleGroup } from '../rules/rule-group.js';
 import { externallyAuthoredWorkItem } from '../rules/types.js';
 import { DEFAULT_INTAKE_ROUTE } from '../storage/domains/boards/base.js';
-import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+import type { Card, ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { cardRuleFacts } from './card-facts.js';
 
 const SOURCES: Record<string, ExternalWorkItemSource | null> = {
@@ -70,6 +72,150 @@ describe('provider facts', () => {
       'item.author': 'provider-author',
       'author.trusted': true,
     });
+  });
+});
+
+describe('where an item lives, its key, state and assignees', () => {
+  const ARRIVALS = [
+    {
+      name: 'GitHub issue',
+      source: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: 'github:7:issue:12',
+        url: 'https://github.com/Acme/App/issues/12',
+      },
+      metadata: { githubRepositoryId: 7, githubIssueNumber: 12, state: 'open', assignees: ['octocat'] },
+      facts: {
+        'source.provider': 'github',
+        'source.repository': 'Acme/App',
+        'item.key': 'Acme/App#12',
+        'item.state': 'open',
+        'item.assignees': ['octocat'],
+      },
+    },
+    {
+      name: 'GitLab merge request in a subgroup',
+      source: {
+        integrationId: 'gitlab',
+        type: 'pull-request',
+        externalId: 'gitlab:9:mr:7',
+        url: 'https://gitlab.com/acme/platform/api/-/merge_requests/7',
+      },
+      metadata: { gitlabMergeRequestIid: 7, merged: true, assignees: [] },
+      facts: {
+        'source.provider': 'gitlab',
+        'source.repository': 'acme/platform/api',
+        'item.key': 'acme/platform/api!7',
+        'item.state': 'merged',
+        'item.assignees': [],
+      },
+    },
+    {
+      name: 'Linear issue',
+      source: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-5' },
+      metadata: { identifier: 'ENG-5', linearState: 'In Progress', linearTeam: 'ENG', assignee: 'Ada' },
+      facts: {
+        'source.provider': 'linear',
+        'source.repository': 'ENG',
+        'item.key': 'ENG-5',
+        'item.state': 'In Progress',
+        'item.assignees': ['Ada'],
+      },
+    },
+    {
+      name: 'Jira issue',
+      source: { integrationId: 'jira', type: 'issue', externalId: '10042' },
+      metadata: { identifier: 'OPS-6', state: 'To Do', project: 'OPS', assignees: ['Grace'] },
+      facts: {
+        'source.provider': 'jira',
+        'source.repository': 'OPS',
+        'item.key': 'OPS-6',
+        'item.state': 'To Do',
+        'item.assignees': ['Grace'],
+      },
+    },
+  ] as const;
+
+  it.each(ARRIVALS)(
+    'reads them off a $name arriving, as its work item will store them',
+    ({ source, metadata, facts }) => {
+      expect(cardRuleFacts({ title: 'Fix', externalSource: source, metadata })).toMatchObject(facts);
+    },
+  );
+
+  it.each(ARRIVALS)(
+    "reads them off a $name card's stored work item, which a phase rule tests",
+    ({ source, metadata, facts }) => {
+      // A filed card's provider facts live on its work item; the card keeps only Factory's own metadata.
+      const workItem = workItemProviderAdapter(source).toSource(source, metadata)!;
+      expect(
+        cardRuleFacts({ title: 'Fix', externalSource: source, metadata: { authorTrusted: true }, workItem }),
+      ).toMatchObject(facts);
+    },
+  );
+
+  it('takes the team or project from the key when the provider metadata leaves it out', () => {
+    const facts = (integrationId: string, identifier: string) =>
+      cardRuleFacts({
+        title: 'Fix',
+        externalSource: { integrationId, type: 'issue', externalId: identifier },
+        metadata: { identifier },
+      });
+    expect(facts('linear', 'ENG-5')['source.repository']).toBe('ENG');
+    expect(facts('jira', 'OPS-6')['source.repository']).toBe('OPS');
+  });
+
+  it('has no repository for an incident.io follow-up or a GitHub item without its URL, and none of these facts for a manual card', () => {
+    const incident = cardRuleFacts({
+      title: 'Follow up',
+      externalSource: { integrationId: 'incidentio', type: 'follow-up', externalId: 'inc-7' },
+      metadata: { identifier: 'INC-7', state: 'Open' },
+    });
+    expect(incident).toMatchObject({ 'source.provider': 'incidentio', 'item.key': 'INC-7', 'item.state': 'Open' });
+    expect(incident).not.toHaveProperty('source.repository');
+    expect(
+      cardRuleFacts({ title: 'Fix', externalSource: SOURCES['github issue']!, metadata: { githubIssueNumber: 1 } }),
+    ).not.toHaveProperty('source.repository');
+    const manual = cardRuleFacts({ title: 'Fix', externalSource: null, metadata: {} });
+    expect(manual).not.toHaveProperty('source.repository');
+    expect(manual).not.toHaveProperty('source.provider');
+    expect(manual).not.toHaveProperty('item.key');
+  });
+});
+
+describe('item.pullRequest', () => {
+  const pullRequest = (number: number, state: string) =>
+    ({
+      sourceType: 'pull-request',
+      state,
+      metadata: { githubPullRequestNumber: number },
+    }) as unknown as Card['workItem']['sources'][number];
+  const issueCard = (sources: Card['workItem']['sources'], metadata: Record<string, unknown> = {}) => ({
+    title: 'Fix',
+    externalSource: SOURCES['github issue']!,
+    metadata,
+    workItem: { labels: [], author: null, sources },
+  });
+  const noPullRequest: RuleGroup = {
+    operator: 'AND',
+    conditions: [{ field: 'item.pullRequest', operator: 'not_exists' }],
+  };
+
+  it('is absent while the card has no open change request', () => {
+    for (const card of [issueCard([]), issueCard([pullRequest(12, 'closed'), pullRequest(13, 'merged')])]) {
+      const facts = cardRuleFacts(card);
+      expect(facts).not.toHaveProperty('item.pullRequest');
+      expect(evaluateRuleGroup(noPullRequest, facts)).toBe(true);
+    }
+  });
+
+  it('is the open change request attached to the card, or the one Factory opened', () => {
+    const attached = cardRuleFacts(issueCard([pullRequest(12, 'closed'), pullRequest(14, 'open')]));
+    expect(attached['item.pullRequest']).toBe(14);
+    expect(evaluateRuleGroup(noPullRequest, attached)).toBe(false);
+
+    expect(cardRuleFacts(issueCard([], { openPullRequestNumber: 21 }))['item.pullRequest']).toBe(21);
   });
 });
 

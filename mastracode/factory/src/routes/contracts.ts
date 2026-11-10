@@ -6,12 +6,10 @@ import { z } from 'zod';
 import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
-import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
-const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
@@ -67,24 +65,17 @@ const storedBoardResponseSchema = z.object({
     revision: z.number().int().nullable(),
     source: z.enum(['builtin', 'app', 'stored']),
     /**
-     * True for boards the project created, the built-in Work board and app boards; their code
-     * behaviour stays attached. False for the legacy Review board, which is read-only.
+     * True for every board: the boards the project created, the built-in Work board and app boards,
+     * whose code behaviour stays attached. Only the retired Review board was read-only.
      */
     editable: z.boolean(),
     /**
      * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
-     * phase stays with its kind, phases with code handlers keep their runner context and skill,
-     * the exit tool id stays, and the moves code makes from it stay in nextPhases. Null for stored boards.
+     * phase stays with its kind and the moves code makes from it stay in nextPhases. Null for
+     * stored boards.
      */
     codeBehaviour: z
-      .record(
-        z.string(),
-        z.object({
-          handlers: z.boolean(),
-          exitToolId: z.string().nullable(),
-          requiredNextPhases: z.array(z.string()),
-        }),
-      )
+      .record(z.string(), z.object({ requiredNextPhases: z.array(z.string()) }))
       .nullable()
       .optional(),
     /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
@@ -100,6 +91,11 @@ const intakeRouteTargetSchema = z
     boardKey: intakeRouteIdentifierSchema,
     /** Unset lands the card in the board's first phase. */
     phaseKey: intakeRouteIdentifierSchema.nullable().optional(),
+    /**
+     * File a pull request on the card of the issue it closes (on `boardKey`) instead of a new card;
+     * that card moves to `phaseKey` when its board allows it. Matches no other arrival.
+     */
+    joinClosedIssue: z.boolean().optional(),
   })
   .strict();
 const intakeRouteWhenSchema = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
@@ -117,8 +113,6 @@ const intakeRouteFields = {
       const problem = routeEventsProblem(on, null);
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     }),
-  /** Lets an event move an existing card into a working phase, such as Triage. */
-  allowWorkingPhase: z.boolean(),
 };
 export const intakeRouteInputSchema = z
   .object({
@@ -127,7 +121,6 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -138,7 +131,6 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -162,9 +154,8 @@ const intakeRouteSchema = z.object({
   /** 0 is evaluated first. */
   position: z.number().int(),
   when: intakeRouteWhenSchema.nullable(),
-  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable() }),
+  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
   on: z.array(z.enum(STATUS_EVENTS)),
-  allowWorkingPhase: z.boolean(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),
@@ -175,7 +166,11 @@ const intakeRouteSchema = z.object({
   problems: z.array(z.string()),
 });
 const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
-const intakeRouteListResponseSchema = z.object({ intakeRoutes: z.array(intakeRouteSchema) });
+const intakeRouteListResponseSchema = z.object({
+  intakeRoutes: z.array(intakeRouteSchema),
+  /** Whether the caller may add, edit, reorder, or delete routes. */
+  canEdit: z.boolean(),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -234,10 +229,13 @@ export const updateProjectBodySchema = z
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
+    /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
+    /** @deprecated Ignored. The review skill decides whether to publish its test check. */
     reviewTestChecksEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. A card is self-reviewed when its board has a self-review phase. */
     selfReviewEnabled: z.boolean().optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
@@ -484,7 +482,8 @@ export const automationRunStartBodySchema = z
   .object({
     requestId: trimmedUuidSchema,
     expectedRevision: z.number().int().min(1),
-    role: z.enum(FACTORY_ROLE_VALUES),
+    // Checked against the card's board when the request arrives.
+    role: nonEmptyTrimmed(32),
     skillName: nonEmptyTrimmed(128),
     arguments: nonEmptyTrimmed(4_096).optional(),
   })
@@ -796,11 +795,25 @@ export const FACTORY_ROUTE_CONTRACTS = {
           description: z.string().optional(),
           /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
           source: z.enum(['builtin', 'app', 'stored']).optional(),
-          /** False only for the legacy Review board; built-in Work, app and stored boards can be edited. */
+          /** True for every board; only the retired Review board was read-only. */
           editable: z.boolean().optional(),
           /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),
           initialPhase: z.string(),
+          /**
+           * Which phase plays each part of the pull request loop, read from what the phases declare.
+           * A part the board has no phase for is absent. Absent from servers older than the loop.
+           */
+          flow: z
+            .object({
+              triage: z.string().optional(),
+              build: z.string().optional(),
+              selfReview: z.string().optional(),
+              pullRequestReview: z.string().optional(),
+              completed: z.string().optional(),
+              canceled: z.string().optional(),
+            })
+            .optional(),
           phases: z.array(
             z.object({
               id: z.string(),
@@ -816,6 +829,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
               role: z.string().optional(),
               /** The skill the phase's runner starts when a card enters it (`runner.skill`). */
               skill: z.string().optional(),
+              /** The objective the phase's runs pursue as a goal (`runner.goal`). */
+              goal: z.object({ objective: z.string(), maxRuns: z.number().optional() }).optional(),
               autoStart: z.boolean().optional(),
               /** Cards the phase starts on its own for; absent means every card. */
               autoStartWhen: cardRuleGroupSchema.optional(),
@@ -827,6 +842,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
                   autoApproveWhen: cardRuleGroupSchema.optional(),
                 })
                 .optional(),
+              /** Factory tools the phase grants the session working the card there. */
+              tools: z.array(z.string()).optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),
@@ -892,7 +909,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   intakeRouteCreate: {
     method: 'POST',
     path: '/web/factory/projects/:id/intake-routes',
-    description: 'Add an intake route at the end of a Factory project',
+    description:
+      'Add an intake route to a Factory project, after its routes; a route that places new cards goes ahead of the first route that takes every new card',
     pathSchema: projectPathSchema,
     bodySchema: intakeRouteInputSchema,
     responseSchema: intakeRouteResponseSchema,
