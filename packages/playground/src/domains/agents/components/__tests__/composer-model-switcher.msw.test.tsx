@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { PlaygroundModelProvider } from '../../context/playground-model-context';
 import { ComposerModelSwitcher } from '../composer-model-switcher';
-import { openAiProviders } from './fixtures/composer-model-switcher';
+import { gatewayProviders, openAiProviders } from './fixtures/composer-model-switcher';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -110,6 +110,32 @@ describe('ComposerModelSwitcher', () => {
       fireEvent.click(await screen.findByRole('option', { name: /Reset to the agent's model/ }));
 
       expect(await screen.findByRole('button', { name: /Model:.*GPT-4o Mini/ })).not.toBeNull();
+    });
+  });
+  describe('when the agent runs on a gateway provider stored without its gateway prefix', () => {
+    const openPicker = async () => {
+      mockProviderRequests(Promise.resolve(), gatewayProviders);
+      renderSwitcher({ provider: 'custom', model: 'custom-small' });
+      fireEvent.click(await screen.findByRole('button', { name: /Model:.*Custom Small/ }));
+      return screen.findByRole('listbox');
+    };
+
+    it("marks the agent's model as the default", async () => {
+      const list = await openPicker();
+
+      const option = within(list).getByRole('option', { name: /Custom Small/ });
+      expect(within(option).getByText('Default')).not.toBeNull();
+    });
+
+    it("resets to the agent's model after another one is picked", async () => {
+      const list = await openPicker();
+      fireEvent.click(within(list).getByRole('option', { name: /Custom Large/ }));
+      await screen.findByRole('button', { name: /Model:.*Custom Large/ });
+
+      fireEvent.click(screen.getByRole('button', { name: /Model:.*Custom Large/ }));
+      fireEvent.click(await screen.findByRole('option', { name: /Reset to the agent's model/ }));
+
+      expect(await screen.findByRole('button', { name: /Model:.*Custom Small/ })).not.toBeNull();
     });
   });
 });

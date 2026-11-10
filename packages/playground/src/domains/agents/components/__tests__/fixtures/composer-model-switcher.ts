@@ -11,3 +11,15 @@ export const openAiProviders = {
     },
   ],
 } satisfies ListAgentsModelProvidersResponse;
+
+export const gatewayProviders = {
+  providers: [
+    {
+      id: 'acme/custom',
+      name: 'Custom',
+      envVar: 'ACME_API_KEY',
+      connected: true,
+      models: ['custom-small', 'custom-large'],
+    },
+  ],
+} satisfies ListAgentsModelProvidersResponse;
