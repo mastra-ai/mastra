@@ -172,8 +172,11 @@ describe('stored agent visibility on /api/agents', () => {
     await server?.close();
     await llm?.stop();
     await rm(dir, { recursive: true, force: true });
-    process.env.OPENAI_BASE_URL = previousBaseUrl;
-    process.env.OPENAI_API_KEY = previousKey;
+    // Assigning undefined would store the string "undefined", so remove variables that weren't set before.
+    if (previousBaseUrl === undefined) delete process.env.OPENAI_BASE_URL;
+    else process.env.OPENAI_BASE_URL = previousBaseUrl;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
   });
 
   async function http(token: string | null, method: string, path: string, body?: unknown, base = server.url) {
