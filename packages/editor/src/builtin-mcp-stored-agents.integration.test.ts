@@ -41,7 +41,8 @@ const payload = (result: ToolResult) => result.structuredContent ?? JSON.parse(t
  * The built-in `/api/mcp` stored_agents toolset against a real MastraEditor, LibSQL storage, Hono server and
  * MCP client: same ownership and permissions as `/api/stored/agents`, plus the builder model policy.
  */
-describe('built-in MCP stored_agents toolset', () => {
+// Each test makes several real MCP/HTTP calls against a live server (about 1-8s locally), so allow headroom for CI.
+describe('built-in MCP stored_agents toolset', { timeout: 30_000 }, () => {
   let dir: string;
   let url: string;
   let close: () => Promise<void>;
@@ -436,7 +437,7 @@ describe('built-in MCP stored_agents toolset', () => {
       outputProcessors: [{ value: graph(step('openai/gpt-4o-mini', 'pii-detector')), rules: RULES }],
     });
     expect(allowed.isError, text(allowed)).toBeFalsy();
-  }, 30_000);
+  });
 
   it('fails closed when the builder model policy cannot be resolved', async () => {
     const resolveBuilder = editor.resolveBuilder;
