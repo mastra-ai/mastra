@@ -178,6 +178,8 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
       schemaVersion: 4,
       supportsSchemaInspection: false,
       supportsExplicitReset: false,
+      // The service's stores keep a pin's kind and depth, so listing pins round-trip.
+      supportsPinKinds: true,
     } as const;
   }
 

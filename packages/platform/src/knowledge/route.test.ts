@@ -1,9 +1,11 @@
 import { createServer } from 'node:http';
 import {
+  InMemoryStore,
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeUnsupportedCapabilityError,
 } from '@mastra/core/storage';
+import type { KnowledgeStorage } from '@mastra/core/storage';
 import { afterEach, expect, it, vi } from 'vitest';
 import { PlatformKnowledge } from './index';
 
@@ -177,4 +179,64 @@ it('rejects scope declaration renames locally because the rename check cannot cr
   } finally {
     fetchSpy.mockRestore();
   }
+});
+
+it('keeps page and listing pins apart on the same page through the hosted operation route', async () => {
+  // A stand-in for the Knowledge service: each operation runs on a real in-memory store.
+  const backing = (await new InMemoryStore().getStore('knowledge')) as KnowledgeStorage;
+  const revive = (_key: string, value: unknown) =>
+    value && typeof value === 'object' && '__knowledgeDate' in value
+      ? new Date((value as { __knowledgeDate: string }).__knowledgeDate)
+      : value;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const operation = req.url!.split('/').pop()!;
+    const { input } = JSON.parse(body, revive) as { input: unknown };
+    const result = await (backing as unknown as Record<string, (input: unknown) => Promise<unknown>>)[operation]!(
+      input,
+    );
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ result: result ?? null }));
+  });
+  servers.push(server);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected a TCP port');
+  const store = await new PlatformKnowledge({
+    apiUrl: `http://127.0.0.1:${address.port}`,
+    instanceId: 'instance',
+    accessToken: 'token',
+  }).getStorage();
+
+  // knowledge_pin refuses `kind: 'list'` before writing unless the store says it keeps pin kinds.
+  expect(store.getCapabilities().supportsPinKinds).toBe(true);
+
+  const provenance = { author: 'host' };
+  const { scope } = await store.materializeScope({
+    address: 'org:acme',
+    declaration: 'org:$orgId',
+    name: 'Acme',
+    provenance,
+  });
+  const page = await store.createPage({
+    parentId: scope.id,
+    key: 'handbook',
+    name: 'Handbook',
+    body: 'Hi.',
+    provenance,
+  });
+  await store.addPinAudience({ pageId: page.id, audience: ['org:acme'], createdBy: 'agent' });
+  await store.addPinAudience({ pageId: page.id, kind: 'list', depth: 2, audience: ['org:acme'], createdBy: 'agent' });
+
+  const pins = async (kind?: 'page' | 'list') =>
+    (await store.listPins({ audience: 'all', read: 'all', kind })).pins.map(pin => ({
+      kind: pin.kind,
+      depth: pin.depth,
+    }));
+  expect(await pins('page')).toEqual([{ kind: 'page', depth: undefined }]);
+  expect(await pins('list')).toEqual([{ kind: 'list', depth: 2 }]);
+
+  await store.removePinAudience({ pageId: page.id, kind: 'list', audience: ['org:acme'], removedBy: 'agent' });
+  expect(await pins()).toEqual([{ kind: 'page', depth: undefined }]);
 });
