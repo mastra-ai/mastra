@@ -1,5 +1,156 @@
 # @mastra/factory
 
+## 0.28.0-alpha.4
+
+### Minor Changes
+
+- The board now decides what Factory does on its own. The project-wide **Auto-start runs** and **Self-review before pull requests** switches are gone: a phase starts its runs without approval when it has `autoStart` (optionally `autoStartWhen`), and a card is self-reviewed when its board has a self-review phase. ([#29756](https://github.com/mastra-ai/mastra/pull/29756))
+
+  **Existing projects keep their behavior.** On the next load, Factory rewrites each project's stored boards once:
+
+  - A project with auto-run on gets `autoStart: true` on every working phase of every stored board.
+  - A project with self-review off loses the self-review phase of every stored board (Work, app and custom), with every move into it. Factory keeps the phase and logs a warning when an app board declares it in code (`defineBoard()`), when cards sit in it, when the board's build phase can't move to its pull request review without it, or when it is another phase's only move.
+
+  Every board the project stores is rewritten, app boards included: Factory serves a project the stored row, not the code. Boards are only served from code, unmigrated, when the boards storage domain is unavailable.
+
+  **API.** `PATCH /web/factory/projects/:id` still accepts `autoRunEnabled` and `selfReviewEnabled` for one more release and ignores them. Projects no longer return them. `autoApprovePlans` stays accepted and ignored as before.
+
+  Instead of `{ "autoRunEnabled": true }`, set `autoStart` on the phases that should start on their own, in Settings → Work board or with `PATCH /web/factory/projects/:id/boards/work`, sending the board's phases and the `expectedRevision` you read.
+
+- Added creating, editing and deleting boards in the Factory UI. Organization admins get **New board** in the sidebar's Boards section and in **Settings → Boards** (formerly "Work board"), and **Edit board** on every board. ([#29895](https://github.com/mastra-ai/mastra/pull/29895))
+
+  A new board starts from Backlog → Doing → Done or from a copy of an existing board. Its key is derived from the name and can be changed before the board is created. The editor that already edited the Work board now edits any board, and also adds, removes and reorders phases, sets each phase's kind, and edits the board's description. Boards the project or the app added can be deleted once no card sits on them; Work can only be reset.
+
+  Cards still reach a new board through intake routes, so the form links to **Settings → Work Intake**.
+
+- Intake routes now decide where every new card lands. Label routes and a source binding's board are gone, and Work stays the default board through an editable route instead of a hardcoded fallback. ([#29754](https://github.com/mastra-ai/mastra/pull/29754))
+
+  **Why.** Where a card landed used to depend on five things: intake routes, GitHub label routes, the board on a source binding, the board and phase an integration's rule named, and a fallback to Work. Only some of them were visible, and they could disagree. Now one ordered list per project decides, and admins can see and change all of it.
+
+  **Everything else goes to Work › Intake.** Every project gets a new default route, added once at the end of its routes: it has no condition and sends every new card no other route takes to Work › Intake, which is where those cards landed before. Point it at another board to send there every new card the routes above it don't take. A deleted default is not added back. A new route that places new cards now goes just ahead of the first enabled route with no condition that takes every new card, whoever added it, so it can match; a route that only handles status events goes at the end.
+
+  ```bash
+  # Send every new card no other route takes to the Docs board.
+  curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$EVERYTHING_ELSE_ROUTE" -H 'content-type: application/json' -d '{
+    "target": { "boardKey": "docs" },
+    "expectedRevision": 1
+  }'
+  ```
+
+  **Edit routes in Settings.** Settings › Work Intake › Intake routes lists the project's routes in the order they are tried. Admins can turn routes on and off, reorder, edit, add and delete them, and use **Send new cards to** to send every new card the routes above the catch-all don't take to another board (outside authors' items and pull requests still go to Work through their own routes unless you change those too), which also copies the close, reopen and pull request routes onto that board. Everyone else sees them read-only. `GET /web/factory/projects/:id/intake-routes` now also returns `canEdit`.
+
+  **Route on any fact of the work item.** Routes and phase rules can now test where an item lives and what the provider says about it: `source.repository` (GitHub repository or GitLab project path, Linear team key, Jira project key), `source.provider`, `item.key` (`acme/app#42`, `ENG-12`), `item.state` and `item.assignees`. Strings compare case-insensitively. A list fact (`item.labels`, `item.assignees`) now matches `equals`, `not_equals`, `in` and `not_in` by its members, and an empty list counts as missing, so `item.assignees exists` matches only assigned items. Before, `equals` never matched a label and `item.labels exists` matched every card.
+
+  ```bash
+  # Send one repository's issues and pull requests to the Docs board.
+  curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+    "name": "acme/docs goes to Docs",
+    "when": { "operator": "AND", "conditions": [
+      { "field": "source.repository", "operator": "equals", "value": "acme/docs" }
+    ] },
+    "target": { "boardKey": "docs" }
+  }'
+  ```
+
+  **Removed: label routes and binding boards.** Use an intake route with any condition on the work item instead, such as `item.labels contains release` or `source.repository equals acme/app`.
+
+  ```bash
+  # Before: send GitHub issues labelled "release" to the Release board
+  curl -X PUT "$FACTORY_URL/web/intake/label-routes" -d '{"factoryProjectId":"…","integrationId":"github","label":"release","board":"release"}'
+
+  # After: an intake route on the project
+  curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+    "name": "Releases go to Release",
+    "when": { "operator": "AND", "conditions": [
+      { "field": "item.labels", "operator": "contains", "value": "release" },
+      { "field": "source.integration", "operator": "equals", "value": "github" }
+    ] },
+    "target": { "boardKey": "release" }
+  }'
+  ```
+
+  - `GET` and `PUT /web/intake/label-routes` answer `410` with `label_routes_removed`. Stored label routes are no longer read.
+  - `PUT /web/intake/bindings` ignores `board`, and bindings no longer return it. A binding only decides which project a source feeds. Rebinding a source no longer moves its cards.
+  - `/web/gitlab/issues` no longer takes a `board` query parameter.
+  - A GitHub label change updates the card's labels and never moves the card.
+
+  **API changes for host rules**
+
+  - `intakeTarget(boards)` and `withIntakeTarget(boards)` from `@mastra/factory/boards` no longer take a `board` argument: they always name the default board's first phase, since intake routes place the card from there.
+  - `FactoryRuleIntakeTarget.pullRequestReview` is gone, so `context.intake.pullRequestReview` no longer compiles. In an `upsertLinkedWorkItem` decision, file a review request at `context.intake.board` / `context.intake.initialPhase` and let the `Requested reviews go to Review` route place it, or set `skipRules: true` with the stage you want.
+
+  ```ts
+  // Before: file a review request straight into the review phase
+  stage: context.intake!.pullRequestReview ?? context.intake!.initialPhase,
+
+  // After: file it in the default board's first phase; the "Requested reviews go to Review" route moves it
+  board: context.intake!.board,
+  stage: context.intake!.initialPhase,
+  ```
+
+  **Behavior changes**
+
+  - The board and stage an integration rule names no longer place a new card: every integration files new cards in the default board's first phase and the project's routes place them. A host override of `issueOpened` (or any intake rule) that picked a board or a phase such as `stage: 'pr-review'` is now routed like any other card. Add an intake route to get the same placement. `skipRules: true` still files a card exactly where the decision says.
+  - A pull request a maintainer asks Factory to review reaches Work › Review through the default `Pull requests go to Review` route. If you disabled that route, it now lands in Work › Intake.
+  - A Linear, Jira or incident.io source bound to a project without a board now feeds that project. Previously it was skipped until a board was picked. Unbind it if it should not feed the project.
+  - A binding's board used to send one source's cards to its own board. Routes can't always do the same: they see where an item lives, not which binding it came through. A `source.repository` condition matches a GitHub or GitLab repository, a Linear team or a Jira project, so sources that differ by one of those can still go to different boards. Two Linear projects in the same team share the team key, so a route can't send them to different boards; send that team to one board, or tell their items apart by another fact such as `item.labels`. incident.io items have no `source.repository`, so a `source.repository` condition never matches them; route them with `source.provider equals incidentio` or another fact.
+
+- **Intake routes can move cards into any phase.** A route that handles a status event (a close, a reopen, a pull request push or review request) now moves the card to its target phase even when that phase is a working phase such as Triage. One limit stays: on a board with a pull request loop, a pull request card enters only the review phase among working phases. ([#29884](https://github.com/mastra-ai/mastra/pull/29884))
+
+  The move is not a person's go-ahead, so whether work starts follows the usual rules. The board decides: a phase with `autoStart` (and a matching `autoStartWhen`) starts its run, and so does a re-review of a pull request Factory opened. Otherwise the run is proposed for a person to approve. To have a reopen route into Triage re-run Triage straight away, give Triage `autoStart`.
+
+  ```bash
+  curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+    "name": "Reopened bugs re-run Triage",
+    "on": ["work_item.reopened"],
+    "target": { "boardKey": "work", "phaseKey": "triage" }
+  }'
+  ```
+
+- Removed the `source_control_publish_test_check` session tool and the per-project `reviewTestChecksEnabled` setting that gated it. Factory's review skills now report test results only in their `## Factory test report` comment. An app that wants a commit check passes its own tool through `tools` and builds it on the new `factory.reviewedChangeRequest(requestContext)`. That returns the change request a Review run reviews (provider, repository, number, current head and branch), or `undefined` outside a Review run. Its `publishCommitCheck()` refuses a head that moved, a closed change request, and a provider that cannot publish commit checks. ([#29888](https://github.com/mastra-ai/mastra/pull/29888))
+
+  `platformConnectTools(projectId)` is now exported, so an app passing `tools` can keep the Mastra Connect tools Factory offers by default.
+
+  `FactoryProject` no longer has `reviewTestChecksEnabled`, and `FactoryProjectsStorage.update` no longer accepts it. `PATCH /web/factory/projects/:id` still accepts it for one more release and ignores it.
+
+  **Before**
+
+  ```ts
+  await projects.update({ orgId, id, input: { autoRunEnabled: true, reviewTestChecksEnabled: true } });
+  // A review skill called source_control_publish_test_check.
+  ```
+
+  **After**
+
+  ```ts
+  await projects.update({ orgId, id, input: { autoRunEnabled: true } });
+
+  const factory: MastraFactory = new MastraFactory({
+    // ...
+    tools: async ({ requestContext }) => ({
+      ...(await platformConnectTools(process.env.MASTRA_PROJECT_ID!)({ requestContext })),
+      publish_test_check: createTool({
+        id: 'publish_test_check',
+        inputSchema: z.object({ headSha: z.string(), status: z.enum(['success', 'failure']), summary: z.string() }),
+        execute: async (input, { requestContext }) => {
+          const reviewed = await factory.reviewedChangeRequest(requestContext!);
+          if (!reviewed) throw new Error('Only a Review run can publish a test check.');
+          return reviewed.publishCommitCheck({ ...input, name: 'Review / tests', title: input.summary });
+        },
+      }),
+    }),
+  });
+  ```
+
+  Call your tool from your own review skill.
+
+### Patch Changes
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+  - @mastra/code-sdk@1.19.0-alpha.4
+  - @mastra/mcp@2.9.0-alpha.1
+
 ## 0.28.0-alpha.3
 
 ### Minor Changes
