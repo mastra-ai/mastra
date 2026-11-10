@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   FACTORY_INTERACTIVE_KEY,
-  getFactoryCallerId,
   createFactoryInteractiveMarker,
   ensureFactoryAuthUser,
   factoryUserOrgId,
@@ -462,24 +461,18 @@ describe('mountFactoryAuth gate (enabled)', () => {
       await next();
     });
     mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    const turn = (c: { get(key: never): unknown }) => {
-      const requestContext = c.get('requestContext' as never) as RequestContext;
-      return {
-        interactive: requestContext.get(FACTORY_INTERACTIVE_KEY) === true,
-        actingUserId: getFactoryCallerId(requestContext) ?? null,
-      };
-    };
-    app.get('/web/whoami', c => c.json(turn(c)));
-    app.post('/web/github/webhook', c => c.json(turn(c)));
+    const interactive = (c: { get(key: never): unknown }) =>
+      (c.get('requestContext' as never) as RequestContext).get(FACTORY_INTERACTIVE_KEY) === true;
+    app.get('/web/whoami', c => c.json({ interactive: interactive(c) }));
+    app.post('/web/github/webhook', c => c.json({ interactive: interactive(c) }));
 
     const signedIn = await app.request('/web/whoami', {
       headers: { Accept: 'application/json', Authorization: 'Bearer cli-token' },
     });
-    expect(await signedIn.json()).toEqual({ interactive: true, actingUserId: 'user_123' });
+    expect(await signedIn.json()).toEqual({ interactive: true });
 
-    // A webhook starts turns nobody asked for, so what they write names nobody.
     const webhook = await app.request('/web/github/webhook', { method: 'POST' });
-    expect(await webhook.json()).toEqual({ interactive: false, actingUserId: null });
+    expect(await webhook.json()).toEqual({ interactive: false });
   });
 
   it('marks every request interactive when auth is disabled', async () => {

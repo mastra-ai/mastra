@@ -895,25 +895,6 @@ const SESSION_FAVICON_PATHS = new Set([
  */
 export const FACTORY_INTERACTIVE_KEY = 'factoryInteractive';
 
-/**
- * Request-context key naming the person present on a turn: the signed-in
- * caller, or the linked Slack sender. Absent on wakes, webhooks and dispatcher
- * turns, which nobody is present on.
- *
- * Distinct from `user`, the identity whose credentials run the turn: a Slack
- * turn in someone else's session runs on that session owner's.
- *
- * Request bodies can fill any key the server left unset, so the auth gate sets
- * this one on every request it authenticates.
- */
-export const FACTORY_CALLER_KEY = 'factoryCaller';
-
-/** The person present on this turn, or `undefined` when nobody is. */
-export function getFactoryCallerId(requestContext: { get: (key: string) => unknown } | undefined): string | undefined {
-  const userId = requestContext?.get(FACTORY_CALLER_KEY);
-  return typeof userId === 'string' && userId.length > 0 ? userId : undefined;
-}
-
 /** With auth disabled there is no gate; this marks every HTTP request as interactive instead. */
 export function createFactoryInteractiveMarker() {
   return async (c: Context, next: () => Promise<void>): Promise<void> => {
@@ -999,7 +980,6 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       requestContext?.set('user', user);
       requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
       requestContext?.set(FACTORY_INTERACTIVE_KEY, true);
-      requestContext?.set(FACTORY_CALLER_KEY, getFactoryAuthUserId(user));
       return next();
     }
 

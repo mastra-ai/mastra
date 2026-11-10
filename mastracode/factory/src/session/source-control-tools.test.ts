@@ -6,25 +6,31 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { FACTORY_CALLER_KEY } from '../auth.js';
+import { FACTORY_INTERACTIVE_KEY } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { FACTORY_SLACK_SENDER_KEY } from '../tools/scope.js';
 import { ensureFactorySourceSession } from './factory-session.js';
 import { selfReviewApprovedHead } from './self-review-gate.js';
 import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.js';
 
-/** `userId` is whose credentials run the turn; `callerId` is the person present on it, `null` when nobody is. */
+/**
+ * `userId` is whose credentials run the turn. `steeredBy` is who drives it: `'caller'` for a signed-in
+ * request, a user id for a linked Slack sender (whose turn runs on the session owner's credentials),
+ * `null` for a wake or dispatcher turn nobody drives.
+ */
 function requestContext({
   orgId = 'org-1',
   userId = 'user-1',
-  callerId = userId,
+  steeredBy = 'caller',
   sessionId = 'session-1',
-}: { orgId?: string; userId?: string; callerId?: string | null; sessionId?: string } = {}) {
+}: { orgId?: string; userId?: string; steeredBy?: string | null; sessionId?: string } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
-  if (callerId) requestContext.set(FACTORY_CALLER_KEY, callerId);
+  if (steeredBy) requestContext.set(FACTORY_INTERACTIVE_KEY, true);
+  if (steeredBy && steeredBy !== 'caller') requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: steeredBy, orgId });
   requestContext.set('controller', {
     // The session runs under its Factory, so only its session id names the source-control session.
     sessionId,
@@ -205,12 +211,12 @@ describe('createSourceControlTools', () => {
   // `user-1` connected the repository and owns `session-1`. A turn in that session runs on their
   // credentials whoever sent the message, so naming them credits a write someone else asked for.
   it.each([
-    { who: 'the teammate', when: 'they drive the session from Slack', callerId: 'teammate-1', named: 'teammate-1' },
-    { who: 'the owner', when: 'the session works on with nobody present', callerId: null, named: 'user-1' },
-  ])('names $who on a change request when $when', async ({ callerId, named }) => {
+    { who: 'the teammate', when: 'they steer the session from Slack', steeredBy: 'teammate-1', named: 'teammate-1' },
+    { who: 'the owner', when: 'the session works on with nobody steering', steeredBy: null, named: 'user-1' },
+  ])('names $who on a change request when $when', async ({ steeredBy, named }) => {
     const setup = await fixture();
     const tools = await createSourceControlTools({
-      requestContext: requestContext({ callerId }),
+      requestContext: requestContext({ steeredBy }),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });
@@ -244,8 +250,8 @@ describe('createSourceControlTools', () => {
       ...(releasedBy ? { attributeToUserId: releasedBy } : {}),
     });
     const tools = await createSourceControlTools({
-      // A dispatcher turn: the session owner's credentials run it and nobody is present.
-      requestContext: requestContext({ userId: session.userId, sessionId: session.sessionId, callerId: null }),
+      // A dispatcher turn: the session owner's credentials run it and nobody steers it.
+      requestContext: requestContext({ userId: session.userId, sessionId: session.sessionId, steeredBy: null }),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });

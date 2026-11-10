@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FACTORY_INTERACTIVE_KEY, getFactoryCallerId } from '../../auth.js';
+import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
 import { factoryProjectSettingsUserId } from '../../storage/domains/projects/base.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
@@ -428,8 +428,6 @@ describe('handler dispatch gating', () => {
       expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
       expect(ctx.requestContext.get(FACTORY_SLACK_SENDER_KEY)).toEqual({ userId: senderId, orgId: 'org-1' });
       expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBe(true);
-      // The owner's credentials run the turn, but what it writes is for whoever sent the message.
-      expect(getFactoryCallerId(ctx.requestContext)).toBe(senderId);
       expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
     },
   );
@@ -459,7 +457,6 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(thread.post).toHaveBeenCalledWith('This private Factory session belongs to another user.');
     expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).not.toBe(true);
-    expect(getFactoryCallerId(ctx.requestContext)).toBeUndefined();
   });
 
   it("authorizes a Factory-resource thread as its session's owner", async () => {
