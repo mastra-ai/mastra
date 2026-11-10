@@ -3,11 +3,15 @@ import type { DashboardColumn, DashboardWidget, DashboardWidgetView } from '@mas
 import { createTool } from '@mastra/core/tools';
 import { METRICS_DASHBOARD } from '@mastra/playground-ui/domains/dashboards/metrics-dashboard';
 import { afterEach, expect, it } from 'vitest';
+import { z } from 'zod/v4';
 import {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
   createObservabilityDashboardInputSchema,
+  createObservabilityWidgetInputSchema,
   observabilityDashboardOutputSchema,
+  observabilityWidgetInputSchema,
   toObservabilityDashboard,
+  toObservabilityWidget,
 } from '../observability-dashboard';
 import type { ObservabilityDashboardInput, ObservabilityWidgetDraft } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
@@ -347,4 +351,32 @@ it.each([
   const { tools } = await client.listTools();
 
   expect(metricNamesIn(tools.find(t => t.name === 'showObservabilityDashboard')!.inputSchema)).toEqual([]);
+});
+
+it('converts one widget as a dashboard converts it, with a fresh id and the full width when left out', () => {
+  const { id: _id, span: _span, ...draft } = draftOf(agentRunsChart);
+
+  const widget = toObservabilityWidget(draft);
+  const { dashboard } = toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draft] }] } });
+
+  expect(widget).toEqual({ ...dashboard.rows[0]!.widgets[0], id: expect.any(String) });
+  expect(widget.id).not.toBe(dashboard.rows[0]!.widgets[0]!.id);
+  expect(widget.span).toBe(12);
+  expect(toObservabilityWidget(draftOf(agentRunsKpi))).toEqual(agentRunsKpi);
+});
+
+it("refuses a widget that doesn't check, saying where from the widget", () => {
+  const draft = { title: 'Spend', table: { groupBy: ['model'], columns: [] } } as never;
+
+  expect(observabilityWidgetInputSchema.safeParse(draft).success).toBe(false);
+  expect(() => toObservabilityWidget(draft)).toThrow(/^The widget is invalid:[\s\S]*table/);
+  expect(() => toObservabilityWidget({ title: 'Two kinds', kpis: {}, table: {} } as never)).toThrow(/exactly one of/);
+});
+
+it("limits one widget's metric names to the catalog, as the dashboard schema does", () => {
+  const schema = createObservabilityWidgetInputSchema({ metricNames: ['mastra_agent_duration_ms'] });
+
+  expect(metricNamesIn(z.toJSONSchema(schema, { io: 'input' }))).toEqual(['"enum":["mastra_agent_duration_ms"]']);
+  expect(schema.safeParse(draftOf(agentRunsKpi)).success).toBe(true);
+  expect(metricNamesIn(z.toJSONSchema(observabilityWidgetInputSchema, { io: 'input' }))).toEqual([]);
 });

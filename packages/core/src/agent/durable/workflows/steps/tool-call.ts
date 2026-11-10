@@ -2029,10 +2029,16 @@ export function createDurableToolCallStep() {
       };
       let mappingFailure: { error: unknown } | undefined;
 
-      // A run that loses its thread lease while this call runs lets it finish before it stops.
+      // A run that loses its thread lease while this call runs lets it finish before it stops. The step stays
+      // running until the tool body settles, even after the abort grace hands control back to the loop.
       const settleRunTool = startRunStep(registryEntry);
       try {
-        ownership?.throwIfLost();
+        try {
+          ownership?.throwIfLost();
+        } catch (error) {
+          settleRunTool();
+          throw error;
+        }
         const outcome = await executeToolCall({
           tool: tool as any,
           args: cleanedArgs,
@@ -2043,8 +2049,9 @@ export function createDurableToolCallStep() {
           assertNotBailedOut: () => ownership?.throwIfLost(),
           // Run-activity tracking brackets live execution (durable-only bookkeeping).
           acquireExecution: () => markRunActive(runId),
+          onToolSettled: settleRunTool,
           logger: logger as any,
-        }).finally(settleRunTool);
+        });
 
         ownership?.throwIfLost();
         if (outcome.status === 'error') {

@@ -405,7 +405,21 @@
                         "role": "user",
                         "content": "Execute the simpleWorkflow with test input"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-workflow-1",
+                          "toolName": "workflow-simpleWorkflow",
+                          "args": {
+                            "inputData": {
+                              "input": "test input"
+                            }
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 {
@@ -887,7 +901,11 @@
                         "role": "tool",
                         "content": "[tool-result: workflow-simpleWorkflow]"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 generate response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

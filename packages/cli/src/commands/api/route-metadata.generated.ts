@@ -2097,6 +2097,7 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "pagination",
+      "textSearch",
       "timeRange",
       "where"
     ],
@@ -2178,6 +2179,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "orderBy",
       "page",
+      "textSearch",
       "timeRange",
       "where"
     ],
