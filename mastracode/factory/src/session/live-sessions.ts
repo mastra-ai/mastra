@@ -59,10 +59,10 @@ export class LiveSessions {
     controller.onSessionCreated(session => this.#track(session));
     controller.onSessionDeleted(session => {
       const id = session.identity.getId();
-      const wasShown = this.isRunning(id) || this.parked(id) !== undefined;
       this.#byId.get(id)?.unsubscribe();
       this.#byId.delete(id);
-      if (wasShown) for (const listener of this.#runListeners) listener(session);
+      // The controller resets the run before it reports the deletion, so the session can no longer say a board showed it.
+      for (const listener of this.#runListeners) listener(session);
     });
   }
 

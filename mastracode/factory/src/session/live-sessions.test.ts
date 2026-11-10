@@ -1,5 +1,9 @@
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { EventEmitterPubSub } from '@mastra/core/events';
+import { InMemoryStore } from '@mastra/core/storage';
+import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { feedTopic } from '../feed-events.js';
@@ -165,8 +169,9 @@ describe('LiveSessions', () => {
     expect(changed).toHaveBeenLastCalledWith(fake.session);
 
     controller.delete(fake.session);
+    expect(changed).toHaveBeenCalledTimes(6);
     fake.park('call-2', 'ask_user');
-    expect(changed).toHaveBeenCalledTimes(5);
+    expect(changed).toHaveBeenCalledTimes(6);
   });
 
   it('announces a parked session going away, so the inbox drops its item', () => {
@@ -183,33 +188,57 @@ describe('LiveSessions', () => {
     expect(changed).toHaveBeenCalledTimes(2);
     expect(registry.parkedIn('project-1')).toEqual([]);
   });
+});
 
-  it('announces a session torn down mid-run, so its running marker clears', () => {
-    const controller = fakeController();
-    const registry = new LiveSessions(controller);
-    const running = { value: true };
-    const fake = fakeSession('session-1', running);
-    controller.create(fake.session);
-    const changed = vi.fn();
-    registry.onRunChanged(changed);
+describe('LiveSessions on a real controller', () => {
+  // The controller resets a session's run before it tells anyone the session is gone,
+  // so by then the registry can no longer ask the session whether it was running.
+  it('announces a session deleted while its run is in flight, so other boards drop its running marker', async () => {
+    let inFlight = false;
+    const model = new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(stream) {
+            stream.enqueue({ type: 'stream-start', warnings: [] });
+            inFlight = true;
+            // Never finishes: only the deletion ends this run.
+          },
+        }),
+      }),
+    });
+    const controller = new AgentController({
+      id: 'code',
+      storage: new InMemoryStore(),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({ id: 'agent', name: 'agent', instructions: 'test', model }),
+        },
+      ],
+    });
+    await controller.init();
+    const eventBus = new EventEmitterPubSub();
+    const registry = liveSessionsTouchingTheFeed(controller, eventBus, { getBySessionId: async () => null });
+    const frames: unknown[] = [];
+    await eventBus.subscribe(feedTopic('org-1', 'project-1'), event => frames.push(event));
+    const session = await controller.createSession({
+      id: 'session-1',
+      resourceId: 'resource-1',
+      tags: { factoryOrgId: 'org-1', factoryProjectId: 'project-1' },
+    });
+    await session.thread.create();
+    void session.sendMessage({ content: 'go' }).catch(() => {});
+    await vi.waitFor(() => expect(inFlight && registry.isRunning('session-1')).toBe(true));
+    // The run's own start frame has landed; only the deletion can add another.
+    await vi.waitFor(() => expect(frames.length).toBeGreaterThan(0));
+    const framesBeforeDeletion = frames.length;
 
-    controller.delete(fake.session);
+    await controller.deleteSession({ sessionId: 'session-1' });
 
-    expect(changed).toHaveBeenCalledOnce();
     expect(registry.isRunning('session-1')).toBe(false);
-  });
-
-  it('stays quiet when an idle session is torn down, since no board showed it', () => {
-    const controller = fakeController();
-    const registry = new LiveSessions(controller);
-    const fake = fakeSession('session-1');
-    controller.create(fake.session);
-    const changed = vi.fn();
-    registry.onRunChanged(changed);
-
-    controller.delete(fake.session);
-
-    expect(changed).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(frames).toHaveLength(framesBeforeDeletion + 1));
   });
 });
 
