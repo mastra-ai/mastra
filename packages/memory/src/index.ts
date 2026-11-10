@@ -1563,11 +1563,7 @@ ${workingMemory}`;
       threadIds.map(async threadId => {
         try {
           const thread = await memoryStore.getThreadById({ threadId });
-          if (!thread?.metadata) return;
-          // Cloned threads keep their clone bookkeeping in metadata as a nested object holding a
-          // Date, which stores with flat metadata (Pinecone) reject. It is not a filter target.
-          const { clone: _clone, ...metadata } = thread.metadata;
-          metadataByThread.set(threadId, metadata);
+          if (thread?.metadata) metadataByThread.set(threadId, thread.metadata);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           throw new Error(

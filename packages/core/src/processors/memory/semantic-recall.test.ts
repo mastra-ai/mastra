@@ -1121,6 +1121,38 @@ describe('SemanticRecall', () => {
       });
     });
 
+    it('embeds the chunks of a long message in one request, and still writes other messages when one fails', async () => {
+      const doEmbed = vi.fn(async ({ values }: { values: string[] }) => {
+        if (values.includes('broken')) throw new Error('rate limited');
+        return { embeddings: values.map(() => [0.1, 0.2, 0.3]) };
+      });
+      const upsert = vi.fn().mockResolvedValue(undefined);
+      const processor = new SemanticRecall({
+        storage: { listMessages: vi.fn(), getThreadById: vi.fn().mockResolvedValue(null) } as any,
+        embedder: { modelId: 'test-model', doEmbed } as any,
+        vector: { upsert, query: vi.fn(), createIndex: vi.fn() } as any,
+        maxChunkChars: 20,
+      });
+      const longText = 'zebra stripes '.repeat(10).trim();
+      const messages: MastraDBMessage[] = [
+        createTestMessage('msg-long', 'user', longText),
+        createTestMessage('msg-broken', 'assistant', 'broken'),
+      ];
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: 'thread-1' }, resourceId: 'resource-1' });
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      await processor.processOutputResult({ messages, messageList, abort: vi.fn() as any, requestContext });
+
+      const longCalls = doEmbed.mock.calls.filter(([args]) => !args.values.includes('broken'));
+      expect(longCalls).toHaveLength(1);
+      expect(longCalls[0]![0].values.length).toBeGreaterThan(1);
+      const { ids } = upsert.mock.calls[0]![0];
+      expect(ids[0]).toBe('msg-long');
+      expect(ids).not.toContain('msg-broken');
+    });
+
     it('should skip system messages when creating embeddings', async () => {
       const mockStorage = {
         listMessages: vi.fn(),

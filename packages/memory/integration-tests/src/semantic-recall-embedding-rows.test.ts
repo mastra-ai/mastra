@@ -170,6 +170,72 @@ describe.each(['plain', 'durable', 'evented'] as const)('Semantic recall rows on
   );
 });
 
+describe.each(['plain', 'durable'] as const)('Semantic recall embedder failure on %s', engine => {
+  // The processor logs a failed message and keeps the others. Durable runs embed it again in the
+  // finalize flush; plain runs have no flush after the processors, so the message stays unembedded.
+  it(
+    engine === 'plain'
+      ? 'still writes the other messages when one embedding call fails'
+      : 'embeds a message in the finalize flush when the processor failed to',
+    async () => {
+      const storage = new LibSQLStore({ id: randomUUID(), url: ':memory:' });
+      const { vector } = countingVector();
+      const embedder = keywordEmbedder();
+      const doEmbed = embedder.model.doEmbed;
+      // A reply text no other test embeds, so the process-wide embedding cache can't serve it.
+      const reply = `noted ${randomUUID()}`;
+      let failed = false;
+      embedder.model.doEmbed = async args => {
+        if (!failed && args.values.includes(reply)) {
+          failed = true;
+          throw new Error('rate limited');
+        }
+        return doEmbed(args);
+      };
+      const memory = new Memory({
+        storage,
+        vector,
+        embedder: embedder.model,
+        options: { lastMessages: 2, semanticRecall: { topK: 1, messageRange: 0 }, generateTitle: false },
+      });
+      const base = new Agent({
+        id: randomUUID(),
+        name: 'Recall',
+        instructions: 'Answer briefly.',
+        memory,
+        model: createOpenAI({ apiKey: 'test-key', baseURL: `${llm.url}/v1` }).chat('gpt-4o'),
+      });
+      const agent = engine === 'plain' ? base : createDurableAgent({ agent: base });
+      const mastra = new Mastra({ agents: { agent }, storage, logger: false });
+      llm.clearFixtures();
+      llm.on({ endpoint: 'chat' }, { content: reply });
+      const thread = randomUUID();
+
+      try {
+        const result = await agent.stream(FACT, { memory: { thread, resource: randomUUID() } });
+        const output = 'output' in result ? result.output : result;
+        await output.consumeStream();
+        if ('cleanup' in result) result.cleanup();
+
+        const { messages } = await (await storage.getStore('memory'))!.listMessages({
+          threadId: thread,
+          perPage: false,
+        });
+        const rowIds = (await readRows(vector)).map(row => row.id);
+        const userMessage = messages.find(message => message.role === 'user')!;
+        const replyMessage = messages.find(message => message.role === 'assistant')!;
+
+        expect(failed).toBe(true);
+        expect(rowIds).toContain(userMessage.id);
+        if (engine === 'plain') expect(rowIds).not.toContain(replyMessage.id);
+        else expect(rowIds).toContain(replyMessage.id);
+      } finally {
+        await mastra.shutdown?.({ drainTimeout: 1000 });
+      }
+    },
+  );
+});
+
 describe('Memory message rows', () => {
   async function setup({ maxChunkChars, maxInputTokens }: { maxChunkChars?: number; maxInputTokens?: number } = {}) {
     const storage = new LibSQLStore({ id: randomUUID(), url: ':memory:' });

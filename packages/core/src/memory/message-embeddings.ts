@@ -90,6 +90,12 @@ export interface BuildMessageEmbeddingRowsOptions {
    * embed text themselves.
    */
   embed?: MessageChunkEmbedder;
+  /**
+   * Called when embedding one message fails. When given, that message is left out of the rows
+   * (and of the record) and the others are still written; when omitted, the failure rejects the
+   * whole build.
+   */
+  onEmbedError?: (error: unknown, message: MastraDBMessage) => void;
   /** Character ceiling per chunk. Resolve it with {@link resolveMaxChunkChars}. */
   maxChunkChars: number;
   /**
@@ -152,6 +158,24 @@ async function hash64(text: string): Promise<string> {
     throw error;
   });
   return (await hasherPromise).h64(text).toString(16);
+}
+
+// How many messages one build embeds at once. Each message is one embedder request.
+const MAX_CONCURRENT_EMBED_CALLS = 4;
+
+/** Like `Promise.all(items.map(fn))`, with at most `limit` calls running at once. */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await fn(items[index]!);
+      }
+    }),
+  );
+  return results;
 }
 
 function isEmbeddable(message: MastraDBMessage): boolean {
@@ -300,6 +324,7 @@ export async function messageVectorId(messageId: string, chunkIndex: number): Pr
 export async function buildMessageEmbeddingRows({
   items,
   embed,
+  onEmbedError,
   maxChunkChars,
   loadThreadMetadata,
   defaults,
@@ -356,40 +381,54 @@ export async function buildMessageEmbeddingRows({
   const rows: MessageEmbeddingRows = { ids: [], metadata: [], embeddedEntries: [] };
   if (pending.length === 0) return rows;
 
+  let written = pending;
   if (embed) {
-    // One embedder call per message, as both writers made before, so a request never carries
-    // more than one message's chunks.
-    const embedded = await Promise.all(pending.map(entry => embed(entry.chunks)));
-    embedded.forEach((result, i) => {
-      if (result.embeddings.length !== pending[i]!.chunks.length) {
-        throw new MastraError({
-          id: 'MASTRA_MEMORY_EMBEDDER_MISSING_EMBEDDINGS',
-          domain: ErrorDomain.MASTRA_MEMORY,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `The embedder returned ${result.embeddings.length} embeddings for ${pending[i]!.chunks.length} chunks.`,
-        });
+    // One embedder call per message, as both writers made before, with a few in flight at a time
+    // so a large batch (a cloned thread, many tool messages) doesn't flood the provider.
+    const embedded = await mapWithConcurrency(pending, MAX_CONCURRENT_EMBED_CALLS, async entry => {
+      try {
+        const result = await embed(entry.chunks);
+        if (result.embeddings.length !== entry.chunks.length) {
+          throw new MastraError({
+            id: 'MASTRA_MEMORY_EMBEDDER_MISSING_EMBEDDINGS',
+            domain: ErrorDomain.MASTRA_MEMORY,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `The embedder returned ${result.embeddings.length} embeddings for ${entry.chunks.length} chunks.`,
+          });
+        }
+        return result;
+      } catch (error) {
+        if (!onEmbedError) throw error;
+        onEmbedError(error, entry.message);
+        return undefined;
       }
     });
-    rows.vectors = embedded.flatMap(result => result.embeddings);
+    written = pending.filter((_, i) => embedded[i] !== undefined);
+    const results = embedded.filter(result => result !== undefined);
+    rows.vectors = results.flatMap(result => result.embeddings);
     rows.dimension = rows.vectors[0]?.length;
-    const tokens = embedded.reduce((sum, result) => sum + (result.usage?.tokens ?? 0), 0);
+    const tokens = results.reduce((sum, result) => sum + (result.usage?.tokens ?? 0), 0);
     if (tokens > 0) rows.usage = { tokens };
   } else {
     rows.documents = pending.flatMap(entry => entry.chunks);
   }
+  if (written.length === 0) return rows;
 
   const threadIds = [
-    ...new Set(pending.map(({ message }) => message.threadId ?? defaults?.threadId).filter(id => id !== undefined)),
+    ...new Set(written.map(({ message }) => message.threadId ?? defaults?.threadId).filter(id => id !== undefined)),
   ];
   const threadMetadata = loadThreadMetadata && threadIds.length > 0 ? await loadThreadMetadata(threadIds) : undefined;
 
-  for (const { message, text, recordEntry, chunks } of pending) {
+  for (const { message, text, recordEntry, chunks } of written) {
     const threadId = message.threadId ?? defaults?.threadId;
+    // A cloned thread keeps its clone bookkeeping in metadata as a nested object holding a Date,
+    // which stores with flat metadata (Pinecone) reject. It is not a filter target.
+    const { clone: _clone, ...threadAttributes } = (threadId ? threadMetadata?.get(threadId) : undefined) ?? {};
     const createdAt = message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt);
     for (const [chunkIndex] of chunks.entries()) {
       rows.ids.push(await messageVectorId(message.id, chunkIndex));
       rows.metadata.push({
-        ...(threadId ? threadMetadata?.get(threadId) : undefined),
+        ...threadAttributes,
         message_id: message.id,
         thread_id: threadId,
         resource_id: message.resourceId ?? defaults?.resourceId,

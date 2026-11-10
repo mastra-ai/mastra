@@ -542,6 +542,42 @@ export class SemanticRecall implements Processor {
   }
 
   /**
+   * Embeds the chunks of one message, reusing cached embeddings. The cache misses go out in one
+   * `doEmbed` call (split only by the model's `maxEmbeddingsPerCall`), so a long message doesn't
+   * fan out into one request per chunk.
+   *
+   * @returns One embedding per chunk, in order.
+   */
+  private async embedChunks(chunks: string[], indexName: string): Promise<number[][]> {
+    const keys = await Promise.all(chunks.map(chunk => this.hashContent(chunk, indexName)));
+    const embeddings = keys.map(key => globalEmbeddingCache.get(key));
+    const missing = embeddings.flatMap((embedding, i) => (embedding ? [] : [i]));
+    if (missing.length === 0) return embeddings as number[][];
+
+    if (!this.embedder) {
+      throw new Error(
+        'SemanticRecall was asked to embed text but has no embedder, and its vector store does not embed server-side.',
+      );
+    }
+    const declaredLimit = Number(await this.embedder.maxEmbeddingsPerCall);
+    const perCall = Number.isFinite(declaredLimit) && declaredLimit > 0 ? declaredLimit : missing.length;
+    for (let start = 0; start < missing.length; start += perCall) {
+      const batch = missing.slice(start, start + perCall);
+      const result = await this.embedder.doEmbed({
+        values: batch.map(i => chunks[i]!),
+        ...(this.embedderOptions as any),
+      });
+      batch.forEach((chunkIndex, i) => {
+        const embedding = result.embeddings[i];
+        if (!embedding) return;
+        embeddings[chunkIndex] = embedding;
+        globalEmbeddingCache.set(keys[chunkIndex]!, embedding);
+      });
+    }
+    return embeddings.filter(embedding => embedding !== undefined);
+  }
+
+  /**
    * Metadata of the threads messages are written for. The run's thread carries its metadata when
    * the agent loaded it; storage is read only for threads that arrive without it, such as a
    * durable finalize step that rebuilt the request context from an id.
@@ -666,17 +702,18 @@ export class SemanticRecall implements Processor {
         return messageList || messages;
       }
 
-      // One failure (an embedder error, a metadata read) skips the whole batch here. Nothing is
-      // recorded for it, so the save-queue flush embeds those messages through Memory.saveMessages.
       const embeddedMessages = messageList?.getEmbeddedMessages();
       const rows = await buildMessageEmbeddingRows({
         items,
         embed: this.isSelfEmbedding
           ? undefined
-          : async chunks => {
-              const results = await Promise.all(chunks.map(chunk => this.embedMessageContent(chunk, indexName)));
-              return { embeddings: results.map(result => result.embeddings[0]).filter(e => e !== undefined) };
-            },
+          : async chunks => ({ embeddings: await this.embedChunks(chunks, indexName) }),
+        // A message whose embedding fails is logged and skipped while the others are written. It
+        // stays out of the record, so a later save-queue flush (savePerStep, the durable finalize)
+        // can still embed it; a plain agent without such a flush leaves it unembedded.
+        onEmbedError: (error, message) => {
+          this.logger?.error(`[SemanticRecall] Error creating embedding for message ${message.id}:`, { error });
+        },
         maxChunkChars: this.maxChunkChars,
         loadThreadMetadata: threadIds => this.loadThreadMetadata(threadIds, thread),
         defaults: { threadId, resourceId },

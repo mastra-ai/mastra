@@ -194,6 +194,62 @@ describe('buildMessageEmbeddingRows', () => {
     });
   });
 
+  it('writes the other messages when one fails to embed and an error handler is given', async () => {
+    const onEmbedError = vi.fn();
+    const items = [{ message: message({ id: 'ok', text: 'fine' }) }, { message: message({ id: 'bad', text: 'boom' }) }];
+    const flakyEmbed = async (chunks: string[]) => {
+      if (chunks[0] === 'boom') throw new Error('rate limited');
+      return { embeddings: chunks.map(() => [1, 0, 0]) };
+    };
+
+    const rows = await buildMessageEmbeddingRows({
+      items,
+      embed: flakyEmbed,
+      onEmbedError,
+      maxChunkChars: 100,
+      embeddedMessages: new Map(),
+      indexName: 'i',
+    });
+
+    expect(rows.ids).toEqual(['ok']);
+    expect(rows.embeddedEntries.map(([key]) => key)).toEqual(['i\u0000ok']);
+    expect(onEmbedError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'rate limited' }),
+      expect.objectContaining({ id: 'bad' }),
+    );
+    await expect(buildMessageEmbeddingRows({ items, embed: flakyEmbed, maxChunkChars: 100 })).rejects.toThrow(
+      'rate limited',
+    );
+  });
+
+  it('keeps a large batch to a few embedder requests at a time', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const items = Array.from({ length: 20 }, (_, i) => ({ message: message({ id: `m${i}`, text: `text ${i}` }) }));
+    await buildMessageEmbeddingRows({
+      items,
+      embed: async chunks => {
+        peak = Math.max(peak, ++inFlight);
+        await new Promise(resolve => setTimeout(resolve, 1));
+        inFlight--;
+        return { embeddings: chunks.map(() => [1, 0, 0]) };
+      },
+      maxChunkChars: 100,
+    });
+    expect(peak).toBeLessThanOrEqual(4);
+  });
+
+  it('leaves nested clone bookkeeping out of row metadata', async () => {
+    const rows = await buildMessageEmbeddingRows({
+      items: [{ message: message() }],
+      maxChunkChars: 100,
+      loadThreadMetadata: async () =>
+        new Map([['thread-1', { projectId: 'p1', clone: { sourceThreadId: 't0', clonedAt: new Date() } }]]),
+    });
+    expect(rows.metadata[0]).toMatchObject({ projectId: 'p1' });
+    expect(rows.metadata[0]).not.toHaveProperty('clone');
+  });
+
   it('applies the text rules to text passed in by an edit', async () => {
     const edited = await buildMessageEmbeddingRows({
       items: [{ message: message(), text: 'kept <working_memory>hidden</working_memory>' }],
