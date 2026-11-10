@@ -213,11 +213,6 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
     label: 'Request review',
     detailKeys: ['changeRequestId'],
   },
-  source_control_publish_test_check: {
-    pose: 'inspecting',
-    label: 'Publish test result',
-    detailKeys: ['title', 'changeRequestId'],
-  },
   source_control_comment_change_request: {
     pose: 'messaging',
     label: 'Post comment',

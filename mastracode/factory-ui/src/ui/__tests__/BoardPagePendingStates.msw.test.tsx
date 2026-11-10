@@ -28,6 +28,7 @@ const workItem = {
   orgId: 'org-1',
   createdBy: 'user-1',
   githubProjectId: FACTORY_ID,
+  factoryProjectId: FACTORY_ID,
   source: 'github-issue',
   sourceKey: 'github-issue:1',
   parentWorkItemId: null,
@@ -1386,7 +1387,7 @@ describe('Board card pending states', () => {
     expect(within(card).getByText('Starting an automated run…')).toBeVisible();
     expect(transitionRequests).toEqual([]);
 
-    dropInto('review');
+    dropInto('intake');
     await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
     transitionGate.resolve();
     await waitForMutationsIdle(client);

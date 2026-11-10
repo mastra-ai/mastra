@@ -56,6 +56,11 @@ export function whenRunStepsSettle(owner: object | undefined, callback: () => vo
   else callback();
 }
 
+/** Whether a step of the run this object owns is running right now. */
+export function hasRunningRunStep(owner: object | undefined): boolean {
+  return !!owner && runningSteps.has(owner);
+}
+
 /**
  * Whether the run this object owns has a step running, or had one settle within the last `withinMs`. A run that was
  * aborted has none worth waiting for, even while a step is still winding down.

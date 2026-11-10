@@ -231,6 +231,8 @@
   body {
     background-color: var(--sidebar);
     color: var(--foreground);
+    /* Text without a role inherits the regular weight instead of the browser's 400. */
+    font-weight: var(--font-weight-normal);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

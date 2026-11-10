@@ -62,6 +62,7 @@ export function planTraceQuery(
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
     const binding = digestBinding({
+      textSearch: request.textSearch,
       timeRange,
       where,
       result,
@@ -73,6 +74,7 @@ export function planTraceQuery(
     const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
     return {
       result,
+      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -87,6 +89,7 @@ export function planTraceQuery(
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
   const deltaBinding = digestBinding({
+    textSearch: request.textSearch,
     timeRange,
     where,
     result: 'trace-delta',
@@ -96,6 +99,7 @@ export function planTraceQuery(
   if (request.mode === 'delta') {
     return {
       result,
+      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -109,6 +113,7 @@ export function planTraceQuery(
   if (request.pagination) {
     return {
       result,
+      textSearch: request.textSearch,
       timeRange,
       where,
       scope,
@@ -122,6 +127,7 @@ export function planTraceQuery(
 
   const page = request.page ?? { limit: 100 };
   const binding = digestBinding({
+    textSearch: request.textSearch,
     timeRange,
     where,
     result,
@@ -135,6 +141,7 @@ export function planTraceQuery(
   }
   return {
     result,
+    textSearch: request.textSearch,
     timeRange,
     where,
     scope,
