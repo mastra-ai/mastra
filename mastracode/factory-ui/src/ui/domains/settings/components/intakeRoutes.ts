@@ -97,8 +97,8 @@ function sameRule(a: RuleGroup | null, b: RuleGroup | null): boolean {
 
 /**
  * The route changes that send the project's new cards to `boardKey`'s first phase: the catch-all
- * route (the last route taking every new card) points there, and each status-event route of the
- * board the catch-all pointed at gets a copy on `boardKey`, since a status event only moves a card
+ * route (the first route taking every new card, the one that places them) points there, and each
+ * status-event route of the board the catch-all pointed at gets a copy on `boardKey`, since a status event only moves a card
  * through routes on the card's own board. A copy is skipped when `boardKey` has no phase playing
  * the same part, or already has such a route.
  */
