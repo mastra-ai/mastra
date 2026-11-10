@@ -58,7 +58,7 @@ To run once at a fixed time, pass `runAt` instead of `cron`:
 ```typescript
 await mastra.schedules.create({
   workflowId: 'send-report',
-  runAt: new Date('2026-12-01T09:00:00Z'),
+  runAt: new Date(Date.now() + 60 * 60 * 1000), // One hour from now
 })
 ```
 

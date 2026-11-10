@@ -92,7 +92,8 @@ To run a workflow once at a fixed time, use `runAt`:
 const launchAnnouncement = createWorkflow({
   id: 'launch-announcement',
   schedule: {
-    runAt: new Date('2026-12-01T09:00:00Z'),
+    // Set this to a stable future ISO timestamp in your deployment environment.
+    runAt: new Date(process.env.LAUNCH_ANNOUNCEMENT_AT!),
     inputData: { userId: 'system' },
   },
   // ...
