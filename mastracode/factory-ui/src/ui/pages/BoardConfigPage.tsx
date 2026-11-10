@@ -16,6 +16,7 @@ import { BoardConfigHeader } from '../domains/boardConfig/components/BoardConfig
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { boardPath } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
+import { LoadErrorState } from '../ui/LoadErrorState';
 import { SettingsRowsSkeleton } from '../ui/SettingsRowsSkeleton';
 
 /** Settings read best in a short line, so the page keeps to a centered column narrower than the layout's. */
@@ -83,16 +84,17 @@ export function BoardConfigPage() {
           <SettingsContainer>
             <SettingsRowsSkeleton label="Loading board" rows={3} />
           </SettingsContainer>
-        ) : query.isError ? (
+        ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
           <EmptyState
             variant="fill"
-            titleSlot={
-              <span role="alert">
-                {query.error instanceof BoardRequestError && query.error.code === 'board_not_found'
-                  ? 'Board unavailable: this board is not installed.'
-                  : 'Unable to load this board.'}
-              </span>
-            }
+            titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>}
+          />
+        ) : query.isError ? (
+          <LoadErrorState
+            title="Couldn’t load this board"
+            error={query.error}
+            onRetry={() => void query.refetch()}
+            retrying={query.isFetching}
           />
         ) : (
           <BoardConfigEditor

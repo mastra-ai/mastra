@@ -11,6 +11,7 @@ import type { StoredBoardResponse } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useBoardQuery } from '../../../../hooks/useBoardEditor';
 import { useOverlays } from '../../../lib/overlays';
+import { SidebarLoadError } from '../../../ui/LoadErrorState';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
@@ -51,7 +52,9 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills }: 
         {query.isPending ? (
           <SidebarNavigationSkeleton label="Loading phases" rows={4} />
         ) : query.isError ? (
-          <p role="alert">Unable to load phases.</p>
+          <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
+            Couldn’t load phases
+          </SidebarLoadError>
         ) : (
           <PhaseList
             factoryId={factoryId}

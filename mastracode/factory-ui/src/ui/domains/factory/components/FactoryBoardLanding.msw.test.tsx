@@ -69,6 +69,61 @@ describe('installed board landing', () => {
     renderLanding();
     expect(screen.getByRole('status', { name: 'Loading boards' })).toBeInTheDocument();
     release();
-    expect((await screen.findByRole('alert')).textContent).toBe('Unable to load boards.');
+    expect((await screen.findByRole('alert')).textContent).toBe('Couldn’t load boards');
+  });
+
+  it('brings the boards back with Try again after a failed load, without reloading the page', async () => {
+    let calls = 0;
+    server.use(
+      http.get(endpoint, () =>
+        ++calls === 1
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({
+              boards: [{ id: 'work', name: 'Work', title: 'Work', initialPhase: 'queued', phases: [] }],
+            }),
+      ),
+    );
+    renderLanding();
+    await screen.findByRole('alert');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('/factories/project-1/work')).toBeTruthy();
+  });
+
+  // Which failure it was decides what a person can do about it, so each one gets its own art and next step.
+  it.each([
+    [
+      'the server errors',
+      () => new HttpResponse(null, { status: 500 }),
+      'server-error',
+      'The server returned an error.',
+    ],
+    ['the server is unreachable', () => HttpResponse.error(), 'disconnected', 'The server could not be reached.'],
+    [
+      'the factory is not in the organization',
+      () => HttpResponse.json({ error: 'Project not found' }, { status: 404 }),
+      'not-a-member',
+      'This factory isn’t in your organization.',
+    ],
+    ['requests are rate limited', () => new HttpResponse(null, { status: 429 }), 'rate-limited', 'Too many requests.'],
+  ])('explains a failed load when %s', async (_case, respond, art, description) => {
+    server.use(http.get(endpoint, respond));
+    const { container } = renderLanding();
+
+    await screen.findByRole('alert');
+    expect(screen.getByText(new RegExp(`^${description}`))).toBeInTheDocument();
+    expect(container.querySelector('[data-illustration]')?.getAttribute('data-illustration')).toBe(art);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
+  });
+
+  it('sends an expired session to sign in instead of offering a retry that would fail again', async () => {
+    server.use(http.get(endpoint, () => HttpResponse.json({ error: 'unauthorized' }, { status: 401 })));
+    renderLanding();
+
+    await screen.findByRole('alert');
+    expect(screen.getByText('Your session expired. Sign in again to continue.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/signin');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 });
