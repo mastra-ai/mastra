@@ -5,7 +5,7 @@ import { z } from 'zod/v4';
 import { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createRoute } from './routes/route-builder';
-import { invokeRoute } from './index';
+import { dispatchRoute, invokeRoute } from './index';
 
 const handler = vi.fn(async ({ name, requestContext }: { name: string; requestContext: RequestContext }) => ({
   greeting: `hello ${name}`,
@@ -188,5 +188,67 @@ describe('invokeRoute', () => {
     });
 
     expect(result.status).toBe(422);
+  });
+});
+
+// dispatchRoute and invokeRoute share one pipeline; these pin where they are meant to differ and where they must not.
+describe('dispatchRoute', () => {
+  const abortSignal = new AbortController().signal;
+
+  it('refuses a user that did not come from Mastra server auth, like invokeRoute', async () => {
+    handler.mockClear();
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'mapped-user' });
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['observability:read']);
+
+    const result = await dispatchRoute(
+      greetRoute,
+      { body: { name: 'Ada' } },
+      { mastra: securedMastra(), requestContext, abortSignal },
+    );
+
+    expect(result).toMatchObject({ ok: false, status: 401 });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('reaches a path server auth declares public without a user, as HTTP does, while invokeRoute still refuses', async () => {
+    const publicRoute = createRoute({
+      method: 'GET',
+      path: '/observability/ping',
+      responseType: 'json',
+      handler: async () => ({ pong: true }),
+    });
+    const mastra = new Mastra({
+      logger: false,
+      server: { auth: { authenticateToken: async () => null, public: ['/api/observability/ping'] } },
+    });
+
+    const dispatched = await dispatchRoute(
+      publicRoute,
+      {},
+      { mastra, requestContext: new RequestContext(), abortSignal },
+    );
+    const invoked = await invokeRoute(publicRoute, { mastra, requestContext: new RequestContext() });
+
+    expect(dispatched).toEqual({ ok: true, result: { pong: true } });
+    expect(invoked.status).toBe(401);
+  });
+
+  it('acts on the resource named in the path when the body names another one', async () => {
+    const seen = vi.fn(async ({ traceId }: { traceId: string }) => ({ traceId }));
+    const route = createRoute({
+      method: 'POST',
+      path: '/observability/traces/:traceId',
+      responseType: 'json',
+      handler: seen as any,
+    });
+
+    const result = await dispatchRoute(
+      route,
+      { pathParams: { traceId: 'mine' }, body: { traceId: 'someone-elses' } },
+      { mastra: new Mastra({ logger: false }), requestContext: new RequestContext(), abortSignal },
+    );
+
+    expect(result).toEqual({ ok: true, result: { traceId: 'mine' } });
   });
 });
