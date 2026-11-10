@@ -190,8 +190,10 @@ describe('rerank', () => {
     const scorer = { getRelevanceScore: async () => 1 };
 
     it.each([
-      { name: 'negative vector weight', weights: { semantic: 2, vector: -1, position: 0 } },
-      { name: 'vector weight above one', weights: { semantic: -1, vector: 2, position: 0 } },
+      { name: 'out-of-range weights that add up to one', weights: { semantic: 2, vector: -1, position: 0 } },
+      { name: 'reversed out-of-range weights that add up to one', weights: { semantic: -1, vector: 2, position: 0 } },
+      { name: 'negative vector weight', weights: { semantic: 0.4, vector: -1, position: 0.2 } },
+      { name: 'vector weight above one', weights: { semantic: 0.4, vector: 2, position: 0.2 } },
       { name: 'NaN weight', weights: { semantic: NaN, vector: 0.4, position: 0.2 } },
       { name: 'infinite weight', weights: { semantic: Infinity, vector: 0.4, position: 0.2 } },
       { name: 'negative infinite weight', weights: { semantic: -Infinity, vector: 0.4, position: 0.2 } },
@@ -205,16 +207,24 @@ describe('rerank', () => {
     });
 
     it('accepts zero and one weights and partial overrides', async () => {
+      // With position-only weighting, the first result must outrank the higher vector score.
       const ranked = await rerankWithScorer({
         results,
         query: 'test',
         scorer,
-        options: { weights: { semantic: 0, vector: 1, position: 0 } },
+        options: { weights: { semantic: 0, vector: 0, position: 1 } },
       });
-      expect(ranked.map(item => item.result.id)).toEqual(['b', 'a']);
+      expect(ranked.map(item => item.result.id)).toEqual(['a', 'b']);
 
-      const partial = await rerankWithScorer({ results, query: 'test', scorer, options: { weights: { vector: 0.4 } } });
+      const partial = await rerankWithScorer({
+        results,
+        query: 'test',
+        scorer,
+        options: { weights: { semantic: 0.7, vector: 0.1 } },
+      });
       expect(partial).toHaveLength(2);
+      expect(partial.map(item => item.result.id)).toEqual(['a', 'b']);
+      expect(partial[0]?.score).toBeCloseTo(0.225);
     });
 
     it('marks the rerank span as errored for invalid weights', async () => {
