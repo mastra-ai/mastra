@@ -1,6 +1,8 @@
+import { decode, encode } from '../../events/codec';
 import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { createRunAbortController } from '../durable/run-abort';
 import type { AgentSuspendedEventData } from '../durable/types';
@@ -15,7 +17,8 @@ import { deleteAgentRunRecord, readAgentRunRecord, writeAgentRunRecord } from '.
  * Publishes a run's chunks on its stream topic as the loop produces them, so
  * readers other than the caller (`Agent.observe()`, a reconnecting client) can
  * follow the run. Publishing never blocks or fails the run: events are queued
- * in order and publish errors are logged.
+ * in order and publish errors are logged. Each event is a snapshot taken when
+ * the chunk is published, not a reference to the loop's objects.
  */
 export interface AgentStreamPublisher {
   readonly runId: string;
@@ -143,6 +146,34 @@ export function createAgentStreamPublisher({
     return queue;
   };
 
+  /**
+   * Copies a payload when it is published. The loop keeps mutating objects it
+   * has already emitted (a resumed run pushes onto the same `steps` array), and
+   * events wait in the queue and in caches that keep references, so replay
+   * would otherwise show later state. Uses the pubsub codec, the same
+   * round-trip cross-process transports apply: Date, Error, Map, Set, BigInt,
+   * undefined and registered classes survive; functions and symbols are
+   * dropped, cycles and non-finite numbers become null, and unregistered
+   * classes and typed arrays become plain data. A value the codec can't encode
+   * is published by reference with a warning rather than dropped.
+   */
+  const snapshot = <T>(value: T): T => {
+    try {
+      return decode(encode(value)) as T;
+    } catch (error) {
+      logger?.warn?.(`[AgentStream:${runId}] failed to snapshot stream event; publishing it by reference`, { error });
+      return value;
+    }
+  };
+  const snapshotChunk = (chunk: ChunkType<any>): ChunkType<any> => {
+    const copy = snapshot(chunk);
+    if (copy !== chunk) {
+      const producedAt = getChunkProducedAt(chunk);
+      if (producedAt !== undefined) stampChunkProducedAt(copy, producedAt);
+    }
+    return copy;
+  };
+
   const scheduleCleanup = () => {
     const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => {
       void (async () => {
@@ -203,36 +234,39 @@ export function createAgentStreamPublisher({
         case 'abort':
           return;
         case 'step-start': {
-          const payload = chunk.payload;
+          const payload = snapshot(chunk.payload);
           void enqueue(() => emitStepStartEvent(pubsub, runId, payload));
           return;
         }
         case 'finish': {
           finished = true;
           const { output, stepResult, messages } = chunk.payload as any;
-          void enqueue(() => emitFinishEvent(pubsub, runId, { output, stepResult, ...(messages ? { messages } : {}) }));
+          const data = snapshot({ output, stepResult, ...(messages ? { messages } : {}) });
+          void enqueue(() => emitFinishEvent(pubsub, runId, data));
           return;
         }
         case 'tool-call-approval':
         case 'tool-call-suspended': {
           const { toolCallId, toolName, args, resumeSchema, suspendPayload } = chunk.payload as any;
-          suspended =
+          suspended = snapshot<AgentSuspendedEventData>(
             chunk.type === 'tool-call-approval'
               ? { type: 'approval', toolCallId, toolName, args, resumeSchema }
-              : { type: 'suspension', toolCallId, toolName, args, resumeSchema, suspendPayload };
+              : { type: 'suspension', toolCallId, toolName, args, resumeSchema, suspendPayload },
+          );
           break;
         }
         case 'error': {
           lastError = chunk.payload.error;
-          const serialized = {
+          const serialized = snapshotChunk({
             ...chunk,
             payload: { ...chunk.payload, error: serializeIfError(chunk.payload.error) },
-          } as ChunkType<any>;
+          } as ChunkType<any>);
           void enqueue(() => emitChunkEvent(pubsub, runId, serialized));
           return;
         }
       }
-      void enqueue(() => emitChunkEvent(pubsub, runId, chunk));
+      const published = snapshotChunk(chunk);
+      void enqueue(() => emitChunkEvent(pubsub, runId, published));
     },
     close() {
       return end(() => new Error('Agent stream ended without a finish event'));
