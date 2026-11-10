@@ -114,10 +114,10 @@ describe('Switch', () => {
 
     const switchEl = screen.getByRole('switch');
     const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
-    expect(switchEl.className).toContain('h-[18px]');
+    expect(switchEl.className).toContain('h-4.5');
     expect(switchEl.className).toContain('w-8');
     expect(thumbEl?.className).toContain('h-3.5');
-    expect(thumbEl?.className).toContain('w-[18px]');
+    expect(thumbEl?.className).toContain('w-4.5');
     expect(thumbEl?.className).toContain('rounded-full');
     expect(thumbEl?.className).toContain('transition-[translate]');
     expect(thumbEl?.className).toContain('data-[checked]:translate-x-2.5');

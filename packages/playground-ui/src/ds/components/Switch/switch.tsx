@@ -37,7 +37,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         ref={ref}
         data-slot="switch"
         className={cn(
-          'peer group/switch inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-active p-0.5',
+          'peer group/switch inline-flex h-4.5 w-8 shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-active p-0.5',
           'transition-colors duration-fast ease-out-custom motion-reduce:transition-none',
           'hover:bg-fill-strong',
           focusRingOffset,
@@ -56,7 +56,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         <SwitchPrimitive.Thumb
           data-slot="switch-thumb"
           className={cn(
-            'pointer-events-none relative isolate block h-3.5 w-[18px] rounded-full bg-foreground data-[checked]:bg-background',
+            'pointer-events-none relative isolate block h-3.5 w-4.5 rounded-full bg-foreground data-[checked]:bg-background',
             'transition-[translate] duration-fast ease-out-custom motion-reduce:transition-none',
             'data-[checked]:translate-x-2.5',
             "after:absolute after:inset-0 after:-z-10 after:rounded-full after:bg-inherit after:content-['']",
