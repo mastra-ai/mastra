@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed `execute_command` reporting exit code 0 for a failing `cmd | tail -N` when `/bin/sh` is a dash without `pipefail` (Debian, Ubuntu 22.04 and 24.04). The command now runs under `bash -o pipefail` when bash is installed, so the failing stage sets the exit code again.
+Fixed `execute_command` reporting exit code 0 when a command piped to `tail` failed and `/bin/sh` is a dash without `pipefail` (Debian, Ubuntu 22.04 and 24.04). The last pipeline of the command now reports the exit code of its last failing stage, as `pipefail` does. The command still runs in the configured shell, so its words expand the same way, and bash is not needed.

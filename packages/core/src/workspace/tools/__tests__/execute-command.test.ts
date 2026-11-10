@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -767,8 +767,8 @@ describe('executeCommandTool data chunks', () => {
       });
     });
 
-    // On a dash /bin/sh without pipefail (Debian, Ubuntu 22.04/24.04) these run through the bash
-    // fallback; on shells with pipefail they run as written.
+    // These run through the POSIX rewrite of the final pipeline, so they pass the same way on a dash
+    // /bin/sh without pipefail (Debian, Ubuntu 22.04/24.04) and on shells that have it.
     it('reports the failing stage of a multi-stage pipeline ending in tail', async () => {
       const { result } = await runCommand(`sh -c 'echo match-line; exit 3' | grep match | tail -5`);
       expect(result).toBe('match-line\n\nExit code: 3');
@@ -782,6 +782,48 @@ describe('executeCommandTool data chunks', () => {
     it('keeps single quotes intact in a pipeline ending in tail', async () => {
       const { result } = await runCommand(`printf '%s\\n' "it's | here" 'x' | tail -n 2`);
       expect(result).toBe("it's | here\nx\n");
+    });
+
+    it('expands words the way the configured shell does in a pipeline ending in tail', async () => {
+      // dash leaves `{a,b}` as written; bash expands it. The tool must match `/bin/sh` itself.
+      const command = `printf '%s\\n' report{a,b}.txt | tail -1`;
+      const expected = execFileSync('/bin/sh', ['-c', command], { encoding: 'utf8' });
+      const { result } = await runCommand(command);
+      expect(result).toBe(expected);
+    });
+
+    it('reports an upstream failure in a command over 40,000 bytes', async () => {
+      const command = `: ${'x'.repeat(40_000)}; false | tail -1`;
+      const { result, chunks } = await runCommand(command);
+      expect(result).toBe('Exit code: 1');
+      expect(chunks.find(chunk => chunk.type === 'data-sandbox-exit')?.data).toMatchObject({ exitCode: 1 });
+    });
+
+    it('reports the failing stage of a compound command piped to tail', async () => {
+      const { result } = await runCommand(`for i in 1 2; do echo "$i"; done | sh -c 'cat; exit 6' | tail -1`);
+      expect(result).toBe('2\n\nExit code: 6');
+    });
+
+    it('keeps set -e inside the stages of a pipeline ending in tail', async () => {
+      const { result } = await runCommand(`set -e; { echo one; sh -c 'exit 4'; echo two; } | tail -2`);
+      expect(result).toBe('one\n\nExit code: 4');
+    });
+
+    it('keeps $? from the previous command in a pipeline ending in tail', async () => {
+      const { result } = await runCommand(`false; echo "previous=$?" | tail -1`);
+      expect(result).toBe('previous=1\n');
+    });
+
+    it('keeps shell error line numbers in a pipeline ending in tail', async () => {
+      const command = `echo one\nmastra-missing-command-xyz | tail -1`;
+      const expected = spawnSync('/bin/sh', ['-c', command], { encoding: 'utf8' }).stderr;
+      const { chunks } = await runCommand(command);
+      const stderr = chunks
+        .filter(chunk => chunk.type === 'data-sandbox-stderr')
+        .map(chunk => chunk.data.output)
+        .join('');
+      expect(expected).toContain('mastra-missing-command-xyz');
+      expect(stderr).toBe(expected);
     });
 
     it('runs a pipeline ending in tail when bash is not on PATH', async () => {
@@ -863,45 +905,62 @@ describe('executeCommandTool data chunks', () => {
       expect(receivedCommand).toBe('cat file.txt | grep error');
     });
 
-    it('falls back to bash pipefail for a pipeline ending in tail', async () => {
+    async function receivedCommandFor(command: string): Promise<string> {
       let receivedCommand = '';
-
       const { context } = createMockContext({
         executeCommand: async cmd => {
           receivedCommand = cmd;
           return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
         },
       });
-
-      const command = `echo "it's" | tail -5`;
       await execute({ command, timeout: null, cwd: null, tail: null }, context);
+      return receivedCommand;
+    }
 
-      expect(receivedCommand).toBe(
-        `if (set -o pipefail) 2>/dev/null; then set -o pipefail; ` +
-          `elif command -v bash >/dev/null 2>&1; then exec bash -o pipefail -c 'echo "it'\\''s" | tail -5'; fi; ` +
-          command,
+    it('rewrites the final pipeline ending in tail in POSIX sh, without bash', async () => {
+      expect(await receivedCommandFor(`cd src && echo "it's" | tail -5`)).toBe(
+        `cd src && { __mastra_pf_init="(exit $?)"; case $- in *e*) __mastra_pf_init='set -e';; esac; ` +
+          `__mastra_pf_status=$(set +e; { { ( eval "$__mastra_pf_init";  echo "it's"  ) 8>&- 9>&-; ` +
+          `echo "__mastra_pf_1=$?" >&9; } |  tail -5 8>&- 9>&-; } 9>&1 >&8); __mastra_pf_exit=$?; ` +
+          `eval "$__mastra_pf_status"; [ "$__mastra_pf_exit" -ne 0 ] || __mastra_pf_exit=\${__mastra_pf_1:-0}; ` +
+          `(exit "$__mastra_pf_exit"); } 8>&1`,
       );
     });
 
-    // The fallback quotes the command and repeats it, so its size is measured in UTF-8 bytes of the
-    // whole wrapped argument: quotes and non-ASCII text grow it beyond `command.length`.
+    // The command is not repeated, so its length does not matter.
+    it('passes a long command to the shell once', async () => {
+      const payload = `${"'".repeat(16_000)}${'é'.repeat(20_000)}`;
+      const command = `echo "${payload}" | tail -1`;
+      const received = await receivedCommandFor(command);
+      expect(received.split(payload)).toHaveLength(2);
+      expect(received.length - command.length).toBeLessThan(500);
+      expect(received).not.toContain('bash');
+    });
+
     it.each([
-      ['a long command', `echo ${'x'.repeat(40_000)} | tail -1`],
-      ['a command full of single quotes', `echo "${"'".repeat(16_000)}" | tail -1`],
-      ['a command full of non-ASCII text', `echo ${'é'.repeat(20_000)} | tail -1`],
-    ])('skips the bash fallback for %s too large to pass twice', async (_label, command) => {
-      let receivedCommand = '';
+      ['a quoted pipe', `printf '%s\\n' "a | b" | tail -1`, 1],
+      ['a pipe inside $(...)', `echo "$(echo a | cat)" | tail -1`, 1],
+      ['a pipe inside backquotes', 'echo `echo a | cat` | tail -1', 1],
+      ['a loop', `for f in a b; do echo "$f" | cat; done | grep a | tail -1`, 2],
+      ['a group after &&', `cd . && { echo a; echo b; } | sort | tail -1`, 2],
+      ['bash [[ ... && ... ]]', `[[ -n a && -n b ]] && echo a | tail -1`, 1],
+    ])('splits only the final top-level pipeline for %s', async (_label, command, stages) => {
+      const received = await receivedCommandFor(command);
+      expect(received.match(/echo "__mastra_pf_\d+=\$\?"/g)).toHaveLength(stages);
+    });
 
-      const { context } = createMockContext({
-        executeCommand: async cmd => {
-          receivedCommand = cmd;
-          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
-        },
-      });
-
-      await execute({ command, timeout: null, cwd: null, tail: null }, context);
-
-      expect(receivedCommand).toBe(`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ${command}`);
+    // The scanner gives up on these, so they keep the plain guard: pipefail where the shell has it.
+    it.each([
+      ['a here-document', `cat <<EOF | tail -1\nhello\nEOF`],
+      ['a case statement', `case a in a) echo a;; esac | tail -1`],
+      ['a trailing comment', `false | tail -1 # last line`],
+      ['a negated pipeline', `! false | tail -1`],
+      ['fd 9', `exec 9>/dev/null; false | tail -1`],
+      ['bash &>', `make &> build.log | tail -1`],
+      ["bash $'...'", `echo $'a\\'b' | tail -1`],
+      ['an unterminated quote', `echo 'a | tail -1`],
+    ])('keeps the set -o pipefail guard for %s', async (_label, command) => {
+      expect(await receivedCommandFor(command)).toBe(`(set -o pipefail) 2>/dev/null && set -o pipefail; ${command}`);
     });
 
     it('passes stdinMode ignore to spawn for background commands', async () => {
