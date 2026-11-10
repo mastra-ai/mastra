@@ -44,6 +44,39 @@ describe('local runtime configuration', () => {
     expect(JSON.stringify(morphModelDescriptor(settings))).not.toContain(syntheticKey);
   });
 
+  it.each(['', 'morph/'])('accepts configurable Morph aliases with the %s namespace', prefix => {
+    const settings = loadSettings({
+      EXPLORER_MODEL: `${prefix}exploration-model-v2`,
+      JUDGE_MODEL: `${prefix}review-model-v2`,
+    });
+    expect(morphModelDescriptor(settings)).toEqual({
+      explorer: {
+        providerId: 'morph',
+        modelId: 'exploration-model-v2',
+        url: 'https://api.morphllm.com/v1',
+        api: 'chat',
+      },
+      judge: { providerId: 'morph', modelId: 'review-model-v2', url: 'https://api.morphllm.com/v1', api: 'chat' },
+    });
+  });
+
+  it.each(['EXPLORER_MODEL', 'JUDGE_MODEL'])('rejects malformed %s aliases without exporting their values', field => {
+    for (const value of [
+      '',
+      'morph/',
+      'other/model',
+      'https://private-marker.invalid',
+      'a b',
+      'a\nb',
+      '../model',
+      'a'.repeat(129),
+    ]) {
+      expect(() => loadSettings({ [field]: value })).toThrowError(
+        expect.objectContaining({ code: 'INVALID_CONFIGURATION', message: `Check supported values for: ${field}.` }),
+      );
+    }
+  });
+
   it.each(['America/Port-au-Prince', 'Etc/GMT+5', 'Etc/GMT-3', 'UTC', 'America/Argentina/Buenos_Aires'])(
     'accepts supported IANA timezone %s for advisory and recurrence schedules',
     timezone => {
@@ -156,11 +189,10 @@ describe('local runtime configuration', () => {
     ['OUTPUT_LIMIT_BYTES', '65537'],
     ['DOCKER_REMOVE_SCAN_IMAGES', 'false'],
     ['DOCKER_PLATFORM', 'linux/386'],
+    ['DOCKER_PLATFORM', 'linux/amd64'],
     ['DATABASE_URL', 'file:../../elsewhere.db'],
     ['DATABASE_URL', 'https://database.example'],
     ['DOCKER_DISCOVERY_IMAGE', 'arbitrary/image:latest'],
-    ['EXPLORER_MODEL', 'other-model'],
-    ['JUDGE_MODEL', 'morph/other-model'],
     ['PORT', '0'],
   ])('rejects unsupported %s before any runtime operation', (field, value) => {
     expect(() => loadSettings({ [field]: value })).toThrow('Check supported values');

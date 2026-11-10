@@ -21,8 +21,8 @@ export function ownerIdentity(settings: Settings) {
 
 /** Check local Docker connectivity and required runtime capabilities before preparing resources. */
 export async function preflight(settings: Settings) {
-  if (Number(process.versions.node.split('.')[0]) !== 24) {
-    throw new RuntimeDiagnostic('UNSUPPORTED_NODE', 'Select the Node version in .nvmrc before running this template.');
+  if (Number(process.versions.node.split('.')[0]) < 24) {
+    throw new RuntimeDiagnostic('UNSUPPORTED_NODE', 'Use Node 24 or later; .nvmrc selects the development version.');
   }
   const policy = loadSandboxPolicy(settings);
   let info;

@@ -41,12 +41,17 @@ async function requestWithHost(url: string, host: string) {
   });
 }
 
-/** Run the real setup CLI with isolated settings and retain its bounded diagnostic outcome. */
-async function runSetupCli(root: string) {
+/** Run a real runtime CLI with isolated settings and retain its bounded diagnostic outcome. */
+async function runRuntimeCli(root: string, command: 'setup' | 'serve' = 'setup') {
   try {
     const output = await executeFile(
       process.execPath,
-      ['--env-file-if-exists=.env', '--import', import.meta.resolve('tsx'), join(templateRoot, 'scripts/setup.ts')],
+      [
+        '--env-file-if-exists=.env',
+        '--import',
+        import.meta.resolve('tsx'),
+        join(templateRoot, `scripts/${command}.ts`),
+      ],
       { cwd: root, env: { PATH: process.env.PATH }, timeout: 30000, maxBuffer: 8192 },
     );
     return { code: 0, ...output };
@@ -97,23 +102,22 @@ afterEach(async () => {
 });
 
 describe('real local runtime', () => {
-  it('rejects unsupported discovery platforms before contacting Docker or writing runtime data', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'scanner-unsupported-platform-'));
-    roots.push(root);
-    const settings = loadSettings(
-      {
-        DOCKER_PLATFORM: 'linux/amd64',
-        DOCKER_SOCKET: join(root, 'absent-docker.sock'),
-        SCANNER_DISCOVERY_ENABLED: 'false',
-      },
-      root,
-    );
-    await expect(setup(settings)).rejects.toMatchObject({
-      code: 'DISCOVERY_PLATFORM_UNSUPPORTED',
-      message: expect.stringContaining('linux/arm64'),
-    });
-    expect(await readdir(root)).toEqual([]);
-  });
+  it.each(['setup', 'serve'] as const)(
+    'rejects unsupported discovery platforms in %s before contacting Docker or writing runtime data',
+    async command => {
+      const root = await mkdtemp(join(tmpdir(), 'scanner-unsupported-platform-'));
+      roots.push(root);
+      await writeFile(join(root, '.env'), 'DOCKER_PLATFORM=linux/amd64\n');
+      const result = await runRuntimeCli(root, command);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(JSON.parse(result.stderr)).toEqual({
+        code: 'INVALID_CONFIGURATION',
+        message: 'Check supported values for: DOCKER_PLATFORM.',
+      });
+      expect(await readdir(root)).toEqual(['.env']);
+    },
+  );
 
   it('checks parent isolation in standalone folders and preserves filesystem errors', async () => {
     const parent = await mkdtemp(join(tmpdir(), 'scanner-standalone-parent-'));
@@ -301,7 +305,7 @@ describe('real local runtime', () => {
     await writeFile(join(root, '.env'), `SANDBOX_DRIVER=unsupported-${secret}\nMORPH_API_KEY=${secret}\n`, {
       mode: 0o600,
     });
-    const invalidCli = await runSetupCli(root);
+    const invalidCli = await runRuntimeCli(root);
     expect(invalidCli.code).toBe(1);
     expect(invalidCli.stdout).toBe('');
     expect(JSON.parse(invalidCli.stderr)).toEqual({
@@ -312,7 +316,7 @@ describe('real local runtime', () => {
     await writeFile(join(root, '.env'), `DOCKER_SOCKET=${settings.DOCKER_SOCKET}\nMORPH_API_KEY=${secret}\n`, {
       mode: 0o600,
     });
-    const unavailableCli = await runSetupCli(root);
+    const unavailableCli = await runRuntimeCli(root);
     expect(unavailableCli.code).toBe(1);
     expect(unavailableCli.stdout).toBe('');
     expect(JSON.parse(unavailableCli.stderr)).toMatchObject({ code: 'DOCKER_UNAVAILABLE' });

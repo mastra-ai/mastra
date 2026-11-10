@@ -1255,6 +1255,83 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
 
   it('real_mastra_sherlock_wire_receives_only_structured_local_advisory_candidates', planningWireAudit, 30000);
 
+  it.each(['defaults', 'bare', 'namespaced'] as const)(
+    'configured Morph %s aliases reach real SDK requests without execution tools',
+    async variant => {
+      const received: Array<{ path: string; model: string; tools?: unknown; messages: unknown }> = [];
+      const fixture = createServer(async (request, response) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const body = JSON.parse(Buffer.concat(chunks).toString());
+        received.push({ path: request.url ?? '', model: body.model, tools: body.tools, messages: body.messages });
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            id: 'chatcmpl-model-configuration',
+            object: 'chat.completion',
+            created: 1,
+            model: body.model,
+            choices: [
+              {
+                index: 0,
+                message: { role: 'assistant', content: 'Configured model accepted.' },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 5, completion_tokens: 4, total_tokens: 9 },
+          }),
+        );
+      });
+      await new Promise<void>((resolve, reject) => {
+        fixture.once('error', reject);
+        fixture.listen(0, '127.0.0.1', resolve);
+      });
+      openFixtures.push(
+        () => new Promise<void>((resolve, reject) => fixture.close(error => (error ? reject(error) : resolve()))),
+      );
+      const address = fixture.address();
+      if (!address || typeof address === 'string') throw new Error('MODEL_CONFIGURATION_FIXTURE_MISSING');
+      const prefix = variant === 'namespaced' ? 'morph/' : '';
+      const settings = loadSettings(
+        variant === 'defaults'
+          ? {}
+          : {
+              EXPLORER_MODEL: `${prefix}exploration-model-v2`,
+              JUDGE_MODEL: `${prefix}review-model-v2`,
+            },
+      );
+      const models = morphModelConfiguration(settings, { MORPH_API_KEY: 'local-model-configuration-key' });
+      for (const [role, descriptor] of Object.entries(models)) {
+        const agent = new Agent({
+          ...INVESTIGATION_AGENT_LIMITS,
+          id: `configuration-${role}`,
+          name: `Configuration ${role}`,
+          model: { ...descriptor, url: `http://127.0.0.1:${address.port}/v1` },
+          instructions: 'Describe only the supplied local facts.',
+        });
+        const result = await agent.generate('One owned endpoint was observed.', {
+          toolChoice: 'none',
+          maxSteps: 1,
+          modelSettings: { maxOutputTokens: 32, maxRetries: 0 },
+          abortSignal: AbortSignal.timeout(5000),
+        });
+        expect(result.text).toBe('Configured model accepted.');
+      }
+      expect(received.map(item => item.model)).toEqual(
+        variant === 'defaults'
+          ? ['morph-dsv41flash-abliterated', 'morph-glm53-744b']
+          : ['exploration-model-v2', 'review-model-v2'],
+      );
+      expect(received).toHaveLength(2);
+      for (const request of received) {
+        expect(request.path).toBe('/v1/chat/completions');
+        expect(request.tools ?? []).toEqual([]);
+        expect(JSON.stringify(request.messages)).not.toContain('local-model-configuration-key');
+      }
+    },
+    30000,
+  );
+
   it('planning_global_deadline_stops_sherlock_after_slow_nemo_and_remains_terminal_on_restart', async () => {
     const requests: Array<{ messages: unknown[] }> = [];
     const fixture = createServer(async (request, response) => {

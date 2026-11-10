@@ -9,6 +9,12 @@ export const KATANA_BASE =
 export const IMAGE_OWNER = 'security-scanner-runtime-v1';
 
 const booleanSetting = z.enum(['true', 'false']).transform(value => value === 'true');
+// Morph aliases may include the same optional provider namespace used by the default judge.
+const morphModelId = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^(?:morph\/)?[a-zA-Z0-9][a-zA-Z0-9._-]*$/);
 const integerSetting = (minimum: number, maximum: number, fallback: string) =>
   z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().min(minimum).max(maximum)).prefault(fallback);
 
@@ -37,8 +43,8 @@ const environmentSchema = z
       .string()
       .regex(/^security-scanner\/katana:[a-zA-Z0-9_.-]+$/)
       .default('security-scanner/katana:1.8.0'),
-    /** Requested native Linux Docker platform; discovery capability checks may narrow support. */
-    DOCKER_PLATFORM: z.enum(['linux/arm64', 'linux/amd64']).default('linux/arm64'),
+    /** Supported native Linux Docker platform for the pinned crawler and browser. */
+    DOCKER_PLATFORM: z.literal('linux/arm64').default('linux/arm64'),
     /** Absolute local Docker Unix socket path. */
     DOCKER_SOCKET: z
       .string()
@@ -100,10 +106,10 @@ const environmentSchema = z
       .optional(),
     /** Loopback HTTP listener port. */
     PORT: integerSetting(1024, 65535, '4111'),
-    /** Supported Morph model used by Nemo, Sherlock, and Dupin. */
-    EXPLORER_MODEL: z.literal('morph-dsv41flash-abliterated').default('morph-dsv41flash-abliterated'),
-    /** Supported Morph model used for independent Watson review. */
-    JUDGE_MODEL: z.literal('morph/morph-glm53-744b').default('morph/morph-glm53-744b'),
+    /** Morph model alias used by Nemo, Sherlock, and Dupin. */
+    EXPLORER_MODEL: morphModelId.default('morph-dsv41flash-abliterated'),
+    /** Morph model alias used for independent Watson review. */
+    JUDGE_MODEL: morphModelId.default('morph/morph-glm53-744b'),
   })
   .superRefine((settings, context) => {
     if (
@@ -173,8 +179,8 @@ export function hasMorphApiKey(environment: NodeJS.ProcessEnv = process.env) {
 export function morphModelDescriptor(settings: Settings) {
   const common = { providerId: 'morph', url: 'https://api.morphllm.com/v1', api: 'chat' as const };
   return {
-    explorer: { ...common, modelId: settings.EXPLORER_MODEL } satisfies OpenAICompatibleConfig,
-    judge: { ...common, modelId: settings.JUDGE_MODEL.slice('morph/'.length) } satisfies OpenAICompatibleConfig,
+    explorer: { ...common, modelId: settings.EXPLORER_MODEL.replace(/^morph\//, '') } satisfies OpenAICompatibleConfig,
+    judge: { ...common, modelId: settings.JUDGE_MODEL.replace(/^morph\//, '') } satisfies OpenAICompatibleConfig,
   };
 }
 

@@ -2,6 +2,12 @@
 
 Commands load `.env` automatically; exported shell variables take precedence. See [`.env.example`](../.env.example) for defaults. Restart the server after changing settings.
 
+## Local runtime
+
+Use Node 24 or later; `.nvmrc` selects Node 24 for development. The pinned crawler and Chromium sandbox require a native Linux ARM64 Docker daemon. `DOCKER_PLATFORM` accepts only `linux/arm64`; AMD64 and emulation are unsupported. Setup rejects unsupported configuration before preparing runtime resources.
+
+Use npm 11 or later to install this standalone template. A fresh manifest-only installation with npm 10.9.9 on Node 24.19.0 failed inside npm's dependency resolver with `Cannot read properties of null (reading 'edgesOut')`; the equivalent installation with npm 11.17.0 succeeded. The npm requirement preserves that working installation path; it does not imply npm 10 fails for every project. Install with `npm install --workspaces=false`.
+
 ## Local access
 
 Generate two independent values:
@@ -33,14 +39,16 @@ Discovery requires `SCANNER_DISCOVERY_ENABLED=true` and successful setup. A `COM
 
 ## Models and investigations
 
-Enable `SCANNER_INVESTIGATION_ENABLED=true` and set `MORPH_API_KEY` for model-backed work. The supported configuration is:
+Enable `SCANNER_INVESTIGATION_ENABLED=true` and set `MORPH_API_KEY` for model-backed work. Morph is the model provider; no OpenAI credential is required. The defaults are:
 
 | Setting          | Model                          | Role                  |
 | ---------------- | ------------------------------ | --------------------- |
 | `EXPLORER_MODEL` | `morph-dsv41flash-abliterated` | Nemo, Sherlock, Dupin |
 | `JUDGE_MODEL`    | `morph/morph-glm53-744b`       | Watson                |
 
-Model IDs are validated in code; changing providers requires an [implementation change](customization.md#agents-and-models). Planning, recurring investigations, and advisory reassessment can make paid calls, including after restart.
+Override either model in `.env` with a compatible Morph alias available to your account. Aliases start with a letter or digit, contain only letters, digits, `.`, `_`, or `-`, and may have one leading `morph/` namespace; the whole value is limited to 128 characters. The optional namespace is removed for both models before dispatch to the fixed Morph endpoint. Validation checks alias syntax, not provider availability or structured-output compatibility. Verify those before enabling live calls with another model. Changing providers requires an [implementation change](customization.md#agents-and-models).
+
+The explorer default is intentionally selected for creative, evidence-grounded hypotheses; Watson uses the independent judge model. Model responses cannot authorize execution, expand scope, or replace deterministic evidence. Discovery and investigation remain opt-in. Planning, recurring investigations, and advisory reassessment can make paid calls, including after restart.
 
 For REST targets, use **Start REST assessment**. For owned-lab checks, open a completed scan in **Scans**, select **Investigate**, then **Plan investigation**. General playbook verification runs only in the owned Docker lab; active SSRF also requires a current approval and owned callback.
 

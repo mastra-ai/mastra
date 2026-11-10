@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -11,6 +11,56 @@ const execute = promisify(execFile);
 const require = createRequire(import.meta.url);
 
 describe('runtime script process boundaries', () => {
+  it('rejects invalid dev settings before replacing existing console assets', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'scanner-dev-configuration-'));
+    try {
+      for (const directory of ['src', 'scripts', 'web', 'example-target-api', 'docker'])
+        await cp(join(root, directory), join(folder, directory), {
+          recursive: true,
+          filter: source => source !== join(root, 'web/dist'),
+        });
+      await copyFile(join(root, 'package.json'), join(folder, 'package.json'));
+      await copyFile(join(root, 'tsconfig.json'), join(folder, 'tsconfig.json'));
+      await symlink(join(root, 'node_modules'), join(folder, 'node_modules'), 'dir');
+      await mkdir(join(folder, 'web/dist'), { recursive: true });
+      await writeFile(join(folder, 'web/dist/preserved.txt'), 'Existing console assets.');
+      await writeFile(join(folder, '.env'), 'DOCKER_PLATFORM=linux/amd64\n');
+      const launch = () =>
+        execute('npm', ['run', 'dev'], {
+          cwd: folder,
+          env: { PATH: process.env.PATH, npm_config_cache: join(folder, 'npm-cache') },
+          timeout: 20000,
+          maxBuffer: 16384,
+        }).then(
+          output => ({ ...output, code: 0 }),
+          error => error as { stdout: string; stderr: string; code: number },
+        );
+      const result = await launch();
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('INVALID_CONFIGURATION');
+      expect(result.stderr).toContain('DOCKER_PLATFORM');
+      expect(await readdir(join(folder, 'web/dist'))).toEqual(['preserved.txt']);
+      expect(await readFile(join(folder, 'web/dist/preserved.txt'), 'utf8')).toBe('Existing console assets.');
+      expect(await readdir(folder)).not.toContain('data');
+
+      // Valid settings still reach the real console build, then the deliberately absent daemon.
+      await writeFile(
+        join(folder, '.env'),
+        `DOCKER_PLATFORM=linux/arm64\nDOCKER_SOCKET=${join(folder, 'absent.sock')}\n`,
+      );
+      const valid = await launch();
+      expect(valid.code).toBe(1);
+      expect(valid.stderr).toContain('DOCKER_UNAVAILABLE');
+      const manifest = JSON.parse(await readFile(join(folder, 'web/dist/manifest.json'), 'utf8'));
+      expect(manifest.script).toMatch(/^console-[a-f0-9]{64}\.js$/);
+      expect((await readFile(join(folder, 'web/dist', manifest.script))).length).toBeGreaterThan(1024);
+      expect(await readdir(join(folder, 'web/dist'))).not.toContain('preserved.txt');
+      expect(await readdir(folder)).not.toContain('data');
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  }, 30000);
+
   it.each(['discovery', 'operations'])(
     'retains trailing %s reporter output after the child exits',
     async kind => {

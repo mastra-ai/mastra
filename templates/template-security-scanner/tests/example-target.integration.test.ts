@@ -308,7 +308,7 @@ describe('local Hono example target', () => {
       expect((await fetch(`${example.output.hostUrl}/api/products`)).status).toBe(200);
       const boundary = await readExampleBoundary(scannerSettings);
       expect(example.output.scannerUrl).toBe(`http://${boundary!.address}:18080`);
-      const wrongPlatform = settings.DOCKER_PLATFORM === 'linux/arm64' ? 'linux/amd64' : 'linux/arm64';
+      const wrongPlatform = 'linux/amd64';
       const dev = spawn('npm', ['run', 'dev'], {
         cwd: settings.root,
         detached: true,
@@ -336,7 +336,8 @@ describe('local Hono example target', () => {
       const devExit = await new Promise<number | null>(resolve => dev.once('exit', resolve));
       clearTimeout(devTimer);
       expect(devExit).not.toBe(0);
-      expect(devOutput).toContain('UNSUPPORTED_PLATFORM');
+      expect(devOutput).toContain('INVALID_CONFIGURATION');
+      expect(devOutput).toContain('DOCKER_PLATFORM');
       expect(devOutput).not.toContain('Local API:');
 
       const evidenceHome = join(settings.root, 'data/example-target/build-evidence');

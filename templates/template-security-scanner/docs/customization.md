@@ -20,7 +20,9 @@ For product changes, use this map:
 
 Nemo summarizes inventory, Sherlock proposes grounded hypotheses, Dupin interprets fixed evidence, and Watson independently reviews proposed confirmations. Their instructions live together; [`bola-models.ts`](../src/investigation/bola-models.ts) defines the REST-specific inputs and outputs.
 
-To change a model, update the validated settings and `morphModelDescriptor` in [`settings.ts`](../src/config/settings.ts). A new provider also needs compatible structured output, credentials, and token accounting. Test the generated requests and rejected responses before using live calls.
+To change a model, set `EXPLORER_MODEL` or `JUDGE_MODEL` in `.env` to a compatible Morph alias, then restart the server. Both accept an optional leading `morph/` namespace. See [model configuration](configuration.md#models-and-investigations) for syntax and access requirements. The defaults remain `morph-dsv41flash-abliterated` for exploration and `morph/morph-glm53-744b` for independent review.
+
+A new provider requires changes to `morphModelDescriptor` in [`settings.ts`](../src/config/settings.ts), compatible structured output, credentials, and token accounting. Test the generated requests and rejected responses before using live calls.
 
 Keep model choices separate from execution authority. Prompts cannot add requests, change target scope, or confirm a finding without the required evidence.
 

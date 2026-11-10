@@ -1,16 +1,17 @@
 {
   "name": "template-security-scanner",
   "version": "0.1.0",
-  "description": "Authorized website and API discovery with isolated local identities and bounded evidence.",
+  "description": "Authorized website and API security assessment with Morph agents and a native Linux ARM64 Docker sandbox.",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.0.0 <25",
+    "node": ">=24.0.0",
     "npm": ">=11"
   },
   "scripts": {
     "setup": "node --env-file-if-exists=.env --import tsx scripts/setup.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
+    "predev": "node --env-file-if-exists=.env --import tsx scripts/validate-settings.ts",
     "dev": "npm run build:console && node --env-file-if-exists=.env --import tsx scripts/serve.ts",
     "build:console": "node --import tsx scripts/build-console.ts",
     "typecheck:console": "tsc -p web/tsconfig.json --noEmit",
