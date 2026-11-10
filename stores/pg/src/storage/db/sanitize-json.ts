@@ -20,6 +20,11 @@ function repairJson(value: unknown): unknown {
   return value;
 }
 
+/** Repair text for a PostgreSQL `text` column, which rejects NUL characters. */
+export function toPgText(value: string): string {
+  return repair(value);
+}
+
 /** Serialize JSON values without emitting Unicode sequences PostgreSQL rejects. */
 export function toPgJson(value: unknown): string {
   const json = JSON.stringify(value);

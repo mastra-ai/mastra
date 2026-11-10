@@ -3,6 +3,7 @@ import type { ContextAudit, ContextAuditGroup, ContextAuditTool } from '@mastra/
 import { getDynamicInstructionSections } from '@mastra/code-sdk/agents/instructions';
 import { formatSkillsCatalog } from '@mastra/core/processors';
 import { TUI_CO_AUTHOR } from '../../commit-attribution.js';
+import { requireLocal } from '../runtime.js';
 import type { SlashCommandContext } from './types.js';
 
 /**
@@ -32,8 +33,9 @@ function requestContextForSession(ctx: SlashCommandContext) {
  */
 async function collectSkillsCatalog(ctx: SlashCommandContext): Promise<string | undefined> {
   let workspace = ctx.getResolvedWorkspace();
-  if (!workspace && ctx.controller.hasWorkspace()) {
-    workspace = await ctx.controller.resolveWorkspace({ session: ctx.state.session });
+  const local = requireLocal(ctx.state, '/context');
+  if (!workspace && local.controller.hasWorkspace()) {
+    workspace = await local.controller.resolveWorkspace({ session: local.session });
   }
   if (!workspace?.skills) return undefined;
 

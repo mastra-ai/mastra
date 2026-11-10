@@ -130,17 +130,22 @@ export async function processWorkflowConditional(
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
 
-  const idxs = await stepExecutor.evaluateConditions({
-    workflowId,
-    step,
-    runId,
-    stepResults,
-    state: currentState,
-    requestContext: reqContext,
-    actor,
-    input: prevResult?.status === 'success' ? prevResult.output : undefined,
-    resumeData,
-  });
+  const savedRoute = step.steps
+    .map(child => stepResults[getSingleStepEntryId(child)]?.metadata?.__restartConditional)
+    .find(route => route?.index === executionPath[0]);
+  const idxs: number[] =
+    savedRoute?.branches ??
+    (await stepExecutor.evaluateConditions({
+      workflowId,
+      step,
+      runId,
+      stepResults,
+      state: currentState,
+      requestContext: reqContext,
+      actor,
+      input: prevResult?.status === 'success' ? prevResult.output : undefined,
+      resumeData,
+    }));
 
   const truthyIdxs: Record<number, boolean> = {};
   for (let i = 0; i < idxs.length; i++) {
@@ -209,28 +214,27 @@ export async function processWorkflowConditional(
               outputOptions,
             },
           });
-        } else {
-          return pubsub.publish('workflows', {
-            type: 'workflow.step.end',
-            runId,
-            data: {
-              workflowId,
-              runId,
-              executionPath: branchPath(idx),
-              resumeSteps,
-              stepResults,
-              prevResult: { status: 'skipped' },
-              resumeData,
-              parentWorkflow,
-              activeStepsPath,
-              requestContext,
-              actor,
-              perStep,
-              state: currentState,
-              outputOptions,
-            },
-          });
         }
+        return pubsub.publish('workflows', {
+          type: 'workflow.step.end',
+          runId,
+          data: {
+            workflowId,
+            runId,
+            executionPath: branchPath(idx),
+            resumeSteps,
+            stepResults,
+            prevResult: { status: 'skipped' },
+            resumeData,
+            parentWorkflow,
+            activeStepsPath,
+            requestContext,
+            actor,
+            perStep,
+            state: currentState,
+            outputOptions,
+          },
+        });
       }),
     );
   }

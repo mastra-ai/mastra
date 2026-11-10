@@ -202,6 +202,6 @@ describe('Kimi For Coding OAuth', () => {
     expect(kimiCodingOAuthProvider.name).toBe('Kimi For Coding');
     expect(kimiCodingOAuthProvider.getApiKey({ access: 'at', refresh: 'rt', expires: 0 })).toBe('at');
     expect(getOAuthProviders()).toContain(kimiCodingOAuthProvider);
-    expect(PROVIDER_DEFAULT_MODELS['kimi-for-coding']).toBe('kimi-for-coding/kimi-for-coding');
+    expect(PROVIDER_DEFAULT_MODELS['kimi-for-coding']).toBe('kimi-code-plan-cn/kimi-for-coding');
   });
 });

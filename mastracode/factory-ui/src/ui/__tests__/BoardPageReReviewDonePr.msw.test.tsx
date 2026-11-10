@@ -1,7 +1,7 @@
 /**
  * A PR that reached Done but is still open on GitHub may have picked up new
  * commits after its review — nothing re-queues it automatically. The Done-lane
- * card offers a manual "Re-review" that moves the card back into Review, where
+ * card offers a manual "Re-review" that moves the card back into PR review, where
  * the lane's rule queues a fresh review run. Merged PRs don't get the action:
  * there's nothing left to review.
  */
@@ -11,6 +11,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
@@ -43,6 +44,7 @@ const donePrWorkItem = {
   orgId: 'org-1',
   createdBy: 'user-1',
   factoryProjectId: FACTORY_ID,
+  board: 'work',
   externalSource: {
     integrationId: 'github',
     type: 'pull-request',
@@ -71,22 +73,12 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -106,10 +98,15 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
+    // Work browses the repository's issues beside its pull requests.
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
+      HttpResponse.json({ issues: [], nextPage: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [reviewSession] }),
     ),
     http.post(
@@ -135,12 +132,12 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
 }
 
 function renderReviewBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
 describe('Re-review action for open PRs in Done', () => {
-  it('moves a Done-lane open PR back into Review, where its rule queues the run', async () => {
+  it('moves a Done-lane open PR back into PR review on Work, where its rule queues the run', async () => {
     const { transitions } = stubReviewBoard();
     const user = userEvent.setup();
     const { router, client } = renderReviewBoard();
@@ -149,9 +146,9 @@ describe('Re-review action for open PRs in Done', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Re-review' }));
 
     await waitForMutationsIdle(client);
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review`);
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
     expect(transitions).toEqual([
-      expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 1 }),
+      expect.objectContaining({ board: 'work', stage: 'pr-review', cause: 'card_action', expectedRevision: 1 }),
     ]);
   });
 

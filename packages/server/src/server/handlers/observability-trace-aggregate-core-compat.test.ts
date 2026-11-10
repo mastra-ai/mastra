@@ -15,7 +15,7 @@ vi.mock('@mastra/core/storage', async importOriginal => {
 });
 
 const { AGGREGATE_TRACES } = await import('./observability-new-endpoints');
-const { supportsTraceAggregateCore } = await import('./observability-shared');
+const { getObservabilityStorageCapabilities, supportsTraceAggregateCore } = await import('./observability-shared');
 
 async function captureHttpException(call: Promise<unknown>) {
   try {
@@ -30,6 +30,11 @@ async function captureHttpException(call: Promise<unknown>) {
 describe('trace aggregate Core compatibility', () => {
   it('reports aggregate support as unavailable when the installed Core lacks aggregate symbols', () => {
     expect(supportsTraceAggregateCore()).toBe(false);
+    expect(
+      getObservabilityStorageCapabilities({
+        getFeatures: () => ['trace-aggregate'],
+      } as unknown as Parameters<typeof getObservabilityStorageCapabilities>[0]).traceAggregate,
+    ).toBe(false);
   });
 
   it('returns a structured 501 instead of a 500 when the installed Core lacks aggregate symbols', async () => {

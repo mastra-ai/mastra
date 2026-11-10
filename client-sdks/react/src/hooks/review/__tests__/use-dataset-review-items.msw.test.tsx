@@ -9,7 +9,8 @@ import { MastraReactProvider } from '../../../mastra-react-provider';
 
 import { server } from '../../../test/msw-server';
 import { useDatasetMutations } from '../../datasets';
-import { useReviewItems, type ReviewItemsOptions } from '../use-dataset-review-items';
+import { useReviewItems } from '../use-dataset-review-items';
+import type { ReviewItemsOptions } from '../use-dataset-review-items';
 import {
   DATASET_ID,
   EXPERIMENT_ID,
@@ -159,6 +160,21 @@ describe('useReviewItems', () => {
       expect(item.id).toBe(RESULT_ID);
       expect(item.datasetId).toBe(DATASET_ID);
       expect(item.tags).toEqual(['hallucination']);
+    });
+  });
+
+  describe('when the experiment result ran against an agent', () => {
+    it('keeps the target type and run timing so the result renders like on the experiment page', async () => {
+      setupHandlers();
+
+      const { result } = renderHook(() => useReviewItems({ experimentId: EXPERIMENT_ID }), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.data).toHaveLength(1));
+      expect(result.current.data![0]).toMatchObject({
+        targetType: 'agent',
+        startedAt: '2026-07-21T00:00:10.000Z',
+        completedAt: '2026-07-21T00:00:20.000Z',
+      });
     });
   });
 

@@ -55,7 +55,7 @@ export const frameFillStyle = 'bg-background ' + fieldsOnPage;
 
 /**
  * Interaction states for a surface that already carries an opaque fill. The
- * `state-layer` utility in `src/index.css` holds the reasoning and the measured
+ * `state-layer` utility in `components.css` holds the reasoning and the measured
  * numbers: the rung has to be layered, never swapped into `background-color`.
  */
 export const surfaceStateLayerStyle = 'state-layer';

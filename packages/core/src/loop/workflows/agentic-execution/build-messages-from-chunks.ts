@@ -92,6 +92,17 @@ export function buildMessagesFromChunks({
       // ── Source ──────────────────────────────────────────────────
       case 'source': {
         const p = chunk.payload as SourcePayload;
+        if (p.sourceType === 'document') {
+          parts.push({
+            type: 'source-document',
+            sourceId: p.id,
+            mediaType: p.mimeType ?? '',
+            title: p.title,
+            ...(p.filename ? { filename: p.filename } : {}),
+            ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
+          });
+          break;
+        }
         parts.push({
           type: 'source',
           source: {

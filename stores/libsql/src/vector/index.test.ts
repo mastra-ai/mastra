@@ -268,6 +268,43 @@ describe('LibSQLVector - Store Specific', () => {
       expect(results.length).toBe(0);
     });
   });
+
+  // https://github.com/mastra-ai/mastra/issues/27880
+  describe('brute-force scan query vector binding', () => {
+    it('binds the query vector as a parameter instead of inlining it into the SQL', async () => {
+      const queryVector = createVector(0);
+      queryVector[1] = 0.123456789;
+      const vectorStr = `[${queryVector.join(',')}]`;
+      const executeSpy = vi.spyOn((libSQLVectorDB as any).turso, 'execute');
+
+      try {
+        const unfiltered = await libSQLVectorDB.query({ indexName: testIndexName, queryVector, topK: 2 });
+        const filtered = await libSQLVectorDB.query({
+          indexName: testIndexName,
+          queryVector,
+          topK: 10,
+          filter: { name: { $in: ['vec1', 'vec3'] } },
+          minScore: -1,
+        });
+
+        expect(unfiltered.map(r => r.metadata.name)).toEqual(['vec1', expect.any(String)]);
+        expect(unfiltered[0]!.score).toBeGreaterThan(0.99);
+        expect(filtered.map(r => r.metadata.name)).toEqual(['vec1', 'vec3']);
+
+        const scanCalls = executeSpy.mock.calls
+          .map(([arg]) => arg as { sql: string; args: unknown[] })
+          .filter(arg => typeof arg === 'object' && arg.sql.includes('vector_distance_cos'));
+        expect(scanCalls).toHaveLength(2);
+        for (const call of scanCalls) {
+          expect(call.sql).not.toContain(vectorStr);
+          expect(call.sql).toContain('vector_distance_cos(embedding, vector32(?))');
+          expect(call.args[0]).toBe(vectorStr);
+        }
+      } finally {
+        executeSpy.mockRestore();
+      }
+    });
+  });
 });
 
 describe('LibSQLVector local-file concurrency', () => {

@@ -28,6 +28,7 @@ program.action(async (projectName: string | undefined, args: CreateCommandOption
       await runCreateCommand(projectName, args, {
         analytics,
         resolveVersionTag: () => getCreateVersionTag(version),
+        loginSource: 'create-mastra',
       });
     } catch (error) {
       if (isCreateCancelledError(error)) return;

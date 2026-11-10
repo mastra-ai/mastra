@@ -21,6 +21,101 @@ export function SaveButton() {
 }
 ```
 
+With a Tailwind build of your own, compile one sheet instead of `style.css`: import the components' stylesheet uncompiled, and `sources.css` so Tailwind emits the classes the compiled components use.
+
+```css
+@import 'tailwindcss';
+@import '@mastra/playground-ui/components.css';
+@import '@mastra/playground-ui/sources.css';
+```
+
+### Metadata
+
+Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows.
+
+Rows that must keep one line, such as cards, menu options, and truncated titles, pass `singleLine`: fields stay on one line and each shrinks with an ellipsis. Give a short field `className="shrink-0"` to keep it whole while a longer one truncates.
+
+```tsx
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+
+<Metadata>
+  <Metadata.Item>
+    <Txt as="span" variant="label">
+      v8
+    </Txt>
+  </Metadata.Item>
+  <Metadata.Item>
+    <Txt as="span" variant="caption" tone="muted">
+      Nov 3, 2026, 10:24 AM
+    </Txt>
+  </Metadata.Item>
+  <Metadata.Item>
+    <Txt as="span" variant="caption" tone="muted">
+      (current)
+    </Txt>
+  </Metadata.Item>
+</Metadata>;
+```
+
+Use normal sentences in tooltips, accessible names, and other plain-text APIs. Parentheses such as `(current)` and missing-value placeholders remain useful; avoid decorative separators or repeated spaces as a substitute for layout. Browser tab titles set through `document.title` keep the `Page | Product` convention.
+
+### Data sizes
+
+Import `formatBytes` from the number utility:
+
+```ts
+import { formatBytes } from '@mastra/playground-ui/utils/number';
+
+formatBytes(1536);
+formatBytes(0.5, { unit: 'GB' });
+formatBytes(2048, { unit: 'GB', autoScale: false });
+formatBytes(0.5, { unit: 'GB', autoScale: true });
+formatBytes(2048, { unit: 'GB', autoScale: true });
+```
+
+These calls return `1.5 KB`, `0.5 GB`, `2048 GB`, `512 MB`, and `2 TB`, respectively.
+
+With no options, `formatBytes(bytes)` keeps its existing automatic byte formatting and rounding. With a source `unit`, the formatter keeps the supplied value and unit unchanged unless `autoScale: true`. The supported units are `B`, `KB`, `MB`, `GB`, `TB`, and `PB`, also exported as the `ByteUnit` type.
+
+Conversions use the helper's existing binary convention: each unit is 1024 of the previous unit, despite the legacy `KB` through `PB` labels. These are not decimal SI conversions, where each step is 1000. Convert decimal measurements to this convention before passing them in.
+
+Automatic scaling stops at B and PB. It rounds bytes and values of 10 or more to whole numbers, and smaller values in larger units to one decimal place. When rounding reaches 1024, the opt-in mode promotes to the next unit, except at PB. Zero becomes `0 B` in automatic mode and keeps its source unit otherwise. Negative, non-finite, null, and undefined measurements return `undefined` in every mode.
+
+### Subtle buttons
+
+Use `variant="subtle"` for a persistent neutral fill, such as a selected view. It keeps the same dimensions as `default`, so switching between the two does not move surrounding controls. Set `aria-pressed` on toggle buttons to expose selection to assistive technology.
+
+```tsx
+<Button variant={selected ? 'subtle' : 'default'} aria-pressed={selected}>
+  My PRs
+</Button>
+```
+
+### Tool icons
+
+`presentTool` from `@mastra/playground-ui/components/ai/tool-call` gives a tool call its label,
+detail, static icon, and animated `AgentIndicator` pose. Use it wherever a tool call is shown, so a
+running call and its finished card look the same.
+
+```tsx
+import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+const { pose, label, detail } = presentTool(call.toolName, call.args);
+
+<AgentIndicator state={pose} />;
+```
+
+Always pass the call's arguments. Tools such as `knowledge_page` take an operation (`op` or
+`action`), and the icon and label follow it, so deleting a page does not look like editing one.
+Workspace prefixes (`mastra_workspace_`), MCP names (`mcp__server__tool`), `namespace.tool` names,
+and known aliases resolve to the tool they wrap. Unknown tools and ambiguous names such as
+`mcp__catalog__search` keep the generic tool icon.
+
+The **AI / Activity / Tool Icon Families** Storybook story shows every family and lets you switch
+actions to watch the morph.
+
 ### Tool approvals
 
 `ToolApproval` renders a standalone approval request in the shared activity layout: the tool name
@@ -227,7 +322,7 @@ Text fields, textareas, input groups, and the default Select, Combobox, and Date
 
 A field in an error state sets `--field-rim` and `--field-rim-focus` to `--destructive-indicator`, so the red outline shows on every surface and stays red while focused.
 
-If your app generates additional semantic utilities, import `@mastra/playground-ui/theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
+If your app keeps `style.css` and generates additional semantic utilities, import `@mastra/playground-ui/theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings. `components.css` already includes it.
 
 ### Brand colors
 
@@ -263,7 +358,7 @@ import { ProductBadge } from '@mastra/playground-ui/components/ProductBadge';
 
 Charts use hue-named roles for categories (`--chart-blue`, `--chart-blue-deep`, `--chart-amber`, `--chart-green`, `--chart-purple`, `--chart-orange`, `--chart-pink`, `--chart-red`) and `--chart-sequential-1` through `--chart-sequential-5` for ordered values. Span colors use `--span-agent`, `--span-workflow`, and the other span names. Pastel chart colors are fills, not text colors; keep labels on `--foreground` or `--muted-foreground`.
 
-Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success/destructive/warning/info`, and `--brand-green-*` are removed. The `yellow` ramp is now `amber`: `--yellow-*`, `--yellow-soft-*`, `--badge-yellow-*`, `--chart-yellow`, and the Badge `yellow` tone are removed in favor of their `amber` names. `--color-brand-yellow` is unchanged. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror uses five local `--syntax-*` properties scoped to `.cm-editor`, not a global palette.
+Numbered `accent*` tokens, `positive1`, `negative1`, `warning1`, `notice-success/destructive/warning/info`, and `--brand-green-*` are removed. The `yellow` ramp is now `amber`: `--yellow-*`, `--yellow-soft-*`, `--badge-yellow-*`, `--chart-yellow`, and the Badge `yellow` tone are removed in favor of their `amber` names. `--color-brand-yellow` is unchanged. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror reads five `--syntax-*` roles from `theme/code.css`, not a global palette.
 
 Every badge hue (`green`, `red`, `amber`, `blue`, `purple`, `orange`, `cyan`, `pink`) is a categorical tone built from the ramps, with `--badge-{hue}-strong`, `-subtle`, `-edge`, `-foreground`, and `-indicator`. `-strong` and `-subtle` are the fills behind `emphasis="strong"` and `emphasis="subtle"`. Badge backgrounds are translucent tints, so a badge follows the surface under it when a card or row changes on hover: `--{hue}-600` at 32% (strong) and 13% (subtle) in dark mode, `--{hue}-400` at 20% and 10% in light mode. On a resting card they match the solid fills they replaced. Product avatars stay solid (`--{hue}-soft-900` / `--{hue}-soft-950` in dark mode, `--{hue}-100` / `--{hue}-50` in light mode) because they overlap each other. The soft steps keep the lightness and hue of `900`/`950` at 75% chroma, and are available as utilities such as `bg-green-soft-900`. `--badge-{hue}-indicator` colors dots, icons, and labels for a category: `--{hue}-soft-300` in dark mode and `--{hue}-soft-600` in light mode, which hold every hue at the same 0.1 chroma so no hue shouts. Use the status role with `-subtle`, `-edge`, `-subtle-foreground`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are `success`, `destructive`, `warning`, and `info`, for states. `green`, `red`, `amber`, and `blue` are categorical tones like `purple` and `orange`, for labels that are not states. `Badge` takes `emphasis="strong"` (the default) or `emphasis="subtle"` (a quieter tinted fill). Use `--green-*` for the shared chromatic ramp.
 
@@ -337,7 +432,11 @@ Text uses roles, not sizes. A role such as `body-sm` or `caption` sets size, lin
 
 Shared components own their typography. Use their existing size and semantic variant APIs, and let compound slots style direct children through inheritance. Use `Txt` for text that the call site owns. Do not add a generic text-role prop or wrap arbitrary children just to migrate a CSS class. A specialized surface can use the existing `className` escape hatch with a DS role when the component's defaults do not fit.
 
+Floating menu rows, values, and search fields use `menu`: 13px text at weight 450 with a 20px line height and −0.01em tracking. DropdownMenu, ContextMenu, Select, and Combobox share this role; their triggers keep the button label role. Labels use the muted foreground tone, with lighter icons. Hover, keyboard highlight, and open submenus increase the contrast of both labels and icons together.
+
 `hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
+
+`display-lg` is the 28px role for plan prices and credit balances. `display` remains 22px. Use `<Txt variant="display-lg">$250</Txt>` without size or weight overrides.
 
 `Txt` defaults to the `body` role. With `as="strong"` or `as="b"`, omitting `variant` keeps the text bold; an explicit variant uses that role's weight.
 
@@ -433,6 +532,71 @@ import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 
 <CodeBlock lang="ts" code={snippet} />
 ```
+
+### Billing usage meters
+
+`Meter` keeps its red overage treatment by default. Set `variant="over-allowance"` for a warning segment and pass the amount charged in dollars through `paidFromCredits`:
+
+```tsx
+import { Meter } from '@mastra/playground-ui/components/Meter';
+
+<Meter
+  variant="over-allowance"
+  value={112}
+  max={100}
+  paidFromCredits={4.37}
+  label="vCPU"
+  aria-label="vCPU"
+  aria-valuetext="112 of 100 vCPU-hours, 12 over"
+/>;
+```
+
+The optional `label` slot accepts text or React content above the bar. Long labels truncate with an ellipsis to keep the label and caption on one line. The paid-from-credits caption sits on the right of that row, or above the bar on its own when no label is supplied. Keep supplying an accessible name through `aria-label` or `aria-labelledby`.
+
+The caption reads “$4.37 paid from credits” only when usage exceeds the allowance and the charged amount is positive. It is linked to the meter’s accessible description, alongside any caller description and `Meter.Source` key. The meter does not calculate charges from usage. `Meter.Source` children still reveal the source breakdown on hover or keyboard focus.
+
+See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s Resize while open story covers a full-size dialog and a form dialog crossing the 640px drawer breakpoint in either direction. Keep form drafts in caller-owned state when they must survive the popup remount.
+
+### Lint rules
+
+The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin that apps on the design system can enable. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
+
+```ts
+import { copyRuleExclusions, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { defineConfig } from 'oxlint';
+
+export default defineConfig({
+  jsPlugins: ['@mastra/playground-ui/oxlint'],
+  rules: { ...playgroundUiRules },
+  overrides: [copyRuleExclusions],
+});
+```
+
+| Rule                                   | Flags                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `playground-ui/icon-button-size`       | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/text-role`              | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
+| `playground-ui/txt-tone`               | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
+| `playground-ui/font-mono`              | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
+| `playground-ui/no-barrel-imports`      | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+| `playground-ui/no-text-separators`     | Decorative pipes, middots, bullets, spaced or double hyphens, and em dashes in authored UI copy  |
+| `playground-ui/no-text-layout-spacing` | Repeated spaces, tabs, or nonbreaking spaces used to lay out UI copy                             |
+
+Turn rules off per glob in `overrides`, for example for tests and stories.
+
+#### Copy rules
+
+Use separate elements for metadata fields and normal punctuation for sentences. Parentheses such as `(current)` and standalone missing-value placeholders such as `—` are allowed.
+
+The copy rules inspect JSX text, copy props, copy-named fields and helpers such as `label`, `title`, `description`, and `meta`, toast messages, and assignments to copy fields such as `element.title`. They follow local bindings and helper returns within the same file. Imported helper implementations and dynamic user content are not inspected.
+
+Code, preformatted content, Markdown sources, agent prompts, tool descriptions, browser tab titles assigned to `document.title`, and technical style or schema fields are excluded. JSX source indentation is normalized before checking whitespace. The rules report without automatic fixes because a metadata row and a sentence need different replacements.
+
+In this workspace, the copy rules apply only to the `src` trees in Playground, Playground UI, and Factory UI. Tests, stories, fixtures, and generated source are excluded.
+
+Both rules are part of `recommended`. Consumers that need only these rules can use `copyRules`. Put `copyRuleExclusions` after the rule-enabling override to keep authored UI copy separate from test and story content.
+
+The root `pnpm lint` command includes Playground, Playground UI, and Factory UI in regular CI linting. Run `pnpm turbo lint --filter=@internal/playground` to build its required dependency types and check Playground on its own. Documentation prose keeps its existing Vale and Remark checks.
 
 ## Documentation
 

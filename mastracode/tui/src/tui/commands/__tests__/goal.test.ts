@@ -832,7 +832,7 @@ describe('handleGoalCommand', () => {
     promptMocks.cyclesSubmitHandler?.(25);
     await promise;
 
-    expect(goalManager.updateJudgeDefaults).toHaveBeenCalledWith(ctx.state, 'anthropic/claude-sonnet-4-5', 25);
+    expect(goalManager.updateJudgeDefaults).toHaveBeenCalledWith(ctx.state.local, 'anthropic/claude-sonnet-4-5', 25);
     expect(showInfo).toHaveBeenCalledWith(
       'Judge defaults set: anthropic/claude-sonnet-4-5, 25 max attempts. Current goal updated.',
     );
@@ -868,7 +868,7 @@ describe('handleGoalCommand', () => {
     promptMocks.cyclesSubmitHandler?.(25);
     await promise;
 
-    expect(goalManager.updateJudgeDefaults).toHaveBeenCalledWith(ctx.state, 'anthropic/claude-sonnet-4-5', 25);
+    expect(goalManager.updateJudgeDefaults).toHaveBeenCalledWith(ctx.state.local, 'anthropic/claude-sonnet-4-5', 25);
   });
 
   it('does not resume a completed goal', async () => {
@@ -927,7 +927,7 @@ describe('handleGoalCommand', () => {
     expect(goalManager.clear).toHaveBeenCalled();
     // Deletion is a verb of its own: an explicit clear must ask for it, and a
     // save must never be what removes the goal.
-    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state.local);
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
     // Not running → must not abort.
@@ -1074,7 +1074,7 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['clear']);
 
     expect(goalManager.clear).toHaveBeenCalled();
-    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state.local);
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(abort).toHaveBeenCalledTimes(1);
     expect((state as any).userInitiatedAbort).toBe(true);

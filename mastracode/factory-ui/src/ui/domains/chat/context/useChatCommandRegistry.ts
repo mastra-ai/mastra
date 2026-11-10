@@ -2,13 +2,10 @@ import type { AgentControllerSessionSettings, ToolCategory } from '@mastra/clien
 import {
   getAvailableThinkingLevelsForModel,
   parseThinkCommand,
-  resolveDefaultThinkingLevel,
   runThinkingLevel,
   THINK_COMMAND_DESCRIPTOR,
 } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useLocation, useNavigate, useParams } from 'react-router';
-import type { ThinkingConfigInfo } from '../../../../api/types';
 
 import {
   useClearAgentControllerGoalMutation,
@@ -21,41 +18,45 @@ import {
   useFollowUpAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
-import { useThinkingConfigQuery } from '../../../../hooks/use-thinking';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
-import { settingsSectionPath } from '../../settings/settingsSections';
+import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
-import { findCommand, parseSlashCommand } from '../services/commands';
+import { findCommand, isSlashCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { THINKING_LEVEL_LABELS, thinkingSourceLabel } from '../services/thinkingLevels';
+import { DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import type { ThinkingDefault } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
-import { useChatModes } from './useChatModes';
+import { useChatModelScope } from './useChatModelScope';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
+import { useChatThinking } from './useChatThinking';
 import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
+
+function describeThinkingDefault({ level, origin }: ThinkingDefault): string {
+  return `${level} (${DEFAULT_SOURCE_LABELS[origin]})`;
+}
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
-  const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
-  const activeModelReasoningOptions = useModelReasoningOptions(activeModelId);
+  const { catalogTarget, modelScope } = useChatModelScope();
+  const activeModelReasoningOptions = useModelReasoningOptions(activeModelId, catalogTarget);
   const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -66,9 +67,16 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
-  const thinkingConfigQuery = useThinkingConfigQuery({ enabled: false });
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
+  const { thinkingDefault } = useChatThinking();
+
+  const openSessionDefaults = () => {
+    if (factoryId)
+      void navigate(settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope)), {
+        state: { from: location },
+      });
+  };
 
   const currentThinkingLevel = settingsQuery.data?.thinkingLevel;
   const runningThinkingLevel =
@@ -77,7 +85,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       value: 'default',
       label: 'Default',
-      description: 'Mode or global default',
+      ...(thinkingDefault ? { description: DEFAULT_SOURCE_LABELS[thinkingDefault.origin] } : {}),
       active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
     },
     ...availableThinkingLevels.map(level => ({
@@ -93,12 +101,6 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     if (!result.data) throw new Error('Session settings are unavailable');
     return result.data;
   };
-  const ensureThinkingConfig = async (): Promise<ThinkingConfigInfo> => {
-    if (thinkingConfigQuery.data) return thinkingConfigQuery.data;
-    const result = await thinkingConfigQuery.refetch();
-    if (!result.data) throw new Error('Thinking defaults are unavailable');
-    return result.data;
-  };
 
   const commandsWithoutHelp: SlashCommand[] = [
     {
@@ -107,7 +109,9 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: 'Switch model',
       requiresSession: true,
       execute: async rawArguments => {
-        if (rawArguments) await setModel(rawArguments);
+        if (!rawArguments) return;
+        if (modelLockedReason) return pushNotice(modelLockedReason);
+        await setModel(rawArguments);
       },
     },
     {
@@ -180,7 +184,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         pushNotice(
           !usage?.totalTokens
             ? 'No token usage recorded yet.'
-            : `Tokens — prompt: ${usage.promptTokens ?? 0}, completion: ${usage.completionTokens ?? 0}, total: ${usage.totalTokens}`,
+            : `Used ${usage.totalTokens} tokens (${usage.promptTokens ?? 0} prompt, ${usage.completionTokens ?? 0} completion).`,
         );
       },
     },
@@ -199,6 +203,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             );
             return;
           }
+          const changesThinkingLevel = action.kind === 'set' || action.kind === 'clear';
+          if (modelLockedReason && changesThinkingLevel) return pushNotice(modelLockedReason);
           if (action.kind === 'set') {
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });
@@ -208,23 +214,20 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           if (action.kind === 'clear') {
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
-            try {
-              const defaults = await ensureThinkingConfig();
-              const fallback = resolveDefaultThinkingLevel(defaults, activeModeId);
-              const source = thinkingSourceLabel(fallback.source, activeModeId);
-              pushNotice(`Thinking level set to default: ${fallback.level} (${source}).`);
-            } catch {
-              pushNotice('Thinking level set to default. Current default is unavailable.');
-            }
+            pushNotice(
+              thinkingDefault
+                ? `Thinking level set to default: ${describeThinkingDefault(thinkingDefault)}.`
+                : 'Thinking level set to default. Current default is unavailable.',
+            );
             return;
           }
-          const [settings, defaults] = await Promise.all([ensureSettings(), ensureThinkingConfig()]);
-          const fallback = resolveDefaultThinkingLevel(defaults, activeModeId);
-          const source = thinkingSourceLabel(fallback.source, activeModeId);
+          const settings = await ensureSettings();
+          if (!thinkingDefault) throw new Error('The thinking default is unavailable');
+          const defaultLevel = describeThinkingDefault(thinkingDefault);
           pushNotice(
             settings.thinkingLevel
-              ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${fallback.level} (${source}).`
-              : `Thinking level: ${fallback.level} (${source}).`,
+              ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${defaultLevel}.`
+              : `Thinking level: ${defaultLevel}.`,
           );
         } catch (error) {
           prefillComposer(originalText);
@@ -246,8 +249,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         pushNotice(
           [
             `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
-            `Path: ${projectPath ?? '(no workspace selected)'}`,
-            `Mode: ${activeModeId ?? '—'}`,
+            `Session: ${sessionId || '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
             `Running: ${busy}`,
@@ -259,17 +261,13 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       name: 'connect',
       description: 'Connect a model provider',
       requiresSession: false,
-      execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
-      },
+      execute: async () => openSessionDefaults(),
     },
     {
       name: 'login',
       description: 'Sign in with a provider account',
       requiresSession: false,
-      execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
-      },
+      execute: async () => openSessionDefaults(),
     },
     {
       name: 'follow-up',
@@ -299,10 +297,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     requiresSession: false,
     execute: async () => {
       const commands = [...commandsWithoutHelp, helpCommand];
-      const width = Math.max(...commands.map(command => `/${command.name} ${command.args ?? ''}`.length));
       const lines = commands.map(command => {
-        const signature = `/${command.name} ${command.args ?? ''}`.padEnd(width);
-        return `  ${signature}  — ${command.description}`;
+        return `/${command.name}${command.args ? ` ${command.args}` : ''}: ${command.description}`;
       });
       pushNotice(['Available commands:', ...lines].join('\n'));
     },
@@ -311,7 +307,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const commands = [...commandsWithoutHelp, helpCommand];
 
   const runComposerCommand = async (text: string): Promise<boolean> => {
-    if (!text.startsWith('/')) return false;
+    if (!isSlashCommand(text)) return false;
     const command = findCommand(commands, text);
     const parsed = parseSlashCommand(text);
     if (!command) {

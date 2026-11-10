@@ -63,6 +63,10 @@ export type ScrollAreaScrollButtons =
 export type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   maxHeight?: string;
   autoScroll?: boolean;
+  /** With `autoScroll`, start pinned to the end. `false` resumes where the reader left a remounted area. */
+  autoScrollStartFollowing?: boolean;
+  /** With `autoScroll`, called when the reader scrolls away from the end or back to it. */
+  onAutoScrollFollowingChange?: (following: boolean) => void;
   orientation?: Orientation;
   /** Show left/right controls for horizontal overflow. Only applies to `horizontal` and `both` orientations. */
   scrollButtons?: ScrollAreaScrollButtons;
@@ -73,6 +77,11 @@ export type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Ro
    * the scrollbar only appears while actively scrolling. Defaults to `true`.
    */
   revealScrollbarOnHover?: boolean;
+  /**
+   * Keep the scrollbar visible whenever the content overflows, so readers can tell there is more
+   * to scroll to. Overrides `revealScrollbarOnHover`. Defaults to `false`.
+   */
+  alwaysShowScrollbar?: boolean;
 };
 
 type ResolvedMask = Record<'top' | 'bottom' | 'left' | 'right', MaskFadeDepth | false>;
@@ -253,10 +262,20 @@ type ScrollAreaViewportContextValue = {
 const ScrollAreaViewportContext = React.createContext<ScrollAreaViewportContextValue | null>(null);
 
 export type ScrollAreaViewportProps = {
+  /**
+   * Viewport layout and scroll chaining overrides. Chaining stays native by default;
+   * use `overscroll-y-contain` to isolate vertical scrolling while allowing browser history swipes.
+   */
   className?: string;
+  contentClassName?: string;
   children?: React.ReactNode;
   /** The scrolling element, e.g. a virtualizer's `getScrollElement`. */
   ref?: React.Ref<HTMLDivElement>;
+  /**
+   * Renders the scrolling element as another component, for a library that has to own it
+   * (e.g. Base UI's `Select.List`, which Select scrolls to line the selected item up with the trigger).
+   */
+  render?: React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>['render'];
 };
 
 function useScrollAreaViewportContext() {
@@ -265,7 +284,7 @@ function useScrollAreaViewportContext() {
   return viewport;
 }
 
-function ScrollAreaViewport({ className, children, ref }: ScrollAreaViewportProps) {
+function ScrollAreaViewport({ className, contentClassName, children, ref, render }: ScrollAreaViewportProps) {
   const viewport = useScrollAreaViewportContext();
   const { areaRef } = viewport;
   const viewportRef = React.useMemo(() => mergeRefs(areaRef, ref), [areaRef, ref]);
@@ -275,8 +294,9 @@ function ScrollAreaViewport({ className, children, ref }: ScrollAreaViewportProp
       ref={viewportRef}
       className={cn(viewport.className, className)}
       style={viewport.style}
+      render={render}
     >
-      <ScrollAreaPrimitive.Content style={viewport.contentStyle}>
+      <ScrollAreaPrimitive.Content className={contentClassName} style={viewport.contentStyle}>
         <ScrollAreaViewportContext value={null}>{children}</ScrollAreaViewportContext>
       </ScrollAreaPrimitive.Content>
     </ScrollAreaPrimitive.Viewport>
@@ -288,14 +308,21 @@ function ScrollArea({
   children,
   maxHeight,
   autoScroll = false,
+  autoScrollStartFollowing,
+  onAutoScrollFollowingChange,
   orientation = 'vertical',
   scrollButtons,
   mask,
   revealScrollbarOnHover = true,
+  alwaysShowScrollbar = false,
   ...props
 }: ScrollAreaProps) {
   const areaRef = React.useRef<HTMLDivElement>(null);
-  useAutoscroll(areaRef, { enabled: autoScroll });
+  useAutoscroll(areaRef, {
+    enabled: autoScroll,
+    startFollowing: autoScrollStartFollowing,
+    onFollowingChange: onAutoScrollFollowingChange,
+  });
 
   const sides = resolveMask(mask, orientation);
   const fadesAnySide = Object.values(sides).some(Boolean);
@@ -336,10 +363,14 @@ function ScrollArea({
       </ScrollAreaViewportContext>
       {scrollButtons && orientation !== 'vertical' && <ScrollButtons areaRef={areaRef} scrollButtons={scrollButtons} />}
       {(orientation === 'vertical' || orientation === 'both') && (
-        <ScrollBar orientation="vertical" revealOnHover={revealScrollbarOnHover} />
+        <ScrollBar orientation="vertical" revealOnHover={revealScrollbarOnHover} alwaysVisible={alwaysShowScrollbar} />
       )}
       {(orientation === 'horizontal' || orientation === 'both') && (
-        <ScrollBar orientation="horizontal" revealOnHover={revealScrollbarOnHover} />
+        <ScrollBar
+          orientation="horizontal"
+          revealOnHover={revealScrollbarOnHover}
+          alwaysVisible={alwaysShowScrollbar}
+        />
       )}
       {orientation === 'both' && <ScrollAreaPrimitive.Corner />}
     </ScrollAreaPrimitive.Root>
@@ -350,18 +381,22 @@ function ScrollBar({
   className,
   orientation = 'vertical',
   revealOnHover = true,
+  alwaysVisible = false,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean }) {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean; alwaysVisible?: boolean }) {
   return (
     <ScrollAreaPrimitive.Scrollbar
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
         'flex touch-none transition-opacity duration-normal ease-out-custom select-none',
-        'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
-        revealOnHover && 'data-[hovering]:opacity-100',
-        orientation === 'vertical' && 'h-full w-1.5 p-px',
-        orientation === 'horizontal' && 'h-1.5 w-full flex-col p-px',
+        alwaysVisible ? 'opacity-100' : 'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
+        revealOnHover && !alwaysVisible && 'data-[hovering]:opacity-100',
+        // Base UI pins the bar to both ends of the area (top/bottom or left/right), so it spans it
+        // without a size class. `--scroll-area-scrollbar-inset` pulls its ends in, so a rounded
+        // container (a popup) doesn't clip them; 0 by default.
+        orientation === 'vertical' && 'my-(--scroll-area-scrollbar-inset,0px) w-1.5 p-px',
+        orientation === 'horizontal' && 'mx-(--scroll-area-scrollbar-inset,0px) h-1.5 flex-col p-px',
         className,
       )}
       {...props}

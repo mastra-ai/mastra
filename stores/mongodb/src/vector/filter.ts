@@ -86,12 +86,11 @@ export class MongoDBFilterTranslator extends BaseFilterTranslator<MongoDBVectorF
           throw new Error('$not operator cannot be empty');
         }
         return this.translateNode(value);
-      } else {
-        if (!Array.isArray(value)) {
-          throw new Error(`Value for logical operator ${operator} must be an array`);
-        }
-        return value.map(item => this.translateNode(item));
       }
+      if (!Array.isArray(value)) {
+        throw new Error(`Value for logical operator ${operator} must be an array`);
+      }
+      return value.map(item => this.translateNode(item));
     }
 
     // Handle basic and numeric operators

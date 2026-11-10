@@ -1,18 +1,16 @@
-/**
- * Regression coverage for the ThreadPage loading shell: while an uncached
- * user-session thread resolves, the app frame (sidebar + header) must stay
- * mounted with a centered spinner in the main slot only — clicking around the
- * sidebar must never blank the whole shell (the old early-return behavior).
- */
 import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
+import { queryKeys } from '../../../api/keys';
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
 const FACTORY_ID = 'fp-1';
@@ -21,12 +19,13 @@ const SESSION_ID = 'sess-1';
 const ROUTE_THREAD_ID = 'thread-2';
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
 
-const userSession = {
+const userSession: FactoryUserSession = {
   id: 'row-1',
   sessionId: SESSION_ID,
   projectRepositoryId: REPO_ID,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'private',
   branch: 'user/my-feature',
   baseBranch: 'main',
   sandboxId: null,
@@ -44,11 +43,6 @@ function deferred() {
   return { promise, resolve };
 }
 
-/**
- * Stubs the whole network surface of the user-session thread route, gating
- * only `/web/user-sessions/:sessionId` (the fetch that used to unmount the
- * shell while pending).
- */
 function stubThreadRoute({
   initialThreadId = SESSION_ID,
   threads = [],
@@ -60,31 +54,25 @@ function stubThreadRoute({
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
+  const onChanges = vi.fn();
   const onSwitchThread = vi.fn<(threadId: string) => void>();
+  const sessionAnswer: { status: 200 | 404 | 500 } = { status: 200 };
   let activeThreadId = initialThreadId;
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -92,16 +80,18 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [userSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    // The gated fetch: the user-session lookup that resolves the workspace.
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, async () => {
       await sessionGate.promise;
-      return HttpResponse.json({ session: userSession });
+      if (sessionAnswer.status === 200) return HttpResponse.json({ session: userSession });
+      return HttpResponse.json({ error: 'Session lookup failed' }, { status: sessionAnswer.status });
     }),
-    // Agent-controller session surface mounted once the session resolves.
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: activeThreadId }),
     ),
@@ -137,14 +127,16 @@ function stubThreadRoute({
       await messagesGate.promise;
       return HttpResponse.json({ messages });
     }),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
-    // Right workspace-files panel, which appears once workspacePath resolves.
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/workspace/changes`, () => {
+      onChanges();
+      return HttpResponse.json({ workspacePath: SESSION_ID, available: true, changes: [] });
+    }),
   );
 
-  return { sessionGate, messagesGate, onSwitchThread };
+  return { sessionGate, messagesGate, onChanges, onSwitchThread, sessionAnswer };
 }
 
 function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`) {
@@ -155,25 +147,44 @@ function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSI
 }
 
 describe('ThreadPage loading shell', () => {
-  it('keeps the sidebar mounted with a main-slot spinner while the session resolves, then shows the thread', async () => {
-    const { sessionGate, messagesGate } = stubThreadRoute();
-    messagesGate.resolve();
-    renderThreadRoute();
+  afterEach(() => vi.restoreAllMocks());
 
-    // Pending phase: the shell is up — sidebar navigation renders alongside
-    // the loading spinner instead of a bare full-page placeholder.
-    expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New user session' })).toBeInTheDocument();
-    // The thread chrome itself is not mounted yet.
-    expect(screen.queryByRole('region', { name: 'Thread composer' })).not.toBeInTheDocument();
+  it.each([
+    `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`,
+    `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`,
+  ])('shows a typable composer and open panel while session metadata loads at %s', async path => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
+    const { sessionGate, messagesGate, onChanges } = stubThreadRoute();
+    const user = userEvent.setup();
+    renderThreadRoute(path);
 
-    // Resolved phase: spinner swaps for the thread main content; the sidebar
-    // never unmounted.
+    const composer = await screen.findByRole('region', { name: 'Thread composer' });
+    const textarea = within(composer).getByRole('textbox', { name: 'Message' });
+    const send = within(composer).getByRole('button', { name: 'Send message' });
+    const conversation = screen.getByRole('region', { name: 'Conversation' });
+    expect(within(conversation).getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(conversation).not.toContainElement(composer);
+    expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Workspace files' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('status', { name: 'Loading workspace details' })).toBeInTheDocument();
+    expect(onChanges).not.toHaveBeenCalled();
+    expect(send).toBeDisabled();
+    await user.type(textarea, 'Draft written while opening the session');
+
+    // Panel details and chat history resolve independently; neither remounts the input.
     sessionGate.resolve();
-    expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Files' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
+    expect(textarea).toHaveValue('Draft written while opening the session');
+    expect(send).toBeDisabled();
+    expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    messagesGate.resolve();
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
+    expect(textarea).toHaveValue('Draft written while opening the session');
+    expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
+    // The dock opened by default, so it leaves an idle sandbox asleep.
+    expect(onChanges).not.toHaveBeenCalled();
   });
 
   it('keeps the session header and its workspace toggle mounted while thread messages load', async () => {
@@ -182,10 +193,6 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
 
     const header = await findPageHeader();
-    // The messages-loading window is now covered by the session-prepare step
-    // loader (with "Loading messages" as its active tail step) rather than
-    // the old skeleton bars — keeps the composer's spinning ring meaningful
-    // across the whole preparing window.
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
 
@@ -236,12 +243,80 @@ describe('ThreadPage loading shell', () => {
     });
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
 
-    // Thread-switch is gated on `sandboxReady`, which is session metadata
-    // resolving — so hold the session query to hold the switch.
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(onSwitchThread).not.toHaveBeenCalled();
 
     sessionGate.resolve();
     await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
+  });
+});
+
+describe('ThreadPage when reading the session fails', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('keeps a draft typed while the session loads through a failed read and its retry', async () => {
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute();
+    sessionAnswer.status = 500;
+    messagesGate.resolve();
+    const user = userEvent.setup();
+    renderThreadRoute();
+
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'Draft written while opening the session');
+    sessionGate.resolve();
+
+    expect(await screen.findByText(/Failed to load session \(500\)/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start a new session' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft written while opening the session');
+
+    sessionAnswer.status = 200;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+    expect(screen.queryByText(/Failed to load session/)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft written while opening the session');
+  });
+
+  it('keeps the open session, its transcript and draft when refreshing the session fails', async () => {
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
+    sessionGate.resolve();
+    messagesGate.resolve();
+    const user = userEvent.setup();
+    const { client } = renderThreadRoute();
+    expect(await screen.findByText('Run the focused checks')).toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Draft in progress');
+
+    sessionAnswer.status = 500;
+    await act(() => client.invalidateQueries({ queryKey: queryKeys.userSession(SESSION_ID) }));
+    await waitForMutationsIdle(client);
+
+    expect(screen.queryByText(/Failed to load session/)).not.toBeInTheDocument();
+    expect(screen.getByText('Run the focused checks')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft in progress');
+  });
+
+  it('leaves for the not-found page when refreshing finds the session gone', async () => {
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
+    sessionGate.resolve();
+    messagesGate.resolve();
+    const { client } = renderThreadRoute();
+    expect(await screen.findByText('Run the focused checks')).toBeInTheDocument();
+
+    sessionAnswer.status = 404;
+    await act(() => client.invalidateQueries({ queryKey: queryKeys.userSession(SESSION_ID) }));
+
+    expect(await screen.findByRole('heading', { name: 'Session not found' })).toBeInTheDocument();
+  });
+
+  it('offers no workspace panel on a workspace route the viewer cannot read', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute();
+    sessionAnswer.status = 404;
+    sessionGate.resolve();
+    messagesGate.resolve();
+    renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+
+    expect(await screen.findByText(/not found or is private to another user/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Workspace files' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
   });
 });

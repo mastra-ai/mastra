@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ a5dad336b416 — do not edit by hand.
 import type { ProviderRegistration } from '../../registry.js';
 import { createGoogleDriveTools } from './tools.js';
 

@@ -698,6 +698,32 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should produce a source-document part for a document source', () => {
+    const result = parts([
+      {
+        type: 'source',
+        payload: {
+          id: 'doc-1',
+          sourceType: 'document',
+          title: 'Q3 report',
+          mimeType: 'application/pdf',
+          filename: 'q3.pdf',
+          providerMetadata: { anthropic: { citedText: 'Revenue grew' } },
+        },
+      },
+    ]);
+    expect(result).toEqual([
+      {
+        type: 'source-document',
+        sourceId: 'doc-1',
+        mediaType: 'application/pdf',
+        title: 'Q3 report',
+        filename: 'q3.pdf',
+        providerMetadata: { anthropic: { citedText: 'Revenue grew' } },
+      },
+    ]);
+  });
+
   it('should produce a file part', () => {
     const result = parts([
       {

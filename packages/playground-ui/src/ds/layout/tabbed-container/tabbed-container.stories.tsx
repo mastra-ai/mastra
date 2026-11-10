@@ -72,7 +72,7 @@ const STATUS_OPTIONS = [
 
 const PanelContent = ({ title, description }: { title: string; description: string }) => (
   <div className="grid gap-1">
-    <h2 className={'text-subheading text-foreground'}>{title}</h2>
+    <h2 className="text-subheading text-foreground">{title}</h2>
     <p className="text-caption text-muted-foreground">{description}</p>
   </div>
 );
@@ -161,7 +161,7 @@ export const SearchAndFilter: Story = {
         <TabbedContainer defaultTab="overview">
           <TabbedContainer.Panel value="overview" label="Overview">
             <div className="grid gap-1">
-              <h2 className={'text-subheading text-foreground'}>Evaluation overview</h2>
+              <h2 className="text-subheading text-foreground">Evaluation overview</h2>
               <p className="text-caption text-muted-foreground">
                 Any product content can share the frame with data-heavy tabs.
               </p>
@@ -238,6 +238,69 @@ export const SearchAndFilter: Story = {
   },
 };
 
+export const SearchPerTab: Story = {
+  render: function SearchPerTabStory() {
+    const [runSearch, setRunSearch] = useState('');
+    const [scoreSearch, setScoreSearch] = useState('');
+    const runs = SAMPLE_RUNS.filter(run => run.input.toLowerCase().includes(runSearch.toLowerCase()));
+    const scores = SAMPLE_SCORES.filter(score => score.scorer.toLowerCase().includes(scoreSearch.toLowerCase()));
+
+    return (
+      <div className="flex w-full max-w-4xl">
+        <TabbedContainer defaultTab="runs">
+          <TabbedContainer.DataList
+            value="runs"
+            label="Runs"
+            columns="auto minmax(0,1fr) auto"
+            fit="container"
+            search={{ label: 'Search runs', placeholder: 'Search runs', value: runSearch, onSearch: setRunSearch }}
+          >
+            <DataList.Top>
+              <DataList.TopCell>ID</DataList.TopCell>
+              <DataList.TopCell>Input</DataList.TopCell>
+              <DataList.TopCell>Status</DataList.TopCell>
+            </DataList.Top>
+            {runs.map(run => (
+              <DataList.RowButton key={run.id} onClick={() => {}}>
+                <DataList.IdCell id={run.id} />
+                <DataList.TextCell>{run.input}</DataList.TextCell>
+                <DataList.Cell>{run.status}</DataList.Cell>
+              </DataList.RowButton>
+            ))}
+            {runs.length === 0 && <DataList.NoMatch message="No runs match the search" />}
+          </TabbedContainer.DataList>
+          <TabbedContainer.DataList
+            value="scores"
+            label="Scores"
+            columns="auto minmax(0,1fr) auto"
+            fit="container"
+            search={{
+              label: 'Search scores',
+              placeholder: 'Search scorers',
+              value: scoreSearch,
+              onSearch: setScoreSearch,
+            }}
+          >
+            <DataList.Top>
+              <DataList.TopCell>ID</DataList.TopCell>
+              <DataList.TopCell>Scorer</DataList.TopCell>
+              <DataList.TopCell>Score</DataList.TopCell>
+            </DataList.Top>
+            {scores.map(score => (
+              <DataList.RowButton key={score.id} onClick={() => {}}>
+                <DataList.IdCell id={score.id} />
+                <DataList.TextCell>{score.scorer}</DataList.TextCell>
+                <DataList.NumberCell>{score.score.toFixed(2)}</DataList.NumberCell>
+              </DataList.RowButton>
+            ))}
+            {scores.length === 0 && <DataList.NoMatch message="No scores match the search" />}
+          </TabbedContainer.DataList>
+        </TabbedContainer>
+      </div>
+    );
+  },
+};
+
 const OVERFLOW_TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'runs', label: 'Runs' },
@@ -273,7 +336,7 @@ export const OverflowAndClosable: Story = {
             tab.value === 'overview' ? (
               <TabbedContainer.Panel key={tab.value} value={tab.value} label={tab.label} onClose={closeTab(tab.value)}>
                 <div className="grid gap-1">
-                  <h2 className={'text-subheading text-foreground'}>Workspace overview</h2>
+                  <h2 className="text-subheading text-foreground">Workspace overview</h2>
                   <p className="text-caption text-muted-foreground">
                     Arbitrary content shares the same closable tab rail.
                   </p>

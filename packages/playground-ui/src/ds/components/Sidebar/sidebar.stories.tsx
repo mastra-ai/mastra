@@ -130,9 +130,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                 title={
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">Mastra</span>
-                    <span className="inline-flex h-5 items-center rounded bg-muted px-1.5 text-meta text-muted-foreground">
-                      Beta
-                    </span>
+                    <Sidebar.Badge>Beta</Sidebar.Badge>
                   </span>
                 }
               />
@@ -144,9 +142,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
             <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
               <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
             </a>
-            <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
-              Staging
-            </span>
+            <Sidebar.Badge>Staging</Sidebar.Badge>
             <Sidebar.Trigger />
           </Sidebar.Header>
         )}
@@ -349,6 +345,53 @@ export const Raised: Story = {
       description: {
         story:
           'The raised variant places the sidebar contents on a raised surface that bleeds off the left edge. On mobile it falls back to the standard drawer.',
+      },
+    },
+  },
+};
+
+const RECENT_THREADS = [
+  'Fix flaky deploy',
+  'Billing webhook',
+  'Docs typo',
+  'Rename env vars',
+  'Trace sampling',
+  'Retry policy',
+  'Slack alerts',
+];
+const FOLDED_THREAD_COUNT = 5;
+
+function ShowMoreStory() {
+  const [expanded, setExpanded] = useState(false);
+  const visibleThreads = expanded ? RECENT_THREADS : RECENT_THREADS.slice(0, FOLDED_THREAD_COUNT);
+  return (
+    <div className="flex h-screen">
+      <Sidebar>
+        <Sidebar.Nav>
+          <Sidebar.NavHeader icon={<ListTodo />}>Recent threads</Sidebar.NavHeader>
+          <Sidebar.NavList>
+            {visibleThreads.map(name => (
+              <Sidebar.NavLink key={name} link={{ name, url: '#' }} />
+            ))}
+          </Sidebar.NavList>
+          <Sidebar.NavShowMore
+            foldedCount={RECENT_THREADS.length - FOLDED_THREAD_COUNT}
+            expanded={expanded}
+            onExpandedChange={setExpanded}
+          />
+        </Sidebar.Nav>
+      </Sidebar>
+    </div>
+  );
+}
+
+export const ShowMore: Story = {
+  render: () => <ShowMoreStory />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'NavShowMore folds a long nav list to its first rows. It hides itself when the sidebar collapses to its rail and when nothing is folded.',
       },
     },
   },

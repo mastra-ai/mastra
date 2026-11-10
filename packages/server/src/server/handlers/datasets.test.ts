@@ -239,6 +239,55 @@ describe('Datasets Handlers', () => {
         expect.objectContaining({ requestContext: { tenantId: 'tenant-1' } }),
       );
     });
+
+    it('forwards agentModel to the dataset as a provider/modelId router string', async () => {
+      const startExperimentAsync = vi.fn().mockResolvedValue({
+        experimentId: 'experiment-1',
+        status: 'pending',
+        totalItems: 1,
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+
+      const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+        targetType: 'agent',
+        targetId: 'my-agent',
+        agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
+      });
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: 'dataset-1',
+        ...parsedBody,
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'agent', targetId: 'my-agent', agentModel: 'openai/gpt-5-mini' }),
+      );
+    });
+
+    describe('agentModel validation', () => {
+      const agentModel = { provider: 'openai', modelId: 'gpt-5-mini' };
+      const parse = (body: Record<string, unknown>) => TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse(body);
+
+      it('accepts agentModel for agent targets', () => {
+        const result = parse({ targetType: 'agent', targetId: 'a', agentModel });
+        expect(result.success && result.data.agentModel).toEqual(agentModel);
+      });
+
+      it('rejects agentModel for non-agent targets', () => {
+        expect(parse({ targetType: 'workflow', targetId: 'w', agentModel }).success).toBe(false);
+      });
+
+      it('rejects agentModel on create-only experiments', () => {
+        expect(parse({ start: false, targetType: 'agent', targetId: 'a', agentModel }).success).toBe(false);
+      });
+
+      it.each([{ provider: 'openai' }, { modelId: 'gpt-5-mini' }, { provider: '', modelId: 'gpt-5-mini' }])(
+        'rejects incomplete agentModel %o',
+        partial => {
+          expect(parse({ targetType: 'agent', targetId: 'a', agentModel: partial }).success).toBe(false);
+        },
+      );
+    });
   });
 
   describe('COMPARE_EXPERIMENTS_ROUTE', () => {
@@ -580,6 +629,42 @@ describe('Datasets Handlers', () => {
         perPage: 10,
       } as any)) as any;
       expect(listed.results).toHaveLength(2);
+    });
+
+    it('rejects updating a result through a dataset the experiment does not belong to', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const other = await mastra.datasets.create({ name: 'Other DS' });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      const submitted = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+
+      await expect(
+        UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: other.id,
+          experimentId: created.experimentId,
+          resultId: submitted.id,
+          tags: ['forged'],
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].tags ?? []).not.toContain('forged');
     });
 
     it('attaches the experiment targetType to returned results', async () => {
@@ -950,6 +1035,52 @@ describe('Datasets Handlers', () => {
         targetIds: ['agent-a'],
       } as any);
       expect(byTypeAndId.datasets.map((d: any) => d.name)).toEqual(['Agent A']);
+    });
+
+    describe('when datasetIds is given', () => {
+      it('returns exactly those datasets on one page, even past the default page size', async () => {
+        const created = [];
+        for (let i = 0; i < 12; i++) {
+          created.push(await mastra.datasets.create({ name: `Dataset ${i + 1}` }));
+        }
+        // The two oldest datasets are not on the default first page.
+        const oldest = [created[0]!.id, created[1]!.id];
+
+        const result = await LIST_DATASETS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          page: 3,
+          perPage: 1,
+          datasetIds: [...oldest, 'missing-id'],
+        } as any);
+
+        expect(result.datasets.map((d: any) => d.name).sort()).toEqual(['Dataset 1', 'Dataset 2']);
+        expect(result.pagination).toMatchObject({ total: 2, page: 0, perPage: false, hasMore: false });
+      });
+
+      it('accepts a single id or repeated ids from the query string', () => {
+        expect(listDatasetsQuerySchema.parse({ datasetIds: 'ds-1' }).datasetIds).toEqual(['ds-1']);
+        expect(listDatasetsQuerySchema.parse({ datasetIds: ['ds-1', 'ds-2'] }).datasetIds).toEqual(['ds-1', 'ds-2']);
+        expect(listDatasetsQuerySchema.parse({ datasetIds: [''] }).datasetIds).toEqual([]);
+        expect(listDatasetsQuerySchema.parse({}).datasetIds).toBeUndefined();
+      });
+
+      it('returns no datasets for a blank datasetIds value', async () => {
+        await mastra.datasets.create({ name: 'Dataset 1' });
+        const { datasetIds } = listDatasetsQuerySchema.parse({ datasetIds: '' });
+
+        const result = await LIST_DATASETS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetIds,
+        } as any);
+
+        expect(result.datasets).toHaveLength(0);
+        expect(result.pagination.total).toBe(0);
+      });
+
+      it('rejects more than 100 ids', () => {
+        const datasetIds = Array.from({ length: 101 }, (_, i) => `ds-${i}`);
+        expect(() => listDatasetsQuerySchema.parse({ datasetIds })).toThrow();
+      });
     });
 
     it('does not pass filters when no target params are given', async () => {

@@ -98,21 +98,19 @@ export function isZodType(value: unknown): value is ZodType {
 export function convertSchemaToZod(schema: Schema | ZodSchema | JSONSchema7): ZodType {
   if (isZodType(schema)) {
     return schema;
-  } else {
-    const jsonSchemaToConvert = 'jsonSchema' in schema ? schema.jsonSchema : schema;
-    try {
-      if ('toJSONSchema' in z) {
-        // @ts-expect-error - type issue in convertJsonSchemaToZod
-        return convertJsonSchemaToZod(jsonSchemaToConvert);
-      } else {
-        // @ts-expect-error - type issue in convertJsonSchemaToZodV3
-        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
-      }
-    } catch (e: unknown) {
-      const errorMessage = `[Schema Builder] Failed to convert schema parameters to Zod. Original schema: ${JSON.stringify(jsonSchemaToConvert)}`;
-      console.error(errorMessage, e);
-      throw new Error(errorMessage + (e instanceof Error ? `\n${e.stack}` : '\nUnknown error object'));
+  }
+  const jsonSchemaToConvert = 'jsonSchema' in schema ? schema.jsonSchema : schema;
+  try {
+    if ('toJSONSchema' in z) {
+      // @ts-expect-error - type issue in convertJsonSchemaToZod
+      return convertJsonSchemaToZod(jsonSchemaToConvert);
     }
+    // @ts-expect-error - type issue in convertJsonSchemaToZodV3
+    return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+  } catch (e: unknown) {
+    const errorMessage = `[Schema Builder] Failed to convert schema parameters to Zod. Original schema: ${JSON.stringify(jsonSchemaToConvert)}`;
+    console.error(errorMessage, e);
+    throw new Error(errorMessage + (e instanceof Error ? `\n${e.stack}` : '\nUnknown error object'));
   }
 }
 
@@ -202,28 +200,27 @@ export function applyCompatLayer({
     }
 
     return standardSchemaToJSONSchema(standardSchema);
-  } else {
-    let zodSchema: ZodSchema;
-
-    if (isZodType(schema)) {
-      zodSchema = schema;
-    } else {
-      if (isStandardSchemaWithJSON(schema)) {
-        throw new Error('StandardSchemaWithJSON is not supported for applyCompatLayer and aiSdkSchema mode');
-      }
-
-      // Convert non-zod schema to Zod
-      // After ruling out ZodType and StandardSchemaWithJSON above, remaining PublicSchema
-      // types are Schema (v4/v5/v6) and JSONSchema7, all handled by convertSchemaToZod
-      zodSchema = convertSchemaToZod(schema as Schema | JSONSchema7);
-    }
-
-    for (const compat of compatLayers) {
-      if (compat.shouldApply()) {
-        return compat.processToAISDKSchema(zodSchema);
-      }
-    }
-
-    return convertZodSchemaToAISDKSchema(zodSchema);
   }
+  let zodSchema: ZodSchema;
+
+  if (isZodType(schema)) {
+    zodSchema = schema;
+  } else {
+    if (isStandardSchemaWithJSON(schema)) {
+      throw new Error('StandardSchemaWithJSON is not supported for applyCompatLayer and aiSdkSchema mode');
+    }
+
+    // Convert non-zod schema to Zod
+    // After ruling out ZodType and StandardSchemaWithJSON above, remaining PublicSchema
+    // types are Schema (v4/v5/v6) and JSONSchema7, all handled by convertSchemaToZod
+    zodSchema = convertSchemaToZod(schema as Schema | JSONSchema7);
+  }
+
+  for (const compat of compatLayers) {
+    if (compat.shouldApply()) {
+      return compat.processToAISDKSchema(zodSchema);
+    }
+  }
+
+  return convertZodSchemaToAISDKSchema(zodSchema);
 }

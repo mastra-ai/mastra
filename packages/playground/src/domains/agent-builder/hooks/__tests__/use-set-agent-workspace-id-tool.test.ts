@@ -35,13 +35,13 @@ describe('useSetAgentWorkspaceIdTool', () => {
 
   it('writes the workspace id to the form', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ workspaceId: 'ws-1' } as any);
+    await tool.execute!({ workspaceId: 'ws-1' });
     expect(form().getValues('workspaceId')).toBe('ws-1');
   });
 
   it('ignores empty workspace ids', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ workspaceId: '' } as any);
+    await tool.execute!({ workspaceId: '' });
     expect(form().getValues('workspaceId')).toBeUndefined();
   });
 

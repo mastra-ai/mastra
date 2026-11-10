@@ -6,6 +6,7 @@ import {
   BookOpen,
   Bot,
   Brain,
+  Bug,
   Building2,
   Cable,
   CircleUserRound,
@@ -13,13 +14,16 @@ import {
   Inbox,
   Palette,
   SlidersHorizontal,
+  SquareKanban,
+  Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
-import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
+import type { SettingsSection } from '../settingsSections';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -30,15 +34,14 @@ type SettingsNavItem = {
 
 type SettingsNavGroup = {
   id: string;
-  label?: string;
-  ariaLabel?: string;
+  label: string;
   items: SettingsNavItem[];
 };
 
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
-    id: 'personal',
-    label: 'Your settings',
+    id: 'account',
+    label: 'Account',
     items: [
       {
         id: 'account',
@@ -53,43 +56,30 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         searchText: 'preferences general theme appearance color scheme completion sound',
       },
       {
-        id: 'personal-models',
-        label: SETTINGS_SECTION_LABELS['personal-models'],
-        icon: Bot,
-        searchText: 'your personal models default model api keys providers credentials sign in oauth',
-      },
-      {
-        id: 'memory',
-        label: SETTINGS_SECTION_LABELS.memory,
-        icon: Brain,
-        searchText:
-          'your personal memory observational recall observer reflector thresholds attachments summarize context',
-      },
-      {
         id: 'connections',
         label: SETTINGS_SECTION_LABELS.connections,
         icon: Cable,
-        searchText: 'your personal connections connected accounts slack communication integrations',
+        searchText: 'personal organization connections connected accounts slack integrations github gitlab tokens pat',
       },
     ],
   },
   {
-    id: 'factory',
-    label: 'Factory settings',
+    id: 'agent',
+    label: 'Agent',
     items: [
       {
         id: 'models',
         label: SETTINGS_SECTION_LABELS.models,
         icon: Bot,
         searchText:
-          'factory shared models thinking level default api keys providers credentials sign in oauth custom endpoints',
+          'models default model your models factory models routing personal factory defaults hybrid thinking level api keys providers credentials sign in oauth custom endpoints',
       },
       {
-        id: 'factory-memory',
-        label: SETTINGS_SECTION_LABELS['factory-memory'],
+        id: 'memory',
+        label: SETTINGS_SECTION_LABELS.memory,
         icon: Brain,
         searchText:
-          'factory shared memory observational recall observer reflector thresholds attachments summarize context',
+          'memory personal memory factory memory your memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
         id: 'skills',
@@ -98,16 +88,29 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         searchText: 'skills factory triage plan review agent instructions prompts stages',
       },
       {
+        id: 'tools',
+        label: SETTINGS_SECTION_LABELS.tools,
+        icon: Wrench,
+        searchText: 'tools mastra connect connections integrations sessions platform project approval',
+      },
+      {
         id: 'behavior',
         label: SETTINGS_SECTION_LABELS.behavior,
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
+    ],
+  },
+  {
+    id: 'factory',
+    label: 'Factory',
+    items: [
       {
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
         icon: GitBranch,
-        searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
+        searchText:
+          'repositories source control git branches remotes code worktrees clone order pre-clone setup teardown github gitlab',
       },
       {
         id: 'intake',
@@ -116,10 +119,24 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
       },
       {
+        id: 'board',
+        label: SETTINGS_SECTION_LABELS.board,
+        icon: SquareKanban,
+        searchText:
+          'work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
+      },
+      {
         id: 'factory',
         label: SETTINGS_SECTION_LABELS.factory,
         icon: Building2,
-        searchText: 'factory project organization manage remove delete danger',
+        searchText:
+          'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
+      },
+      {
+        id: 'debug',
+        label: SETTINGS_SECTION_LABELS.debug,
+        icon: Bug,
+        searchText: 'debug versions packages release build node mastra core factory installed running',
       },
     ],
   },
@@ -152,19 +169,15 @@ export function SettingsNavigation() {
       </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <SearchInput label="Search settings" placeholder="Search settings…" value={query} onValueChange={setQuery} />
+          <SearchInput label="Search settings" placeholder="Search settings" value={query} onValueChange={setQuery} />
         </div>
       )}
       {filteredGroups.length > 0 ? (
         filteredGroups.map(group => {
-          const headerId = group.label ? `settings-${group.id}` : undefined;
+          const headerId = `settings-${group.id}`;
           return (
-            <Sidebar.NavSection
-              key={group.id}
-              aria-labelledby={headerId}
-              aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
-            >
-              {group.label && <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>}
+            <Sidebar.NavSection key={group.id} aria-labelledby={headerId}>
+              <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>
               <Sidebar.NavList>
                 {group.items.map(({ id, label, icon: Icon }) => {
                   const isActive = section === id;

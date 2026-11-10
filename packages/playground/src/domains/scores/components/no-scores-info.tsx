@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ExternalLinkIcon, Play } from 'lucide-react';
+import { ExternalLinkIcon, Plus } from 'lucide-react';
 
 export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void }) => (
   <EmptyState
@@ -9,8 +9,8 @@ export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void
     actionSlot={
       <div className="flex flex-col items-center gap-2">
         {onRunExperiment && (
-          <Button variant="primary" onClick={onRunExperiment} icon={<Play />}>
-            Run Experiment
+          <Button variant="primary" onClick={onRunExperiment} icon={<Plus />}>
+            New experiment
           </Button>
         )}
         <Button
@@ -19,7 +19,7 @@ export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void
 
           icon={<ExternalLinkIcon />}
         >
-          Scorers Documentation
+          Scorers documentation
         </Button>
       </div>
     }

@@ -44,7 +44,7 @@ export interface ModelSelectionDecision {
   /** Confidence in the selected choice, when the evaluation model returned a distribution. */
   probability?: number;
   /** Why the router abstained, when it did. */
-  abstained?: 'below-threshold' | 'no-text' | 'error' | 'no-model-for-choice';
+  abstained?: 'below-threshold' | 'no-text' | 'error' | 'no-model-for-choice' | 'refused';
 }
 
 interface ModelSelectionCommonOptions {
@@ -374,6 +374,9 @@ export class ModelSelectionProcessor<const Q extends ClassifierQuestions = Class
     }
 
     const answer = (result.answers as Record<string, any>)[this.question!];
+    if (answer?.type === 'refusal') {
+      return { abstained: 'refused' };
+    }
     if (!answer || typeof answer.choice !== 'string') {
       return { abstained: 'error' };
     }

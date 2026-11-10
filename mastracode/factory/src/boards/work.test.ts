@@ -1,98 +1,156 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
-import { workBoard } from './work.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { cardRuleFacts } from './card-facts.js';
+import { phaseRunDecision } from './phase-runner.js';
+import { selfReviewWorkBoard } from './test-utils.js';
+import { BUILD_OBJECTIVE, workBoard } from './work.js';
 
-function executeContext(source: FactoryRuleItemContext['source']): FactoryStageRuleContext {
+function entering(
+  source: FactoryRuleItemContext['source'],
+  fromStage: string,
+  toStage: string,
+): Pick<FactoryStageRuleContext, 'ingress' | 'item' | 'fromStage'> {
   return {
-    tenant: { orgId: 'org-1', projectId: 'project-1' },
-    actor: { type: 'system', id: 'test' },
     ingress: { type: 'rule', id: 'ingress-1' },
-    cause: 'test',
-    causalChain: [],
-    configVersion: 'test',
+    fromStage,
     item: {
       id: 'item-1',
       source,
       sourceKey: 'source-1',
       parentWorkItemId: null,
       title: 'Fix the issue',
-      url: 'https://gitlab.com/acme/app/-/issues/3',
-      stages: ['execute'],
+      url: 'https://github.com/acme/app/issues/3',
+      stages: [toStage],
       acceptedAt: null,
-      metadata: { identifier: 'acme/app#3' },
+      metadata: {},
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: 'Fix the issue',
+        source: { integrationId: 'github', type: 'issue', externalId: '3' },
+        metadata: { identifier: 'acme/app#3' },
+      }),
     },
-    board: 'work',
-    itemRevision: 1,
-    source: source === 'gitlab-issue' ? 'gitlabIssue' : 'issue',
-    stage: 'execute',
-    fromStage: 'triage',
-    toStage: 'execute',
   };
 }
 
-describe('work board build prompt', () => {
-  it('asks for a merge request for a GitLab issue', async () => {
-    const decision = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(executeContext('gitlab-issue'));
-    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });
-    if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(decision.prompt).toContain('Open a merge request when the work is ready for review.');
-    expect(decision.prompt).toContain('GitLab issue acme/app#3');
-    expect(decision.prompt).not.toContain('pull request');
+describe('the Work board seed', () => {
+  it('stores a runner for every working phase, with the skill, context and fields each phase runs on', () => {
+    const working = Object.fromEntries(
+      Object.entries(workBoard.phases).flatMap(([key, phase]) =>
+        phase.kind === 'working'
+          ? [
+              [
+                key,
+                {
+                  runner: phase.runner,
+                  exitTool: phase.exitTool,
+                  tools: phase.tools,
+                  autoStart: phase.autoStart,
+                  autoStartWhen: phase.autoStartWhen,
+                  nextPhases: phase.nextPhases,
+                },
+              ],
+            ]
+          : [],
+      ),
+    );
+    expect(working).toEqual({
+      triage: {
+        runner: { agentId: 'code-agent', skill: 'factory-triage', context: 'triage' },
+        exitTool: undefined,
+        tools: undefined,
+        autoStart: undefined,
+        autoStartWhen: undefined,
+        nextPhases: ['intake', 'planning', 'done', 'canceled'],
+      },
+      planning: {
+        runner: { agentId: 'code-agent', skill: 'factory-plan', context: 'work' },
+        exitTool: { id: 'submit_plan', autoApprove: false },
+        tools: undefined,
+        autoStart: undefined,
+        autoStartWhen: undefined,
+        nextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'],
+      },
+      execute: {
+        runner: {
+          agentId: 'code-agent',
+          skill: 'factory-build',
+          context: 'work',
+          goal: { objective: BUILD_OBJECTIVE, maxRuns: 20 },
+        },
+        exitTool: undefined,
+        tools: undefined,
+        autoStart: undefined,
+        autoStartWhen: undefined,
+        nextPhases: ['pr-review', 'planning', 'done', 'canceled'],
+      },
+      'pr-review': {
+        runner: { agentId: 'code-agent', skill: 'factory-review', context: 'review' },
+        exitTool: undefined,
+        tools: ['factory_record_review_verdict', 'factory_review_source'],
+        autoStart: undefined,
+        autoStartWhen: undefined,
+        nextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'],
+      },
+    });
+    expect(workBoard.tools).toEqual({});
   });
 
-  it('retains the pull-request instruction for a GitHub issue', async () => {
-    const decision = await workBoard.rules.execute?.issue?.onEnter?.(executeContext('github-issue'));
-    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });
-    if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(decision.prompt).toContain('Open a pull request when the work is ready for review.');
+  it("states the build goal's done, continue and waiting criteria in the stored objective the judge reads", () => {
+    expect(BUILD_OBJECTIVE).toContain('plan approved in Planning');
+    expect(BUILD_OBJECTIVE).toContain('pushed');
+    // The judge cannot see the project's self-review setting: the objective never asks it to.
+    expect(BUILD_OBJECTIVE).not.toMatch(/self-review/i);
+    expect(BUILD_OBJECTIVE).toMatch(/out of Building \(to Review after opening the change request/);
+    // A change request tracked on its own card never lets the card into Review: that hand-off is done too.
+    expect(BUILD_OBJECTIVE).toContain('tracked on its own card');
+    expect(BUILD_OBJECTIVE).toContain('says a person should confirm it is reviewed there');
+    expect(BUILD_OBJECTIVE).toMatch(/[Ww]aiting/);
+    expect(BUILD_OBJECTIVE.length).toBeLessThanOrEqual(2_000);
   });
 });
 
-describe('work board done policy', () => {
-  function toDone(
-    actor: { type: string; id: string; role?: string },
-    reviewVerdict?: string | null,
-    openPullRequestNumber?: number | null,
-  ) {
-    return workBoard.transitionPolicy!({
-      actor,
-      fromStage: 'review',
-      toStage: 'done',
-      isHumanTransition: actor.type === 'human',
-      plansAutoApproved: false,
-      planApproved: false,
-      item: {
-        ...executeContext('issue').item,
-        stages: ['review'],
-        triageType: 'bug',
-        metadata: { reviewVerdict, openPullRequestNumber },
-      },
-    } as never);
-  }
+describe('Work phase runs', () => {
+  it('starts factory-build with its goal whether the card comes from Planning or back from Review', () => {
+    for (const fromStage of ['planning', 'pr-review']) {
+      expect(phaseRunDecision(workBoard, 'execute', entering('github-issue', fromStage, 'execute'))).toEqual({
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'factory-build',
+        arguments: 'Work item (https://github.com/acme/app/issues/3)',
+        goal: { objective: BUILD_OBJECTIVE, maxRuns: 20 },
+        startsAfterOwnMove: true,
+        idempotencyKey: 'ingress-1:execute:factory-build',
+      });
+    }
+  });
 
-  it('keeps the builder from closing work while a review requests changes', () => {
-    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'request changes')).toMatchObject({
-      type: 'reject',
-      code: 'invalid_transition',
+  it('has no self-review phase: Building hands its change request straight to Review', () => {
+    expect(Object.keys(workBoard.phases)).not.toContain('review');
+    expect(workBoard.phases['pr-review']).toMatchObject({ name: 'Review' });
+  });
+
+  it("starts self-review on its own, in an older project's Work, only while the card has no open change request", () => {
+    const facts = (metadata: Record<string, unknown>) =>
+      cardRuleFacts({ title: 'Fix the issue', metadata, externalSource: null });
+    expect(selfReviewWorkBoard.startsAutomatically('review', facts({}))).toBe(true);
+    expect(selfReviewWorkBoard.startsAutomatically('review', facts({ openPullRequestNumber: 7 }))).toBe(false);
+    expect(
+      phaseRunDecision(selfReviewWorkBoard, 'review', entering('github-issue', 'execute', 'review')),
+    ).toMatchObject({
+      role: 'review',
+      skillName: 'factory-self-review',
+      idempotencyKey: 'ingress-1:review:factory-self-review',
     });
   });
 
-  it('lets the builder close work once the review approves or the merge settles it', () => {
-    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'approve')).toMatchObject({ type: 'allow' });
-    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, null)).toMatchObject({ type: 'allow' });
-  });
-
-  it('still lets a maintainer close work with changes requested', () => {
-    expect(toDone({ type: 'human', id: 'user-1' }, 'request changes')).toMatchObject({ type: 'allow' });
-  });
-
-  it('keeps the builder from closing work while its pull request is still open', () => {
-    expect(toDone({ type: 'agent', id: 'binding-1', role: 'work' }, 'approve', 17)).toMatchObject({
-      type: 'reject',
-      code: 'invalid_transition',
-    });
-    expect(toDone({ type: 'system', id: 'factory-rule-dispatcher' }, null, 17)).toMatchObject({ type: 'allow' });
-    expect(toDone({ type: 'human', id: 'user-1' }, null, 17)).toMatchObject({ type: 'allow' });
+  it('starts the triage runner for an incident.io follow-up, whose fetch reference the signal carries', () => {
+    expect(
+      phaseRunDecision(workBoard, 'triage', {
+        ...entering('incidentio-follow-up', 'intake', 'triage'),
+      }),
+    ).toMatchObject({ role: 'triage', skillName: 'factory-triage', idempotencyKey: 'ingress-1:triage:factory-triage' });
   });
 });

@@ -63,15 +63,26 @@ export function Table({ variant = 'default', ...props }: TableProps) {
   );
 }
 
-export type TableHeaderProps = ComponentProps<'thead'>;
+export type TableHeaderProps = ComponentProps<'thead'> & {
+  placement?: 'above' | 'inside';
+};
 
-function TableHeader({ className, ...props }: TableHeaderProps) {
+const insideHeaderStyles = [
+  '[&>tr>th]:border-b [&>tr>th]:bg-background [&>tr>th]:bg-clip-padding',
+  '[&>tr>th:first-child]:rounded-tl-lg [&>tr>th:last-child]:rounded-tr-lg',
+];
+
+function TableHeader({ className, placement = 'above', ...props }: TableHeaderProps) {
   const variant = useTableVariant();
+  const inside = variant === 'inset' && placement === 'inside';
+  const headerPlacement = inside ? 'inside' : undefined;
   return (
     <thead
       data-slot="table-header"
+      data-placement={headerPlacement}
       className={cn(
         variant === 'default' && '[&>tr]:h-table-header [&>tr]:border-b [&>tr]:border-border [&>tr]:bg-card',
+        inside && insideHeaderStyles,
         className,
       )}
       {...props}
@@ -137,6 +148,8 @@ const tableBodyStyles = [
   '[&>tr:first-child>td:first-child]:rounded-tl-lg',
   '[&>tr:first-child>td:last-child]:rounded-tr-lg',
   '[&>tr:first-child_[data-row-target]]:after:rounded-t-lg',
+  '[thead[data-placement=inside]+&>tr:first-child>td]:rounded-none',
+  '[thead[data-placement=inside]+&>tr:first-child_[data-row-target]]:after:rounded-none',
   '[&>tr:last-child_[data-row-target]]:after:rounded-b-lg',
   '[&_:is(a,button,input,select,textarea):not([data-row-target])]:relative',
   '[&_:is(a,button,input,select,textarea):not([data-row-target])]:z-1',

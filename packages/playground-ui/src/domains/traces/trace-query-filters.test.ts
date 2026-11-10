@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTraceQueryRequest,
-  clampTraceDiscoveryTimeRange,
+  resolveTraceQueryTimeRange,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from './trace-query-filters';
 
@@ -275,6 +275,43 @@ describe('buildTraceQueryRequest', () => {
     });
   });
 
+  describe('when an outcome token carries is', () => {
+    it('emits an eq predicate on the trace outcome', () => {
+      expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'outcome', value: 'limit' }], now }).where).toEqual({
+        op: 'and',
+        args: [{ op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } }],
+      });
+    });
+  });
+
+  describe('when an outcome token carries notExists', () => {
+    it('matches traces with no recorded outcome', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'outcome', value: '', operatorId: 'notExists' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'notExists', path: 'outcome' }] });
+    });
+  });
+
+  describe('when a stop reason token carries isNot', () => {
+    it('also matches traces with no recorded stop reason', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'stopReason', value: 'max_steps', operatorId: 'isNot' }], now })
+          .where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path: 'stopReason' }, right: { literal: 'max_steps' } },
+              { op: 'notExists', path: 'stopReason' },
+            ],
+          },
+        ],
+      });
+    });
+  });
+
   describe('when an optional trace field carries isNot', () => {
     it('also matches traces where the field is unset', () => {
       expect(
@@ -500,6 +537,46 @@ describe('buildTraceQueryRequest', () => {
       expect(
         buildTraceQueryRequest({ tokens: [{ fieldId: 'durationMs', value: '', operatorId: 'exists' }], now }).where,
       ).toEqual({ op: 'and', args: [{ op: 'exists', path: 'durationMs' }] });
+    });
+  });
+
+  describe.each([
+    ['timeToFirstChunkMs', 'time to first chunk'],
+    ['timeToFirstTokenMs', 'time to first token'],
+  ])('when a root %s token is set', (path, name) => {
+    it(`emits a top-level range predicate on the root ${name}`, () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: '400', operatorId: 'lte' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'lte', left: { path }, right: { literal: 400 } }] });
+    });
+
+    it('also matches traces that never streamed when excluding a value', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: '400', operatorId: 'isNot' }], now }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path }, right: { literal: 400 } },
+              { op: 'notExists', path },
+            ],
+          },
+        ],
+      });
+    });
+
+    it(`emits a spans.some predicate for the span ${name}`, () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: `spans.${path}`, value: '250', operatorId: 'gt' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ spans: { some: { op: 'gt', left: { path }, right: { literal: 250 } } } }] });
+    });
+
+    it('drops a non-numeric value', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: 'fast', operatorId: 'gt' }], now }).where,
+      ).toBeUndefined();
     });
   });
 
@@ -803,22 +880,21 @@ describe('buildTraceQueryRequest with groups', () => {
   });
 });
 
-describe('clampTraceDiscoveryTimeRange', () => {
-  const to = '2026-09-15T12:00:00.000Z';
-
-  it('keeps ranges of 31 days or less untouched', () => {
-    const range = { from: '2026-09-01T00:00:00.000Z', to };
-    expect(clampTraceDiscoveryTimeRange(range)).toBe(range);
-  });
-
-  it('clamps wider ranges to the 31 days ending at to', () => {
-    expect(clampTraceDiscoveryTimeRange({ from: '2026-01-01T00:00:00.000Z', to })).toEqual({
-      from: '2026-08-15T12:00:00.000Z',
-      to,
+describe('resolveTraceQueryTimeRange', () => {
+  describe('when the window has no ends', () => {
+    it('covers the last seven days up to now', () => {
+      expect(resolveTraceQueryTimeRange(undefined, undefined, now)).toEqual({
+        from: '2026-09-08T12:00:00.000Z',
+        to: now.toISOString(),
+      });
     });
   });
 
-  it('falls back to the 31-day window when from is not before to', () => {
-    expect(clampTraceDiscoveryTimeRange({ from: to, to })).toEqual({ from: '2026-08-15T12:00:00.000Z', to });
+  describe('when the window has both ends', () => {
+    it('uses them', () => {
+      const from = new Date('2026-01-01T00:00:00.000Z');
+      const to = new Date('2026-01-02T00:00:00.000Z');
+      expect(resolveTraceQueryTimeRange(from, to, now)).toEqual({ from: from.toISOString(), to: to.toISOString() });
+    });
   });
 });

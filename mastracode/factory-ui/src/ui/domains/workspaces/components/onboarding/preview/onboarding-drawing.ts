@@ -1,4 +1,5 @@
-/** App-owned vector artwork. All scenes share six surfaces so their geometry can morph. */
+/** App-owned vector artwork. All scenes share the same surface count so their geometry can morph. */
+export const DRAWING_SURFACE_COUNT = 8;
 export type Point = readonly [number, number];
 type WorldPoint = readonly [number, number, number];
 export type DrawingScene = 'factory' | 'codebase' | 'intake' | 'accounts';
@@ -136,6 +137,10 @@ export function panel(x: number, y: number, width: number, height: number, marke
   );
 }
 const folded = panel(200, 175, 0, 0);
+
+function withFoldedSurfaces(surfaces: Surface[]): Surface[] {
+  return [...surfaces, ...Array.from({ length: DRAWING_SURFACE_COUNT - surfaces.length }, () => folded)];
+}
 const worldLine = (a: WorldPoint, b: WorldPoint): Point[] => [project(a), project(b)];
 const worldPolygon = (points: WorldPoint[]) => polygon(points.map(project));
 function box(
@@ -202,6 +207,8 @@ const roofs = [0, 1, 2].map(i => {
 const miniScale = 0.46,
   miniX = 314 - 222 * miniScale,
   miniY = 148 - 168 * miniScale;
+const accountsMiniX = 80 - 209 * miniScale,
+  accountsMiniY = 222 - 213 * miniScale;
 const repositoryCenter = project([-21, 107, 13]);
 const repoX = 116 - repositoryCenter[0] * 1.65,
   repoY = 181 - repositoryCenter[1] * 1.65;
@@ -255,14 +262,18 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
       x: 0,
       y: 0,
       foundation: 0,
-      surfaces: [...roofs, conveyorTicket(0, smooth(0.18)), conveyorTicket(1, smooth(0.53)), folded],
+      surfaces: withFoldedSurfaces([...roofs, conveyorTicket(0, smooth(0.18)), conveyorTicket(1, smooth(0.53))]),
     };
   if (scene === 'codebase')
     return {
       ...base,
       building: 1,
       links: [codeLink, hiddenLink, hiddenLink],
-      surfaces: [...roofs.map(shape => transformed(shape, miniScale, miniX, miniY)), repository, ...brackets],
+      surfaces: withFoldedSurfaces([
+        ...roofs.map(shape => transformed(shape, miniScale, miniX, miniY)),
+        repository,
+        ...brackets,
+      ]),
     };
   if (scene === 'intake')
     return {
@@ -277,26 +288,29 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
         hiddenLink,
         hiddenLink,
       ],
-      surfaces: [panel(28, 48, 148, 64), panel(28, 186, 104, 48), panel(148, 186, 104, 48), folded, folded, folded],
+      surfaces: withFoldedSurfaces([panel(28, 48, 148, 64), panel(28, 186, 104, 48), panel(148, 186, 104, 48)]),
     };
   const links = [80, 200, 320].map((x, index): Point[] => {
-    const origin = mode === 'individual' || (mode === 'hybrid' && index === 2) ? x : 200;
+    const origin = mode === 'shared' ? 200 : x;
     return [
       [origin, 90],
       [origin, 126],
       [x, 126],
-      [x, 156],
+      [x, index === 0 ? 185 : 156],
     ];
   });
   return {
     ...base,
     links,
+    building: 1,
+    x: accountsMiniX,
+    y: accountsMiniY,
     surfaces: [
-      panel(28, 156, 104, 94, true),
-      panel(148, 156, 104, 94, true),
-      panel(268, 156, 104, 94, true),
-      panel(148, 48, 104, 42),
-      mode === 'individual' ? panel(28, 48, 104, 42) : folded,
+      ...roofs.map(shape => transformed(shape, miniScale, accountsMiniX, accountsMiniY)),
+      panel(148, 156, 104, 94),
+      panel(268, 156, 104, 94),
+      panel(mode === 'shared' ? 148 : 28, 48, 104, 42),
+      mode === 'shared' ? folded : panel(148, 48, 104, 42),
       mode === 'shared' ? folded : panel(268, 48, 104, 42),
     ],
   };

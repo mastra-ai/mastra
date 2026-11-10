@@ -8,7 +8,6 @@ import { Avatar } from '@/ds/components/Avatar';
 import { Button } from '@/ds/components/Button';
 import {
   Comment,
-  type CommentVariant,
   CommentItem,
   CommentItemActions,
   CommentItemAuthor,
@@ -19,8 +18,10 @@ import {
   CommentItemTimestamp,
   CommentList,
 } from '@/ds/components/Comment';
+import type { CommentVariant } from '@/ds/components/Comment';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
+import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { formatDate } from '@/utils/date-format';
@@ -32,6 +33,7 @@ type FeedbackThreadProps = {
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
   onSubmit: (text: string) => void | Promise<unknown>;
   isSubmitting?: boolean;
+  submitError?: string;
   /** When provided, records with a feedbackId get a delete action. */
   onDelete?: (feedbackId: string) => void | Promise<unknown>;
   isDeleting?: boolean;
@@ -175,6 +177,7 @@ export function FeedbackThread({
   onPageChange,
   onSubmit,
   isSubmitting = false,
+  submitError,
   onDelete,
   isDeleting = false,
   variant = 'thread',
@@ -220,7 +223,7 @@ export function FeedbackThread({
         <InputGroup size="sm">
           <InputGroupInput
             aria-label="Leave feedback"
-            placeholder="Leave feedback..."
+            placeholder="Leave feedback"
             value={text}
             onChange={event => setText(event.target.value)}
           />
@@ -231,6 +234,11 @@ export function FeedbackThread({
           </InputGroupAddon>
         </InputGroup>
       </form>
+      {submitError && (
+        <Notice variant="destructive" role="alert">
+          <Notice.Message>{submitError}</Notice.Message>
+        </Notice>
+      )}
 
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (

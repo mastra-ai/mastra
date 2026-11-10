@@ -1,8 +1,10 @@
 import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
+import type { RequestContextReader } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
@@ -14,15 +16,24 @@ import {
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
+import { GOOGLE_VERTEX_GATEWAY_ID, createGoogleVertexGateway } from '../providers/google-vertex-gateway.js';
+import { normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
-import { resolveCredentialStore } from './credential-resolver.js';
+import {
+  hasCredentialTenantResolver,
+  prepareCredentialTenant,
+  resolveCredentialScope,
+  resolveCredentialStore,
+  resolveTenantFromRequestContext,
+} from './credential-resolver.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 import {
   MASTRA_GATEWAY_PREFIX,
   MASTRACODE_GATEWAY_ID,
   MastraCodeGateway,
   getGlobalAuthStorage,
+  hasProviderEnvironmentKey,
   reloadAuthStorage,
   stripMastraGatewayPrefix,
 } from './mastracode-gateway.js';
@@ -50,7 +61,7 @@ export {
 } from './custom-provider-source.js';
 export type { CustomProvidersSource } from './custom-provider-source.js';
 
-type ResolvedModel = GatewayLanguageModel;
+type ResolvedModel = GatewayLanguageModel | ModelRouterLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
 function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
@@ -70,7 +81,7 @@ function accountCredential(account: OAuthAccountRecord) {
 
 export function createRequestScopedCredentialStore(
   base: CredentialStore,
-  requestContext?: RequestContext,
+  requestContext?: RequestContextReader,
 ): CredentialStore {
   const selectedId = (providerId: string) => getRequestAccountSelection(requestContext, providerId);
   const selectedAccount = (providerId: string) => {
@@ -162,18 +173,52 @@ export function resolveModel(
     requestContext?: RequestContext;
     anthropicPromptCacheScope?: AnthropicPromptCacheScope;
   },
-): GatewayLanguageModel {
+): ResolvedModel {
+  if (!hasCredentialTenantResolver()) return resolveModelForRequest(modelId, options);
+  const createRequestModel = () => {
+    const requestContext = options?.requestContext ? new RequestContext(options.requestContext.entries()) : undefined;
+    // The router supplies stable SDK metadata and adapts whichever provider the refreshed policy selects.
+    // Each invocation owns its policy context and model cache, including concurrent OM and subagent calls.
+    return new ModelRouterLanguageModel({ id: `${MASTRACODE_GATEWAY_ID}/${modelId}` }, [
+      {
+        id: MASTRACODE_GATEWAY_ID,
+        name: 'Request-scoped MastraCode',
+        fetchProviders: async () => ({}),
+        buildUrl: () => undefined,
+        getApiKey: async () => '',
+        resolveAuth: () => ({ apiKey: 'request-scoped' }),
+        resolveLanguageModel: async () => {
+          await prepareCredentialTenant(requestContext);
+          return resolveModelForRequest(modelId, { ...options, requestContext });
+        },
+      },
+    ]);
+  };
+  let currentModel = createRequestModel();
+  return new Proxy(currentModel, {
+    get(_target, property) {
+      if (property === 'supportedUrls') return createRequestModel().supportedUrls;
+      if (property === 'doStream' || property === 'doGenerate') {
+        return async (...args: unknown[]) => {
+          const refreshed = createRequestModel();
+          currentModel = refreshed;
+          return Reflect.apply(Reflect.get(refreshed, property), refreshed, args);
+        };
+      }
+      const value = Reflect.get(currentModel, property, currentModel);
+      return typeof value === 'function' ? value.bind(currentModel) : value;
+    },
+  });
+}
+
+function resolveModelForRequest(modelId: string, options?: Parameters<typeof resolveModel>[1]): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  // Bedrock was previously cataloged under the MastraCode gateway namespace
-  // (`mastracode/amazon-bedrock/<model>`). Normalize any legacy saved ids to the
-  // standalone `amazon-bedrock/<model>` form so they resolve through the
-  // dedicated Bedrock gateway.
-  const bedrockLegacyPrefix = `${MASTRACODE_GATEWAY_ID}/amazon-bedrock/`;
-  const bedrockNormalizedInput = modelId.startsWith(bedrockLegacyPrefix)
-    ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
-    : modelId;
+  // Older versions cataloged Bedrock, Copilot and Kimi under the MastraCode
+  // gateway namespace, and Kimi under its own `kimi-for-coding` provider. Map
+  // already-saved ids (packs, OM settings, thread metadata) to current ids.
+  const legacyNormalizedInput = normalizeLegacyModelId(modelId);
   // Deployed web registers a custom providers source (DB-backed, tenant
   // scoped); when registered it is authoritative and settings.json custom
   // providers are ignored. Undefined = local settings-based behavior.
@@ -184,7 +229,7 @@ export function resolveModel(
   // Normalize at resolution time (in addition to stripping at selection time)
   // so already-saved ids and any surface that persists the raw catalog id
   // still resolve to the custom provider.
-  const normalizedInput = stripMastraCodeCustomProviderPrefix(bedrockNormalizedInput, customProviders);
+  const normalizedInput = stripMastraCodeCustomProviderPrefix(legacyNormalizedInput, customProviders);
   const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
   const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
   const [providerId, ...modelParts] = normalizedModelId.split('/');
@@ -193,9 +238,8 @@ export function resolveModel(
     throw new Error(`Invalid model id: ${modelId}`);
   }
 
-  // Deployed web registers a per-tenant credential store provider; when the
-  // request carries an authenticated tenant, resolve credentials through the
-  // caller's own store (user > org > env). Undefined = global AuthStorage.
+  // Deployed hosts resolve exactly the trusted policy's credential scope.
+  // Only local mode falls back to global AuthStorage.
   const tenantCredentialStore = resolveCredentialStore(options?.requestContext);
   const baseCredentialStore = tenantCredentialStore ?? getGlobalAuthStorage();
 
@@ -227,6 +271,37 @@ export function resolveModel(
     });
   }
 
+  if (providerId === GOOGLE_VERTEX_GATEWAY_ID) {
+    if (
+      tenantCredentialStore?.allowEnvironmentFallback === false &&
+      !tenantCredentialStore.allowsDeploymentCredentials?.(GOOGLE_VERTEX_GATEWAY_ID)
+    ) {
+      throw new ProviderAuthRequiredError(
+        'Google Vertex AI is not enabled for this Factory deployment. The operator must configure Application Default Credentials, GOOGLE_VERTEX_PROJECT, GOOGLE_VERTEX_LOCATION, and FACTORY_DEPLOYMENT_MODEL_PROVIDERS=google-vertex.',
+      );
+    }
+
+    const vertexGateway = createGoogleVertexGateway();
+    const auth = vertexGateway.resolveAuth({
+      gatewayId: GOOGLE_VERTEX_GATEWAY_ID,
+      providerId: GOOGLE_VERTEX_GATEWAY_ID,
+      modelId: bareModelId,
+      routerId: normalizedModelId,
+    });
+    if (!auth) {
+      throw new Error(
+        'Google Vertex ADC requires GOOGLE_VERTEX_PROJECT and GOOGLE_VERTEX_LOCATION. Configure Application Default Credentials in the deployment environment.',
+      );
+    }
+
+    return vertexGateway.resolveLanguageModel({
+      providerId: GOOGLE_VERTEX_GATEWAY_ID,
+      modelId: bareModelId,
+      apiKey: auth.apiKey ?? '',
+      headers,
+    });
+  }
+
   const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
   const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
@@ -251,8 +326,12 @@ export function resolveModel(
   });
 
   if (!auth && credentialStore?.allowEnvironmentFallback === false) {
+    // Scopes are exclusive, so name the one in effect: otherwise a user with a
+    // personal sign-in can't tell why an organization-scoped Factory fails.
     throw new ProviderAuthRequiredError(
-      `No usable ${providerId} credential is configured for this signed-in Factory account. Connect the provider or add an organization credential, then try again.`,
+      resolveCredentialScope(options?.requestContext) === 'factory'
+        ? `No usable ${providerId} credential is available for ${normalizedModelId}. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
+        : `No usable ${providerId} credential is available for ${normalizedModelId}. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
     );
   }
 
@@ -262,6 +341,91 @@ export function resolveModel(
     apiKey: auth?.apiKey ?? '',
     headers,
   });
+}
+
+/**
+ * Which provider-executed web search tool fits the transport a model resolves to:
+ * - `anthropic` / `openai`: the native provider API (direct keys, and Claude or
+ *   Codex OAuth, which keep the native API even through the Mastra gateway).
+ * - `mastra-gateway`: a `mastra/` alias with a gateway key and no OAuth, which
+ *   `resolveModelForRequest` sends to the gateway's OpenRouter chat endpoint.
+ * Other providers have no built-in search. Mirrors the routing in
+ * `resolveModelForRequest` and `MastraCodeGateway`, so the registered tool and
+ * the prompt guidance follow the request the model will actually make.
+ */
+export type ProviderWebSearchRoute = 'anthropic' | 'openai' | 'mastra-gateway';
+
+/** Credential ids whose OAuth sign-in keeps the native provider API through the gateway. */
+const NATIVE_OAUTH_CREDENTIAL_IDS = { anthropic: 'anthropic', openai: 'openai-codex' } as const;
+
+/** The provider whose credentials decide a gateway alias's route, or its fixed route otherwise. */
+function classifyWebSearchModel(
+  modelId: string | undefined,
+): { route: ProviderWebSearchRoute | undefined } | { gatewayProvider: keyof typeof NATIVE_OAUTH_CREDENTIAL_IDS } {
+  if (!modelId) return { route: undefined };
+  const normalizedInput = normalizeLegacyModelId(modelId);
+  const providerId = stripMastraGatewayPrefix(normalizedInput).split('/')[0];
+  if (providerId !== 'anthropic' && providerId !== 'openai') return { route: undefined };
+  if (!normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX)) return { route: providerId };
+  // Read the gateway key from fresh storage, as `resolveModelForRequest` does.
+  reloadAuthStorage();
+  return MastraCodeGateway.getMastraGatewayApiKey() ? { gatewayProvider: providerId } : { route: providerId };
+}
+
+/**
+ * Prepares tenant credential policy when the web search route depends on it and the
+ * request hasn't been prepared yet. Model resolution prepares its own context only when
+ * the model is invoked, after tools and instructions are built. Returns undefined when
+ * there is nothing to prepare, so callers can stay synchronous.
+ */
+export function prepareProviderWebSearchRoute(
+  modelId: string | undefined,
+  options?: { requestContext?: RequestContextReader },
+): Promise<void> | undefined {
+  const requestContext = options?.requestContext;
+  if (!hasCredentialTenantResolver() || !(requestContext instanceof RequestContext)) return undefined;
+  if (resolveTenantFromRequestContext(requestContext)) return undefined;
+  if (!('gatewayProvider' in classifyWebSearchModel(modelId))) return undefined;
+  return prepareCredentialTenant(requestContext);
+}
+
+export function resolveProviderWebSearchRoute(
+  modelId: string | undefined,
+  options?: { requestContext?: RequestContextReader },
+): ProviderWebSearchRoute | undefined {
+  const model = classifyWebSearchModel(modelId);
+  if (!('gatewayProvider' in model)) return model.route;
+  const providerId = model.gatewayProvider;
+
+  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
+  return credentialStore.get(NATIVE_OAUTH_CREDENTIAL_IDS[providerId])?.type === 'oauth' ? providerId : 'mastra-gateway';
+}
+
+/**
+ * Whether `resolveModel` can authenticate a provider for this request, using the
+ * same credential lookup: the tenant store in deployed Factory (no environment
+ * keys), otherwise local auth and then the provider's environment keys.
+ */
+export function canUseProvider(providerId: string, options?: { requestContext?: RequestContext }): boolean {
+  reloadAuthStorage();
+  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
+  const gateway = createMastraCodeGateway({
+    mastraGatewayBaseUrl: '',
+    routeThroughMastraGateway: false,
+    customProviders: resolveCustomProviders(options?.requestContext) ?? loadSettings().customProviders,
+    credentialStore,
+  });
+  const auth = gateway.resolveAuth({
+    gatewayId: MASTRACODE_GATEWAY_ID,
+    providerId,
+    modelId: '',
+    routerId: `${MASTRACODE_GATEWAY_ID}/${providerId}`,
+  });
+  if (auth) return true;
+  // resolveModel lets the models.dev gateway read environment keys only when the store allows it.
+  return credentialStore.allowEnvironmentFallback !== false && hasProviderEnvironmentKey(providerId);
 }
 
 export interface ThinkingRequestContext {
@@ -274,20 +438,24 @@ export interface ThinkingRequestContext {
  * Precedence:
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
- *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`).
- *   3. Global default (`preferences.thinkingLevel`).
+ *   2. The host's default for this request (`hostDefault`), when the host
+ *      stores thinking defaults itself (the Factory keeps one per Factory).
+ *   3. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
+ *      only when the context carries a session mode.
+ *   4. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
  * (rule-driven) Factory runs that nobody ever opens interactively.
  */
-
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
+  hostDefault?: ThinkingLevelSetting,
 ): ThinkingLevelSetting {
   const override = agentControllerContext?.state?.thinkingLevel;
   if (isThinkingLevelSetting(override)) return override;
+  if (hostDefault) return hostDefault;
   const modeId = agentControllerContext?.session?.modeId;
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
@@ -301,6 +469,7 @@ export function resolveRequestThinkingLevel(
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
+  { modeless = false, defaultThinkingLevel }: { modeless?: boolean; defaultThinkingLevel?: ThinkingLevelSetting } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
   const state = controller?.getState?.() as
@@ -332,7 +501,11 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(controller, settingsPath);
+  const thinkingLevel = resolveRequestThinkingLevel(
+    modeless ? { state: controller?.state } : controller,
+    settingsPath,
+    defaultThinkingLevel,
+  );
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.

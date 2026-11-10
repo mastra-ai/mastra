@@ -148,7 +148,7 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
             <span
               role="img"
               aria-label={`Mount: ${mount.displayName ?? mount.provider}`}
-              title={[mount.displayName ?? mount.provider, mount.description].filter(Boolean).join(' — ')}
+              title={[mount.displayName ?? mount.provider, mount.description].filter(Boolean).join(': ')}
               className="flex"
             >
               <MountIcon mount={mount} />

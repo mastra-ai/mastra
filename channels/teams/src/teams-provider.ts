@@ -19,6 +19,7 @@ import {
   addApplicationPassword,
   createApplication,
   createBotRegistration,
+  decodeTenantId,
   deleteApplication,
   deleteBotRegistration,
   validateBotCredentials,
@@ -173,8 +174,12 @@ export class TeamsProvider implements ChannelProvider {
   async #doInitialize(): Promise<void> {
     const store = await this.#getStore();
     const active = (await store.list()).filter(i => i.status === 'active');
-    this.#configured = active.length > 0;
+    // Only installations with a readable secret can actually be activated.
+    this.#configured = active.some(i => !i.secretUnreadable);
     for (const installation of active) {
+      // The store already logged the actionable error; the adapter can't
+      // authenticate without the secret.
+      if (installation.secretUnreadable) continue;
       try {
         await this.#activateInstallation(installation);
       } catch (err) {
@@ -351,19 +356,28 @@ export class TeamsProvider implements ChannelProvider {
     }
 
     const botName = options.name ?? agentId;
-    const appType = this.#config.appType ?? 'MultiTenant';
-    const appTenantId = options.appTenantId ?? this.#config.appTenantId;
-    if (appType === 'SingleTenant' && !appTenantId) {
-      throw new Error(
-        'TeamsProvider is configured for SingleTenant bots but no appTenantId is available. ' +
-          'Set `appTenantId` on the provider or pass it to connect().',
-      );
-    }
+    // Microsoft deprecated new multitenant bot registrations (July 2025) —
+    // the Dev Portal rejects them with HTTP 400, so delegated provisioning
+    // defaults to SingleTenant.
+    const appType = this.#config.appType ?? 'SingleTenant';
+    let appTenantId = options.appTenantId ?? this.#config.appTenantId;
     const webhookId = existing?.webhookId ?? randomUUID();
     const messagingEndpoint = `${baseUrl}/${PLATFORM}/events/${webhookId}`;
 
     // 1. Entra application + client secret (Microsoft Graph audience).
     const graphToken = await tokenResolver(TEAMS_GRAPH_SCOPE, appTenantId);
+    if (appType === 'SingleTenant' && !appTenantId) {
+      // Default the tenant from the delegated token's `tid` claim so
+      // connect() stays zero-config; an explicit appTenantId still wins.
+      appTenantId = decodeTenantId(graphToken);
+      if (!appTenantId) {
+        throw new Error(
+          'TeamsProvider provisions SingleTenant bots but no appTenantId is available ' +
+            'and the Graph access token carries no `tid` claim. ' +
+            'Set `appTenantId` on the provider or pass it to connect().',
+        );
+      }
+    }
     const application = await createApplication(
       graphToken,
       { displayName: botName, signInAudience: appType === 'SingleTenant' ? 'AzureADMyOrg' : 'AzureADMultipleOrgs' },
@@ -388,6 +402,7 @@ export class TeamsProvider implements ChannelProvider {
           iconUrl: this.#config.botIconUrl ?? '',
           messagingEndpoint,
           callingEndpoint: '',
+          isSingleTenant: appType === 'SingleTenant',
         },
         this.#config.devPortalBaseUrl,
       );
@@ -478,7 +493,7 @@ export class TeamsProvider implements ChannelProvider {
     }
     this.#adapters.delete(existing.id);
     await store.deleteByAgent(agentId);
-    this.#configured = (await store.list()).some(i => i.status === 'active');
+    this.#configured = (await store.list()).some(i => i.status === 'active' && !i.secretUnreadable);
   }
 
   /** List installations (public info only — no secrets). */
@@ -524,7 +539,7 @@ export class TeamsProvider implements ChannelProvider {
 
     const store = await this.#getStore();
     const installation = await store.getByWebhookId(webhookId);
-    if (!installation || installation.status !== 'active') {
+    if (!installation || installation.status !== 'active' || installation.secretUnreadable) {
       return c.json({ ok: false, error: 'Unknown webhook' }, 404);
     }
 

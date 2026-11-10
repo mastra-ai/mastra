@@ -4,12 +4,8 @@ import { PassThrough, Readable } from 'node:stream';
 import { ToolMockMatcher } from '@mastra/core/datasets';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  EXPERIMENT_WORKER_EXIT_CODES,
-  EXPERIMENT_WORKER_MAX_FRAME_BYTES,
-  runExperimentWorker,
-  type ExperimentWorkerBuildIdentity,
-} from './runtime';
+import { EXPERIMENT_WORKER_EXIT_CODES, EXPERIMENT_WORKER_MAX_FRAME_BYTES, runExperimentWorker } from './runtime';
+import type { ExperimentWorkerBuildIdentity } from './runtime';
 
 const build: ExperimentWorkerBuildIdentity = {
   buildId: 'test-build',

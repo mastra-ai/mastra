@@ -18,9 +18,7 @@ export interface DatasetItemsViewProps {
   datasetId: string;
   onAddItemClick?: () => void;
   onNavigateToDataset?: (datasetId: string) => void;
-  leftSlot?: React.ReactNode;
-  rightSlot?: React.ReactNode;
-  belowToolbarSlot?: React.ReactNode;
+  toolbarActionsSlot?: React.ReactNode;
 }
 
 const DATASET_ITEMS_SORT_KEYS = ['createdAt'] as const;
@@ -29,9 +27,7 @@ export function DatasetItemsView({
   datasetId,
   onAddItemClick,
   onNavigateToDataset,
-  leftSlot,
-  rightSlot,
-  belowToolbarSlot,
+  toolbarActionsSlot,
 }: DatasetItemsViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion: activeDatasetVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
@@ -132,9 +128,7 @@ export function DatasetItemsView({
       <div className="grid h-full overflow-auto">
         <DatasetItems
           items={items}
-          leftSlot={leftSlot}
-          rightSlot={rightSlot}
-          belowToolbarSlot={belowToolbarSlot}
+          toolbarActionsSlot={toolbarActionsSlot}
           isLoading={isItemsLoading}
           onItemClick={handleItemClick}
           featuredItemId={currentItemId}

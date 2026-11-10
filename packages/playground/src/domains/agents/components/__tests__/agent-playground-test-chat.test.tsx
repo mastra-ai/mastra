@@ -162,7 +162,7 @@ describe('AgentPlaygroundTestChat', () => {
       renderEditorTestChat();
     });
 
-    const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'hello from the editor composer' } });
     });

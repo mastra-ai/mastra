@@ -8,7 +8,8 @@ import type { FactoryProjectsStorage } from '../../../storage/domains/projects/b
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
-import { PlatformApiClient, PlatformApiError } from '../api-client.js';
+import type { PlatformApiClient} from '../api-client.js';
+import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/linear';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
@@ -78,7 +79,7 @@ export interface PlatformLinearEventWorkerConfig {
    * First-observation of a Linear issue happens through the user-authenticated
    * `/web/linear/issues?factoryProjectId=...` intake path instead.
    */
-  workItems: Pick<WorkItemsStorage, 'list'>;
+  workItems: Pick<WorkItemsStorage, 'list' | 'copyLegacyCards'>;
   /** Called with a single-issue rules ingress derived from an `Issue` webhook. */
   ingestFactoryIssue?: (input: LinearRulesIngress) => Promise<unknown>;
   reconcileFactoryState?: IssueReconciler;
@@ -119,7 +120,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
   readonly #linear: PlatformLinearEventDispatchIntegration;
   readonly #storage: PlatformLinearEventStorage;
   readonly #projects: Pick<FactoryProjectsStorage, 'listAll'>;
-  readonly #workItems: Pick<WorkItemsStorage, 'list'>;
+  readonly #workItems: Pick<WorkItemsStorage, 'list' | 'copyLegacyCards'>;
   readonly #ingestFactoryIssue: ((input: LinearRulesIngress) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: IssueReconciler | undefined;
   readonly #pollEventsEnabled: boolean;
@@ -412,6 +413,12 @@ export class PlatformLinearEventWorker extends MastraWorker {
     for (const project of projects) {
       let items;
       try {
+        // A finished card may still be only in the legacy table; copy it so the event finds it.
+        await this.#workItems.copyLegacyCards({
+          orgId: project.orgId,
+          factoryProjectId: project.id,
+          sources: [{ integrationId: 'linear', type: 'issue', externalId: sourceKey }],
+        });
         items = await this.#workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
       } catch (error) {
         this.deps?.logger.error('Platform Linear work-item lookup failed', {

@@ -3,7 +3,7 @@ import { ComposerAttachment } from '@mastra/playground-ui/domains/chat/attachmen
 import { ComposerAttachmentList } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-list';
 import { useState } from 'react';
 
-import type { PendingImage } from './useComposerImages';
+import type { PendingImage } from '../context/ComposerImagesContext';
 
 export function ComposerImageAttachments({
   images,

@@ -1,4 +1,5 @@
-import { Badge, type BadgeVariant } from '@mastra/playground-ui/components/Badge';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
@@ -7,18 +8,9 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  Brain,
-  CircleCheck,
-  CircleDashed,
-  CirclePause,
-  CircleSlash,
-  CircleX,
-  ListFilter,
-  Repeat,
-  type LucideIcon,
-} from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { CircleCheck, CircleDashed, CirclePause, CircleSlash, CircleX, ListFilter, Repeat } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { useSearchParams } from 'react-router';
 
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
@@ -27,23 +19,21 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
-import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
-import { SkeletonRows } from '../ui/SkeletonRows';
+import { RuleDecisionsSkeleton } from '../domains/factory/components/RuleDecisionsSkeleton';
+import { RULE_DECISION_GROUPS, ruleDecisionGroup } from '../domains/factory/ruleDecisionGroups';
+import type { RuleDecisionGroupKey } from '../domains/factory/ruleDecisionGroups';
 
-const DECISION_GROUPS: ReadonlyArray<{
-  key: string;
-  label: string;
-  icon: LucideIcon;
-  statuses: FactoryDecisionStatus[] | undefined;
-}> = [
-  { key: 'all', label: 'All effects', icon: ListFilter, statuses: undefined },
-  { key: 'active', label: 'Active', icon: CircleDashed, statuses: ['pending', 'leased', 'retry'] },
-  { key: 'proposed', label: 'Awaiting approval', icon: CirclePause, statuses: ['proposed'] },
-  { key: 'failed', label: 'Failed', icon: CircleX, statuses: ['failed'] },
-  { key: 'succeeded', label: 'Succeeded', icon: CircleCheck, statuses: ['succeeded'] },
-];
+const GROUP_PRESENTATION: Record<RuleDecisionGroupKey, { label: string; icon: LucideIcon }> = {
+  all: { label: 'All effects', icon: ListFilter },
+  active: { label: 'Active', icon: CircleDashed },
+  proposed: { label: 'Awaiting approval', icon: CirclePause },
+  failed: { label: 'Failed', icon: CircleX },
+  succeeded: { label: 'Succeeded', icon: CircleCheck },
+};
+
+const DECISION_GROUPS = RULE_DECISION_GROUPS.map(group => ({ ...group, ...GROUP_PRESENTATION[group.key] }));
 
 const STATUS_STYLE: Record<
   FactoryDecisionStatus,
@@ -74,10 +64,8 @@ export function RulesPage() {
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedGroup = searchParams.get('group');
-  const decisionGroup = DECISION_GROUPS.find(entry => entry.key === requestedGroup)?.key ?? 'all';
+  const { key: decisionGroup, statuses: decisionStatuses } = ruleDecisionGroup(searchParams.get('group'));
   const decisionFilter = DECISION_GROUPS.find(entry => entry.key === decisionGroup);
-  const decisionStatuses = decisionFilter?.statuses;
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
   const retryDecision = useFactoryDecisionAction(factoryProjectId, 'retry');
   const approveDecision = useFactoryDecisionAction(factoryProjectId, 'approve');
@@ -142,7 +130,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
       )}
 
       {decisionsQuery.isPending ? (
-        <SkeletonRows label="Loading rule decisions" rows={4} rowClassName="h-16 w-full" />
+        <RuleDecisionsSkeleton />
       ) : decisions.length === 0 ? (
         <EmptyState
           className="min-h-0 flex-1"
@@ -178,7 +166,6 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                         mark={<StatusIcon size={14} className={RAIL_MARK_TONE[tone]} aria-hidden />}
                       >
                         <DecisionRow
-                          factoryProjectId={factoryProjectId ?? ''}
                           decision={decision}
                           retrying={retryDecision.isPending && retryDecision.variables === decision.id}
                           approving={approveDecision.isPending && approveDecision.variables === decision.id}
@@ -207,7 +194,6 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
 }
 
 function DecisionRow({
-  factoryProjectId,
   decision,
   retrying,
   approving,
@@ -216,7 +202,6 @@ function DecisionRow({
   onApprove,
   onDismiss,
 }: {
-  factoryProjectId: string;
   decision: FactoryDecisionSummary;
   retrying: boolean;
   approving: boolean;
@@ -225,7 +210,6 @@ function DecisionRow({
   onApprove: () => void;
   onDismiss: () => void;
 }) {
-  const navigate = useNavigate();
   const { tone, label, live } = STATUS_STYLE[decision.status];
   const progress = decision.completedAt
     ? `Completed ${relativeTime(decision.completedAt)}`
@@ -250,24 +234,6 @@ function DecisionRow({
         </Txt>
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-        {decision.status === 'failed' ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip="Ask supervisor"
-            aria-label={`Ask supervisor about failed ${decision.type} decision`}
-            onClick={() =>
-              void navigate(
-                supervisorAskPath(
-                  factoryProjectId,
-                  `Explain why rule decision ${decision.id} failed and recommend the safest repair.`,
-                ),
-              )
-            }
-          >
-            <Brain aria-hidden />
-          </Button>
-        ) : null}
         {decision.status === 'proposed' ? (
           <>
             <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>

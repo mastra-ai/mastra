@@ -1,11 +1,11 @@
-import { emitErrorEvent } from '@mastra/core/agent/durable';
+import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
-import type { WorkflowRuns } from '@mastra/core/storage';
+import type { RunFence, WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
   Step,
@@ -19,12 +19,14 @@ import type {
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
+import { RESUME_CLAIM_RUN_LEASE_MS } from './durable-event-payload';
 import { InngestExecutionEngine } from './execution-engine';
 import {
   compactNestedWorkflowResult,
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
+import { workflowTermination } from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -33,6 +35,46 @@ import type {
   InngestFlowCronConfig,
   InngestWorkflowConfig,
 } from './types';
+
+function durableAgentWorkflowError(error: unknown): { error: Error; delivery?: 'reject' } {
+  const serialized = error as {
+    code?: unknown;
+    id?: unknown;
+    name?: unknown;
+    message?: unknown;
+    stepId?: unknown;
+    details?: { name?: unknown; message?: unknown };
+    cause?: { name?: unknown; message?: unknown };
+  };
+  const isMarkedStopWhenError =
+    serialized?.code === DURABLE_STOP_WHEN_ERROR_ID || serialized?.id === DURABLE_STOP_WHEN_ERROR_ID;
+  // Inngest's serve transport serializes predicate failures as StepErrors and drops
+  // the MastraError id/details. Keep this prefix in sync with the memoized step id
+  // in create-inngest-agentic-workflow.ts; any failure in that step is classified
+  // as a stopWhen failure.
+  const isStopWhenStepError = typeof serialized?.stepId === 'string' && serialized.stepId.startsWith('stop-when-');
+  if (isMarkedStopWhenError || isStopWhenStepError) {
+    const normalized = new Error(
+      typeof serialized.details?.message === 'string'
+        ? serialized.details.message
+        : typeof serialized.cause?.message === 'string'
+          ? serialized.cause.message
+          : typeof serialized.message === 'string'
+            ? serialized.message
+            : 'Workflow execution failed',
+    );
+    normalized.name =
+      typeof serialized.details?.name === 'string'
+        ? serialized.details.name
+        : typeof serialized.cause?.name === 'string'
+          ? serialized.cause.name
+          : typeof serialized.name === 'string'
+            ? serialized.name
+            : 'Error';
+    return { error: normalized, delivery: 'reject' };
+  }
+  return { error: getErrorFromUnknown(error, { fallbackMessage: 'Workflow execution failed' }) };
+}
 
 /**
  * Resolves the nested `InngestWorkflow` wrapped by a graph entry, if any.
@@ -137,6 +179,8 @@ export class InngestWorkflow<
    */
   #pubsubFactory?: (defaultPubsub: PubSub) => PubSub;
   #emitWorkflowEvents = true;
+  /** Functions a host (e.g. the durable agent loop) serves alongside this workflow's own. */
+  #hostFunctions: ReturnType<Inngest['createFunction']>[] = [];
 
   constructor(
     params: InngestWorkflowConfig<
@@ -234,6 +278,10 @@ export class InngestWorkflow<
     }
     this.__setEmitWorkflowEvents(this.#emitWorkflowEvents);
     return committed;
+  }
+
+  __addHostFunctions(functions: ReturnType<Inngest['createFunction']>[]) {
+    this.#hostFunctions.push(...functions);
   }
 
   __setEmitWorkflowEvents(enabled: boolean) {
@@ -460,6 +508,19 @@ export class InngestWorkflow<
           );
         }
 
+        // An InngestAgent resume runs under a claim on the run, held for the whole segment once it starts.
+        // A claim a later resume took over before this event ran leaves nothing to run. Checked once, in
+        // a step, because the segment releases the claim before its last invocation replays.
+        const resumeClaim: RunFence | undefined = resume?.claim;
+        if (resumeClaim) {
+          const held = await step.run(`workflow.${this.id}.resume-claim`, async () => {
+            const store = await this.#mastra?.getStorage()?.getStore('workflows');
+            const lease = await store?.renewRunOwnership({ ...resumeClaim, leaseMs: RESUME_CLAIM_RUN_LEASE_MS });
+            return lease?.renewed ?? true;
+          });
+          if (!held) return { result: undefined, runId };
+        }
+
         if (resume && (initialState === undefined || resume.stepResults === undefined)) {
           const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
           const snapshot = await workflowsStore?.loadWorkflowSnapshot({
@@ -501,6 +562,7 @@ export class InngestWorkflow<
 
           const span = observability.startSpan({
             type: SpanType.WORKFLOW_RUN,
+            outcome: null,
             name: `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
@@ -515,7 +577,7 @@ export class InngestWorkflow<
             requestContext,
           });
 
-          return span?.exportSpan();
+          return span?.snapshot?.() ?? span?.exportSpan();
         });
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
@@ -595,11 +657,16 @@ export class InngestWorkflow<
            */
           const finalizeWorkflow = async () => {
             // For durable agent workflows, emit error event on failure so the
-            // client's stream can receive the error and close properly.
-            if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
-              const error = getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' });
+            // client's stream can receive the error and close properly. A resume
+            // event carries the resume payload as `inputData`, so read the agent
+            // input from the restored step results instead.
+            const durableAgentInput = [inputData, resume?.stepResults?.input].find(
+              input => input?.__workflowKind === 'durable-agent' && input.runId,
+            );
+            if (result.status === 'failed' && durableAgentInput) {
+              const { error, delivery } = durableAgentWorkflowError(result.error);
               try {
-                await emitErrorEvent(pubsub, inputData.runId, error);
+                await emitErrorEvent(pubsub, durableAgentInput.runId, error, undefined, delivery);
               } catch (e) {
                 this.logger.debug?.('Failed to emit error event:', e);
               }
@@ -632,11 +699,13 @@ export class InngestWorkflow<
 
                 if (result.status === 'failed') {
                   workflowSpan.error({
+                    ...workflowTermination(result),
                     error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
                     attributes: { status: 'failed' },
                   });
                 } else {
                   workflowSpan.end({
+                    ...workflowTermination(result),
                     output: result.status === 'success' ? result.result : undefined,
                     attributes: { status: result.status },
                   });
@@ -671,6 +740,8 @@ export class InngestWorkflow<
                   status: result.status,
                   value: result.state ?? initialState ?? {},
                   context: toSnapshotContext(result.steps),
+                  // InngestAgent resumes only claim a suspension written here, which they tell apart
+                  // from the engine's earlier writes by this empty path.
                   activePaths: [],
                   activeStepsPath: {},
                   serializedStepGraph: this.serializedStepGraph,
@@ -698,6 +769,11 @@ export class InngestWorkflow<
                     : finalSnapshot,
                 });
               }
+            }
+
+            // The run is parked or finished again, so the next resume may claim it.
+            if (resumeClaim) {
+              await (await mastra?.getStorage()?.getStore('workflows'))?.releaseRunOwnership(resumeClaim);
             }
 
             // Publish workflow-finish event for realtime subscribers (best-effort)
@@ -772,6 +848,7 @@ export class InngestWorkflow<
       this.getFunction(),
       ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),
       ...this.getNestedFunctions(this.executionGraph.steps),
+      ...this.#hostFunctions,
     ];
   }
 }

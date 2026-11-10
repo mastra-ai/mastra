@@ -202,6 +202,8 @@ Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
 
 Resumes a suspended Inngest run, for example after a tool approval. Loads the workflow snapshot from storage and finds the suspended step before sending a resume event to Inngest.
 
+The resumed output includes the tool calls and text from before the suspension. To restore them, `resume()` waits up to 10 seconds for the stored snapshot to include every suspended tool call. If the snapshot is still incomplete, `resume()` rejects with `Cannot resume run <runId>: ...` and doesn't send a resume event. The run stays suspended, so you can call `resume()` again.
+
 ```typescript
 const { output, cleanup } = await durableAgent.resume(
   runId,
@@ -268,7 +270,7 @@ Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
 
 #### `generate(messages, options?)`
 
-Runs a response on Inngest's durable execution engine and resolves with a single `FullOutput`. If the run suspends, `generate()` resolves with `finishReason: 'suspended'`. The `runId` option is optional. If you omit it, `generate()` creates a run ID and returns it in `result.runId`. Continue the run with [`resumeGenerate()`](#resumegeneraterunid-resumedata-options). Use [`stream()`](#streammessages-options) with `onSuspended` when the caller needs a suspension callback.
+Runs a response on Inngest's durable execution engine and resolves with a single `FullOutput`. If the run suspends, `generate()` resolves with `finishReason: 'suspended'`. The `runId` option is optional. If you omit it, `generate()` creates a run ID and returns it in `result.runId`. Continue the run with [`resumeGenerate()`](#resumegenerateresumedata-options). Use [`stream()`](#streammessages-options) with `onSuspended` when the caller needs a suspension callback.
 
 ```typescript
 const result = await durableAgent.generate('Delete the old records', {
@@ -281,16 +283,16 @@ result.finishReason // 'suspended' when approval is required
 
 Returns: `Promise<FullOutput<TOutput>>`
 
-#### `resumeGenerate(runId, resumeData, options?)`
+#### `resumeGenerate(resumeData, options)`
 
-Resumes a suspended `generate()` run and resolves with a single `FullOutput`.
+Resumes a suspended `generate()` run and resolves with a single `FullOutput`. Pass the run ID as `options.runId`, the same as `Agent.resumeGenerate()`. The older `resumeGenerate(runId, resumeData, options?)` order still works but is deprecated.
 
 ```typescript
 if (!result.runId) {
   throw new Error('Run ID is missing')
 }
 
-const resumedResult = await durableAgent.resumeGenerate(result.runId, { approved: true })
+const resumedResult = await durableAgent.resumeGenerate({ approved: true }, { runId: result.runId })
 ```
 
 Returns: `Promise<FullOutput<TOutput>>`

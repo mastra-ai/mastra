@@ -4,6 +4,7 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   FACTORY_OPEN_RUNS_SETTING,
+  FACTORY_RUN_USAGE_STEPS_JSON_BUDGET,
   heartbeatSessionOpenRun,
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
@@ -35,7 +36,6 @@ function makeSession() {
         settings[key] = value;
       },
     },
-    mode: { get: () => 'work' },
     subscribe: listener => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -46,6 +46,10 @@ function makeSession() {
     settings,
     emit: (reason: 'complete' | 'error' | 'suspended') => {
       for (const listener of listeners) listener({ type: 'agent_end', reason });
+    },
+    step: (promptTokens: number, completionTokens: number, extra: { cachedInputTokens?: number } = {}) => {
+      const usage = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens, ...extra };
+      for (const listener of listeners) listener({ type: 'usage_update', usage });
     },
   };
 }
@@ -63,15 +67,21 @@ async function setup() {
 describe('Factory run lifecycle audit', () => {
   it('exposes the validated open runs used by dispatch admission', async () => {
     const { session, settings } = makeSession();
-    const stored = { ...OPEN_RUN, agentName: 'build' };
-    settings[FACTORY_OPEN_RUNS_SETTING] = [stored];
+    settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
 
-    await expect(listSessionOpenRuns(session)).resolves.toEqual([stored]);
+    await expect(listSessionOpenRuns(session)).resolves.toEqual([OPEN_RUN]);
+  });
+
+  it('given a run opened before modes were removed, when the ledger is read, then the entry still parses', async () => {
+    const { session, settings } = makeSession();
+    settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, agentName: 'plan agent' }];
+
+    await expect(listSessionOpenRuns(session)).resolves.toEqual([OPEN_RUN]);
   });
 
   it('accepts ledger entries written before ownership was recorded', async () => {
     const { session, settings } = makeSession();
-    settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, agentName: 'build' }];
+    settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
 
     const [entry] = await listSessionOpenRuns(session);
     expect(isOpenRunLiveElsewhere(entry!, 'worker-2')).toBe(false);
@@ -79,7 +89,7 @@ describe('Factory run lifecycle audit', () => {
 
   it('treats only a fresh heartbeat from a different owner as live elsewhere', () => {
     const now = 1_000_000;
-    const entry = { ...OPEN_RUN, agentName: 'build', ownerId: 'worker-1', heartbeatAt: now };
+    const entry = { ...OPEN_RUN, ownerId: 'worker-1', heartbeatAt: now };
     expect(isOpenRunLiveElsewhere(entry, 'worker-2', now)).toBe(true);
     expect(isOpenRunLiveElsewhere(entry, 'worker-1', now)).toBe(false);
     expect(isOpenRunLiveElsewhere(entry, 'worker-2', now + FACTORY_OPEN_RUN_STALE_MS)).toBe(false);
@@ -139,6 +149,20 @@ describe('Factory run lifecycle audit', () => {
     expect((await events()).find(event => event.action === 'factory.run.ended')?.metadata.reason).toBe('error');
   });
 
+  it('dates each run end from its kickoff, so a session timeline can draw the whole run', async () => {
+    const { start, emit, events } = await setup();
+    const beforeKickoff = Date.now();
+    await start();
+    emit('complete');
+
+    await vi.waitFor(async () => expect(await events()).toHaveLength(2));
+    const ended = (await events()).find(event => event.action === 'factory.run.ended');
+    const startedAt = ended?.metadata.startedAt;
+    expect(startedAt).toEqual(expect.any(Number));
+    expect(startedAt).toBeGreaterThanOrEqual(beforeKickoff);
+    expect(startedAt).toBeLessThanOrEqual(ended!.occurredAt.getTime());
+  });
+
   it('records a run that finishes before its delivery acknowledgement', async () => {
     const { start, emit, events } = await setup();
     emit('complete');
@@ -158,6 +182,188 @@ describe('Factory run lifecycle audit', () => {
     emit('complete');
     await vi.waitFor(async () => expect(await events()).toHaveLength(2));
     warning.mockRestore();
+  });
+
+  describe('token usage (#23883)', () => {
+    const ended = async (events: () => Promise<Array<{ action: string; metadata?: Record<string, unknown> | null }>>) =>
+      (await events()).filter(event => event.action === 'factory.run.ended').map(event => event.metadata);
+
+    it('records each step of a run, across a suspend and resume, on its end record under its role', async () => {
+      const { start, emit, step, events } = await setup();
+      await start();
+      step(100, 50, { cachedInputTokens: 40 });
+      emit('suspended');
+      step(30, 10);
+      emit('complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      const [metadata] = await ended(events);
+      expect(metadata).toMatchObject({ role: 'work', kickoffId: 'kickoff-1', reason: 'complete' });
+      expect(metadata?.usage).toEqual({
+        status: 'recorded',
+        stepCount: 2,
+        totals: { promptTokens: 130, completionTokens: 60, totalTokens: 190, cachedInputTokens: 40 },
+        steps: [
+          { promptTokens: 100, completionTokens: 50, totalTokens: 150, cachedInputTokens: 40 },
+          { promptTokens: 30, completionTokens: 10, totalTokens: 40 },
+        ],
+      });
+    });
+
+    it('keeps each role run to its own usage', async () => {
+      const { audit } = await createFactoryStorageForTests();
+      const work = makeSession();
+      const review = makeSession();
+      for (const [capture, role] of [
+        [work, 'work'],
+        [review, 'review'],
+      ] as const) {
+        observeSessionRunEnd(capture.session, { audit });
+        await recordSessionRunStart(capture.session, {
+          audit,
+          run: { ...OPEN_RUN, kickoffId: `kickoff-${role}`, role, threadId: `thread-${role}` },
+          actorType: 'human',
+          observedEnd: () => undefined,
+        });
+      }
+      work.step(1000, 200);
+      review.step(10, 5);
+      work.emit('complete');
+      review.emit('complete');
+
+      const ends = async () =>
+        (await audit.list({ orgId: 'org-1' })).events.filter(event => event.action === 'factory.run.ended');
+      await vi.waitFor(async () => expect(await ends()).toHaveLength(2));
+      const totalsByRole = Object.fromEntries(
+        (await ends()).map(event => [
+          event.metadata?.role,
+          (event.metadata?.usage as { totals: Record<string, number> }).totals.totalTokens,
+        ]),
+      );
+      expect(totalsByRole).toEqual({ work: 1200, review: 15 });
+    });
+
+    it('marks a run with no reported usage as unreported, never as zero spend', async () => {
+      const { start, emit, events } = await setup();
+      await start();
+      emit('complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toEqual({ status: 'unreported' });
+    });
+
+    it('does not bill a conversation turn without a kickoff to the next run', async () => {
+      const { start, emit, step, events } = await setup();
+      step(500, 500);
+      emit('complete');
+      await start();
+      step(5, 5);
+      emit('complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 10 } });
+    });
+
+    it('bills a run whose turn ended before its ledger entry was written', async () => {
+      const { emit, step, start, events } = await setup();
+      step(7, 3);
+      emit('complete');
+      await start(OPEN_RUN, 'complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 10 } });
+    });
+
+    it('does not bill an earlier conversation turn to a run that ended without usage before its ledger entry', async () => {
+      const { emit, step, start, events } = await setup();
+      step(500, 500);
+      emit('complete');
+      // The run's turn fails before any usage arrives, and its end is written before its start.
+      emit('error');
+      await start(OPEN_RUN, 'error');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toEqual({ status: 'unreported' });
+    });
+
+    it('does not bill an earlier conversation turn to a run whose start is written before its usage-less end', async () => {
+      const { emit, step, start, events } = await setup();
+      step(500, 500);
+      emit('complete');
+      const started = start(OPEN_RUN, 'error');
+      emit('error');
+      await started;
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toEqual({ status: 'unreported' });
+    });
+
+    it('bills each queued end the turn it closed, not a later turn', async () => {
+      const { start, emit, step, events } = await setup();
+      await start();
+      step(7, 3);
+      emit('complete');
+      step(400, 100);
+      emit('complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 10 } });
+    });
+
+    it('bills a turn to only one run when two ledger entries land after it ended', async () => {
+      const { start, emit, step, events } = await setup();
+      step(7, 3);
+      emit('complete');
+      await start(OPEN_RUN, 'complete');
+      await start({ ...OPEN_RUN, kickoffId: 'kickoff-2' }, 'complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(2));
+      const byKickoff = Object.fromEntries((await ended(events)).map(meta => [meta?.kickoffId, meta?.usage]));
+      expect(byKickoff['kickoff-1']).toMatchObject({ status: 'recorded', totals: { totalTokens: 10 } });
+      expect(byKickoff['kickoff-2']).toEqual({ status: 'unreported' });
+    });
+
+    it('warns when a run end cannot persist its usage, and persists the same usage on the retry', async () => {
+      const { start, emit, step, events, audit, settings } = await setup();
+      await start();
+      step(100, 50);
+      const failure = vi.spyOn(audit, 'record').mockResolvedValueOnce(null);
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      emit('complete');
+
+      await vi.waitFor(() =>
+        expect(warning).toHaveBeenCalledWith(
+          '[Factory run audit] Token usage for run kickoff-1 (work) was not persisted; keeping it for the next attempt.',
+          expect.objectContaining({ status: 'recorded', totals: expect.objectContaining({ totalTokens: 150 }) }),
+        ),
+      );
+      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toHaveLength(1);
+      failure.mockRestore();
+      warning.mockRestore();
+
+      emit('complete');
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 150 } });
+      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+    });
+
+    it('keeps a long run inside the audit metadata bound: drops late steps, totals every step', async () => {
+      const { start, emit, step, events } = await setup();
+      await start();
+      const steps = 400;
+      for (let i = 0; i < steps; i++) step(12_000, 800, { cachedInputTokens: 9_000 });
+      emit('complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      const [metadata] = await ended(events);
+      expect(metadata).toMatchObject({ role: 'work', kickoffId: 'kickoff-1' });
+      const usage = metadata?.usage as { stepCount: number; steps: unknown[]; stepsTruncated: number; totals: object };
+      expect(JSON.stringify(usage.steps).length).toBeLessThanOrEqual(FACTORY_RUN_USAGE_STEPS_JSON_BUDGET);
+      expect(usage.steps.length).toBeGreaterThan(0);
+      expect(usage.stepCount).toBe(steps);
+      expect(usage.steps.length + usage.stepsTruncated).toBe(steps);
+      expect(usage.totals).toMatchObject({ totalTokens: steps * 12_800, cachedInputTokens: steps * 9_000 });
+    });
   });
 
   it('ignores ordinary conversation turns without a Factory kickoff', async () => {

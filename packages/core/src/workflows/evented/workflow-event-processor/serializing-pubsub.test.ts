@@ -52,6 +52,57 @@ function createInnerWorkflow(execute: () => Promise<any>) {
 }
 
 describe('evented workflows over a serializing pubsub', () => {
+  it.each([false, true])('preserves state written by a bailing step (nested: %s)', async nested => {
+    const workflow = createWorkflow({
+      id: 'bail_state',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ done: z.boolean() }),
+      stateSchema: z.object({ text: z.string().default('') }),
+    })
+      .then(
+        createStep({
+          id: 'write_and_bail',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ done: z.boolean() }),
+          stateSchema: z.object({ text: z.string().default('') }),
+          execute: async ({ setState, bail }) => {
+            await setState({ text: 'partial response' });
+            return bail({ done: true });
+          },
+        }),
+      )
+      .commit();
+
+    const pubsub = new SerializingPubSub();
+    const publish = vi.spyOn(pubsub, 'publish');
+    const parent = createWorkflow({
+      id: 'bail_parent',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ text: z.string() }),
+      stateSchema: z.object({ text: z.string().default('') }),
+    })
+      .dowhile(workflow, async ({ inputData }) => !inputData.done)
+      .then(
+        createStep({
+          id: 'read_bailed_state',
+          inputSchema: z.object({ done: z.boolean() }),
+          outputSchema: z.object({ text: z.string() }),
+          stateSchema: z.object({ text: z.string().default('') }),
+          execute: async ({ state }) => ({ text: state.text }),
+        }),
+      )
+      .commit();
+    const result = await runWorkflow(nested ? parent : workflow, { bail_state: workflow, bail_parent: parent }, pubsub);
+    expect(result.status).toBe('success');
+    if (nested) {
+      expect(result.status === 'success' && result.result).toEqual({ text: 'partial response' });
+    } else {
+      const finish = publish.mock.calls.find(([topic]) => topic === 'workflows-finish')?.[1];
+      expect(finish?.data.state).toEqual({ text: 'partial response' });
+    }
+    expect(publish.mock.calls.some(([, event]) => event.type === 'workflow.cancel')).toBe(false);
+  });
+
   it('dountil over a nested workflow evaluates the loop condition', async () => {
     const inner = createInnerWorkflow(async () => ({ done: true }));
     const outer = createWorkflow({ id: 'outer_loop', inputSchema: z.any(), outputSchema: z.any() })

@@ -6,7 +6,6 @@ import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/compo
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Pencil, X, Check } from 'lucide-react';
 import { DatasetFieldErrors } from '../dataset-field-errors';
-import { DatasetItemScorerSelector } from './dataset-item-scorer-selector';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
@@ -28,10 +27,6 @@ export interface EditModeContentProps {
   setTrajectoryValue: (value: string) => void;
   toolMocksValue: string;
   setToolMocksValue: (value: string) => void;
-  scorerOverrideEnabled: boolean;
-  setScorerOverrideEnabled: (enabled: boolean) => void;
-  selectedScorerIds: string[];
-  setSelectedScorerIds: (scorerIds: string[]) => void;
   requestContextValue: string;
   setRequestContextValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
@@ -51,10 +46,6 @@ export function EditModeContent({
   setTrajectoryValue,
   toolMocksValue,
   setToolMocksValue,
-  scorerOverrideEnabled,
-  setScorerOverrideEnabled,
-  selectedScorerIds,
-  setSelectedScorerIds,
   requestContextValue,
   setRequestContextValue,
   validationErrors,
@@ -118,14 +109,6 @@ export function EditModeContent({
           )}
         </Field>
 
-        <DatasetItemScorerSelector
-          overrideEnabled={scorerOverrideEnabled}
-          onOverrideEnabledChange={setScorerOverrideEnabled}
-          selectedScorerIds={selectedScorerIds}
-          onSelectedScorerIdsChange={setSelectedScorerIds}
-          disabled={isSaving}
-        />
-
         <Field>
           <FieldLabel>Request Context (JSON, optional)</FieldLabel>
           <CodeEditor
@@ -148,7 +131,7 @@ export function EditModeContent({
 
         <div className="flex gap-2 pt-4">
           <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
           <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel

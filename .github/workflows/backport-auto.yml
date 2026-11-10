@@ -44,6 +44,8 @@ jobs:
           token: ${{ steps.app-auth.outputs.token }}
           persist-credentials: true
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildSpanQueryResponse,
   createSpanQueryPreview,
   encodeSpanQueryCursor,
   parseSpanQueryRequest,
@@ -12,14 +13,13 @@ import {
 } from './span-query';
 import type { SpanQueryCostMetric, SpanQueryRow } from './span-query';
 import {
-  digestBinding,
   parseTraceQueryRequest,
-  planTraceQuery,
   TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_NODES,
   TraceQueryCursorError,
 } from './trace-query';
+import { digestBinding, planTraceQuery } from './trace-query-plan';
 
 const timeRange = { from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
 const scope = { organizationId: 'org-a', resourceId: 'project-a' };
@@ -39,13 +39,29 @@ const row: SpanQueryRow = {
   entityType: 'tool',
   entityId: 'search-products',
   entityName: null,
+  entityVersionId: null,
+  parentEntityType: null,
+  parentEntityId: null,
+  parentEntityName: null,
+  parentEntityVersionId: null,
+  rootEntityType: null,
+  rootEntityId: null,
+  rootEntityName: null,
+  rootEntityVersionId: null,
+  threadId: null,
+  runId: null,
+  sessionId: null,
+  userId: null,
+  requestId: null,
+  serviceName: null,
+  experimentId: null,
+  environment: null,
+  executionSource: null,
   model: null,
   provider: null,
   inputPreview: 'hello',
-  inputTruncated: false,
   outputPreview: null,
-  outputTruncated: false,
-  cost: { state: 'unavailable' },
+  errorPreview: null,
 };
 
 describe('span query model cost', () => {
@@ -83,6 +99,40 @@ describe('span query model cost', () => {
 });
 
 describe('span query contract', () => {
+  it('accepts rows from older adapters and ignores their legacy metrics argument', () => {
+    const legacyRow = {
+      ...identity,
+      parentSpanId: row.parentSpanId,
+      name: row.name,
+      spanType: row.spanType,
+      status: row.status,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt,
+      durationMs: row.durationMs,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      entityName: row.entityName,
+      model: null,
+      provider: null,
+    };
+    // Published adapters invoke this function with their older selected-row shape.
+    const result = buildSpanQueryResponse(
+      planSpanQuery({ timeRange }),
+      [legacyRow as Parameters<typeof buildSpanQueryResponse>[1][number]],
+      [{ ...identity, inputPreview: 'legacy input', outputPreview: null, errorPreview: null }],
+      [],
+    );
+    expect(result.spans[0]).toMatchObject({
+      ...legacyRow,
+      threadId: null,
+      parentEntityName: null,
+      inputPreview: 'legacy input',
+    });
+    expect(Object.values(result.spans[0]!)).not.toContain(undefined);
+    expect(result.spans[0]).not.toHaveProperty('cost');
+    expect(result.spans[0]).not.toHaveProperty('inputTruncated');
+  });
+
   it('defaults to bounded keyset pagination without accepting authorization in the request', () => {
     expect(parseSpanQueryRequest({ timeRange })).toEqual({
       timeRange,
@@ -110,10 +160,14 @@ describe('span query contract', () => {
     },
     { timeRange: { from: timeRange.to, to: timeRange.from } },
     { timeRange: { from: timeRange.from, to: timeRange.from } },
-    { timeRange: { from: timeRange.from, to: '2026-11-02T00:00:00Z' } },
     { where: { spans: { some: where } } },
   ])('rejects unsupported or invalid request fields: %j', overrides => {
     expect(spanQueryRequestSchema.safeParse({ timeRange, ...overrides }).success).toBe(false);
+  });
+
+  it('accepts time ranges of any positive width', () => {
+    const wide = { from: '2025-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
+    expect(parseSpanQueryRequest({ timeRange: wide }).timeRange).toEqual(wide);
   });
 
   it.each([
@@ -148,6 +202,70 @@ describe('span query contract', () => {
     const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
     if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
     expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
+  });
+
+  it.each(['model', 'provider'])('plans direct %s filters', field => {
+    const predicate = { op: 'eq', left: { path: field }, right: { literal: 'example' } };
+    expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual({
+      type: 'comparison',
+      field,
+      operator: 'eq',
+      value: 'example',
+    });
+  });
+
+  it.each([
+    'traceId',
+    'spanId',
+    'parentSpanId',
+    'threadId',
+    'resourceId',
+    'requestId',
+    'serviceName',
+    'experimentId',
+    'environment',
+    'executionSource',
+    'parentEntityType',
+    'parentEntityId',
+    'parentEntityName',
+    'rootEntityType',
+    'rootEntityId',
+    'rootEntityName',
+    'outcome',
+    'stopReason',
+  ])('accepts dedicated string filters for %s', field => {
+    for (const op of ['eq', 'ne'])
+      expect(
+        planSpanQuery({ timeRange, where: { op, left: { path: field }, right: { literal: 'example' } } }).where,
+      ).toMatchObject({ field, operator: op });
+    for (const op of ['in', 'notIn'])
+      expect(planSpanQuery({ timeRange, where: { op, value: { path: field }, set: ['example'] } }).where).toMatchObject(
+        { field, operator: op },
+      );
+    for (const op of ['exists', 'notExists'])
+      expect(planSpanQuery({ timeRange, where: { op, path: field } }).where).toMatchObject({ field, operator: op });
+    expect(() =>
+      planSpanQuery({ timeRange, where: { op: 'matches', left: { path: field }, right: { literal: 'example' } } }),
+    ).toThrow();
+  });
+
+  it('accepts arbitrary outcome strings but never filters or sorts on outcome context', () => {
+    expect(
+      planSpanQuery({
+        timeRange,
+        where: { op: 'in', value: { path: 'outcome' }, set: ['unknown', 'my-custom-outcome'] },
+      }).where,
+    ).toMatchObject({ field: 'outcome', operator: 'in', values: ['unknown', 'my-custom-outcome'] });
+    expect(() => planSpanQuery({ timeRange, where: { op: 'exists', path: 'stopReasonContext' } })).toThrow();
+    expect(() =>
+      planSpanQuery({
+        timeRange,
+        where: { op: 'eq', left: { path: 'stopReasonContext.maxSteps' }, right: { literal: 5 } },
+      }),
+    ).toThrow();
+    for (const field of ['outcome', 'stopReason', 'stopReasonContext']) {
+      expect(() => planSpanQuery({ timeRange, orderBy: [{ field, direction: 'asc' }] })).toThrow();
+    }
   });
 
   it('normalizes equivalent requests and keeps trusted scope separate from a conflicting predicate', () => {
@@ -236,6 +354,57 @@ describe('span cursor ownership', () => {
     }
   });
 
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'round trips numeric and empty %s cursors and rejects other kinds',
+    field => {
+      const request = { timeRange, where, orderBy: [{ field, direction: 'asc' }] } as const;
+      const plan = planSpanQuery(request, options);
+      for (const sortValue of [250, 0, null]) {
+        const cursor = encodeSpanQueryCursor(plan, { ...values, sortValue });
+        expect(planSpanQuery({ ...request, page: { after: cursor } }, options).cursor).toEqual({
+          ...values,
+          sortValue,
+        });
+      }
+      const timestampCursor = encodeSpanQueryCursor(plan, values);
+      expect(() => planSpanQuery({ ...request, page: { after: timestampCursor } }, options)).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+      );
+      const numericCursor = encodeSpanQueryCursor(initial, { ...values, sortValue: 250 });
+      expect(() => planSpanQuery({ timeRange, where, page: { after: numericCursor } }, options)).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+      );
+      for (const orderBy of [
+        [{ field, direction: 'desc' }],
+        [{ field: field === 'timeToFirstChunkMs' ? 'timeToFirstTokenMs' : 'timeToFirstChunkMs', direction: 'asc' }],
+        [{ field: 'startedAt', direction: 'asc' }],
+      ] as const) {
+        const cursor = encodeSpanQueryCursor(plan, { ...values, sortValue: 250 });
+        expect(() =>
+          planSpanQuery({ timeRange, where, orderBy: [...orderBy], page: { after: cursor } }, options),
+        ).toThrowError(
+          expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+        );
+      }
+    },
+  );
+
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'encodes an empty %s as a null cursor value',
+    field => {
+      const plan = planSpanQuery({
+        timeRange,
+        orderBy: [{ field, direction: 'desc' }],
+        page: { limit: 1 },
+      });
+      const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...selected } = row;
+      const rows = ['span-a', 'span-b'].map(spanId => ({ ...selected, spanId, [field]: null }));
+      const response = buildSpanQueryResponse(plan, rows, []);
+      const cursor = JSON.parse(Buffer.from(response.page.next!, 'base64url').toString());
+      expect(cursor.values.sortValue).toBeNull();
+    },
+  );
+
   it('supports local OSS spans with absent tenant fields without conflating null and empty IDs', () => {
     const plan = planSpanQuery({ timeRange });
     const cursor = encodeSpanQueryCursor(plan, { ...values, organizationId: null, resourceId: null });
@@ -275,6 +444,25 @@ describe('bounded result contract', () => {
     expect(spanQueryRowSchema.safeParse({ ...row, startedAt, endedAt, durationMs }).success).toBe(true);
   });
 
+  it('returns nullable outcome fields without requiring them from older adapters', () => {
+    const recorded = {
+      ...row,
+      outcome: 'limit',
+      stopReason: 'max_steps',
+      stopReasonContext: { maxSteps: 5 },
+    };
+    expect(spanQueryRowSchema.parse(recorded)).toMatchObject({
+      outcome: 'limit',
+      stopReason: 'max_steps',
+      stopReasonContext: { maxSteps: 5 },
+    });
+    const unrecorded = spanQueryRowSchema.parse({ ...row, outcome: null, stopReason: null, stopReasonContext: null });
+    expect(unrecorded.outcome).toBeNull();
+    expect(unrecorded.status).toBe('success');
+    expect(spanQueryRowSchema.parse(row)).not.toHaveProperty('outcome');
+    expect(spanQueryRowSchema.safeParse({ ...row, stopReasonContext: 'max_steps' }).success).toBe(false);
+  });
+
   it.each([999, 1001])('rejects a duration discrepancy of at least one millisecond: %s', durationMs => {
     expect(spanQueryRowSchema.safeParse({ ...row, durationMs }).success).toBe(false);
   });
@@ -285,7 +473,7 @@ describe('bounded result contract', () => {
     { endedAt: '2026-10-01T11:59:59Z' },
     { durationMs: 999 },
     { inputPreview: null, inputTruncated: true },
-    { outputPreview: fourByteCharacter.repeat(257) },
+    { errorPreview: null, errorTruncated: true },
     { input: 'full-payload-is-not-a-list-field' },
   ])('rejects invalid result states: %j', overrides => {
     expect(spanQueryRowSchema.safeParse({ ...row, ...overrides }).success).toBe(false);
@@ -293,13 +481,18 @@ describe('bounded result contract', () => {
 
   it.each<[string | null, string | null, boolean]>([
     [null, null, false],
-    ['', '', false],
-    ['{malformed', '{malformed', false],
-    [fourByteCharacter.repeat(256), fourByteCharacter.repeat(256), false],
-    [fourByteCharacter.repeat(257), fourByteCharacter.repeat(256), true],
-    ['x'.repeat(257), 'x'.repeat(256), true],
-  ])('preserves the expected preview and truncation state for input %#', (input, value, truncated) => {
+    ['', null, false],
+    ['short preview', 'short preview', false],
+    ['x'.repeat(500), 'x'.repeat(500), false],
+    ['x'.repeat(100), 'x'.repeat(100), false],
+    [`${'x'.repeat(100)}…`, `${'x'.repeat(100)}…`, true],
+    [`${'x'.repeat(99)}…`, `${'x'.repeat(99)}…`, true],
+  ])('maps a stored preview to its value and truncation state %#', (input, value, truncated) => {
     expect(createSpanQueryPreview(input)).toEqual({ value, truncated });
+  });
+
+  it('accepts custom previews without a length limit', () => {
+    expect(spanQueryRowSchema.safeParse({ ...row, outputPreview: fourByteCharacter.repeat(500) }).success).toBe(true);
   });
 
   it('rejects duplicate logical rows but permits matching IDs in different trusted resources', () => {

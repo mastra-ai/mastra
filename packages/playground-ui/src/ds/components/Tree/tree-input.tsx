@@ -88,7 +88,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
           onBlur={handleBlur}
           onFocus={handleFocus}
           {...passwordManagerOptOutProps}
-          className="min-w-0 flex-1 border-none bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
+          className="min-w-0 flex-1 border-none bg-transparent text-caption zoom-safe-text text-foreground outline-hidden placeholder:text-muted-foreground"
         />
       </li>
     );

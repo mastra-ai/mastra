@@ -154,6 +154,7 @@ export const FLAGS: FlagSpec[] = [
       '  human  streaming text to stdout, activity to stderr',
       '  json   single final JSON object (text, usage, tools)',
       '  jsonl  newline-delimited JSON event stream',
+      '         (omits display_state_changed UI snapshots)',
     ],
   },
   {
@@ -207,6 +208,12 @@ export const FLAGS: FlagSpec[] = [
     short: 'h',
     type: 'boolean',
     help: 'Show this help and exit',
+  },
+  {
+    key: 'version',
+    short: 'v',
+    type: 'boolean',
+    help: 'Print the Mastra Code version and exit',
   },
 ];
 

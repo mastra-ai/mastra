@@ -6,7 +6,6 @@ import { useCallback, useMemo } from 'react';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
-import { useExperimentTagVocabulary } from '@/domains/experiments/hooks/use-experiment-tag-vocabulary';
 
 export interface ExperimentItemPanelProps {
   withQueryTrace: boolean;
@@ -53,18 +52,6 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback, variant }: E
     },
     [datasetId, experimentId, updateExperimentResult],
   );
-  const tagVocabulary = useExperimentTagVocabulary(datasetId, results);
-
-  const updateTags = useCallback(
-    async (resultId: string, tags: string[]) => {
-      try {
-        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, tags });
-      } catch {
-        toast.error('Failed to update tags');
-      }
-    },
-    [datasetId, experimentId, updateExperimentResult],
-  );
   const completeResult = useCallback(
     async (resultId: string) => {
       try {
@@ -101,9 +88,6 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback, variant }: E
       onClose={close}
       onComplete={result ? () => completeResult(result.id) : undefined}
       onFlagForReview={result ? () => void flagForReview(result.id) : undefined}
-      onTagsChange={result ? tags => void updateTags(result.id, tags) : undefined}
-      tagVocabulary={tagVocabulary}
-      isUpdatingTags={updateExperimentResult.isPending}
     />
   );
 }

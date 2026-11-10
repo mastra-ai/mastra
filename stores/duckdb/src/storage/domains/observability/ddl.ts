@@ -52,6 +52,12 @@ CREATE TABLE IF NOT EXISTS span_events (
   entityVersionId VARCHAR,
   parentEntityVersionId VARCHAR,
   rootEntityVersionId VARCHAR,
+  parentEntityType VARCHAR,
+  parentEntityId VARCHAR,
+  parentEntityName VARCHAR,
+  rootEntityType VARCHAR,
+  rootEntityId VARCHAR,
+  rootEntityName VARCHAR,
 
   -- Context
   userId VARCHAR,
@@ -71,6 +77,18 @@ CREATE TABLE IF NOT EXISTS span_events (
   spanType VARCHAR,
   isEvent BOOLEAN,
   endedAt TIMESTAMP,
+  timeToFirstChunkMs DOUBLE,
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId VARCHAR,
+  resumedFromSpanId VARCHAR,
+  model VARCHAR,
+  provider VARCHAR,
+  outcome VARCHAR,
+  stopReason VARCHAR,
+  timeToFirstTokenMs DOUBLE,
+  errorCount INTEGER,
+  stopReasonContext JSON,
 
   -- JSON fields
   attributes JSON,
@@ -80,7 +98,22 @@ CREATE TABLE IF NOT EXISTS span_events (
   links JSON,
   input JSON,
   output JSON,
-  error JSON
+  error JSON,
+
+  -- Previews of input/output/error in the shared core format, set on the
+  -- event rows that carry the matching payload ('' = nothing to preview).
+  -- NULL marks a row written before previews were stored, or a row that does
+  -- not carry that payload.
+  inputPreview VARCHAR,
+  outputPreview VARCHAR,
+  errorPreview VARCHAR,
+
+  -- Whether this row carries a non-null input/output/error payload. Lets the
+  -- light trace list pick each preview's row without reading the payloads.
+  -- NULL on rows written before these columns existed.
+  hasInputPayload BOOLEAN,
+  hasOutputPayload BOOLEAN,
+  hasErrorPayload BOOLEAN
 )`;
 
 /** DDL for the metric_events append-only table. */
@@ -334,6 +367,30 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
+  // Stored previews. Existing rows keep NULL; readers build their previews
+  // from the payload instead (no backfill).
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS inputPreview VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS outputPreview VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS errorPreview VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasInputPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasOutputPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasErrorPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS timeToFirstChunkMs DOUBLE`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS externalParentSpanId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS resumedFromSpanId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS model VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS provider VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS outcome VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS stopReason VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS timeToFirstTokenMs DOUBLE`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS errorCount INTEGER`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS stopReasonContext JSON`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityType VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityName VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityType VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityName VARCHAR`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,

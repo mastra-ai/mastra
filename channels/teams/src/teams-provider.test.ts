@@ -10,7 +10,7 @@ import {
   resolveTeamsAdapterConfig,
 } from './index';
 import type { TeamsProviderConfig, TeamsTokenResolver } from './index';
-import { PLATFORM } from './install-store';
+import { PLATFORM, TeamsInstallStore } from './install-store';
 
 const GRAPH_ORIGIN = 'https://graph.microsoft.com';
 const DEV_PORTAL_ORIGIN = 'https://dev.teams.microsoft.com';
@@ -49,9 +49,20 @@ function makeProvider(config: Partial<TeamsProviderConfig> = {}) {
   return { provider, storage };
 }
 
+/** Tenant id baked into the fake Graph token's `tid` claim. */
+const TOKEN_TENANT_ID = 'token-tenant-id';
+
+/** A minimal unsigned JWT so `decodeTenantId` can read claims from test tokens. */
+function fakeJwt(claims: Record<string, unknown>): string {
+  const b64 = (obj: object) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+  return `${b64({ alg: 'none', typ: 'JWT' })}.${b64(claims)}.`;
+}
+
+const GRAPH_TOKEN = fakeJwt({ tid: TOKEN_TENANT_ID });
+
 /** A scope-aware manager resolver returning a distinct token per audience. */
 function makeTokenResolver(): TeamsTokenResolver & ReturnType<typeof vi.fn> {
-  return vi.fn(async (scope: string | string[]) => (scope === TEAMS_GRAPH_SCOPE ? 'graph-token' : 'dev-portal-token'));
+  return vi.fn(async (scope: string | string[]) => (scope === TEAMS_GRAPH_SCOPE ? GRAPH_TOKEN : 'dev-portal-token'));
 }
 
 /**
@@ -286,15 +297,19 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     const result = await provider.connect('agent-1', { name: 'Sales Bot' });
     expect(result).toMatchObject({ type: 'deep_link', url: DEV_PORTAL_BOTS_URL });
 
-    // Two audiences resolved — Graph for the Entra app, Dev Portal for the bot.
+    // Two audiences resolved — Graph for the Entra app, Dev Portal for the
+    // bot. No tenant is configured, so the Graph resolve runs tenant-less and
+    // the Dev Portal resolve uses the tenant derived from the token's `tid`.
     expect(tokenResolver).toHaveBeenCalledWith(TEAMS_GRAPH_SCOPE, undefined);
-    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, undefined);
-    expect(stubs.createAppAuth()).toBe('Bearer graph-token');
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, TOKEN_TENANT_ID);
+    expect(stubs.createAppAuth()).toBe(`Bearer ${GRAPH_TOKEN}`);
     expect(stubs.botRegistrationAuth()).toBe('Bearer dev-portal-token');
 
+    // New multitenant bot registrations are deprecated — provisioning
+    // defaults to a single-tenant app in the token's tenant.
     expect(stubs.createAppBody()).toMatchObject({
       displayName: 'Sales Bot',
-      signInAudience: 'AzureADMultipleOrgs',
+      signInAudience: 'AzureADMyOrg',
     });
     expect(stubs.addPasswordBody()).toMatchObject({ passwordCredential: { displayName: 'mastra-teams' } });
 
@@ -302,6 +317,8 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     expect(record?.status).toBe('active');
     expect(record?.data.appId).toBe(MINTED_APP_ID);
     expect(record?.data.entraObjectId).toBe(OBJECT_ID);
+    expect(record?.data.appTenantId).toBe(TOKEN_TENANT_ID);
+    expect(record?.data.appType).toBe('SingleTenant');
     expect(isEncrypted(String(record?.data.appPassword))).toBe(true);
 
     expect(stubs.botRegistrationBody()).toMatchObject({
@@ -309,6 +326,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
       name: 'Sales Bot',
       messagingEndpoint: `${BASE_URL}/${PLATFORM}/events/${record?.webhookId}`,
       callingEndpoint: '',
+      isSingleTenant: true,
     });
   });
 
@@ -389,13 +407,26 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     await expect(provider.connect('agent-1')).rejects.toThrow('platform credential fetch failed');
   });
 
-  it('rejects SingleTenant provisioning without a tenant id', async () => {
+  it('rejects SingleTenant provisioning when no tenant id is available (opaque token, no tid claim)', async () => {
     const { provider } = makeProvider({
-      tokenResolver: makeTokenResolver(),
+      // Opaque token — decodeTenantId cannot derive a tenant from it.
+      tokenResolver: vi.fn(async () => 'opaque-token'),
       encryptionKey: ENC_KEY,
       appType: 'SingleTenant',
     });
     await expect(provider.connect('agent-1')).rejects.toThrow(/no appTenantId is available/);
+  });
+
+  it('still provisions MultiTenant bots when explicitly configured', async () => {
+    const stubs = stubProvisioning();
+    const { provider } = makeProvider({
+      tokenResolver: makeTokenResolver(),
+      encryptionKey: ENC_KEY,
+      appType: 'MultiTenant',
+    });
+    await provider.connect('agent-1');
+    expect(stubs.createAppBody()).toMatchObject({ signInAudience: 'AzureADMultipleOrgs' });
+    expect(stubs.botRegistrationBody()).toMatchObject({ isSingleTenant: false });
   });
 
   it('provisions SingleTenant bots with the tenant stored and passed to the resolver', async () => {
@@ -621,6 +652,61 @@ describe('TeamsProvider.disconnect', () => {
   it('throws for an unknown agent', async () => {
     const { provider } = makeProvider();
     await expect(provider.disconnect('missing')).rejects.toThrow(/No Teams installation found/);
+  });
+});
+
+describe('TeamsProvider — undecryptable installations (encryption key changed)', () => {
+  /** Seed storage with a record encrypted under a key the provider does not have. */
+  async function seedUnderOtherKey(storage: InMemoryChannelsStorage) {
+    const otherKeyStore = new TeamsInstallStore(storage, 'the-original-key-now-lost');
+    await otherKeyStore.save({
+      id: 'install-1',
+      agentId: 'agent-1',
+      webhookId: 'webhook-1',
+      status: 'active',
+      appId: APP_ID,
+      appPassword: 'secret-under-old-key',
+      installedAt: new Date(),
+    });
+  }
+
+  it('initialize() survives a record it cannot decrypt instead of crashing boot', async () => {
+    const { provider, storage } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD, encryptionKey: ENC_KEY });
+    await seedUnderOtherKey(storage);
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(provider.initialize()).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot decrypt the stored bot secret'));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('does not report configured when the only installation is unreadable', async () => {
+    const { provider, storage } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD, encryptionKey: ENC_KEY });
+    await seedUnderOtherKey(storage);
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await provider.initialize();
+    } finally {
+      errorSpy.mockRestore();
+    }
+    expect(provider.isConfigured()).toBe(false);
+  });
+
+  it('disconnect() still deletes the stored record so the agent can reconnect', async () => {
+    const { provider, storage } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD, encryptionKey: ENC_KEY });
+    await seedUnderOtherKey(storage);
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await provider.disconnect('agent-1');
+    } finally {
+      errorSpy.mockRestore();
+    }
+    expect(await storage.getInstallationByAgent(PLATFORM, 'agent-1')).toBeNull();
   });
 });
 

@@ -105,8 +105,9 @@ const result = await scorer.run({
   },
   {
     name: 'reason',
-    type: 'string',
-    description: 'Explanation for the score, if generateReason step was defined (optional).',
+    type: 'TReason | undefined',
+    description:
+      "Explanation for the score. Its type is inferred from the `generateReason` step's return type (which defaults to `string`), and it is omitted when that step is not defined. Observability only records the reason when it is a string.",
   },
   {
     name: 'preprocessStepResult',

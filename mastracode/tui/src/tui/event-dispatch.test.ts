@@ -49,6 +49,7 @@ function createMockTUIState(controller: ReturnType<typeof createMockAgentControl
   return {
     controller: controller as any,
     session: controller.session as any,
+    local: { controller, session: controller.session } as any,
     taskProgress: {
       updateTasks: vi.fn(),
       getTasks: () => [],
@@ -400,7 +401,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(goalManager.saveToThread).toHaveBeenCalledWith(state.local);
     expect(goalManager.loadFromThreadMetadata).not.toHaveBeenCalled();
   });
 

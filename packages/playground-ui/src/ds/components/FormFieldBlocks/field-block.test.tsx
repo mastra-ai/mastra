@@ -8,7 +8,7 @@ import { TextareaFieldBlock } from './fields/textarea-field-block';
 
 afterEach(() => cleanup());
 
-const messageContainer = (container: HTMLElement) => container.querySelector('.h-\\[1lh\\]');
+const messageContainer = (container: HTMLElement) => container.querySelector('.h-lh');
 
 describe('TextFieldBlock message', () => {
   describe('when neither helpText nor errorMsg is provided', () => {
@@ -92,7 +92,7 @@ describe('FieldBlock error wiring', () => {
     expect(input.parentElement?.parentElement?.className).toContain('gap-2');
     expect(message.id).toBe('error-email');
     expect(message.textContent).toContain('@ symbol');
-    expect(message.parentElement?.className).toContain('h-[1lh]');
+    expect(message.parentElement?.className).toContain('h-lh');
   });
 
   it('ties a textarea message to its control', () => {
@@ -185,7 +185,7 @@ describe('FieldBlock error wiring', () => {
       <FieldBlock.Message name="email" helpText="Use your work email." errorMsg="Email is required." />,
     );
 
-    expect(container.firstElementChild?.className).toContain('h-[1lh]');
+    expect(container.firstElementChild?.className).toContain('h-lh');
     expect(screen.getByRole('alert').textContent).toBe('Email is required.');
     expect(screen.queryByText('Use your work email.')).toBeNull();
   });

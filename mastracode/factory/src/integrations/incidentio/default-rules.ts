@@ -1,10 +1,9 @@
-import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type {
   FactoryIncidentioEventName,
   FactoryIncidentioRuleContext,
   FactoryRuleHandler,
 } from '../../rules/types.js';
-import { incidentioClaimKey } from './claim.js';
 
 export type IncidentioRuleOverrides = Partial<
   Record<FactoryIncidentioEventName, FactoryRuleHandler<FactoryIncidentioRuleContext> | null | undefined>
@@ -14,19 +13,18 @@ export type IncidentioEventRules = Readonly<
 >;
 
 function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
-  if (context.item) return;
+  if (context.item || !context.intake) return;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:follow-up-triage`,
     // A source bound to a custom board lands on that board's initial phase;
-    // otherwise the follow-up waits in Work Intake.
-    board: context.intake?.board ?? 'work',
+    // otherwise it waits on the project's default board.
+    board: context.intake.board,
     source: 'incidentio-follow-up',
     sourceKey: context.issue.id,
-    claimKey: incidentioClaimKey(context.issue.id),
     title: context.issue.title,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'intake',
+    stage: context.intake.initialPhase,
     metadata: {
       identifier: context.issue.identifier,
       issueRef: context.issue.id,
@@ -48,8 +46,9 @@ function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
 
 function incidentioFollowUpClosed(context: FactoryIncidentioRuleContext) {
   if (!context.item || context.item.source !== 'incidentio-follow-up') return;
-  // The card's board decides where a closed source sends it; boards that declare no
-  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
   const closure = context.boardClosure;
   if (!context.board || !closure || closure.itemTerminal) return;
   // Only terminal state types trigger close.
@@ -57,15 +56,14 @@ function incidentioFollowUpClosed(context: FactoryIncidentioRuleContext) {
   if (stateType !== 'completed' && stateType !== 'canceled') return;
   const canceled = stateType === 'canceled';
   const target = canceled ? closure.canceled : closure.completed;
-  return {
-    type: 'transition',
+  return closedByRoutes(canceled, {
     idempotencyKey: `${context.ingress.id}:follow-up-closed`,
     board: context.board,
     stage: target.phase,
     message: {
       text: `incident.io follow-up ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
-  } as const;
+  });
 }
 
 export const defaultIncidentioRules = Object.freeze({

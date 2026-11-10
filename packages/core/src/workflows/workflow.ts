@@ -33,6 +33,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
+import { executionFailureTermination } from '../observability/execution-outcome';
 import { executeWithContext } from '../observability/utils';
 import type {
   OutputResult,
@@ -41,8 +42,16 @@ import type {
   ProcessorStreamWriter,
   ProcessorStreamWriterOptions,
 } from '../processors';
-import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX, ProcessorRunner, ProcessorState } from '../processors/runner';
-import { createProcessorSendSignal } from '../processors/send-signal';
+import {
+  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
+  ProcessorRunner,
+  ProcessorState,
+  endOutputStreamSpanAtStepEnd,
+  endOutputStreamSpanOutsideStep,
+  findOwnModelStepSpan,
+} from '../processors/runner';
+import type { ProcessorLateSignalSink } from '../processors/send-signal';
+import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from '../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -62,6 +71,8 @@ import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
+import type { WorkflowRunHeader } from '../storage/domains/workflows/journal';
+import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -69,14 +80,28 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
+import { HAND_BACK_STATE_SYMBOL, PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
+import {
+  cancelNestedRun,
+  createNestedRunParentStatusLookup,
+  nestedRunParentOf,
+  nestedRunRecoveryAction,
+  nestedRunStatusOf,
+} from './nested-run-recovery';
+import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { loadedStepResults, residentStepResults } from './run-journal';
+import type { ParentStateLink, StateBase } from './run-journal';
+import { claimWorkflowRunOwnership } from './run-ownership';
+import type { WorkflowRunOwnership } from './run-ownership';
+import { createRunStorage } from './run-storage';
+import type { RunStorage } from './run-storage';
 import { validateScheduleTiming } from './scheduler/cron';
 import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
@@ -89,6 +114,7 @@ import type {
 } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
+import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -110,7 +136,9 @@ import type {
   WorkflowConfig,
   WorkflowEngineType,
   WorkflowOptions,
+  WorkflowStateTracingContext,
   WorkflowResult,
+  WorkflowStepResults,
   WorkflowType,
   WorkflowRunState,
   NestedWorkflowParent,
@@ -125,6 +153,7 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
   StepFlowEntryOptions,
+  InferWorkflowRequestContext,
 } from './types';
 import {
   cleanStepResult,
@@ -132,7 +161,6 @@ import {
   createTimeTravelExecutionParams,
   getSingleStepEntryId,
   hydrateSerializedStepErrors,
-  waitForSuspendedSnapshot,
 } from './utils';
 
 // Re-exported so the public `@mastra/core/workflows` surface (and existing
@@ -191,12 +219,20 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * conditional/loop entries from stored predicates.
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
+  const stepRefs = collectPredicateStepRefs(predicate);
   return async (params: any) => {
+    // Resolve every referenced step up front. Passing the sync getStepResult
+    // instead would let the predicate's fail-quiet lookup swallow its throw on
+    // runs that can't serve it, and silently take the wrong branch.
+    const stepResults =
+      typeof params?.getStepResultAsync === 'function'
+        ? Object.fromEntries(await resolveStepOutputs(stepRefs, id => params.getStepResultAsync(id)))
+        : {};
     return evaluatePredicate(predicate, {
       initData: params?.getInitData ? params.getInitData() : undefined,
       inputData: params?.inputData,
       state: params?.state,
-      getStepResult: typeof params?.getStepResult === 'function' ? (id: string) => params.getStepResult(id) : undefined,
+      stepResults,
     });
   };
 }
@@ -322,6 +358,100 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
   return undefined;
 }
 
+/** The id of the nested workflow that runs as step `stepId`, or undefined when the step is not a workflow. */
+function getNestedWorkflowId(graph: SerializedStepFlowEntry[], stepId: string): string | undefined {
+  const entry = findStepInGraph(graph, stepId) as any;
+  if (entry?.type === 'workflow') return entry.workflowId;
+  if (entry?.step?.type === 'workflow') return entry.step.workflowId;
+  if (entry?.step?.component === 'WORKFLOW') return stepId;
+  return undefined;
+}
+
+/** A stored run as the cancel cascade reads it: its header, and a read of the step results to look through. */
+type RunForCancel = {
+  header: WorkflowRunHeader;
+  storageVersion: 1 | 2;
+  loadSteps(): Promise<Record<string, unknown>>;
+};
+
+/**
+ * A run as the cancel cascade reads it. A storage v2 run's header names its suspended steps, so only those
+ * that run a nested workflow are read. A v1 run is one snapshot. Without `storageVersion`, a run with a
+ * storage v2 header is a storage v2 run. `header` is a storage v2 header already read.
+ */
+async function loadRunForCancel(
+  store: WorkflowsStorage,
+  run: { workflowName: string; runId: string },
+  storageVersion?: 1 | 2,
+  header?: WorkflowRunHeader,
+): Promise<RunForCancel | null> {
+  if (storageVersion !== 1 && store.supportsRunJournal()) {
+    const v2Header = header ?? (await store.loadWorkflowRunHeader(run))?.header;
+    if (v2Header) {
+      const stepIds = Object.keys(v2Header.suspendedPaths ?? {}).filter(stepId =>
+        getNestedWorkflowId(v2Header.serializedStepGraph, stepId),
+      );
+      return {
+        header: v2Header,
+        storageVersion: 2,
+        loadSteps: async () => (stepIds.length ? ((await store.loadWorkflowRunSteps({ ...run, stepIds })) ?? {}) : {}),
+      };
+    }
+    if (storageVersion === 2) return null;
+  }
+  const snapshot = await store.loadWorkflowSnapshot({ ...run, storageVersion: 1 });
+  return snapshot && { header: snapshot, storageVersion: 1, loadSteps: async () => snapshot.context };
+}
+
+/**
+ * Cancels the suspended nested runs reachable from `run`. A suspended nested run has no live execution for
+ * its parent's abort signal to reach, so only its persisted status changes. Descendants are canceled before their
+ * parent, so a nested run left suspended by a failed write is found again when cancel() is retried.
+ */
+async function cancelSuspendedNestedRuns(store: WorkflowsStorage, run: RunForCancel): Promise<void> {
+  for (const [stepId, result] of Object.entries(await run.loadSteps())) {
+    if ((result as StepResult<any, any, any, any>)?.status !== 'suspended') {
+      continue;
+    }
+
+    const workflowName = getNestedWorkflowId(run.header.serializedStepGraph, stepId);
+
+    if (!workflowName) {
+      continue;
+    }
+
+    const { suspendPayload, output } = result as any;
+    const meta = suspendPayload?.__workflow_meta;
+    // Foreach keeps one record per iteration: the default engine under foreachOutput, the evented engine as output.
+    const iterations: any[] = meta?.foreachOutput ?? (Array.isArray(output) ? output : []);
+
+    const runIds = [
+      meta?.runId,
+      ...iterations.map(iteration =>
+        iteration?.status === 'suspended' ? iteration.suspendPayload?.__workflow_meta?.runId : undefined,
+      ),
+    ];
+
+    for (const runId of new Set(runIds)) {
+      if (typeof runId !== 'string') {
+        continue;
+      }
+
+      const nested = await loadRunForCancel(store, { workflowName, runId });
+
+      if (nested?.header.status !== 'suspended') {
+        continue;
+      }
+
+      await cancelSuspendedNestedRuns(store, nested);
+      const opts = { status: 'canceled', expectedStatus: 'suspended' } as const;
+      await (nested.storageVersion === 2
+        ? store.updateWorkflowRunHeader({ workflowName, runId, opts })
+        : store.updateWorkflowState({ workflowName, runId, storageVersion: 1, opts }));
+    }
+  }
+}
+
 // ============================================
 // Overloads (Public API - clean types for consumers)
 // ============================================
@@ -383,7 +513,7 @@ export function createStep<
   TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 >;
 
 /**
@@ -404,7 +534,7 @@ export function createStep<TStepId extends string>(
 export function createStep<TStepId extends string, TStepOutput>(
   agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
-    structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+    structuredOutput: { schema: PublicSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -442,7 +572,13 @@ export function createStep<const QUESTIONS extends ClassifierQuestions, TStepInp
  * Creates a step from a Processor - wraps a Processor as a workflow step
  * Note: We require at least one processor method to distinguish from StepParams
  */
-export function createStep<TProcessorId extends string>(
+export function createStep<
+  TProcessorId extends string,
+  // Inferred from the previous step when chained, so a processor step accepts another processor step's output.
+  TInput extends
+    | InferPublicSchema<typeof ProcessorStepInputSchema>
+    | InferPublicSchema<typeof ProcessorStepOutputSchema> = InferPublicSchema<typeof ProcessorStepInputSchema>,
+>(
   processor:
     | (Processor<TProcessorId> & { processInput: Function })
     | (Processor<TProcessorId> & { processInputStream: Function })
@@ -455,7 +591,7 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferPublicSchema<typeof ProcessorStepInputSchema>,
+  TInput,
   InferPublicSchema<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
@@ -493,7 +629,7 @@ export function createStep<
   TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 >;
 
 // ============================================
@@ -809,7 +945,12 @@ export function createStepFromProcessor<TProcessorId extends string>(
       requestContext,
       tracingContext,
       outputWriter,
-    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0]) => {
+      mastra,
+      runId: workflowRunId,
+    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0] & {
+      mastra?: Mastra;
+      runId?: string;
+    }) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -818,6 +959,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         llmRequestProcessorIds?: ReadonlySet<string>;
         abortSignal?: AbortSignal;
         agent?: Agent;
+        lateSignalSink?: ProcessorLateSignalSink;
       };
       const {
         phase,
@@ -861,6 +1003,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
         // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
         agent,
+        // Receives sendSignal calls made after the creating durable step returned
+        lateSignalSink,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -1044,6 +1188,9 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
       // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
+      // - For outputStream: the MODEL_STEP whose stream is processed, else AGENT_RUN. Durable agents stay
+      //   on AGENT_RUN because their stream runs with the agent run's context; their tool-result chunks
+      //   do carry a step, but they reuse the span that is already open
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       // Fall back to currentSpan only when its tree can reach exporters — otherwise
       // the public processor span would export as an orphan trace root.
@@ -1051,7 +1198,9 @@ export function createStepFromProcessor<TProcessorId extends string>(
       const parentSpan =
         phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
-          : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
+          : (phase === 'outputStream' && findOwnModelStepSpan(currentSpan)) ||
+            currentSpan?.findParent(SpanType.AGENT_RUN) ||
+            fallbackSpan;
 
       const processorSpan =
         phase !== 'outputStream'
@@ -1135,6 +1284,9 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 messageList: processorMessageList,
                 writer: processorWriter,
                 rotateResponseMessageId: rotateCurrentResponseMessageId,
+                lateSink:
+                  (workflowRunId ? mastra?.__getRunScope(workflowRunId)?.get(PROCESSOR_LATE_SIGNAL_SINK) : undefined) ??
+                  lateSignalSink,
               }),
             }
           : {}),
@@ -1143,6 +1295,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Pass-through data that should flow to the next processor in a chain
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
+        agent,
+        lateSignalSink,
         phase,
         runId: agentRunId,
         // Auto-create MessageList from messages if not provided
@@ -1357,10 +1511,13 @@ export function createStepFromProcessor<TProcessorId extends string>(
 
               // Preserve messages in return - passThrough doesn't include messages,
               // so we must explicitly include it to avoid losing it for subsequent steps.
+              // Unless the processor returned its own array, hand on the list as it is now: it may have
+              // removed or added messages through the messageList, and a later processor that returns
+              // the stale array would otherwise put removed messages back.
               return {
                 ...passThrough,
-                messages,
                 ...validatedResult,
+                messages: validatedResult.messages ?? checkedMessageList.get.all.db(),
                 runId: agentRunId,
                 systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
@@ -1381,6 +1538,13 @@ export function createStepFromProcessor<TProcessorId extends string>(
               // Use processorState (from the shared processorStates Map) so state persists
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
+              endOutputStreamSpanOutsideStep(
+                mutableState,
+                processor.id,
+                part as ChunkType,
+                parentSpan,
+                (streamParts ?? []).length,
+              );
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
@@ -1439,6 +1603,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                   // post-finish chunks (e.g. step-finish) don't trigger a
                   // new span creation at the guard above.
                 }
+                endOutputStreamSpanAtStepEnd(mutableState, processor.id, part as ChunkType, (streamParts ?? []).length);
               } catch (error) {
                 // End span with error (keep reference to prevent re-creation)
                 if (error instanceof TripWire) {
@@ -1800,6 +1965,36 @@ type RequireAgentInput<TPrev> = [TPrev] extends [{ prompt: string }]
       readonly receivedPrevOutput: TPrev;
     };
 
+/**
+ * Expected shape of one step passed to `.parallel()`. Distributes over unions so a
+ * non-tuple array of different steps is checked step by step. Input follows the
+ * `.then()` rule: the previous output only has to satisfy the step's input.
+ */
+type ParallelStepCheck<TStep, TState, TPrevSchema, TEngineType, TRequestContext> =
+  TStep extends Step<
+    string,
+    infer S,
+    infer TStepInput,
+    infer O,
+    any, // Don't infer TResume - causes issues with heterogeneous tuples
+    any, // Don't infer TSuspend - causes issues with heterogeneous tuples
+    TEngineType,
+    infer TStepRC
+  >
+    ? Step<
+        string,
+        SubsetOf<S, TState>,
+        TPrevSchema extends TStepInput ? TStepInput : TPrevSchema,
+        O,
+        any,
+        any,
+        TEngineType,
+        // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+        // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+        unknown extends TStepRC ? unknown : TRequestContext
+      >
+    : `Error: Expected Step with state schema that is a subset of workflow state`;
+
 export class Workflow<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -1817,6 +2012,7 @@ export class Workflow<
   TOutput = unknown,
   TPrevSchema = TInput,
   TRequestContext extends Record<string, any> | unknown = unknown,
+  TStorageVersion extends 1 | 2 = any,
 >
   extends MastraBase
   implements Step<TWorkflowId, TState, TInput, TOutput | undefined, any, any, DefaultEngineType, TRequestContext>
@@ -1837,14 +2033,36 @@ export class Workflow<
   public origin: 'code' | 'dynamic' = 'code';
   public isInternal = false;
   /** Handed from execute() to the createRun() call right after it; see createRun. */
-  #nestedRunStart?: { input: TInput; state: TState };
+  #nestedRun?: {
+    /** The parent run's storage version, which a new nested run takes. */
+    storageVersion: 1 | 2;
+    /** Set when execute() starts the nested run rather than resuming or restarting it. */
+    start?: { input: TInput; state: TState; inheritedState?: StateBase };
+  };
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
+
+  /**
+   * @internal For run-scoped agent loops only. Overrides the parent saved on
+   * suspension without changing live tracing. Ordinary workflows derive it
+   * from their execution span instead.
+   */
+  __setResumeTracingContext(context: WorkflowStateTracingContext | undefined): void {
+    this.executionEngine.options = { ...this.executionEngine.options, resumeTracingContext: context };
+  }
+
+  /**
+   * @internal Currently set by normal agent loops. Evented persistence also
+   * honors it for engine parity: changing engines must not change the saved parent.
+   */
+  __getResumeTracingContext(): WorkflowStateTracingContext | undefined {
+    return this.executionEngine.options.resumeTracingContext;
+  }
   protected executionGraph: ExecutionGraph;
-  #options: Omit<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'> &
-    Required<Pick<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'>>;
+  #options: Omit<WorkflowOptions<TStorageVersion>, 'shouldPersistSnapshot' | 'validateInputs'> &
+    Required<Pick<WorkflowOptions<TStorageVersion>, 'shouldPersistSnapshot' | 'validateInputs'>>;
   public retryConfig: {
     attempts?: number;
     delay?: number;
@@ -1852,7 +2070,7 @@ export class Workflow<
 
   #mastra?: Mastra;
 
-  #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> = new Map();
+  #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> = new Map();
 
   #schedules: WorkflowScheduleConfig[];
 
@@ -1871,7 +2089,7 @@ export class Workflow<
     options = {},
     type,
     schedule,
-  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext, TStorageVersion>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     // Stored type-erased: the scheduler reads these as plain records.
     const schedules = (!schedule ? [] : Array.isArray(schedule) ? schedule : [schedule]) as WorkflowScheduleConfig[];
@@ -1916,9 +2134,13 @@ export class Workflow<
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
+      persistResumeClaim: options.persistResumeClaim,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
+      watchExecutionLoss: options.watchExecutionLoss,
       pruneSnapshot: options.pruneSnapshot,
+      storageVersion: options.storageVersion,
+      autoStorageVersion: options.autoStorageVersion,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,
       onFinish: options.onFinish,
@@ -1926,6 +2148,15 @@ export class Workflow<
       sharePubsub: options.sharePubsub,
       autoRestartActiveRuns: options.autoRestartActiveRuns,
     };
+
+    if (options.storageVersion === 2 && options.pruneSnapshot) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_PRUNE_SNAPSHOT',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${id}" sets both storageVersion: 2 and pruneSnapshot. Storage version 2 doesn't support pruneSnapshot.`,
+      });
+    }
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -1964,12 +2195,29 @@ export class Workflow<
   }
 
   __registerMastra(mastra: Mastra) {
+    // Checked here rather than in the constructor: other engines set engineType after super().
+    if (this.#options.storageVersion === 2 && this.engineType !== 'default') {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default engine or storageVersion: 1.`,
+      });
+    }
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
   }
 
   __markInternal() {
     this.isInternal = true;
+    // Nested workflows of an internal workflow are its own plumbing (e.g. the
+    // background-task attempt body, the agentic loop iteration), not resources
+    // end users are granted access to.
+    for (const step of Object.values(this.steps)) {
+      if (step instanceof Workflow && !step.isInternal) {
+        step.__markInternal();
+      }
+    }
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -2017,7 +2265,7 @@ export class Workflow<
           return;
         case 'mapping':
           this.steps[entry.id] = createMappingStep(entry.id, entry.mapConfig as MappingConfig) as any;
-          return;
+          break;
       }
     };
     switch (live.type) {
@@ -2048,9 +2296,9 @@ export class Workflow<
           outputSchema: z.object({}),
           execute: async () => ({}),
         });
-        return;
+        break;
       default:
-        return;
+        break;
     }
   }
 
@@ -2088,7 +2336,8 @@ export class Workflow<
       TInput,
       TOutput,
       TSchemaOut,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2105,7 +2354,8 @@ export class Workflow<
     TInput,
     TOutput,
     ClassifierStepOutput<QUESTIONS>,
-    TRequestContext
+    TRequestContext,
+    TStorageVersion
   >;
   classifier<const QUESTIONS extends ClassifierQuestions = ClassifierQuestions>(
     classifierId: string,
@@ -2119,7 +2369,8 @@ export class Workflow<
     TInput,
     TOutput,
     ClassifierStepOutput<QUESTIONS>,
-    TRequestContext
+    TRequestContext,
+    TStorageVersion
   >;
   classifier(
     classifierOrId: Classifier<any> | string,
@@ -2166,17 +2417,27 @@ export class Workflow<
       metadata?: StepMetadata;
     },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    { text: string },
+    TRequestContext,
+    TStorageVersion
+  >;
   agent<TStepId extends string, TStepOutput>(
     agent: (SubAgent<TStepId, any> | Agent<TStepId, any>) & RequireAgentInput<TPrevSchema>,
     options: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
-      structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+      structuredOutput: { schema: PublicSchema<TStepOutput> };
       retries?: number;
       scorers?: DynamicArgument<MastraScorers>;
       metadata?: StepMetadata;
     },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TStepOutput, TRequestContext>;
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TStepOutput, TRequestContext, TStorageVersion>;
   agent(
     agentId: string,
     options?: AgentStepOptions<any> & {
@@ -2185,7 +2446,17 @@ export class Workflow<
       metadata?: StepMetadata;
     },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    { text: string },
+    TRequestContext,
+    TStorageVersion
+  >;
   agent(agentOrId: any, options?: any, stepOptions?: { id?: string }): any {
     const isId = typeof agentOrId === 'string';
     const agentId = isId ? agentOrId : agentOrId.id;
@@ -2233,12 +2504,12 @@ export class Workflow<
     >,
     options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext>;
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext, TStorageVersion>;
   tool(
     toolId: string,
     options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext>;
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext, TStorageVersion>;
   tool(toolOrId: any, options?: any, stepOptions?: { id?: string }): any {
     const isId = typeof toolOrId === 'string';
     const toolId = isId ? toolOrId : toolOrId.id;
@@ -2303,7 +2574,8 @@ export class Workflow<
       TInput,
       TOutput,
       TPrevSchema,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2352,7 +2624,8 @@ export class Workflow<
       TInput,
       TOutput,
       TPrevSchema,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2408,7 +2681,7 @@ export class Workflow<
         }
       | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null; description?: string; metadata?: StepMetadata },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext, TStorageVersion> {
     // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
     // interpreted at execution time by `createMappingStep`, not baked in here.
     // Mapping ids must be stable across process restarts: they are recorded in
@@ -2466,11 +2739,12 @@ export class Workflow<
         TInput,
         TOutput,
         any,
-        TRequestContext
+        TRequestContext,
+        TStorageVersion
       >;
     }
 
-    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
+    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce<Record<string, any>>(
       (a, [key, mapping]) => {
         const m: any = mapping;
         if (m.value !== undefined) {
@@ -2514,7 +2788,7 @@ export class Workflow<
         }
         return a;
       },
-      {} as Record<string, any>,
+      {},
     );
 
     type MappedOutputSchema = any;
@@ -2540,36 +2814,21 @@ export class Workflow<
       TInput,
       TOutput,
       MappedOutputSchema,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
   // TODO: make typing better here
-  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType, any>[]>(
+  parallel<TParallelSteps extends readonly Step<string, any, any, any, any, any, TEngineType, any>[]>(
     steps: TParallelSteps & {
-      [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<
-        string,
-        infer S,
+      [K in keyof TParallelSteps]: ParallelStepCheck<
+        TParallelSteps[K],
+        TState,
         TPrevSchema,
-        infer O,
-        any, // Don't infer TResume - causes issues with heterogeneous tuples
-        any, // Don't infer TSuspend - causes issues with heterogeneous tuples
         TEngineType,
-        infer TStepRC
-      >
-        ? Step<
-            string,
-            SubsetOf<S, TState>,
-            TPrevSchema,
-            O,
-            any,
-            any,
-            TEngineType,
-            // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
-            // declare one matching the workflow's TRequestContext. Mismatched schemas error.
-            unknown extends TStepRC ? unknown : TRequestContext
-          >
-        : `Error: Expected Step with state schema that is a subset of workflow state`;
+        TRequestContext
+      >;
     },
     options?: StepFlowEntryOptions,
   ) {
@@ -2599,7 +2858,8 @@ export class Workflow<
           StepsRecord<TParallelSteps>[K]['outputSchema']
         >;
       },
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2665,7 +2925,8 @@ export class Workflow<
           StepsRecord<ExtractedSteps[]>[K]['outputSchema']
         >;
       },
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2718,7 +2979,8 @@ export class Workflow<
       TInput,
       TOutput,
       TSchemaOut,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2771,7 +3033,8 @@ export class Workflow<
       TInput,
       TOutput,
       TSchemaOut,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2831,7 +3094,8 @@ export class Workflow<
       TInput,
       TOutput,
       TSchemaOut[],
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2862,7 +3126,8 @@ export class Workflow<
       TInput,
       TOutput,
       TOutput,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2897,11 +3162,12 @@ export class Workflow<
     /** Overrides the workflow-wide tracing policy for this run only. */
     tracingPolicy?: TracingPolicy;
     parentWorkflow?: NestedWorkflowParent;
-  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> {
     // Taken before the first await: concurrent parent runs share this workflow
     // instance, so a later execute() would otherwise swap in its own input and state.
-    const nestedRunStart = this.#nestedRunStart;
-    this.#nestedRunStart = undefined;
+    const nestedRun = this.#nestedRun;
+    this.#nestedRun = undefined;
+    const nestedRunStart = nestedRun?.start;
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -2910,6 +3176,27 @@ export class Workflow<
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
+    // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
+    // With autoStorageVersion, a new run takes v2 only where it can be stored as v2.
+    // A nested run doesn't use the workflow's options, so it never hits either.
+    const { storageVersion: optionVersion, autoStorageVersion } = this.#options;
+    let unsupportedV2 = false;
+    let autoVersion: 1 | 2 | undefined;
+    if (!nestedRun && (optionVersion === 2 || (optionVersion === undefined && autoStorageVersion))) {
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const journal = !!workflowsStore?.supportsRunJournal();
+      if (optionVersion === 2) unsupportedV2 = !!workflowsStore && !journal;
+      else autoVersion = journal && this.engineType === 'default' ? 2 : 1;
+    }
+    const throwUnsupportedV2 = (): never => {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the configured storage adapter doesn't support yet. Use storageVersion: 1.`,
+      });
+    };
+    if (unsupportedV2 && !options?.runId) throwUnsupportedV2();
     const runIdToUse =
       options?.runId ||
       this.#mastra?.generateId({
@@ -2919,6 +3206,76 @@ export class Workflow<
         resourceId: options?.resourceId,
       }) ||
       globalThis.crypto.randomUUID();
+
+    const cachedRun = this.#runs.get(runIdToUse);
+    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
+      workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
+      stepResults: {},
+    });
+
+    // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
+    // transient processor workflows from #17344) cannot have a stored row, so this
+    // existence read would be a guaranteed miss. Skipping it removes one storage
+    // round trip per streamed chunk on the agent output-processor hot path (#19015).
+    const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
+    // A stored run keeps the version it was created with, whatever the workflow sets now. A new
+    // nested run takes its parent run's, and a new top-level run the workflow's. The version's
+    // table is probed first; only a caller-given top-level id can name a run stored in the other
+    // one. A cached run's version is already known, and a nested run is stored in its parent's.
+    let storageVersion: 1 | 2 =
+      cachedRun?.storageVersion ??
+      nestedRun?.storageVersion ??
+      (unsupportedV2 ? 1 : (optionVersion ?? autoVersion ?? 1));
+    const probeOtherVersion = !!options?.runId && !cachedRun && !nestedRun;
+    const loadStoredHeader = (version: 1 | 2) =>
+      createRunStorage({
+        storageVersion: version,
+        workflowName: this.id,
+        runId: runIdToUse,
+        getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
+      }).loadHeader();
+    let existsInStorage = false;
+    let stored: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> | undefined;
+
+    if (storageVersion === 2) {
+      // The header holds the status and parent this reads, so one header read replaces the
+      // existence check and the snapshot load.
+      const header = lookUpStoredRun ? await loadStoredHeader(2) : null;
+      if (header) {
+        existsInStorage = true;
+        stored = header;
+      } else if (probeOtherVersion) {
+        const v1Snapshot = await loadStoredHeader(1);
+        if (v1Snapshot) {
+          existsInStorage = true;
+          stored = v1Snapshot;
+          storageVersion = 1;
+        }
+      }
+    } else {
+      // Unlike the header reads, this finds the run in either version's table.
+      const existingRun = lookUpStoredRun
+        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+        : undefined;
+
+      // Check if run exists in persistent storage (not just in-memory)
+      existsInStorage = !!existingRun && !existingRun.isFromInMemory;
+
+      // If a run exists in storage, update the run's status to reflect the actual state
+      // This fixes the issue where createRun checks storage but doesn't use the stored data
+      if (existsInStorage && existingRun?.status) {
+        let header = await loadStoredHeader(1);
+        if (!header && probeOtherVersion) {
+          const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+          if (workflowsStore?.supportsRunJournal()) {
+            header = await loadStoredHeader(2);
+            if (header) storageVersion = 2;
+          }
+        }
+        stored = { status: existingRun.status as WorkflowRunStatus, parentWorkflow: header?.parentWorkflow };
+      }
+    }
+    if (unsupportedV2 && !existsInStorage) throwUnsupportedV2();
 
     // Return a new Run instance with object parameters
     const run =
@@ -2947,6 +3304,9 @@ export class Workflow<
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
         pubsub: options?.pubsub,
+        storageVersion,
+        recoverable:
+          this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
       });
 
     this.#runs.set(runIdToUse, run);
@@ -2955,34 +3315,12 @@ export class Workflow<
       this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
     }
 
-    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
-      workflowStatus: run.workflowRunStatus,
-      stepResults: {},
-    });
-
-    // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
-    // transient processor workflows from #17344) cannot have a stored row, so this
-    // existence read would be a guaranteed miss. Skipping it removes one storage
-    // round trip per streamed chunk on the agent output-processor hot path (#19015).
-    const existingRun =
-      shouldPersistSnapshot || options?.runId
-        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
-        : undefined;
-
-    // Check if run exists in persistent storage (not just in-memory)
-    const existsInStorage = existingRun && !existingRun.isFromInMemory;
-
-    // If a run exists in storage, update the run's status to reflect the actual state
-    // This fixes the issue where createRun checks storage but doesn't use the stored data
-    if (existsInStorage && existingRun.status) {
-      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const storedSnapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse });
-      run.parentWorkflow = storedSnapshot?.parentWorkflow ?? run.parentWorkflow;
+    if (stored) {
+      run.workflowRunStatus = stored.status;
+      run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       const initialSnapshot: WorkflowRunState = {
         runId: runIdToUse,
         status: 'pending',
@@ -3002,16 +3340,18 @@ export class Workflow<
         error: undefined,
         timestamp: Date.now(),
       };
-      await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: this.id,
-        runId: runIdToUse,
-        resourceId: options?.resourceId,
-        snapshot: this.#options.pruneSnapshot
+      await run.runStorage.writeInitial(
+        // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
+        this.#options.pruneSnapshot && storageVersion === 1
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
-      });
+        options?.resourceId,
+        // The nested run starts from exactly that version of the parent's state.
+        { stateBase: nestedRunStart?.inheritedState?.ref },
+      );
     }
 
+    run.inheritedState = nestedRunStart?.inheritedState;
     return run;
   }
 
@@ -3058,6 +3398,8 @@ export class Workflow<
     timeTravel,
     parentWorkflow,
     [PUBSUB_SYMBOL]: pubsub,
+    [PARENT_STATE_SYMBOL]: parentState,
+    [HAND_BACK_STATE_SYMBOL]: handBackState,
     mastra,
     requestContext,
     abort,
@@ -3097,6 +3439,8 @@ export class Workflow<
       forEachIndex?: number;
     };
     [PUBSUB_SYMBOL]: PubSub;
+    [PARENT_STATE_SYMBOL]?: ParentStateLink;
+    [HAND_BACK_STATE_SYMBOL]?: (state: TState, base: Record<string, unknown>) => Promise<void>;
     mastra: Mastra;
     requestContext?: RequestContext<TRequestContext>;
     engine: DefaultEngineType;
@@ -3112,9 +3456,9 @@ export class Workflow<
     const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
-    // FGA authorization check
+    // FGA authorization check (internal workflows are exempt, matching Run.start)
     const fgaProvider = mastra?.getServer()?.fga;
-    if (fgaProvider) {
+    if (fgaProvider && !this.isInternal) {
       const user = requestContext?.get('user' as any);
       await requireFGA({
         fgaProvider,
@@ -3163,8 +3507,23 @@ export class Workflow<
     // and relaying with the same runId would cause an infinite event loop.
     const useSharedPubsub = !!this.#options?.sharePubsub;
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
+    // A started nested run works on its own copy of the parent's state and hands back its changes
+    // on top of the parent's state then, so changes the parent's other steps make meanwhile are kept.
+    let startState = state;
+    let startedFrom: Record<string, unknown> | undefined;
+    if (!restart && !isResume) {
+      startedFrom = toJsonState(state);
+      // State that isn't JSON is shared and handed back whole, as before.
+      if (startedFrom) startState = copyState(state);
+    }
+    // The nested run takes the parent run's version. Only a storage v2 parent hands over its
+    // state link, and it stores the nested run's state as its changes to a version of the parent's.
+    const inheritedState = !restart && !isResume ? await parentState?.(startState) : undefined;
     // Nothing may await between this and createRun(), which takes it synchronously.
-    this.#nestedRunStart = !restart && !isResume ? { input: inputData, state } : undefined;
+    this.#nestedRun = {
+      storageVersion: parentState ? 2 : 1,
+      start: !restart && !isResume ? { input: inputData, state: startState, inheritedState } : undefined,
+    };
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
@@ -3173,7 +3532,12 @@ export class Workflow<
     };
     const parentAbortCb = async () => {
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
-      await run.cancel();
+      // run.cancel() rejects when a nested snapshot can't be updated; an event listener has no caller to surface it to.
+      try {
+        await run.cancel();
+      } catch (error) {
+        mastra?.getLogger()?.error(`Failed to cancel nested workflow "${this.id}" run ${run.runId}`, error);
+      }
     };
     run.abortController.signal.addEventListener('abort', nestedAbortCb);
     abortSignal.addEventListener('abort', parentAbortCb);
@@ -3192,20 +3556,19 @@ export class Workflow<
       (requestContext as RequestContext).set('__mastraWorflowInputData', inputData);
     }
 
-    let res: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    let res: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
 
     // The parent and nested snapshots are written separately, so a crash can leave them out of
     // sync. Trust the nested run's status: an active nested run must be restarted, and a nested
     // run that never claimed its resume must be resumed. See https://github.com/mastra-ai/mastra/issues/25187
+    // What the nested run's hand-back is relative to. A nested run a restarting parent resumes may
+    // have changes its parent never received, so it hands back its whole state.
+    let handBackBase: Record<string, unknown> | undefined;
     try {
       let restartNested = !!restart;
       let resumeNested = isResume;
       if ((restart || isResume) && !isTimeTravel) {
-        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.id,
-          runId: run.runId,
-        });
+        const nestedSnapshot = await run.runStorage.loadHeader();
         let nestedStatus = nestedSnapshot?.status;
         // A crash between the nested run's resume claim and its resumed step starting leaves a
         // `running` snapshot that still only has suspended steps. Restarting it would drop the
@@ -3218,11 +3581,7 @@ export class Workflow<
         ) {
           // The resume claim is only written by stores with atomic updates, so a claim-only
           // snapshot implies one; compare-and-set so a concurrent caller's claim is not re-armed.
-          const released = await workflowsStore!.updateWorkflowState({
-            workflowName: this.id,
-            runId: run.runId,
-            opts: { status: 'suspended', expectedStatus: nestedStatus },
-          });
+          const released = await run.runStorage.updateHeader({ status: 'suspended', expectedStatus: nestedStatus });
           if (released) {
             nestedStatus = 'suspended';
             restartNested = false;
@@ -3241,7 +3600,7 @@ export class Workflow<
         res = await run.timeTravel({
           inputData: timeTravel?.inputData,
           resumeData: timeTravel?.resumeData,
-          initialState: state,
+          initialState: startState,
           step: timeTravel?.steps,
           context: (timeTravel?.nestedStepResults?.[this.id] ?? {}) as any,
           nestedStepsContext: timeTravel?.nestedStepResults as any,
@@ -3252,7 +3611,11 @@ export class Workflow<
           outputOptions: { includeState: true, includeResumeLabels: true },
           perStep,
         });
+        handBackBase = startedFrom;
       } else if (restartNested) {
+        // The changes since the drive started are the ones the parent hasn't received: from a fresh
+        // start, none of them; from a resume, those after the suspension the parent took in.
+        handBackBase = await run.runStorage.loadDriveStartState();
         res = await run.restart({
           requestContext,
           actor,
@@ -3272,6 +3635,7 @@ export class Workflow<
           label: resume?.label,
           perStep,
         });
+        if (isResume) handBackBase = run.resumedFromState;
       } else {
         res = await run.start({
           inputData,
@@ -3279,29 +3643,41 @@ export class Workflow<
           actor,
           ...observabilityContext,
           outputWriter,
-          initialState: state,
+          initialState: startState,
           outputOptions: { includeState: true, includeResumeLabels: true },
           perStep,
         } as any);
+        if (startedFrom) handBackBase = run.startedFromState;
       }
     } finally {
+      run.resumedFromState = undefined;
+      run.startedFromState = undefined;
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
       abortSignal.removeEventListener('abort', parentAbortCb);
       unwatch();
     }
 
-    const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
+    // On storage v2 `res.steps` is a loader. The suspended and failed results read here are never
+    // evicted, so the ones it holds are enough.
+    const nestedSteps = residentStepResults(res.steps) ?? res.steps;
+    const suspendedSteps = Object.entries(nestedSteps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
     });
 
     if (res.state) {
-      await setState(res.state);
+      await (handBackBase && handBackState ? handBackState(res.state, handBackBase) : setState(res.state));
     }
+    // What this nested run has handed back so far. A suspended nested run may have changed state
+    // before parking, and the hand-back above already merged those changes into the parent. If the
+    // parent crashes and re-executes this step, the finished run's state is rebased onto the
+    // parent's current state from here, so the changes it already handed back aren't applied twice.
+    // Storage v2 keeps the state each drive started from, so a v2 parent reads it from there
+    // instead of storing a copy.
+    const handedBack = handBackBase && !parentState ? toJsonState(res.state) : undefined;
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
-        // @ts-expect-error - context type mismatch
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
         const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
         // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
@@ -3323,6 +3699,11 @@ export class Workflow<
             __workflow_meta: {
               ...nestedMeta,
               ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+              // The state this nested run had already handed back when it parked. If the parent
+              // crashes and re-executes this step, the finished nested run's state is rebased onto
+              // the parent's current state with this base, so keys a sibling changed meanwhile are
+              // not overwritten and nothing this nested run already handed back is applied twice.
+              ...(handedBack ? { startState: handedBack } : {}),
               runId: run.runId,
               path: suspendPath,
             },
@@ -3335,7 +3716,7 @@ export class Workflow<
     }
 
     if (res.status === 'failed') {
-      const isNonRetryable = Object.values(res.steps).some(stepResult => {
+      const isNonRetryable = Object.values(nestedSteps).some(stepResult => {
         const result = stepResult as StepResult<any, any, any, any>;
         return result.status === 'failed' && result.nonRetryable;
       });
@@ -3394,22 +3775,76 @@ export class Workflow<
       return;
     }
     const activeRuns = await this.listActiveWorkflowRuns();
-    if (activeRuns.runs.length > 0) {
-      this.logger.debug('Restarting active workflow runs', { count: activeRuns.runs.length });
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
+    // the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
+    const runs: typeof activeRuns.runs = [];
+    for (const runSnapshot of activeRuns.runs) {
+      const parent = nestedRunParentOf(runSnapshot.snapshot);
+      if (!parent) {
+        runs.push(runSnapshot);
+        continue;
+      }
+      // Restarting a nested run standalone while its parent drives it runs the item twice, and
+      // after the parent finished nothing collects the result, so the item runs a second time.
+      try {
+        const parentStatus = await parentStatusOf(parent);
+        const recovery = nestedRunRecoveryAction(parentStatus);
+        if (recovery === 'restart') {
+          runs.push(runSnapshot);
+        } else if (recovery === 'cancel' && workflowsStore) {
+          await cancelNestedRun({
+            store: workflowsStore,
+            workflowName: this.id,
+            runId: runSnapshot.runId,
+            expectedStatus: nestedRunStatusOf(runSnapshot.snapshot),
+            logger: this.logger,
+          });
+        } else if (recovery === 'skip') {
+          // The parent can still drive this run, so there is nothing to do here. Logged because a
+          // nested run left waiting on a parent that never restarts is otherwise only visible in
+          // the nested workflow's own active runs.
+          this.logger.debug('Left a nested workflow run for its parent to drive', {
+            workflowId: this.id,
+            runId: runSnapshot.runId,
+            parentWorkflow: parent.workflowName,
+            parentRunId: parent.runId,
+            parentStatus,
+          });
+        }
+      } catch (error) {
+        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        this.logger.error('Failed to recover nested workflow run', {
+          workflowId: this.id,
+          runId: runSnapshot.runId,
+          error,
+        });
+      }
+    }
+    if (runs.length > 0) {
+      this.logger.debug('Restarting active workflow runs', { count: runs.length });
     }
     const concurrency = this.#mastra?.recoveryConfig?.workflowConcurrency ?? DEFAULT_RESTART_CONCURRENCY;
-    await runWithConcurrency(activeRuns.runs, concurrency, async runSnapshot => {
+    await runWithConcurrency(runs, concurrency, async runSnapshot => {
       try {
         const run = await this.createRun({ runId: runSnapshot.runId });
         await run.restart();
         this.logger.debug('Restarted workflow run', { workflowId: this.id, runId: runSnapshot.runId });
       } catch (error) {
+        if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {
+          this.logger.debug('Skipped restarting workflow run owned by a live process', {
+            workflowId: this.id,
+            runId: runSnapshot.runId,
+          });
+          return;
+        }
         this.logger.error('Failed to restart workflow run', { workflowId: this.id, runId: runSnapshot.runId, error });
       }
     });
   }
 
-  async deleteWorkflowRunById(runId: string) {
+  async deleteWorkflowRunById(runId: string, options?: { storageVersion: 1 | 2 }) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot delete workflow run by ID. Mastra storage is not initialized');
@@ -3422,7 +3857,7 @@ export class Workflow<
       return;
     }
 
-    await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id });
+    await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
     // deleting the run from the in memory runs
     this.#runs.delete(runId);
   }
@@ -3466,18 +3901,9 @@ export class Workflow<
     let finalSteps = {} as Record<string, StepResult<any, any, any, any>>;
 
     for (const step of Object.keys(steps)) {
-      const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
-      const nestedWorkflowEntry =
-        stepGraph?.type === 'workflow'
-          ? stepGraph
-          : (stepGraph as any)?.step?.type === 'workflow'
-            ? (stepGraph as any).step
-            : (stepGraph as any)?.step?.component === 'WORKFLOW'
-              ? { workflowId: step }
-              : undefined;
-      if (nestedWorkflowEntry) {
-        const nestedWorkflowId = nestedWorkflowEntry.workflowId as string;
+      const nestedWorkflowId = getNestedWorkflowId(serializedStepGraph, step);
+      if (nestedWorkflowId) {
         const stepResult = steps[step] as any;
         const nestedRunIdMetadata = stepResult?.metadata?.nestedRunId;
         const invocationResults = Array.isArray(stepResult) ? stepResult : undefined;
@@ -3695,6 +4121,7 @@ export class Run<
   TInput = unknown,
   TOutput = unknown,
   TRequestContext extends Record<string, any> | unknown = unknown,
+  TStorageVersion extends 1 | 2 = any,
 > {
   #abortController?: AbortController;
   protected workflowRunSpan?: Span<SpanType.WORKFLOW_RUN>;
@@ -3764,19 +4191,54 @@ export class Run<
   readonly workflowEngineType: WorkflowEngineType;
 
   /**
+   * How this run is stored: the version it was stored with, or for a new run the workflow's
+   * `storageVersion` option.
+   * @experimental
+   */
+  readonly storageVersion: 1 | 2;
+
+  /**
+   * For the next start or time travel of a storage v2 nested run: the stored version of its parent's
+   * state it starts from and stores only its changes to. Set by `createRun`, taken by `_start` and
+   * `_timeTravel`.
+   * @internal
+   */
+  inheritedState?: StateBase;
+  /**
+   * For a nested run its parent resumes: the state it resumed from, as JSON. Its parent already
+   * holds that state, so it takes only the changes after it. Set by `_resume`, taken by the parent's step.
+   * @internal
+   */
+  resumedFromState?: Record<string, unknown>;
+  /**
+   * For a nested run its parent starts: the state it started from after its `stateSchema` parsed
+   * it, as JSON. Its changes are taken relative to this, so a schema default or transform isn't
+   * mistaken for one. Set by `_start`, taken by the parent's step.
+   * @internal
+   */
+  startedFromState?: Record<string, unknown>;
+  /**
+   * The store calls this run makes, for its `storageVersion`.
+   * @internal
+   */
+  readonly runStorage: RunStorage;
+
+  /**
    * The storage for this run
    */
   #mastra?: Mastra;
 
   #observerHandlers: (() => void)[] = [];
 
+  #recoverable: boolean;
+
   get mastra() {
     return this.#mastra;
   }
 
-  streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+  streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>;
   protected closeStreamAction?: () => Promise<void>;
-  protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+  protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>;
   protected stateSchema?: StandardSchemaWithJSON<TState>;
   protected inputSchema?: StandardSchemaWithJSON<TInput>;
   protected requestContextSchema?: StandardSchemaWithJSON<any>;
@@ -3813,6 +4275,10 @@ export class Run<
     workflowEngineType: WorkflowEngineType;
     /** Optional pubsub instance. If not provided, a new EventEmitterPubSub is created. */
     pubsub?: PubSub;
+    /** @experimental Defaults to 1. */
+    storageVersion?: 1 | 2;
+    /** Whether the boot-time recovery sweep may restart this run, so it must hold an ownership lease while it executes. */
+    recoverable?: boolean;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -3835,6 +4301,17 @@ export class Run<
     this.requestContextSchema = params.requestContextSchema;
     this.workflowRunStatus = 'pending';
     this.workflowEngineType = params.workflowEngineType;
+    this.storageVersion = params.storageVersion ?? 1;
+    this.runStorage = createRunStorage({
+      storageVersion: this.storageVersion,
+      workflowName: this.workflowId,
+      runId: this.runId,
+      // Use the store the engine writes to. The engine follows the workflow's latest Mastra
+      // registration, while `#mastra` is fixed when the run is created (a run created before
+      // `__registerInternalWorkflow`, or reused across registrations, would miss its stored run).
+      getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
+    });
+    this.#recoverable = params.recoverable ?? false;
   }
 
   public get abortController(): AbortController {
@@ -3899,25 +4376,40 @@ export class Run<
   protected async hasReachedTerminalStatus(): Promise<boolean> {
     if (TERMINAL_WORKFLOW_RUN_STATUSES.has(this.workflowRunStatus)) return true;
     try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: this.workflowId,
-        runId: this.runId,
-      });
-      return !!snapshot && TERMINAL_WORKFLOW_RUN_STATUSES.has(snapshot.status);
+      const header = await this.runStorage.loadHeader();
+      return !!header && TERMINAL_WORKFLOW_RUN_STATUSES.has(header.status);
     } catch {
       return false;
     }
   }
 
   /**
+   * Cancels a canceled run's suspended nested runs. Running nested runs are canceled through the abort signal.
+   * `header` is the storage v2 header the cancel just stored, so it isn't read again.
+   * @throws When reading this run, or reading or updating a nested run, fails.
+   */
+  protected async cancelSuspendedNestedRuns(header?: WorkflowRunHeader): Promise<void> {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return;
+    const run = await loadRunForCancel(
+      workflowsStore,
+      { workflowName: this.workflowId, runId: this.runId },
+      this.storageVersion,
+      this.storageVersion === 2 ? header : undefined,
+    );
+    if (run?.header.status === 'canceled') await cancelSuspendedNestedRuns(workflowsStore, run);
+  }
+
+  /**
    * Cancels the workflow execution.
-   * This aborts any running execution and updates the workflow status to 'canceled' in storage.
+   * This aborts any running execution and updates the workflow status to 'canceled' in storage,
+   * along with the status of its suspended nested workflow runs.
    * Runs that already finished (success, failed, canceled, tripwire, bailed) are left unchanged.
+   * Canceling an already canceled run cancels any of its nested runs that are still suspended.
    */
   async cancel() {
-    // Canceling a finished run is a no-op so its final status is preserved
-    if (await this.hasReachedTerminalStatus()) return;
+    // A finished run keeps its final status. A canceled one can still have suspended nested runs.
+    if (await this.hasReachedTerminalStatus()) return this.cancelSuspendedNestedRuns();
 
     // Abort any running execution and update in-memory status
     this.abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
@@ -3925,23 +4417,29 @@ export class Run<
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
-    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
+    const span = this.workflowRunSpan;
+    // Older observability implementations may only support end({ endTree: true }).
+    const endTree = span?.endTree ?? span?.end;
+    endTree?.call(span, {
+      endTree: true,
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      attributes: { status: 'canceled' },
+    });
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
+    let header: WorkflowRunHeader | null;
     try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      await workflowsStore?.updateWorkflowState({
-        workflowName: this.workflowId,
-        runId: this.runId,
-        opts: {
-          status: 'canceled',
-        },
-      });
+      header = await this.runStorage.updateHeader({ status: 'canceled' });
     } catch {
       // Storage errors should not prevent cancellation from succeeding
       // The abort signal and in-memory status are already updated
+      // Nested runs are only canceled under a run stored as canceled, so there is nothing more to do
+      return;
     }
+
+    await this.cancelSuspendedNestedRuns(header ?? undefined);
   }
 
   async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {
@@ -4088,11 +4586,14 @@ export class Run<
         actor?: ActorSignal;
       } & Partial<ObservabilityContext>,
     onDispatched?: () => void,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
+    const inheritedState = this.inheritedState;
+    this.inheritedState = undefined;
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -4133,9 +4634,10 @@ export class Run<
 
       return { inputDataToUse: validatedInput, initialStateToUse: validatedState };
     })().catch(error => {
-      workflowSpan?.error({ error: error as Error });
+      workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
       throw error;
     });
+    if (this.parentWorkflow) this.startedFromState = toJsonState(initialStateToUse);
 
     if (onDispatched) {
       const shouldPersistSnapshot =
@@ -4145,7 +4647,6 @@ export class Run<
         this.workflowRunStatus === 'pending' &&
         shouldPersistSnapshot({ workflowStatus: 'waiting', stepResults: {} })
       ) {
-        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const initialRunSnapshot: WorkflowRunState = {
           runId: this.runId,
           status: 'waiting',
@@ -4161,16 +4662,14 @@ export class Run<
           timestamp: Date.now(),
         };
         try {
-          await workflowsStore?.persistWorkflowSnapshot({
-            workflowName: this.workflowId,
-            runId: this.runId,
-            resourceId: this.resourceId,
-            snapshot: this.executionEngine.options.pruneSnapshot
+          await this.runStorage.writeInitial(
+            this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
               ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
               : initialRunSnapshot,
-          });
+            this.resourceId,
+          );
         } catch (error) {
-          workflowSpan?.error({ error: error as Error });
+          workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
           throw error;
         }
       }
@@ -4178,27 +4677,31 @@ export class Run<
       onDispatched();
     }
 
-    const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      parentWorkflow: this.parentWorkflow,
-      resourceId: this.resourceId,
-      disableScorers: this.disableScorers,
-      graph: this.executionGraph,
-      serializedStepGraph: this.serializedStepGraph,
-      input: inputDataToUse,
-      initialState: initialStateToUse,
-      pubsub: this.pubsub,
-      retryConfig: this.retryConfig,
-      requestContext: (requestContext ?? new RequestContext()) as RequestContext,
-      actor,
-      abortController: this.abortController,
-      outputWriter,
-      workflowSpan,
-      format,
-      outputOptions,
-      perStep,
-    });
+    const result = await this.#executeOwned(() =>
+      this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        parentWorkflow: this.parentWorkflow,
+        resourceId: this.resourceId,
+        disableScorers: this.disableScorers,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        input: inputDataToUse,
+        initialState: initialStateToUse,
+        pubsub: this.pubsub,
+        retryConfig: this.retryConfig,
+        requestContext: (requestContext ?? new RequestContext()) as RequestContext,
+        actor,
+        abortController: this.abortController,
+        outputWriter,
+        workflowSpan,
+        format,
+        outputOptions,
+        perStep,
+        storageVersion: this.storageVersion,
+        inheritedState,
+      }),
+    );
 
     this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
@@ -4231,7 +4734,7 @@ export class Run<
           }) & {
         requestContext?: RequestContext<TRequestContext>;
       } & WorkflowRunStartOptions,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     return this._start(args);
   }
 
@@ -4315,7 +4818,7 @@ export class Run<
     } & Partial<ObservabilityContext>,
   ): {
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>;
   } {
     const observabilityContext = resolveObservabilityContext(rest);
     if (this.closeStreamAction) {
@@ -4480,7 +4983,9 @@ export class Run<
       };
       perStep?: boolean;
       actor?: ActorSignal;
-    } & Partial<ObservabilityContext>): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    } & Partial<ObservabilityContext>): WorkflowRunOutput<
+    WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
+  > {
     const observabilityContext = resolveObservabilityContext(rest);
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
@@ -4558,7 +5063,7 @@ export class Run<
 
           if (self.streamOutput) {
             self.streamOutput.updateResults(
-              executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
+              executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>,
             );
           }
 
@@ -4576,7 +5081,7 @@ export class Run<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -4677,7 +5182,7 @@ export class Run<
           ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
-            void controller.enqueue(chunk);
+            controller.enqueue(chunk);
           },
           isVNext: true,
           forEachIndex,
@@ -4702,7 +5207,7 @@ export class Run<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -4818,7 +5323,7 @@ export class Run<
       perStep?: boolean;
       actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     return this._resume(params);
   }
 
@@ -4884,23 +5389,59 @@ export class Run<
       };
       actor?: ActorSignal;
     } & Partial<ObservabilityContext> = {},
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     return this._restart(args);
   }
 
   /**
-   * Atomically claims a suspended run for exactly one resume caller by flipping the persisted
-   * status from `suspended` to `running`.
-   *
-   * Throws `WORKFLOW_RESUME_ALREADY_CLAIMED` when another caller already claimed this
-   * suspension, so losing callers never enter the execution engine.
+   * Takes the storage ownership lease for runs the boot-time recovery sweep could restart, so a
+   * sweep on another replica skips this run while this process drives it. Nested runs are covered
+   * by their parent's lease, and runs that never persist a `running` snapshot are never swept.
    */
-  async #claimResume({
+  async #claimOwnership(force: boolean): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
+    const shouldPersistSnapshot =
+      this.executionEngine.getRunPersistenceOverride(this.runId) ?? this.executionEngine.options.shouldPersistSnapshot;
+    if (
+      !this.#recoverable ||
+      this.parentWorkflow ||
+      !shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} })
+    ) {
+      return { release: async () => {} };
+    }
+    return claimWorkflowRunOwnership({
+      store: await this.#mastra?.getStorage()?.getStore('workflows'),
+      runId: this.runId,
+      force,
+      logger: this.#mastra?.getLogger(),
+    });
+  }
+
+  async #executeOwned<T>(execute: () => Promise<T>): Promise<T> {
+    const ownership = await this.#claimOwnership(true);
+    if (!('release' in ownership)) return execute();
+    try {
+      return await execute();
+    } finally {
+      await ownership.release();
+    }
+  }
+
+  /**
+   * Atomically claims a run for exactly one caller by flipping the persisted status to `running`.
+   *
+   * `resume` claims a `suspended` run; `timeTravel` claims the run from whatever non-running
+   * status it was loaded in. Throws `WORKFLOW_RESUME_ALREADY_CLAIMED` or
+   * `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED` when another caller already claimed the run, so losing
+   * callers never enter the execution engine.
+   */
+  async #claimRun({
     workflowsStore,
     snapshot,
+    operation = 'resume',
   }: {
     workflowsStore: WorkflowsStorage | undefined;
     snapshot: WorkflowRunState;
+    operation?: 'resume' | 'timeTravel';
   }): Promise<void> {
     if (!workflowsStore) {
       return;
@@ -4909,10 +5450,16 @@ export class Run<
     // The claim is a persisted state transition, so a workflow that opts out of persisting
     // `running` snapshots cannot be claimed: writing one anyway would leave the stored snapshot
     // in a state the caller explicitly asked us never to write.
-    const persistsRunningState = this.executionEngine.options.shouldPersistSnapshot({
-      workflowStatus: 'running',
-      stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
-    });
+    // `persistResumeClaim` workflows write this one claim even so: their stored status must stop
+    // reading `suspended` once a resume takes the run.
+    const persistsRunningState =
+      (operation === 'resume' && this.executionEngine.options.persistResumeClaim) ||
+      this.executionEngine.options.shouldPersistSnapshot({
+        workflowStatus: 'running',
+        stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
+      });
+
+    const expectedStatus = operation === 'resume' ? 'suspended' : snapshot.status;
 
     if (!persistsRunningState) {
       // Workflows that acknowledged the trade-off (internal agent loops that
@@ -4922,7 +5469,7 @@ export class Run<
         this.#mastra
           ?.getLogger()
           ?.warn(
-            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated. Concurrent resumes may execute downstream steps more than once.`,
+            `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated. Concurrent calls may execute downstream steps more than once.`,
           );
       }
       return;
@@ -4933,33 +5480,46 @@ export class Run<
     // and throw. Claiming is an optimization over the pre-existing behaviour, so a store that
     // cannot claim keeps resuming exactly as it did before rather than failing the resume.
     if (!workflowsStore.supportsConcurrentUpdates()) {
-      this.#mastra
-        ?.getLogger()
-        ?.warn(
-          `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent resumes may execute downstream steps more than once.`,
-        );
+      if (!this.executionEngine.options.allowUnclaimedResumes) {
+        this.#mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent calls may execute downstream steps more than once.`,
+          );
+      }
       return;
     }
 
-    const claimed = await workflowsStore.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: { status: 'running', expectedStatus: 'suspended' },
-    });
+    const claimed = await this.runStorage.updateHeader({ status: 'running', expectedStatus });
 
     if (claimed) {
       return;
     }
 
-    // The compare-and-set found a status other than `suspended`. Re-read so the error names the
+    // The compare-and-set found a status other than the expected one. Re-read so the error names the
     // status the run actually landed in rather than guessing.
-    const current = await workflowsStore.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const current = await this.runStorage.loadHeader();
 
     if (!current) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
+    }
+
+    if (operation === 'timeTravel') {
+      throw new MastraError({
+        id: 'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text:
+          `This workflow run was already claimed by another caller. Workflow "${this.workflowId}" run "${this.runId}" ` +
+          `moved from "${snapshot.status}" to "${current.status}" before this time travel could claim it. ` +
+          `Only one timeTravel() call may run at a time; re-read the run state before time travelling again.`,
+        details: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          expectedStatus,
+          actualStatus: current.status ?? 'unknown',
+        },
+      });
     }
 
     throw new MastraError({
@@ -5008,7 +5568,7 @@ export class Run<
       claimedSnapshot?: WorkflowRunState;
       onExecutionStarted?: () => void;
     } & Partial<ObservabilityContext>,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(params);
     const fgaProvider = this.#mastra?.getServer()?.fga;
     if (fgaProvider && !this.isInternalWorkflow) {
@@ -5031,8 +5591,7 @@ export class Run<
     }
 
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot =
-      params.claimedSnapshot ?? (await waitForSuspendedSnapshot(workflowsStore, this.workflowId, this.runId));
+    const snapshot = params.claimedSnapshot ?? (await this.runStorage.loadForResume({ wait: true }));
 
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
@@ -5131,38 +5690,13 @@ export class Run<
       }
     });
 
-    // Build tracing options for the resumed span, linking to the original suspended span if available
-    // Priority: user-provided tracingOptions > persisted tracingContext from snapshot
     const persistedTracingContext = snapshot?.tracingContext;
-    const userProvidedTraceId = params.tracingOptions?.traceId;
-    const userProvidedParentSpanId = params.tracingOptions?.parentSpanId;
-
-    // Only fall back to persisted traceId when the caller didn't provide either tracing identifier.
-    // If the caller provided parentSpanId without traceId, using the persisted traceId would create
-    // invalid cross-trace parentage (a span in one trace claiming a parent from another trace).
-    const effectiveTraceId =
-      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
-
-    // Only use persisted spanId as parentSpanId if:
-    // 1. User didn't provide their own parentSpanId, AND
-    // 2. Either no user traceId was provided, OR user traceId matches persisted traceId
-    // This prevents cross-trace parentage where a span in one trace claims a parent from another trace
-    const shouldUsePersistedParentSpan =
-      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
-
-    const resumeTracingOptions = {
-      ...params.tracingOptions,
-      traceId: effectiveTraceId,
-    };
-
-    // The persisted resume link travels separately from tracingOptions:
-    // tracingOptions.parentSpanId is reserved for external correlation ids,
-    // while the suspended span's id is a Mastra span present in storage.
-    const resumedFromSpanId = shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : undefined;
+    const isAgentLoop = Boolean(this.executionEngine.options.resumeTracingContext);
 
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}' (resumed)`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -5175,11 +5709,11 @@ export class Run<
         resumedFromSpanId: persistedTracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
-      tracingOptions: resumeTracingOptions,
+      tracingOptions: params.tracingOptions,
       tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
-      resumedFromSpanId,
+      resumeFrom: isAgentLoop ? undefined : persistedTracingContext,
     });
 
     this.workflowRunSpan = workflowSpan;
@@ -5197,7 +5731,7 @@ export class Run<
     // The compare-and-set is executed inside the store's own critical section, so exactly one
     // caller flips `suspended -> running` and every other caller loses and throws below.
     if (!params.claimedSnapshot) {
-      await this.#claimResume({ workflowsStore, snapshot });
+      await this.#claimRun({ workflowsStore, snapshot });
     }
 
     const releaseClaimIfUnused = async () => {
@@ -5208,39 +5742,11 @@ export class Run<
       // else is left alone: a stuck `running` run is strictly safer than silently re-arming a
       // suspension whose downstream steps already fired.
       try {
-        const current = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-
-        const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
-        const currentPaths = Object.keys(current?.suspendedPaths ?? {});
-        const claimedStepIds = Object.keys(snapshot.context ?? {});
-        const currentStepIds = Object.keys(current?.context ?? {});
-        const resumedStepId = steps?.[0] ?? '';
-        const resumedStepResult = current?.context?.[resumedStepId] as { status?: string } | undefined;
-
-        // Every one of these must still look exactly as it did at claim time. The status alone
-        // is not enough evidence: the engine deliberately suppresses `running` step persists
-        // while the last persisted status is `suspended`, so a run that failed midway can still
-        // read back as `running`.
-        const engineNeverStarted =
-          current?.status === 'running' &&
-          currentPaths.length === claimedPaths.length &&
-          claimedPaths.every(path => currentPaths.includes(path)) &&
-          currentStepIds.length === claimedStepIds.length &&
-          claimedStepIds.every(stepId => currentStepIds.includes(stepId)) &&
-          resumedStepResult?.status === 'suspended';
-
-        if (!engineNeverStarted) {
+        if (!(await this.runStorage.isClaimUnused(snapshot, steps?.[0] ?? ''))) {
           return;
         }
 
-        await workflowsStore?.updateWorkflowState({
-          workflowName: this.workflowId,
-          runId: this.runId,
-          opts: { status: 'suspended', expectedStatus: 'running' },
-        });
+        await this.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
       } catch (releaseError) {
         this.#mastra
           ?.getLogger()
@@ -5252,7 +5758,6 @@ export class Run<
       | {
           run: Run<any, any, any, any, any, any>;
           snapshot: WorkflowRunState;
-          store: WorkflowsStorage;
         }
       | undefined;
 
@@ -5263,10 +5768,22 @@ export class Run<
         throw new Error(`Parent workflow ${this.parentWorkflow.workflowId} is not registered`);
       }
 
-      const parentSnapshot = await workflowsStore.loadWorkflowSnapshot({
-        workflowName: this.parentWorkflow.workflowId,
-        runId: this.parentWorkflow.runId,
-      });
+      // This load seeds the parent's resume (`claimedSnapshot`), so it loads the way the parent's own
+      // resume would: in the version the parent run is stored with. That is this run's version for
+      // runs that inherited it; older runs nested a different version, so the other table is probed
+      // on a miss. The parent `Run` can't load it itself: creating it first would write a pending snapshot.
+      const parent = this.parentWorkflow;
+      const loadParentSnapshot = (storageVersion: 1 | 2) =>
+        createRunStorage({
+          storageVersion,
+          workflowName: parent.workflowId,
+          runId: parent.runId,
+          getStore: async () => workflowsStore,
+        }).loadForResume({ wait: false });
+      let parentSnapshot = await loadParentSnapshot(this.storageVersion);
+      if (!parentSnapshot && workflowsStore.supportsRunJournal()) {
+        parentSnapshot = await loadParentSnapshot(this.storageVersion === 2 ? 1 : 2);
+      }
       if (!parentSnapshot) {
         await releaseClaimIfUnused();
         throw new Error(`No snapshot found for parent workflow run: ${this.parentWorkflow.runId}`);
@@ -5274,22 +5791,18 @@ export class Run<
 
       const parentRun = await parentWorkflow.createRun({ runId: this.parentWorkflow.runId });
       try {
-        await parentRun.#claimResume({ workflowsStore, snapshot: parentSnapshot });
+        await parentRun.#claimRun({ workflowsStore, snapshot: parentSnapshot });
       } catch (error) {
         await releaseClaimIfUnused();
         throw error;
       }
-      claimedParent = { run: parentRun, snapshot: parentSnapshot, store: workflowsStore };
+      claimedParent = { run: parentRun, snapshot: parentSnapshot };
     }
 
     const releaseParentClaim = async () => {
       if (!claimedParent) return;
       try {
-        await claimedParent.store.updateWorkflowState({
-          workflowName: claimedParent.run.workflowId,
-          runId: claimedParent.run.runId,
-          opts: { status: 'suspended', expectedStatus: 'running' },
-        });
+        await claimedParent.run.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
       } catch (releaseError) {
         this.#mastra
           ?.getLogger()
@@ -5301,8 +5814,9 @@ export class Run<
     };
 
     params.onExecutionStarted?.();
-    const executionResultPromise = this.executionEngine
-      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    if (params.skipParentWorkflowClaim) this.resumedFromState = toJsonState(snapshot?.value);
+    const executionResultPromise = this.#executeOwned(() =>
+      this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
         workflowId: this.workflowId,
         runId: this.runId,
         parentWorkflow: this.parentWorkflow,
@@ -5330,7 +5844,10 @@ export class Run<
         outputOptions: params.outputOptions,
         outputWriter: params.outputWriter,
         perStep: params.perStep,
-      })
+        storageVersion: this.storageVersion,
+        storedState: this.runStorage.storedState(snapshot),
+      }),
+    )
       .then(async result => {
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
@@ -5380,7 +5897,9 @@ export class Run<
     this.executionResults = executionResultPromise;
 
     return executionResultPromise.then(result => {
-      this.streamOutput?.updateResults(result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
+      this.streamOutput?.updateResults(
+        result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>,
+      );
 
       return result;
     });
@@ -5402,18 +5921,17 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const allowedEngines = ['default', 'evented'];
     if (!allowedEngines.includes(this.workflowEngineType)) {
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    let snapshot =
+      this.storageVersion === 2
+        ? await this.runStorage.loadForResume({ wait: false })
+        : await this.runStorage.loadFull();
 
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
@@ -5431,15 +5949,38 @@ export class Run<
       this.cleanup?.();
       // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
       // is also surfaced as a top-level field on the returned WorkflowResult.
-      const hydratedSteps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
       // Strip internal bookkeeping (__state, metadata.nestedRunId) from step results so the
       // reconstructed result matches what a live run would have returned via fmtReturnValue.
-      const steps = Object.fromEntries(
-        Object.entries(hydratedSteps).map(([stepId, stepResult]) => [stepId, cleanStepResult(stepResult)]),
-      ) as typeof hydratedSteps;
+      const clean = <T extends Record<string, any>>(context: T): T =>
+        Object.fromEntries(
+          Object.entries(hydrateSerializedStepErrors({ ...context }) ?? {}).map(([stepId, stepResult]) => [
+            stepId,
+            cleanStepResult(stepResult),
+          ]),
+        ) as T;
+      const steps = clean(snapshot.context ?? {});
       const input = (snapshot.context as { input?: TInput } | undefined)?.input as TInput;
+      // On storage v2 the result holds the successful results as stubs, read again by `steps()`.
+      const v2Store =
+        this.storageVersion === 2
+          ? await (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows')
+          : undefined;
+      const storedState = this.runStorage.storedState(snapshot);
+      const lastSeq = storedState?.seq;
       const base = {
-        steps,
+        steps: (v2Store && lastSeq !== undefined
+          ? loadedStepResults(
+              {
+                store: v2Store,
+                workflowName: this.workflowId,
+                runId: this.runId,
+                lastSeq,
+                runToken: storedState?.runToken,
+              },
+              snapshot.context ?? {},
+              clean,
+            )
+          : steps) as WorkflowStepResults<typeof steps, TStorageVersion>,
         input,
         runId: this.runId,
         ...(snapshot.value && Object.keys(snapshot.value).length > 0 ? { state: snapshot.value as TState } : {}),
@@ -5452,7 +5993,8 @@ export class Run<
           TState,
           TInput,
           TOutput,
-          TSteps
+          TSteps,
+          TStorageVersion
         >;
       }
       if (snapshot.status === 'failed') {
@@ -5460,17 +6002,42 @@ export class Run<
           ...base,
           status: 'failed',
           error: getErrorFromUnknown(snapshot.error, { serializeStack: false }),
-        } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+        } as WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
       }
       return { ...base, status: 'tripwire', tripwire: snapshot.tripwire } as WorkflowResult<
         TState,
         TInput,
         TOutput,
-        TSteps
+        TSteps,
+        TStorageVersion
       >;
     }
 
+    if (this.storageVersion === 2) {
+      snapshot = await this.runStorage.loadFull();
+      if (!snapshot) {
+        throw new Error(`Snapshot not found for run ${this.runId}`);
+      }
+    }
+
     const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
+
+    const ownership = await this.#claimOwnership(false);
+    if (!('release' in ownership)) {
+      throw new MastraError({
+        id: 'WORKFLOW_RESTART_RUN_OWNED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text:
+          `Workflow "${this.workflowId}" run "${this.runId}" is still being executed by another process, so it was not restarted. ` +
+          `Restart it after that process stops renewing its ownership lease.`,
+        details: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          leaseExpiresAt: ownership.owner?.leaseExpiresAt?.toISOString() ?? null,
+        },
+      });
+    }
 
     const requestContextToUse = requestContext ?? new RequestContext();
     for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
@@ -5480,6 +6047,7 @@ export class Run<
     }
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -5499,24 +6067,35 @@ export class Run<
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
-    const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      parentWorkflow: this.parentWorkflow,
-      resourceId: this.resourceId,
-      disableScorers: this.disableScorers,
-      graph: this.executionGraph,
-      serializedStepGraph: this.serializedStepGraph,
-      restart: restartData,
-      pubsub: this.pubsub,
-      retryConfig: this.retryConfig,
-      requestContext: requestContextToUse as RequestContext,
-      actor,
-      abortController: this.abortController,
-      outputWriter,
-      outputOptions,
-      workflowSpan,
-    });
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
+    try {
+      result = await this.executionEngine.execute<
+        TState,
+        TInput,
+        WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
+      >({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        parentWorkflow: this.parentWorkflow,
+        resourceId: this.resourceId,
+        disableScorers: this.disableScorers,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        restart: restartData,
+        pubsub: this.pubsub,
+        retryConfig: this.retryConfig,
+        requestContext: requestContextToUse as RequestContext,
+        actor,
+        abortController: this.abortController,
+        outputWriter,
+        outputOptions,
+        workflowSpan,
+        storageVersion: this.storageVersion,
+        storedState: this.runStorage.storedState(snapshot),
+      });
+    } finally {
+      await ownership.release();
+    }
 
     this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
@@ -5565,24 +6144,29 @@ export class Run<
     };
     perStep?: boolean;
     actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
+    const inheritedState = this.inheritedState;
+    this.inheritedState = undefined;
     if (!stepParam || (Array.isArray(stepParam) && stepParam.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
     }
 
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const snapshot = await this.runStorage.loadFull();
 
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
     }
 
     if (snapshot.status === 'running') {
-      throw new Error('This workflow run is still running, cannot time travel');
+      throw new MastraError({
+        id: 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run is still running, cannot time travel',
+        details: { workflowId: this.workflowId, runId: this.runId, status: snapshot.status },
+      });
     }
 
     let steps: string[];
@@ -5617,6 +6201,7 @@ export class Run<
 
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
       entityType: EntityType.WORKFLOW_RUN,
@@ -5637,25 +6222,80 @@ export class Run<
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
-    const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      parentWorkflow: this.parentWorkflow,
-      resourceId: this.resourceId,
-      disableScorers: this.disableScorers,
-      graph: this.executionGraph,
-      timeTravel: timeTravelData,
-      serializedStepGraph: this.serializedStepGraph,
-      pubsub: this.pubsub,
-      retryConfig: this.retryConfig,
-      requestContext: requestContextToUse as RequestContext,
-      actor,
-      abortController: this.abortController,
-      outputWriter,
-      workflowSpan,
-      outputOptions,
-      perStep,
-    });
+    // Claim the run before entering the execution engine. The engine does not persist `running`
+    // until the target step actually starts, so without an atomic claim two concurrent
+    // timeTravel() callers can both pass the status check above and both run the target step.
+    // See https://github.com/mastra-ai/mastra/issues/27279.
+    try {
+      await this.#claimRun({ workflowsStore, snapshot, operation: 'timeTravel' });
+    } catch (error) {
+      workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error, endSpan: true });
+      throw error;
+    }
+
+    const releaseClaimIfUnused = async () => {
+      // Only roll the claim back when the engine never persisted anything: the snapshot is still
+      // `running` (our claim) and every step result and execution path is exactly as it was before
+      // the claim. An engine that already accepted the run (e.g. a publish that failed after
+      // delivery) writes its active paths before any step result, so those must match too.
+      // The reload and the release are not one atomic operation; closing that window fully needs
+      // a per-snapshot revision in every storage adapter.
+      try {
+        const current = await this.runStorage.loadFull();
+        const claimedStepIds = Object.keys(snapshot.context);
+        const currentStepIds = Object.keys(current?.context ?? {});
+        const engineNeverStarted =
+          current?.status === 'running' &&
+          currentStepIds.length === claimedStepIds.length &&
+          claimedStepIds.every(stepId => current.context[stepId]?.status === snapshot.context[stepId]?.status) &&
+          JSON.stringify(current?.activePaths ?? []) === JSON.stringify(snapshot.activePaths ?? []) &&
+          JSON.stringify(current?.activeStepsPath ?? {}) === JSON.stringify(snapshot.activeStepsPath ?? {}) &&
+          JSON.stringify(current?.suspendedPaths ?? {}) === JSON.stringify(snapshot.suspendedPaths ?? {});
+
+        if (!engineNeverStarted) {
+          return;
+        }
+
+        await this.runStorage.updateHeader({ status: snapshot.status, expectedStatus: 'running' });
+      } catch (releaseError) {
+        this.#mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] Failed to release time travel claim for run ${this.runId}`,
+            releaseError,
+          );
+      }
+    };
+
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
+    try {
+      result = await this.#executeOwned(() =>
+        this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
+          workflowId: this.workflowId,
+          runId: this.runId,
+          parentWorkflow: this.parentWorkflow,
+          resourceId: this.resourceId,
+          disableScorers: this.disableScorers,
+          graph: this.executionGraph,
+          timeTravel: timeTravelData,
+          serializedStepGraph: this.serializedStepGraph,
+          pubsub: this.pubsub,
+          retryConfig: this.retryConfig,
+          requestContext: requestContextToUse as RequestContext,
+          actor,
+          abortController: this.abortController,
+          outputWriter,
+          workflowSpan,
+          outputOptions,
+          perStep,
+          storageVersion: this.storageVersion,
+          inheritedState,
+        }),
+      );
+    } catch (error) {
+      await releaseClaimIfUnused();
+      throw error;
+    }
 
     this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
@@ -5692,7 +6332,7 @@ export class Run<
       perStep?: boolean;
       actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     return this._timeTravel(args);
   }
 
@@ -5778,7 +6418,7 @@ export class Run<
           ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
-            void controller.enqueue(chunk);
+            controller.enqueue(chunk);
           },
           outputOptions,
           perStep,
@@ -5801,7 +6441,7 @@ export class Run<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -5814,7 +6454,7 @@ export class Run<
    * @access private
    * @returns The execution results of the workflow run
    */
-  _getExecutionResults(): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined {
+  _getExecutionResults(): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> | undefined {
     return this.executionResults ?? this.streamOutput?.result;
   }
 }

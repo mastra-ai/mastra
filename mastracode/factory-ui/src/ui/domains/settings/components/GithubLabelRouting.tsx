@@ -1,13 +1,21 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useIntakeLabelRoutesQuery, useSaveIntakeLabelRouteMutation } from '../../../../hooks/useIntakeConfig';
+import {
+  useAddIntakeLabelRouteMutation,
+  useIntakeLabelRoutesQuery,
+  useSaveIntakeLabelRouteMutation,
+} from '../../../../hooks/useIntakeConfig';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 const NO_BOARD = '__no_board__';
 
@@ -15,46 +23,74 @@ export function GithubLabelRouting({
   factoryProjectId,
   name,
   repositories,
+  showScope = true,
 }: {
   factoryProjectId: string;
   name: string;
   repositories: string[];
+  showScope?: boolean;
 }) {
   const routesQuery = useIntakeLabelRoutesQuery(factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
-  const save = useSaveIntakeLabelRouteMutation();
+  const callbacks = {
+    onSaved: () => toast.success('GitHub routing updated', { id: 'github-routing-saved' }),
+    onFailed: (error: Error) => toast.error(error.message, { id: 'github-routing-failed' }),
+  };
+  const save = useSaveIntakeLabelRouteMutation(factoryProjectId, callbacks);
+  const add = useAddIntakeLabelRouteMutation(factoryProjectId, callbacks);
   const [draft, setDraft] = useState('');
   const [draftBoard, setDraftBoard] = useState<string | null>(null);
 
   const routes = (routesQuery.data ?? []).filter(route => route.integrationId === 'github');
-  const boards = (catalog.data ?? []).filter(board => board.id !== 'work' && board.id !== 'review');
-  const busy = save.isPending;
+  const boards = (catalog.data ?? []).filter(board => board.id !== DEFAULT_BOARD_ID);
 
-  const scope = `Applies to issues from ${repositories.join(', ')}`;
+  const scope = showScope ? `Applies to issues from ${repositories.join(', ')}` : undefined;
+  const label = (
+    <span className="flex flex-wrap items-center gap-2">
+      <span>Routing</span>
+      {showScope && (
+        <Txt as="span" variant="caption" tone="muted">
+          {name}
+        </Txt>
+      )}
+    </span>
+  );
+  const summary = (
+    <Txt variant="body-sm">
+      <Metadata>
+        <Metadata.Item>{routes.length ? 'Unmatched issues' : 'Issues'} → Work</Metadata.Item>
+        <Metadata.Item>PRs → Review</Metadata.Item>
+      </Metadata>
+    </Txt>
+  );
 
-  const route = (label: string, board: string | null, onDone?: () => void) => {
-    save.mutate(
-      { factoryProjectId, integrationId: 'github', label, board },
-      {
-        onSuccess: () => {
-          toast.success('GitHub routing updated');
-          onDone?.();
-        },
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save GitHub routing'),
-      },
+  if (routesQuery.isError && !routesQuery.data) {
+    return (
+      <SettingsRow
+        label={label}
+        description={[scope, 'GitHub label routes are unavailable right now.'].filter(Boolean).join('. ')}
+      />
     );
-  };
+  }
 
-  if (routesQuery.isError) {
-    return <SettingsRow label={name} description={`${scope}. GitHub label routes are unavailable right now.`} />;
+  if (routesQuery.isPending || catalog.isPending) {
+    return (
+      <SettingsRow label={label} description={scope}>
+        <SkeletonRows label={`Loading ${name} routing`} rows={1} />
+      </SettingsRow>
+    );
   }
 
   if (boards.length === 0 && catalog.isSuccess && routes.length === 0) {
     return (
-      <SettingsRow
-        label={name}
-        description={`${scope}. No custom boards are installed, so every issue files onto Work.`}
-      />
+      <SettingsFieldsetRow label={label} description={scope} className="sm:items-start">
+        <div className="flex w-full flex-col gap-1 sm:w-3/4">
+          {summary}
+          <Txt variant="caption" tone="muted">
+            No custom boards in {name}.
+          </Txt>
+        </div>
+      </SettingsFieldsetRow>
     );
   }
 
@@ -64,9 +100,13 @@ export function GithubLabelRouting({
   return (
     <div className="flex flex-col">
       <SettingsRow
-        label={name}
-        description={catalog.isError ? `${scope}. Installed boards are unavailable right now.` : scope}
-      />
+        label={label}
+        description={
+          catalog.isError ? [scope, 'Installed boards are unavailable right now.'].filter(Boolean).join('. ') : scope
+        }
+      >
+        {summary}
+      </SettingsRow>
       {routes.map(existing => {
         const current = boards.find(board => board.id === existing.board);
         return (
@@ -87,15 +127,15 @@ export function GithubLabelRouting({
                   current || catalog.isError ? (current?.title ?? existing.board) : `${existing.board} (not installed)`
                 }
                 boards={boards}
-                disabled={busy || !catalog.isSuccess}
-                onChange={next => route(existing.label, next)}
+                disabled={!catalog.isSuccess}
+                onChange={next => save.mutate({ integrationId: 'github', label: existing.label, board: next })}
               />
               <Button
                 size="sm"
                 variant="ghost"
+                icon={<Trash2 />}
                 aria-label={`Remove route for ${existing.label}`}
-                disabled={busy}
-                onClick={() => route(existing.label, null)}
+                onClick={() => save.mutate({ integrationId: 'github', label: existing.label, board: null })}
               >
                 Remove
               </Button>
@@ -105,7 +145,7 @@ export function GithubLabelRouting({
       })}
       <SettingsFieldsetRow
         label="Add label route"
-        description={duplicate ? 'That label is already routed — change its board above.' : undefined}
+        description={duplicate ? 'That label is already routed. Change its board above.' : undefined}
       >
         <div className="flex items-center gap-2">
           <Input
@@ -113,7 +153,7 @@ export function GithubLabelRouting({
             aria-label={`Label for ${name}`}
             placeholder="label"
             value={draft}
-            disabled={busy}
+            disabled={add.isPending}
             onChange={event => setDraft(event.target.value)}
           />
           <BoardSelect
@@ -121,20 +161,26 @@ export function GithubLabelRouting({
             value={draftBoard}
             placeholder="Choose a board"
             boards={boards}
-            disabled={busy || !catalog.isSuccess}
+            disabled={add.isPending || !catalog.isSuccess}
             onChange={setDraftBoard}
           />
           <Button
             size="sm"
-            disabled={busy || !trimmed || !draftBoard || duplicate}
+            icon={<Plus />}
+            disabled={add.isPending || !trimmed || !draftBoard || duplicate}
             onClick={() =>
-              route(trimmed, draftBoard, () => {
-                setDraft('');
-                setDraftBoard(null);
-              })
+              add.mutate(
+                { integrationId: 'github', label: trimmed, board: draftBoard },
+                {
+                  onSuccess: () => {
+                    setDraft('');
+                    setDraftBoard(null);
+                  },
+                },
+              )
             }
           >
-            Add
+            {add.isPending ? 'Adding…' : 'Add'}
           </Button>
         </div>
       </SettingsFieldsetRow>

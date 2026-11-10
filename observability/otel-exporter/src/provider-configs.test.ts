@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { resolveProviderConfig } from './provider-configs';
 
 describe('Provider Configurations', () => {
@@ -106,6 +106,34 @@ describe('Provider Configurations', () => {
   });
 
   describe('Custom', () => {
+    it('validates explicitly passed undefined endpoint values at runtime', () => {
+      expect(resolveProviderConfig({ custom: { endpoints: { traces: undefined, logs: undefined } } })).toBeNull();
+    });
+
+    it('does not load endpoint environment variables implicitly', () => {
+      vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'https://collector.example.com/traces');
+      vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'https://collector.example.com/logs');
+      try {
+        expect(resolveProviderConfig({ custom: {} })).toBeNull();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it.each(['https://collector.example.com', ''])('rejects both endpoint and endpoints (%s)', endpoint => {
+      expect(
+        resolveProviderConfig({
+          // @ts-expect-error These options are mutually exclusive, including for JavaScript callers.
+          custom: { endpoint, endpoints: { traces: 'https://collector.example.com/traces' } },
+        }),
+      ).toBeNull();
+    });
+
+    it('rejects an empty endpoints configuration', () => {
+      // @ts-expect-error At least one signal is required; verify runtime validation for JavaScript callers.
+      expect(resolveProviderConfig({ custom: { endpoints: {} } })).toBeNull();
+    });
+
     it('should configure custom provider', () => {
       const config = resolveProviderConfig({
         custom: {
@@ -120,7 +148,7 @@ describe('Provider Configurations', () => {
       expect(config?.protocol).toBe('http/protobuf');
     });
 
-    it('should require endpoint for custom provider', () => {
+    it('should require an endpoint for custom provider', () => {
       const config = resolveProviderConfig({
         custom: {
           headers: { 'x-value': 'test' },

@@ -42,6 +42,14 @@ export function isOptional(schema: AnySchema): boolean {
 }
 
 /**
+ * Use `schema` as an object property that may be left out whenever the schema accepts `undefined`.
+ * zod v3 did this implicitly; zod v4 still requires the key for schemas like `z.any()`.
+ */
+export function asObjectProperty(schema: AnySchema): AnySchema {
+  return isOptional(schema) ? schema.optional() : schema;
+}
+
+/**
  * Get the shape of an object schema (works for both v3 and v4).
  * v3: schema.shape (getter) or schema._def.shape()
  * v4: schema.shape (getter) or schema._zod.def.shape

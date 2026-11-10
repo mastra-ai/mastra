@@ -84,7 +84,6 @@ describe('augmentWithInit', () => {
     const mockStorage = {
       init: vi.fn().mockResolvedValue(true),
       listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false }),
-      disableInit: false,
     } as unknown as MastraStorage;
 
     const augmentedStorage = augmentWithInit(mockStorage);

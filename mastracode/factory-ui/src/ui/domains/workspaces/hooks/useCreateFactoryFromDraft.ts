@@ -1,11 +1,13 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import type { BoardCatalogResponse } from '../../../../api/types';
+import { boardCatalogQueryOptions } from '../../../../hooks/useBoardCatalog';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
-import { fetchIntakeConfig, selectIntakeSource } from '../../factory/services/intake';
+import { useSaveIntakeBindingMutation, useSaveIntakeSelectionMutation } from '../../../../hooks/useIntakeConfig';
+import { fetchIntakeConfig, IntakeBindingConflictError, selectIntakeSource } from '../../factory/services/intake';
 import { updateFactoryDefaultModel } from '../services/github';
 import type { FactoryProjectPayload } from '../services/github';
 import type { CreateFactoryDraft } from './useCreateFactoryFlow';
@@ -35,17 +37,15 @@ export function useCreateFactoryFromDraft({
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
   const saveIntakeBinding = useSaveIntakeBindingMutation();
-  const saveIntakeConfig = useSaveIntakeConfigMutation();
+  const saveLinearSelection = useSaveIntakeSelectionMutation('linear');
+  const saveJiraSelection = useSaveIntakeSelectionMutation('jira');
 
-  // Issues belong on Work. An app that replaced the built-in boards leaves the
-  // source routed but boardless, so intake settings prompt for a board instead
-  // of guessing one.
+  // Issues belong on the default board. An app that replaced the built-in boards
+  // leaves the source routed but boardless, so intake settings prompt for a board
+  // instead of guessing one.
   const resolveIntakeBoard = async (factoryProjectId: string) => {
-    const { boards } = await queryClient.fetchQuery({
-      queryKey: queryKeys.boardCatalog(factoryProjectId),
-      queryFn: () => client.get<BoardCatalogResponse>(`/web/factory/projects/${factoryProjectId}/boards`),
-    });
-    return boards.some(board => board.id === 'work') ? 'work' : null;
+    const { boards } = await queryClient.query(boardCatalogQueryOptions(client, factoryProjectId));
+    return boards.find(board => board.id === DEFAULT_BOARD_ID)?.id ?? null;
   };
 
   const feedProject = async (input: {
@@ -54,16 +54,26 @@ export function useCreateFactoryFromDraft({
     factoryProjectId: string;
     board: string | null;
   }) => {
-    await saveIntakeBinding.mutateAsync({
-      integrationId: input.integrationId,
-      sourceId: input.sourceId,
-      factoryProjectId: input.factoryProjectId,
-      board: input.board,
-    });
+    try {
+      await saveIntakeBinding.mutateAsync({
+        integrationId: input.integrationId,
+        sourceId: input.sourceId,
+        factoryProjectId: input.factoryProjectId,
+        board: input.board,
+      });
+    } catch (error) {
+      // A Jira project already feeding another factory with all its issues is not taken over; the
+      // new factory is still created and can take a labelled slice from Settings › Work Intake.
+      if (!(error instanceof IntakeBindingConflictError)) throw error;
+      toast.warning('This Jira project already feeds another factory', {
+        description: 'Add a label filter in Settings › Work Intake to route some of its issues here.',
+      });
+      return;
+    }
     const config = await fetchIntakeConfig(baseUrl);
     const selection = selectIntakeSource(config[input.integrationId], input.sourceId);
     if (selection === config[input.integrationId]) return;
-    await saveIntakeConfig.mutateAsync({ ...config, [input.integrationId]: selection });
+    await (input.integrationId === 'linear' ? saveLinearSelection : saveJiraSelection).mutateAsync(selection);
   };
 
   return useMutation({

@@ -125,7 +125,7 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
                     size="sm"
                     variant="primary"
                     className="whitespace-nowrap"
-                    aria-label="Approve the plan and switch to build"
+                    aria-label="Approve the plan and build it"
                     disabled={approveDisabled}
                     onClick={() => respond({ action: 'approved' })}
                   >

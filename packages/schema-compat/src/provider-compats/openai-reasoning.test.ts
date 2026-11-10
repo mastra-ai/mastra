@@ -47,5 +47,35 @@ describe('OpenAIReasoningSchemaCompatLayer', () => {
       const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
       expect(layer.shouldApply()).toBe(false);
     });
+
+    it('should apply for @ai-sdk/azure reasoning models', () => {
+      const layer = new OpenAIReasoningSchemaCompatLayer({
+        provider: 'azure.responses',
+        modelId: 'o3-mini',
+        supportsStructuredOutputs: false,
+      });
+      expect(layer.shouldApply()).toBe(true);
+    });
+
+    it.each([
+      ['azure.responses', 'my-o3-deployment'],
+      ['azure.responses', 'O4-mini'],
+      ['openai', 'ft:o4-mini-2025-04-16:org::abc123'],
+    ])('should apply for o-series model ids and deployment names (%s, %s)', (provider, modelId) => {
+      const layer = new OpenAIReasoningSchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+      expect(layer.shouldApply()).toBe(true);
+    });
+
+    it.each([
+      ['azure.chat', 'gpt-4o'],
+      ['azure.responses', 'claude-o3-test'],
+      ['azure.chat', 'demo1-gpt'],
+      ['azure.chat', 'proto3-chat'],
+      ['azure.responses', 'solo4'],
+      ['azure.deepseek', 'my-o3-deployment'],
+    ])('should not apply for other @ai-sdk/azure models (%s, %s)', (provider, modelId) => {
+      const layer = new OpenAIReasoningSchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+      expect(layer.shouldApply()).toBe(false);
+    });
   });
 });

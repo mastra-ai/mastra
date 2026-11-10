@@ -12,7 +12,8 @@
  * overwrites any `session` id passed to `buildImage`, so this module dials the
  * hijacked `/session` endpoint itself and registers both services.
  */
-import { Server, ServerCredentials, type ServiceDefinition, type UntypedServiceImplementation } from '@grpc/grpc-js';
+import { Server, ServerCredentials } from '@grpc/grpc-js';
+import type { ServiceDefinition, UntypedServiceImplementation } from '@grpc/grpc-js';
 import type Docker from 'dockerode';
 import { createAbortError, throwIfAborted } from '../abort';
 

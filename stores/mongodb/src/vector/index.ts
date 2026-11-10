@@ -1487,13 +1487,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         const doc = documents?.[idx];
 
         // Normalize metadata - convert Date objects to ISO strings
-        const normalizedMeta = Object.keys(meta).reduce(
-          (acc, key) => {
-            acc[key] = meta[key] instanceof Date ? meta[key].toISOString() : meta[key];
-            return acc;
-          },
-          {} as Record<string, any>,
-        );
+        const normalizedMeta = Object.keys(meta).reduce<Record<string, any>>((acc, key) => {
+          acc[key] = meta[key] instanceof Date ? meta[key].toISOString() : meta[key];
+          return acc;
+        }, {});
 
         // MongoDB stores the generated vectors itself, so the document carries text only.
         const updateDoc: Partial<MongoDBDocument> = {
@@ -2044,14 +2041,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
       if (update.metadata) {
         // Normalize metadata in updates too
-        const normalizedMeta = Object.keys(update.metadata).reduce(
-          (acc, key) => {
-            acc[key] =
-              update.metadata![key] instanceof Date ? update.metadata![key].toISOString() : update.metadata![key];
-            return acc;
-          },
-          {} as Record<string, any>,
-        );
+        const normalizedMeta = Object.keys(update.metadata).reduce<Record<string, any>>((acc, key) => {
+          acc[key] =
+            update.metadata![key] instanceof Date ? update.metadata![key].toISOString() : update.metadata![key];
+          return acc;
+        }, {});
 
         updateDoc[this.metadataFieldName] = normalizedMeta;
       }

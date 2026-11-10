@@ -24,7 +24,6 @@ export const customProviderModelSelectorScenario = {
   description:
     'creates a /models custom pack by selecting models from a configured OpenAI-compatible custom provider catalog',
   testName: 'selects custom-provider models in the /models custom pack flow and persists defaults',
-  skipReason: 'current main no longer exposes settings-backed custom provider models in the selector catalog',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
@@ -67,6 +66,13 @@ export const customProviderModelSelectorScenario = {
     await selectModel(terminal, runtime, /Select model for plan mode/i, planModel);
     await selectModel(terminal, runtime, /Select model for build mode/i, buildModel);
     await selectModel(terminal, runtime, /Select model for fast mode/i, fastModel);
+
+    await runtime.waitForScreenText(/Observational memory model \(optional\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Skip — use \/om settings/i, terminal, 8_000);
+    // Third row is "Skip — use /om settings".
+    terminal.write('\x1b[B');
+    terminal.write('\x1b[B');
+    terminal.write('\r');
 
     await runtime.waitForScreenText(/Switched to Provider Selector E2E pack/i, terminal, 8_000);
 

@@ -16,24 +16,16 @@ import {
   isNull,
   isIntersection,
 } from '../zodTypes';
-import { OpenAISchemaCompatLayer } from './openai';
+import { isOpenAICompatibleModel, OpenAISchemaCompatLayer } from './openai';
 
 export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `openApi3`;
   }
 
-  isReasoningModel(): boolean {
-    // there isn't a good way to automatically detect reasoning models besides doing this.
-    // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
-    const modelId = this.getModel().modelId;
-    if (!modelId) return false;
-    return modelId.includes(`o3`) || modelId.includes(`o4`) || modelId.includes(`o1`);
-  }
-
   shouldApply(): boolean {
     const model = this.getModel();
-    if (this.isReasoningModel() && (model.provider.includes(`openai`) || model.modelId?.includes(`openai`))) {
+    if (this.isReasoningModel() && isOpenAICompatibleModel(model)) {
       return true;
     }
 

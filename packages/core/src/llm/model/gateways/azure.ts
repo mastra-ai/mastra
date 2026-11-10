@@ -576,7 +576,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     const apiVersion =
       this.config.apiVersion ||
       (useResponsesAPI || this.config.useDeploymentBasedUrls === false ? 'v1' : '2024-04-01-preview');
-    const useDeploymentBasedUrls = this.config.useDeploymentBasedUrls ?? (useResponsesAPI ? false : true);
+    const useDeploymentBasedUrls = this.config.useDeploymentBasedUrls ?? !useResponsesAPI;
     const useEntraId = this.config.authentication?.type === 'entraId';
     const useWebSocket = useResponsesAPI && transport === 'websocket';
     const websocketFetch = useWebSocket

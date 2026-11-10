@@ -1,8 +1,7 @@
 /**
  * Shared command classification utilities for scoring.
  *
- * Used by both live scorers (outcome.ts) and offline scorers (outcome-match.ts)
- * to consistently identify build, test, and other command types.
+ * Used by scorers to consistently identify build, test, and other command types.
  */
 
 /**
@@ -36,7 +35,7 @@ export function getExitCode(result: unknown): number | null {
   if (result == null) return null;
 
   if (typeof result === 'string') {
-    const exitMatch = result.match(/exit(?:ed)?\s+(?:with\s+)?(?:code\s+)?(\d+)/i);
+    const exitMatch = result.match(/(?:^|\n)(?:exit code\s*:?|process exited with code)\s*(-?\d+)\s*$/i);
     if (exitMatch) return parseInt(exitMatch[1]!, 10);
     return null;
   }
@@ -55,22 +54,13 @@ export function getExitCode(result: unknown): number | null {
  * Works with both structured result objects and string results.
  */
 export function isSuccessResult(result: unknown, error?: unknown): boolean {
-  if (error) return false;
-  if (!result) return false;
+  if (error || !result) return false;
 
-  if (typeof result === 'object') {
-    const obj = result as Record<string, unknown>;
-    const exitCode = (obj.exitCode as number | undefined) ?? (obj.code as number | undefined);
-    if (typeof exitCode === 'number') return exitCode === 0;
-  }
+  const exitCode = getExitCode(result);
+  if (exitCode !== null) return exitCode === 0;
 
-  if (typeof result === 'string') {
-    const exitMatch = result.match(/exit(?:ed)?\s+(?:with\s+)?(?:code\s+)?(\d+)/i);
-    if (exitMatch) return exitMatch[1] === '0';
-  }
-
-  // No explicit exit code — can't determine
-  return false;
+  // execute_command only appends an exit code when the command fails.
+  return typeof result === 'string';
 }
 
 /**

@@ -3,6 +3,7 @@
     "brick-complexity-pro",
     "brick-v1-beta",
     "deepseek-ocr-2",
+    "faster-whisper-large-v3",
     "gemma4-31b",
     "mistral-small-4-119b",
     "qwen3.5-122b",
@@ -13,6 +14,8 @@
     "apertus-70b",
     "brick-complexity-pro",
     "brick-v1-beta",
+    "deepseek-ocr-2",
+    "faster-whisper-large-v3",
     "gemma4-31b",
     "glm5.2",
     "gpt-oss-120b",
@@ -27,7 +30,7 @@
   ],
   "structuredOutput": ["gemma4-31b", "glm5.2", "qwen3.8-27b"],
   "reasoning": {
-    "qwen3.8-27b": [
+    "gemma4-31b": [
       {
         "type": "toggle"
       }
@@ -36,11 +39,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "gemma4-31b": [
-      {
-        "type": "toggle"
       }
     ],
     "gpt-oss-20b": [
@@ -53,6 +51,11 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
       }
     ]
   }

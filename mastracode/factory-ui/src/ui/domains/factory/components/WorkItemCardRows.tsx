@@ -1,19 +1,31 @@
-import { knownExternalAuthor } from '@mastra/factory/rules/types';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { BoardCardStatus } from '../boardCardState';
+import { boardLoop, boardOf } from '../boardFlow';
+import type { BoardInfo } from '../boardFlow';
 import type { CardAction } from '../cardPrimaryAction';
-import { workItemMeta } from '../boardItems';
+import { sourceMetadata, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
+import { reviewVerdict, selfReviewVerdict } from '../reviewVerdict';
+import { reasonSummary } from '../reworkReason';
+import type { ReworkReason } from '../reworkReason';
+import type { ReviewVerdict } from '../reviewVerdict';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
+import {
+  CardActions,
+  CardStatus,
+  CommentCount,
+  MetadataLabels,
+  SourceTitle,
+  WorkItemSourceIcon,
+} from './BoardCardParts';
 import { WorkItemActivity } from './WorkItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -30,6 +42,7 @@ export function WorkItemCardRows({
   beforeStart,
   controls,
   open,
+  rework,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -45,10 +58,11 @@ export function WorkItemCardRows({
   controls: ReactNode;
   /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
+  rework?: ReworkReason;
 }) {
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
-  const external = knownExternalAuthor(item);
-  const verdict = columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
+  const verdict = columnReviewVerdict(item, columnStage, board);
 
   return (
     <>
@@ -56,21 +70,19 @@ export function WorkItemCardRows({
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
           <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
-            {workItemMeta(item)}
+            <Metadata singleLine>
+              {workItemMeta(item).map((part, index, parts) => (
+                <Metadata.Item
+                  key={index}
+                  className={index === 0 || index === parts.length - 1 ? 'shrink-0' : undefined}
+                >
+                  {part}
+                </Metadata.Item>
+              ))}
+            </Metadata>
           </Txt>
           {relatedLinks}
-          {item.commentCount > 0 && (
-            <Txt
-              as="span"
-              variant="meta"
-              tone="faint"
-              className="flex shrink-0 items-center gap-1"
-              aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
-            >
-              <MessageSquare size={11} aria-hidden />
-              {item.commentCount}
-            </Txt>
-          )}
+          <CommentCount count={item.commentCount} />
         </div>
         <div className="flex min-w-0 items-center gap-1.5">
           <WorkItemSourceIcon item={item} />
@@ -79,7 +91,12 @@ export function WorkItemCardRows({
           </Txt>
         </div>
       </div>
-      <MetadataLabels metadata={item.metadata} />
+      {item.workItem?.provider !== 'factory' && item.workItem?.state && (
+        <Badge size="xs" variant="neutral" className="self-start" aria-label={`Source state: ${item.workItem.state}`}>
+          {item.workItem.state}
+        </Badge>
+      )}
+      <MetadataLabels metadata={sourceMetadata(item)} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
@@ -90,57 +107,61 @@ export function WorkItemCardRows({
               key={stage}
               className="border-border rounded-full border px-2 py-0.5"
             >
-              {itemStageLabel(item, stage)}
+              {itemStageLabel(item, stage, board)}
             </Txt>
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || external || verdict) && (
+      {(status.kind !== 'idle' || verdict || rework) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
-          {verdict && (
-            <Badge size="xs" variant={verdict.outdated ? 'neutral' : verdict.approved ? 'green' : 'orange'}>
-              {verdict.label}
-            </Badge>
-          )}
-          {external && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Badge size="xs" tabIndex={0} className="relative z-10 ml-auto">
-                    External
-                  </Badge>
-                }
-              />
-              <TooltipContent side="bottom" className="max-w-64">
-                From someone without write access — never starts a run on its own, even with auto-start runs on.
-              </TooltipContent>
-            </Tooltip>
-          )}
+          {verdict && <ReviewVerdictBadge verdict={verdict} />}
+          {rework && <ReworkLine rework={rework} />}
         </div>
       )}
       <CardActions
         actions={actions}
         beforeStart={beforeStart}
-        trailing={<WorkItemActivity activity={activity} actors={actors} />}
+        trailing={<WorkItemActivity activity={activity} actors={actors} board={board} />}
       />
     </>
   );
 }
 
-/**
- * The last verdict a review pass recorded; the card rests in Reviewing until the PR merges.
- * Once a push moves the PR past the reviewed head the verdict is kept but marked outdated,
- * so a stale approval never reads as current while the next pass runs.
- */
-export function reviewVerdict(
-  metadata: Record<string, unknown>,
-): { approved: boolean; outdated: boolean; label: string } | undefined {
-  const verdict = metadata.reviewVerdict;
-  if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
-  const reviewed = typeof metadata.reviewedHeadSha === 'string' ? metadata.reviewedHeadSha : undefined;
-  const head = typeof metadata.pullRequestHeadSha === 'string' ? metadata.pullRequestHeadSha : undefined;
-  const outdated = reviewed !== undefined && head !== undefined && reviewed.toLowerCase() !== head.toLowerCase();
-  const label = `${verdict === 'approve' ? 'Approved' : 'Changes requested'}${outdated ? ' (outdated)' : ''}`;
-  return { approved: verdict === 'approve' && !outdated, outdated, label };
+/** The verdict a column shows: the pull request's in its review, the builder's own in self-review and building. */
+export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId, board: BoardInfo | undefined) {
+  const loop = boardLoop(board);
+  if (loop === undefined) return undefined;
+  if (columnStage === loop.selfReview) return reviewVerdict(item.metadata) ?? selfReviewVerdict(item.metadata);
+  if (columnStage === loop.pullRequestReview) return reviewVerdict(item.metadata);
+  if (columnStage === loop.build?.phase) return selfReviewVerdict(item.metadata);
+  return undefined;
+}
+
+/** "Back from Review: <first line of why>", the whole reason on hover. */
+export function ReworkLine({ rework }: { rework: ReworkReason }) {
+  const text = `Back from ${rework.fromLabel}${rework.reason ? `: ${reasonSummary(rework.reason)}` : ''}`;
+  return (
+    <Txt
+      as="span"
+      variant="caption"
+      className="text-badge-orange-indicator max-w-full min-w-0 truncate"
+      title={rework.reason ?? text}
+    >
+      {text}
+    </Txt>
+  );
+}
+
+export function ReviewVerdictBadge({ verdict }: { verdict: ReviewVerdict }) {
+  return (
+    <Badge
+      size="xs"
+      variant={verdict.outdated ? 'neutral' : verdict.approved ? 'green' : 'orange'}
+      className="min-w-0"
+      title={verdict.label}
+    >
+      <span className="truncate">{verdict.label}</span>
+    </Badge>
+  );
 }

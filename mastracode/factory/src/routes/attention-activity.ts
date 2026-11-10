@@ -1,5 +1,6 @@
 /** Projects `activity.ts` fan-out rows. */
 
+import { boardForWorkItem } from '../boards/index.js';
 import type {
   WorkItemActivityRow,
   WorkItemCommentRow,
@@ -8,7 +9,7 @@ import type {
 import type {
   FactoryAttentionIdentity,
   FactoryAttentionReceiptRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { factoryActivityAttentionIdentity, factoryAttentionKey } from '../storage/domains/work-items/base.js';
@@ -29,12 +30,11 @@ import {
   receiptScope,
   SCAN_PAGE_SIZE,
   scanBatches,
-  workItemBoard,
 } from './attention-providers.js';
 
 interface ResolvedActivity {
   activity: WorkItemActivityRow;
-  item: WorkItemRow;
+  item: Card;
   comment: WorkItemCommentRow | undefined;
   identity: FactoryAttentionIdentity;
   receipt: FactoryAttentionReceiptRecord | undefined;
@@ -191,7 +191,7 @@ function toActivityItem(scope: AttentionScope, resolved: ResolvedActivity) {
     target: {
       kind: 'work-item' as const,
       workItemId: activity.workItemId,
-      board: workItemBoard(item),
+      board: boardForWorkItem(item),
       commentId: activity.latestCommentId,
     },
   };

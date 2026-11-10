@@ -136,7 +136,11 @@ export interface DelegationStartResult {
   modifiedPrompt?: string;
   /** Modified instructions for the sub-agent (optional) */
   modifiedInstructions?: string;
-  /** Modified maxSteps for the sub-agent (optional) */
+  /**
+   * The sub-agent's maxSteps budget. Overrides the cap on the model-supplied
+   * `maxSteps` (capped at the sub-agent's `defaultOptions.maxSteps`), so this
+   * can raise the budget as well as lower it.
+   */
   modifiedMaxSteps?: number;
   /**
    * Metadata to attach to the sub-agent thread when it is created for this delegation (optional).
@@ -462,6 +466,15 @@ export type NetworkOptions<OUTPUT = undefined> = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
+  /**
+   * Scopes this run acts with, as `<type>:<value>` addresses such as `org:acme`, `resource:u1`,
+   * or `thread:t1`. Unioned with the Agent's `scopes` and the reserved `mastra__scopes`
+   * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
+   * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
+   * also set, or the call throws. Never accepted from an HTTP request body.
+   */
+  scopes?: string[];
+
   /** Whether to automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
 
@@ -607,6 +620,15 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   memory?: AgentMemoryOption;
 
   /**
+   * Scopes this run acts with, as `<type>:<value>` addresses such as `org:acme`, `resource:u1`,
+   * or `thread:t1`. Unioned with the Agent's `scopes` and the reserved `mastra__scopes`
+   * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
+   * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
+   * also set, or the call throws. Never accepted from an HTTP request body.
+   */
+  scopes?: string[];
+
+  /**
    * Serverless runtime helpers. Use these when the platform freezes the
    * isolate after the HTTP response so detached finish-time work (e.g. thread
    * title generation) would otherwise be dropped.
@@ -667,6 +689,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * Signal to abort the streaming operation
    */
   abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
+  /**
+   * @internal The object this run's steps report themselves as running under: the signal the thread runtime prepared
+   * for the run. Carried so the loop can keep step bookkeeping on that object even after `abortSignal` is replaced by
+   * a signal derived from it.
+   */
+  stepOwner?: LoopConfig<OUTPUT>['stepOwner'];
 
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
@@ -676,8 +704,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
    * Maximum number of times processors can trigger a retry for this generation.
-   * Overrides agent's default maxProcessorRetries.
-   * If not set, defaults to the agent's maxProcessorRetries (which defaults to no retries if also unset).
+   * Overrides the agent's default maxProcessorRetries. Input and output processor
+   * retries require an explicit cap; error processors default to a cap of 3 when
+   * they resolve to a non-empty list and no cap is set.
    */
   maxProcessorRetries?: number;
 
@@ -868,6 +897,13 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /**
+   * @internal
+   * HTTP observers detach on reader cancellation without aborting durable
+   * execution. In-process readers retain cancel-aborts behavior by default.
+   */
+  _detachObserverOnCancel?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**
@@ -905,6 +941,8 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     claim?: AgentLoopResumeClaim;
   };
   toolCallId?: string;
+  /** Internal: The run's resolved scopes, persisted in suspend snapshots for resume */
+  resolvedScopes?: string[];
 } & ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}

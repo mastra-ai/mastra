@@ -1,5 +1,6 @@
 import { ScorerRunError } from '../../evals/base';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
+import { flushBeforeTraceRead } from '../../evals/flush-before-trace-read';
 import type { NotScorableOutcome } from '../../evals/not-scorable';
 import { extractTrajectory, extractTrajectoryFromTrace, extractWorkflowTrajectory } from '../../evals/types';
 import type {
@@ -118,6 +119,7 @@ export function createItemScorerResolver(mastra: Mastra): (scorerIds: string[]) 
 /**
  * Attempt to extract a Trajectory from the observability trace store.
  * Falls back to undefined if storage is unavailable or the trace has no spans.
+ * Callers flush observability first (see `flushForTrajectoryScorers`).
  */
 async function extractTrajectoryFromStorage(
   storage: MastraCompositeStore | null,
@@ -130,9 +132,22 @@ async function extractTrajectoryFromStorage(
     const trace = await observabilityStore.getTrace({ traceId });
     if (!trace?.spans?.length) return undefined;
     return extractTrajectoryFromTrace(trace.spans);
-  } catch {
+  } catch (error) {
+    console.warn(
+      `Failed to read trace ${traceId}; trajectory scorers get a flat trajectory from the run output instead:`,
+      error,
+    );
     return undefined;
   }
+}
+
+/** Flush before the trace read, only when a trajectory scorer will read the trace. */
+export async function flushForTrajectoryScorers(
+  mastra: Mastra,
+  scorers: MastraScorer<any, any, any, any>[],
+  traceId: string | null | undefined,
+): Promise<void> {
+  if (scorers.some(s => s.type === 'trajectory')) await flushBeforeTraceRead(mastra, traceId);
 }
 
 /**

@@ -1,17 +1,22 @@
+import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useParams } from 'react-router';
 
+import { useParams } from 'react-router';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import { boardCardState } from '../boardCardState';
-import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
-import { itemThreadSession } from '../boardItems';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { cardContextSessions, cardThreadSession, itemThreadSession } from '../boardItems';
+import { reworkReason } from '../reworkReason';
+import type { BoardLayout } from '../boardLayout';
+import { boardLoop } from '../boardFlow';
 import { itemBoard } from '../boardStages';
 import {
   awaitsTriageDecision,
@@ -27,23 +32,20 @@ import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
-import type { BoardLayout } from '../boardLayout';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { ActivityWick } from '@mastra/playground-ui/components/Activity';
-import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
+import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { RelatedWorkItemLink } from './RelatedWorkItemLink';
 import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
+import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
-import { WorkItemListRow } from './WorkItemListRow';
 
 export function WorkItemCard({
   item,
   deepLinkRef,
-  deepLinkCommentId,
   highlighted,
   columnStage,
   relatedItems,
@@ -68,8 +70,6 @@ export function WorkItemCard({
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
-  /** Comment deep link (`?item&comment`): holds the details popover open so the feed is reachable. */
-  deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
@@ -99,17 +99,20 @@ export function WorkItemCard({
   layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const morph = useCardMorph({ openFor: deepLinkCommentId });
+  const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
-  const custom = boardId !== 'work' && boardId !== 'review';
   const definition = catalog.data?.find(board => board.id === boardId);
+  // A board without a pull request loop advances cards through its own phases instead.
+  const custom = boardLoop(definition) === undefined;
 
   const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
-  const moves = cardMoves(item, columnStage);
-  const primaryMove = primaryCardMove(moves, columnStage, sessions);
-  const threadSession = itemThreadSession(sessions);
+  const moves = cardMoves(item, columnStage, definition);
+  const primaryMove = primaryCardMove(moves, columnStage, { sessions, stageHistory: item.stageHistory });
+  const threadSession = cardThreadSession(item, definition?.phases, columnStage);
+  const contextSessions = cardContextSessions(item, definition?.phases, columnStage);
+  const rework = definition ? reworkReason(item, definition.phases, activityPage?.events) : undefined;
   const nextPhase = nextBoardPhase(definition, columnStage);
   const sessionHref =
     threadSession === undefined
@@ -127,7 +130,7 @@ export function WorkItemCard({
     decision,
     transitionReason,
     sessionStatus,
-    heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
+    held: awaitsTriageDecision(item, columnStage, definition),
   });
   const { status, owner, wick } = state;
   const lockedByYou = owner.kind === 'you';
@@ -138,9 +141,10 @@ export function WorkItemCard({
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
   const primaryAction = cardPrimaryAction({
     item,
+    board: definition,
     columnStage,
     move: primaryMove,
-    resumeStage: custom ? undefined : resumeStage(columnStage, sessions),
+    resumeStage: resumeStage(columnStage, { sessions, stageHistory: item.stageHistory }, definition),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
@@ -203,6 +207,7 @@ export function WorkItemCard({
       <RelatedWorkItemLink key={related.id} item={related} href={relationshipPath(related, factoryId)} kind="board" />
     );
   };
+  const relatedLinks = relatedItems.map(relatedLink);
 
   // A held card's decision, like a parked suggestion, is the person's to
   // release, so it stays on the card beside a finished triage session.
@@ -219,11 +224,14 @@ export function WorkItemCard({
       columnStage={columnStage}
       projectRepositoryId={projectRepositoryId}
       activityPage={activityPage}
+      contextSessions={contextSessions}
+      rework={rework}
       morph={morph}
-      relatedLinks={relatedItems.map(relatedLink)}
+      relatedLinks={relatedLinks}
       status={status}
       actions={actions}
       menu={<WorkItemMenuItems {...panelMenu} />}
+      layout={layout}
     />
   );
 
@@ -232,9 +240,12 @@ export function WorkItemCard({
       <>
         <WorkItemListRow
           item={item}
+          columnStage={columnStage}
           morph={morph}
           deepLinkRef={deepLinkRef}
           highlighted={highlighted}
+          activityStatus={wick}
+          relatedLinks={relatedLinks}
           locked={lockedByYou}
           busy={busy}
           dragPayload={dragPayload}
@@ -243,6 +254,7 @@ export function WorkItemCard({
           status={status}
           actions={actions}
           menu={<WorkItemMenuItems {...menu} />}
+          rework={rework}
         />
         {detailsPanel}
       </>
@@ -263,7 +275,8 @@ export function WorkItemCard({
           if (dragPayload) setDragPayload(event, dragPayload);
         }}
         className={cn(
-          'group relative flex min-h-36 flex-col gap-3 rounded-card border border-surface-rim bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
+          BOARD_CARD_LAYOUT_CLASS,
+          'group outline-none transition-colors hover:bg-fill-hover',
           // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
           wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',
@@ -283,12 +296,13 @@ export function WorkItemCard({
         <WorkItemCardRows
           item={item}
           columnStage={columnStage}
-          relatedLinks={relatedItems.map(relatedLink)}
+          relatedLinks={relatedLinks}
           activity={activity}
           actors={activityPage?.actors ?? {}}
           status={status}
           actions={actions}
           open={false}
+          rework={rework}
           controls={
             <>
               <CardDetailsHint onOpen={morph.openDetails} />

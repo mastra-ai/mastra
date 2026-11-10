@@ -1,6 +1,5 @@
-import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleHandler } from '../../rules/types.js';
-import { linearClaimKey } from './claim.js';
 
 export type LinearRuleOverrides = Partial<
   Record<FactoryLinearEventName, FactoryRuleHandler<FactoryLinearRuleContext> | null | undefined>
@@ -10,19 +9,18 @@ export type LinearEventRules = Readonly<
 >;
 
 function linearIssueObserved(context: FactoryLinearRuleContext) {
-  if (context.item) return;
+  if (context.item || !context.intake) return;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-triage`,
     // A source bound to a custom board lands on that board's initial phase;
-    // otherwise the issue waits in Work Intake.
-    board: context.intake?.board ?? 'work',
+    // otherwise it waits on the project's default board.
+    board: context.intake.board,
     source: 'linear-issue',
     sourceKey: `linear:${context.issue.identifier}`,
-    claimKey: linearClaimKey(context.issue.id),
     title: `${context.issue.identifier}: ${context.issue.title}`,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'intake',
+    stage: context.intake.initialPhase,
     metadata: {
       linearIssueId: context.issue.id,
       ...(context.issue.projectId ? { linearProjectId: context.issue.projectId } : {}),
@@ -43,8 +41,9 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
 
 function linearIssueClosed(context: FactoryLinearRuleContext) {
   if (!context.item || context.item.source !== 'linear-issue') return;
-  // The card's board decides where a closed source sends it; boards that declare no
-  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
   const closure = context.boardClosure;
   if (!context.board || !closure || closure.itemTerminal) return;
   // Only terminal state types trigger close.
@@ -52,15 +51,14 @@ function linearIssueClosed(context: FactoryLinearRuleContext) {
   if (stateType !== 'completed' && stateType !== 'canceled') return;
   const canceled = stateType === 'canceled';
   const target = canceled ? closure.canceled : closure.completed;
-  return {
-    type: 'transition',
+  return closedByRoutes(canceled, {
     idempotencyKey: `${context.ingress.id}:issue-closed`,
     board: context.board,
     stage: target.phase,
     message: {
       text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
-  } as const;
+  });
 }
 
 export const defaultLinearRules = Object.freeze({

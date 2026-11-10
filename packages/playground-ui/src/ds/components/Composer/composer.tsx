@@ -1,40 +1,41 @@
-import type { ComponentPropsWithoutRef } from 'react';
-import { forwardRef } from 'react';
+import type { ComponentProps } from 'react';
+import { use } from 'react';
 
+import { ChatShellComposerInputContext } from '../ChatShell/chat-shell-context';
 import { ScrollArea } from '../ScrollArea';
 import { useComposerPointer } from './use-composer-pointer';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 import './composer.css';
 import './composer-ring.css';
 import './composer-sending.css';
 
-export type ComposerProps = ComponentPropsWithoutRef<'form'>;
+export type ComposerProps = ComponentProps<'form'>;
 
-export interface ComposerInputProps extends ComponentPropsWithoutRef<'textarea'> {
+export interface ComposerInputProps extends ComponentProps<'textarea'> {
   variant?: 'inline' | 'textarea';
   maxHeight?: string;
 }
 
-export const Composer = forwardRef<HTMLFormElement, ComposerProps>(({ children, ...props }, ref) => (
-  <form ref={ref} data-slot="composer" {...props}>
-    {children}
-  </form>
-));
-Composer.displayName = 'Composer';
+/** Positioned so an overlay `ComposerHeader` can anchor to its top edge. */
+export function Composer({ className, ...props }: ComposerProps) {
+  return <form data-slot="composer" className={cn('relative', className)} {...props} />;
+}
 
-export interface ComposerBoxProps extends ComponentPropsWithoutRef<'div'> {
+export interface ComposerBoxProps extends ComponentProps<'div'> {
   sendingPulseKey?: number;
 }
 
-export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
-  ({ children, className, sendingPulseKey = 0, ...props }, ref) => (
+export function ComposerBox({ children, className, sendingPulseKey = 0, ...props }: ComposerBoxProps) {
+  return (
     <div
-      ref={ref}
       data-slot="composer-box"
       className={cn(
-        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border transition-colors duration-normal focus-within:border-border-strong',
+        // The suggestions list and the input scroll flush with the top corners, so their scrollbars
+        // take the inset for this radius.
+        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border transition-colors duration-normal scrollbar-inset-[22px] focus-within:border-border-strong',
         className,
       )}
       {...props}
@@ -42,18 +43,17 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       <ComposerSendingPulse pulseKey={sendingPulseKey} />
       <div className="relative z-10">{children}</div>
     </div>
-  ),
-);
-ComposerBox.displayName = 'ComposerBox';
+  );
+}
 
 export type ComposerTone = 'default' | 'green' | 'purple' | 'orange';
 
-export interface ComposerRingProps extends ComponentPropsWithoutRef<'div'> {
+export interface ComposerRingProps extends ComponentProps<'div'> {
   busy?: boolean;
   tone?: ComposerTone;
 }
 
-export const ComposerRing = ({
+export function ComposerRing({
   busy = false,
   tone = 'green',
   className,
@@ -61,7 +61,7 @@ export const ComposerRing = ({
   onPointerEnter,
   onPointerMove,
   ...props
-}: ComposerRingProps) => {
+}: ComposerRingProps) {
   const { trackPointer, pointerStyle } = useComposerPointer(!busy);
 
   return (
@@ -82,30 +82,35 @@ export const ComposerRing = ({
       {...props}
     />
   );
-};
-ComposerRing.displayName = 'ComposerRing';
+}
 
-export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
-  ({ className, ...props }, ref) => (
+export function ComposerAttachments({ className, ...props }: ComponentProps<'div'>) {
+  return (
     <div
-      ref={ref}
       role="region"
       data-slot="composer-attachments"
       className={cn('mx-auto w-full max-w-3xl pb-2', className)}
       {...props}
     />
-  ),
-);
-ComposerAttachments.displayName = 'ComposerAttachments';
+  );
+}
 
-export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
-  ({ className, variant = 'inline', maxHeight, autoComplete, ...props }, ref) => (
+export function ComposerInput({
+  ref,
+  className,
+  variant = 'inline',
+  maxHeight,
+  autoComplete,
+  ...props
+}: ComposerInputProps) {
+  const shellInputRef = use(ChatShellComposerInputContext);
+  return (
     <ScrollArea maxHeight={maxHeight ?? (variant === 'textarea' ? '16rem' : '13rem')}>
       <textarea
-        ref={ref}
+        ref={mergeRefs(ref, shellInputRef)}
         data-slot="composer-input"
         className={cn(
-          'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body zoom-safe-text text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           variant === 'textarea' ? 'min-h-28' : 'min-h-10',
           className,
         )}
@@ -113,22 +118,58 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
         {...textFieldAutofillProps(autoComplete)}
       />
     </ScrollArea>
-  ),
-);
-ComposerInput.displayName = 'ComposerInput';
+  );
+}
 
-export const ComposerActions = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
-  ({ className, ...props }, ref) => (
+export function ComposerActions({ className, ...props }: ComponentProps<'div'>) {
+  return (
     <div
-      ref={ref}
       role="region"
       data-slot="composer-actions"
       className={cn('flex w-full flex-wrap items-end justify-between gap-2 px-3 pb-3', className)}
       {...props}
     />
-  ),
-);
-ComposerActions.displayName = 'ComposerActions';
+  );
+}
+
+/** Leading actions, such as attaching files. */
+export function ComposerActionsStart({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="composer-actions-start"
+      className={cn('flex min-w-0 shrink-0 items-center gap-1.5', className)}
+      {...props}
+    />
+  );
+}
+
+/** Trailing actions: model, voice, and the primary Send action last. Stays right-aligned when alone. */
+export function ComposerActionsEnd({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="composer-actions-end"
+      className={cn('ml-auto flex max-w-full min-w-0 items-center justify-end gap-1.5', className)}
+      {...props}
+    />
+  );
+}
+
+/**
+ * Session status above the composer, outside the input box: right-aligned, wraps on narrow screens,
+ * and takes no space when nothing renders inside it.
+ */
+export function ComposerStatus({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="composer-status"
+      className={cn(
+        'mx-auto flex w-full max-w-3xl min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 px-3 text-caption text-muted-foreground empty:hidden',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
 const ComposerGradientColumn = ({ className }: { className?: string }) => (
   <div className={cn('flex size-full flex-col -space-y-3', className)}>
@@ -156,7 +197,7 @@ const ComposerSendingPulse = ({ pulseKey }: { pulseKey: number }) => {
   );
 };
 
-export interface ComposerToneLabelProps extends ComponentPropsWithoutRef<'span'> {
+export interface ComposerToneLabelProps extends ComponentProps<'span'> {
   tone: ComposerTone;
 }
 

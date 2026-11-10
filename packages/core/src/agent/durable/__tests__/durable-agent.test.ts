@@ -3,6 +3,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import type { EventCallback } from '../../../events/types';
 import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import type { MCPToolExecutionContext } from '../../../tools';
@@ -407,7 +408,7 @@ describe('DurableAgent', () => {
         model: mockModel as LanguageModelV2,
       });
 
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, id: 'public-prepare-agent' });
       const mcp: MCPToolExecutionContext = {
         extra: {
           signal: new AbortController().signal,
@@ -424,6 +425,9 @@ describe('DurableAgent', () => {
       expect(globalRunRegistry.has(result.runId)).toBe(true);
 
       const entry = globalRunRegistry.get(result.runId);
+      expect(durableAgent.id).not.toBe(baseAgent.id);
+      expect(entry?.agentId).toBe(durableAgent.id);
+      expect(durableAgent.runRegistry.get(result.runId)?.agentId).toBe(durableAgent.id);
       expect(entry).toBeDefined();
       expect(entry!.model).toBeDefined();
       expect(entry!.mcp).toBe(mcp);
@@ -769,6 +773,134 @@ describe('createDurableAgentStream', () => {
     await delivery;
     expect(settled).toBe(true);
     cleanup();
+  });
+
+  it('should wait for onChunk before FINISH without waiting for transport acknowledgement', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    let subscribedCallback!: EventCallback;
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementation(async (_topic, callback) => {
+      subscribedCallback = callback;
+    });
+
+    let releaseAck!: () => void;
+    const ackBlocked = new Promise<void>(resolve => {
+      releaseAck = resolve;
+    });
+    let releaseCallback!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const onChunk = vi.fn(() => callbackBlocked);
+    const onFinish = vi.fn();
+    const runId = 'test-finish-chunk-delivery';
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-chunk-delivery',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onChunk,
+      onFinish,
+    });
+
+    try {
+      await ready;
+      const ack = vi.fn(() => ackBlocked);
+      const chunkDelivery = subscribedCallback(
+        {
+          type: AgentStreamEventTypes.CHUNK,
+          runId,
+          data: { type: 'text-delta', payload: { text: 'test' } },
+        },
+        ack,
+      );
+      await vi.waitFor(() => expect(onChunk).toHaveBeenCalledOnce());
+
+      const finishDelivery = subscribedCallback({
+        type: AgentStreamEventTypes.FINISH,
+        runId,
+        data: {
+          output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+          stepResult: { reason: 'stop', warnings: [], isContinued: false },
+        },
+      });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(onFinish).not.toHaveBeenCalled();
+
+      releaseCallback();
+      await vi.waitFor(() => {
+        expect(ack).toHaveBeenCalledOnce();
+        expect(onFinish).toHaveBeenCalledOnce();
+      });
+      await finishDelivery;
+      for await (const _chunk of output.fullStream) {
+        // Drain the stream while the transport acknowledgement is still blocked.
+      }
+      releaseAck();
+      await chunkDelivery;
+    } finally {
+      releaseCallback();
+      releaseAck();
+      cleanup();
+    }
+  });
+
+  it('should stop the idle timer while FINISH waits for chunk delivery', async () => {
+    vi.useFakeTimers();
+    const { createDurableAgentStream, emitChunkEvent, emitFinishEvent } = await import('../stream-adapter');
+
+    let releaseCallback!: () => void;
+    let markCallbackStarted!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const callbackStarted = new Promise<void>(resolve => {
+      markCallbackStarted = resolve;
+    });
+    const onChunk = vi.fn(async () => {
+      markCallbackStarted();
+      await callbackBlocked;
+    });
+    const onFinish = vi.fn();
+    const onError = vi.fn();
+    const runId = 'test-finish-delivery-idle-timer';
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-delivery-idle-timer',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      idleTimeoutMs: 20,
+      onChunk,
+      onFinish,
+      onError,
+    });
+
+    try {
+      await ready;
+      await emitChunkEvent(pubsub, runId, {
+        type: 'text-delta',
+        payload: { text: 'test' },
+      } as any);
+      await callbackStarted;
+      await emitFinishEvent(pubsub, runId, {
+        output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+      });
+      await Promise.resolve();
+
+      await vi.advanceTimersByTimeAsync(20);
+      expect(onError).not.toHaveBeenCalled();
+      expect(onFinish).not.toHaveBeenCalled();
+
+      releaseCallback();
+      for await (const _chunk of output.fullStream) {
+        // Drain the stream after FINISH completes.
+      }
+      expect(onFinish).toHaveBeenCalledOnce();
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
   });
 
   it('should terminate when subscription setup fails', async () => {

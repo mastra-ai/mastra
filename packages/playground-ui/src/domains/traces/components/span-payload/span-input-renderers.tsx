@@ -2,12 +2,13 @@ import { describeSpanInput } from '@mastra/core/observability';
 import type { AgentRunResumeInput, SpanInputDescription } from '@mastra/core/observability';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
-import { SpanPayloadMessages } from './span-payload-messages';
+import { SpanPayloadMessages, SpanSignal } from './span-payload-messages';
 import { SpanPayloadField, SpanPayloadMarkdown } from './span-payload-primitives';
-import { SpanPayloadProcessor } from './span-payload-processor';
+import { SpanPayloadProcessorInput } from './span-payload-processor';
 import { asCoreSpan, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
-import { Card, CardContent } from '@/ds/components/Card';
+import { SpanToolNameValue } from './span-payload-tool';
+import { getSpanSignal } from '@/domains/traces/utils/span-signal';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
 function SpanTextRenderer({ value }: { value: string }) {
@@ -26,7 +27,7 @@ function SpanAgentRunResumeRenderer({ value }: { value: AgentRunResumeInput }) {
             {toolName !== undefined && (
               <>
                 <DataKeysAndValues.Key>Tool</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{String(toolName)}</DataKeysAndValues.Value>
+                <SpanToolNameValue toolName={String(toolName)} />
               </>
             )}
             {toolCallId !== undefined && (
@@ -57,7 +58,7 @@ const SPAN_INPUT_RENDERERS = {
   text: SpanTextRenderer,
   messages: SpanPayloadMessages,
   'agent-run-resume': SpanAgentRunResumeRenderer,
-  processor: SpanPayloadProcessor,
+  processor: SpanPayloadProcessorInput,
   json: SpanPayloadJson,
 } satisfies PayloadRegistry<SpanInputDescription>;
 
@@ -65,17 +66,16 @@ export interface SpanInputRendererProps {
   span: SpanRecord;
 }
 
-/** Renders a span's input through the registry; `null` when the span recorded none. */
+/**
+ * Renders a span's input through the registry; `null` when the span recorded none. An agent
+ * run started by a signal renders the signal, which `describeSpanInput` only knows as JSON.
+ */
 export function SpanInputRenderer({ span }: SpanInputRendererProps) {
+  const signal = getSpanSignal(span);
+  if (signal) return <SpanSignal signal={signal} />;
   const description = describeSpanInput(asCoreSpan(span));
   if (!description) return null;
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_INPUT_RENDERERS, description);
-  return (
-    <Card data-slot="span-input-card" className="min-w-0">
-      <CardContent>
-        <Renderer value={description.value} />
-      </CardContent>
-    </Card>
-  );
+  return <Renderer value={description.value} />;
 }

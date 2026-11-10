@@ -147,6 +147,57 @@ function makeDefaultCtx(): EntryExecuteContext {
   } as unknown as EntryExecuteContext;
 }
 
+describe('runAgentEntry durable stream result', () => {
+  it('consumes the nested model output and cleans up after success', async () => {
+    const cleanup = vi.fn();
+    const agent = {
+      name: 'durable-agent',
+      getModel: async () => ({ specificationVersion: 'v2' }),
+      stream: async (_prompt: string, opts: { onFinish?: (result: any) => void }) => ({
+        output: {
+          text: Promise.resolve('durable response'),
+          fullStream: (async function* () {
+            opts.onFinish?.({ text: 'durable response' });
+          })(),
+        },
+        runId: 'durable-run-1',
+        cleanup,
+      }),
+    };
+
+    const result = await runAgentEntry(
+      { type: 'agent', id: 'step-1', agentId: 'durable-agent', agent },
+      makeDefaultCtx(),
+    );
+
+    expect(result).toEqual({ text: 'durable response' });
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans up after preserving a stream error', async () => {
+    const cleanup = vi.fn();
+    const agent = {
+      name: 'durable-agent',
+      getModel: async () => ({ specificationVersion: 'v2' }),
+      stream: async () => ({
+        output: {
+          text: Promise.resolve(''),
+          fullStream: (async function* () {
+            throw new Error('durable stream failed');
+          })(),
+        },
+        runId: 'durable-run-1',
+        cleanup,
+      }),
+    };
+
+    await expect(
+      runAgentEntry({ type: 'agent', id: 'step-1', agentId: 'durable-agent', agent }, makeDefaultCtx()),
+    ).rejects.toThrow('durable stream failed');
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('runAgentEntry structured output guard', () => {
   const structuredOptions = { structuredOutput: { schema: { parse: (v: unknown) => v } } };
 

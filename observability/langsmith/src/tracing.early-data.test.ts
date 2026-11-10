@@ -59,6 +59,8 @@ vi.mock('langsmith', () => {
 
     createRun = vi.fn().mockResolvedValue(undefined);
     updateRun = vi.fn().mockResolvedValue(undefined);
+    flush = vi.fn().mockResolvedValue(undefined);
+    awaitPendingTraceBatches = vi.fn().mockResolvedValue(undefined);
   }
 
   return {

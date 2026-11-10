@@ -12,6 +12,7 @@ import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/boar
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
+import { queryKeys } from '../../../../../api/keys';
 import type { InstalledBoardInfo } from '../../../../../api/types';
 import type { GithubIssue } from '../../services/factory';
 import type { GitLabIssue } from '../../services/gitlab';
@@ -23,7 +24,6 @@ import { githubWithLinearConfig, gitlabOnlyConfig, connectedLinear, disabledGitl
 
 const repository: LinkedRepositoryPayload = { projectRepositoryId: 'repo-1', slug: 'acme/app' };
 const workBoard = builtinBoardCatalog.boards.find(board => board.id === 'work')!;
-const reviewBoard = builtinBoardCatalog.boards.find(board => board.id === 'review')!;
 
 const linearIssue = (identifier: string, sourceId: string): LinearIssue => ({
   id: identifier,
@@ -212,7 +212,7 @@ describe('useBoardIntake board-bound sources', () => {
   });
 
   it('withholds the Linear feed from a custom board with nothing bound to it', async () => {
-    stubIntake([bindings[0]!], ['factory-1'], issues);
+    stubIntake([bindings[0]], ['factory-1'], issues);
 
     const { result } = renderIntake('factory-1', releaseBoard);
 
@@ -271,7 +271,7 @@ describe('useBoardIntake GitLab routing', () => {
     expect(githubLabelRouteRequests).toBe(0);
   });
 
-  it('uses the GitLab MR feed for a GitLab-linked Review board and never requests GitHub PRs', async () => {
+  it('browses the GitLab MR feed on Work for a GitLab-linked repository and never requests GitHub PRs', async () => {
     stubIntake([]);
     let githubRequests = 0;
     server.use(
@@ -307,14 +307,16 @@ describe('useBoardIntake GitLab routing', () => {
       useBoardIntake({
         factoryProjectId: 'factory-1',
         repositories: [{ ...repository, provider: 'gitlab' }],
-        definition: reviewBoard,
+        definition: workBoard,
         knownSourceKeys: new Set(),
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.active).toBe('gitlab-prs');
-    expect(result.current.candidates[0]).toMatchObject({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' });
+    await waitFor(() =>
+      expect(result.current.candidates).toContainEqual(
+        expect.objectContaining({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' }),
+      ),
+    );
     expect(githubRequests).toBe(0);
   });
 
@@ -632,7 +634,7 @@ describe('useBoardIntake Jira gating', () => {
     const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    const candidate = result.current.candidates[0]!;
+    const candidate = result.current.candidates[0];
     expect(candidate.sourceKey).toBe('jira-issue-acme-eng-42');
     expect(candidate.source).toBe('jira-issue');
     expect(candidate.url).toBe('https://acme.atlassian.net/browse/ENG-42');
@@ -649,7 +651,7 @@ describe('useBoardIntake Jira gating', () => {
     expect(result.current.candidates).toEqual([]);
   });
 
-  it('given another feed is active, when the board loads, then Jira issues still feed participant candidates', async () => {
+  it('given GitHub and Jira are available, when the board loads, then both feed intake candidates', async () => {
     stubJiraIntake([workBinding], {
       githubEnabled: true,
     });
@@ -657,38 +659,37 @@ describe('useBoardIntake Jira gating', () => {
     const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.available).toEqual(['github', 'jira']));
-    expect(result.current.active).toBe('github');
-
-    // The Jira feed is not displayed, but its issues are fetched for teammate filtering.
     await waitFor(() =>
-      expect(result.current.participantCandidates.map(candidate => candidate.sourceKey)).toContain(
-        'jira-issue-acme-eng-42',
-      ),
+      expect(result.current.candidates.map(candidate => candidate.sourceKey)).toContain('jira-issue-acme-eng-42'),
     );
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira-issue-acme-eng-42');
+    expect(result.current.candidates.find(candidate => candidate.source === 'jira-issue')?.column).toBe('intake');
   });
 });
 
 describe('useBoardIntake query loading', () => {
   describe('when GitHub intake is ready and Linear status is still loading', () => {
-    it('keeps the active intake feed ready', async () => {
+    it('keeps intake pending until all configured sources are discovered', async () => {
       stubIntake([]);
       let release = () => {};
       const held = new Promise<void>(resolve => {
         release = resolve;
       });
+      let statusRequested = false;
       server.use(
         http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: githubWithLinearConfig })),
         http.get(`${TEST_BASE_URL}/web/linear/status`, async () => {
+          statusRequested = true;
           await held;
           return HttpResponse.json(connectedLinear);
         }),
       );
       const { result, unmount } = renderIntake('factory-1');
       try {
+        await waitFor(() => expect(statusRequested).toBe(true));
+        expect(result.current.isPending).toBe(true);
+        release();
         await waitFor(() => expect(result.current.isPending).toBe(false));
         expect(result.current.active).toBe('github');
-        expect(result.current.isPending).toBe(false);
       } finally {
         release();
         unmount();
@@ -797,14 +798,13 @@ describe('useBoardIntake across linked repositories', () => {
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual([
-      'github:1:issue:5',
-      'github:2:issue:5',
-    ]);
+    await waitFor(() => expect(result.current.candidates).toHaveLength(5));
+    expect(
+      result.current.candidates.filter(candidate => candidate.source === 'github-issue').map(c => c.sourceKey),
+    ).toEqual(['github:1:issue:5', 'github:2:issue:5']);
   });
 
-  it('offers Review the pull requests of every linked GitHub repository', async () => {
+  it('offers Work the pull requests of every linked GitHub repository, filed onto its Intake', async () => {
     const requested: string[] = [];
     stubRepositories(requested);
 
@@ -812,17 +812,21 @@ describe('useBoardIntake across linked repositories', () => {
       useBoardIntake({
         factoryProjectId: 'factory-1',
         repositories,
-        definition: reviewBoard,
+        definition: workBoard,
         knownSourceKeys: new Set(),
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(3));
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual([
-      'github:1:pull-request:9',
-      'github:2:pull-request:9',
-      'github:3:pull-request:9',
+    await waitFor(() => expect(result.current.candidates).toHaveLength(5));
+    const pullRequests = result.current.candidates.filter(candidate => candidate.source === 'github-pr');
+    expect(pullRequests.map(candidate => [candidate.sourceKey, candidate.column])).toEqual([
+      ['github:1:pull-request:9', 'intake'],
+      ['github:2:pull-request:9', 'intake'],
+      ['github:3:pull-request:9', 'intake'],
     ]);
+    // Pull requests are not an issue source: Work still lists only its issue feeds.
+    expect(result.current.available).toEqual(['github']);
+    expect(requested).toEqual(expect.arrayContaining(['prs:repo-1', 'prs:repo-2', 'prs:repo-3']));
   });
 
   it('drops a second repository candidate that is already a card without hiding the first repository one', async () => {
@@ -837,7 +841,9 @@ describe('useBoardIntake across linked repositories', () => {
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.candidates[0]).toMatchObject({ sourceKey: 'github:1:issue:5' });
+    await waitFor(() => expect(result.current.candidates).toHaveLength(4));
+    expect(result.current.candidates.filter(candidate => candidate.source === 'github-issue')).toEqual([
+      expect.objectContaining({ sourceKey: 'github:1:issue:5' }),
+    ]);
   });
 });

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import type { RequestContext } from '../../../../request-context';
+import { MASTRA_SCOPES_KEY } from '../../../../request-context';
+import { MastraServerBase } from '../../../../server/base';
 import { MessageList } from '../../../message-list';
+import { resolveAgentScopes } from '../../../scopes';
 import { globalRunRegistry } from '../../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../../types';
 
@@ -110,6 +114,33 @@ describe('runDurableFinishSideEffects', () => {
     );
     expect(createThread).not.toHaveBeenCalled();
     expect(flushMessages).not.toHaveBeenCalled();
+  });
+
+  it('restores the run scopes from persisted entries as Core-written', async () => {
+    class OutdatedServer extends MastraServerBase {}
+    let restored: RequestContext | undefined;
+    authorizeDurableMemory.mockImplementation(async (_checks, input) => {
+      restored = input.requestContext;
+      throw new Error('stop');
+    });
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      saveQueueManager: { flushMessages: vi.fn() },
+      memory: { createThread: vi.fn() },
+    } as unknown as RunRegistryEntry);
+    const initData = {
+      ...makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: false }, { actor: true }),
+      requestContextEntries: JSON.parse(JSON.stringify({ [MASTRA_SCOPES_KEY]: ['org:a'] })),
+    } as DurableAgenticWorkflowInput;
+
+    await expect(
+      runDurableFinishSideEffects({ runId: 'run-1', initData, messageListState: makeMessageListState() }),
+    ).rejects.toThrow('stop');
+
+    expect(restored?.get(MASTRA_SCOPES_KEY)).toEqual(['org:a']);
+    const outdated = { getMastraServer: () => new OutdatedServer({ app: {} }) };
+    expect(() => resolveAgentScopes({ requestContext: restored, mastra: outdated })).not.toThrow();
   });
 
   it('denies before durable title generation when memory reads are denied', async () => {

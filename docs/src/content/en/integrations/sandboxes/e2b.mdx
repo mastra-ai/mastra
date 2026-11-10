@@ -177,6 +177,12 @@ const agent = new Agent({
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
   },
+  {
+    name: 'filesystem',
+    type: 'E2BSandboxFilesystem',
+    description:
+      "The sandbox's disk through E2B's files API. Each operation starts the sandbox if needed and retries once when the sandbox died server-side. Paths are absolute and not confined to a root. Copies, appends, and no-overwrite writes run as one command in the VM. See [Native filesystem](/reference/workspace/sandbox#native-filesystem).",
+  },
 ]}
 />
 
@@ -214,7 +220,9 @@ await handle.sendStdin('input\n')
 await handle.kill()
 ```
 
-The E2B process manager supports reconnecting to processes that were spawned externally or before a reconnection. Call `get(pid)` with a PID to connect to an existing process:
+`list()` returns the processes running in the sandbox, including ones this manager didn't start, plus exited processes whose output hasn't been read yet.
+
+The E2B process manager supports reconnecting to processes that were spawned externally or before a reconnection. Call `get(pid)` with a PID to connect to an existing process. Output written before connecting isn't available:
 
 ```typescript
 const handle = await sandbox.processes.get(existingPid)
@@ -567,28 +575,25 @@ anything — useful for pruning old sha tags with the E2B CLI.
 ### Per-session sandboxes
 
 Hosts that construct one sandbox per session, such as Mastra Factory's
-`sandbox` config, combine the pieces above in a small callback: sandbox
-identity is the session id (id-keyed getOrCreate — the sandbox pauses on
-E2B's idle timeout and resumes by id), and the repo template comes from
-`createRepoTemplate`. The host's session context carries everything the
-template needs, so it can be passed straight through:
+`sandbox` config, use `E2BFactorySandbox`: sandbox identity is the session id
+(id-keyed getOrCreate, so the sandbox pauses on E2B's idle timeout and resumes
+by id), the repo template comes from `createRepoTemplate` over the session's
+repositories, and the project's `cpuCount` and `memoryMb` settings flow into
+the template. See the [FactorySandbox reference](/reference/workspace/factory-sandbox).
 
 ```typescript
 import { MastraFactory } from '@mastra/factory'
-import { E2BSandbox, createRepoTemplate } from '@mastra/e2b'
+import { E2BFactorySandbox } from '@mastra/e2b'
 
 new MastraFactory({
-  sandbox: ctx =>
-    new E2BSandbox({
-      id: ctx.sessionId,
-      // Undefined for a session with no repository.
-      template: createRepoTemplate(ctx),
-    }),
+  sandbox: new E2BFactorySandbox({ apiKey: process.env.E2B_API_KEY }),
 })
 ```
 
-Factory attaches its own session setup to the sandbox it gets back, so the
-callback doesn't wire up a start hook.
+The bare callback form, `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, template: createRepoTemplate(ctx) })`,
+is also supported: factory sees it as a custom provider with no settings to
+tune. Either way, factory attaches its own session setup to the
+sandbox it gets back.
 
 ## Using with Code Mode
 

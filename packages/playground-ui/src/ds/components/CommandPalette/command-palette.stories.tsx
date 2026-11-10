@@ -44,7 +44,7 @@ function CommandPaletteExample() {
         description="Search routes and application resources"
         commandLabel="Search resources"
       >
-        <CommandPaletteInput placeholder="Search routes and resources..." />
+        <CommandPaletteInput placeholder="Search routes and resources" />
         <CommandPaletteBody>
           <CommandPaletteRail aria-label="Search categories">
             <CommandPaletteScope

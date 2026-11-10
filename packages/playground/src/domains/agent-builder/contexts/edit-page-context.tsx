@@ -53,11 +53,11 @@ export const EditPageProvider = ({
   const canPublishToChannel = isOwner && storedAgent.visibility === 'public';
   const isFreshThread = initialUserMessage !== undefined;
 
-  const autosave = useAutosaveAgent({ agentId: agentId!, availableAgentTools, availableSkills });
+  const autosave = useAutosaveAgent({ agentId: agentId, availableAgentTools, availableSkills });
 
   const value = useMemo<EditPageContextValue>(
     () => ({
-      agentId: agentId!,
+      agentId: agentId,
       isOwner,
       canPublishToChannel,
       features,
@@ -83,7 +83,7 @@ export const EditPageProvider = ({
   return (
     <EditPageContext.Provider value={value}>
       <ConversationPanelProvider
-        agentId={agentId!}
+        agentId={agentId}
         features={features}
         availableAgentTools={availableAgentTools}
         availableWorkspaces={availableWorkspaces}

@@ -136,6 +136,31 @@ export function isLockError(error: any): boolean {
   );
 }
 
+const TRANSIENT_NETWORK_PATTERNS = [
+  'fetch failed',
+  'econnreset',
+  'etimedout',
+  'eai_again',
+  'socket hang up',
+  'und_err_',
+];
+
+/**
+ * Checks if an error (or any error in its `cause` chain) is a transient network failure
+ * such as `fetch failed` from a remote libsql client.
+ */
+export function isTransientNetworkError(error: unknown): boolean {
+  let current: any = error;
+  for (let depth = 0; current && depth < 5; depth++) {
+    const text = `${current.message ?? ''} ${current.code ?? ''}`.toLowerCase();
+    if (TRANSIENT_NETWORK_PATTERNS.some(pattern => text.includes(pattern))) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
+}
+
 export function createExecuteWriteOperationWithRetry({
   logger,
   maxRetries,

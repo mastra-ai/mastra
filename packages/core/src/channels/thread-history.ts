@@ -2,6 +2,7 @@ import type { Message, Thread } from 'chat';
 
 import type { ChannelLogContext } from './agent-channels';
 import { chatModule } from './chat-lazy';
+import { layoutBlockTexts } from './slack-blocks';
 
 /**
  * How far past the history window the first-mention walk counts omitted
@@ -35,10 +36,47 @@ export interface ThreadHistoryWindow {
   recent: Message[];
 }
 
-/** Rich text when the platform provided it, else the plain text. */
+/**
+ * Rich text when the platform provided it, else the plain text, followed by
+ * any Slack layout-block text (header, section, context, markdown) the
+ * message text doesn't already contain.
+ */
 export function messageText(message: Message): string {
   const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
-  return richText || message.text;
+  const base = richText || message.text;
+  const blocks = layoutBlockTexts(message.raw);
+  if (!blocks.length) return base;
+
+  const seen = [contentKey(base ?? ''), contentKey(message.text ?? '')];
+  const extra: string[] = [];
+  for (const parts of blocks) {
+    const kept: string[] = [];
+    for (const part of parts) {
+      const key = contentKey(part);
+      const duplicate = key ? seen.some(s => s.includes(key)) : !!base?.includes(part);
+      if (duplicate) continue;
+      seen.push(key);
+      kept.push(part);
+    }
+    if (kept.length) extra.push(kept.join('\n'));
+  }
+  return [base, ...extra].filter(s => s?.trim()).join('\n\n');
+}
+
+/**
+ * Words of `text` with markup removed, space-padded so containment matches
+ * whole words. Blocks arrive as Slack mrkdwn while `formatted` is Markdown and
+ * `text` is plain, so comparing raw strings would miss `*bold*` vs `**bold**`
+ * and link syntax.
+ */
+function contentKey(text: string): string {
+  const words = text
+    .replace(/\[((?:\\.|[^\]\\])*)\]\((?:<[^>]*>|[^)]*)\)/g, '$1')
+    .replace(/<[^|>]*\|([^>]*)>/g, '$1')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .toLowerCase();
+  return words ? ` ${words} ` : '';
 }
 
 /** Gap marker between the thread's first message and the recent window, e.g. `[… 6 earlier Slack messages omitted]`. */

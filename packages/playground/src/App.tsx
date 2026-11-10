@@ -57,17 +57,18 @@ import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import ConnectionsPage from './pages/connections';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
-import CreateDatasetPage from './pages/datasets/new';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ReviewQueuePage from './pages/experiments/review-queue';
 import IntegrationsPage from './pages/integrations';
+import KnowledgePage from './pages/knowledge';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -79,8 +80,10 @@ import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
+import Spans from './pages/spans';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import Threads from './pages/threads';
 import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
@@ -95,11 +98,13 @@ import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
-
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
+
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+import { StudioKnowledgeLinks } from '@/domains/knowledge/studio-knowledge-links';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
+import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
@@ -138,11 +143,13 @@ const RootLayout = () => {
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       <KeyboardShortcutsProvider>
         <GlobalShortcuts />
-        <Layout>
-          <RoutePermissionGuard>
-            <Outlet />
-          </RoutePermissionGuard>
-        </Layout>
+        <StudioKnowledgeLinks>
+          <Layout>
+            <RoutePermissionGuard>
+              <Outlet />
+            </RoutePermissionGuard>
+          </Layout>
+        </StudioKnowledgeLinks>
       </KeyboardShortcutsProvider>
     </LinkComponentProvider>
   );
@@ -313,7 +320,18 @@ export const routes: RouteObject[] = [
         path: '/intelligence/entities/:entityType/:entityId',
         element: <SignalsEntityDetailPage />,
       },
-      { path: '/traces', element: <Traces /> },
+      {
+        element: (
+          <ObservabilityLayout>
+            <Outlet />
+          </ObservabilityLayout>
+        ),
+        children: [
+          { path: '/traces', element: <Traces /> },
+          { path: '/spans', element: <Spans /> },
+          { path: '/threads', element: <Threads /> },
+        ],
+      },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {
@@ -391,6 +409,11 @@ export const routes: RouteObject[] = [
         element: <IntegrationsPage />,
       },
 
+      {
+        path: '/connections',
+        element: <ConnectionsPage />,
+      },
+
       { path: '/processors', element: <Processors /> },
       {
         path: '/processors/:processorId',
@@ -442,13 +465,11 @@ export const routes: RouteObject[] = [
         ],
       },
 
+      { path: '/knowledge', element: <KnowledgePage /> },
+
       ...(isExperimentalFeatures
         ? [
             { path: '/datasets', element: <Datasets /> },
-            {
-              path: '/datasets/new',
-              element: <CreateDatasetPage />,
-            },
             {
               path: '/datasets/:datasetId',
               element: <DatasetPage />,

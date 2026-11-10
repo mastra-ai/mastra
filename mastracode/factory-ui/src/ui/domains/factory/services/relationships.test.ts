@@ -4,6 +4,7 @@ import {
   inferredParentWorkItemId,
   relatedWorkItemIndex,
   relationshipLabel,
+  relationshipPath,
   workItemReferenceLabel,
 } from './relationships';
 import type { WorkItem } from './workItems';
@@ -29,7 +30,6 @@ function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>
     createdAt: '2026-07-17T00:00:00.000Z',
     updatedAt: '2026-07-17T00:00:00.000Z',
     commentCount: 0,
-    feedActivityAt: null,
     ...rest,
     revision: rest.revision ?? 1,
   };
@@ -152,6 +152,25 @@ describe('Factory work item relationships', () => {
     expect(relationshipLabel(linear)).toBe('Work item: ENG-24');
     expect(workItemReferenceLabel(linear)).toBe('ENG-24');
   });
+
+  it.each([
+    { source: 'jira-issue', identifier: 'ENG-42' },
+    { source: 'gitlab-issue', identifier: 'acme/app#7' },
+    { source: 'incidentio-follow-up', identifier: 'INC-42' },
+  ] as const)('names a $source card by its key', ({ source, identifier }) => {
+    const item = workItem({ id: `${source}-1`, source, metadata: { identifier } });
+
+    expect(relationshipLabel(item)).toBe(`Work item: ${identifier}`);
+  });
+
+  it.each([
+    { source: 'github-issue', sourceKey: 'github-issue:24', label: 'Work item: Issue #24' },
+    { source: 'linear-issue', sourceKey: 'linear:ENG-24', label: 'Work item: ENG-24' },
+  ] as const)('reads a $source key off its source key when metadata lost it', ({ source, sourceKey, label }) => {
+    const item = workItem({ id: `${source}-legacy`, source, sourceKey });
+
+    expect(relationshipLabel(item)).toBe(label);
+  });
 });
 
 describe('related work item index', () => {
@@ -200,5 +219,15 @@ describe('related work item index', () => {
     expect(relatedItemsFor(unrelated)).toEqual([]);
     // Board order decides, not the order the buckets are read in.
     expect(relatedItemsFor(multiLinked)).toEqual([branchPr, childOfMultiLinked]);
+  });
+});
+
+describe('relationshipPath', () => {
+  it('opens Work for a pull request card, whether filed there, stored before boards, or not filed yet', () => {
+    const pullRequest = workItem({ id: 'pr', source: 'github-pr' });
+    expect(relationshipPath({ ...pullRequest, board: 'work' }, 'f1')).toBe('/factories/f1/work');
+    expect(relationshipPath({ ...pullRequest, board: null }, 'f1')).toBe('/factories/f1/work');
+    expect(relationshipPath({ source: 'gitlab-pr' }, 'f1')).toBe('/factories/f1/work');
+    expect(relationshipPath(workItem({ id: 'issue', source: 'github-issue' }), 'f1')).toBe('/factories/f1/work');
   });
 });

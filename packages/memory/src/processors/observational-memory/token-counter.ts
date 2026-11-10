@@ -5,7 +5,11 @@ import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import { estimateTokenCount } from 'tokenx';
 
 import { measureImageBuffer } from './measure-image-buffer';
-import { resolveToolResultValue, serializeToolResultForTokenCounting } from './tool-result-helpers';
+import {
+  resolveToolResultValue,
+  serializeToolResultForTokenCounting,
+  toolErrorTextToString,
+} from './tool-result-helpers';
 
 type TokenEstimateCacheEntry = {
   v: number;
@@ -52,7 +56,7 @@ const IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-const TOKEN_ESTIMATE_CACHE_VERSION = 7;
+const TOKEN_ESTIMATE_CACHE_VERSION = 8;
 
 /**
  * Cache `source` marker for token estimates supplied by the caller via
@@ -1818,9 +1822,10 @@ export class TokenCounter {
             overheadDelta -= 12;
           }
         } else {
+          const errorText = toolErrorTextToString(invocation.errorText);
           const fallback = invocation.isError
-            ? invocation.errorText?.trim()
-              ? invocation.errorText
+            ? errorText.trim()
+              ? errorText
               : 'Tool execution failed'
             : '[empty result]';
           tokens += this.readOrPersistPartEstimate(
@@ -1852,7 +1857,8 @@ export class TokenCounter {
         const signature = this.countToolCallSignature(part, invocation);
         tokens += signature.tokens;
         overheadDelta += signature.overheadDelta;
-        const errorMessage = invocation.errorText?.trim() ? invocation.errorText : 'Tool execution failed';
+        const errorText = toolErrorTextToString(invocation.errorText);
+        const errorMessage = errorText.trim() ? errorText : 'Tool execution failed';
         tokens += this.readOrPersistPartEstimate(part, 'tool-result-error', errorMessage);
         return { tokens, overheadDelta, extraMessageDelta };
       }

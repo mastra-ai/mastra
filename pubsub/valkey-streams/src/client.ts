@@ -1,11 +1,5 @@
-import {
-  Batch,
-  Decoder,
-  GlideClient,
-  InfBoundary,
-  type GlideClientConfiguration,
-  type GlideString,
-} from '@valkey/valkey-glide';
+import { Batch, Decoder, GlideClient, InfBoundary } from '@valkey/valkey-glide';
+import type { GlideClientConfiguration, GlideString } from '@valkey/valkey-glide';
 
 export type ValkeyClientOptions = Omit<Partial<GlideClientConfiguration>, 'addresses'> & {
   url?: string;

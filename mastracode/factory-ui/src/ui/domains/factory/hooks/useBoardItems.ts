@@ -1,3 +1,4 @@
+import { boardLoop, boardOf } from '../boardFlow';
 import { useMemo, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -11,7 +12,7 @@ import {
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { persistedSourceKeys } from '../boardItems';
-import { belongsToBoard, itemBoard } from '../boardStages';
+import { belongsToBoard, itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
 import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
@@ -87,9 +88,10 @@ export function useBoardItems({
     // Held in a ref, not in mutation state: two clicks can land in the same render
     // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
-    const boardId = itemBoard(item);
-    if (boardId !== 'work' && boardId !== 'review') {
-      const definition = catalog.data?.find(board => board.id === boardId);
+    const definition = boardOf(catalog.data, item);
+    if (!pullRequestMayEnter(definition, item, toStage)) return;
+    // Only a board without a pull request loop is held to its declared moves here; the server judges the rest.
+    if (boardLoop(definition) === undefined) {
       const phase = definition?.phases.find(candidate => item.stages.includes(candidate.id));
       if (!phase || (phase.id !== toStage && !phase.transitions.some(target => target.to === toStage))) return;
     }
@@ -103,7 +105,11 @@ export function useBoardItems({
     void update
       .mutateAsync({
         id,
-        patch: { metadata: { ...item.metadata, repository: options.repositorySlug } },
+        patch: {
+          metadata: item.workItem
+            ? { repository: options.repositorySlug }
+            : { ...item.metadata, repository: options.repositorySlug },
+        },
       })
       .then(patched => requestTransition(patched, toStage, options, release))
       .catch(error => {
@@ -142,7 +148,9 @@ export function useBoardItems({
       if (customPrompt) {
         await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
       }
-      if (!item.stages.includes(toStage)) requestTransition(item, toStage, { cause });
+      if (!item.stages.includes(toStage) && pullRequestMayEnter(boardOf(catalog.data, item), item, toStage)) {
+        requestTransition(item, toStage, { cause });
+      }
     })().catch(error => {
       const failure = error instanceof Error ? error : new Error('The card could not be filed.');
       setDropError(failure);

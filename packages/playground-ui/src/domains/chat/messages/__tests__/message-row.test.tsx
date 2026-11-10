@@ -18,6 +18,7 @@ import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/do
 import { ArrivalScope } from '@/ds/components/Arrival';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 import { server } from '@/test/msw-server';
+import { toUntrustedAppContext } from '@/utils/mcp-app-context';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -68,14 +69,13 @@ const omPart = (name: string, data: Record<string, unknown>) => ({
   data,
 });
 
-const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
-  ({
-    id: 'msg-1',
-    role: 'assistant',
-    createdAt: new Date(),
-    content: { format: 2, parts: [] },
-    ...over,
-  }) as MastraDBMessage;
+const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage => ({
+  id: 'msg-1',
+  role: 'assistant',
+  createdAt: new Date(),
+  content: { format: 2, parts: [] },
+  ...over,
+});
 
 describe('MessageRow', () => {
   describe('when a user message is a skill envelope', () => {
@@ -100,6 +100,27 @@ describe('MessageRow', () => {
     });
   });
 
+  describe('when a user message carries MCP App context', () => {
+    const appContextMessage = () =>
+      baseMessage({
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Show me the traces for the selection I drilled into.' },
+            { type: 'text', text: toUntrustedAppContext(['{"page":"traces","filters":[]}']) },
+          ],
+        },
+      });
+
+    it('shows only the text the user typed', () => {
+      const { container } = renderRow(appContextMessage());
+      expect(screen.getByText('Show me the traces for the selection I drilled into.')).toBeTruthy();
+      expect(container.textContent).not.toContain('mcp-app-context');
+      expect(container.textContent).not.toContain('"page":"traces"');
+    });
+  });
+
   it('renders assistant text as markdown', () => {
     renderRow(
       baseMessage({
@@ -108,6 +129,22 @@ describe('MessageRow', () => {
       }),
     );
     expect(screen.getByText('world')).toBeTruthy();
+  });
+
+  it('shows a persisted terminal error after the partial reply', () => {
+    const { container } = renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'partial answer' },
+            { type: 'error', error: { name: 'APICallError', message: 'The model request failed.' } },
+          ],
+        },
+      }),
+    );
+    expect(container.textContent).toMatch(/partial answer[\s\S]*APICallError[\s\S]*The model request failed\./);
   });
 
   // The reveal only paces if the factory keeps the text part mounted as the
@@ -287,8 +324,8 @@ describe('MessageRow', () => {
     const { container } = renderRow(
       baseMessage({
         id: 'sig-1',
-        role: 'signal' as MastraDBMessage['role'],
-        type: 'reactive' as MastraDBMessage['type'],
+        role: 'signal',
+        type: 'reactive',
         content: {
           format: 2,
           metadata: { signal: { type: 'reactive', tagName: 'system-reminder' } },
@@ -306,8 +343,8 @@ describe('MessageRow', () => {
     const { container } = renderRow(
       baseMessage({
         id: 'sig-unknown',
-        role: 'signal' as MastraDBMessage['role'],
-        type: 'internal' as MastraDBMessage['type'],
+        role: 'signal',
+        type: 'internal',
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'internal signal body' }],
@@ -321,8 +358,8 @@ describe('MessageRow', () => {
     renderRow(
       baseMessage({
         id: 'sig-user',
-        role: 'signal' as MastraDBMessage['role'],
-        type: 'user' as MastraDBMessage['type'],
+        role: 'signal',
+        type: 'user',
         content: { format: 2, parts: [{ type: 'text', text: 'echoed user signal' }] },
       }),
     );
@@ -352,6 +389,36 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+  });
+
+  describe('when a command exits non-zero, as the stream saves its exit', () => {
+    it('marks the call failed and says how it exited', () => {
+      renderRow(
+        baseMessage({
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'mastra_workspace_execute_command',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: { command: 'grep -rl DashboardQuery src/schema' },
+                  result: 'Exit code: 1',
+                },
+              },
+              { type: 'data-sandbox-exit', data: { exitCode: 1, success: false, toolCallId: 'call-1' } },
+            ],
+          },
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('exit 1')).toBeTruthy();
+    });
   });
 
   describe('when a completed tool result has image model output', () => {
@@ -459,7 +526,8 @@ describe('MessageRow', () => {
           toolCall('call-3'),
         ]),
       );
-      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 failed')).toBeTruthy();
     });
 
     it('does not count recorded legacy tool errors as successful results', () => {
@@ -480,7 +548,8 @@ describe('MessageRow', () => {
           toolCall('three'),
         ]),
       );
-      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 failed')).toBeTruthy();
     });
 
     it('does not count unfinished calls in stopped history as successful', () => {
@@ -491,7 +560,8 @@ describe('MessageRow', () => {
           toolCall('call-3', 'genericTool', 'call'),
         ]),
       );
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
     });
 
     it('identifies only unfinished calls inside the expanded group', () => {
@@ -534,7 +604,8 @@ describe('MessageRow', () => {
       );
       const stored = messages.get.all.db();
       renderRow(stored[0]);
-      expect(screen.getByText('2 OK · 1 incomplete')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 incomplete')).toBeTruthy();
     });
 
     it('preserves incomplete counts when a live row stops and is remounted as history', () => {
@@ -558,13 +629,15 @@ describe('MessageRow', () => {
       const pendingCall = within(screen.getAllByRole('group', { name: 'genericTool' })[1]).getByRole('button');
       fireEvent.click(pendingCall);
       rerender(row(false));
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
       expect(screen.getAllByText('Incomplete')).toHaveLength(2);
       expect(pendingCall.getAttribute('aria-expanded')).toBe('true');
       expect(pendingCall.isConnected).toBe(true);
       unmount();
       renderRow(structuredClone(message));
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
       fireEvent.click(within(screen.getByRole('group', { name: 'Tool group: 3 steps' })).getByRole('button'));
       expect(screen.getAllByText('Incomplete')).toHaveLength(2);
     });

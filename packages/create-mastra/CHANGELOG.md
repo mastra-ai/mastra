@@ -1,5 +1,155 @@
 # create-mastra
 
+## 1.39.0-alpha.3
+
+## 1.39.0-alpha.2
+
+## 1.39.0-alpha.1
+
+## 1.39.0-alpha.0
+
+### Patch Changes
+
+- Fixed new projects getting an organization (v2) Gateway key, which broke Studio threads with `Gateway API error 404`. New projects now get a Gateway project key, so Studio memory and threads work again. ([#29369](https://github.com/mastra-ai/mastra/pull/29369))
+
+## 1.38.0
+
+## 1.38.0-alpha.3
+
+## 1.38.0-alpha.2
+
+## 1.38.0-alpha.1
+
+## 1.38.0-alpha.0
+
+## 1.37.0
+
+### Minor Changes
+
+- Added Mastra Gateway as a model provider in `create-mastra`. Pick **Mastra Gateway** to call every model with one key: the CLI signs you in to Mastra in the browser, creates a Gateway API key, writes it to `.env` as `MASTRA_GATEWAY_API_KEY`, and points the agent at `mastra/` models. When your balance is $0, it offers to open the Mastra dashboard's Add credits page. ([#28718](https://github.com/mastra-ai/mastra/pull/28718))
+
+  ```bash
+  npx create-mastra@latest my-app --llm mastra
+  ```
+
+## 1.37.0-alpha.3
+
+### Minor Changes
+
+- Added Mastra Gateway as a model provider in `create-mastra`. Pick **Mastra Gateway** to call every model with one key: the CLI signs you in to Mastra in the browser, creates a Gateway API key, writes it to `.env` as `MASTRA_GATEWAY_API_KEY`, and points the agent at `mastra/` models. When your balance is $0, it offers to open the Mastra dashboard's Add credits page. ([#28718](https://github.com/mastra-ai/mastra/pull/28718))
+
+  ```bash
+  npx create-mastra@latest my-app --llm mastra
+  ```
+
+## 1.37.0-alpha.2
+
+## 1.37.0-alpha.1
+
+## 1.37.0-alpha.0
+
+## 1.36.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`posthog-node@^5.57.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.57.1) (from `^5.46.1`, in `devDependencies`)
+  - Updated dependency [`tinyexec@^1.3.1` ↗︎](https://www.npmjs.com/package/tinyexec/v/1.3.1) (from `^1.1.1`, in `devDependencies`)
+
+## 1.36.0-alpha.7
+
+## 1.36.0-alpha.6
+
+## 1.36.0-alpha.5
+
+## 1.36.0-alpha.4
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`posthog-node@^5.57.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.57.1) (from `^5.46.1`, in `devDependencies`)
+  - Updated dependency [`tinyexec@^1.3.1` ↗︎](https://www.npmjs.com/package/tinyexec/v/1.3.1) (from `^1.1.1`, in `devDependencies`)
+
+## 1.36.0-alpha.3
+
+## 1.36.0-alpha.2
+
+## 1.36.0-alpha.1
+
+## 1.35.1-alpha.0
+
+## 1.35.0
+
+### Patch Changes
+
+- Platform sign-ins started from `create-mastra` are now attributed to `create-mastra`, so new Mastra accounts can be traced back to it. ([#27229](https://github.com/mastra-ai/mastra/pull/27229))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.35.0-alpha.13
+
+## 1.35.0-alpha.12
+
+## 1.35.0-alpha.11
+
+## 1.35.0-alpha.10
+
+## 1.35.0-alpha.9
+
+## 1.35.0-alpha.8
+
+## 1.35.0-alpha.7
+
+## 1.35.0-alpha.6
+
+## 1.35.0-alpha.5
+
+## 1.34.3-alpha.4
+
+## 1.34.3-alpha.3
+
+## 1.34.3-alpha.2
+
+### Patch Changes
+
+- Platform sign-ins started from `create-mastra` are now attributed to `create-mastra`, so new Mastra accounts can be traced back to it. ([#27229](https://github.com/mastra-ai/mastra/pull/27229))
+
+## 1.34.3-alpha.1
+
+## 1.34.3-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.34.2
+
+## 1.34.2-alpha.9
+
+## 1.34.2-alpha.8
+
+## 1.34.2-alpha.7
+
+## 1.34.2-alpha.6
+
+## 1.34.2-alpha.5
+
+## 1.34.2-alpha.4
+
+## 1.34.2-alpha.3
+
+## 1.34.2-alpha.2
+
+## 1.34.2-alpha.1
+
+## 1.34.2-alpha.0
+
+## 1.34.1
+
+## 1.34.1-alpha.4
+
 ## 1.34.1-alpha.3
 
 ## 1.34.1-alpha.2

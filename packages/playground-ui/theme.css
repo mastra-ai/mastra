@@ -10,6 +10,7 @@
  *   colors      raw ramps — background, gray, gray-alpha, chromatic hues, Mastra brand
  *   status      status, badge, and product roles
  *   data-viz    chart series and span-type hues
+ *   code        syntax highlight roles
  *   surfaces    fill ladder, boundary ladder, elevation, scrim
  *   typography  text roles and font families
  *   scale       spacing multiplier, named rungs, radii, breakpoints
@@ -23,6 +24,7 @@
 @import './theme/colors.css';
 @import './theme/status.css';
 @import './theme/data-viz.css';
+@import './theme/code.css';
 @import './theme/surfaces.css';
 @import './theme/typography.css';
 @import './theme/scale.css';
@@ -45,6 +47,18 @@
      text read as a second ink instead of stepping back. */
   --muted-foreground: var(--gray-8);
   --placeholder: var(--gray-7);
+  /* The icons inside an interactive control (see `controlIconState`). A labelled control's
+     icons stay muted on hover: the label and surface answer it. Icon-only controls and lists
+     retune the pair, never the rule. */
+  --control-icon-rest: var(--muted-foreground);
+  --control-icon-hover: var(--muted-foreground);
+  /* The clock a time field draws in place of the browser's picker icon (see `Input`). An image
+     can't read CSS variables, so the stroke repeats `--muted-foreground` (`--gray-8`) per theme. */
+  --time-field-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='oklch(0.65 0 0)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
+}
+
+html.light {
+  --time-field-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='oklch(0.4459 0 0)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 6v6l4 2'/%3E%3C/svg%3E");
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled

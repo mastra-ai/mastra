@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { ToolTracker, editOrPostMessage, extractErrorMessage, postFileAttachment } from '../stream-helpers';
+import { ChunkFrom } from '../../stream/types';
+import {
+  ToolTracker,
+  editOrPostMessage,
+  extractErrorMessage,
+  postFileAttachment,
+  postStreamError,
+} from '../stream-helpers';
 
 describe('ToolTracker', () => {
   it('tracks a tool start and returns enrichment', () => {
@@ -291,5 +298,47 @@ describe('extractErrorMessage', () => {
   it('returns null/undefined unchanged', () => {
     expect(extractErrorMessage(null)).toBe(null);
     expect(extractErrorMessage(undefined)).toBe(undefined);
+  });
+});
+
+describe('postStreamError', () => {
+  it('logs the status and request id of a provider failure but not its raw response body', async () => {
+    const error = Object.assign(new Error('Bad Request'), {
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: 'prompt is too long' }, echoed: 'SECRET_PROMPT_TEXT' }),
+      responseHeaders: { 'request-id': 'req_123' },
+    });
+    const logger = { error: vi.fn(), debug: vi.fn() };
+    const post = vi.fn(async () => undefined);
+
+    await postStreamError({
+      chunk: { type: 'error', runId: 'r', from: 'AGENT', payload: { error } } as any,
+      chatThread: { post } as any,
+      platform: 'slack',
+      logger: logger as any,
+    });
+
+    expect(post).toHaveBeenCalledWith('❌ Error: Bad Request (HTTP 400): prompt is too long (request id req_123)');
+    expect(logger.error).toHaveBeenCalledWith('[slack] Stream completed with error', {
+      error: 'Bad Request (HTTP 400): prompt is too long (request id req_123)',
+      statusCode: 400,
+      requestId: 'req_123',
+    });
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain('SECRET_PROMPT_TEXT');
+  });
+
+  it('hands a custom formatter the provider frame behind a plain stream error, so it can name the failure', async () => {
+    const frame = { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } };
+    const formatError = vi.fn((error: Error) => JSON.stringify(error.cause));
+    const post = vi.fn(async () => undefined);
+
+    await postStreamError({
+      chunk: { type: 'error', runId: 'r', from: ChunkFrom.AGENT, payload: { error: frame } },
+      chatThread: { post },
+      platform: 'slack',
+      formatError,
+    });
+
+    expect(post).toHaveBeenCalledWith(JSON.stringify(frame));
   });
 });

@@ -78,6 +78,10 @@ export function createLlmsRedirect(redirect) {
   }
 }
 
+export function hasWildcardSource(source) {
+  return source.includes(':path') || source.includes('*')
+}
+
 export function assertNoDuplicateSources(redirects) {
   const seen = new Map()
 
@@ -113,28 +117,41 @@ export function generateRedirects(sourceRedirects) {
   assertNoRedirectChains(sourceRedirects)
 
   const generated = sourceRedirects.filter(shouldGenerateLlmsRedirect).map(createLlmsRedirect)
-  const redirects = [...sourceRedirects, ...generated]
+  // Vercel takes the first matching rule, so a wildcard source has to come after every more
+  // specific rule it would otherwise swallow, including the `/llms.txt` companions generated below.
+  const redirects = [
+    ...sourceRedirects.filter(redirect => !hasWildcardSource(redirect.source)),
+    ...generated,
+    ...sourceRedirects.filter(redirect => hasWildcardSource(redirect.source)),
+  ]
   assertNoDuplicateSources(redirects)
   return redirects
 }
 
-export async function main() {
-  const raw = await fs.readFile(sourcePath, 'utf8')
-  const config = JSON.parse(raw)
-
+/** Builds the docs/vercel.json file content from the authored redirects config. */
+export function renderVercelConfig(config) {
   if (!Array.isArray(config.redirects)) {
     throw new Error('Expected redirects array in vercel.redirects.json')
   }
 
-  const redirects = generateRedirects(config.redirects)
-  const generatedCount = redirects.length - config.redirects.length
-
   const output = {
+    $schema: 'https://openapi.vercel.sh/vercel.json',
+    // docs dependencies use pnpm `catalog:` versions, which only pnpm can resolve
+    installCommand: 'pnpm install --frozen-lockfile',
     headers: HEADERS,
-    redirects,
+    redirects: generateRedirects(config.redirects),
   }
 
-  await fs.writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`)
+  return `${JSON.stringify(output, null, 2)}\n`
+}
+
+export async function main() {
+  const config = JSON.parse(await fs.readFile(sourcePath, 'utf8'))
+  const content = renderVercelConfig(config)
+  const redirects = JSON.parse(content).redirects
+  const generatedCount = redirects.length - config.redirects.length
+
+  await fs.writeFile(outputPath, content)
   console.log(
     `Wrote ${redirects.length} redirects (${config.redirects.length} base + ${generatedCount} llms companions)`,
   )

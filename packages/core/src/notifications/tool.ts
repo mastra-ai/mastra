@@ -45,6 +45,13 @@ type NotificationToolAgent = {
 const isReadable = (notification: NotificationRecord) =>
   notification.status === 'pending' || notification.status === 'delivered';
 
+/**
+ * Records a default list shows and then marks seen. `failed` records ran out of delivery
+ * attempts, so the inbox listing is the only place the recipient learns delivery gave up;
+ * marking them seen once shown keeps them from reappearing on every list.
+ */
+const isUnseen = (notification: NotificationRecord) => isReadable(notification) || notification.status === 'failed';
+
 const DEFAULT_LIST_LIMIT = 20;
 
 /**
@@ -58,7 +65,7 @@ const toInboxProjection = (notification: NotificationRecord) => {
 };
 
 /**
- * Viewing a notification marks it as seen: any pending/delivered notification returned to
+ * Viewing a notification marks it as seen: any pending/delivered/failed notification returned to
  * the agent transitions to 'seen' so the pending backlog drains as the agent triages it.
  * Without this, summarized notifications stayed 'pending' forever (the summary digest is
  * consumed without any per-record transition) and every list returned the full backlog.
@@ -74,7 +81,7 @@ async function markViewedNotificationsSeen({
   notifications: NotificationRecord[];
   storage: NotificationsStorage;
 }): Promise<Set<string>> {
-  const ids = notifications.filter(isReadable).map(notification => notification.id);
+  const ids = notifications.filter(isUnseen).map(notification => notification.id);
   if (ids.length === 0) return new Set();
   try {
     const updated = await storage.updateNotificationsStatus({ threadId, ids, status: 'seen' });
@@ -149,7 +156,7 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
   return createTool({
     id: 'notification-inbox',
     description:
-      'Inspect and manage the current thread notification inbox. Use this to list unread notifications, read full details after a summary, mark notifications seen, dismiss, archive, or search old notifications. Listing, reading, or searching automatically marks the returned unread notifications as seen; list defaults to unread notifications unless a status is given.',
+      'Inspect and manage the current thread notification inbox. Use this to list unread notifications, read full details after a summary, mark notifications seen, dismiss, archive, or search old notifications. Listing, reading, or searching automatically marks the returned unread notifications as seen; list defaults to unread and failed-delivery notifications unless a status is given.',
     inputSchema: notificationActionSchema,
     execute: async (input: NotificationInboxAction, context) => {
       const threadId = input.threadId ?? context?.agent?.threadId;
@@ -162,9 +169,9 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
         const limit = input.limit ?? DEFAULT_LIST_LIMIT;
         const notifications = await storage.listNotifications({
           threadId,
-          // Default list to unread: auto-seen bumps updatedAt (the sort key), so listing every
+          // Default list to unread and failed: auto-seen bumps updatedAt (the sort key), so listing every
           // status would keep returning the page just viewed. Search spans all statuses.
-          status: input.status ?? (input.action === 'list' ? ['pending', 'delivered'] : undefined),
+          status: input.status ?? (input.action === 'list' ? ['pending', 'delivered', 'failed'] : undefined),
           priority: input.priority,
           source: input.source,
           ...(input.action === 'search' ? { search: input.query! } : {}),
@@ -173,8 +180,10 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
         const page = notifications.slice(0, limit);
         const seenIds = await markViewedNotificationsSeen({ threadId, notifications: page, storage });
         return {
+          // A failed record keeps reporting `failed` on the listing that surfaces it, so the
+          // recipient sees delivery gave up; storage now holds it as seen.
           notifications: page.map(notification =>
-            seenIds.has(notification.id)
+            seenIds.has(notification.id) && notification.status !== 'failed'
               ? { ...toInboxProjection(notification), status: 'seen' as const }
               : toInboxProjection(notification),
           ),

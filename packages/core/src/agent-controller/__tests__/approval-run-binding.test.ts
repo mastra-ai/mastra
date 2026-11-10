@@ -20,7 +20,8 @@ import { Agent } from '../../agent';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
-import { SUSPENDED_RUN_AGENT_KEY, THREAD_OWNER_ID_CONTEXT_KEY, type Session } from '../session';
+import { SUSPENDED_RUN_AGENT_KEY, THREAD_OWNER_ID_CONTEXT_KEY } from '../session';
+import type { Session } from '../session';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerRequestContext } from '../types';
 
@@ -513,5 +514,64 @@ describe('tool approvals keep the run step budget', () => {
     expect(sendToolApproval).toHaveBeenCalledTimes(1);
     expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.maxSteps).toBe(1000);
     expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.savePerStep).toBe(false);
+  });
+});
+
+describe('a user message that interrupts a parked approval', () => {
+  // Regression (#28342): a run reattached from storage has no request context of
+  // its own, so the decline continuation that a new user message triggers ran
+  // without the sender's `user`. Tenant credential resolution then failed with
+  // "the request has no authenticated user" on every message.
+  it('declines the gate with the sender request context', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+    const resourceId = session.identity.getResourceId();
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('ask');
+    vi.spyOn(session.thread, 'getById').mockResolvedValue({ id: 'thread-a', resourceId } as any);
+    vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-a' }),
+      persisted: Promise.resolve(),
+      signal: {},
+    } as any);
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    const senderContext = new RequestContext();
+    senderContext.set('user', { id: 'user-1', workosId: 'user-1' });
+
+    let sent: Promise<unknown> | undefined;
+    session.subscribe(event => {
+      if (event.type !== 'tool_approval_required' || sent) return;
+      sent = session.sendSignal({ content: 'do something else instead' }, { requestContext: senderContext }).accepted;
+    });
+
+    // A run reattached after a restart or reload: it has no request context.
+    const chunks = [{ type: 'start', runId: 'run-a' }, toolCallApprovalChunk(), finishChunk()];
+    const subscription = {
+      stream: (async function* () {
+        yield* chunks;
+      })(),
+      activeRunId: () => 'run-a',
+      __getCurrentRunRequestContext: () => undefined,
+      abort: () => {},
+      unsubscribe: () => {},
+    };
+    session.stream.attach({
+      subscription: subscription as any,
+      agent,
+      key: `${agent.id}:${resourceId}:thread-a`,
+      resourceId,
+      threadId: 'thread-a',
+    });
+    await session.processSubscribedThreadStream(subscription as any);
+    await sent;
+
+    expect(sendToolApproval).toHaveBeenCalledTimes(1);
+    const call = sendToolApproval.mock.calls[0]?.[0];
+    expect(call?.approved).toBe(false);
+    expect(call?.declineContext?.reason).toBe('interrupted_by_user_message');
+    expect(call?.requestContext?.get('user')).toEqual({ id: 'user-1', workosId: 'user-1' });
   });
 });

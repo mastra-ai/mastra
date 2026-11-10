@@ -10,12 +10,11 @@ export interface PullRequestSubscription {
 }
 
 export function pullRequestSubscriptionsQueryKey(
-  resourceId: string,
+  sessionId: string,
   threadId: string | undefined,
-  projectPath?: string,
   provider: ChangeRequestProvider = 'github',
 ) {
-  return [provider, 'subscriptions', resourceId, threadId, projectPath] as const;
+  return [provider, 'subscriptions', sessionId, threadId] as const;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -45,13 +44,11 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
  */
 export async function listPullRequestSubscriptions(
   baseUrl: string,
-  resourceId: string,
+  sessionId: string,
   threadId: string,
-  projectPath?: string,
   provider: ChangeRequestProvider = 'github',
 ): Promise<PullRequestSubscription[]> {
-  const params = new URLSearchParams({ resourceId, threadId });
-  if (projectPath) params.set('scope', projectPath);
+  const params = new URLSearchParams({ sessionId, threadId });
   const response = await fetch(`${baseUrl}/web/${provider}/subscriptions?${params}`, { credentials: 'include' });
   if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
 

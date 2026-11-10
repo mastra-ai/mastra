@@ -666,6 +666,7 @@ function buildIfIdleOptions(ifIdle: ScheduleIfIdle): AgentSignalIfIdleOptions {
     ...(requestContext
       ? { streamOptions: { requestContext: new RequestContext(Object.entries(requestContext)) } }
       : {}),
+    ...(ifIdle.requireClaimedOwner ? { requireClaimedOwner: true } : {}),
   };
 }
 

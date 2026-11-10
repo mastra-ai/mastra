@@ -12,9 +12,8 @@ import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domai
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,
-  WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
-import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
+import type { FactoryDeferredDecisionRecord, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
@@ -61,6 +60,7 @@ const audit: AuditEmitter = {
 };
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
@@ -189,24 +189,127 @@ describe('installed board catalog', () => {
     expect(response.status).toBe(200);
     const { boards } = await response.json();
     expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
-      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+      includeDefaultBoards ? ['work', 'release'] : ['release'],
     );
+    // Deprecated `title`/`role` stay beside their replacements for older clients.
     expect(boards.at(-1)).toEqual({
       id: 'release',
+      name: 'Release Preview',
       title: 'Release Preview',
       initialPhase: 'queued',
+      // No phase reviews or builds, so the board has no pull request loop: only its terminal phase finishes cards.
+      flow: { completed: 'shipped', canceled: 'shipped' },
       phases: [
-        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
+        {
+          id: 'queued',
+          name: 'Queued',
+          title: 'Queued',
+          kind: 'resting',
+          nextPhases: ['preparing'],
+          transitions: [{ outcome: null, to: 'preparing' }],
+        },
         {
           id: 'preparing',
+          name: 'Preparing',
           title: 'Preparing',
           kind: 'working',
+          nextPhases: ['shipped'],
+          context: 'release-preparer',
           role: 'release-preparer',
+          autoStart: false,
           transitions: [{ outcome: null, to: 'shipped' }],
         },
-        { id: 'shipped', title: 'Shipped', kind: 'terminal', transitions: [] },
+        { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },
       ],
     });
+  });
+
+  it("names the phase playing each part of each board's pull request loop", async () => {
+    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry());
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    expect(body.boards[0]).toMatchObject({
+      id: 'work',
+      flow: {
+        triage: 'triage',
+        build: 'execute',
+        pullRequestReview: 'pr-review',
+        completed: 'done',
+        canceled: 'canceled',
+      },
+    });
+    // Which board is the default is DEFAULT_BOARD_ID, and the build context is the build phase's own.
+    expect(body.boards[0]).not.toHaveProperty('default');
+    expect(body.boards[0].flow).not.toHaveProperty('buildContext');
+  });
+
+  it('sends the conditions a phase starts and approves its exit tool under', async () => {
+    const lowEffort = {
+      operator: 'AND' as const,
+      conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'effort:low' }],
+    };
+    const board = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['planning', 'shipping'] },
+        planning: {
+          name: 'Planning',
+          kind: 'working',
+          nextPhases: ['shipping'],
+          autoStart: true,
+          autoStartWhen: lowEffort,
+          exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: lowEffort },
+        },
+        shipping: { name: 'Shipping', kind: 'working', nextPhases: ['shipped'], autoStart: true, exitTool: 'ship' },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    );
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    const [, planning, shipping] = body.boards[0].phases;
+    expect(planning).toMatchObject({
+      autoStart: true,
+      autoStartWhen: lowEffort,
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: lowEffort },
+    });
+    // No condition means every card.
+    expect(shipping).toMatchObject({ autoStart: true, exitTool: { id: 'ship', autoApprove: false } });
+    expect(shipping).not.toHaveProperty('autoStartWhen');
+    expect(shipping.exitTool).not.toHaveProperty('autoApproveWhen');
+  });
+
+  it('sends the skill a custom phase runs, so Settings can show it', async () => {
+    const board = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
+        drafting: { name: 'Drafting', kind: 'working', nextPhases: ['shipped'], runner: { skill: 'release-notes' } },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    );
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    const [queued, drafting] = body.boards[0].phases;
+    expect(drafting).toMatchObject({ kind: 'working', skill: 'release-notes' });
+    expect(queued).not.toHaveProperty('skill');
   });
 
   it('supports an empty installation', async () => {
@@ -265,6 +368,20 @@ describe('auth and scoping', () => {
 
 // ── Create / upsert ──────────────────────────────────────────────────────
 describe('POST /web/factory/projects/:id/work-items', () => {
+  it('refuses a card filed onto the retired Review board, and files nothing', async () => {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        board: 'review',
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:7' },
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: 'invalid_board' });
+    expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId: PROJECT_ID })).toEqual([]);
+  });
+
   it('creates a work item with server-stamped history', async () => {
     const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     expect(res.status).toBe(200);
@@ -391,6 +508,45 @@ describe('POST /web/factory/projects/:id/work-items', () => {
 
 // ── Read wire ────────────────────────────────────────────────────────────
 describe('work item read wire', () => {
+  it('serves normalized source facts on create, list and update while retaining the legacy wire fields', async () => {
+    const response = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        metadata: { number: 42, state: 'closed', labels: ['bug'], author: 'reporter', authorTrusted: true },
+      }),
+    );
+    const created = await response.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema.parse(created)).toEqual(created);
+    expect(created.workItem.workItem).toMatchObject({
+      provider: 'github',
+      key: 'acme/app#42',
+      title: 'Fix the login flow',
+      state: 'closed',
+      labels: ['bug'],
+      author: 'reporter',
+    });
+    expect(created.workItem.metadata).toMatchObject({ number: 42, author: 'reporter', authorTrusted: true });
+    expect(created.workItem.workItem.metadata).not.toHaveProperty('authorTrusted');
+
+    const listed = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(listed)).toEqual(listed);
+    expect(listed.workItems[0].workItem).toEqual(created.workItem.workItem);
+
+    const updated = await (
+      await json('PATCH', `/web/factory/work-items/${created.workItem.id}`, { title: 'Updated title' })
+    ).json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemUpdate.responseSchema.parse(updated)).toEqual(updated);
+    expect(updated.workItem.workItem.title).toBe('Updated title');
+    expect(updated.workItem.title).toBe('Updated title');
+    for (const card of [created.workItem, listed.workItems[0], updated.workItem]) {
+      expect(card.workItem).not.toHaveProperty('kind');
+      expect(card.workItem.sources).toHaveLength(1);
+      expect(card.workItem.sources[0]).toMatchObject({ provider: 'github', sourceType: 'issue' });
+      expect(card.workItem.sources[0]).not.toHaveProperty('kind');
+    }
+  });
+
   it('keeps internal tokens in storage and out of every read', async () => {
     const { item } = await seed.workItems.upsert({
       orgId: 'org1',
@@ -475,7 +631,8 @@ describe('work item read wire', () => {
     expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
 
     const [stored] = await listItems();
-    expect(stored?.metadata).toEqual({ number: 42, prNumber: 7 });
+    expect(stored?.metadata).toEqual({ prNumber: 7 });
+    expect(stored?.workItem.metadata).toEqual({ number: 42 });
   });
 });
 
@@ -679,19 +836,18 @@ describe('PATCH /web/factory/work-items/:id', () => {
     expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { title: '' })).status).toBe(400);
   });
 
-  it('stamps a hands-off grant once and refuses anything but true', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+  it('no longer takes a hands-off plan grant: alone it changes nothing, beside a real field it is ignored', async () => {
     const item = await createItem();
-    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true })).status).toBe(200);
-    const granted = (await listItems())[0]?.plansPreapprovedAt;
-    expect(granted).toBeInstanceOf(Date);
+    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true })).status).toBe(400);
+    expect((await listItems())[0]).toMatchObject({ revision: item.revision });
+    expect((await listItems())[0]).not.toHaveProperty('plansPreapprovedAt');
 
-    vi.setSystemTime(new Date('2030-01-02T00:00:00.000Z'));
-    await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true });
-    expect((await listItems())[0]?.plansPreapprovedAt).toEqual(granted);
-
-    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: false })).status).toBe(400);
+    const renamed = await json('PATCH', `/web/factory/work-items/${item.id}`, {
+      title: 'Renamed',
+      plansPreapproved: true,
+    });
+    expect(renamed.status).toBe(200);
+    expect((await listItems())[0]).toMatchObject({ title: 'Renamed' });
   });
 });
 
@@ -704,7 +860,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
   const transition = (item: { id: string; revision: number }, overrides: Record<string, unknown> = {}) =>
     json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`, {
       board: 'work',
-      stage: 'execute',
+      stage: 'planning',
       expectedRevision: item.revision,
       requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
       cause: 'board_drag',
@@ -717,12 +873,12 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const res = await transition(item);
     expect(res.status).toBe(200);
     const { result } = await res.json();
-    expect(result).toMatchObject({ status: 'accepted', itemId: item.id, revision: 2, stage: 'execute' });
+    expect(result).toMatchObject({ status: 'accepted', itemId: item.id, revision: 2, stage: 'planning' });
     const [canonical] = await listItems();
-    expect(canonical?.stages).toEqual(['execute']);
+    expect(canonical?.stages).toEqual(['planning']);
     expect(canonical?.stageHistory.map(entry => [entry.stage, entry.exitedAt !== undefined])).toEqual([
       ['intake', true],
-      ['execute', false],
+      ['planning', false],
     ]);
     expect(auditRecorded).toContainEqual(
       expect.objectContaining({
@@ -747,7 +903,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
         },
         body: JSON.stringify({
           board: 'work',
-          stage: 'execute',
+          stage: 'planning',
           expectedRevision: item.revision,
           requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
           cause: 'board_drag',
@@ -775,18 +931,18 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
   it('returns typed stale without overwriting the winner', async () => {
     const item = await createItem();
     expect((await transition(item)).status).toBe(200);
-    const stale = await transition(item, { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', stage: 'planning' });
+    const stale = await transition(item, { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', stage: 'triage' });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
-    expect((await listItems())[0]?.stages).toEqual(['execute']);
+    expect((await listItems())[0]?.stages).toEqual(['planning']);
   });
 
   it('replays immutable ingress without evaluating a second destination', async () => {
     const item = await createItem();
     const first = await transition(item);
-    const replay = await transition(item, { stage: 'planning' });
+    const replay = await transition(item, { stage: 'triage' });
     expect(await replay.json()).toEqual(await first.json());
-    expect((await listItems())[0]?.stages).toEqual(['execute']);
+    expect((await listItems())[0]?.stages).toEqual(['planning']);
   });
 
   it('rejects non-UUID human request identities before they can collide across work items', async () => {
@@ -874,6 +1030,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         orgId: 'org1',
         userId: 'u1',
         factoryProjectId: PROJECT_ID,
+        modelScope: 'factory',
         defaultModelId: 'anthropic/claude-fable-5',
         requestContext,
       }),
@@ -997,6 +1154,8 @@ describe('work item relations', () => {
     });
 
     expect(child.workItem.parentWorkItemId).toBe(parent.workItem.id);
+    // A pull request filed without a board lands on Work, where it is reviewed.
+    expect(child.workItem.board).toBe('work');
 
     const { body: repeated } = await create('child', {
       externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },
@@ -1654,184 +1813,6 @@ describe('GET /web/factory/projects/:id/attention', () => {
     });
   });
 
-  it('repairs only legacy decisions whose canonical work is finished', async () => {
-    const terminalResponse = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ title: 'Terminal repair target' }),
-    );
-    const terminalItem = (await terminalResponse.json()).workItem;
-    const now = new Date('2030-01-01T00:00:00.000Z');
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: terminalItem.id,
-      ingress: { identity: 'legacy-repair-terminal', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: terminalItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'transition',
-          board: 'work',
-          stage: 'done',
-          idempotencyKey: 'legacy-transition-accepted',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'work',
-          skillName: 'factory-plan',
-          idempotencyKey: 'legacy-terminal-skill',
-        },
-        {
-          type: 'sendMessage',
-          role: 'work',
-          message: 'Obsolete message.',
-          idempotencyKey: 'legacy-terminal-message',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'review',
-          skillName: 'factory-review',
-          idempotencyKey: 'legacy-terminal-proposal',
-        },
-      ],
-      causalChain: [],
-      now,
-    });
-    const terminalDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    const byKey = new Map(terminalDecisions.map(decision => [decision.idempotencyKey, decision]));
-    const transition = byKey.get('legacy-transition-accepted');
-    const failedSkill = byKey.get('legacy-terminal-skill');
-    const failedMessage = byKey.get('legacy-terminal-message');
-    const proposal = byKey.get('legacy-terminal-proposal');
-    if (!transition || !failedSkill || !failedMessage || !proposal) {
-      throw new Error('Expected legacy repair decisions');
-    }
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: { in: [transition.id, failedSkill.id, failedMessage.id] } },
-      { status: 'failed', last_error: 'Legacy failure.', completed_at: now, updated_at: now },
-    );
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: proposal.id },
-      { status: 'proposed', updated_at: now },
-    );
-    await seed.workItems.setAttentionReceipt({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      userId: 'u1',
-      identity: { kind: 'automation-failed', sourceId: failedSkill.id, occurrence: 0 },
-      action: 'archive',
-      now,
-    });
-    await seed.storage.ops.insertOne('factory_rule_ingress', {
-      org_id: 'org1',
-      factory_project_id: PROJECT_ID,
-      identity: 'decision:legacy-transition-accepted',
-      trigger_type: 'rule',
-      transition_id: crypto.randomUUID(),
-      result: { status: 'accepted', stage: 'done' },
-      created_at: now,
-    });
-    await seed.workItems.update({
-      orgId: 'org1',
-      id: terminalItem.id,
-      userId: 'user-1',
-      patch: { stages: ['done'] },
-    });
-
-    const activeResponse = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({
-        title: 'Active repair target',
-        externalSource: {
-          integrationId: 'github',
-          type: 'issue',
-          externalId: '43',
-          url: 'https://github.com/acme/app/issues/43',
-        },
-        metadata: { number: 43 },
-      }),
-    );
-    const activeItem = (await activeResponse.json()).workItem;
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: activeItem.id,
-      ingress: { identity: 'legacy-repair-active', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: activeItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'invokeSkill',
-          role: 'work',
-          skillName: 'factory-plan',
-          idempotencyKey: 'legacy-active-skill',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'review',
-          skillName: 'factory-review',
-          idempotencyKey: 'legacy-multistage-proposal',
-        },
-      ],
-      causalChain: [],
-      now,
-    });
-    const activeDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    const activeDecision = activeDecisions.find(decision => decision.idempotencyKey === 'legacy-active-skill');
-    const multistageProposal = activeDecisions.find(
-      decision => decision.idempotencyKey === 'legacy-multistage-proposal',
-    );
-    if (!activeDecision || !multistageProposal) throw new Error('Expected active legacy decisions');
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: activeDecision.id },
-      { status: 'failed', last_error: 'Still unresolved.', completed_at: now, updated_at: now },
-    );
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: multistageProposal.id },
-      { status: 'proposed', updated_at: now },
-    );
-    await seed.workItems.update({
-      orgId: 'org1',
-      id: activeItem.id,
-      userId: 'user-1',
-      patch: { stages: ['review', 'done'] },
-    });
-
-    await seed.workItems.repairLegacyAttentionState();
-
-    const repaired = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    expect(repaired.find(decision => decision.id === transition.id)?.status).toBe('succeeded');
-    expect(repaired.find(decision => decision.id === failedSkill.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === proposal.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === failedMessage.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === activeDecision.id)?.status).toBe('failed');
-    expect(repaired.find(decision => decision.id === multistageProposal.id)?.status).toBe('proposed');
-    await expect(
-      seed.workItems.listAttentionReceipts({
-        orgId: 'org1',
-        factoryProjectId: PROJECT_ID,
-        userId: 'u1',
-        identities: [
-          {
-            kind: 'automation-failed',
-            sourceId: failedSkill.id,
-            occurrence: 0,
-          },
-        ],
-      }),
-    ).resolves.toEqual([]);
-  });
-
   it('rejects malformed structured receipt rows', async () => {
     const now = new Date('2030-01-01T00:00:00.000Z');
     await seed.storage.ops.insertOne('factory_attention_receipts', {
@@ -2150,7 +2131,6 @@ describe('GET /web/factory/projects/:id/metrics', () => {
         actor,
         ingress: { type: 'rule', identity },
         cause: 'auto_triage',
-        ...(actor.type === 'agent' && actor.role === 'triage' ? { triageType: 'bug' as const } : {}),
       });
     const triaged = await move('triage', workItem.revision, 'auto-1', {
       type: 'system',

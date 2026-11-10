@@ -20,6 +20,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
           token: ${{ secrets.RENOVATE_PAT  }}
           persist-credentials: true
 

@@ -43,7 +43,7 @@ test.describe('Metrics dashboard page', () => {
       await page.goto('/metrics?filterEnvironment=production');
 
       await expect(page).toHaveURL(/filterEnvironment=production/);
-      // The toolbar should show the active filter pill
+      // The filter bar should show the active filter chip
       await expect(page.getByText('production')).toBeVisible();
     });
   });

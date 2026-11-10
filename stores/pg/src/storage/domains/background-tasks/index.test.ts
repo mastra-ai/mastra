@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PostgresStore } from '../../index';
 
@@ -39,5 +40,50 @@ describe('background task JSONB storage', () => {
 
     await tasks.updateTask(id, { result: data });
     expect((await tasks.getTask(id))?.result).toEqual(expected);
+  });
+});
+
+describe('background task expiresAt column upgrade', () => {
+  const schemaName = `bg_upgrade_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+  const table = `"${schemaName}".mastra_background_tasks`;
+  const stores: PostgresStore[] = [];
+  let pool: Pool;
+
+  beforeAll(() => {
+    pool = new Pool({ connectionString });
+  });
+
+  afterAll(async () => {
+    await Promise.all(stores.map(s => s.close()));
+    await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    await pool.end();
+  });
+
+  it('leaves rows that predate the column without an expiry', async () => {
+    const before = new PostgresStore({ id: `bg-upgrade-a-${randomUUID()}`, connectionString, schemaName });
+    stores.push(before);
+    await before.init();
+    // Recreate the table shape from before the columns existed.
+    await pool.query(`ALTER TABLE ${table} DROP COLUMN "expiresAt", DROP COLUMN "expiresAtZ", DROP COLUMN "metadata"`);
+    const id = randomUUID();
+    const completedAt = new Date(Date.now() - 60_000).toISOString();
+    await pool.query(
+      `INSERT INTO ${table} (id, tool_call_id, tool_name, agent_id, run_id, status, args, retry_count, max_retries, timeout_ms, "createdAt", "createdAtZ", "completedAt", "completedAtZ")
+       VALUES ($1, $1, 'tool', 'agent', $1, 'completed', '{}', 0, 0, 1000, $2, $3, $2, $3)`,
+      [id, completedAt, completedAt],
+    );
+
+    // A new process adds the columns. Postgres backfills the TIMESTAMPTZ twin
+    // with its DEFAULT NOW(), so presence must come from the naive column.
+    const after = new PostgresStore({ id: `bg-upgrade-b-${randomUUID()}`, connectionString, schemaName });
+    stores.push(after);
+    await after.init();
+    const tasks = await after.getStore('backgroundTasks');
+
+    expect((await tasks.getTask(id))?.expiresAt).toBeUndefined();
+    expect((await tasks.listTasks({ hasExpiresAt: false })).tasks.map(t => t.id)).toEqual([id]);
+
+    await tasks.deleteTasks({ status: 'completed', dateFilterBy: 'expiresAt', toDate: new Date(Date.now() + 60_000) });
+    expect(await tasks.getTask(id)).not.toBeNull();
   });
 });

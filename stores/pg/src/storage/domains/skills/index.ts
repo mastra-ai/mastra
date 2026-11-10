@@ -438,6 +438,7 @@ export class SkillsPG extends SkillsStorage {
       entityIds,
       pinFavoritedFor,
       favoritedOnly,
+      metadata,
     } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -496,6 +497,22 @@ export class SkillsPG extends SkillsStorage {
       if (visibility !== undefined) {
         conditions.push(`s.visibility = $${paramIdx++}`);
         queryParams.push(visibility);
+      }
+
+      if (metadata && Object.keys(metadata).length > 0) {
+        // Metadata lives on version rows; match against the resolved version
+        // (active, falling back to latest; latest when listing drafts).
+        const versionsTable = getTableName({
+          indexName: TABLE_SKILL_VERSIONS,
+          schemaName: getSchemaName(this.#schema),
+        });
+        const latestVersionId = `(SELECT lv.id FROM ${versionsTable} lv WHERE lv."skillId" = s.id ORDER BY lv."versionNumber" DESC LIMIT 1)`;
+        const resolvedVersionId =
+          status === 'draft' ? latestVersionId : `COALESCE(s."activeVersionId", ${latestVersionId})`;
+        conditions.push(
+          `EXISTS (SELECT 1 FROM ${versionsTable} mv WHERE mv."skillId" = s.id AND mv.id = ${resolvedVersionId} AND mv.metadata @> $${paramIdx++}::jsonb)`,
+        );
+        queryParams.push(toPgJson(metadata));
       }
 
       if (entityIds && entityIds.length > 0) {

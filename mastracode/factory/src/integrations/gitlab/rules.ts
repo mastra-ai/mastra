@@ -1,19 +1,35 @@
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
+  cardBoardFlow,
   eventBoardId,
+  isTerminalWorkItem,
+  cardOwnsBranch,
+  newestOwnedOpenPullRequestNumber,
+  pullRequestSources,
+  DEFAULT_BOARD_ID,
+  intakeTarget,
   rulePhaseField,
   withBoardClosure,
+  withBoardFlow,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { hasExplicitRuleOverride, selectEventRule } from '../../rules/event-rules.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
+import { deploymentOwnsEvent, hasExplicitRuleOverride, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
+  FactoryPullRequestHome,
+  FactoryRuleIntakeTarget,
   FactoryRuleActor,
   FactoryRuleDecision,
+  FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -21,11 +37,13 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { LEGACY_REVIEW_BOARD } from '../../storage/domains/work-items/legacy-review.js';
 import type { IntegrationContext } from '../base.js';
+import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GitLabEventRules } from './default-rules.js';
-import { encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
+import { decodeIssueReference, encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -44,11 +62,14 @@ function number(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-/** GitLab sends `2024-01-02T03:04:05Z` or `2024-01-02 03:04:05 UTC`. */
+/** GitLab sends `2024-01-02T03:04:05Z`, `2024-01-02 03:04:05 UTC` or `2024-01-02 03:04:05 +0000`. */
 function timestamp(value: unknown): number | undefined {
   const text = string(value);
   if (!text) return undefined;
-  const parsed = Date.parse(text.replace(' UTC', 'Z').replace(' ', 'T'));
+  const spaced = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?) (?:UTC|([+-]\d{2}):?(\d{2}))$/.exec(text);
+  const parsed = Date.parse(
+    spaced ? `${spaced[1]}T${spaced[2]}${spaced[3] ? `${spaced[3]}:${spaced[4]}` : 'Z'}` : text,
+  );
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
@@ -85,11 +106,58 @@ function labelColors(value: unknown): Record<string, string> {
   );
 }
 
+/**
+ * Points the card's session at a new comment on its issue, or at an edit to
+ * the issue's title or description. Only pointers travel (who, where, a link).
+ * An edited comment (a Note Hook with action `update`, GitLab 16.11+) is no new comment.
+ * GitLab deliveries don't say whether Factory wrote the comment, so the
+ * message waits in the session's notifications instead of waking it: a session
+ * that comments must not wake itself.
+ */
+export function activitySignalFor(
+  context: Pick<FactoryGitLabRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'note'>,
+  delivery: { edited: boolean; noteEdited: boolean },
+): FactorySignalActivityDecision | undefined {
+  const event =
+    context.event === 'issueCommented' && !delivery.noteEdited
+      ? ('work_item.commented' as const)
+      : context.event === 'issueUpdated' && delivery.edited
+        ? ('work_item.edited' as const)
+        : undefined;
+  if (!event || !context.item || !context.issue) return undefined;
+  if (context.actor.type !== 'gitlab' || context.actor.factoryAuthored) return undefined;
+  return {
+    type: 'signalActivity',
+    idempotencyKey: `${context.ingress.id}:activity`,
+    event,
+    reference: `${context.repository.fullName}#${context.issue.number}`,
+    url: (event === 'work_item.commented' ? context.note?.url : undefined) ?? context.issue.url,
+    ...(context.actor.username ? { author: context.actor.username } : {}),
+    authorTrusted: context.actor.trusted,
+    idleBehavior: 'persist',
+  };
+}
+
+/** The status change a GitLab delivery reports. GitLab gives no close reason, so every close is completed. */
+export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>): BoardEventFacts | undefined {
+  switch (context.event) {
+    case 'issueOpened':
+      return { type: 'work_item.created' };
+    case 'issueReopened':
+      return { type: 'work_item.reopened' };
+    case 'issueClosed':
+      return { type: 'work_item.closed', reason: closeReason(false) };
+    default:
+      return undefined;
+  }
+}
+
 function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefined {
   const attributes = object(parsed.payload.object_attributes);
   const action = string(attributes?.action)?.toLowerCase();
   if (parsed.event === 'Issue Hook') {
-    if (action === 'open' || action === 'reopen') return 'issueOpened';
+    if (action === 'open') return 'issueOpened';
+    if (action === 'reopen') return 'issueReopened';
     if (action === 'close') return 'issueClosed';
     return 'issueUpdated';
   }
@@ -104,6 +172,20 @@ function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefi
   if (action === 'merge') return 'mergeRequestMerged';
   if (action === 'close') return 'mergeRequestClosed';
   return 'mergeRequestUpdated';
+}
+
+/**
+ * A card filed for an issue in a different GitLab project than `projectId` on `host`. Branch
+ * names repeat across projects, so a card attributed elsewhere never owns this project's branch.
+ * A card with no GitLab issue of its own can't be attributed, and isn't.
+ */
+function cardInOtherGitLabProject(item: Card, host: string, projectId: number): boolean {
+  if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'issue') return false;
+  const reference = decodeIssueReference(item.externalSource.externalId);
+  if (!reference) return false;
+  return (
+    reference.projectId !== String(projectId) || (reference.host !== undefined && normalizeHost(reference.host) !== host)
+  );
 }
 
 function normalizeHost(host: string): string {
@@ -121,6 +203,14 @@ function hostFromPayload(parsed: ParsedGitLabWebhook): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Whether a card carries the merge request as a source attached to its issue, rather than as its own card. */
+function carriesAttachedMergeRequest(item: Card, mergeRequestKey: string): boolean {
+  return (
+    item.externalSource?.type !== 'pull-request' &&
+    pullRequestSources(item).some(source => source.integrationId === 'gitlab' && source.externalId === `pull-request:${mergeRequestKey}`)
+  );
 }
 
 function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
@@ -162,7 +252,8 @@ interface GitLabRulesOptions {
   storage: WorkItemsStorage;
   intake: IntakeStorage;
   configVersion: string;
-  boards: BoardRegistry;
+  /** The code boards, or the per-project source so a project's stored boards run its cards. */
+  boards: BoardRegistry | ProjectBoardSource;
 }
 
 interface ProjectTarget {
@@ -172,6 +263,16 @@ interface ProjectTarget {
 
 export class GitLabRules {
   constructor(private readonly options: GitLabRulesOptions) {}
+
+  /** Brings the project's boards up to date, so the sync reads below see its stored boards. */
+  async loadBoards(scope: StoredBoardScope): Promise<void> {
+    await toBoardSource(this.options.boards).load(scope);
+  }
+
+  /** The project's loaded boards; {@link loadBoards} runs before an event is handled. */
+  #boards(scope: StoredBoardScope): BoardRegistry {
+    return toBoardSource(this.options.boards).forProject(scope);
+  }
 
   async ingest(parsed: ParsedGitLabWebhook): Promise<{ status: IngressStatus }> {
     const event = eventName(parsed);
@@ -186,6 +287,7 @@ export class GitLabRules {
     if (targets.length === 0) return { status: 'ignored' };
     const results: Array<{ status: IngressStatus }> = [];
     for (const target of targets) {
+      await this.loadBoards(target.target);
       results.push(await this.#ingestProject(parsed, event, projectId, projectPath, host, username, target));
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
@@ -251,7 +353,11 @@ export class GitLabRules {
       candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
     );
     if (!binding) return { status: 'ignored' };
-    const board = this.options.boards.get(binding.board ?? 'work');
+    // A binding saved for the retired Review board files onto the default board, where its merge
+    // requests now live.
+    const board = this.#boards(target.target).get(
+      binding.board === LEGACY_REVIEW_BOARD || !binding.board ? DEFAULT_BOARD_ID : binding.board,
+    );
     if (!board) return { status: 'ignored' };
 
     const connectionIds = [
@@ -273,6 +379,15 @@ export class GitLabRules {
       ? encodeIssueReference({ host, projectId: String(projectId), issueIid })
       : undefined;
     const mergeRequestKey = mergeRequestIid ? mergeRequestSourceKey(host, projectId, mergeRequestIid) : undefined;
+    // A finished card may still be only in the legacy table; copy it so the event finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId: target.target.orgId,
+      factoryProjectId: target.target.factoryProjectId,
+      sources: [
+        ...(issueSourceKey ? [{ integrationId: 'gitlab', type: 'issue', externalId: issueSourceKey }] : []),
+        ...(mergeRequestKey ? [{ integrationId: 'gitlab', type: 'pull-request', externalId: mergeRequestKey }] : []),
+      ],
+    });
     const items = await this.options.storage.list({
       orgId: target.target.orgId,
       factoryProjectId: target.target.factoryProjectId,
@@ -287,14 +402,16 @@ export class GitLabRules {
           item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === mergeRequestKey,
         )
       : undefined;
+    // A merge request attached to its issue's card, instead of filed on a card of its own.
+    const attachedItem =
+      mergeRequestKey && !reviewItem ? items.find(item => carriesAttachedMergeRequest(item, mergeRequestKey)) : undefined;
     const headBranch = string(mergeRequest?.source_branch) ?? '';
-    const authoringItem = headBranch
-      ? items.find(
-          item =>
-            item.externalSource?.type !== 'pull-request' &&
-            Object.values(item.sessions).some(session => session.branch === headBranch),
-        )
-      : undefined;
+    // A card whose session builds on the merge request's branch, in this project.
+    const buildsOnBranch = (item: Card) =>
+      item.externalSource?.type !== 'pull-request' &&
+      !cardInOtherGitLabProject(item, host, projectId) &&
+      Object.values(item.sessions).some(session => session.branch === headBranch);
+    const authoringItem = headBranch ? items.find(buildsOnBranch) : undefined;
     const actorTrusted = await this.#trusted(connectionIds, String(projectId), username);
     const eventUserId = number(object(parsed.payload.user)?.id) ?? number(parsed.payload.user_id);
     const resolveAuthor = async (
@@ -339,16 +456,128 @@ export class GitLabRules {
       trusted: actorTrusted,
       factoryAuthored: false,
     };
+    // A merge request seen for the first time is filed on the card whose branch it comes from,
+    // when its board reviews merge requests. Otherwise a trusted author's merge request names the card of the issue
+    // its description says it closes, and the project's intake routes decide, when it is filed,
+    // whether it joins that card. An untrusted author's merge request never lands on another card.
+    // A card with no source of its own (a manual card) never takes one: the merge request would
+    // become its only source and turn it into a merge request card. A GitHub card keeps only
+    // GitHub pull requests, so a merge request on its session's branch gets its own card.
+    const eligibleHome = (card: Card) =>
+      card.externalSource !== null &&
+      card.externalSource.integrationId !== 'github' &&
+      card.externalSource.type !== 'pull-request' &&
+      !isTerminalWorkItem(this.#boards(card), card);
+    let home: { card: Card; reason: FactoryPullRequestHome['reason'] } | undefined;
+    if (event === 'mergeRequestOpened' && mergeRequestKey && !reviewItem && !attachedItem) {
+      // A branch name alone is not proof: a fork can reuse it. The Factory's own merge requests come
+      // from this project under a trusted account.
+      const sourceProjectId = number(mergeRequest?.source_project_id);
+      const fromThisProject = sourceProjectId === undefined || sourceProjectId === projectId;
+      if (
+        authoringItem &&
+        fromThisProject &&
+        (actorTrusted || mergeRequestAuthorTrusted) &&
+        eligibleHome(authoringItem) &&
+        cardBoardFlow(this.#boards(authoringItem), authoringItem).pullRequestReview !== undefined
+      ) {
+        home = { card: authoringItem, reason: 'authored' };
+      } else if (mergeRequestAuthorTrusted) {
+        for (const iid of closingIssueNumbers(string(mergeRequest?.description), {
+          provider: 'gitlab',
+          repository: projectPath,
+        })) {
+          const key = encodeIssueReference({ host, projectId: String(projectId), issueIid: iid });
+          const card = items.find(
+            item =>
+              item.externalSource?.integrationId === 'gitlab' &&
+              item.externalSource.externalId === key &&
+              eligibleHome(item),
+          );
+          if (card) {
+            home = { card, reason: 'closes' };
+            break;
+          }
+        }
+      }
+    }
+    const pullRequestHome: FactoryPullRequestHome | undefined = home
+      ? { workItemId: home.card.id, reason: home.reason }
+      : undefined;
+    // An attached merge request's state lives on its own source, never the issue's.
+    if ((event === 'mergeRequestMerged' || event === 'mergeRequestClosed') && attachedItem && mergeRequestKey) {
+      const merged = event === 'mergeRequestMerged';
+      await this.options.storage.syncWorkItemSource({
+        orgId: attachedItem.orgId,
+        factoryProjectId: attachedItem.factoryProjectId,
+        provider: 'gitlab',
+        externalId: `pull-request:${mergeRequestKey}`,
+        patch: { state: merged ? 'merged' : 'closed', metadata: { state: 'closed', merged } },
+      });
+    }
 
-    const candidates: Array<WorkItemRow | undefined> =
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review. It is
+    // recorded before the push is evaluated: the dispatcher can apply the
+    // re-review transition as soon as it commits, and the pass it starts names
+    // the head it covers, which must be the pushed one.
+    const lastCommit = object(mergeRequest?.last_commit);
+    const headSha = string(lastCommit?.id)?.toLowerCase();
+    // Without an update time the commit time still orders the push; dropping
+    // the write would leave the pass naming the head the last verdict covered.
+    const headAt = timestamp(mergeRequest?.updated_at) ?? timestamp(lastCommit?.timestamp);
+    const unchangedListedHead =
+      parsed.deliveryId.startsWith('poll:merge-request-head:') &&
+      headAt !== undefined &&
+      reviewItem?.metadata?.pullRequestHeadSha === headSha &&
+      (reviewItem?.metadata?.pullRequestHeadAt !== headAt ||
+        reviewItem?.metadata?.pullRequestHeadDeliveryId !== parsed.deliveryId);
+    let pushedReviewItem = reviewItem;
+    if (event === 'mergeRequestUpdated' && headSha && attachedItem && mergeRequestIid) {
+      await recordPullRequestHead(this.options.storage, {
+        orgId: attachedItem.orgId,
+        id: attachedItem.id,
+        headSha,
+        headAt,
+        ownedPullRequestNumber: mergeRequestIid,
+      });
+      if (unchangedListedHead) return { status: 'ignored' };
+    }
+    if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
+      const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
+      // The authoring Work item mirrors the verdict of the merge request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      await recordPullRequestHead(this.options.storage, {
+        orgId: reviewItem.orgId,
+        id: reviewItem.id,
+        headSha,
+        headAt,
+        deliveryId: parsed.deliveryId.startsWith('poll:merge-request-head:') ? parsed.deliveryId : undefined,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: mergeRequestIid,
+        });
+      }
+      pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
+      if (unchangedListedHead) return { status: 'ignored' };
+    }
+    const ownItem = reviewItem ?? attachedItem;
+    const openedItem = (home?.reason === 'authored' ? home.card : undefined) ?? authoringItem;
+    const candidates: Array<Card | undefined> =
       event === 'mergeRequestMerged'
-        ? [...new Map([reviewItem, authoringItem].filter(Boolean).map(item => [item!.id, item!])).values()]
+        ? [...new Map([ownItem, authoringItem].filter(Boolean).map(item => [item!.id, item!])).values()]
         : event === 'mergeRequestCommented'
-          ? [authoringItem ?? reviewItem]
+          ? [authoringItem ?? ownItem]
           : event === 'mergeRequestOpened'
-            ? [authoringItem, ...(authoringItem ? [authoringItem] : [])]
+            ? [openedItem, ...(openedItem ? [openedItem] : [])]
             : event.startsWith('mergeRequest')
-              ? [reviewItem ?? authoringItem]
+              ? [pushedReviewItem ?? attachedItem ?? authoringItem]
               : [issueItem];
     const results = [];
     for (const [index, item] of candidates.entries()) {
@@ -363,7 +592,7 @@ export class GitLabRules {
           orgId: target.target.orgId,
           factoryProjectId: target.target.factoryProjectId,
           factoryProject,
-          board: { board: board.id, initialPhase: board.initialPhase },
+          board: intakeTarget(this.#boards(target.target), board),
           issue,
           issueAuthor,
           issueAuthorTrusted,
@@ -376,8 +605,9 @@ export class GitLabRules {
           mergeRequestKey,
           factoryAuthored: Boolean(authoringItem),
           item,
+          ...(pullRequestHome ? { pullRequestHome } : {}),
           ingressIdentity: `gitlab:${projectId}:${parsed.deliveryId}${index ? `:${item?.id ?? index}` : ''}`,
-          // A merge request opening concerns two cards: its own Review card,
+          // A merge request opening concerns two cards: its own card,
           // which the integration handler files against the authoring item,
           // and that authoring item, which its board may react to. The second
           // evaluation runs only the board handler, under an id-suffixed
@@ -390,48 +620,23 @@ export class GitLabRules {
     // Work transition policy keeps an agent from closing the work while it is
     // open. Sessions carry no repository, so a branch shared by two Work cards
     // is ambiguous and records nothing.
-    const branchOwners = headBranch
-      ? items.filter(
-          item =>
-            item.externalSource?.type !== 'pull-request' &&
-            Object.values(item.sessions).some(session => session.branch === headBranch),
-        )
-      : [];
-    if (authoringItem && mergeRequestIid && branchOwners.length === 1) {
+    const branchOwners = headBranch ? items.filter(buildsOnBranch) : [];
+    // A merge request filed on its issue's card is tracked there the same way.
+    const trackedItem = attachedItem ?? (branchOwners.length === 1 ? authoringItem : undefined);
+    if (trackedItem && mergeRequestIid) {
       await this.#trackOpenMergeRequest({
-        orgId: authoringItem.orgId,
-        id: authoringItem.id,
+        orgId: trackedItem.orgId,
+        id: trackedItem.id,
         event,
         mergeRequestIid,
         eventAt: timestamp(mergeRequest?.updated_at),
         opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
         headSha: string(object(mergeRequest?.last_commit)?.id)?.toLowerCase(),
+        // Only a merge request the card wrote is the one it has out. One filed there because it
+        // closes the issue is someone else's work: recording it would stop the builder's own
+        // self-review and merge request.
+        ownedByCard: trackedItem.id !== attachedItem?.id || cardOwnsBranch(trackedItem, headBranch),
       });
-    }
-    // A push moves the head a recorded review verdict was given on. Recording
-    // the new head lets the verdict badge show that it is outdated, while the
-    // verdict itself stays so the next pass still runs as a re-review.
-    const headSha = string(object(mergeRequest?.last_commit)?.id)?.toLowerCase();
-    const headAt = timestamp(mergeRequest?.updated_at);
-    if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
-      const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
-      // The authoring Work item mirrors the verdict of the merge request it has
-      // out; a push to an older one must not mark its successor's verdict.
-      await recordPullRequestHead(this.options.storage, {
-        orgId: reviewItem.orgId,
-        id: reviewItem.id,
-        headSha,
-        headAt,
-      });
-      if (parent) {
-        await recordPullRequestHead(this.options.storage, {
-          orgId: parent.orgId,
-          id: parent.id,
-          headSha,
-          headAt,
-          ownedPullRequestNumber: mergeRequestIid,
-        });
-      }
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
@@ -452,6 +657,7 @@ export class GitLabRules {
     eventAt: number | undefined;
     opened: boolean;
     headSha: string | undefined;
+    ownedByCard: boolean;
   }): Promise<void> {
     const settling = input.event === 'mergeRequestMerged' || input.event === 'mergeRequestClosed';
     if (input.event !== 'mergeRequestOpened' && !settling) return;
@@ -470,7 +676,7 @@ export class GitLabRules {
       const patch: Record<string, unknown> = {
         mergeRequestEvents: { ...events, [key]: { at: input.eventAt ?? lastAt ?? null, open: !settling } },
       };
-      if (!settling) {
+      if (!settling && input.ownedByCard) {
         // A head recorded for an earlier merge request must not mark this one's
         // verdict outdated. A replayed opening of the merge request already
         // recorded keeps the head its pushes left.
@@ -479,8 +685,10 @@ export class GitLabRules {
           patch.pullRequestHeadAt = input.eventAt ?? null;
         }
         patch.openPullRequestNumber = input.mergeRequestIid;
-      } else if (recorded === input.mergeRequestIid) {
-        patch.openPullRequestNumber = null;
+      } else if (settling && recorded === input.mergeRequestIid) {
+        // With several merge requests on the card, the newest one its sessions opened is out next;
+        // someone else's merge request never becomes the card's own.
+        patch.openPullRequestNumber = newestOwnedOpenPullRequestNumber(item, input.mergeRequestIid);
         if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {
           patch.reviewVerdict = null;
         }
@@ -523,7 +731,7 @@ export class GitLabRules {
       orgId: string;
       factoryProjectId: string;
       factoryProject: { createdAt: Date };
-      board: { board: string; initialPhase: string };
+      board: FactoryRuleIntakeTarget | undefined;
       issue: Record<string, unknown> | undefined;
       issueAuthor: string | undefined;
       issueAuthorTrusted: boolean;
@@ -535,7 +743,8 @@ export class GitLabRules {
       mergeRequestIid: number | undefined;
       mergeRequestKey: string | undefined;
       factoryAuthored: boolean;
-      item: WorkItemRow | undefined;
+      item: Card | undefined;
+      pullRequestHome?: FactoryPullRequestHome;
       ingressIdentity: string;
       mergeRequestOpenedScope?: 'intake' | 'board';
     },
@@ -567,16 +776,19 @@ export class GitLabRules {
               title: input.item.title,
               url: input.item.externalSource?.url ?? null,
               stages: input.item.stages,
+              workItem: input.item.workItem,
               acceptedAt: input.item.acceptedAt,
               metadata: input.item.metadata,
             },
             board: boardForWorkItem(input.item),
             itemRevision: input.item.revision,
-            ...withBoardClosure(this.options.boards, input.item),
-            ...rulePhaseField(this.options.boards, input.item),
+            ...withBoardClosure(this.#boards(input), input.item),
+            ...rulePhaseField(this.#boards(input), input.item),
+            ...withBoardFlow(this.#boards(input), input.item),
           }
         : {}),
-      intake: input.board,
+      ...(input.board ? { intake: input.board } : {}),
+      ...(input.pullRequestHome ? { pullRequestHome: input.pullRequestHome } : {}),
       event: input.event,
       deliveryId: input.parsed.deliveryId,
       factory: { createdAt: input.factoryProject.createdAt.toISOString() },
@@ -646,8 +858,10 @@ export class GitLabRules {
           }
         : {}),
     };
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
     const boardRules = boardEventHandlers(
-      this.options.boards,
+      this.#boards(input),
       input.mergeRequestOpenedScope === 'intake' ? undefined : eventBoardId(context),
       'gitlab',
     );
@@ -660,7 +874,8 @@ export class GitLabRules {
     // Without a board handler the authoring card has nothing to answer; skip
     // recording an empty evaluation for it.
     if (input.mergeRequestOpenedScope === 'board' && !rule) return { status: 'ignored' };
-    let decision: FactoryRuleDecision | void;
+    const ownedByDeployment = deploymentOwnsEvent(this.options.gitlab.rules, boardRules, input.event);
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -671,7 +886,7 @@ export class GitLabRules {
         decisions = validateFactoryRuleDecisions([decision]).map(entry => {
           assertFactoryDecisionTarget(
             entry,
-            this.options.boards,
+            this.#boards(input),
             input.item ? boardForWorkItem(input.item) : undefined,
           );
           return { ...entry };
@@ -688,6 +903,20 @@ export class GitLabRules {
             ? error.message.slice(0, 2_000)
             : 'Factory GitLab rule failed.',
       };
+    }
+    if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
+    if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
+      const changes = object(input.parsed.payload.changes);
+      const routed =
+        (await routeEventDecision(context, this.options.storage, {
+          orgId: input.orgId,
+          factoryProjectId: input.factoryProjectId,
+        })) ??
+        activitySignalFor(context, {
+          edited: Boolean(object(changes?.title) || object(changes?.description)),
+          noteEdited: string(object(input.parsed.payload.object_attributes)?.action)?.toLowerCase() === 'update',
+        });
+      if (routed) decisions = [{ ...routed }];
     }
 
     const committed = await this.options.storage.commitRuleEvaluation({

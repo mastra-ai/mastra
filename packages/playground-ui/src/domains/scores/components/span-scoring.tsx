@@ -102,8 +102,8 @@ export function SpanScoring({
         <DialogDescription>Select a scorer to evaluate this trace.</DialogDescription>
         <Combobox
           aria-label="Select scorer"
-          searchPlaceholder="Search scorers..."
-          placeholder="Select a scorer..."
+          searchPlaceholder="Search scorers"
+          placeholder="Select a scorer"
           options={scorerList.map(scorer => ({
             label: scorer.name || scorer.id,
             value: scorer.id || scorer.name || '',
@@ -122,7 +122,7 @@ export function SpanScoring({
       <DialogFooter>
         <DialogCancel disabled={isPending}>Cancel</DialogCancel>
         <DialogAction disabled={!selectedScorer || isWaiting} onConfirm={handleStartScoring}>
-          {isPending ? 'Starting...' : 'Start Scoring'}
+          {isPending ? 'Starting...' : 'Start scoring'}
         </DialogAction>
       </DialogFooter>
     </>

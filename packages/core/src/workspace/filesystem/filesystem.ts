@@ -32,7 +32,7 @@ export type FileContent = string | Buffer | Uint8Array;
 export interface FileStat {
   /** File or directory name */
   name: string;
-  /** Absolute path */
+  /** Path within the filesystem namespace; relative to basePath for LocalFilesystem */
   path: string;
   /** 'file' or 'directory' */
   type: 'file' | 'directory';
@@ -126,6 +126,17 @@ export interface WalkOptions {
   maxDepth?: number;
   /** Include entries whose names start with "." (default: false) */
   includeHidden?: boolean;
+  /**
+   * Still return `.gitignore` files when hidden entries are excluded, so the
+   * caller can apply them. Providers that ignore this return no nested
+   * `.gitignore` files, so their rules don't apply to the listing.
+   */
+  includeGitignoreFiles?: boolean;
+  /**
+   * Directory names (e.g. `node_modules`) not to descend into or return. The
+   * caller filters the results too, so providers may ignore this.
+   */
+  skipDirectoryNames?: string[];
 }
 
 export interface FilesystemGrepOptions {

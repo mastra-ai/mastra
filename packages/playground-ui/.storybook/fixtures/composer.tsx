@@ -7,11 +7,10 @@ import {
   ComposerActions,
   ComposerBox,
   ComposerInput,
-  type ComposerInputProps,
-  type ComposerTone,
   ComposerToneLabel,
   ComposerRing,
 } from '@/ds/components/Composer';
+import type { ComposerInputProps, ComposerTone } from '@/ds/components/Composer';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 
 const modes = [
@@ -62,7 +61,7 @@ export function ComposerPreview({
           <ComposerInput
             ref={inputRef}
             aria-label="Message"
-            placeholder="Ask a question…"
+            placeholder="Ask a question"
             variant={variant}
             disabled={disabled}
             value={text}

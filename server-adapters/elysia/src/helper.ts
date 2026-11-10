@@ -100,7 +100,11 @@ export function getMastraOpenAPIDoc(
   // Merge custom API routes if present
   const customApiRoutes = (server as any).customApiRoutes;
   if (customApiRoutes && customApiRoutes.length > 0) {
-    const customPaths = convertCustomRoutesToOpenAPIPaths(customApiRoutes);
+    const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
+    const customPaths = convertCustomRoutesToOpenAPIPaths(customApiRoutes, componentSchemas);
+    if (Object.keys(componentSchemas).length > 0) {
+      openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
+    }
     openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
   }
 

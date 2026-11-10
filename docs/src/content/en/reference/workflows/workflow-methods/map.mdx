@@ -79,16 +79,18 @@ Use `inputData` to access the full output of the previous step.
   })
 ```
 
-## Using `getStepResult()`
+## Using `getStepResultAsync()`
 
-Use `getStepResult()` to access the full output of a specific step by referencing the step's instance.
+Use `getStepResultAsync()` to access the full output of a specific step by referencing the step's instance or its ID.
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" oxfmt:false
   .then(step1)
-  .map(async ({ getStepResult }) => {
-    console.log(getStepResult(step1));
+  .map(async ({ getStepResultAsync }) => {
+    console.log(await getStepResultAsync(step1));
   })
 ```
+
+`getStepResultAsync()` replaces the deprecated `getStepResult()`, which returns the same value synchronously.
 
 ## Using `getInitData()`
 
@@ -130,7 +132,9 @@ In this example, the `value` field from `step1`'s output is extracted and mapped
 Use `mapVariable()` with `initData` to extract a specific field from the workflow's initial input data. This is useful when you need to pass the original workflow input to a later step.
 In this example, the `value` field from the workflow's input is extracted and mapped to a field called `details`:
 
-```typescript oxfmt:false {6-9} filename="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {8-11} filename="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow } from '@mastra/core/workflows';
+
 export const testWorkflow = createWorkflow({...});
 
 testWorkflow

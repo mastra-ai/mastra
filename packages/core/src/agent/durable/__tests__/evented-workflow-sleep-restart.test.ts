@@ -9,15 +9,23 @@
  *   the harness checks that the sleep actually held and the result passed
  *   through it.
  *
- * The sleep duration is only checked on the non-restart cells: the harness
- * excludes timing on a mechanism cell because the restarted run re-enters the
- * sleep, and the port does the same. The harness's `wf-evented-redeliver`
- * condition is not ported: it exercises the engine's redelivery path rather
- * than a restart out of the helper's surface (COR-1307 owns the finding).
+ * The sleep duration is only checked on the non-mechanism cells: restart and
+ * redelivery can re-enter the sleep, so those cells assert the result and exact
+ * execution log instead, with stale-detecting known differences for
+ * COR-1307/COR-1394's completed-transition replay.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Mastra } from '../../../mastra';
+import { MockStore } from '../../../storage/mock';
+import { createEventedWorkflow, createStep } from '../../../workflows';
+import {
+  REDELIVERY_MODES,
+  expectRedeliveryParity,
+  redeliverAndDrain,
+} from '../../../workflows/evented/test-utils/redelivery-contract';
+import { RedeliveryDriver } from '../../../workflows/evented/test-utils/redelivery-driver';
 import { DEFAULT_TIMEOUT_MS, createGate, createRestartScenario, findRow, loadGraph } from './restart-harness';
 import type { Checkpoint, Gate } from './restart-harness';
 
@@ -198,5 +206,69 @@ describe('T58 wf-sleep: the sleep holds without a restart', () => {
         await app.stopWorkers?.();
       }
     }, 30_000);
+  }
+});
+
+describe('T58 wf-evented-redeliver', () => {
+  for (const variant of ['sleep', 'sleep-until'] as const) {
+    it.each(REDELIVERY_MODES)(`${variant} / %s: executes each completed transition once`, async mode => {
+      const driver = new RedeliveryDriver();
+      const executed: string[] = [];
+      const step = (id: string) =>
+        createStep({
+          id,
+          inputSchema: N,
+          outputSchema: N,
+          execute: async ({ inputData }) => {
+            executed.push(id);
+            return { n: inputData.n + 1 };
+          },
+        });
+      const workflowId = `t58-redeliver-${variant}`;
+      const before = createEventedWorkflow({ id: workflowId, inputSchema: N, outputSchema: N }).then(step('before'));
+      const slept =
+        variant === 'sleep'
+          ? before.sleep(20, { id: 'nap' })
+          : before.sleepUntil(async () => new Date(Date.now() + 20), { id: 'nap' });
+      const workflow = slept.then(step('after')).commit();
+      const mastra = new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        pubsub: driver.pubsub,
+        workflows: { [workflowId]: workflow },
+      });
+      try {
+        await mastra.startWorkers();
+        driver.assertEvented(workflow);
+        const runId = `${workflowId}-run`;
+        const run = await workflow.createRun({ runId });
+        const result = await run.start({ inputData: { n: 1 } });
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual({ n: 3 });
+        expect(executed).toEqual(['before', 'after']);
+
+        const match = { spec: `${workflowId}@0`, runId } as const;
+        const original = driver.stepRuns(match).at(-1)!;
+        expect(original.data).toMatchObject({ workflowId, runId, executionPath: [0] });
+        const { event } = await redeliverAndDrain(driver, match, mode);
+        expect(event.data).toEqual(original.data);
+        expect(event.data).toMatchObject({ workflowId, runId, executionPath: [0] });
+        expectRedeliveryParity(
+          { executed },
+          { executed: ['before', 'after'] },
+          mode === 'same-id'
+            ? undefined
+            : {
+                reason:
+                  'COR-1307 / COR-1394: a completed transition drives the sleep chain again on fresh-ID or expired replay.',
+                expect: correct => ({ ...correct, executed: [...correct.executed, ...correct.executed] }),
+              },
+        );
+      } finally {
+        await mastra.stopWorkers();
+        driver.dispose();
+        vi.useRealTimers();
+      }
+    });
   }
 });

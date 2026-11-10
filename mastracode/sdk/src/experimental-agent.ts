@@ -2,7 +2,8 @@ import type { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent, isDurableAgent, isEventedAgent } from '@mastra/core/agent/durable';
 import type { Mastra } from '@mastra/core/mastra';
 
-import { parseExperimentalAgentSetting, type ExperimentalAgent, type GlobalSettings } from './onboarding/settings.js';
+import { parseExperimentalAgentSetting } from './onboarding/settings.js';
+import type { ExperimentalAgent, GlobalSettings } from './onboarding/settings.js';
 
 export interface ExperimentalAgentEnvironment {
   MASTRACODE_EXPERIMENTAL_AGENT?: string;

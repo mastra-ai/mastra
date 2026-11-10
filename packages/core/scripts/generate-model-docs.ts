@@ -376,6 +376,8 @@ ${modelsDevAttribution}
 ### Custom headers
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -397,6 +399,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
@@ -664,7 +668,7 @@ function generateIndexPage(grouped: GroupedProviders): string {
 
   // Link each provider's markdown page so agents reading /models/llms.txt can reach any provider.
   const providerLinks = [...grouped.popular, ...grouped.other]
-    .map(provider => `  - [${provider.name}](https://mastra.ai/models/providers/${provider.id})`)
+    .map(provider => `  - [${provider.name}](/models/providers/${provider.id})`)
     .join('\n');
 
   return `---
@@ -880,6 +884,8 @@ const reasoningAgent = new Agent({
 Since models are just strings, you can select them dynamically based on [request context](/docs/server/request-context), variables, or any other logic.
 
 \`\`\`typescript title="src/mastra/agents/dynamic-assistant-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-assistant",
   name: "Dynamic Assistant",
@@ -902,6 +908,8 @@ This enables powerful patterns:
 Different model providers expose their own configuration options. With OpenAI, you might adjust the \`reasoningEffort\`. With Anthropic, you might tune \`cacheControl\`. Mastra lets you set these specific \`providerOptions\` either at the agent level or per message.
 
 \`\`\`typescript title="src/mastra/agents/planner-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 // Agent level (apply to all future messages)
 const planner = new Agent({
   id: "planner",
@@ -936,6 +944,8 @@ const highEffort = await planner.generate([
 If you need to specify custom headers, such as an organization ID or other provider-specific fields, use this syntax.
 
 \`\`\`typescript title="src/mastra/agents/custom-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "Custom Agent",
@@ -976,7 +986,7 @@ const agent = new Agent({
       maxRetries: 2,
     },
     {
-      model: "__GATEWAY_GOOGLE_MODEL__",
+      model: "__GATEWAY_GOOGLE_MODEL_FLASH__",
       maxRetries: 2,
     },
   ],
@@ -1006,7 +1016,7 @@ const agent = new Agent({
       providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
     },
     {
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       maxRetries: 2,
       modelSettings: { temperature: 0.7 },
       providerOptions: { openai: { reasoningEffort: 'low' } },
@@ -1065,7 +1075,7 @@ const agent = new Agent({
 
 ### Example: LMStudio
 
-After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/$\{modelId\}\`) which will be displayed in the LMStudio interface.
+After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/\${modelId}\`) which will be displayed in the LMStudio interface.
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -1100,7 +1110,51 @@ const agent = new Agent({
 })
 \`\`\`
 
-When \`api\` is omitted it defaults to \`"chat"\`, so existing configurations are unchanged. Provider options are read from the \`openai\` namespace for the Responses API, whereas the Chat Completions path reads the \`openai-compatible\` namespace.
+When \`api\` is omitted it defaults to \`"chat"\`, so existing configurations are unchanged.
+
+### Provider options for custom endpoints
+
+The \`providerOptions\` key that reaches a custom endpoint depends on the API it uses.
+
+On the default Chat Completions path, use the first segment of the model \`id\` as the key. For \`id: "lmstudio/qwen/qwen3-30b-a3b-2507"\`, the key is \`lmstudio\`, and for \`id: "openrouter/google/gemini-2.5-flash"\`, it's \`openrouter\`. A camelCase form also works, for example \`myServer\` for \`id: "my-server/my-model"\`. If the segment contains a period, use the part before the first period.
+
+The exception is an \`id\` that starts with the prefix of an enabled gateway, where the key is the segment after the prefix. Netlify's gateway is always enabled, so for \`id: "netlify/openai/gpt-4o"\`, the key is \`openai\`. When \`MASTRA_GATEWAY_API_KEY\` is set or a \`MastraGateway\` with an API key is configured, \`id: "mastra/google/gemini-2.5-flash"\` uses \`google\`.
+
+Typed options such as \`reasoningEffort\` are mapped to their request field (\`reasoning_effort\`). Other keys, such as \`parallel_tool_calls\`, are copied into the request body as written. They replace any field of the same name that the AI SDK sets before them, including \`model\`, \`temperature\` from \`modelSettings\`, and the structured-output \`response_format\`. \`reasoning_effort\`, \`verbosity\`, \`messages\`, \`tools\`, and \`tool_choice\` are set after them, as are \`stream\` and \`stream_options\` when streaming, so those can't be replaced this way. Use \`reasoningEffort\` and \`textVerbosity\` instead of the first two.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "lmstudio/qwen/qwen3-30b-a3b-2507",
+    url: "http://localhost:1234/v1"
+  }
+})
+\`\`\`
+
+Pass the options under \`lmstudio\` when you call the agent:
+
+\`\`\`typescript
+const response = await agent.generate("Hello", {
+  providerOptions: {
+    lmstudio: {
+      reasoningEffort: "low",
+      parallel_tool_calls: false
+    }
+  }
+})
+\`\`\`
+
+Other keys behave differently unless they match the key from the \`id\`:
+
+- \`openaiCompatible\`: Applies only the typed options \`user\`, \`reasoningEffort\`, \`textVerbosity\`, and \`strictJsonSchema\`. Other keys under it are dropped. The \`openai-compatible\` spelling is deprecated. It still works but adds a warning to the result.
+- \`openai\`: Ignored on the Chat Completions path, unless \`openai\` is itself the key from the \`id\`, as in \`openai/my-model\` or \`openai.foo/my-model\`. Then it works as described above. With \`api: "responses"\`, only \`openai\` applies, whatever the \`id\` prefix. On that path it takes only the OpenAI provider's typed options, such as \`parallelToolCalls\`, and other keys, such as \`parallel_tool_calls\`, are dropped.
+
+Options under a key that doesn't apply are dropped without a warning. If an option has no effect on the request, check the key first.
 
 ## Use AI SDK with Mastra
 
@@ -1203,7 +1257,7 @@ function generateProvidersIndexPage(grouped: GroupedProviders): string {
 
   return `---
 title: "Providers"
-description: "Direct access to AI model providers."
+description: "Direct access to AI model providers through their AI SDK provider packages."
 ---
 
 ${getGeneratedComment()}
@@ -1224,10 +1278,7 @@ ${allProviders
       logo="${getLogoUrl(p.id)}"
     />`,
   )
-  .join(
-    '\
-',
-  )}
+  .join('')}
 </CardGrid>`;
 }
 
@@ -1277,7 +1328,7 @@ For detailed provider-specific documentation, see the [AI SDK ${provider.name} p
 
   return `---
 title: "${provider.name}"
-description: "Use ${provider.name} models via the AI SDK."
+description: "Use ${provider.name} models in Mastra through the AI SDK provider package."
 ---
 
 ${getGeneratedComment()}
@@ -1407,10 +1458,7 @@ async function generateDocs() {
   console.info('✅ Generated gateways/index.mdx');
 
   // Generate AI SDK provider documentation
-  console.info(
-    '\
-🔍 Filtering AI SDK providers...',
-  );
+  console.info('🔍 Filtering AI SDK providers...');
   const supportedProviderIds = new Set(Object.keys(providerRegistry));
   const aiSdkProviders = allModelsDevProviders
     .filter(p => {

@@ -3,6 +3,7 @@ export * from './context/chat-context';
 export * from './context/tool-call-context';
 export * from './messages/message-metadata';
 export * from './messages/signal-data';
+export * from './knowledge';
 export * from './messages/renderers/tool-part';
 export * from './context/dataset-save-context';
 export { useDatasetSaveContext } from './context/dataset-save-context-value';

@@ -196,7 +196,9 @@ export function updateStatusLine(state: TUIState): void {
     if (state.omStatusLineModel?.status !== status) {
       state.omStatusLineModel = {
         status,
-        modelId: getEffectiveOMRoleModelId(state.session, isObserving ? 'observer' : 'reflector'),
+        modelId: state.local
+          ? getEffectiveOMRoleModelId(state.local.session, isObserving ? 'observer' : 'reflector')
+          : undefined,
       };
     }
   } else {
@@ -298,7 +300,7 @@ export function updateStatusLine(state: TUIState): void {
     : null;
 
   // --- Location: thread title, else path (branch); GitHub PR label in front ---
-  const branch = state.projectInfo.gitBranch;
+  const branch = state.factory?.branch ?? state.projectInfo.gitBranch;
   const threadTitle =
     state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
   const activeGithubPrSubscriptions = state.activeGithubPrSubscriptions ?? [];
@@ -323,7 +325,9 @@ export function updateStatusLine(state: TUIState): void {
         plain: branch ? `${path} (${branch})` : path,
         styled: theme.fg('muted', path) + (branch ? theme.fg('dim', ` (${branch})`) : ''),
       });
-      const path = shortPath(state.projectInfo.rootPath ?? process.cwd());
+      const path = state.factory
+        ? `${state.factory.projectName} / ${state.factory.repositorySlug}`
+        : shortPath(state.projectInfo.rootPath ?? process.cwd());
       const candidates = fit === 'full' ? [withBranch(path)] : compactPaths(path).map(withBranch);
       text = candidates.find(candidate => fits(candidate.plain)) ?? null;
       if (!text && fit === 'any' && room >= 10) {
@@ -346,13 +350,28 @@ export function updateStatusLine(state: TUIState): void {
   // --- Fit: one row when everything fits, else the location moves to a second row ---
   const width = (parts: Part[]) =>
     PAD + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP_WIDTH : 0), 0) + 1; // +1 buffer
+
+  // Input mouse mode state, right-aligned on the first row; only shown once opted in via /settings.
+  const mouseController = state.mouseController;
+  const mouseModeOn = mouseController?.isInputMouseMode() === true;
+  const mouseModePart: Part | null = mouseController?.isInputMouseModeEnabled()
+    ? {
+        plain: `mouse mode: ${mouseModeOn ? 'auto' : 'off'}`,
+        styled: theme.fg('dim', 'mouse mode: ') + (mouseModeOn ? theme.fg('accent', 'auto') : theme.fg('muted', 'off')),
+      }
+    : null;
+  // Keep at least two columns between the left parts and the indicator; drop it on very narrow terminals.
+  const mouseModeReserve = mouseModePart ? visibleWidth(mouseModePart.plain) + 2 : 0;
+  const showMouseMode = mouseModePart !== null && width(modePart ? [modePart] : []) + mouseModeReserve <= termWidth;
+  const rowWidth = showMouseMode ? termWidth - mouseModeReserve : termWidth;
+
   const fitsRow = (parts: Array<Part | null>): Part[] | null => {
     const present = parts.filter((p): p is Part => p !== null);
-    return width(present) <= termWidth ? present : null;
+    return width(present) <= rowWidth ? present : null;
   };
   const withLocation = (parts: Array<Part | null>, fit: Fit): Part[] | null => {
     const present = parts.filter((p): p is Part => p !== null);
-    const location = locationPart(termWidth - width(present) - SEP_WIDTH, fit);
+    const location = locationPart(rowWidth - width(present) - SEP_WIDTH, fit);
     return location ? fitsRow([...present, location]) : null;
   };
   const transient = [fallbackPart, goalPart, queuedPart];
@@ -380,7 +399,13 @@ export function updateStatusLine(state: TUIState): void {
   const secondRow = oneRow ? null : locationPart(termWidth - PAD - 1, 'any');
   if (secondRow) twoRowFooterWidth.set(state, termWidth);
   else twoRowFooterWidth.delete(state);
-  state.statusLine.setText(' '.repeat(PAD) + row.map(p => p.styled).join(SEP));
+  const left = ' '.repeat(PAD) + row.map(p => p.styled).join(SEP);
+  // Ends one column short of the edge, mirroring the left padding.
+  const right =
+    showMouseMode && mouseModePart
+      ? ' '.repeat(Math.max(2, termWidth - width(row) - visibleWidth(mouseModePart.plain))) + mouseModePart.styled
+      : '';
+  state.statusLine.setText(left + right);
   if (state.memoryStatusLine) state.memoryStatusLine.setText(secondRow ? ' '.repeat(PAD) + secondRow.styled : '');
 
   updateActivityLine(state, modeColor, now);

@@ -30,7 +30,6 @@ export default function AgentBuilderSkillsCreate() {
               viewTransition: true,
             })
           }
-          className="rounded-full"
           tooltip="Skills list"
         >
           <ArrowLeftIcon />

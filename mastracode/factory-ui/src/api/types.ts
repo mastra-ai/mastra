@@ -9,20 +9,24 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { z } from 'zod';
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 
 export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
 export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
+export type IntakeRouteListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteList.responseSchema>;
 export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
+export type StoredBoardResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardGet.responseSchema>;
+export type StoredBoardInfo = StoredBoardResponse['board'];
+export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
+export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
 
 import type {
   CustomProviderInfo,
   OMConfigInfo,
   ProviderInfo,
   ProviderOMDefaultsResponse,
-  ThinkingConfigInfo,
-  UpdateThinkingConfigResponse,
 } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
@@ -30,37 +34,40 @@ import type {
   DirectoryEntry,
   DirectoryListing,
   WorkspaceChange,
+  WorkspaceChangePatches,
   WorkspaceChanges,
+  WorkspaceChangesRepository,
+  WorkspaceChangesScope,
   WorkspaceChangeStatus,
-  WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
+import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
-export type {
-  ProviderInfo,
-  CustomProviderInfo,
-  OMConfigInfo,
-  ProviderOMDefaultsResponse,
-  ThinkingConfigInfo,
-  UpdateThinkingConfigResponse,
-};
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
   ArtifactEntry,
   ArtifactListing,
   DirectoryEntry,
   DirectoryListing,
   WorkspaceChange,
+  WorkspaceChangePatches,
   WorkspaceChanges,
+  WorkspaceChangesRepository,
+  WorkspaceChangesScope,
   WorkspaceChangeStatus,
-  WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspacePatchOmission,
 };
+export type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
 
@@ -76,24 +83,37 @@ export interface CustomProvidersResponse {
 
 export interface DefaultModelResponse {
   modelId: string | null;
+  thinkingLevel: ThinkingLevelSetting | null;
 }
 
 export interface OMResponse {
   config: OMConfigInfo;
 }
 
-/** A bundled Factory skill (`GET /web/factory/skills`). */
+/** A skill the Factory skill mount serves (`GET /web/factory/skills`). */
 export interface FactorySkillInfo {
   name: string;
   description: string;
   /** SKILL.md body with the frontmatter removed. */
   content: string;
+  /** Shipped with Factory, the app's `factory-skills/` folder, or `MastraFactory({ skills })`. Absent from older servers. */
+  origin?: 'bundled' | 'folder' | 'code';
+  /** True for a skill Factory ships, including when the app overrides it. Absent from older servers. */
+  builtIn?: boolean;
   /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
   error?: string;
+  /** Frontmatter fields besides name and description, kept when the skill is saved from the editor. */
+  frontmatter?: Record<string, unknown>;
+  /** Set when the project has an edited copy; description and content then come from the edit. */
+  edited?: { updatedBy: string; updatedAt: string };
+  /** True when the original SKILL.md changed since the project's edit was made. */
+  originalChanged?: boolean;
 }
 
 export interface FactorySkillsResponse {
   skills: FactorySkillInfo[];
+  /** Whether the caller may edit this project's skills. Present when the catalog is read for a project. */
+  canEdit?: boolean;
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────
@@ -172,3 +192,5 @@ export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
 }
+
+export type VoiceChoice = NonNullable<VoiceSettingsResponse['selected']>;

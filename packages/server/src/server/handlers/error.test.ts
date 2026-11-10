@@ -138,6 +138,36 @@ describe('handleError', () => {
     });
   });
 
+  describe('AGENT_RUN_ID_ALREADY_CLAIMED', () => {
+    it('maps starting a run on a run id another run owns to 409', () => {
+      const err = Object.assign(new Error('run id already owned'), { id: 'AGENT_RUN_ID_ALREADY_CLAIMED' });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('run id already owned');
+    });
+  });
+
+  describe('AGENT_RESUME_ABORTED_RUN', () => {
+    it('maps approving or resuming an aborted run to 409', () => {
+      const err = Object.assign(new Error('cannot resume aborted run'), { id: 'AGENT_RESUME_ABORTED_RUN' });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('cannot resume aborted run');
+    });
+  });
+
   describe.each(['AGENT_RESUME_RUN_NOT_SUSPENDED', 'WORKFLOW_RUN_NOT_SUSPENDED'])('%s', id => {
     it('maps resuming a run that is not waiting to be resumed to 409', () => {
       const err = Object.assign(new Error('not suspended'), { id });
@@ -179,6 +209,21 @@ describe('handleError', () => {
     });
   });
 
+  describe('time travel conflicts', () => {
+    it.each(['WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED', 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING'])('maps %s to 409', id => {
+      const err = Object.assign(new Error('already claimed'), { id });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('already claimed');
+    });
+  });
+
   describe('durable agent run conflicts', () => {
     it.each([
       'DURABLE_AGENT_RUN_ACTIVE',
@@ -199,6 +244,30 @@ describe('handleError', () => {
       expect(caught!.message).toBe('run is busy');
     });
 
+    it.each([
+      ['DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE', 'pending', 500],
+      ['DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE', 'paused', 409],
+    ])('returns a numeric HTTP failure for %s', async (id, snapshotStatus, status) => {
+      const err = new MastraError({
+        id,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'No restartable checkpoint is available',
+        details: { agentName: 'agent', runId: 'run', snapshotStatus },
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'Recovery failed');
+      } catch (error) {
+        caught = error as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      const response = caught!.getResponse();
+      expect(response.status).toBe(status);
+      expect(response.ok).toBe(false);
+      expect(await response.text()).toBe(err.message);
+    });
+
     it('does not treat a superseded execution as a request conflict', () => {
       const err = Object.assign(new Error('superseded'), { id: 'DURABLE_AGENT_EXECUTION_SUPERSEDED' });
       let caught: HTTPException | undefined;
@@ -208,6 +277,28 @@ describe('handleError', () => {
         caught = e as HTTPException;
       }
       expect(caught!.status).not.toBe(409);
+    });
+  });
+
+  describe('AGENT_REQUEST_CONTEXT_VALIDATION_FAILED', () => {
+    it('maps a rejected request context to 400 with the original message', () => {
+      const err = new MastraError({
+        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: "Request context validation failed for agent 'a':\n- userId: Required",
+        details: { agentId: 'a', agentName: 'a' },
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(400);
+      expect(caught!.message).toBe(err.message);
+      expect(caught!.cause).toBe(err);
     });
   });
 

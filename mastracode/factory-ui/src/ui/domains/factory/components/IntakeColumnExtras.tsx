@@ -1,12 +1,11 @@
 import type { IntakeFeed } from '../boardCandidates';
-import { SKELETON_ROW_CLASS } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 import { LoadMoreSentinel } from './LoadMoreSentinel';
 
 /**
- * Pagination for the browsed candidate feed. A failed feed renders nothing: the
- * sentinel auto-loads when it scrolls into view, which would retry forever.
+ * Pagination for healthy candidate feeds. A failed single feed renders nothing;
+ * combined feeds can still page their healthy providers without retrying errors.
  */
 export function IntakeColumnExtras({
   feed,
@@ -17,7 +16,7 @@ export function IntakeColumnExtras({
   currentColumnLength: number;
   layout: BoardLayout;
 }) {
-  if (!feed || feed.error) return null;
+  if (!feed || (feed.error && !feed.retryFailed)) return null;
 
   return (
     <LoadMoreSentinel
@@ -27,7 +26,7 @@ export function IntakeColumnExtras({
       label="Load more candidates"
       loadingIndicator={
         currentColumnLength > 0 ? (
-          <SkeletonRows label="Loading more candidates" rows={1} rowClassName={SKELETON_ROW_CLASS[layout]} />
+          <BoardItemsSkeleton label="Loading more candidates" rows={1} layout={layout} />
         ) : (
           <span role="status" className="sr-only">
             Loading more candidates

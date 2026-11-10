@@ -1,18 +1,9 @@
-import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
-import type {
-  JSONValue,
-  ReasoningUIPart,
-  TextUIPart,
-  ToolInvocation,
-  UIMessage,
-  UseChatOptions,
-} from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { SerializableStructuredOutputOptions, ToolsInput } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
@@ -43,6 +34,7 @@ import type {
   SendAgentMessageParams,
   SendAgentSignalParams,
   QueueAgentMessageParams,
+  QueueAgentSignalParams,
   SubscribeAgentThreadParams,
   AbortAgentThreadParams,
   CancelQueuedAgentMessagesParams,
@@ -59,6 +51,7 @@ import type {
   PartProviderMetadata,
   MaybeProviderMetadata,
   ToolInvocationUIPartWithMeta,
+  ClientToolsResolver,
 } from '../types';
 
 import {
@@ -68,9 +61,19 @@ import {
   requestContextQueryString,
   toQueryParams,
 } from '../utils';
+import type {
+  JSONValue,
+  ReasoningUIPart,
+  TextUIPart,
+  ToolInvocation,
+  UIMessage,
+  UseChatOptions,
+} from '../utils/ai-sdk-v4';
+import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import { createSseEventSplitter } from '../utils/sse-event-splitter';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
@@ -117,6 +120,15 @@ type SignalRuntimeOptionsEntry = {
 
 const SIGNAL_RUNTIME_OPTIONS_TTL_MS = 5 * 60 * 1000;
 const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptionsEntry>();
+
+/**
+ * Client tools a resume request can execute, keyed by run. The stream that stayed open from
+ * before the suspension must not run those tools again, but it must run any resumed client tool
+ * the resume request cannot execute (a server-side approve sends no client tools). Held until the
+ * last stream of the run closes, which is after the resume request returns.
+ */
+const resumingClientToolNamesByRunKey = new Map<string, Map<string, number>>();
+const openStreamCountByRunKey = new Map<string, number>();
 const latestSignalRuntimeOptionsByThread = new Map<string, SignalRuntimeOptionsEntry>();
 
 const createSignalRuntimeOptionsEntry = (
@@ -216,6 +228,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   threadId,
   requestContext,
   respondFn,
+  abortSignal,
 }: {
   params: StreamParams<OUTPUT>;
   response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
@@ -224,6 +237,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   threadId?: string;
   requestContext?: RequestContext<any>;
   respondFn: ToolCallRespondFn<OUTPUT>;
+  abortSignal?: AbortSignal;
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -244,7 +258,13 @@ async function executeToolCallAndRespond<OUTPUT>({
       return response;
     }
 
+    // Run every client tool the model called, then send all results back in one turn.
+    const toolResults: Record<string, unknown>[] = [];
     for (const toolCall of toolCalls) {
+      // Don't start more client tools once the caller has cancelled.
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
       const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
@@ -287,32 +307,36 @@ async function executeToolCallAndRespond<OUTPUT>({
           toolResultContent.__mastraObservability = observability;
         }
 
-        // Build updated messages from the response, adding the tool result
-        // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-        // When no threadId (stateless), include full conversation history for context
-        const newMessages = [
-          ...(response.response.messages || []),
-          {
-            role: 'tool',
-            content: [toolResultContent],
-          },
-        ];
-
-        const updatedMessages = threadId
-          ? newMessages
-          : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
-
-        const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
-          structuredOutput?: StructuredOutputOptions<OUTPUT>;
-        } = {
-          ...params,
-          clientTools: params.clientToolsResolver?.() ?? params.clientTools,
-        };
-
-        delete (respondOptions as { messages?: MessageListInput }).messages;
-
-        return respondFn(updatedMessages as MessageListInput, respondOptions);
+        toolResults.push(toolResultContent);
       }
+    }
+
+    if (toolResults.length > 0) {
+      // Build updated messages from the response, adding the tool results
+      // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+      // When no threadId (stateless), include full conversation history for context
+      const newMessages = [
+        ...(response.response.messages || []),
+        {
+          role: 'tool',
+          content: toolResults,
+        },
+      ];
+
+      const updatedMessages = threadId
+        ? newMessages
+        : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
+
+      const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+        structuredOutput?: StructuredOutputOptions<OUTPUT>;
+      } = {
+        ...params,
+        clientTools: params.clientToolsResolver?.() ?? params.clientTools,
+      };
+
+      delete (respondOptions as { messages?: MessageListInput }).messages;
+
+      return respondFn(updatedMessages as MessageListInput, respondOptions);
     }
   }
 
@@ -433,6 +457,63 @@ export class Agent extends BaseResource {
 
   private getSignalRuntimeRunKey(runId: string): string {
     return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${runId}`;
+  }
+
+  /**
+   * Records that `runId` is being resumed by a request that can execute these client tools, so the
+   * stream that is still open from before the suspension skips them. Released when the last stream
+   * of the run closes, which is after this request returns.
+   */
+  private holdResumingClientTools(
+    runId: string,
+    clientTools: ToolsInput | undefined,
+  ): (options?: { force?: boolean }) => void {
+    const names = Object.entries(clientTools ?? {})
+      .filter(([, tool]) => typeof (tool as { execute?: unknown }).execute === 'function')
+      .map(([name]) => name);
+    if (names.length === 0) return () => {};
+
+    const key = this.getSignalRuntimeRunKey(runId);
+    const held = resumingClientToolNamesByRunKey.get(key) ?? new Map<string, number>();
+    for (const name of names) held.set(name, (held.get(name) ?? 0) + 1);
+    resumingClientToolNamesByRunKey.set(key, held);
+
+    // A generate resume opens no stream, so nothing else would drop this hold. A stream resume
+    // leaves it: the open first stream still needs it after this request returns, and drops it
+    // when that stream closes.
+    let released = false;
+    // force drops the hold even while a stream is tracking the run. A rejected resume request
+    // never resumes the run, so the open stream must not treat a later retry as already covered.
+    return ({ force = false }: { force?: boolean } = {}) => {
+      if (released || (!force && openStreamCountByRunKey.has(key))) return;
+      released = true;
+      const current = resumingClientToolNamesByRunKey.get(key);
+      if (!current) return;
+      for (const name of names) {
+        const count = (current.get(name) ?? 1) - 1;
+        if (count > 0) current.set(name, count);
+        else current.delete(name);
+      }
+      if (current.size === 0) resumingClientToolNamesByRunKey.delete(key);
+    };
+  }
+
+  /** Drops the held tool names when the last stream of the run closes. */
+  private trackOpenStream(runId: string): () => void {
+    const key = this.getSignalRuntimeRunKey(runId);
+    openStreamCountByRunKey.set(key, (openStreamCountByRunKey.get(key) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const remaining = (openStreamCountByRunKey.get(key) ?? 1) - 1;
+      if (remaining > 0) {
+        openStreamCountByRunKey.set(key, remaining);
+        return;
+      }
+      openStreamCountByRunKey.delete(key);
+      resumingClientToolNamesByRunKey.delete(key);
+    };
   }
 
   private getSignalRuntimeThreadKey({
@@ -635,23 +716,34 @@ export class Agent extends BaseResource {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
-  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+  queueSignal(params: QueueAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/queue-signal'>> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/queue-signal`, params);
+  }
+
+  async subscribeToThread<WITH_RUN_STATUS extends boolean = false>(
+    params: SubscribeAgentThreadParams & { withRunStatus?: WITH_RUN_STATUS },
+  ): Promise<
     Response & {
-      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      processDataStream: (options: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => Promise<void>;
       abort: (options?: Pick<AbortAgentThreadParams, 'clearPendingSignals'>) => Promise<boolean>;
       unsubscribe: () => void;
     }
   > {
-    const { resourceId, threadId, withInitialHistory } = params;
+    const { resourceId, threadId, withInitialHistory, withRunStatus } = params;
     const requestSubscription = () =>
       this.request(`/agents/${this.agentId}/threads/subscribe`, {
         method: 'POST',
-        body: { resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) },
+        body: {
+          resourceId,
+          threadId,
+          ...(withInitialHistory ? { withInitialHistory } : {}),
+          ...(withRunStatus ? { withRunStatus } : {}),
+        },
         stream: true,
       }) as Promise<Response>;
 
     const streamResponse = (await requestSubscription()) as Response & {
-      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      processDataStream: (options: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => Promise<void>;
       abort: (options?: Pick<AbortAgentThreadParams, 'clearPendingSignals'>) => Promise<boolean>;
       unsubscribe: () => void;
     };
@@ -676,7 +768,10 @@ export class Agent extends BaseResource {
       }
     };
 
-    streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
+    streamResponse.processDataStream = async ({
+      onChunk,
+      reconnect,
+    }: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => {
       if (unsubscribed) return;
       processStarted = true;
       processAbortController = new AbortController();
@@ -973,10 +1068,25 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async abortThread(params: AbortAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
+  /** Stops execution of a run, including runs without a memory thread. */
+  async abortRun(
+    runId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<RouteResponse<'POST /agents/:agentId/runs/:runId/abort'>> {
+    return this.request<RouteResponse<'POST /agents/:agentId/runs/:runId/abort'>>(
+      `/agents/${this.agentId}/runs/${encodeURIComponent(runId)}/abort`,
+      { method: 'POST', signal: options?.signal },
+    );
+  }
+
+  async abortThread(
+    params: AbortAgentThreadParams,
+    options?: { signal?: AbortSignal },
+  ): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
     const { resourceId, threadId, clearPendingSignals, expectedRunId } = params;
     return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
       method: 'POST',
+      signal: options?.signal,
       body: {
         resourceId,
         threadId,
@@ -1201,7 +1311,12 @@ export class Agent extends BaseResource {
         return response;
       }
 
+      const toolResults: Record<string, unknown>[] = [];
       for (const toolCall of toolCalls) {
+        // Don't start more client tools once the caller has cancelled.
+        if (abortSignal?.aborted) {
+          throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+        }
         const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
@@ -1224,30 +1339,29 @@ export class Agent extends BaseResource {
             },
           });
 
-          // Build updated messages from the response, adding the tool result
-          // Do NOT re-include the original user message to avoid storage duplicates
-          const updatedMessages = [
-            ...(response.response as unknown as { messages: CoreMessage[] }).messages,
-            {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result,
-                  ...(observability ? { __mastraObservability: observability } : {}),
-                },
-              ],
-            },
-          ];
-          // Recursive call to generateLegacy with updated messages
-          // Using type assertion to handle the complex overload types
-          return (this.generateLegacy as any)({
-            ...params,
-            messages: updatedMessages,
+          toolResults.push({
+            type: 'tool-result',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            result,
+            ...(observability ? { __mastraObservability: observability } : {}),
           });
         }
+      }
+
+      if (toolResults.length > 0) {
+        // Build updated messages from the response, adding the tool results
+        // Do NOT re-include the original user message to avoid storage duplicates
+        const updatedMessages = [
+          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          { role: 'tool', content: toolResults },
+        ];
+        // Recursive call to generateLegacy with updated messages
+        // Using type assertion to handle the complex overload types
+        return (this.generateLegacy as any)({
+          ...params,
+          messages: updatedMessages,
+        });
       }
     }
 
@@ -1318,6 +1432,7 @@ export class Agent extends BaseResource {
         threadId,
         requestContext: requestContext as RequestContext<any>,
         respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
+        abortSignal,
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
@@ -1637,7 +1752,8 @@ export class Agent extends BaseResource {
         const toolInvocations = message.toolInvocations;
 
         if (toolInvocations == null) {
-          throw new Error('tool_result must be preceded by a tool_call');
+          // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+          return;
         }
 
         // find if there is any tool invocation with the same toolCallId
@@ -1645,7 +1761,7 @@ export class Agent extends BaseResource {
         const toolInvocationIndex = toolInvocations.findIndex(invocation => invocation.toolCallId === value.toolCallId);
 
         if (toolInvocationIndex === -1) {
-          throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+          return;
         }
 
         const invocation = {
@@ -2116,7 +2232,8 @@ export class Agent extends BaseResource {
             const toolInvocations = message.toolInvocations;
 
             if (toolInvocations == null) {
-              throw new Error('tool_result must be preceded by a tool_call');
+              // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+              break;
             }
 
             // find if there is any tool invocation with the same toolCallId
@@ -2126,7 +2243,7 @@ export class Agent extends BaseResource {
             );
 
             if (toolInvocationIndex === -1) {
-              throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+              break;
             }
 
             const invocation = {
@@ -2189,10 +2306,11 @@ export class Agent extends BaseResource {
 
   /**
    * Creates the consumer-facing stream for the streaming methods. Cancelling the
-   * returned stream (or aborting `externalSignal`) aborts the underlying request
-   * and stops any client-tool continuations.
+   * returned stream or the client-wide signal detaches the HTTP observer and
+   * stops any client-tool continuations. Per-call execution cancellation is
+   * handled separately by processStreamResponse.
    */
-  private createCancellableStream(externalSignal?: AbortSignal) {
+  private createCancellableStream() {
     const abortController = new AbortController();
     let readableController: ReadableStreamDefaultController<Uint8Array>;
     const readable = new ReadableStream<Uint8Array>({
@@ -2206,7 +2324,7 @@ export class Agent extends BaseResource {
     return {
       readable,
       controller: readableController!,
-      signal: mergeAbortSignals(abortController.signal, externalSignal, this.options.abortSignal)!,
+      signal: mergeAbortSignals(abortController.signal, this.options.abortSignal)!,
     };
   }
 
@@ -2216,6 +2334,69 @@ export class Agent extends BaseResource {
     route: string = 'stream',
     signal?: AbortSignal,
   ) {
+    // Know the execution ID before the first chunk, including for early cancellation.
+    const suppliedRunId = processedParams.runId;
+    processedParams = { ...processedParams, runId: processedParams.runId ?? uuid() };
+    const callerSignal: AbortSignal | undefined = processedParams.abortSignal;
+    callerSignal?.throwIfAborted();
+    const transportAbort = new AbortController();
+    const cancellationAbort = new AbortController();
+    const detachSignal = signal;
+    signal = mergeAbortSignals(detachSignal, transportAbort.signal);
+    let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
+    const stopCancellation = () => cancellationAbort.abort();
+    const cancelExecution = () => {
+      cancellationTimer = setTimeout(
+        () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
+        10_000,
+      );
+      void (async () => {
+        try {
+          while (true) {
+            cancellationAbort.signal.throwIfAborted();
+            const result = await this.abortRun(processedParams.runId, { signal: cancellationAbort.signal });
+            if (result.aborted) return;
+            await new Promise<void>((resolve, reject) => {
+              const onAbort = () => {
+                clearTimeout(timer);
+                reject(cancellationAbort.signal.reason);
+              };
+              const timer = setTimeout(() => {
+                cancellationAbort.signal.removeEventListener('abort', onAbort);
+                resolve();
+              }, 100);
+              cancellationAbort.signal.addEventListener('abort', onAbort, { once: true });
+              if (cancellationAbort.signal.aborted) onAbort();
+            });
+          }
+        } catch (error) {
+          if (
+            !cancellationAbort.signal.aborted &&
+            !(error instanceof Error && 'status' in error && (error.status === 404 || error.status === 501))
+          ) {
+            try {
+              controller.error(error);
+            } catch {
+              /* Already detached. */
+            }
+          }
+        } finally {
+          clearTimeout(cancellationTimer);
+          transportAbort.abort(callerSignal?.reason);
+        }
+      })();
+    };
+    const cleanupCancellation = () => {
+      callerSignal?.removeEventListener('abort', cancelExecution);
+      detachSignal?.removeEventListener('abort', stopCancellation);
+      clearTimeout(cancellationTimer);
+      stopCancellation();
+    };
+    detachSignal?.addEventListener('abort', stopCancellation, { once: true });
+    if (detachSignal?.aborted) stopCancellation();
+    callerSignal?.addEventListener('abort', cancelExecution, { once: true });
+    if (callerSignal?.aborted) cancelExecution();
+
     // Extract threadId from memory config if present (matching generate() behavior)
     const { memory } = processedParams ?? {};
     const { resource, thread } = memory ?? {};
@@ -2234,18 +2415,22 @@ export class Agent extends BaseResource {
       route === 'stream' && this.routeOverrides?.stream
         ? this.routeOverrides.stream
         : `/agents/${this.agentId}/${route}`;
-    const response: Response = await this.request(requestPath, {
+    const response = await this.request<Response>(requestPath, {
       method: 'POST',
       body: requestBody,
       stream: true,
       signal,
+    }).catch(error => {
+      cleanupCancellation();
+      throw error;
     });
 
     if (!response.body) {
+      cleanupCancellation();
       throw new Error('No response body');
     }
 
-    const isAborted = () => Boolean(signal?.aborted);
+    const isAborted = () => Boolean(signal?.aborted || callerSignal?.aborted);
     const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
     const safeClose = () => {
       try {
@@ -2261,17 +2446,34 @@ export class Agent extends BaseResource {
 
     try {
       let messages: UIMessage[] = [];
-      let streamRunId: string | undefined = processedParams.runId;
+      let streamRunId: string | undefined = suppliedRunId;
+      // The full model-message history the server reported on its last finish chunk. A resumed
+      // run restores the conversation from its snapshot, so this is the only place a stateless
+      // client can recover it for a client-tool continuation.
+      let finishedHistory: unknown[] | undefined;
+      // A durable run keeps this stream open across a suspension, so it also carries the
+      // resumed continuation. Its client tools are run by the request that resumed the run
+      // (approve/decline/resume), so this stream must not run them again.
+      let suspended = false;
+      const resumedToolCallIds = new Set<string>();
+      const releaseOpenStream = streamRunId ? this.trackOpenStream(streamRunId) : () => {};
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
       const decoder = new TextDecoder();
-      let pendingText = '';
+      const splitEvents = createSseEventSplitter();
 
       const enqueueReadableText = (text: string, isFinal = false) => {
-        pendingText += text;
-        const lines = pendingText.split('\n\n');
-        pendingText = isFinal ? '' : (lines.pop() ?? '');
+        const lines = splitEvents(text, isFinal);
+        for (const line of lines) {
+          if (!line.startsWith('data: ') || !line.includes('"type":"finish"')) continue;
+          try {
+            const all = JSON.parse(line.slice(6))?.payload?.messages?.all;
+            if (Array.isArray(all)) finishedHistory = all;
+          } catch {
+            // Not a JSON chunk
+          }
+        }
 
         const readableLines = lines
           .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
@@ -2375,6 +2577,14 @@ export class Agent extends BaseResource {
             }
 
             const executableToolCalls = [...toolInvocationsById.values()].filter(toolCall => {
+              // A resumed call is skipped only when the request that resumed the run can execute
+              // that tool. A server-side approve sends no client tools, so the call must run here.
+              if (resumedToolCallIds.has(toolCall.toolCallId)) {
+                const held = streamRunId
+                  ? resumingClientToolNamesByRunKey.get(this.getSignalRuntimeRunKey(streamRunId))
+                  : undefined;
+                if (held?.has(toolCall.toolName)) return false;
+              }
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               return Boolean(clientTool?.execute);
             });
@@ -2388,6 +2598,7 @@ export class Agent extends BaseResource {
                     payload: {
                       toolCallId: string;
                       toolName: string;
+                      args: unknown;
                       result: unknown;
                       isError: boolean;
                       providerExecuted: false;
@@ -2450,6 +2661,7 @@ export class Agent extends BaseResource {
                     payload: {
                       toolCallId: toolCall.toolCallId,
                       toolName: toolCall.toolName,
+                      args: toolCall.args,
                       result,
                       isError: false,
                       providerExecuted: false,
@@ -2481,7 +2693,7 @@ export class Agent extends BaseResource {
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   input: toolCall.args,
-                  result,
+                  output: { type: 'json', value: result as JSONValue },
                   ...(modelOutput != null
                     ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
                     : {}),
@@ -2529,22 +2741,26 @@ export class Agent extends BaseResource {
                 content: toolResultContents,
               };
 
+              const isOneShotResume =
+                route === 'resume-stream' || route === 'approve-tool-call' || route === 'decline-tool-call';
               const updatedMessages = threadId
                 ? [toolResultMessage]
-                : [
-                    ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
-                    ...messages,
-                    toolResultMessage,
-                  ];
+                : isOneShotResume && finishedHistory
+                  ? [...finishedHistory, toolResultMessage]
+                  : [
+                      ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
+                      ...messages,
+                      toolResultMessage,
+                    ];
 
               // Recursively call stream with updated messages
               // This will wait for the recursive stream to complete before continuing.
-              // Resume routes are one-shot (they consume server-side resumeData),
+              // Resume routes (including approve/decline) are one-shot (they consume server-side resumeData),
               // so client-tool continuations must fall back to the corresponding
               // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
               // are idempotent continuations and stay on the same endpoint.
               const recursionRoute =
-                route === 'resume-stream'
+                route === 'resume-stream' || route === 'approve-tool-call' || route === 'decline-tool-call'
                   ? 'stream'
                   : route === 'resume-stream-until-idle'
                     ? 'stream-until-idle'
@@ -2587,6 +2803,17 @@ export class Agent extends BaseResource {
           if (!streamRunId && typeof chunk.runId === 'string') {
             streamRunId = chunk.runId;
           }
+          if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+            suspended = true;
+          } else if (suspended && chunk.type === 'tool-call' && typeof chunk.payload?.toolCallId === 'string') {
+            const toolName = chunk.payload.toolName;
+            const held = streamRunId
+              ? resumingClientToolNamesByRunKey.get(this.getSignalRuntimeRunKey(streamRunId))
+              : undefined;
+            if (typeof toolName === 'string' && held?.has(toolName)) {
+              resumedToolCallIds.add(chunk.payload.toolCallId);
+            }
+          }
         },
         lastMessage: undefined,
       })
@@ -2603,9 +2830,12 @@ export class Agent extends BaseResource {
           safeClose();
         })
         .finally(() => {
+          cleanupCancellation();
           signal?.removeEventListener('abort', onAbort);
+          releaseOpenStream();
         });
     } catch (error) {
+      cleanupCancellation();
       if (!isAbortError(error)) {
         console.error('Error processing stream response:', error);
       }
@@ -2851,7 +3081,7 @@ export class Agent extends BaseResource {
     };
 
     // Create a manually controlled readable stream
-    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
@@ -2968,7 +3198,7 @@ export class Agent extends BaseResource {
     };
 
     // Create a manually controlled readable stream
-    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
@@ -3034,6 +3264,14 @@ export class Agent extends BaseResource {
     /** Aborts the underlying request and any client-tool continuations. */
     abortSignal?: AbortSignal;
     requestContext?: RequestContext | Record<string, any>;
+    /** Client tools the model may call after the approval decision. */
+    clientTools?: ToolsInput;
+    clientToolsResolver?: ClientToolsResolver;
+    /**
+     * Memory thread/resource of the suspended run. Client-tool continuations go to `/stream`,
+     * so pass the same memory as the original call to keep them on the thread.
+     */
+    memory?: StreamParamsBaseWithoutMessages['memory'];
   }): Promise<
     Response & {
       processDataStream: ({
@@ -3044,13 +3282,27 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
-    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+    const executableClientTools = params.clientToolsResolver?.() ?? params.clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
+    const processedParams = {
+      ...rest,
+      requestContext: parseClientRequestContext(requestContext),
+      clientTools: processClientTools(executableClientTools),
+    };
 
     // Create a manually controlled readable stream
-    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
-    // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController, 'approve-tool-call', signal);
+    // A rejected request never resumes the run, so drop the hold even if the original stream is open.
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'approve-tool-call',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -3106,6 +3358,14 @@ export class Agent extends BaseResource {
     /** Optional explanation surfaced to the model in place of the default decline message. */
     reason?: string;
     requestContext?: RequestContext | Record<string, any>;
+    /** Client tools the model may call after the approval decision. */
+    clientTools?: ToolsInput;
+    clientToolsResolver?: ClientToolsResolver;
+    /**
+     * Memory thread/resource of the suspended run. Client-tool continuations go to `/stream`,
+     * so pass the same memory as the original call to keep them on the thread.
+     */
+    memory?: StreamParamsBaseWithoutMessages['memory'];
   }): Promise<
     Response & {
       processDataStream: ({
@@ -3116,13 +3376,27 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
-    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+    const executableClientTools = params.clientToolsResolver?.() ?? params.clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
+    const processedParams = {
+      ...rest,
+      requestContext: parseClientRequestContext(requestContext),
+      clientTools: processClientTools(executableClientTools),
+    };
 
     // Create a manually controlled readable stream
-    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
-    // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController, 'decline-tool-call', signal);
+    // A rejected request never resumes the run, so drop the hold even if the original stream is open.
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'decline-tool-call',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -3157,20 +3431,27 @@ export class Agent extends BaseResource {
    * Use this to resume receiving events after a disconnection.
    *
    * @param params.runId - The run ID to observe
-   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @param params.offset - Run-log position to resume from. Chunks from `observe()`, and from `stream()` on
+   *   durable and evented agents, carry an `index`; pass the `index + 1` of the last chunk that has one. Chunks without an `index`
+   *   (`abort` and structured-output `object` chunks) are skipped when choosing the offset. If omitted,
+   *   replays the chunks still cached for the run, or only live chunks if the server's transport can't replay.
    * @returns Promise containing a streaming Response
    *
    * @example
    * ```typescript
-   * // Reconnect to a stream from a specific position
-   * const response = await client.agents('my-agent').observe({
-   *   runId: 'run-123',
-   *   offset: 42, // Resume from event 42
-   * });
+   * const agent = client.getAgent('my-agent');
+   * let offset = 0;
+   * const trackOffset = async (chunk: { index?: number }) => {
+   *   if (chunk.index === undefined) return;
+   *   offset = chunk.index + 1;
+   * };
    *
-   * await response.processDataStream({
-   *   onChunk: (chunk) => console.log('Received:', chunk),
-   * });
+   * const stream = await agent.stream(messages, { runId: 'run-123' });
+   * await stream.processDataStream({ onChunk: trackOffset });
+   *
+   * // After a dropped connection, resume where the last indexed chunk left off
+   * const response = await agent.observe({ runId: 'run-123', offset });
+   * await response.processDataStream({ onChunk: trackOffset });
    * ```
    */
   async observe(params: { runId: string; offset?: number }): Promise<
@@ -3234,11 +3515,13 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const executableClientTools = options.clientToolsResolver?.() ?? options.clientTools;
+    const releaseHold = this.holdResumingClientTools(options.runId, executableClientTools);
     const processedParams = {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
+      clientTools: processClientTools(executableClientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3247,9 +3530,17 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
-    const response = await this.processStreamResponse(processedParams, readableController, 'resume-stream', signal);
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'resume-stream',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3355,11 +3646,13 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const executableClientTools = options.clientToolsResolver?.() ?? options.clientTools;
+    const releaseHold = this.holdResumingClientTools(options.runId, executableClientTools);
     const processedParams = {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
+      clientTools: processClientTools(executableClientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3368,14 +3661,17 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     const response = await this.processStreamResponse(
       processedParams,
       readableController,
       'resume-stream-until-idle',
       signal,
-    );
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3408,15 +3704,50 @@ export class Agent extends BaseResource {
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
   async approveToolCallGenerate(
-    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext'> & {
+    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext' | 'clientTools'> & {
       requestContext?: RequestContext | Record<string, any>;
+      /** Client tools the model may call after the approval decision. */
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
+      /**
+       * Memory of the original call. When the model calls a client tool after the decision, the
+       * continuation is saved to this thread instead of running stateless.
+       */
+      memory?: StreamParamsBaseWithoutMessages['memory'];
     },
   ): Promise<ToolCallGenerateResponse> {
-    const { requestContext, ...rest } = params;
-    return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
-      method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
-    });
+    const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
+    // The open first stream receives the resumed call while this request is in flight. Hold before
+    // the request so that stream skips tools this request can execute. A generate resume opens no
+    // stream of its own, so release the hold here unless a stream is still tracking the run.
+    const executableClientTools = clientToolsResolver?.() ?? clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
+    let response: ToolCallGenerateResponse;
+    try {
+      response = await this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
+        method: 'POST',
+        body: {
+          ...rest,
+          requestContext: parseClientRequestContext(requestContext),
+          clientTools: processClientTools(executableClientTools),
+        },
+      });
+    } catch (error) {
+      // The server rejected the resume, so it never happened. Drop the hold even if a stream is open.
+      releaseHold({ force: true });
+      throw error;
+    }
+    try {
+      return await this.continueResumedGenerate(response, {
+        requestContext,
+        clientTools: executableClientTools,
+        clientToolsResolver,
+        memory,
+      });
+    } finally {
+      // The resume was accepted. Leave the hold while a stream is still tracking the run.
+      releaseHold();
+    }
   }
 
   /**
@@ -3424,14 +3755,96 @@ export class Agent extends BaseResource {
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
   async declineToolCallGenerate(
-    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext'> & {
+    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext' | 'clientTools'> & {
       requestContext?: RequestContext | Record<string, any>;
+      /** Client tools the model may call after the approval decision. */
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
+      /**
+       * Memory of the original call. When the model calls a client tool after the decision, the
+       * continuation is saved to this thread instead of running stateless.
+       */
+      memory?: StreamParamsBaseWithoutMessages['memory'];
     },
   ): Promise<ToolCallGenerateResponse> {
-    const { requestContext, ...rest } = params;
-    return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
-      method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+    const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
+    // The open first stream receives the resumed call while this request is in flight. Hold before
+    // the request so that stream skips tools this request can execute. A generate resume opens no
+    // stream of its own, so release the hold here unless a stream is still tracking the run.
+    const executableClientTools = clientToolsResolver?.() ?? clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
+    let response: ToolCallGenerateResponse;
+    try {
+      response = await this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
+        method: 'POST',
+        body: {
+          ...rest,
+          requestContext: parseClientRequestContext(requestContext),
+          clientTools: processClientTools(executableClientTools),
+        },
+      });
+    } catch (error) {
+      // The server rejected the resume, so it never happened. Drop the hold even if a stream is open.
+      releaseHold({ force: true });
+      throw error;
+    }
+    try {
+      return await this.continueResumedGenerate(response, {
+        requestContext,
+        clientTools: executableClientTools,
+        clientToolsResolver,
+        memory,
+      });
+    } finally {
+      // The resume was accepted. Leave the hold while a stream is still tracking the run.
+      releaseHold();
+    }
+  }
+
+  /**
+   * Runs executable client tools the model called after an approval decision and continues on
+   * /generate, like generate() does. With memory the continuation sends only the new messages to the
+   * thread. Without memory it re-sends the conversation up to the last user turn, because the resume
+   * routes keep the earlier history server-side and drop it once the run finishes.
+   */
+  private async continueResumedGenerate(
+    response: ToolCallGenerateResponse,
+    {
+      requestContext,
+      clientTools,
+      clientToolsResolver,
+      memory,
+    }: {
+      requestContext?: RequestContext | Record<string, any>;
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
+      memory?: StreamParamsBaseWithoutMessages['memory'];
+    },
+  ): Promise<ToolCallGenerateResponse> {
+    if (response.finishReason !== 'tool-calls') return response;
+    const context =
+      requestContext === undefined || requestContext instanceof RequestContext
+        ? requestContext
+        : new RequestContext<unknown>(Object.entries(requestContext));
+    const threadId = typeof memory?.thread === 'string' ? memory.thread : memory?.thread?.id;
+    const history = response.messages ?? [];
+    // response.messages is the whole run; the turns after the last user message are also in
+    // response.response.messages, which executeToolCallAndRespond appends.
+    const priorTurns = history.slice(0, history.findLastIndex(message => message.role === 'user') + 1);
+    return executeToolCallAndRespond<undefined>({
+      response,
+      params: {
+        messages: threadId ? [] : priorTurns,
+        clientTools: clientToolsResolver?.() ?? clientTools,
+        clientToolsResolver,
+        requestContext: context,
+        memory,
+      },
+      agentId: this.agentId,
+      resourceId: memory?.resource,
+      threadId,
+      requestContext: context,
+      respondFn: (messages, options) => this.generate(messages, options),
     });
   }
 

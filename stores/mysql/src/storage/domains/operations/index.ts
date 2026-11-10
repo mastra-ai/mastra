@@ -306,7 +306,7 @@ export class StoreOperationsMySQL extends StoreOperations {
   }: {
     tableName: TABLE_NAMES;
     column: string;
-    cutoff: Date;
+    cutoff: Date | number;
     limit: number;
   }): Promise<number> {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {

@@ -63,7 +63,41 @@ function createOneToolCallModel() {
   });
 }
 
-function createQuietAgent(id: string) {
+/**
+ * First call requests the tool; the second call holds its stream open, fires
+ * `abort`, and errors with an AbortError once the run's signal aborts (as real
+ * providers do), so the step returns reason 'abort'.
+ */
+function createAbortOnSecondCallModel(abort: () => void) {
+  let calls = 0;
+  return new MockLanguageModelV2({
+    doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+      calls++;
+      if (calls === 1) return createOneToolCallModel().doStream({} as any);
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 't' });
+            abortSignal?.addEventListener(
+              'abort',
+              () => {
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                controller.error(err);
+              },
+              { once: true },
+            );
+            queueMicrotask(abort);
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  });
+}
+
+function createQuietAgent(id: string, model: MockLanguageModelV2 = createOneToolCallModel()) {
   const quiet = createTool({
     id: 'quiet',
     description: 'Does not stream anything',
@@ -74,7 +108,7 @@ function createQuietAgent(id: string) {
     id,
     name: id,
     instructions: 'Call the tool',
-    model: createOneToolCallModel() as LanguageModelV2,
+    model: model as LanguageModelV2,
     tools: { quiet },
   });
 }
@@ -112,6 +146,25 @@ describe('agent turn ToolStream allocation', () => {
       // drain
     }
 
+    expect(constructions.count).toBe(1);
+  });
+  it('constructs only the tool writer for a durable agent turn aborted mid-stream', async () => {
+    const controller = new AbortController();
+    const durable = createDurableAgent({
+      agent: createQuietAgent(
+        'quiet-aborted',
+        createAbortOnSecondCallModel(() => controller.abort()),
+      ),
+      pubsub,
+    });
+    new Mastra({ agents: { quietAborted: durable as any }, logger: false, storage: new InMemoryStore(), pubsub });
+
+    const result = await durable.stream('go', { maxSteps: 3, abortSignal: controller.signal });
+    for await (const _ of result.fullStream) {
+      // drain
+    }
+
+    expect(controller.signal.aborted).toBe(true);
     expect(constructions.count).toBe(1);
   });
 });

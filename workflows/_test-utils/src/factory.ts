@@ -225,7 +225,7 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
     };
 
     // Register domain tests conditionally
-    if (!skip.constructor) {
+    if (!skip.agentCreation) {
       createConstructorTests(context);
     }
 

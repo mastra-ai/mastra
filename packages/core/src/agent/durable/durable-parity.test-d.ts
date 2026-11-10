@@ -49,6 +49,7 @@ type ConsumedDuringPreparation =
   // Memory is resolved during preparation; thread/resource/memoryConfig are
   // extracted and stored in workflow state + registry
   | 'memory'
+  | 'scopes'
   // savePerStep is extracted and stored in workflow state during preparation
   | 'savePerStep'
   // RunId is generated/used during preparation, not forwarded as an "option"
@@ -71,8 +72,12 @@ type ConsumedDuringPreparation =
   | 'hideSignals'
   // Caller-local stream lifecycle; read by DurableAgent.stream()/resume(), never serialized.
   | 'closeOnSuspend'
+  | '_detachObserverOnCancel'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
+  // Caller-local step-owner object for plain runs; durable registers its steps
+  // under the registry entry instead, so this is never serialized or read here
+  | 'stepOwner'
   // Toolsets and clientTools are resolved into the `tools` record during
   // getToolsForExecution() in preparation
   | 'toolsets'

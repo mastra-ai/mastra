@@ -793,6 +793,7 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
     'minProperties',
     'maxProperties',
     'patternProperties',
+    'propertyNames',
     'unevaluatedItems',
     'unevaluatedProperties',
     'allOf',
@@ -1164,6 +1165,21 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
 
     const out = prepareJsonSchemaForOpenAIStrictMode(schema);
     expect(collectLeakedKeywords(out)).toEqual([]);
+  });
+
+  it('drops propertyNames emitted by z.record() (#25235)', () => {
+    // Shape zod v4 emits for z.record(z.string(), z.string()).
+    const schema = {
+      type: 'object',
+      properties: {
+        labels: { type: 'object', propertyNames: { type: 'string' }, additionalProperties: { type: 'string' } },
+      },
+      required: ['labels'],
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema) as any;
+    expect(collectLeakedKeywords(out)).toEqual([]);
+    expect(out.properties.labels.type).toBe('object');
   });
 });
 

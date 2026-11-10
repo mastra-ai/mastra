@@ -38,4 +38,17 @@ describe('resolveAutoModelId', () => {
       'mastra/google/gemini-3.5-flash',
     );
   });
+
+  it('skips Gemini when the caller cannot use Google, even with the server key set', () => {
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+    const canUseProvider = (providerId: string) => providerId !== 'google';
+    expect(resolveAutoModelId('anthropic/claude-opus-4-6', { canUseProvider })).toBe('anthropic/claude-haiku-4-5');
+  });
+
+  it('prefers Gemini when the caller can use Google, even without the server key', () => {
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+    expect(resolveAutoModelId('anthropic/claude-opus-4-6', { canUseProvider: () => true })).toBe(
+      'google/gemini-2.5-flash',
+    );
+  });
 });

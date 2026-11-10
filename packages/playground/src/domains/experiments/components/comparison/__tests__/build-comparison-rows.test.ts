@@ -80,6 +80,14 @@ describe('buildComparisonRows', () => {
       // Both fixtures ran for 5s.
       expect(contender.durationDeltaMs).toBe(0);
     });
+
+    it('computes the average score delta on the contender side', () => {
+      const [baseline, contender] = rows()[0].sides;
+
+      expect(baseline.averageScoreDelta).toBeUndefined();
+      // Baseline averages (0.5 + 0.9) / 2, the contender (0.9 + 0.9) / 2.
+      expect(contender.averageScoreDelta).toBeCloseTo(0.2);
+    });
   });
 
   describe('when comparing a baseline and two contenders', () => {
@@ -114,6 +122,12 @@ describe('buildComparisonRows', () => {
       const [, contender] = rows()[1].sides;
 
       expect(contender.deltas?.accuracy).toBeNull();
+    });
+
+    it('leaves the average score delta undefined when that side has no score left', () => {
+      const [, contender] = rows()[1].sides;
+
+      expect(contender.averageScoreDelta).toBeUndefined();
     });
   });
 

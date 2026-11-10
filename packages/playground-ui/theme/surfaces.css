@@ -100,7 +100,7 @@
    * overlay (popover, dropdown, dialog, drawer, tooltip).
    *
    * These are the drop layers only. The `shadow-raised` / `shadow-overlay`
-   * utilities in `src/index.css` assemble lip + rim + drops on the element
+   * utilities in `components.css` assemble lip + rim + drops on the element
    * itself, which is what lets a state repaint the rim: a custom property
    * holding `var(--surface-rim)` would be substituted here, on the root, and
    * every descendant would inherit the finished string.
@@ -117,7 +117,7 @@
    * `border` beside it, which would read as two lines — and is why a field and
    * a card can be the same material. Hover does not touch it: the rim is the
    * loudest part of a borderless surface, so a pointer wash goes through
-   * `--surface-tint` (see `src/index.css`) and leaves the boundary alone.
+   * `--surface-tint` (see `components.css`) and leaves the boundary alone.
    *
    * The rim is inset, so it cannot be clipped: the app frame and every
    * ScrollArea viewport are `overflow-hidden`, and an outer ring on a surface

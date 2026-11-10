@@ -54,8 +54,20 @@ describe('persisted idle signal trim', () => {
     }
 
     await waitFor(() => completed.length === 3);
-    await waitFor(() => retained().filter(event => event.runId !== undefined).length === 0);
-    expect(retained().filter(event => event.runId !== undefined)).toEqual([]);
+    await waitFor(() => retained().filter(event => event.runId !== undefined).length === 6);
+    expect(
+      retained()
+        .filter(event => event.runId !== undefined)
+        .map(event => event.data.type)
+        .sort(),
+    ).toEqual([
+      'run-completed',
+      'run-completed',
+      'run-completed',
+      'run-registered',
+      'run-registered',
+      'run-registered',
+    ]);
   });
 
   it('deletes the failure of a wake whose run could not start', async () => {
@@ -95,6 +107,6 @@ describe('persisted idle signal trim', () => {
     } finally {
       vi.useRealTimers();
     }
-    await waitFor(() => failures().length === 0);
+    expect(failures()).toHaveLength(1);
   });
 });

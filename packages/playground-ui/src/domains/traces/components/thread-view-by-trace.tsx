@@ -3,6 +3,7 @@ import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks/trace
 import { useQueries } from '@tanstack/react-query';
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { FeedbackOptions } from './feedback-options';
 import { TraceScoresTab } from '@/domains/scores';
 import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
@@ -19,8 +20,8 @@ import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { useLinkComponent } from '@/lib/framework';
 
-// `queryTraces` requires a time range and rejects ranges over 31 days; the legacy endpoint is left unbounded.
-const THREAD_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
+// `queryTraces` requires a time range; start at the epoch so it covers the whole thread, like the legacy endpoint.
+const THREAD_WINDOW_FROM = new Date(0).toISOString();
 
 export interface ThreadViewByTraceProps {
   threadId: string;
@@ -28,6 +29,7 @@ export interface ThreadViewByTraceProps {
   withQueryTrace: boolean;
   /** Shows the per-trace Feedback tab and fetches its feedback. */
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
   /** Opens a score from a trace's Scores tab; the app owns routing. */
@@ -46,20 +48,21 @@ export function ThreadViewByTrace({
   threadId,
   withQueryTrace,
   withFeedback,
+  feedbackOptions,
   onSelectedSpanChange,
   onOpenScore,
-  pageSize = 10,
+  pageSize = 3,
 }: ThreadViewByTraceProps) {
   const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(() => ({ threadId }), [threadId]);
   const { rows, isLoading, isPlaceholderData, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useTracesListSource({
-      initialAutoRefetch: false,
+      autoRefetch: false,
       withQueryTrace,
       legacyFilters,
       limit: pageSize,
       query: now => ({
         timeRange: {
-          from: new Date(now.getTime() - THREAD_WINDOW_MS).toISOString(),
+          from: THREAD_WINDOW_FROM,
           to: now.toISOString(),
         },
         where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },
@@ -118,7 +121,12 @@ export function ThreadViewByTrace({
       <ThreadTrace.List data-testid="thread-view-by-trace">
         {traceIds.map((traceId, index) => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTraceRowContent turn={index + 1} withFeedback={withFeedback} onOpenScore={onOpenScore} />
+            <ThreadTraceRowContent
+              turn={index + 1}
+              withFeedback={withFeedback}
+              feedbackOptions={feedbackOptions}
+              onOpenScore={onOpenScore}
+            />
           </ThreadTrace.Row>
         ))}
       </ThreadTrace.List>
@@ -130,11 +138,13 @@ export function ThreadViewByTrace({
 function ThreadTraceRowContent({
   turn,
   withFeedback,
+  feedbackOptions,
   onOpenScore,
 }: {
   /** 1-based position among the loaded turns. */
   turn: number;
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   onOpenScore: (traceId: string, scoreId: string) => void;
 }) {
   const { traceId, highlightSpans } = useThreadTraceRow();
@@ -185,7 +195,7 @@ function ThreadTraceRowContent({
           </ThreadTrace.TabContent>
           {withFeedback && (
             <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3">
-              <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
+              <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" feedbackOptions={feedbackOptions} />
             </ThreadTrace.TabContent>
           )}
           <ThreadTrace.TabContent value="scores" className="min-h-0 py-3">
@@ -206,3 +216,5 @@ function ThreadTraceRowContent({
     </>
   );
 }
+
+export type { FeedbackOptions } from './feedback-options';

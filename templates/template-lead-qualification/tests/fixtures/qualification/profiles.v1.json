@@ -1,0 +1,411 @@
+{
+  "version": 1,
+  "assessmentTime": "2026-10-19T12:00:00Z",
+  "cases": [
+    {
+      "id": "qualified",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "minimum",
+      "employees": {
+        "min": 20,
+        "max": 20
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "maximum",
+      "employees": {
+        "min": 500,
+        "max": 500
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "brazil",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "BR",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "germany",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "DE",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "britain",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "GB",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "below-minimum",
+      "employees": {
+        "min": 19,
+        "max": 19
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "above-maximum",
+      "employees": {
+        "min": 501,
+        "max": 501
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "outside-region",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "JP",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "other-business",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "other",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "nurture",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": false,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "old-intent",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2025-01-01T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "missing-workforce",
+      "employees": null,
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "crossing-boundary",
+      "employees": {
+        "min": 19,
+        "max": 20
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "conflicting-workforce",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": true,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "unsupported-workforce",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": true,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "ambiguous-company",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": true,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "email-candidate",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "email",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "unresolved-crm",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "crm",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "lower-only",
+      "employees": {
+        "min": 150,
+        "max": null
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "inferred-workforce",
+      "employees": {
+        "min": 150,
+        "max": 300
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": true,
+      "intentUnknown": false
+    },
+    {
+      "id": "missing-business",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": null,
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "missing-headquarters",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": null,
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": false
+    },
+    {
+      "id": "missing-intent",
+      "employees": {
+        "min": 40,
+        "max": 40
+      },
+      "country": "US",
+      "business": "b2b_saas",
+      "intent": true,
+      "intentAt": "2026-10-18T12:00:00Z",
+      "identity": "domain",
+      "ambiguous": false,
+      "conflict": false,
+      "unsupported": false,
+      "inferred": false,
+      "intentUnknown": true
+    }
+  ]
+}

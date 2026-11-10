@@ -1,12 +1,7 @@
 /**
- * DurableAgent approval resume data forwarding
- *
- * `sendToolApproval({ approved, resumeData })` lets a caller attach extra keys to an
- * approval (e.g. user-edited arguments from an approval UI). The non-durable tool-call
- * step forwards such a payload to the tool and only drops the bare `{ approved }`.
- * The durable step must behave the same way.
- *
- * Regression test for https://github.com/mastra-ai/mastra/issues/24561
+ * DurableAgent approval resume lifecycle: registry cleanup, abort, and segment ownership
+ * across an approval resume. Resume-data forwarding (#24561) is covered on every engine by the
+ * `approval-policy` aimock scenario.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -17,6 +12,7 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { MockStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
+import { Workflow } from '../../../workflows/workflow';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
@@ -26,14 +22,14 @@ import { globalRunRegistry } from '../run-registry';
 function createToolCallThenTextModel(
   tool: { name: string; args: object },
   abortOnResume = false,
-  onResumeCall?: () => void,
+  onResumeCall?: (abortSignal?: AbortSignal) => void,
 ) {
   let callCount = 0;
   return new MockLanguageModelV2({
     doStream: async ({ abortSignal }) => {
       callCount++;
       if (callCount > 1 && abortOnResume) {
-        onResumeCall?.();
+        onResumeCall?.(abortSignal);
         return {
           stream: new ReadableStream({
             start(controller) {
@@ -100,76 +96,6 @@ function createToolCallThenTextModel(
   });
 }
 
-async function runApprovalGatedTool(
-  pubsub: EventEmitterPubSub,
-  resumeData: Record<string, unknown>,
-  useSendToolApproval = false,
-) {
-  const seenResumeData: unknown[] = [];
-  const approvalTool = createTool({
-    id: 'approvalTool',
-    description: 'approval-gated tool',
-    inputSchema: z.object({ value: z.string() }),
-    requireApproval: true,
-    execute: async (_input, context) => {
-      seenResumeData.push(context?.agent?.resumeData);
-      return 'ok';
-    },
-  });
-  const baseAgent = new Agent({
-    id: 'approval-resume-data-agent',
-    name: 'Approval Resume Data Agent',
-    instructions: 'Use the approval tool.',
-    model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV2,
-    tools: { approvalTool },
-  });
-  const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-  new Mastra({
-    logger: false,
-    storage: new MockStore(),
-    agents: { approvalResumeDataAgent: durableAgent },
-  });
-
-  const memory = { thread: 'approval-resume-data-thread', resource: 'approval-resume-data-resource' };
-  let suspendedData: unknown;
-  const initial = await durableAgent.stream('Run the approval tool', {
-    ...(useSendToolApproval ? { memory } : {}),
-    onSuspended: data => {
-      suspendedData = data;
-    },
-  });
-  await vi.waitFor(() => expect(suspendedData).toBeDefined());
-  expect(suspendedData).toMatchObject({ type: 'approval', toolCallId: 'call-1' });
-
-  let finishData: unknown;
-  let resumed: { cleanup: () => void } | undefined;
-  if (useSendToolApproval) {
-    await durableAgent.sendToolApproval({
-      threadId: memory.thread,
-      resourceId: memory.resource,
-      toolCallId: 'call-1',
-      approved: true,
-      resumeData,
-      streamOptions: {
-        onFinish: data => {
-          finishData = data;
-        },
-      },
-    });
-  } else {
-    resumed = await durableAgent.resume(initial.runId, resumeData, {
-      onFinish: data => {
-        finishData = data;
-      },
-    });
-  }
-  await vi.waitFor(() => expect(finishData).toBeDefined());
-
-  resumed?.cleanup();
-  initial.cleanup();
-  return seenResumeData;
-}
-
 describe('DurableAgent approval resume data', () => {
   let pubsub: EventEmitterPubSub;
 
@@ -180,21 +106,6 @@ describe('DurableAgent approval resume data', () => {
   afterEach(async () => {
     globalRunRegistry.clear();
     await pubsub.close();
-  });
-
-  it('forwards an approval payload with extra keys to the tool', async () => {
-    const seen = await runApprovalGatedTool(pubsub, { approved: true, note: 'hello' });
-    expect(seen).toEqual([{ approved: true, note: 'hello' }]);
-  });
-
-  it('does not forward a bare { approved } payload to the tool', async () => {
-    const seen = await runApprovalGatedTool(pubsub, { approved: true });
-    expect(seen).toEqual([undefined]);
-  });
-
-  it('merges the separate approval decision into custom sendToolApproval resume data', async () => {
-    const seen = await runApprovalGatedTool(pubsub, { note: 'hello' }, true);
-    expect(seen).toEqual([{ approved: true, note: 'hello' }]);
   });
 
   it('does not recreate the registry key when an evented approval stream is cleaned up before FINISH completes', async () => {
@@ -262,6 +173,103 @@ describe('DurableAgent approval resume data', () => {
     await vi.waitFor(() => expect([...globalRunRegistry.keys()]).not.toContain(initial.runId));
     await new Promise(r => setTimeout(r, 50));
     expect([...globalRunRegistry.keys()]).not.toContain(initial.runId);
+  });
+
+  it('releases settled workflow handles and the external resume abort listener', async () => {
+    const createRunSpy = vi.spyOn(Workflow.prototype, 'createRun');
+    const approvalTool = createTool({
+      id: 'approvalTool',
+      description: 'approval-gated tool',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async () => 'ok',
+    });
+    const baseAgent = new Agent({
+      id: 'approval-settlement-agent',
+      name: 'Approval Settlement Agent',
+      instructions: 'Use the approval tool.',
+      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV2,
+      tools: { approvalTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({ logger: false, storage: new MockStore(), agents: { approvalSettlementAgent: durableAgent } });
+
+    let suspendedData: unknown;
+    const initial = await durableAgent.stream('Run the approval tool', {
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+    await vi.waitFor(() => expect(suspendedData).toBeDefined());
+    const childWorkflow = createRunSpy.mock.contexts.find(workflow => workflow.id === 'durable-agentic-execution');
+    expect(childWorkflow).toBeDefined();
+    expect(durableAgent.getWorkflow().runs.has(initial.runId)).toBe(true);
+    expect(childWorkflow!.runs.has(initial.runId)).toBe(true);
+
+    const controller = new AbortController();
+    const addListener = vi.spyOn(controller.signal, 'addEventListener');
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+    const resumed = await durableAgent.resume(initial.runId, { approved: true }, { abortSignal: controller.signal });
+    await resumed.output.consumeStream();
+    await vi.waitFor(() => expect(durableAgent.getWorkflow().runs.has(initial.runId)).toBe(false));
+    expect(childWorkflow!.runs.has(initial.runId)).toBe(false);
+    const forwarder = addListener.mock.calls.find(([type]) => type === 'abort')?.[1];
+    expect(forwarder).toBeDefined();
+    expect(removeListener).toHaveBeenCalledWith('abort', forwarder);
+
+    createRunSpy.mockRestore();
+    resumed.cleanup();
+    expect(removeListener).toHaveBeenCalledTimes(1);
+    initial.cleanup();
+  });
+
+  it('continues forwarding external abort after stream cleanup while resume execution is active', async () => {
+    let resumeModelStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      resumeModelStarted = resolve;
+    });
+    let modelSignal: AbortSignal | undefined;
+    const approvalTool = createTool({
+      id: 'approvalTool',
+      description: 'approval-gated tool',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async () => 'ok',
+    });
+    const baseAgent = new Agent({
+      id: 'approval-cleanup-inflight-agent',
+      name: 'Approval Cleanup Inflight Agent',
+      instructions: 'Use the approval tool.',
+      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }, true, signal => {
+        modelSignal = signal;
+        resumeModelStarted();
+      }) as LanguageModelV2,
+      tools: { approvalTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({ logger: false, storage: new MockStore(), agents: { approvalCleanupInflightAgent: durableAgent } });
+
+    let suspendedData: unknown;
+    const initial = await durableAgent.stream('Run the approval tool', {
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+    await vi.waitFor(() => expect(suspendedData).toBeDefined());
+
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+    const resumed = await durableAgent.resume(initial.runId, { approved: true }, { abortSignal: controller.signal });
+    await started;
+    const execution = globalRunRegistry.get(initial.runId)?.workflowExecution;
+    expect(execution).toBeDefined();
+    resumed.cleanup();
+    expect(removeListener).not.toHaveBeenCalled();
+    controller.abort();
+    await vi.waitFor(() => expect(modelSignal?.aborted).toBe(true));
+    await execution;
+    expect(removeListener).toHaveBeenCalledTimes(1);
+    initial.cleanup();
   });
 
   it('invokes onAbort when a resumed run is aborted', async () => {

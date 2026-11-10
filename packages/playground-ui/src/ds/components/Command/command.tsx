@@ -7,7 +7,7 @@ import type { DialogSize } from '@/ds/components/Dialog';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { controlIconState } from '@/ds/primitives/control-icon';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -180,7 +180,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
-          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-body-sm text-foreground',
+          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-body-sm zoom-safe-text text-foreground',
           'placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50',
           'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,
@@ -204,8 +204,6 @@ type CommandListProps = React.ComponentPropsWithoutRef<typeof CommandPrimitive.L
   scrollAreaClassName?: string;
   scrollAreaViewportClassName?: string;
   scrollAreaMask?: ScrollAreaMask;
-  /** Extra classes for the travelling hover surface (e.g. a different radius). */
-  highlightClassName?: string;
 };
 
 const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.List>, CommandListProps>(
@@ -217,12 +215,10 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
       scrollAreaClassName,
       scrollAreaViewportClassName,
       scrollAreaMask,
-      highlightClassName,
       ...props
     },
     ref,
   ) => {
-    const menu = useFluidMenu<HTMLDivElement>({ activeAttr: 'data-selected' });
     const animateHeight = React.useContext(CommandDialogVariantContext) === 'inset';
     const list = (
       <CommandPrimitive.List
@@ -230,22 +226,20 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
           'outline-none focus:outline-none focus-visible:outline-none',
           scrollArea ? 'overflow-visible' : 'max-h-dropdown overflow-x-hidden overflow-y-auto',
           animateHeight && cn('h-(--cmdk-list-height)', heightTransition),
-          menu.containerClassName,
           className,
         )}
         {...props}
-        {...menu.getContainerProps(props, ref)}
+        ref={ref}
       >
-        <FluidMenuItems menu={menu} className={highlightClassName}>
-          {children}
-        </FluidMenuItems>
+        {children}
       </CommandPrimitive.List>
     );
 
     if (!scrollArea) return list;
 
+    // The list fills Command's `rounded-xl` box, so its scrollbar takes that radius's inset.
     return (
-      <ScrollArea className={cn('min-h-0', scrollAreaClassName)} mask={scrollAreaMask}>
+      <ScrollArea className={cn('min-h-0 scrollbar-inset-xl', scrollAreaClassName)} mask={scrollAreaMask}>
         <ScrollAreaViewport className={scrollAreaViewportClassName}>{list}</ScrollAreaViewport>
       </ScrollArea>
     );
@@ -292,14 +286,17 @@ const CommandItem = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
 >(({ className, ...props }, ref) => (
   <CommandPrimitive.Item
-    ref={useFluidMenuItemRef(ref)}
+    ref={ref}
     className={cn(
       'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-body-sm text-muted-foreground select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
-      transitions.colors,
-      'data-[selected=true]:text-foreground',
+      // cmdk's selection follows both the pointer and the arrow keys; the row paints it instantly.
+      'data-[selected=true]:bg-fill data-[selected=true]:text-foreground',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
-      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground data-[selected=true]:[&>svg]:text-foreground',
+      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0',
+      controlIconState,
+      // A selected row brightens its icon with its label, like a highlighted menu row.
+      '[--control-icon-hover:var(--foreground)] data-[selected=true]:[--control-icon:var(--control-icon-hover)]',
       className,
     )}
     {...props}

@@ -239,6 +239,23 @@ describe('Metric Schemas', () => {
         }),
       ).toThrow();
     });
+
+    it('accepts a batch of experiment IDs', () => {
+      const filter = metricsFilterSchema.parse({ experimentIds: ['exp-1', 'exp-2'] });
+      expect(filter.experimentIds).toEqual(['exp-1', 'exp-2']);
+    });
+
+    it('rejects an empty experiment ID batch', () => {
+      expect(() => metricsFilterSchema.parse({ experimentIds: [] })).toThrow();
+    });
+
+    it('rejects experiment ID batches larger than the filter limit', () => {
+      expect(() =>
+        metricsFilterSchema.parse({
+          experimentIds: Array.from({ length: 1001 }, (_, index) => `exp-${index}`),
+        }),
+      ).toThrow();
+    });
   });
 
   describe('OLAP query schemas', () => {

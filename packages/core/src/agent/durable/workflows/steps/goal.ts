@@ -5,9 +5,11 @@ import { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
+import { restoreRunAgentScopes } from '../../../scopes';
 import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import { createRunMessageList } from '../../utils/run-message-list';
+import { readAccumulatedSteps } from '../shared/accumulated-steps';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
@@ -36,7 +38,8 @@ export function createDurableGoalStep() {
         /** Present only on runs that thread the transcript through step payloads. */
         messageListState?: any;
         messageId: string;
-        accumulatedSteps: Array<{
+        /** Present only on runs that thread step records through step payloads. */
+        accumulatedSteps?: Array<{
           text?: string;
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
@@ -68,6 +71,7 @@ export function createDurableGoalStep() {
         for (const [key, value] of Object.entries(initData.requestContextEntries)) {
           requestContext.set(key, value);
         }
+        restoreRunAgentScopes(requestContext);
       }
 
       // No goal configured on the agent → nothing to judge.
@@ -86,7 +90,7 @@ export function createDurableGoalStep() {
         return messageList;
       };
 
-      const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+      const lastStep = readAccumulatedSteps(params.state, state).at(-1);
       const outcome = await evaluateGoal({
         goal: goalConfig,
         stepReason: state.lastStepResult?.reason,

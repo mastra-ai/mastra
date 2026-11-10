@@ -11,7 +11,7 @@ describe('RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE', () => {
       restartAllActiveWorkflowRuns: vi.fn(() => Promise.reject(error)),
     };
     const mastra = {
-      getWorkflowById: vi.fn(() => workflow),
+      listWorkflows: vi.fn(() => ({ 'test-workflow': workflow })),
       getLogger: vi.fn(() => logger),
     } as unknown as Mastra;
 
@@ -40,7 +40,7 @@ describe('RESTART_WORKFLOW_ROUTE', () => {
       createRun: vi.fn(() => Promise.resolve(run)),
     };
     const mastra = {
-      getWorkflowById: vi.fn(() => workflow),
+      listWorkflows: vi.fn(() => ({ 'test-workflow': workflow })),
       getLogger: vi.fn(() => logger),
     } as unknown as Mastra;
 

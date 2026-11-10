@@ -7,7 +7,7 @@ import { execa } from 'execa';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CreateLLMProvider } from './command';
-import { adaptDefaultTemplate, MANAGED_PROVIDER_CONFIGS } from './provider-adapter';
+import { adaptDefaultTemplate, MANAGED_PROVIDER_CONFIGS, writeManagedApiKey } from './provider-adapter';
 import { PNPM_WORKSPACE } from './utils';
 
 vi.mock('execa');
@@ -58,17 +58,21 @@ beforeEach(() => {
 });
 
 const expectedAdaptations = {
+  mastra: {
+    primaryModel: 'mastra/openai/gpt-6.1-sol',
+    observationalModel: 'mastra/openai/gpt-6-luna',
+  },
   anthropic: {
-    primaryModel: 'anthropic/claude-sonnet-5',
-    observationalModel: 'anthropic/claude-haiku-4-5',
+    primaryModel: 'anthropic/claude-sonnet-5-5',
+    observationalModel: 'anthropic/claude-haiku-5-5',
   },
   google: {
-    primaryModel: 'google/gemini-3.5-flash',
-    observationalModel: 'google/gemini-3.5-flash',
+    primaryModel: 'google/gemini-3.8-flash',
+    observationalModel: 'google/gemini-3.8-flash',
   },
   xai: {
-    primaryModel: 'xai/grok-4.3',
-    observationalModel: 'xai/grok-4.3',
+    primaryModel: 'xai/grok-4.7',
+    observationalModel: 'xai/grok-4.7',
   },
 } satisfies Record<Exclude<CreateLLMProvider, 'openai'>, { primaryModel: string; observationalModel: string }>;
 
@@ -533,5 +537,57 @@ describe('adaptDefaultTemplate', () => {
 
     expect(mockedExeca).not.toHaveBeenCalled();
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('writeManagedApiKey', () => {
+  it('writes the key into the adapted .env.example when there is no .env yet', async () => {
+    const projectPath = await createFixture();
+    await fs.rm(path.join(projectPath, '.env'));
+    await adaptFixture({ projectPath, provider: 'mastra', versionTag: 'latest' });
+
+    const written = await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+    });
+
+    expect(written).toBe(true);
+    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe(`MASTRA_GATEWAY_API_KEY=${TEST_API_KEY}\n`);
+    if (process.platform !== 'win32') {
+      expect((await fs.stat(path.join(projectPath, '.env'))).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  it('does not replace a .env it cannot read', async () => {
+    const projectPath = await createFixture();
+    const envPath = path.join(projectPath, '.env');
+    const originalEnv = await fs.readFile(envPath, 'utf8');
+    const originalReadFile = fs.readFile.bind(fs);
+    vi.spyOn(fs, 'readFile').mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+      if (args[0].toString() === envPath) throw Object.assign(new Error('denied'), { code: 'EACCES' });
+      return originalReadFile(...args);
+    });
+
+    const written = await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+    });
+
+    vi.restoreAllMocks();
+    expect(written).toBe(false);
+    expect(await fs.readFile(envPath, 'utf8')).toBe(originalEnv);
+  });
+
+  it('keeps other .env values and appends the key when the variable is missing', async () => {
+    const projectPath = await createFixture();
+    await fs.writeFile(path.join(projectPath, '.env'), 'TURSO_DATABASE_URL=file:local.db', 'utf8');
+
+    await writeManagedApiKey({ projectPath, apiKeyEnv: 'MASTRA_GATEWAY_API_KEY', apiKey: TEST_API_KEY });
+
+    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe(
+      `TURSO_DATABASE_URL=file:local.db\nMASTRA_GATEWAY_API_KEY=${TEST_API_KEY}\n`,
+    );
   });
 });

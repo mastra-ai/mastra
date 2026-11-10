@@ -146,6 +146,30 @@ describe('login() server lifecycle', () => {
     expect(creds.organizationId).toBe('org-1');
   });
 
+  it.each([
+    { options: undefined, expected: 'mastra-cli' },
+    { options: { source: 'create-mastra' as const }, expected: 'create-mastra' },
+    { options: { source: 'mastra-cli-create' as const }, expected: 'mastra-cli-create' },
+    { options: { source: 'create-factory' as const }, expected: 'create-factory' },
+  ])('sends source=$expected in the login URL', async ({ options, expected }) => {
+    const { login } = await import('./credentials.js');
+
+    const loginPromise = login(undefined, options);
+
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
+    expect(extractUrl()).toMatch(
+      new RegExp(`/v1/auth/login\\?product=cli&cli_port=\\d+&state=[a-f0-9]{32}&source=${expected}$`),
+    );
+
+    await sendCallback(extractPort(), { ...validParams, state: extractState() });
+    await loginPromise;
+  });
+
   it('closes all connections so the process can exit', async () => {
     const { login } = await import('./credentials.js');
 
@@ -197,7 +221,7 @@ describe('login() server lifecycle', () => {
     ).rejects.toThrow();
   });
 
-  it('skips login when any key is pressed', async () => {
+  it.each(['x', 'h'])('skips login when a key is pressed (%s)', async key => {
     const stdin = mockTerminal();
     try {
       const { login, LoginCancelledError } = await import('./credentials.js');
@@ -209,7 +233,7 @@ describe('login() server lifecycle', () => {
         },
         { timeout: 5000 },
       );
-      process.stdin.emit('data', Buffer.from('x'));
+      process.stdin.emit('data', Buffer.from(key));
 
       await expect(loginPromise).rejects.toBeInstanceOf(LoginCancelledError);
       expect(stdin.setRawMode).toHaveBeenNthCalledWith(1, true);
@@ -219,6 +243,154 @@ describe('login() server lifecycle', () => {
       );
     } finally {
       stdin.restore();
+    }
+  });
+
+  it.each([{ skipOnInput: false }, { skipOnInput: true }])(
+    'signs in from a callback URL pasted into the terminal (skipOnInput: $skipOnInput)',
+    async ({ skipOnInput }) => {
+      const terminal = mockTerminal();
+      try {
+        const { login } = await import('./credentials.js');
+        const loginPromise = login(undefined, { skipOnInput });
+
+        await vi.waitFor(
+          () => {
+            extractPort();
+          },
+          { timeout: 5000 },
+        );
+        // A browser on another machine lands on this URL but can't load it.
+        const qs = new URLSearchParams({ ...validParams, state: extractState() }).toString();
+        const callbackUrl = `http://localhost:${extractPort()}/callback?${qs}`;
+        // Terminals may deliver a long paste in several chunks.
+        process.stdin.emit('data', Buffer.from(callbackUrl.slice(0, 20)));
+        process.stdin.emit('data', Buffer.from(`${callbackUrl.slice(20)}\r`));
+
+        await expect(loginPromise).resolves.toMatchObject({ token: 'test-token', organizationId: 'org-1' });
+        expect(terminal.setRawMode).toHaveBeenLastCalledWith(false);
+        // A stdin left flowing would keep `mastra auth login` from exiting.
+        expect(process.stdin.pause).toHaveBeenCalled();
+      } finally {
+        terminal.restore();
+      }
+    },
+  );
+
+  it('keeps a paste split before the full scheme when there is no skip key', async () => {
+    const terminal = mockTerminal();
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login();
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      const qs = new URLSearchParams({ ...validParams, state: extractState() }).toString();
+      const callbackUrl = `http://localhost:${extractPort()}/callback?${qs}`;
+      process.stdin.emit('data', Buffer.from(callbackUrl.slice(0, 2)));
+      process.stdin.emit('data', Buffer.from(`${callbackUrl.slice(2)}\r`));
+
+      await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('shows the hint for other input when there is no skip key', async () => {
+    const terminal = mockTerminal();
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login();
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      // e.g. a URL copied without its scheme
+      process.stdin.emit('data', Buffer.from(`localhost:${extractPort()}/callback\r`));
+      expect(console.info).toHaveBeenCalledWith(expect.stringContaining("doesn't look like the sign-in address"));
+
+      await sendCallback(extractPort(), { ...validParams, state: extractState() });
+      await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('fails with the Platform error when the pasted callback carries one', async () => {
+    const terminal = mockTerminal();
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login(undefined, { skipOnInput: true });
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      // Platform's redirect when the account's email domain is rejected.
+      const qs = new URLSearchParams({
+        error: 'email_domain_not_allowed',
+        error_description: 'Email domain not allowed',
+        state: extractState(),
+      }).toString();
+      process.stdin.emit('data', Buffer.from(`http://localhost:${extractPort()}/callback?${qs}\r`));
+
+      await expect(loginPromise).rejects.toThrow('Sign-in failed: Email domain not allowed.');
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('fails with the Platform error when the callback server receives one', async () => {
+    const { login } = await import('./credentials.js');
+    const loginPromise = login();
+    const rejection = expect(loginPromise).rejects.toThrow('Sign-in failed: Single sign-on is required.');
+
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
+    const response = await sendCallback(extractPort(), {
+      error: 'sso_required',
+      error_description: 'Single sign-on is required',
+      state: extractState(),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toContain('Single sign-on is required. Close this tab and return to the terminal.');
+    await rejection;
+  });
+
+  it('keeps waiting when the pasted URL is not a valid callback', async () => {
+    const terminal = mockTerminal();
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login(undefined, { skipOnInput: true });
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      const qs = new URLSearchParams({ ...validParams, state: 'wrong-state' }).toString();
+      process.stdin.emit('data', Buffer.from(`http://localhost:${extractPort()}/callback?${qs}\r`));
+      expect(console.info).toHaveBeenCalledWith(expect.stringContaining("doesn't look like the sign-in address"));
+
+      await sendCallback(extractPort(), { ...validParams, state: extractState() });
+      await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+    } finally {
+      terminal.restore();
     }
   });
 
@@ -343,6 +515,10 @@ describe('login() server lifecycle', () => {
     const response = await sendCallback(port, { token: 'tok' });
     expect(response.status).toBe(400);
     expect(response.body).toContain('Login failed');
+
+    // A user that isn't an object would crash later when reading its email.
+    const nullUser = await sendCallback(port, { ...validParams, user: 'null', state });
+    expect(nullUser.status).toBe(400);
 
     // Server should still be listening (waiting for a valid callback).
     // Clean up by sending a valid callback.

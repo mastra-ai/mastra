@@ -243,6 +243,34 @@ describe.each([
   });
 });
 
+describe.each([
+  ['workflow', createStep],
+  ['evented workflow', createEventedStep],
+] as const)('%s processor inputStep output', (_executor, makeStep) => {
+  it('hands on the list without the messages the processor removed through the messageList', async () => {
+    const messageList = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    messageList.add({ role: 'user', content: 'old note' }, 'input');
+    messageList.add({ role: 'user', content: 'current request' }, 'input');
+    const handedIn = messageList.get.all.db();
+    const oldId = handedIn.find(m => JSON.stringify(m.content).includes('old note'))!.id;
+
+    const step = makeStep({
+      id: 'pruner',
+      processInputStep: async ({ messageList: list }) => {
+        list.removeByIds([oldId]);
+        return list;
+      },
+    } satisfies Processor);
+
+    const result = (await step.execute({
+      inputData: { phase: 'inputStep', messages: handedIn, messageList, stepNumber: 1, systemMessages: [] },
+    } as any)) as { messages: MastraDBMessage[] };
+
+    expect(result.messages.map(m => m.id)).not.toContain(oldId);
+    expect(result.messages).toHaveLength(1);
+  });
+});
+
 describe('isProcessor', () => {
   it('should return true for object with processInput method', () => {
     const processor: Processor = {

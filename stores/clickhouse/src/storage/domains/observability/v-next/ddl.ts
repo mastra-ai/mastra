@@ -170,6 +170,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -183,7 +195,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Previews of \`input\` / \`output\` / \`error\` in core's \`buildPreview\` format, written
+  -- on every span ('' when there is nothing to preview). NULL on rows written before
+  -- the columns existed; readers build those from the payload columns.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String)
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -241,6 +260,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -255,6 +286,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   error              Nullable(String),
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
+
+  -- Previews of \`input\` / \`output\` / \`error\` ('' when there is nothing to preview).
+  -- NULL on rows written before the columns existed.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
 
   -- traceId is second in the sort key, behind startedAt, so point lookups by
   -- traceId (getRootSpan, trace deletes, trace-query root dedupe) need a skip
@@ -338,6 +375,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -352,6 +401,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   error              Nullable(String),
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
 
   INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
@@ -1230,6 +1282,26 @@ export type MigrationEntry =
   | { kind: 'column'; table: string; name: string; sql: string }
   | { kind: 'index'; table: string; name: string; sql: string };
 
+/**
+ * Span columns added after the first span tables shipped, with their types.
+ * Present on span events, trace roots and trace branches.
+ */
+export const ADDED_SPAN_COLUMNS = [
+  ['inputPreview', 'Nullable(String)'],
+  ['outputPreview', 'Nullable(String)'],
+  ['errorPreview', 'Nullable(String)'],
+  ['timeToFirstChunkMs', 'Nullable(Float64)'],
+  ['externalParentSpanId', 'Nullable(String)'],
+  ['resumedFromSpanId', 'Nullable(String)'],
+  ['model', 'LowCardinality(Nullable(String))'],
+  ['provider', 'LowCardinality(Nullable(String))'],
+  ['outcome', 'LowCardinality(Nullable(String))'],
+  ['stopReason', 'LowCardinality(Nullable(String))'],
+  ['stopReasonContext', 'Nullable(String)'],
+  ['timeToFirstTokenMs', 'Nullable(Float64)'],
+  ['errorCount', 'Nullable(UInt32)'],
+] as const;
+
 const addColumn = (table: string, name: string, type: string): MigrationEntry => ({
   kind: 'column',
   table,
@@ -1257,6 +1329,20 @@ const LOG_SKIP_INDEX_COLUMNS = [
 ] as const;
 
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
+  // Added span columns. The trace_roots / trace_branches views copy span_events
+  // with SELECT *, so both targets get each column first and no write lands
+  // while the source has a column its targets lack.
+  ...ADDED_SPAN_COLUMNS.flatMap(([column, type]) => [
+    addColumn(TABLE_TRACE_ROOTS, column, type),
+    addColumn(TABLE_TRACE_BRANCHES, column, type),
+    addColumn(TABLE_SPAN_EVENTS, column, type),
+  ]),
+  // Trace branches, before span_events: its view copies span_events with SELECT *, so the target
+  // needs each column first. CREATE has always included these; listed so a table lacking them
+  // still gains them.
+  addColumn(TABLE_TRACE_BRANCHES, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'rootEntityVersionId', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),

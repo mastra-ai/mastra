@@ -19,13 +19,31 @@ vi.mock('../../onboarding/settings.js', async importOriginal => ({
 }));
 
 vi.mock('../prompts/agent-instructions.js', () => ({
-  loadAgentInstructions: vi.fn(() => []),
+  loadSessionInstructions: vi.fn(() => []),
   formatAgentInstructions: vi.fn(() => ''),
 }));
 
 import { getDynamicInstructions } from '../instructions.js';
 
 describe('getDynamicInstructions', () => {
+  it('omits web_search guidance when the agent tool is disabled', async () => {
+    const requestContext = {
+      get: vi.fn(key =>
+        key === 'controller'
+          ? {
+              getState: () => ({ projectPath: '/tmp/project', projectName: 'test-project' }),
+              session: { modeId: 'build', modelId: 'openai/gpt-5.5', state: { get: () => ({}) } },
+            }
+          : undefined,
+      ),
+    };
+
+    expect(await getDynamicInstructions({ requestContext })).toContain('**web_search**');
+    expect(await getDynamicInstructions({ requestContext, disabledTools: ['web_search'] })).not.toContain(
+      '**web_search**',
+    );
+  });
+
   it('builds commit attribution guidance from restored controller model state', async () => {
     const prompt = await getDynamicInstructions({
       requestContext: {
@@ -78,9 +96,9 @@ describe('getDynamicInstructions', () => {
 
   it('never leaks the host cwd, branch, or instruction files into a session without a project', async () => {
     const { getCurrentGitBranchAsync } = await import('../../utils/project.js');
-    const { loadAgentInstructions } = await import('../prompts/agent-instructions.js');
+    const { loadSessionInstructions } = await import('../prompts/agent-instructions.js');
     vi.mocked(getCurrentGitBranchAsync).mockClear();
-    vi.mocked(loadAgentInstructions).mockClear();
+    vi.mocked(loadSessionInstructions).mockClear();
 
     const prompt = await getDynamicInstructions({
       requestContext: {
@@ -106,7 +124,7 @@ describe('getDynamicInstructions', () => {
     // locations would resolve against the server cwd, globals against the
     // server homedir).
     expect(getCurrentGitBranchAsync).not.toHaveBeenCalled();
-    expect(loadAgentInstructions).not.toHaveBeenCalled();
+    expect(loadSessionInstructions).not.toHaveBeenCalled();
   });
 
   it('appends active plugin instructions to the base prompt', async () => {

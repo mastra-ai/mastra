@@ -1,7 +1,7 @@
+import type { WorkspacesRoot } from '@internal/find-workspaces';
+import { findWorkspacesRoot, findWorkspaces } from '@internal/find-workspaces';
 import type { IMastraLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
-import type { WorkspacesRoot } from 'find-workspaces';
-import { findWorkspacesRoot, findWorkspaces } from 'find-workspaces';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   collectTransitiveWorkspaceDependencies,
@@ -10,7 +10,7 @@ import {
   hasRootExport,
 } from './workspaceDependencies';
 
-vi.mock('find-workspaces', () => ({
+vi.mock('@internal/find-workspaces', () => ({
   findWorkspacesRoot: vi.fn().mockReturnValue({ location: '/mock-root' }),
   findWorkspaces: vi.fn(),
   createWorkspacesCache: vi.fn(),
@@ -114,6 +114,23 @@ describe('workspaceDependencies', () => {
       expect(result.usedWorkspacePackages.has('pkg-b')).toBe(true);
     });
 
+    it('resolves a versionless workspace package to the placeholder version tarball', async () => {
+      vi.mocked(findWorkspacesRoot).mockReturnValue({ location: '/root' } as unknown as WorkspacesRoot);
+
+      await collectTransitiveWorkspaceDependencies({
+        workspaceMap: new Map([
+          ['@inner/versionless', { location: '/versionless', dependencies: {}, version: undefined }],
+        ]),
+        initialDependencies: new Set(['@inner/versionless']),
+        logger: mockLogger,
+      });
+
+      expect(mockDepsServiceMethods.getWorkspaceDependencyPath).toHaveBeenCalledWith({
+        pkgName: 'inner-versionless',
+        version: '0.0.0',
+      });
+    });
+
     it('should handle circular dependencies', async () => {
       const workspaceMap = new Map<
         string,
@@ -186,6 +203,24 @@ describe('workspaceDependencies', () => {
         version: '1.0.0',
       });
       expect(mockLogger.info).toHaveBeenCalledWith('Successfully packaged workspace dependencies', { count: 3 });
+    });
+
+    it('packs a versionless workspace package under the placeholder version', async () => {
+      await packWorkspaceDependencies({
+        workspaceMap: new Map([
+          ['@inner/versionless', { location: '/versionless', dependencies: {}, version: undefined }],
+        ]),
+        usedWorkspacePackages: new Set(['@inner/versionless']),
+        bundleOutputDir: '/output',
+        logger: mockLogger,
+      });
+
+      expect(mockDepsServiceMethods.pack).toHaveBeenCalledWith({
+        dir: '/versionless',
+        destination: expect.stringContaining('workspace-module'),
+        sanitizedName: 'inner-versionless',
+        version: '0.0.0',
+      });
     });
 
     it('should do nothing with empty workspace packages', async () => {

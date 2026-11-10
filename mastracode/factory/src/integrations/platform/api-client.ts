@@ -1,6 +1,12 @@
 export interface PlatformApiClientConfig {
   baseUrl: string;
   accessToken: string;
+  /**
+   * Mastra project this deployment belongs to. Sent as `x-mastra-project-id`
+   * so the platform can attribute proxied provider activity to the project;
+   * the platform strips the header before forwarding anything upstream.
+   */
+  projectId?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -26,7 +32,12 @@ export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
       'Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY).',
     );
   }
-  return { baseUrl: normalizeIntegrationsApiUrl(integrationsApiUrl), accessToken };
+  const projectId = process.env.MASTRA_PROJECT_ID?.trim();
+  return {
+    baseUrl: normalizeIntegrationsApiUrl(integrationsApiUrl),
+    accessToken,
+    ...(projectId ? { projectId } : {}),
+  };
 }
 
 /**
@@ -65,6 +76,7 @@ export class PlatformApiError extends Error {
 export class PlatformApiClient {
   readonly #baseUrl: string;
   readonly #accessToken: string;
+  readonly #projectId: string | null;
   readonly #fetch: typeof fetch;
 
   constructor(config: PlatformApiClientConfig) {
@@ -74,6 +86,7 @@ export class PlatformApiClient {
     }
     this.#baseUrl = config.baseUrl.replace(/\/+$/, '');
     this.#accessToken = config.accessToken;
+    this.#projectId = config.projectId?.trim() || null;
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
@@ -133,6 +146,12 @@ export class PlatformApiClient {
       accept: 'application/json',
       authorization: `Bearer ${this.#accessToken}`,
     };
+    // Project attribution for proxied provider calls. Org-scoped machine
+    // tokens carry no project claim, so without this header the platform
+    // records proxy activity with no project.
+    if (this.#projectId) {
+      headers['x-mastra-project-id'] = this.#projectId;
+    }
     // Acting end-user for platform GitHub writes: the platform resolves this
     // user's GitHub OAuth connection (org-scoped) so issues/PRs are authored
     // by the human instead of the App bot. Ignored by older platforms.

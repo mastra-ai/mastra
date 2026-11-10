@@ -35,43 +35,28 @@
  * the observation `expectEngineParity` returns. Nothing is pinned per engine and the helper
  * is not modified.
  *
- * Deviation from the harness, stated per the case's port notes: the harness drives
- * `retry-zero` alongside the others and compares each cell's contract, but here the variant is
- * driven per engine instead. The helper cannot run this scenario at all — the COR-1429 note below
- * explains why — so the run is asserted the way the harness judges it: the attempt count on each
- * engine, that the run settled as a failure, and the harness's own cross-engine comparison of the
- * whole contract.
- *
- * It cannot move onto `expectEngineParity`. Since COR-1417 the helper does record a failed run
- * (as `snapshot.error`), but on this scenario all three engines emit the same non-empty
- * `finish.stepResult` (`{ reason: 'error', warnings: [], isContinued: false }`), which makes the
- * helper's global staleness guard fire on COR-1390's `finish` entry — "payload 'stepResult' no
- * longer differs from plain; remove it from KNOWN_CHUNK_DIFFERENCES" — before any per-scenario
- * comparison runs. That guard is deliberately not overridable, because every other scenario depends
- * on it staying global; COR-1429 tracks making the staleness check scenario-aware so this leg can
- * use the helper too. Until then the run is driven directly.
+ * `retry-zero` now runs through the same helper as the successful variants. Its
+ * call-level failure produces an identical `finish.stepResult` on every engine,
+ * so that COR-1390 declaration is not applicable to this scenario.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
 import {
   chunksOfType,
   createRecordingModel,
+  FAILED_STEP_WARNINGS_DIFFERENCE,
   expectEngineParity,
   textOnlyTape,
-  type EngineDifference,
-  type EngineObservation,
-  type EngineParityResults,
-  type ModelScript,
-  type ParityEngine,
-  type ParitySnapshot,
-} from './parity-harness';
+} from '../../../loop/test-utils/aimock/parity';
+import type {
+  EngineObservation,
+  EngineParityResults,
+  ModelScript,
+  ParityEngine,
+  ParitySnapshot,
+} from '../../../loop/test-utils/aimock/parity';
+import { MockMemory } from '../../../memory/mock';
+import { Agent } from '../../agent';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const MAX_STEPS = 3;
@@ -131,73 +116,36 @@ function labelledModel(model: LanguageModelV2, modelId: string, onCall: (id: str
   return clone;
 }
 
-type FailedRunContract = {
-  attempts: number;
-  models: string[];
-  finish: number;
-  errors: string[];
-  threw: string | null;
-  finalText: string;
-};
-
-/** Drives one engine directly so a rejected run is recorded instead of thrown. */
-async function runRetryZeroOnEngine(engine: ParityEngine): Promise<FailedRunContract> {
-  const served: string[] = [];
-  const recorded = createRecordingModel(failingScript(1));
-  const model = labelledModel(recorded.model, SINGLE_MODEL_ID, id => served.push(id));
-  const agent = new Agent({
-    id: `t27-agent-${engine}`,
-    name: 't27',
-    instructions: 'Follow the script.',
-    model,
-    memory: new MockMemory(),
-    maxRetries: 0,
-    errorProcessorDefaults: false,
+async function runRetryZero() {
+  const served = new Map<ParityEngine, string[]>();
+  const results = await expectEngineParity({
+    engines: ENGINES,
+    model: failingScript(1),
+    buildAgent: ({ engine, model }) => {
+      served.set(engine, []);
+      return new Agent({
+        id: `t27-agent-retry-zero-${engine}`,
+        name: 't27',
+        instructions: 'Follow the script.',
+        model: labelledModel(model, SINGLE_MODEL_ID, id => served.get(engine)!.push(id)),
+        memory: new MockMemory(),
+        maxRetries: 0,
+        errorProcessorDefaults: false,
+      });
+    },
+    run: async handle => {
+      await handle.turn('Go.', {
+        maxSteps: MAX_STEPS,
+        modelSettings: { maxRetries: 3 },
+        memory: { thread: 't27-thread-retry-zero', resource: 't27-resource-retry-zero' },
+      });
+    },
+    differences: {
+      durable: FAILED_STEP_WARNINGS_DIFFERENCE,
+      evented: FAILED_STEP_WARNINGS_DIFFERENCE,
+    },
   });
-
-  const pubsub = new EventEmitterPubSub();
-  const wrapper =
-    engine === 'durable'
-      ? createDurableAgent({ agent, pubsub })
-      : engine === 'evented'
-        ? createEventedAgent({ agent, pubsub })
-        : undefined;
-  const host = new Mastra({
-    agents: { [agent.id]: wrapper ?? agent },
-    storage: new InMemoryStore(),
-    logger: false,
-  });
-
-  const errors: string[] = [];
-  let finish = 0;
-  let finalText = '';
-  let threw: string | null = null;
-  try {
-    const runner: { stream: (input: string, options: Record<string, unknown>) => Promise<unknown> } = wrapper ?? agent;
-    const result = (await runner.stream('Go.', {
-      maxSteps: MAX_STEPS,
-      runId: `t27-retry-zero-${engine}`,
-      memory: { thread: `t27-thread-retry-zero-${engine}`, resource: `t27-resource-retry-zero-${engine}` },
-      modelSettings: { maxRetries: 3 },
-    })) as { output?: { fullStream: AsyncIterable<Record<string, any>> }; cleanup?: () => void };
-    const output = (result.output ?? result) as { fullStream: AsyncIterable<Record<string, any>> };
-    for await (const chunk of output.fullStream) {
-      if (chunk.type === 'finish') finish += 1;
-      if (chunk.type === 'text-delta') finalText += String(chunk.payload?.text ?? '');
-      if (chunk.type === 'error') errors.push(String(chunk.payload?.error?.message ?? '').slice(0, 120));
-    }
-    result.cleanup?.();
-  } catch (error) {
-    threw = String((error as { message?: string })?.message ?? error).slice(0, 200);
-  } finally {
-    try {
-      await host.shutdown();
-    } finally {
-      await pubsub.close();
-    }
-  }
-
-  return { attempts: recorded.requests.length, models: served, finish, errors, threw, finalText };
+  return { results, served };
 }
 
 // ---------------------------------------------------------------------------
@@ -408,17 +356,17 @@ function expectHarnessSuccess(turn: ParitySnapshot): void {
 }
 
 describe('T27 model retry and fallback (plain, durable, evented)', () => {
-  // Driven directly: the helper's global staleness guard fires on this scenario before any
-  // comparison runs — see the COR-1429 note in the file header.
   it('retry-zero: an explicit agent maxRetries of 0 beats call-time maxRetries: 3, and the run fails', async () => {
-    const plain = await runRetryZeroOnEngine('plain');
-    expect(plain.attempts).toBe(1);
-    expect(plain.errors.length > 0 || plain.threw !== null).toBe(true);
-    for (const engine of ENGINES.filter(engine => engine !== 'plain')) {
-      const actual = await runRetryZeroOnEngine(engine);
-      expect(actual.attempts).toBe(1);
-      expect(actual.errors.length > 0 || actual.threw !== null).toBe(true);
-      expect(actual).toEqual(plain);
+    const { results, served } = await runRetryZero();
+    for (const engine of ENGINES) {
+      const turn = turnOf(results, engine);
+      expect(results[engine]!.requests).toHaveLength(1);
+      expect(served.get(engine)).toEqual([SINGLE_MODEL_ID]);
+      expect(chunksOfType(turn, 'finish')).toBe(1);
+      expect(chunksOfType(turn, 'error')).toBe(1);
+      expect(turn.finishReason).toBe('error');
+      expect(turn.text).toBe('');
+      expect(turn.error?.message).toContain('T27 failure 1');
     }
   });
 

@@ -3,19 +3,20 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { EllipsisVertical, Minimize2, PencilLine } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useRef, useState } from 'react';
 
+import { useRef, useState } from 'react';
 import type { BoardCandidate } from '../boardCandidates';
 import type { BoardCardStatus } from '../boardCardState';
+import type { BoardLayout } from '../boardLayout';
 import type { CardMove } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import { CardSourceDescription } from './BoardCardDetails';
 import { CardActions } from './BoardCardParts';
 import { CandidateCardRows } from './CandidateCardRows';
 import { CardDetailsPanel } from './CardDetailsPanel';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function CandidateDetailsPanel({
   candidate,
@@ -27,6 +28,7 @@ export function CandidateDetailsPanel({
   menu,
   defaultMove,
   onRun,
+  layout,
 }: {
   candidate: BoardCandidate;
   labelledBy: string;
@@ -38,6 +40,7 @@ export function CandidateDetailsPanel({
   defaultMove?: CardMove;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
+  layout: BoardLayout;
 }) {
   const promptAnchorRef = useRef<HTMLButtonElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -60,6 +63,7 @@ export function CandidateDetailsPanel({
   return (
     <CardDetailsPanel
       morph={morph}
+      layout={layout}
       labelledBy={labelledBy}
       header={
         <CandidateCardRows

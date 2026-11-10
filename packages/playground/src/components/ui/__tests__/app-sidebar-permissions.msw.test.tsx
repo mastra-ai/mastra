@@ -9,6 +9,7 @@ import {
   viewerSidebarCapabilities,
 } from './fixtures/sidebar-permissions';
 import { authHandler, BASE_URL, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
+import { providersResponse } from '@/pages/connections/__tests__/fixtures/user-connect';
 import { server } from '@/test/msw-server';
 
 beforeEach(() => {
@@ -19,6 +20,9 @@ beforeEach(() => {
     systemPackagesHandler(),
     http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(noMcpServers)),
     http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(noWorkspaces)),
+    // Mounted connect surface, so the Connections entry is available and these
+    // tests exercise RBAC gating alone.
+    http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
   );
 });
 
@@ -60,7 +64,12 @@ describe('AppSidebar permissions', () => {
       await screen.findByRole('link', { name: 'Agents' });
       expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
       expect(screen.queryByRole('link', { name: 'MCP Servers' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+      // Connections is not RBAC-gated (the connect surface gates on the
+      // caller's own identity), so the More menu holds only that entry.
+      fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+      expect((await screen.findByRole('menuitem', { name: 'Connections' })).getAttribute('href')).toBe('/connections');
+      expect(screen.queryByRole('menuitem', { name: 'Tools' })).toBeNull();
+      expect(screen.queryByRole('menuitem', { name: 'MCP Servers' })).toBeNull();
     });
   });
 

@@ -297,10 +297,12 @@ class DockerProcessHandle extends ProcessHandle {
         // Static script; the pgid file path is passed as $1 (sh sets $0='sh',
         // $1=path) so no runtime value is ever interpolated into the command.
         Cmd: ['sh', '-c', KILL_SCRIPT, 'sh', this._pgidFile],
-        AttachStdout: false,
-        AttachStderr: false,
+        // Podman's Docker-compatible API rejects an exec with no attached stream.
+        AttachStdout: true,
+        AttachStderr: true,
       });
       const killStream = await killExec.start({});
+      killStream.resume();
 
       try {
         // Exec.start() resolves when the exec stream is opened, not when the

@@ -430,7 +430,7 @@ describe('PropertyFilterApplied — removing a pill', () => {
     );
 
     const removes = screen.getAllByRole('button', { name: /Remove Primitive ID filter/i });
-    fireEvent.click(removes[1] as HTMLElement);
+    fireEvent.click(removes[1]);
 
     expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'entityId', value: 'a' }]);
   });
