@@ -100,6 +100,9 @@ describe('Environment variables settings', () => {
       .getAllByRole('columnheader')
       .map(header => header.textContent);
     expect(headers).toEqual(['Name', 'Value', 'Applies to', 'Updated', 'Actions']);
+    expect(within(table).getByRole('button', { name: 'About where variables apply' })).toHaveAccessibleDescription(
+      /Runtime: every command in the sandbox.*Build: only the template image build/,
+    );
     expect(within(table).getByText('DATABASE_URL')).toBeInTheDocument();
     expect(within(table).getByLabelText('DATABASE_URL value hidden')).toHaveTextContent('••••••••••••');
     expect(within(table).getByLabelText('NPM_TOKEN applies to')).toHaveTextContent('BuildRuntime');
