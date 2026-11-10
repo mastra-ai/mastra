@@ -99,6 +99,16 @@ export function tenantOrgId(tenant: { orgId?: string; userId: string }): string 
 }
 
 /**
+ * Whether the tenant belongs to an organization other people can be in. An
+ * account without one is keyed by the synthetic `user:<id>` org, which only
+ * that account ever resolves to, so "the organization's" and "my own" are the
+ * same thing there.
+ */
+export function hasOrganization(tenant: { orgId?: string; userId: string }): boolean {
+  return !tenantOrgId(tenant).startsWith('user:');
+}
+
+/**
  * Resolve the credential context for a request, or a ready-to-return error
  * response. Mutating credential routes call this and hard-fail (401/503)
  * when the tenant path is required but unavailable.

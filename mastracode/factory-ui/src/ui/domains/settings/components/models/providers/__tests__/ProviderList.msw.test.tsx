@@ -5,19 +5,26 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../../e2e/ui/render';
-import type { OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
+import type { CustomProviderInfo, OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
 import { useAvailableModelsQuery } from '../../../../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../../../../hooks/useAvailableModels';
 import { ProviderList } from '../ProviderList';
 import {
+  CUSTOM_PROVIDERS_URL,
   PROVIDERS_URL,
+  customProviderUrl,
+  fillCustomEndpoint,
+  findCustomRow,
   keyUrl,
   oauthUrl,
   openAddProvider,
+  openCustomEndpointForm,
   pasteCodeSession,
+  pickCustomRowAction,
   pickRowAction,
   rowFor,
   saveKey,
+  stubCustomProviders,
   stubProviders,
 } from './provider-list-test-utils';
 
@@ -283,5 +290,148 @@ describe('ProviderList', () => {
 
     await waitFor(() => expect(signedOut).toBe(true));
     await waitFor(() => expect(screen.queryByText('Anthropic')).not.toBeInTheDocument());
+  });
+});
+
+describe('ProviderList custom endpoints', () => {
+  const myLlm: CustomProviderInfo = {
+    id: 'my-llm',
+    name: 'my-llm',
+    url: 'https://api.example.com/v1',
+    hasApiKey: true,
+    models: ['model-a', 'model-b'],
+    scope: 'user',
+  };
+
+  it('lists an endpoint with its URL and model count, with its own actions instead of key actions', async () => {
+    // The provider catalog reports the endpoint too; it must not also be drawn
+    // as a built-in provider whose key can be updated.
+    stubProviders([
+      { provider: 'openai', source: 'stored' },
+      { provider: 'my-llm', source: 'stored', custom: true },
+    ]);
+    stubCustomProviders([myLlm]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const row = await findCustomRow('my-llm');
+    expect(within(row).getByText('https://api.example.com/v1')).toBeInTheDocument();
+    expect(within(row).getByText('2 models')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /actions$/ })).toHaveLength(2);
+
+    await user.click(within(row).getByRole('button', { name: 'my-llm actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Update key' })).not.toBeInTheDocument();
+  });
+
+  it('adds an endpoint from the Add provider dialog, even when no provider matches the search', async () => {
+    const saved: CustomProviderInfo[] = [];
+    let postBody: unknown;
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    server.use(
+      http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers: saved })),
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        postBody = await request.json();
+        saved.push(myLlm);
+        return HttpResponse.json({ ok: true, provider: myLlm });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const dialog = await openAddProvider(user);
+    await user.type(within(dialog).getByLabelText('Search providers'), 'no-such-provider');
+    expect(within(dialog).getByText(/No providers match/)).toBeInTheDocument();
+
+    const form = await openCustomEndpointForm(user, dialog);
+    await fillCustomEndpoint(user, form, {
+      name: 'my-llm',
+      url: 'https://api.example.com/v1',
+      models: 'model-a, model-b',
+    });
+    await user.click(within(form).getByRole('button', { name: 'Add' }));
+
+    // Without sign-in there is one list, so no scope is sent.
+    await waitFor(() =>
+      expect(postBody).toEqual({
+        name: 'my-llm',
+        url: 'https://api.example.com/v1',
+        models: ['model-a', 'model-b'],
+      }),
+    );
+    expect(await findCustomRow('my-llm')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps the form open with the server message when saving fails', async () => {
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, () =>
+        HttpResponse.json(
+          { error: 'provider_name_taken', message: '"OpenAI" is already a built-in provider. Choose another name.' },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const form = await openCustomEndpointForm(user, await openAddProvider(user));
+    await fillCustomEndpoint(user, form, { name: 'OpenAI', url: 'https://proxy.example.com/v1', models: 'gpt' });
+    await user.click(within(form).getByRole('button', { name: 'Add' }));
+
+    expect(await within(form).findByText(/already a built-in provider/)).toBeInTheDocument();
+  });
+
+  it('edits an endpoint without sending its key again', async () => {
+    let postBody: unknown;
+    stubProviders([]);
+    stubCustomProviders([myLlm]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        postBody = await request.json();
+        return HttpResponse.json({ ok: true, provider: { ...myLlm, url: 'https://moved.example.com/v1' } });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    const url = within(form).getByPlaceholderText('https://api.example.com/v1');
+    await user.clear(url);
+    await user.type(url, 'https://moved.example.com/v1');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(postBody).toEqual({
+        name: 'my-llm',
+        url: 'https://moved.example.com/v1',
+        models: ['model-a', 'model-b'],
+        previousId: 'my-llm',
+      }),
+    );
+  });
+
+  it('removes an endpoint from its row menu', async () => {
+    const saved: CustomProviderInfo[] = [myLlm];
+    let removedWith: string | undefined;
+    stubProviders([]);
+    server.use(
+      http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers: saved })),
+      http.delete(customProviderUrl('my-llm'), ({ request }) => {
+        removedWith = new URL(request.url).search;
+        saved.length = 0;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Remove');
+
+    await waitFor(() => expect(removedWith).toBe(''));
+    await waitFor(() => expect(screen.queryByText('my-llm')).not.toBeInTheDocument());
   });
 });

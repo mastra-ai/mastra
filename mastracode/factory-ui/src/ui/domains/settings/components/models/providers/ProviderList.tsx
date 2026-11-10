@@ -2,7 +2,8 @@ import type { StatusPresentation } from '@mastra/playground-ui/components/Status
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
+import type { CustomProviderInfo, OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
+import { useCustomProvidersQuery } from '../../../../../../hooks/use-custom-providers';
 import { useCancelProviderOAuth, useProvidersQuery } from '../../../../../../hooks/use-providers';
 import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
@@ -18,6 +19,8 @@ import type { CredentialScope } from '../../provider-credential';
 import { AddProviderDrawer } from './AddProviderDrawer';
 import { ConnectedProviderRow } from './ConnectedProviderRow';
 import type { ProviderConnection } from './ConnectedProviderRow';
+import { CustomProviderDialog } from './CustomProviderDialog';
+import { CustomProviderRow } from './CustomProviderRow';
 import { ProviderRows, ProviderRowsSkeleton } from './ProviderRows';
 
 const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
@@ -52,15 +55,21 @@ function connectedProviders(providers: ProviderInfo[], scope: CredentialScope): 
 
 export function ProviderList({ credentialScope }: { credentialScope: CredentialScope }) {
   const providersQuery = useProvidersQuery();
+  const customProvidersQuery = useCustomProvidersQuery();
   const { authEnabled, scope, requestScope, readOnly, actionsDisabled, memberReason } =
     useCredentialAccess(credentialScope);
   const cancelOAuthMutation = useCancelProviderOAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
+  const [customProviderDraft, setCustomProviderDraft] = useState<CustomProviderInfo | 'new'>();
 
-  const providers = providersQuery.data ?? [];
+  // Custom endpoints have their own rows and their own form, so the built-in
+  // list and its key actions never see them.
+  const providers = (providersQuery.data ?? []).filter(provider => !provider.custom);
   const connections = connectedProviders(providers, scope);
+  const customProviders = (customProvidersQuery.data ?? []).filter(provider => provider.scope === scope);
+  const error = providersQuery.error ?? customProvidersQuery.error;
 
   const openOAuth = (provider: string, session: OAuthStartResponse) => {
     setAddOpen(false);
@@ -72,13 +81,18 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
     setKeyDialogProvider(provider);
   };
 
+  const openCustomProviderDialog = () => {
+    setAddOpen(false);
+    setCustomProviderDraft('new');
+  };
+
   const closeOAuth = () => {
     const flow = activeOAuth;
     setActiveOAuth(undefined);
     if (flow) cancelOAuthMutation.mutate({ provider: flow.provider, sessionId: flow.session.sessionId });
   };
 
-  if (providersQuery.isPending) return <ProviderRowsSkeleton />;
+  if (providersQuery.isPending || customProvidersQuery.isPending) return <ProviderRowsSkeleton />;
 
   return (
     <div className="flex flex-col gap-2">
@@ -93,6 +107,15 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
             onOAuthStarted={openOAuth}
           />
         ))}
+        {customProviders.map(provider => (
+          <CustomProviderRow
+            key={provider.id}
+            provider={provider}
+            requestScope={requestScope}
+            disabled={actionsDisabled}
+            onEdit={() => setCustomProviderDraft(provider)}
+          />
+        ))}
       </ProviderRows>
       {memberReason && (
         <Txt as="p" variant="caption" tone="muted">
@@ -104,9 +127,9 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           {ORG_SCOPE_AUDIENCE}
         </Txt>
       )}
-      {providersQuery.error && (
+      {error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-          {providersQuery.error.message}
+          {error.message}
         </Txt>
       )}
 
@@ -117,6 +140,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
         requestScope={requestScope}
         onOAuthStarted={openOAuth}
         onAddKey={openKeyDialog}
+        onAddCustomProvider={openCustomProviderDialog}
         onClose={() => setAddOpen(false)}
       />
       {keyDialogProvider && (
@@ -125,6 +149,14 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           authEnabled={authEnabled}
           fixedScope={requestScope}
           onClose={() => setKeyDialogProvider(undefined)}
+        />
+      )}
+      {customProviderDraft && (
+        <CustomProviderDialog
+          provider={customProviderDraft === 'new' ? undefined : customProviderDraft}
+          credentialScope={scope}
+          requestScope={requestScope}
+          onClose={() => setCustomProviderDraft(undefined)}
         />
       )}
       {activeOAuth && (

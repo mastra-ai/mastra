@@ -10,6 +10,7 @@ import {
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { ServerCog } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
@@ -17,6 +18,7 @@ import { useStartProviderOAuth } from '../../../../../../hooks/use-providers';
 import { useSidePanelDrawer } from '../../../../../lib/hooks/useSidePanelDrawer';
 import {
   CREDENTIAL_LABEL,
+  SCOPE_AUDIENCE,
   SHARED_SOURCE,
   SIGN_IN_EXPIRED_LABEL,
   credentialAt,
@@ -25,11 +27,6 @@ import {
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
 import { ProviderOptionRow } from './ProviderRows';
-
-const AUDIENCE: Record<CredentialScope, string> = {
-  user: 'Only you can use it.',
-  org: 'Everyone in your organization can use it.',
-};
 
 function matchesSearch(provider: ProviderInfo, query: string): boolean {
   return (
@@ -61,6 +58,7 @@ export function AddProviderDrawer({
   requestScope,
   onOAuthStarted,
   onAddKey,
+  onAddCustomProvider,
   onClose,
 }: {
   open: boolean;
@@ -69,6 +67,7 @@ export function AddProviderDrawer({
   requestScope: CredentialScope | undefined;
   onOAuthStarted: (provider: string, session: OAuthStartResponse) => void;
   onAddKey: (provider: ProviderInfo) => void;
+  onAddCustomProvider: () => void;
   onClose: () => void;
 }) {
   const sidePanel = useSidePanelDrawer();
@@ -103,7 +102,7 @@ export function AddProviderDrawer({
         <DrawerHeader>
           <DrawerTitle>Add provider</DrawerTitle>
           <DrawerDescription>
-            Sign in with a subscription or paste an API key. {AUDIENCE[credentialScope]}
+            Sign in with a subscription or paste an API key. {SCOPE_AUDIENCE[credentialScope]}
           </DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="flex min-h-0 flex-col gap-3">
@@ -139,6 +138,26 @@ export function AddProviderDrawer({
               {keyOnlyCount} more take an API key. Type to find one.
             </Txt>
           )}
+          {/* Outside the searched list: the way out when no provider matches. */}
+          <div className="border-border flex min-h-12 shrink-0 items-center gap-3 rounded-lg border py-2 pr-2 pl-3">
+            <ServerCog aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <Txt as="span" variant="caption" className="truncate">
+                Custom endpoint
+              </Txt>
+              <Txt as="span" variant="meta" tone="muted">
+                Any OpenAI-compatible API
+              </Txt>
+            </span>
+            <Button
+              size="sm"
+              aria-label="Add a custom endpoint"
+              disabled={startingProvider !== undefined}
+              onClick={onAddCustomProvider}
+            >
+              Add
+            </Button>
+          </div>
           {startOAuthMutation.error && (
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {startOAuthMutation.error.message}

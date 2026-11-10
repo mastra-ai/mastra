@@ -22,6 +22,9 @@ export const server = setupServer(
   // Ambient provider catalog (read by the NewPage credential guard wherever
   // it renders); credential-specific tests override it with `server.use(...)`.
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
+  // Ambient custom endpoints: every provider list reads them next to the
+  // catalog above. Custom-endpoint tests override it with `server.use(...)`.
+  http.get('*/web/config/custom-providers', () => HttpResponse.json({ providers: [] })),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   http.get('*/web/status', () => HttpResponse.json({ problems: [] })),

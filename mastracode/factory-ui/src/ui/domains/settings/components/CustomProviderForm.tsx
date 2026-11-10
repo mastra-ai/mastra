@@ -17,12 +17,23 @@ interface DraftState {
 
 export interface CustomProviderFormProps {
   provider?: CustomProviderInfo;
+  /** Where a new provider is saved. Omitted without sign-in, where there is one list. */
+  scope?: CustomProviderInfo['scope'];
   requireModels?: boolean;
+  /** Draws its own border. Off inside a surface that already frames it, such as a dialog. */
+  framed?: boolean;
   onCancel?: () => void;
   onSaved?: (provider: CustomProviderInfo) => void;
 }
 
-export function CustomProviderForm({ provider, requireModels = false, onCancel, onSaved }: CustomProviderFormProps) {
+export function CustomProviderForm({
+  provider,
+  scope,
+  requireModels = false,
+  framed = true,
+  onCancel,
+  onSaved,
+}: CustomProviderFormProps) {
   const saveMutation = useSaveCustomProvider();
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftState>({
@@ -56,6 +67,7 @@ export function CustomProviderForm({ provider, requireModels = false, onCancel, 
       models,
       ...(apiKey ? { apiKey } : {}),
       ...(provider ? { previousId: provider.id } : {}),
+      ...(scope ? { scope } : {}),
     };
 
     setError(null);
@@ -68,7 +80,7 @@ export function CustomProviderForm({ provider, requireModels = false, onCancel, 
   };
 
   return (
-    <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
+    <div className={framed ? 'border-border flex flex-col gap-3 rounded-lg border p-3' : 'flex flex-col gap-3'}>
       {error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}

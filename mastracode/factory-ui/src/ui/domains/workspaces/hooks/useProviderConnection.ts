@@ -31,6 +31,8 @@ export interface ProviderConnection {
   catalogError?: Error;
   authEnabled: boolean;
   orgKeyAdmin: boolean;
+  /** The scope new connections are saved at. Absent without sign-in, where there is one store. */
+  credentialScope?: ProviderCredentialScope;
   signInProviders: ProviderInfo[];
   keyProviders: ProviderInfo[];
   provider?: ProviderInfo;
@@ -57,7 +59,6 @@ export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
-  if (provider.custom) return 'api_key';
   if (scope === 'user') return credentialAt(provider, 'user');
   if (provider.source === 'deployment') return 'api_key';
   if (scope === 'org') return credentialAt(provider, 'org');
@@ -161,9 +162,15 @@ export function useProviderConnection({
     catalogError: providersQuery.error ?? (scope !== undefined ? authQuery.error : undefined) ?? undefined,
     authEnabled,
     orgKeyAdmin,
+    credentialScope,
     signInProviders: providers.filter(candidate => candidate.oauth?.supported === true),
     keyProviders: providers.filter(
-      candidate => !(hidesDeploymentKeys && candidate.source === 'deployment') && offersApiKey(candidate),
+      candidate =>
+        !(hidesDeploymentKeys && candidate.source === 'deployment') &&
+        // A custom endpoint is set up in its own form, never by pasting a key,
+        // so it is only offered where it already exists.
+        !(candidate.custom && !isConfigured(candidate)) &&
+        offersApiKey(candidate),
     ),
     provider,
     connected: provider ? isConfigured(provider, selection?.method) : false,

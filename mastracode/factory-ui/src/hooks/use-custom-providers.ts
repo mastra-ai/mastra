@@ -5,7 +5,8 @@ import { queryKeys } from '../api/keys';
 import type { CustomProviderInfo, CustomProvidersResponse, OkResponse, SaveCustomProviderBody } from '../api/types';
 
 /**
- * Organization-scoped OpenAI-compatible providers. The API key is write-only;
+ * OpenAI-compatible providers the caller can reach: their own and their
+ * organization's, each tagged with its `scope`. The API key is write-only;
  * the server only ever reports `hasApiKey`.
  */
 export function useCustomProvidersQuery() {
@@ -36,14 +37,16 @@ export function useSaveCustomProvider() {
 
 export interface RemoveCustomProviderArgs {
   id: string;
+  /** The scope the provider is saved at. Omitted without sign-in, where there is one list. */
+  scope?: CustomProviderInfo['scope'];
 }
 
 export function useRemoveCustomProvider() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }: RemoveCustomProviderArgs) =>
-      client.del<OkResponse>(`/web/config/custom-providers/${encodeURIComponent(id)}`),
+    mutationFn: ({ id, scope }: RemoveCustomProviderArgs) =>
+      client.del<OkResponse>(`/web/config/custom-providers/${encodeURIComponent(id)}${scope ? `?scope=${scope}` : ''}`),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),

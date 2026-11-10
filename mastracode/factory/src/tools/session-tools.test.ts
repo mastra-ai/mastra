@@ -471,13 +471,50 @@ describe('factory_switch_session_model with stored credentials', () => {
     expect(env.controller.setThreadModel).toHaveBeenCalledTimes(1);
   });
 
+  /** An organization-wide endpoint, the session owner's own, and another member's. */
+  async function seedCustomProviders(env: Awaited<ReturnType<typeof tenantSetup>>) {
+    const endpoint = (id: string) => ({
+      providerId: id,
+      name: id,
+      url: `https://llm.${id}.test/v1`,
+      apiKey: id,
+      models: [`${id}-1`],
+    });
+    await env.seed.customProviders.upsert({ owner: { orgId: 'org-1' }, createdBy: 'owner', input: endpoint('acme') });
+    await env.seed.customProviders.upsert({
+      owner: { orgId: 'org-1', userId: 'user-1' },
+      createdBy: 'user-1',
+      input: endpoint('mine'),
+    });
+    await env.seed.customProviders.upsert({
+      owner: { orgId: 'org-1', userId: 'someone-else' },
+      createdBy: 'someone-else',
+      input: endpoint('theirs'),
+    });
+  }
+
+  it("lets a user-scoped session use its owner's custom providers, not the Factory's or another member's", async () => {
+    const env = await tenantSetup('user');
+    await seedCustomProviders(env);
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['anthropic/claude-opus-5-5', 'mine/mine-1'],
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'mine/mine-1' })).resolves.toMatchObject({
+      modelId: 'mine/mine-1',
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'acme/acme-1' })).rejects.toThrow(
+      'Unknown model acme/acme-1.',
+    );
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'theirs/theirs-1' })).rejects.toThrow(
+      'Unknown model theirs/theirs-1.',
+    );
+  });
+
   it('lets a Factory-scoped session use the Factory credentials and its custom providers, not the owner credentials', async () => {
     const env = await tenantSetup('factory');
-    await env.seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'owner',
-      input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.test/v1', apiKey: 'acme', models: ['acme-1'] },
-    });
+    await seedCustomProviders(env);
     env.controller.getSession.mockResolvedValue(null);
 
     await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({

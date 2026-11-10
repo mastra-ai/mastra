@@ -28,8 +28,8 @@ async function seedLegacyRawApiKeyRow(url: string, apiKey = 'sk-ant-api03-raw-le
   // secret string, exactly as `upsert` wrote it before this change.
   const { backend, domain } = await makeFileStore(url);
   await domain.upsert({
-    orgId: 'org-1',
-    userId: 'user-1',
+    owner: { orgId: 'org-1' },
+    createdBy: 'user-1',
     input: { providerId: 'legacy-llm', name: 'Legacy LLM', url: 'https://llm.example.com/v1', models: ['m'] },
   });
   await backend.ops.updateMany(
@@ -49,8 +49,8 @@ describe('CustomProvidersStorage', () => {
     const seed = await createFactoryStorageForTests();
 
     const provider = await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: {
         providerId: 'my-llm',
         name: 'My LLM',
@@ -84,8 +84,16 @@ describe('CustomProvidersStorage', () => {
     });
 
     const [a, b] = await Promise.all([
-      seed.customProviders.upsert({ orgId: 'org-1', userId: 'user-1', input: input('https://a.example.com') }),
-      seed.customProviders.upsert({ orgId: 'org-1', userId: 'user-2', input: input('https://b.example.com') }),
+      seed.customProviders.upsert({
+        owner: { orgId: 'org-1' },
+        createdBy: 'user-1',
+        input: input('https://a.example.com'),
+      }),
+      seed.customProviders.upsert({
+        owner: { orgId: 'org-1' },
+        createdBy: 'user-2',
+        input: input('https://b.example.com'),
+      }),
     ]);
 
     // Both writes succeed against the single row; the insert-race loser
@@ -97,30 +105,31 @@ describe('CustomProvidersStorage', () => {
     expect(['https://a.example.com', 'https://b.example.com']).toContain(rows[0]!.url);
   });
 
-  it('upserts by (org, providerId) with wholesale replace — absent apiKey clears the key', async () => {
+  it('replaces a provider by (org, providerId) and keeps its saved key when the edit leaves the key out', async () => {
     const seed = await createFactoryStorageForTests();
 
     const first = await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: { providerId: 'my-llm', name: 'My LLM', url: 'https://a.example.com', apiKey: 'sk-1', models: ['m1'] },
     });
     const second = await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-2',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-2',
       input: { providerId: 'my-llm', name: 'My LLM', url: 'https://b.example.com', models: ['m1', 'm2'] },
     });
 
     expect(second.id).toBe(first.id);
     expect(second.url).toBe('https://b.example.com');
-    expect(second.apiKey).toBeNull();
+    // The settings form sends no key unless the user types a new one.
+    expect(second.apiKey).toBe('sk-1');
     expect(second.models).toEqual(['m1', 'm2']);
     expect(await seed.customProviders.list({ orgId: 'org-1' })).toHaveLength(1);
 
     // Same provider id in another org is independent.
     const otherOrg = await seed.customProviders.upsert({
-      orgId: 'org-2',
-      userId: 'user-3',
+      owner: { orgId: 'org-2' },
+      createdBy: 'user-3',
       input: { providerId: 'my-llm', name: 'My LLM', url: 'https://c.example.com', models: [] },
     });
     expect(otherOrg.id).not.toBe(first.id);
@@ -130,13 +139,13 @@ describe('CustomProvidersStorage', () => {
     const seed = await createFactoryStorageForTests();
 
     await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: { providerId: 'old-name', name: 'Old Name', url: 'https://a.example.com', models: ['m'] },
     });
     await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: { providerId: 'new-name', name: 'New Name', url: 'https://a.example.com', models: ['m'] },
       previousProviderId: 'old-name',
     });
@@ -149,13 +158,13 @@ describe('CustomProvidersStorage', () => {
     const seed = await createFactoryStorageForTests();
 
     const original = await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: { providerId: 'old-name', name: 'Old Name', url: 'https://a.example.com', models: ['m'] },
     });
     const renamed = await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-2',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-2',
       input: { providerId: 'new-name', name: 'New Name', url: 'https://b.example.com', models: ['m'] },
       previousProviderId: 'old-name',
     });
@@ -172,19 +181,19 @@ describe('CustomProvidersStorage', () => {
     const seed = await createFactoryStorageForTests();
 
     await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: { providerId: 'source', name: 'Source', url: 'https://source.example.com', models: ['m'] },
     });
     const target = await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: { providerId: 'target', name: 'Target', url: 'https://target.example.com', models: ['m'] },
     });
 
     const merged = await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-2',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-2',
       input: { providerId: 'target', name: 'Target', url: 'https://merged.example.com', models: ['m2'] },
       previousProviderId: 'source',
     });
@@ -195,12 +204,98 @@ describe('CustomProvidersStorage', () => {
     expect(providers.map(p => p.providerId)).toEqual(['target']);
   });
 
+  it('keeps the saved key when a provider is renamed without retyping it', async () => {
+    const seed = await createFactoryStorageForTests();
+    const owner = { orgId: 'org-1' };
+
+    await seed.customProviders.upsert({
+      owner,
+      createdBy: 'user-1',
+      input: { providerId: 'old-name', name: 'Old Name', url: 'https://a.example.com', apiKey: 'sk-kept', models: [] },
+    });
+    const renamed = await seed.customProviders.upsert({
+      owner,
+      createdBy: 'user-1',
+      input: { providerId: 'new-name', name: 'New Name', url: 'https://a.example.com', models: [] },
+      previousProviderId: 'old-name',
+    });
+    expect(renamed.apiKey).toBe('sk-kept');
+
+    // Renaming onto a name that already exists carries the edited provider's
+    // key, not the key of the provider it replaces.
+    await seed.customProviders.upsert({
+      owner,
+      createdBy: 'user-1',
+      input: { providerId: 'taken', name: 'Taken', url: 'https://t.example.com', apiKey: 'sk-replaced', models: [] },
+    });
+    const merged = await seed.customProviders.upsert({
+      owner,
+      createdBy: 'user-1',
+      input: { providerId: 'taken', name: 'Taken', url: 'https://a.example.com', models: [] },
+      previousProviderId: 'new-name',
+    });
+    expect(merged.apiKey).toBe('sk-kept');
+  });
+
+  it("keeps a member's providers apart from the organization's and from other members'", async () => {
+    const seed = await createFactoryStorageForTests();
+    const organization = { orgId: 'org-1' };
+    const alice = { orgId: 'org-1', userId: 'alice' };
+    const bob = { orgId: 'org-1', userId: 'bob' };
+    const endpoint = (url: string, apiKey: string) => ({
+      providerId: 'my-llm',
+      name: 'My LLM',
+      url,
+      apiKey,
+      models: ['m'],
+    });
+
+    // The same name is free at every owner.
+    await seed.customProviders.upsert({
+      owner: organization,
+      createdBy: 'admin',
+      input: endpoint('https://org.example.com', 'sk-org'),
+    });
+    await seed.customProviders.upsert({
+      owner: alice,
+      createdBy: 'alice',
+      input: endpoint('https://alice.example.com', 'sk-alice'),
+    });
+    await seed.customProviders.upsert({
+      owner: bob,
+      createdBy: 'bob',
+      input: endpoint('https://bob.example.com', 'sk-bob'),
+    });
+
+    expect(await seed.customProviders.list(organization)).toMatchObject([
+      { userId: null, url: 'https://org.example.com', apiKey: 'sk-org' },
+    ]);
+    expect(await seed.customProviders.list(alice)).toMatchObject([
+      { userId: 'alice', url: 'https://alice.example.com', apiKey: 'sk-alice' },
+    ]);
+    expect(await seed.customProviders.list(bob)).toMatchObject([
+      { userId: 'bob', url: 'https://bob.example.com', apiKey: 'sk-bob' },
+    ]);
+    // Same member id in another organization is a different owner.
+    expect(await seed.customProviders.list({ orgId: 'org-2', userId: 'alice' })).toEqual([]);
+
+    // Model resolution loads an organization once and serves every owner from it.
+    const everyone = await seed.customProviders.listForOrg('org-1');
+    expect(everyone.map(provider => provider.userId).sort()).toEqual(['alice', 'bob', null].sort());
+
+    // Removing one owner's provider leaves the others in place.
+    expect(await seed.customProviders.delete({ owner: alice, providerId: 'my-llm' })).toBe(true);
+    expect(await seed.customProviders.list(alice)).toEqual([]);
+    expect(await seed.customProviders.list(organization)).toHaveLength(1);
+    expect(await seed.customProviders.list(bob)).toHaveLength(1);
+  });
+
   it('rename whose source row is already gone still creates the new provider', async () => {
     const seed = await createFactoryStorageForTests();
 
     const created = await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: { providerId: 'new-name', name: 'New Name', url: 'https://a.example.com', models: ['m'] },
       previousProviderId: 'vanished',
     });
@@ -213,13 +308,13 @@ describe('CustomProvidersStorage', () => {
     const seed = await createFactoryStorageForTests();
 
     await seed.customProviders.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
+      owner: { orgId: 'org-1' },
+      createdBy: 'user-1',
       input: { providerId: 'my-llm', name: 'My LLM', url: 'https://a.example.com', models: [] },
     });
 
-    expect(await seed.customProviders.delete({ orgId: 'org-2', providerId: 'my-llm' })).toBe(false);
-    expect(await seed.customProviders.delete({ orgId: 'org-1', providerId: 'my-llm' })).toBe(true);
+    expect(await seed.customProviders.delete({ owner: { orgId: 'org-2' }, providerId: 'my-llm' })).toBe(false);
+    expect(await seed.customProviders.delete({ owner: { orgId: 'org-1' }, providerId: 'my-llm' })).toBe(true);
     expect(await seed.customProviders.list({ orgId: 'org-1' })).toEqual([]);
   });
 
@@ -275,8 +370,8 @@ describe('CustomProvidersStorage enabling secretEncryption', () => {
     {
       const { backend, domain } = await makeFileStore(url);
       await domain.upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
+        owner: { orgId: 'org-1' },
+        createdBy: 'user-1',
         input: {
           providerId: 'my-llm',
           name: 'My LLM',
@@ -306,8 +401,8 @@ describe('CustomProvidersStorage enabling secretEncryption', () => {
     {
       const { backend, domain } = await makeFileStore(url, encryption());
       const saved = await domain.upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
+        owner: { orgId: 'org-1' },
+        createdBy: 'user-1',
         input: {
           providerId: 'my-llm',
           name: 'My LLM',
