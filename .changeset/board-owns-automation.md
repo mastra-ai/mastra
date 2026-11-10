@@ -8,9 +8,9 @@ The board now decides what Factory does on its own. The project-wide **Auto-star
 **Existing projects keep their behavior.** On the next load, Factory rewrites each project's stored boards once:
 
 - A project with auto-run on gets `autoStart: true` on every working phase of every stored board.
-- A project with self-review off loses the self-review phase of every stored board, Work and custom, with every move into it. Factory keeps the phase and logs a warning when cards sit in it, or when the board's build phase can't move to its pull request review without it.
+- A project with self-review off loses the self-review phase of every stored board (Work, app and custom), with every move into it. Factory keeps the phase and logs a warning when an app board declares it in code (`defineBoard()`), when cards sit in it, or when the board's build phase can't move to its pull request review without it.
 
-Boards defined in code (`defineBoard()`) are not rewritten: remove their self-review phase, or add `autoStart`, in code.
+Every board the project stores is rewritten, app boards included: Factory serves a project the stored row, not the code. Boards are only served from code, unmigrated, when the boards storage domain is unavailable.
 
 **API.** `PATCH /web/factory/projects/:id` still accepts `autoRunEnabled` and `selfReviewEnabled` for one more release and ignores them. Projects no longer return them. `autoApprovePlans`, ignored since the previous release, is now an unknown field: a request that sends only it is rejected.
 

@@ -100,6 +100,11 @@ export interface BoardMigrationContext {
   readonly retiredSettings: RetiredAutomationSettings | null;
   /** The phases of each board that cards sit in, by board key; null when the cards can't be read. */
   readonly occupiedPhases: ReadonlyMap<string, ReadonlySet<string>> | null;
+  /**
+   * The phases the code board under this key declares; undefined for a board only the project
+   * stores. A row that drops one runs without its code rules (`mergeCodeBehaviour`).
+   */
+  codePhases(boardKey: string): ReadonlySet<string> | undefined;
   /** Tells the operator about a board a migration left as it is. */
   warn(message: string): void;
 }
@@ -119,6 +124,7 @@ export interface StoredBoardMigration {
 const EMPTY_MIGRATION_CONTEXT: BoardMigrationContext = {
   retiredSettings: null,
   occupiedPhases: new Map(),
+  codePhases: () => undefined,
   warn: () => {},
 };
 

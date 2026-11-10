@@ -263,7 +263,8 @@ function reviewPhases(board: StoredBoardRecord) {
 /**
  * Carries a project's retired self-review switch into its boards: with the switch off, a card went
  * past any board's self-review phase, so the phase goes, with every move into it. A board is left
- * as it is, with a warning, when cards sit in the phase (removing it would strand them) or when its
+ * as it is, with a warning, when its code board declares the phase (without it the board would run
+ * without its code rules), when cards sit in the phase (removing it would strand them) or when its
  * build phase could only reach the pull request review through it.
  */
 export function migrateSelfReviewSwitch(
@@ -274,8 +275,6 @@ export function migrateSelfReviewSwitch(
   const { pullRequestReview, selfReview, build } = reviewPhases(board);
   if (!selfReview) return undefined;
   const phase = selfReview.key;
-  // Without the cards it could strand some in the phase: the project's next load runs it again.
-  if (!context.occupiedPhases) throw new Error("the project's cards can't be read yet");
   const keep = (reason: string) => {
     context.warn(
       `Board "${board.key}" keeps its self-review phase "${phase}": ${reason}. The project's self-review ` +
@@ -283,6 +282,9 @@ export function migrateSelfReviewSwitch(
     );
     return undefined;
   };
+  if (context.codePhases(board.key)?.has(phase)) return keep('its code declares it, so remove it in code first');
+  // Without the cards it could strand some in the phase: the project's next load runs it again.
+  if (!context.occupiedPhases) throw new Error("the project's cards can't be read yet");
   if (context.occupiedPhases.get(board.key)?.has(phase)) return keep('cards sit in it, move them first');
   if (build && !(pullRequestReview && (build.nextPhases ?? []).includes(pullRequestReview.key))) {
     return keep(`"${build.key}" can't move to a pull request review without it, add that move first`);

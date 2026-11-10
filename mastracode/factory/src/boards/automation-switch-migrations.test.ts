@@ -6,8 +6,10 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { StoredBoardInput, StoredBoardScope } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
+import { defineBoard } from './define-board.js';
 import { occupiedPhasesOf, ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
+import type { BoardRegistry } from './registry.js';
 import { boardDefinitionOf } from './stored-board.js';
 import { BOARD_MIGRATIONS, workSeedWithSelfReview } from './work-migrations.js';
 import { workBoard } from './work.js';
@@ -28,6 +30,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     async function setup(
       switches: { auto_run_enabled?: boolean; self_review_enabled?: boolean },
       stored: StoredBoardInput[] = [],
+      codeRegistry: BoardRegistry = createBoardRegistry(),
     ) {
       const storage =
         backend === 'postgres'
@@ -46,7 +49,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
        */
       const load = (options: { cards?: boolean } = {}) =>
         new ProjectBoardCache({
-          codeRegistry: createBoardRegistry(),
+          codeRegistry,
           storage: seed.boards,
           projects: seed.projects,
           ...(options.cards === false ? {} : { occupiedPhases: occupiedPhasesOf(seed.workItems) }),
@@ -218,6 +221,31 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect(boards.get('ship')!.phases).not.toHaveProperty('check');
       });
 
+      it("keeps a self-review phase an app board declares in code, and with it the board's code rules", async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const transitionPolicy = () => undefined;
+        const { key: _key, ...ship } = shipBoard(['check', 'pr']);
+        const app = defineBoard({
+          id: 'ship',
+          name: ship.name,
+          initialPhase: 'inbox',
+          transitionPolicy,
+          phases: Object.fromEntries(ship.phases.map(({ key, ...phase }) => [key, phase])),
+        } as Parameters<typeof defineBoard>[0]);
+        const {
+          load,
+          boards: stored,
+          scope,
+          warn,
+        } = await setup({ self_review_enabled: false }, [], createBoardRegistry({ boards: [app] }));
+
+        const boards = await load();
+
+        expect((await stored.get(scope, 'ship'))!.phases.map(phase => phase.key)).toContain('check');
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('keeps its self-review phase "check"'));
+        expect(boards.get('ship')!.transitionPolicy).toBe(transitionPolicy);
+      });
+
       it("keeps a self-review phase the build phase can't get past without, and says why", async () => {
         const {
           load,
@@ -278,6 +306,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
                 ops,
               ),
               occupiedPhases,
+              codePhases: () => undefined,
               warn: () => {},
             };
           };

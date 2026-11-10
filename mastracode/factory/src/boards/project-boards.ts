@@ -357,6 +357,10 @@ export class ProjectBoardCache implements ProjectBoardSource {
     return {
       retiredSettings,
       occupiedPhases: retiredSettings && this.#occupiedPhases ? await this.#occupiedPhases(scope, ops) : null,
+      codePhases: boardKey => {
+        const code = this.codeRegistry.get(boardKey);
+        return code ? new Set(Object.keys(code.phases)) : undefined;
+      },
       warn: message =>
         this.#warnOnce(`migration:${scopeKey(scope)}:${message}`, `${message} (project ${scope.factoryProjectId})`),
     };
