@@ -1,0 +1,1140 @@
+{
+  "summary": {
+    "label": "outage-60s",
+    "outageMs": 60000,
+    "plainRuns": 5,
+    "durableRuns": 1,
+    "pacing": {
+      "chunkChars": 16,
+      "intervalMs": 50,
+      "chunksPerRun": 1500,
+      "streamMs": 75000
+    },
+    "downAt": 5109,
+    "upAt": 65174,
+    "drainedAt": 76581,
+    "backlogFlushedAfterRecoveryMs": 1114,
+    "allSettledAfterRecoveryMs": 11407,
+    "busTotals": {
+      "started": 9037,
+      "acked": 9037,
+      "failed": 0,
+      "inFlight": 0,
+      "peakInFlight": 6
+    },
+    "publishFailures": [],
+    "memStart": {
+      "rssMB": 428,
+      "heapUsedMB": 250.3,
+      "externalMB": 4.1,
+      "arrayBuffersMB": 0.1
+    },
+    "memPeakDelta": {
+      "rssMB": 6.2,
+      "heapUsedMB": 8.4,
+      "externalMB": 2.5,
+      "arrayBuffersMB": 0.1
+    },
+    "peakPendingInferred": 5925,
+    "runs": [
+      {
+        "label": "p0",
+        "runId": "8de513ab-7a89-4fbd-9483-7c8d84808814",
+        "caller": {
+          "frames": 1506,
+          "ms": 76498,
+          "textOk": true,
+          "textLen": 24000,
+          "tail": "step-finish,finish"
+        },
+        "bus": {
+          "started": 1506,
+          "acked": 1506,
+          "failed": 0
+        },
+        "replay": {
+          "frames": 1506,
+          "textOk": true,
+          "textLen": 24000
+        },
+        "redis": {
+          "entries": 1506,
+          "textOk": true,
+          "textLen": 24000
+        }
+      },
+      {
+        "label": "p1",
+        "runId": "899cb34e-657a-4754-bd16-71029898dc37",
+        "caller": {
+          "frames": 1506,
+          "ms": 76505,
+          "textOk": true,
+          "textLen": 24000,
+          "tail": "step-finish,finish"
+        },
+        "bus": {
+          "started": 1506,
+          "acked": 1506,
+          "failed": 0
+        },
+        "replay": {
+          "frames": 1506,
+          "textOk": true,
+          "textLen": 24000
+        },
+        "redis": {
+          "entries": 1506,
+          "textOk": true,
+          "textLen": 24000
+        }
+      },
+      {
+        "label": "p2",
+        "runId": "b3ae3dda-a2ff-4013-90ad-2f40dda4b398",
+        "caller": {
+          "frames": 1506,
+          "ms": 76510,
+          "textOk": true,
+          "textLen": 24000,
+          "tail": "step-finish,finish"
+        },
+        "bus": {
+          "started": 1506,
+          "acked": 1506,
+          "failed": 0
+        },
+        "replay": {
+          "frames": 1506,
+          "textOk": true,
+          "textLen": 24000
+        },
+        "redis": {
+          "entries": 1506,
+          "textOk": true,
+          "textLen": 24000
+        }
+      },
+      {
+        "label": "p3",
+        "runId": "7e2851cc-d740-4c87-afbe-8bcff3393faa",
+        "caller": {
+          "frames": 1506,
+          "ms": 76516,
+          "textOk": true,
+          "textLen": 24000,
+          "tail": "step-finish,finish"
+        },
+        "bus": {
+          "started": 1506,
+          "acked": 1506,
+          "failed": 0
+        },
+        "replay": {
+          "frames": 1506,
+          "textOk": true,
+          "textLen": 24000
+        },
+        "redis": {
+          "entries": 1506,
+          "textOk": true,
+          "textLen": 24000
+        }
+      },
+      {
+        "label": "p4",
+        "runId": "b9289da5-ee37-41db-8419-7c1b874ab40a",
+        "caller": {
+          "frames": 1506,
+          "ms": 76523,
+          "textOk": true,
+          "textLen": 24000,
+          "tail": "step-finish,finish"
+        },
+        "bus": {
+          "started": 1506,
+          "acked": 1506,
+          "failed": 0
+        },
+        "replay": {
+          "frames": 1506,
+          "textOk": true,
+          "textLen": 24000
+        },
+        "redis": {
+          "entries": 1506,
+          "textOk": true,
+          "textLen": 24000
+        }
+      },
+      {
+        "label": "d0",
+        "runId": "28062f8e-8537-4f9f-9d8d-a8e753edada1",
+        "caller": {
+          "frames": 1506,
+          "ms": 76544,
+          "textOk": true,
+          "textLen": 24000,
+          "tail": "step-finish,finish"
+        },
+        "bus": {
+          "started": 1507,
+          "acked": 1507,
+          "failed": 0
+        },
+        "replay": {
+          "frames": 1506,
+          "textOk": true,
+          "textLen": 24000
+        },
+        "redis": {
+          "entries": 1507,
+          "textOk": true,
+          "textLen": 24000
+        }
+      }
+    ],
+    "observers": [
+      {
+        "label": "p0",
+        "frames": 1506,
+        "textOk": true,
+        "textLen": 24000
+      },
+      {
+        "label": "p1",
+        "frames": 1506,
+        "textOk": true,
+        "textLen": 24000
+      },
+      {
+        "label": "p2",
+        "frames": 1506,
+        "textOk": true,
+        "textLen": 24000
+      },
+      {
+        "label": "p3",
+        "frames": 1506,
+        "textOk": true,
+        "textLen": 24000
+      },
+      {
+        "label": "p4",
+        "frames": 1506,
+        "textOk": true,
+        "textLen": 24000
+      }
+    ]
+  },
+  "samples": [
+    {
+      "t": 2035,
+      "rssMB": 428.2,
+      "heapUsedMB": 254.3,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 228,
+      "busStarted": 228,
+      "busAcked": 228,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": 0,
+      "producedByRun": {
+        "p0": 38,
+        "p1": 38,
+        "p2": 38,
+        "p3": 38,
+        "p4": 38,
+        "d0": 38
+      }
+    },
+    {
+      "t": 4035,
+      "rssMB": 428.3,
+      "heapUsedMB": 254.7,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 467,
+      "busStarted": 467,
+      "busAcked": 467,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": 0,
+      "producedByRun": {
+        "p0": 78,
+        "p1": 78,
+        "p2": 78,
+        "p3": 78,
+        "p4": 78,
+        "d0": 77
+      }
+    },
+    {
+      "t": 5053,
+      "event": "outage-start",
+      "rssMB": 431.2,
+      "heapUsedMB": 255.1,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 587,
+      "busStarted": 587,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": 0,
+      "producedByRun": {
+        "p0": 98,
+        "p1": 98,
+        "p2": 98,
+        "p3": 98,
+        "p4": 98,
+        "d0": 97
+      }
+    },
+    {
+      "t": 6035,
+      "rssMB": 431.5,
+      "heapUsedMB": 255.2,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 677,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 90,
+      "producedByRun": {
+        "p0": 116,
+        "p1": 116,
+        "p2": 116,
+        "p3": 116,
+        "p4": 116,
+        "d0": 97
+      }
+    },
+    {
+      "t": 8035,
+      "rssMB": 431.5,
+      "heapUsedMB": 255.6,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 872,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 285,
+      "producedByRun": {
+        "p0": 155,
+        "p1": 155,
+        "p2": 155,
+        "p3": 155,
+        "p4": 155,
+        "d0": 97
+      }
+    },
+    {
+      "t": 10032,
+      "rssMB": 431.5,
+      "heapUsedMB": 255.8,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 1071,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 484,
+      "producedByRun": {
+        "p0": 195,
+        "p1": 195,
+        "p2": 195,
+        "p3": 195,
+        "p4": 194,
+        "d0": 97
+      }
+    },
+    {
+      "t": 12038,
+      "rssMB": 431.5,
+      "heapUsedMB": 256,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 1267,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 680,
+      "producedByRun": {
+        "p0": 234,
+        "p1": 234,
+        "p2": 234,
+        "p3": 234,
+        "p4": 234,
+        "d0": 97
+      }
+    },
+    {
+      "t": 14033,
+      "rssMB": 431.5,
+      "heapUsedMB": 256.2,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 1464,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 877,
+      "producedByRun": {
+        "p0": 274,
+        "p1": 274,
+        "p2": 273,
+        "p3": 273,
+        "p4": 273,
+        "d0": 97
+      }
+    },
+    {
+      "t": 16036,
+      "rssMB": 431.5,
+      "heapUsedMB": 256.4,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 1662,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 1075,
+      "producedByRun": {
+        "p0": 313,
+        "p1": 313,
+        "p2": 313,
+        "p3": 313,
+        "p4": 313,
+        "d0": 97
+      }
+    },
+    {
+      "t": 18042,
+      "rssMB": 431.5,
+      "heapUsedMB": 256.7,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 1859,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 1272,
+      "producedByRun": {
+        "p0": 353,
+        "p1": 353,
+        "p2": 352,
+        "p3": 352,
+        "p4": 352,
+        "d0": 97
+      }
+    },
+    {
+      "t": 20034,
+      "rssMB": 431.7,
+      "heapUsedMB": 256.9,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 2054,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 1467,
+      "producedByRun": {
+        "p0": 392,
+        "p1": 392,
+        "p2": 391,
+        "p3": 391,
+        "p4": 391,
+        "d0": 97
+      }
+    },
+    {
+      "t": 22034,
+      "rssMB": 431.7,
+      "heapUsedMB": 257.1,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 2251,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 1664,
+      "producedByRun": {
+        "p0": 431,
+        "p1": 431,
+        "p2": 431,
+        "p3": 431,
+        "p4": 430,
+        "d0": 97
+      }
+    },
+    {
+      "t": 24037,
+      "rssMB": 431.7,
+      "heapUsedMB": 257.3,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 2449,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 1862,
+      "producedByRun": {
+        "p0": 471,
+        "p1": 471,
+        "p2": 470,
+        "p3": 470,
+        "p4": 470,
+        "d0": 97
+      }
+    },
+    {
+      "t": 26036,
+      "rssMB": 431.7,
+      "heapUsedMB": 257.5,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 2646,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 2059,
+      "producedByRun": {
+        "p0": 510,
+        "p1": 510,
+        "p2": 510,
+        "p3": 510,
+        "p4": 509,
+        "d0": 97
+      }
+    },
+    {
+      "t": 28036,
+      "rssMB": 431.7,
+      "heapUsedMB": 257.7,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 2844,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 2257,
+      "producedByRun": {
+        "p0": 550,
+        "p1": 550,
+        "p2": 549,
+        "p3": 549,
+        "p4": 549,
+        "d0": 97
+      }
+    },
+    {
+      "t": 30032,
+      "rssMB": 431.7,
+      "heapUsedMB": 248.6,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 3042,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 2455,
+      "producedByRun": {
+        "p0": 589,
+        "p1": 589,
+        "p2": 589,
+        "p3": 589,
+        "p4": 589,
+        "d0": 97
+      }
+    },
+    {
+      "t": 32035,
+      "rssMB": 431.9,
+      "heapUsedMB": 248.8,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 3239,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 2652,
+      "producedByRun": {
+        "p0": 629,
+        "p1": 629,
+        "p2": 628,
+        "p3": 628,
+        "p4": 628,
+        "d0": 97
+      }
+    },
+    {
+      "t": 34035,
+      "rssMB": 432.4,
+      "heapUsedMB": 249.1,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 3437,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 2850,
+      "producedByRun": {
+        "p0": 668,
+        "p1": 668,
+        "p2": 668,
+        "p3": 668,
+        "p4": 668,
+        "d0": 97
+      }
+    },
+    {
+      "t": 36037,
+      "rssMB": 432.6,
+      "heapUsedMB": 249.4,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 3634,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 3047,
+      "producedByRun": {
+        "p0": 708,
+        "p1": 708,
+        "p2": 707,
+        "p3": 707,
+        "p4": 707,
+        "d0": 97
+      }
+    },
+    {
+      "t": 38032,
+      "rssMB": 432.6,
+      "heapUsedMB": 249.6,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 3832,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 3245,
+      "producedByRun": {
+        "p0": 747,
+        "p1": 747,
+        "p2": 747,
+        "p3": 747,
+        "p4": 747,
+        "d0": 97
+      }
+    },
+    {
+      "t": 40032,
+      "rssMB": 432.6,
+      "heapUsedMB": 249.8,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 4029,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 3442,
+      "producedByRun": {
+        "p0": 787,
+        "p1": 787,
+        "p2": 786,
+        "p3": 786,
+        "p4": 786,
+        "d0": 97
+      }
+    },
+    {
+      "t": 42031,
+      "rssMB": 432.6,
+      "heapUsedMB": 250,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 4227,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 3640,
+      "producedByRun": {
+        "p0": 826,
+        "p1": 826,
+        "p2": 826,
+        "p3": 826,
+        "p4": 826,
+        "d0": 97
+      }
+    },
+    {
+      "t": 44034,
+      "rssMB": 432.6,
+      "heapUsedMB": 250.3,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 4424,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 3837,
+      "producedByRun": {
+        "p0": 866,
+        "p1": 866,
+        "p2": 865,
+        "p3": 865,
+        "p4": 865,
+        "d0": 97
+      }
+    },
+    {
+      "t": 46032,
+      "rssMB": 432.6,
+      "heapUsedMB": 250.5,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 4623,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 4036,
+      "producedByRun": {
+        "p0": 906,
+        "p1": 905,
+        "p2": 905,
+        "p3": 905,
+        "p4": 905,
+        "d0": 97
+      }
+    },
+    {
+      "t": 48035,
+      "rssMB": 432.6,
+      "heapUsedMB": 250.7,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 4821,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 4234,
+      "producedByRun": {
+        "p0": 945,
+        "p1": 945,
+        "p2": 945,
+        "p3": 945,
+        "p4": 944,
+        "d0": 97
+      }
+    },
+    {
+      "t": 50033,
+      "rssMB": 432.6,
+      "heapUsedMB": 251,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 5019,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 4432,
+      "producedByRun": {
+        "p0": 985,
+        "p1": 985,
+        "p2": 984,
+        "p3": 984,
+        "p4": 984,
+        "d0": 97
+      }
+    },
+    {
+      "t": 52032,
+      "rssMB": 432.6,
+      "heapUsedMB": 251.2,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 5216,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 4629,
+      "producedByRun": {
+        "p0": 1024,
+        "p1": 1024,
+        "p2": 1024,
+        "p3": 1024,
+        "p4": 1023,
+        "d0": 97
+      }
+    },
+    {
+      "t": 54033,
+      "rssMB": 432.6,
+      "heapUsedMB": 251.3,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 5414,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 4827,
+      "producedByRun": {
+        "p0": 1064,
+        "p1": 1064,
+        "p2": 1063,
+        "p3": 1063,
+        "p4": 1063,
+        "d0": 97
+      }
+    },
+    {
+      "t": 56034,
+      "rssMB": 432.6,
+      "heapUsedMB": 251.5,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 5612,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 5025,
+      "producedByRun": {
+        "p0": 1103,
+        "p1": 1103,
+        "p2": 1103,
+        "p3": 1103,
+        "p4": 1103,
+        "d0": 97
+      }
+    },
+    {
+      "t": 58034,
+      "rssMB": 432.6,
+      "heapUsedMB": 251.8,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 5810,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 5223,
+      "producedByRun": {
+        "p0": 1143,
+        "p1": 1143,
+        "p2": 1143,
+        "p3": 1142,
+        "p4": 1142,
+        "d0": 97
+      }
+    },
+    {
+      "t": 60030,
+      "rssMB": 432.6,
+      "heapUsedMB": 251.9,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 6007,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 5420,
+      "producedByRun": {
+        "p0": 1182,
+        "p1": 1182,
+        "p2": 1182,
+        "p3": 1182,
+        "p4": 1182,
+        "d0": 97
+      }
+    },
+    {
+      "t": 62033,
+      "rssMB": 432.6,
+      "heapUsedMB": 252.1,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 6207,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 5620,
+      "producedByRun": {
+        "p0": 1222,
+        "p1": 1222,
+        "p2": 1222,
+        "p3": 1222,
+        "p4": 1222,
+        "d0": 97
+      }
+    },
+    {
+      "t": 64034,
+      "rssMB": 432.6,
+      "heapUsedMB": 252.3,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 6405,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 5818,
+      "producedByRun": {
+        "p0": 1262,
+        "p1": 1262,
+        "p2": 1262,
+        "p3": 1261,
+        "p4": 1261,
+        "d0": 97
+      }
+    },
+    {
+      "t": 65140,
+      "event": "outage-end",
+      "rssMB": 432.6,
+      "heapUsedMB": 252.4,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 6512,
+      "busStarted": 593,
+      "busAcked": 587,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 5925,
+      "producedByRun": {
+        "p0": 1283,
+        "p1": 1283,
+        "p2": 1283,
+        "p3": 1283,
+        "p4": 1283,
+        "d0": 97
+      }
+    },
+    {
+      "t": 66036,
+      "rssMB": 433,
+      "heapUsedMB": 255.8,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 7388,
+      "busStarted": 5345,
+      "busAcked": 5339,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 2049,
+      "producedByRun": {
+        "p0": 1300,
+        "p1": 1300,
+        "p2": 1300,
+        "p3": 1300,
+        "p4": 1300,
+        "d0": 888
+      }
+    },
+    {
+      "t": 66321,
+      "event": "backlog-flushed",
+      "rssMB": 433,
+      "heapUsedMB": 256.5,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 7653,
+      "busStarted": 6785,
+      "busAcked": 6779,
+      "busFailed": 0,
+      "inFlight": 6,
+      "pendingInferred": 874,
+      "producedByRun": {
+        "p0": 1305,
+        "p1": 1305,
+        "p2": 1305,
+        "p3": 1305,
+        "p4": 1305,
+        "d0": 1128
+      }
+    },
+    {
+      "t": 68037,
+      "rssMB": 433.2,
+      "heapUsedMB": 257.4,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 8034,
+      "busStarted": 8034,
+      "busAcked": 8034,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": 0,
+      "producedByRun": {
+        "p0": 1339,
+        "p1": 1339,
+        "p2": 1339,
+        "p3": 1339,
+        "p4": 1339,
+        "d0": 1339
+      }
+    },
+    {
+      "t": 70039,
+      "rssMB": 433.2,
+      "heapUsedMB": 257.6,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 8274,
+      "busStarted": 8274,
+      "busAcked": 8274,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": 0,
+      "producedByRun": {
+        "p0": 1379,
+        "p1": 1379,
+        "p2": 1379,
+        "p3": 1379,
+        "p4": 1379,
+        "d0": 1379
+      }
+    },
+    {
+      "t": 72039,
+      "rssMB": 433.3,
+      "heapUsedMB": 257.9,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 8508,
+      "busStarted": 8508,
+      "busAcked": 8508,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": 0,
+      "producedByRun": {
+        "p0": 1418,
+        "p1": 1418,
+        "p2": 1418,
+        "p3": 1418,
+        "p4": 1418,
+        "d0": 1418
+      }
+    },
+    {
+      "t": 74041,
+      "rssMB": 433.3,
+      "heapUsedMB": 258.4,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 8748,
+      "busStarted": 8748,
+      "busAcked": 8748,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": 0,
+      "producedByRun": {
+        "p0": 1458,
+        "p1": 1458,
+        "p2": 1458,
+        "p3": 1458,
+        "p4": 1458,
+        "d0": 1458
+      }
+    },
+    {
+      "t": 76039,
+      "rssMB": 433.3,
+      "heapUsedMB": 258.7,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.1,
+      "produced": 8982,
+      "busStarted": 8982,
+      "busAcked": 8982,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": 0,
+      "producedByRun": {
+        "p0": 1497,
+        "p1": 1497,
+        "p2": 1497,
+        "p3": 1497,
+        "p4": 1497,
+        "d0": 1497
+      }
+    },
+    {
+      "t": 76581,
+      "event": "callers-done",
+      "rssMB": 434.2,
+      "heapUsedMB": 258.7,
+      "externalMB": 6.6,
+      "arrayBuffersMB": 0.2,
+      "produced": 9036,
+      "busStarted": 9037,
+      "busAcked": 9037,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": -1,
+      "producedByRun": {
+        "p0": 1506,
+        "p1": 1506,
+        "p2": 1506,
+        "p3": 1506,
+        "p4": 1506,
+        "d0": 1506
+      }
+    },
+    {
+      "t": 76617,
+      "event": "drained",
+      "rssMB": 433.5,
+      "heapUsedMB": 258.6,
+      "externalMB": 3.9,
+      "arrayBuffersMB": 0.2,
+      "produced": 9036,
+      "busStarted": 9037,
+      "busAcked": 9037,
+      "busFailed": 0,
+      "inFlight": 0,
+      "pendingInferred": -1,
+      "producedByRun": {
+        "p0": 1506,
+        "p1": 1506,
+        "p2": 1506,
+        "p3": 1506,
+        "p4": 1506,
+        "d0": 1506
+      }
+    }
+  ]
+}

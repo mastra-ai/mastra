@@ -141,3 +141,64 @@ There is no approved remote endpoint in the environment. The PR 3 latency figure
 - Cell 4 real-browser evidence covers the default signals transport in Chromium only, from a disposable fixture outside the repo test suites.
 - Cell 5 is unverified.
 - All Redis evidence is local Docker. Emulated RTT was not used and would not count as remote evidence.
+
+## Long Redis outage (local Docker), Nov 10 rerun on current main
+
+Provenance:
+- Baseline origin/main 66c620c0, merged into the session branch as 82fffe73.
+- Dists rebuilt from that tree 15:52–15:53Z.
+- node 22.23.3, pnpm 11.21.0, Docker 29.9.1, redis:7-alpine 7.4.12 on :6381, aimock 1.47.0. Host: 4 CPUs, 8GB.
+
+Test: `pubsub/redis-streams/src/agent-stream-bus-outage.test.ts`. It is opt-in and test-only.
+
+Command:
+
+```
+cd pubsub/redis-streams && COR1519_OUTAGE_SECONDS=60,120,300 COR1519_OUTAGE_OUT=<dir> REDIS_URL=redis://localhost:6381 npx vitest run src/agent-stream-bus-outage.test.ts
+```
+
+Run 15:59–16:17Z, 1082s. Result: 5 passed, 1 failed (outage-300s). Log: `logs/outage-60-120-300.log`. JSON timelines: `outage/`.
+
+Load:
+- 5 concurrent plain Agent runs plus 1 DurableAgent run (d0), all on one Mastra instance.
+- Public `agent.stream()` per run, and a live `agent.observe()` per plain run.
+- The model is AIMock over HTTP, streaming 16-char chunks every 50ms (20 chunks/s per run). Each stream lasts 5s lead + outage + 10s tail.
+- Outage method: `docker pause` on the Redis container, starting 5s into the run.
+- Quiet baselines use the same runs and the same stream length with no pause.
+- Memory: `process.memoryUsage()` sampled every 2s after a forced GC. Reported as the peak delta over the phase start.
+
+Accounting:
+- A test-only RedisStreamsPubSub subclass counts publishes started, acked and failed per run on `agent.stream.*` topics.
+- "Pending (inferred)" = frames produced to callers − acked − failed. This is a lower bound for the plain publisher's queue: in-flight publishes are included, and lifecycle/record writes are not counted.
+- The Redis stream contents are verified directly with XRANGE.
+
+| phase | chunks/run | bus started/acked/failed | peak pending (inferred) | backlog flushed after recovery | all settled after recovery | peak Δ rss / heap / external MB |
+|---|---|---|---|---|---|---|
+| quiet-60s | 1500 | 9037/9037/0 | 4 | – | – | +14.6 / +20.6 / +2.7 |
+| outage-60s | 1500 | 9037/9037/0 | 5925 | 1.1s | 11.4s | +6.2 / +8.4 / +2.5 |
+| quiet-120s | 2700 | 16237/16237/0 | 4 | – | – | +11.9 / +21.5 / +5.0 |
+| outage-120s | 2700 | 16237/16237/0 | 11832 | 2.3s | 12.6s | +10.1 / +11.8 / +3.4 |
+| quiet-300s | 6300 | 37837/37837/0 | 5 | – | – | +22.2 / +52.2 / +2.2 |
+| outage-300s | 6300 | 31629/31617/12 | 29290 | 4.9s | 18.2s | +12.7 / +19.1 / +6.0 |
+
+Memory: at this load (~29k pending frames of 16 chars each), the outage memory deltas are within the noise of the matched quiet runs. No growth attributable to the queue was measurable. Larger payloads or more runs were not tested.
+
+60s and 120s: PASS.
+- Every caller, live observer, observe() replay and Redis stream was exact.
+- No publish failures.
+- Caveat: the 120s pause lasted 120.09s, right at the 120s `publishRetryBudgetMs` default, so that cell doesn't show where the budget boundary falls.
+
+300s: FAIL (strict assertions kept).
+- Plain runs (p0–p4):
+  - Each run had 2 publishes rejected with `PublishRetryBudgetExhaustedError` ("publish did not reach Redis within 120000ms").
+  - Even so, every caller, observer, replay and Redis XRANGE was exact: 6306 entries per run, no loss and no duplicates. The rejected XADDs were still in node-redis's offline queue and landed after the unpause.
+  - Failing assertions: `failed = 0` and `acked = caller frames`.
+  - Finding F1: the publisher's failure accounting and warnings report frames as lost when they were actually delivered. Duplicates are possible in principle (retry after a lost reply) but were not observed.
+- Durable run (d0):
+  - FAILED. Its first stalled publish (index 97, 16:12:00Z) exhausted the 120s budget, and the run failed with `PublishRetryBudgetExhaustedError`. The error chunk was produced at 16:14:00Z.
+  - The caller received nothing until Redis returned at ~305.8s. It then got 99 frames ending `error,error`, with 1504 of 100800 chars of text.
+  - Replay and Redis hold the same truncated run plus the error frames.
+  - Finding F2 (candidate defect, needs Nik to decide): during an outage longer than 120s, a DurableAgent run is failed after ~120s, but the caller's read-back stays silent until the bus recovers, so the failure is invisible for the rest of the outage. The model output after the stall is lost.
+  - This matches the documented retry budget, so F2 may be considered by design. It is reported, not fixed.
+
+Not covered: `docker stop/start` (connection loss, as opposed to a hung connection), multiple processes, payloads larger than 16-char chunks, more than 6 concurrent runs.

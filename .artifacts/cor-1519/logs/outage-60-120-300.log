@@ -1,0 +1,352 @@
+
+ RUN  v5.1.0 /workspace/mastra/pubsub/redis-streams
+
+stdout | src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 60s quiet baseline: same runs and stream length, no outage
+[COR-1519 outage] {"label":"quiet-60s","outageMs":0,"plainRuns":5,"durableRuns":1,"pacing":{"chunkChars":16,"intervalMs":50,"chunksPerRun":1500,"streamMs":75000},"drainedAt":76459,"allSettledAfterRecoveryMs":0,"busTotals":{"started":9037,"acked":9037,"failed":0,"inFlight":0,"peakInFlight":6},"publishFailures":[],"memStart":{"rssMB":398.9,"heapUsedMB":235.1,"externalMB":3.9,"arrayBuffersMB":0.1},"memPeakDelta":{"rssMB":14.6,"heapUsedMB":20.6,"externalMB":2.7,"arrayBuffersMB":0.1},"peakPendingInferred":4,"observers":[{"label":"p0","frames":1506,"textOk":true,"textLen":24000},{"label":"p1","frames":1506,"textOk":true,"textLen":24000},{"label":"p2","frames":1506,"textOk":true,"textLen":24000},{"label":"p3","frames":1506,"textOk":true,"textLen":24000},{"label":"p4","frames":1506,"textOk":true,"textLen":24000}]}
+[COR-1519 outage run] quiet-60s {"label":"p0","runId":"b052c1dc-1ee8-4a32-be3e-e3dc2b848b83","caller":{"frames":1506,"ms":76358,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] quiet-60s {"label":"p1","runId":"488e6c81-cd4e-49db-b24b-b1fc2f747f99","caller":{"frames":1506,"ms":76362,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] quiet-60s {"label":"p2","runId":"a4baf2fa-2d0a-46aa-b9a4-22116b7f2d41","caller":{"frames":1506,"ms":76367,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] quiet-60s {"label":"p3","runId":"47217e82-9541-4921-8489-8581362cfefc","caller":{"frames":1506,"ms":76371,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] quiet-60s {"label":"p4","runId":"39f75e51-4865-4aef-bee9-b25ebec09b51","caller":{"frames":1506,"ms":76375,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] quiet-60s {"label":"d0","runId":"0f1fcb47-a8e1-4f0b-b994-65e0e4e91609","caller":{"frames":1506,"ms":76418,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1507,"acked":1507,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1507,"textOk":true,"textLen":24000}}
+
+stdout | src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 60s docker pause: callers keep streaming, backlog drains, every frame survives
+[COR-1519 outage] {"label":"outage-60s","outageMs":60000,"plainRuns":5,"durableRuns":1,"pacing":{"chunkChars":16,"intervalMs":50,"chunksPerRun":1500,"streamMs":75000},"downAt":5109,"upAt":65174,"drainedAt":76581,"backlogFlushedAfterRecoveryMs":1114,"allSettledAfterRecoveryMs":11407,"busTotals":{"started":9037,"acked":9037,"failed":0,"inFlight":0,"peakInFlight":6},"publishFailures":[],"memStart":{"rssMB":428,"heapUsedMB":250.3,"externalMB":4.1,"arrayBuffersMB":0.1},"memPeakDelta":{"rssMB":6.2,"heapUsedMB":8.4,"externalMB":2.5,"arrayBuffersMB":0.1},"peakPendingInferred":5925,"observers":[{"label":"p0","frames":1506,"textOk":true,"textLen":24000},{"label":"p1","frames":1506,"textOk":true,"textLen":24000},{"label":"p2","frames":1506,"textOk":true,"textLen":24000},{"label":"p3","frames":1506,"textOk":true,"textLen":24000},{"label":"p4","frames":1506,"textOk":true,"textLen":24000}]}
+[COR-1519 outage run] outage-60s {"label":"p0","runId":"8de513ab-7a89-4fbd-9483-7c8d84808814","caller":{"frames":1506,"ms":76498,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] outage-60s {"label":"p1","runId":"899cb34e-657a-4754-bd16-71029898dc37","caller":{"frames":1506,"ms":76505,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] outage-60s {"label":"p2","runId":"b3ae3dda-a2ff-4013-90ad-2f40dda4b398","caller":{"frames":1506,"ms":76510,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] outage-60s {"label":"p3","runId":"7e2851cc-d740-4c87-afbe-8bcff3393faa","caller":{"frames":1506,"ms":76516,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] outage-60s {"label":"p4","runId":"b9289da5-ee37-41db-8419-7c1b874ab40a","caller":{"frames":1506,"ms":76523,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1506,"acked":1506,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1506,"textOk":true,"textLen":24000}}
+[COR-1519 outage run] outage-60s {"label":"d0","runId":"28062f8e-8537-4f9f-9d8d-a8e753edada1","caller":{"frames":1506,"ms":76544,"textOk":true,"textLen":24000,"tail":"step-finish,finish"},"bus":{"started":1507,"acked":1507,"failed":0},"replay":{"frames":1506,"textOk":true,"textLen":24000},"redis":{"entries":1507,"textOk":true,"textLen":24000}}
+
+stdout | src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 120s quiet baseline: same runs and stream length, no outage
+[COR-1519 outage] {"label":"quiet-120s","outageMs":0,"plainRuns":5,"durableRuns":1,"pacing":{"chunkChars":16,"intervalMs":50,"chunksPerRun":2700,"streamMs":135000},"drainedAt":137889,"allSettledAfterRecoveryMs":0,"busTotals":{"started":16237,"acked":16237,"failed":0,"inFlight":0,"peakInFlight":6},"publishFailures":[],"memStart":{"rssMB":436.9,"heapUsedMB":253,"externalMB":3.9,"arrayBuffersMB":0.1},"memPeakDelta":{"rssMB":11.9,"heapUsedMB":21.5,"externalMB":5,"arrayBuffersMB":0},"peakPendingInferred":4,"observers":[{"label":"p0","frames":2706,"textOk":true,"textLen":43200},{"label":"p1","frames":2706,"textOk":true,"textLen":43200},{"label":"p2","frames":2706,"textOk":true,"textLen":43200},{"label":"p3","frames":2706,"textOk":true,"textLen":43200},{"label":"p4","frames":2706,"textOk":true,"textLen":43200}]}
+[COR-1519 outage run] quiet-120s {"label":"p0","runId":"7240c9cc-e8a6-4957-9fbc-48083ef11524","caller":{"frames":2706,"ms":137685,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] quiet-120s {"label":"p1","runId":"26fb89ce-2ebd-4492-9835-e25b0f9f18bc","caller":{"frames":2706,"ms":137690,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] quiet-120s {"label":"p2","runId":"6e8e8bad-cdfb-49a0-b0da-1d96c5b3ae84","caller":{"frames":2706,"ms":137695,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] quiet-120s {"label":"p3","runId":"d0ea48ff-f2ea-4a2d-a55c-caa2f9867d03","caller":{"frames":2706,"ms":137703,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] quiet-120s {"label":"p4","runId":"9067b18e-fbbb-4a3a-afac-d0f0f8473d2b","caller":{"frames":2706,"ms":137707,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] quiet-120s {"label":"d0","runId":"907bb795-57f5-4d90-b8e2-34dcd7f23e95","caller":{"frames":2706,"ms":137741,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2707,"acked":2707,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2707,"textOk":true,"textLen":43200}}
+
+stdout | src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 120s docker pause: callers keep streaming, backlog drains, every frame survives
+[COR-1519 outage] {"label":"outage-120s","outageMs":120000,"plainRuns":5,"durableRuns":1,"pacing":{"chunkChars":16,"intervalMs":50,"chunksPerRun":2700,"streamMs":135000},"downAt":5108,"upAt":125198,"drainedAt":137824,"backlogFlushedAfterRecoveryMs":2251,"allSettledAfterRecoveryMs":12626,"busTotals":{"started":16237,"acked":16237,"failed":0,"inFlight":0,"peakInFlight":6},"publishFailures":[],"memStart":{"rssMB":463.7,"heapUsedMB":263.2,"externalMB":3.9,"arrayBuffersMB":0.1},"memPeakDelta":{"rssMB":10.1,"heapUsedMB":11.8,"externalMB":3.4,"arrayBuffersMB":0},"peakPendingInferred":11832,"observers":[{"label":"p0","frames":2706,"textOk":true,"textLen":43200},{"label":"p1","frames":2706,"textOk":true,"textLen":43200},{"label":"p2","frames":2706,"textOk":true,"textLen":43200},{"label":"p3","frames":2706,"textOk":true,"textLen":43200},{"label":"p4","frames":2706,"textOk":true,"textLen":43200}]}
+[COR-1519 outage run] outage-120s {"label":"p0","runId":"0458b1f4-69d5-4afd-86d0-619cb8a7e278","caller":{"frames":2706,"ms":137592,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] outage-120s {"label":"p1","runId":"67416be6-e326-49f0-b5ab-86e6644df4ef","caller":{"frames":2706,"ms":137598,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] outage-120s {"label":"p2","runId":"2dd9af86-2017-42a4-922a-952370e78450","caller":{"frames":2706,"ms":137637,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] outage-120s {"label":"p3","runId":"69318564-d82d-47b5-a956-d5983fdacdc0","caller":{"frames":2706,"ms":137643,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] outage-120s {"label":"p4","runId":"213bc6b6-0bb6-454b-b53e-2101eb0146b0","caller":{"frames":2706,"ms":137647,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2706,"acked":2706,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2706,"textOk":true,"textLen":43200}}
+[COR-1519 outage run] outage-120s {"label":"d0","runId":"832d5f11-9786-47a6-8f0d-6c751a192da9","caller":{"frames":2706,"ms":137670,"textOk":true,"textLen":43200,"tail":"step-finish,finish"},"bus":{"started":2707,"acked":2707,"failed":0},"replay":{"frames":2706,"textOk":true,"textLen":43200},"redis":{"entries":2707,"textOk":true,"textLen":43200}}
+
+stdout | src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s quiet baseline: same runs and stream length, no outage
+[COR-1519 outage] {"label":"quiet-300s","outageMs":0,"plainRuns":5,"durableRuns":1,"pacing":{"chunkChars":16,"intervalMs":50,"chunksPerRun":6300,"streamMs":315000},"drainedAt":323173,"allSettledAfterRecoveryMs":0,"busTotals":{"started":37837,"acked":37837,"failed":0,"inFlight":0,"peakInFlight":6},"publishFailures":[],"memStart":{"rssMB":474,"heapUsedMB":265.7,"externalMB":3.9,"arrayBuffersMB":0.1},"memPeakDelta":{"rssMB":22.2,"heapUsedMB":52.2,"externalMB":2.2,"arrayBuffersMB":0},"peakPendingInferred":5,"observers":[{"label":"p0","frames":6306,"textOk":true,"textLen":100800},{"label":"p1","frames":6306,"textOk":true,"textLen":100800},{"label":"p2","frames":6306,"textOk":true,"textLen":100800},{"label":"p3","frames":6306,"textOk":true,"textLen":100800},{"label":"p4","frames":6306,"textOk":true,"textLen":100800}]}
+[COR-1519 outage run] quiet-300s {"label":"p0","runId":"451cfa82-d4d4-4537-b542-79447e1d48b4","caller":{"frames":6306,"ms":323012,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6306,"failed":0},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] quiet-300s {"label":"p1","runId":"2ba67bb6-687c-446c-876b-10a9eb682b84","caller":{"frames":6306,"ms":323024,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6306,"failed":0},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] quiet-300s {"label":"p2","runId":"a664bb01-559f-4b59-954a-8590f47bf786","caller":{"frames":6306,"ms":323031,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6306,"failed":0},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] quiet-300s {"label":"p3","runId":"ccf1f2b4-e0e0-4e60-b2d0-5c2192839aa4","caller":{"frames":6306,"ms":323039,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6306,"failed":0},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] quiet-300s {"label":"p4","runId":"ac3b7627-aa62-44e2-bcc3-b2fffb13f2d8","caller":{"frames":6306,"ms":323047,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6306,"failed":0},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] quiet-300s {"label":"d0","runId":"3406ac21-6ac9-4286-bed9-e6d1ba15f180","caller":{"frames":6306,"ms":323107,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6307,"acked":6307,"failed":0},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6307,"textOk":true,"textLen":100800}}
+
+stdout | src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+[COR-1519 outage] {"label":"outage-300s","outageMs":300000,"plainRuns":5,"durableRuns":1,"pacing":{"chunkChars":16,"intervalMs":50,"chunksPerRun":6300,"streamMs":315000},"downAt":5119,"upAt":305814,"drainedAt":324018,"backlogFlushedAfterRecoveryMs":4903,"allSettledAfterRecoveryMs":18204,"busTotals":{"started":31629,"acked":31617,"failed":12,"inFlight":0,"peakInFlight":6},"publishFailures":["redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms","redis-streams: publish did not reach Redis within 120000ms"],"memStart":{"rssMB":532.3,"heapUsedMB":293.3,"externalMB":3.9,"arrayBuffersMB":0.1},"memPeakDelta":{"rssMB":12.7,"heapUsedMB":19.1,"externalMB":6,"arrayBuffersMB":0.1},"peakPendingInferred":29290,"observers":[{"label":"p0","frames":6306,"textOk":true,"textLen":100800},{"label":"p1","frames":6306,"textOk":true,"textLen":100800},{"label":"p2","frames":6306,"textOk":true,"textLen":100800},{"label":"p3","frames":6306,"textOk":true,"textLen":100800},{"label":"p4","frames":6306,"textOk":true,"textLen":100800}]}
+[COR-1519 outage run] outage-300s {"label":"p0","runId":"7c5e3666-f590-4378-9176-bd89ede52dc2","caller":{"frames":6306,"ms":323788,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6304,"failed":2},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] outage-300s {"label":"p1","runId":"d4955087-9532-47df-9e37-1b3a83f5b02d","caller":{"frames":6306,"ms":323796,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6304,"failed":2},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] outage-300s {"label":"p2","runId":"9323cfa3-0646-4465-93b7-965b0594906d","caller":{"frames":6306,"ms":323831,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6304,"failed":2},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] outage-300s {"label":"p3","runId":"ae931e6c-2b8b-4be6-9fab-570400f72387","caller":{"frames":6306,"ms":323841,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6304,"failed":2},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] outage-300s {"label":"p4","runId":"18a81844-9c6b-4b63-9447-391e2217667d","caller":{"frames":6306,"ms":323848,"textOk":true,"textLen":100800,"tail":"step-finish,finish"},"bus":{"started":6306,"acked":6304,"failed":2},"replay":{"frames":6306,"textOk":true,"textLen":100800},"redis":{"entries":6306,"textOk":true,"textLen":100800}}
+[COR-1519 outage run] outage-300s {"label":"d0","runId":"f70a48e4-243a-4203-945b-3a6649b165de","caller":{"frames":99,"ms":305817,"textOk":false,"textLen":1504,"tail":"error,error"},"bus":{"started":99,"acked":97,"failed":2},"replay":{"frames":99,"textOk":false,"textLen":1504},"redis":{"entries":99,"textOk":false,"textLen":1504}}
+
+ ❯  e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts (6 tests | 1 failed) 1080236ms
+   ❯ plain agents through a long Redis outage (COR-1519) (6)
+     ✓ 60s quiet baseline: same runs and stream length, no outage 77231ms
+     ✓ 60s docker pause: callers keep streaming, backlog drains, every frame survives 77184ms
+     ✓ 120s quiet baseline: same runs and stream length, no outage 138540ms
+     ✓ 120s docker pause: callers keep streaming, backlog drains, every frame survives 138418ms
+     ✓ 300s quiet baseline: same runs and stream length, no outage 324333ms
+     × 300s docker pause: callers keep streaming, backlog drains, every frame survives 324493ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p0 failed publishes: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:387:66
+    385|       expect.soft(r.redis.textOk, `${r.label} redis text`).toBe(true);
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+       |                                                                  ^
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+    389|       }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p0 acked = caller frames: expected 6304 to be 6306 // Object.is equality
+
+- Expected
++ Received
+
+- 6306
++ 6304
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:388:70
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+       |                                                                      ^
+    389|       }
+    390|     }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p1 failed publishes: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:387:66
+    385|       expect.soft(r.redis.textOk, `${r.label} redis text`).toBe(true);
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+       |                                                                  ^
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+    389|       }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p1 acked = caller frames: expected 6304 to be 6306 // Object.is equality
+
+- Expected
++ Received
+
+- 6306
++ 6304
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:388:70
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+       |                                                                      ^
+    389|       }
+    390|     }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p2 failed publishes: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:387:66
+    385|       expect.soft(r.redis.textOk, `${r.label} redis text`).toBe(true);
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+       |                                                                  ^
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+    389|       }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p2 acked = caller frames: expected 6304 to be 6306 // Object.is equality
+
+- Expected
++ Received
+
+- 6306
++ 6304
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:388:70
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+       |                                                                      ^
+    389|       }
+    390|     }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p3 failed publishes: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:387:66
+    385|       expect.soft(r.redis.textOk, `${r.label} redis text`).toBe(true);
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+       |                                                                  ^
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+    389|       }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p3 acked = caller frames: expected 6304 to be 6306 // Object.is equality
+
+- Expected
++ Received
+
+- 6306
++ 6304
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:388:70
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+       |                                                                      ^
+    389|       }
+    390|     }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p4 failed publishes: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:387:66
+    385|       expect.soft(r.redis.textOk, `${r.label} redis text`).toBe(true);
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+       |                                                                  ^
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+    389|       }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: p4 acked = caller frames: expected 6304 to be 6306 // Object.is equality
+
+- Expected
++ Received
+
+- 6306
++ 6304
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:388:70
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+    388|         expect.soft(r.bus.acked, `${r.label} acked = caller frames`).t…
+       |                                                                      ^
+    389|       }
+    390|     }
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: d0 caller text: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:380:62
+    378|     for (const r of summary.runs) {
+    379|       expect.soft(r.caller.error, `${r.label} caller error`).toBeUndef…
+    380|       expect.soft(r.caller.textOk, `${r.label} caller text`).toBe(true…
+       |                                                              ^
+    381|       expect.soft(r.caller.tail, `${r.label} caller tail`).toBe('step-…
+    382|       expect.soft(r.replay.error, `${r.label} replay error`).toBeUndef…
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: d0 caller tail: expected 'error,error' to be 'step-finish,finish' // Object.is equality
+
+Expected: "step-finish,finish"
+Received: "error,error"
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:381:60
+    379|       expect.soft(r.caller.error, `${r.label} caller error`).toBeUndef…
+    380|       expect.soft(r.caller.textOk, `${r.label} caller text`).toBe(true…
+    381|       expect.soft(r.caller.tail, `${r.label} caller tail`).toBe('step-…
+       |                                                            ^
+    382|       expect.soft(r.replay.error, `${r.label} replay error`).toBeUndef…
+    383|       expect.soft(r.replay.textOk, `${r.label} replay text`).toBe(true…
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: d0 replay text: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:383:62
+    381|       expect.soft(r.caller.tail, `${r.label} caller tail`).toBe('step-…
+    382|       expect.soft(r.replay.error, `${r.label} replay error`).toBeUndef…
+    383|       expect.soft(r.replay.textOk, `${r.label} replay text`).toBe(true…
+       |                                                              ^
+    384|       expect.soft(r.replay.frames, `${r.label} replay frames`).toBe(r.…
+    385|       expect.soft(r.redis.textOk, `${r.label} redis text`).toBe(true);
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL   e2e:pubsub/redis-streams  src/agent-stream-bus-outage.test.ts > plain agents through a long Redis outage (COR-1519) > 300s docker pause: callers keep streaming, backlog drains, every frame survives
+AssertionError: d0 redis text: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectComplete src/agent-stream-bus-outage.test.ts:385:60
+    383|       expect.soft(r.replay.textOk, `${r.label} replay text`).toBe(true…
+    384|       expect.soft(r.replay.frames, `${r.label} replay frames`).toBe(r.…
+    385|       expect.soft(r.redis.textOk, `${r.label} redis text`).toBe(true);
+       |                                                            ^
+    386|       if (r.label.startsWith('p')) {
+    387|         expect.soft(r.bus.failed, `${r.label} failed publishes`).toBe(…
+ ❯ src/agent-stream-bus-outage.test.ts:415:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  15:59:17
+   Duration  1082.02s (tests 100%)
+
+exit=1
