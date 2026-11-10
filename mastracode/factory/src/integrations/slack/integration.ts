@@ -30,12 +30,15 @@ import { announcePullRequest } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
+import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
 import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
 import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
-import { createShareFileTool, isSlackThread } from './share-file-tool.js';
+import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
+import { DEFAULT_SLACK_TOOL_SETTINGS, slackToolSettingsSchema } from './tool-settings.js';
+import type { SlackToolSettings } from './tool-settings.js';
 
 /** Slack app credentials, read from env ONCE by the deploy entry. */
 export interface SlackIntegrationConfig {
@@ -76,6 +79,20 @@ export interface SlackIntegrationConfig {
    * ```
    */
   adapterOptions?: SlackAdapterChannelConfig;
+  /**
+   * What sessions started from Slack may do with the Slack tools. By default a
+   * session can read and post only in its own channel, and can't send DMs.
+   *
+   * @example
+   * ```ts
+   * new SlackIntegration({
+   *   signingSecret,
+   *   // Any channel the app is in, and DMs to anyone in the workspace.
+   *   tools: { channels: 'all', directMessages: 'anyone' },
+   * });
+   * ```
+   */
+  tools?: Partial<SlackToolSettings>;
 }
 
 /** Slack renders the status inline next to the app name; keep it to one short line. */
@@ -159,6 +176,7 @@ export class SlackIntegration implements FactoryIntegration {
   readonly requiresStableStateSigner = true;
 
   readonly #config: SlackIntegrationConfig;
+  readonly #toolSettings: SlackToolSettings;
   readonly #adapterOptions: SlackAdapterChannelConfig;
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
   #channels: ShareFileToolDeps['channels'];
@@ -191,6 +209,9 @@ export class SlackIntegration implements FactoryIntegration {
       throw new Error("SlackIntegration: 'botToken' is required in socket mode — Factory cannot reply without it.");
     }
     this.#config = config;
+    // An explicit `undefined` means "use the default", not "unset it".
+    const granted = Object.fromEntries(Object.entries(config.tools ?? {}).filter(([, value]) => value !== undefined));
+    this.#toolSettings = slackToolSettingsSchema.parse({ ...DEFAULT_SLACK_TOOL_SETTINGS, ...granted });
     this.#adapterOptions = factoryAdapterOptions(adapterOverrides(config.adapterOptions));
     const textHidden = this.#textHidden;
     this.processors = {
@@ -214,15 +235,20 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   /**
-   * `attach_file`, and `reply_in_thread` when reply text is hidden, on runs
-   * whose session is linked to a Slack thread. The tools find the thread to
-   * post into when they are called.
+   * On runs whose session is linked to a Slack thread: `attach_file`,
+   * `reply_in_thread` when reply text is hidden, and the Slack read, post,
+   * search, lookup and DM tools. The tools find the thread to post into when
+   * they are called.
    */
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
-    if (!(await isSlackThread(requestContext, this.#deps))) return {};
+    const slackThread = await slackThreadOf(requestContext, this.#deps);
+    if (!slackThread) return {};
+    const chat = this.#channels?.()?.sdk;
+    const sessionThreadId = slackThread.threadId;
     return {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
+      ...(chat && sessionThreadId ? createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings }) : {}),
     };
   }
 
@@ -264,6 +290,8 @@ export class SlackIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       sourceControls,
       modelDefaults: ctx.storage.modelDefaults,
+      modelCredentials: ctx.storage.modelCredentials,
+      voiceSettings: ctx.storage.voiceSettings,
       workItems: ctx.runtime?.workItems,
       adapterOptions: this.#adapterOptions,
     });

@@ -53,7 +53,7 @@ describe('SearchFieldBlock — the field itself', () => {
   it('invites a search unless the caller says otherwise', () => {
     render(<SearchFieldBlock name="search" />);
 
-    expect(screen.getByPlaceholderText('Search...')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search')).toBeTruthy();
   });
 
   it('takes the placeholder the caller gives it', () => {

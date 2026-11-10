@@ -67,13 +67,25 @@ export async function resolveRenderContext(
  * Plain web sessions get `false` and no channel tools.
  */
 export async function isSlackThread(requestContext: RequestContext, deps: ShareFileToolDeps): Promise<boolean> {
-  const channel = requestContext.get('channel') as { platform?: string } | undefined;
-  if (channel) return channel.platform === 'slack';
+  return (await slackThreadOf(requestContext, deps)) !== null;
+}
+
+/**
+ * The run's Slack thread, with its chat thread id (`slack:C…:ts`) when known,
+ * or null when the run isn't on a Slack thread. Same cost as
+ * {@link isSlackThread}.
+ */
+export async function slackThreadOf(
+  requestContext: RequestContext,
+  deps: ShareFileToolDeps,
+): Promise<{ threadId?: string } | null> {
+  const channel = requestContext.get('channel') as { platform?: string; threadId?: string } | undefined;
+  if (channel) return channel.platform === 'slack' ? { threadId: channel.threadId } : null;
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   const threadId = controller?.threadId;
-  if (!threadId) return false;
+  if (!threadId) return null;
   const linked = await deps.channels?.()?.buildChannelContextForThread(threadId);
-  return linked?.channel.platform === 'slack';
+  return linked?.channel.platform === 'slack' ? { threadId: linked.render.chatThread.id } : null;
 }
 
 /** The thread a channel tool posts into, resolved when the tool runs. */

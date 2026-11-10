@@ -6,10 +6,14 @@ import { createWorkflow } from './create';
 import { createWorkflow as createEventedWorkflow, createStep as createEventedStep } from './evented';
 import { createStep } from './workflow';
 
+const createWorkflowOnV2 = (params: Parameters<typeof createWorkflow>[0]) =>
+  createWorkflow({ ...params, options: { ...params.options, storageVersion: 2 } });
+
 // Regression coverage for https://github.com/mastra-ai/mastra/issues/25414
 describe('cancel() on a finished run', () => {
   const engines = [
     ['default', createWorkflow, createStep],
+    ['default (storage v2)', createWorkflowOnV2, createStep],
     ['evented', createEventedWorkflow, createEventedStep],
   ] as const;
 

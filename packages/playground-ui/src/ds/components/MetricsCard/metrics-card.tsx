@@ -1,5 +1,6 @@
 import { MetricsCardActions } from './metrics-card-actions';
 import { MetricsCardContent } from './metrics-card-content';
+import { MetricsCardDragHandle } from './metrics-card-drag-handle';
 import { MetricsCardError } from './metrics-card-error';
 import { MetricsCardHeadline } from './metrics-card-headline';
 import { MetricsCardLoading } from './metrics-card-loading';
@@ -18,6 +19,7 @@ export const MetricsCard = Object.assign(MetricsCardRoot, {
   TopBar: MetricsCardTopBar,
   Toolbar: MetricsCardToolbar,
   Actions: MetricsCardActions,
+  DragHandle: MetricsCardDragHandle,
   Title: MetricsCardTitle,
   TitleMenu: MetricsCardTitleMenu,
   Total: MetricsCardTotal,

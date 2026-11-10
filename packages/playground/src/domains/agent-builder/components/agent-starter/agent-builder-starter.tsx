@@ -95,7 +95,7 @@ export const AgentBuilderStarter = () => {
             testId="agent-builder-starter-input"
             size="md"
             variant="unstyled"
-            placeholder="Describe the agent you want to build…"
+            placeholder="Describe the agent you want to build"
             value={message}
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { workBoardInfo as work } from '../../../../e2e/ui/board-catalog';
+import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
 import { starterPrompts } from './starterPrompts';
@@ -38,9 +40,16 @@ function card(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
+const TRIAGE_RUN = { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' };
+
+/** Triage ran and left the card in Intake for a person. */
+function triaged(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
+  return card(id, { sessions: { triage: TRIAGE_RUN }, ...overrides });
+}
+
 function pullRequest(number: number, stages: string[], metadata: Record<string, unknown> = {}): WorkItem {
   return card(`pr-${number}`, {
-    board: 'review',
+    board: 'work',
     source: 'github-pr',
     title: `Pull request ${number}`,
     stages,
@@ -77,7 +86,7 @@ function failedRun(workItemId: string, lastError: string): FactoryDecisionSummar
 
 function build(cards: WorkItem[], effects: FactoryDecisionSummary[] = []) {
   const effectByItem = new Map(effects.map(effect => [effect.workItemId ?? '', effect]));
-  return starterPrompts({ cards, effectByItem, now: NOW });
+  return starterPrompts({ board: work, cards, effectByItem, now: NOW });
 }
 
 function promptFor(kind: StarterKind, cards: WorkItem[], effects: FactoryDecisionSummary[] = []) {
@@ -87,6 +96,26 @@ function promptFor(kind: StarterKind, cards: WorkItem[], effects: FactoryDecisio
 }
 
 describe('starterPrompts', () => {
+  it('uses normalized source labels and opening dates instead of stale board metadata', () => {
+    const bugs = ['one', 'two', 'three'].map(id =>
+      card(id, {
+        metadata: { labels: ['documentation', 'stale-area'] },
+        workItem: { ...providerFactsCard.workItem, labels: ['bug', 'Memory'], metadata: {} },
+      }),
+    );
+    const recentPullRequest = pullRequest(73, ['intake'], { sourceCreatedAt: daysAgo(60) });
+    recentPullRequest.workItem = {
+      ...providerFactsCard.workItem,
+      state: 'open',
+      metadata: { sourceCreatedAt: daysAgo(2) },
+    };
+
+    expect(promptFor('bug', bugs)).toMatchObject({ value: 3 });
+    expect(promptFor('sweep', bugs)).toMatchObject({ label: 'Memory backlog', value: 3 });
+    expect(promptFor('review', [recentPullRequest])).toMatchObject({ value: 2, unit: 'days' });
+    expect(build([recentPullRequest]).some(prompt => prompt.kind === 'stale')).toBe(false);
+  });
+
   it('offers nothing when no card waits on anyone', () => {
     expect(
       build([
@@ -99,12 +128,12 @@ describe('starterPrompts', () => {
   });
 
   const memoryCards = ['leak', 'recall', 'threads'].map(id =>
-    card(`memory-${id}`, { stages: ['triage'], triageType: 'feature request', metadata: { labels: ['Memory'] } }),
+    triaged(`memory-${id}`, { metadata: { labels: ['Memory'] } }),
   );
 
   const quietBoard = [
     done('shipped', 2),
-    card('bug', { stages: ['triage'], triageType: 'bug' }),
+    card('bug', { stages: ['triage'], metadata: { labels: ['bug'] } }),
     card('new', { stages: ['intake'] }),
     pullRequest(1, ['intake'], { sourceCreatedAt: daysAgo(2) }),
     pullRequest(3, ['intake'], { sourceCreatedAt: daysAgo(45) }),
@@ -119,7 +148,7 @@ describe('starterPrompts', () => {
     const prompts = build(
       [
         ...quietBoard,
-        pullRequest(2, ['review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+        pullRequest(2, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
         card('stuck', { stages: ['execute'] }),
       ],
       [failedRun('stuck', 'Sandbox quota exceeded')],
@@ -135,7 +164,7 @@ describe('starterPrompts', () => {
       pullRequest(3, ['intake'], { draft: true }),
       pullRequest(4, ['done'], { merged: true }),
       pullRequest(5, ['canceled'], { state: 'closed' }),
-      pullRequest(6, ['review']),
+      pullRequest(6, ['pr-review']),
     ]);
 
     expect(review).toMatchObject({
@@ -158,17 +187,24 @@ describe('starterPrompts', () => {
     expect(promptFor('review', cards)).toMatchObject({ value: 29, unit: 'days', action: 'Review it' });
   });
 
-  it('asks for a decision on the cards triage classified that nobody accepted, leaving bugs and started work out', () => {
+  it('asks for a decision on the cards triage left in Intake, leaving work still triaging or started out', () => {
     const decide = promptFor('decide', [
-      card('question', { stages: ['triage'], triageType: 'question/support' }),
-      card('feature', { stages: ['intake'], triageType: 'feature request' }),
-      card('accepted', { stages: ['triage'], triageType: 'feature request', acceptedAt: daysAgo(1) }),
-      card('bug', { stages: ['triage'], triageType: 'bug' }),
-      card('unclassified', { stages: ['intake'] }),
-      card('building', { stages: ['execute'], triageType: 'feature request' }),
+      triaged('question'),
+      triaged('feature'),
+      triaged('triaging', { stages: ['triage'] }),
+      card('untriaged', { stages: ['intake'] }),
+      triaged('building', { stages: ['execute'] }),
+      triaged('parked', {
+        sessions: { triage: TRIAGE_RUN, work: TRIAGE_RUN },
+        stageHistory: [
+          { stage: 'triage', enteredAt: daysAgo(3), by: 'user-1' },
+          { stage: 'execute', enteredAt: daysAgo(2), by: 'user-1' },
+          { stage: 'intake', enteredAt: daysAgo(1), by: 'user-1' },
+        ],
+      }),
     ]);
 
-    expect(decide).toMatchObject({ label: 'Not yet accepted', value: 2, action: 'Help me decide' });
+    expect(decide).toMatchObject({ label: 'Triaged, waiting for you', value: 2, action: 'Help me decide' });
   });
 
   it('sweeps the area label with the most open cards, ignoring process labels and GitHub type labels', () => {
@@ -189,11 +225,8 @@ describe('starterPrompts', () => {
     expect(kinds).not.toContain('sweep');
   });
 
-  it('leaves cards triage already classified out of the triage count', () => {
-    const triage = promptFor('triage', [
-      card('unclassified'),
-      card('held-question', { triageType: 'question/support' }),
-    ]);
+  it('leaves cards triage already looked at out of the triage count', () => {
+    const triage = promptFor('triage', [card('untriaged'), triaged('held-question')]);
 
     expect(triage).toMatchObject({ label: 'Untriaged in Intake', value: 1, action: 'Triage it' });
   });
@@ -209,15 +242,15 @@ describe('starterPrompts', () => {
 
   it('plans only the bugs nobody has planned or started', () => {
     const plan = promptFor('bug', [
-      card('triaged-bug', { stages: ['triage'], triageType: 'bug' }),
+      card('triaging-bug', { stages: ['triage'], metadata: { labels: ['bug'] } }),
       card('labelled-bug', { stages: ['intake'], metadata: { labels: ['Bug'] } }),
       card('planned-bug', {
         stages: ['triage'],
-        triageType: 'bug',
+        metadata: { labels: ['bug'] },
         sessions: { plan: { sessionId: 's-1', branch: 'b', threadId: 't', startedBy: 'user-1' } },
       }),
-      card('building-bug', { stages: ['execute'], triageType: 'bug' }),
-      card('feature', { stages: ['triage'], triageType: 'feature request' }),
+      card('building-bug', { stages: ['execute'], metadata: { labels: ['bug'] } }),
+      triaged('feature'),
     ]);
 
     expect(plan).toMatchObject({ label: 'Bugs with no plan', value: 2, action: 'Plan a fix for one' });
@@ -233,22 +266,42 @@ describe('starterPrompts', () => {
     expect(unblock).toMatchObject({ label: 'Failed runs', value: 1, action: 'Debug and retry it' });
   });
 
+  it('counts pull request cards on the Work board as pull requests, not as untriaged intake', () => {
+    const onWork = (number: number, stages: string[], metadata: Record<string, unknown> = {}) => ({
+      ...pullRequest(number, stages, metadata),
+      board: 'work',
+    });
+    const cards = [
+      onWork(1, ['intake'], { sourceCreatedAt: daysAgo(3) }),
+      onWork(2, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+    ];
+
+    expect(promptFor('review', cards)).toMatchObject({ value: 3, unit: 'days' });
+    expect(promptFor('review', cards).prompt).toContain('Intake on the Work board');
+    expect(promptFor('feedback', cards)).toMatchObject({ value: 1 });
+    const stale = [onWork(3, ['intake'], { sourceCreatedAt: daysAgo(40) })];
+    expect(promptFor('stale', stale).prompt).toContain('Intake on the Work board');
+    const kinds = build(cards).map(({ kind }) => kind);
+    expect(kinds).not.toContain('triage');
+    expect(kinds).not.toContain('decide');
+  });
+
   it('fixes review feedback only on open Factory pull requests whose verdict is still current', () => {
     const feedback = promptFor('feedback', [
-      pullRequest(1, ['review'], {
+      pullRequest(1, ['pr-review'], {
         factoryAuthored: true,
         reviewVerdict: 'request changes',
         reviewedHeadSha: 'abc',
         pullRequestHeadSha: 'ABC',
       }),
-      pullRequest(2, ['review'], { reviewVerdict: 'request changes' }),
-      pullRequest(3, ['review'], {
+      pullRequest(2, ['pr-review'], { reviewVerdict: 'request changes' }),
+      pullRequest(3, ['pr-review'], {
         factoryAuthored: true,
         reviewVerdict: 'request changes',
         reviewedHeadSha: 'abc',
         pullRequestHeadSha: 'def',
       }),
-      pullRequest(4, ['review'], { factoryAuthored: true, reviewVerdict: 'approve' }),
+      pullRequest(4, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'approve' }),
       pullRequest(5, ['done'], { factoryAuthored: true, reviewVerdict: 'request changes', merged: true }),
     ]);
 
@@ -258,7 +311,7 @@ describe('starterPrompts', () => {
   it('sends a prompt that names no card, pull request, error or area, whatever the board holds', () => {
     const busyBoard = [
       ...quietBoard,
-      pullRequest(2, ['review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+      pullRequest(2, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
       card('stuck', { stages: ['execute'] }),
     ];
     const failures = [failedRun('stuck', 'Sandbox quota exceeded')];

@@ -15,7 +15,6 @@ packages:
   - browser/*
   - code-mode/*
   - voice/*
-  - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
   - signals/*
@@ -27,7 +26,6 @@ packages:
   - observability/*
   - channels/*
   - explorations/longmemeval
-  - explorations/agent-builder-gh-repro
   - e2e-tests/client-js/_test-utils
   - e2e-tests/client-js/zod-v3
   - e2e-tests/client-js/zod-v4
@@ -40,18 +38,25 @@ catalog:
   '@microsoft/api-extractor': ^7.59.4
   '@stryker-mutator/core': 10.0.0
   '@stryker-mutator/vitest-runner': 10.0.0
-  '@vitest/coverage-v8': 4.1.12
-  '@vitest/ui': 4.1.12
+  '@vitest/coverage-v8': 5.1.0
+  '@vitest/ui': 5.1.0
   date-fns: 4.4.0
   lucide-react: ^1.61.0
   react: ^19.3.1
   react-dom: ^19.3.1
   typescript: ^7.0.2
-  vitest: 4.1.12
+  vitest: 5.1.0
   zod: ^4.6.7
   tsx: ^4.23.15
   oxfmt: 0.59.0
   sonner: 2.0.7
+  # Each @chat-adapter/* release depends on the exact `chat` release with the same
+  # version. Keep all of them on one range so apps install a single copy of `chat`.
+  chat: ^4.44.0
+  '@chat-adapter/discord': ^4.44.0
+  '@chat-adapter/slack': ^4.44.0
+  '@chat-adapter/teams': ^4.44.0
+  '@chat-adapter/telegram': ^4.44.0
 
 catalogs:
   ts6:
@@ -118,17 +123,17 @@ packageExtensions:
       # client; if this resolves to a different vitest than the workspace,
       # a second SnapshotClient is created and every toMatchSnapshot() in
       # tests that import from that entrypoint fails. Keep these in sync.
-      vitest: 4.1.12
+      vitest: 5.1.0
   '@ai-sdk/provider-utils@3.0.28':
     dependencies:
       msw: ^2.12.11
       # See the note on the 3.0.25 entry — must track the catalog `vitest`.
-      vitest: 4.1.12
+      vitest: 5.1.0
   '@ai-sdk/provider-utils@3.0.38':
     dependencies:
       msw: ^2.12.11
       # See the note on the 3.0.25 entry — must track the catalog `vitest`.
-      vitest: 4.1.12
+      vitest: 5.1.0
   '@uiw/codemirror-theme-dracula@*':
     dependencies:
       '@babel/runtime': ^7.29.2
@@ -222,7 +227,8 @@ minimumReleaseAgeExclude:
   - ws@8.21.3 || 7.5.13
   - undici@8.11.2 || 7.29.1 || 6.28.1
   - qs@6.16.0
-  - joi@17.13.8
+  # Renovate security update: joi@17.13.9
+  - joi@17.13.8 || 17.13.9
   - nanoid@3.3.19
   - browserslist@4.28.9
   # Renovate security update: ip-address@10.7.4
@@ -234,10 +240,21 @@ minimumReleaseAgeExclude:
   - js-yaml@5.4.1
   - js-yaml@5.4.2
   - vitest@4.1.11
+  - vitest@5.1.0
   - '@vitest/coverage-v8@4.1.11'
   - '@vitest/ui@4.1.11'
+  - '@vitest/coverage-v8@5.1.0'
+  - '@vitest/ui@5.1.0'
+  - '@vitest/expect@5.1.0'
+  - '@vitest/mocker@5.1.0'
+  - '@vitest/pretty-format@5.1.0'
+  - '@vitest/runner@5.1.0'
+  - '@vitest/snapshot@5.1.0'
+  - '@vitest/spy@5.1.0'
+  - '@vitest/utils@5.1.0'
   - deepmerge-ts@8.0.2
-  - zod@4.6.5
+  # Renovate security update: zod@3.25.76
+  - zod@4.6.5 || 3.25.76
   - zod@4.6.7
   # Renovate security update: brace-expansion@2.1.4 || 5.0.9
   - brace-expansion@2.1.4 || 5.0.9
@@ -305,6 +322,8 @@ minimumReleaseAgeExclude:
   - storybook@10.6.2
   # Renovate security update: serialize-javascript@7.1.4
   - serialize-javascript@7.1.4
+  # Renovate security update: follow-redirects@1.16.2
+  - follow-redirects@1.16.2
 trustPolicyExclude:
   # Storybook 9.1.21 fixes the Storybook preview origin-validation advisories. It is
   # the official `v9` backport (GitHub Actions trusted publisher), but pnpm compares
@@ -360,17 +379,17 @@ overrides:
   # Vanta 2026-10-23: AIKIDO-2026-886499 (fixed in 4.1.1). deepeval -> open@9 ->
   # default-browser@4 pins bundle-name ^3; 4.x keeps the same bundleName() API.
   'default-browser@4.0.0>bundle-name': 4.1.1
-  client-js-e2e-tests-zod-v3>zod: ^3.24.0
+  client-js-e2e-tests-zod-v3>zod: ^3.25.76
   client-js-e2e-tests-zod-v4>zod: ^4.6.7
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
   # Vanta 2026-10-12: AIKIDO-2026-373183 critical (better-auth) fixed 1.7.7; pulls drizzle-adapter 1.7.7 (AIKIDO-2026-261025)
-  better-auth: ^1.7.13
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.13
+  better-auth: ^1.7.18
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.18
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
   body-parser@<2.4.0: 2.4.0
-  inngest: ^4.2.2
+  inngest: ^4.26.1
   fast-xml-parser@<5.5.7: ^5.10.1
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
@@ -397,8 +416,8 @@ overrides:
   immer@>=11.0.0 <11.1.9: 11.1.9
   '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
-  path-to-regexp@<0.1.13: 0.1.13
-  joi@>=17.0.0 <17.13.8: 17.13.8
+  path-to-regexp@<0.1.13: 9.0.0
+  joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
   e2b>undici8: npm:undici@8.12.2
   multer@<2.5.0: 2.5.0
@@ -436,8 +455,8 @@ overrides:
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   # Round 2 2026-09-18: clear remaining Dependabot + raise Aikido-visible floors
   image-size@<=2.0.2: 2.0.4
-  '@vitest/mocker@>=2.1.0 <4.1.12': 4.1.12
-  vitest@>=2.1.0 <4.1.12: 4.1.12
+  '@vitest/mocker@>=2.1.0 <4.1.12': 5.1.0
+  vitest@>=2.1.0 <4.1.12: 5.1.0
   jose@>=4.14.0 <6.2.12: 6.2.12
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
@@ -475,6 +494,11 @@ overrides:
   # Vanta 2026-10-28: GHSA-f897-62hf-6gxq (MCP HTTP transports: no body-size / batch-length limit); published @mastra/mcp 1.18 pins node 2.0.0; 2.1.1 is the fixed release whose peer range (server ^2.3.0) matches its server 2.3.1
   '@modelcontextprotocol/node@>=2.0.0 <2.1.0': 2.1.1
   '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
+  # Vanta 2026-11-02: CVE-2026-118663 / GHSA-rmxm-3fg6-px4f (serveStatic double-decode, >=1.19.10 <2.1.3; fixed only in 2.1.3).
+  # The MCP SDK and @modelcontextprotocol/node already declare `^1.19.9 || ^2.x`; resolve them onto the 2.x line the
+  # server adapters/deployer already use (2.x only drops Node 18 and the unused /vercel entry).
+  '@modelcontextprotocol/sdk>@hono/node-server': 2.1.6
+  '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.12.0
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.42
@@ -516,89 +540,89 @@ overrides:
   onnxruntime-node@<1.24.2: 1.24.3
   # Note: zod@3.x has no AIKIDO patches (fixes are 4.x-only); left as residual.
   '@codemirror/lang-jinja': ^6.0.1
-  'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'
-  'array-buffer-byte-length': 'npm:@socketregistry/array-buffer-byte-length@^1'
-  'array-flatten': 'npm:@socketregistry/array-flatten@^1'
-  'array-includes': 'npm:@socketregistry/array-includes@^1'
-  'array.prototype.findlast': 'npm:@socketregistry/array.prototype.findlast@^1'
-  'array.prototype.flat': 'npm:@socketregistry/array.prototype.flat@^1'
-  'array.prototype.flatmap': 'npm:@socketregistry/array.prototype.flatmap@^1'
-  'array.prototype.tosorted': 'npm:@socketregistry/array.prototype.tosorted@^1'
-  'arraybuffer.prototype.slice': 'npm:@socketregistry/arraybuffer.prototype.slice@^1'
-  'available-typed-arrays': 'npm:@socketregistry/available-typed-arrays@^1'
-  'deep-equal': 'npm:@socketregistry/deep-equal@^1'
-  'define-properties': 'npm:@socketregistry/define-properties@^1'
-  'es-define-property': 'npm:@socketregistry/es-define-property@^1'
-  'es-iterator-helpers': 'npm:@socketregistry/es-iterator-helpers@^1'
-  'es-set-tostringtag': 'npm:@socketregistry/es-set-tostringtag@^1'
-  'for-each': 'npm:@socketregistry/for-each@^1'
-  'function-bind': 'npm:@socketregistry/function-bind@^1'
-  'function.prototype.name': 'npm:@socketregistry/function.prototype.name@^1'
-  'functions-have-names': 'npm:@socketregistry/functions-have-names@^1'
-  'get-symbol-description': 'npm:@socketregistry/get-symbol-description@^1'
-  'globalthis': 'npm:@socketregistry/globalthis@^1'
-  'gopd': 'npm:@socketregistry/gopd@^1'
-  'has-property-descriptors': 'npm:@socketregistry/has-property-descriptors@^1'
-  'has-proto': 'npm:@socketregistry/has-proto@^1'
-  'has-symbols': 'npm:@socketregistry/has-symbols@^1'
-  'has-tostringtag': 'npm:@socketregistry/has-tostringtag@^1'
-  'hasown': 'npm:@socketregistry/hasown@^1'
-  'indent-string': 'npm:@socketregistry/indent-string@^1'
-  'internal-slot': 'npm:@socketregistry/internal-slot@^1'
-  'is-array-buffer': 'npm:@socketregistry/is-array-buffer@^1'
-  'is-bigint': 'npm:@socketregistry/is-bigint@^1'
-  'is-boolean-object': 'npm:@socketregistry/is-boolean-object@^1'
-  'is-core-module': 'npm:@socketregistry/is-core-module@^1'
-  'is-date-object': 'npm:@socketregistry/is-date-object@^1'
-  'is-generator-function': 'npm:@socketregistry/is-generator-function@^1'
-  'is-interactive': 'npm:@socketregistry/is-interactive@^1'
-  'is-map': 'npm:@socketregistry/is-map@^1'
-  'is-negative-zero': 'npm:@socketregistry/is-negative-zero@^1'
-  'is-number-object': 'npm:@socketregistry/is-number-object@^1'
-  'is-regex': 'npm:@socketregistry/is-regex@^1'
-  'is-set': 'npm:@socketregistry/is-set@^1'
-  'is-shared-array-buffer': 'npm:@socketregistry/is-shared-array-buffer@^1'
-  'is-string': 'npm:@socketregistry/is-string@^1'
-  'is-symbol': 'npm:@socketregistry/is-symbol@^1'
-  'is-typed-array': 'npm:@socketregistry/is-typed-array@^1'
-  'is-unicode-supported': 'npm:@socketregistry/is-unicode-supported@^1'
-  'is-weakmap': 'npm:@socketregistry/is-weakmap@^1'
-  'is-weakref': 'npm:@socketregistry/is-weakref@^1'
-  'is-weakset': 'npm:@socketregistry/is-weakset@^1'
-  'isarray': 'npm:@socketregistry/isarray@^1'
-  'iterator.prototype': 'npm:@socketregistry/iterator.prototype@^1'
-  'object-assign': 'npm:@socketregistry/object-assign@^1'
-  'object-keys': 'npm:@socketregistry/object-keys@^1'
-  'object.assign': 'npm:@socketregistry/object.assign@^1'
-  'object.entries': 'npm:@socketregistry/object.entries@^1'
-  'object.fromentries': 'npm:@socketregistry/object.fromentries@^1'
-  'object.values': 'npm:@socketregistry/object.values@^1'
-  'path-parse': 'npm:@socketregistry/path-parse@^1'
-  'querystringify': 'npm:@socketregistry/querystringify@^1'
-  'reflect.getprototypeof': 'npm:@socketregistry/reflect.getprototypeof@^1'
-  'regexp.prototype.flags': 'npm:@socketregistry/regexp.prototype.flags@^1'
-  'safe-array-concat': 'npm:@socketregistry/safe-array-concat@^1'
-  'safe-buffer': 'npm:@socketregistry/safe-buffer@^1'
-  'safe-regex-test': 'npm:@socketregistry/safe-regex-test@^1'
-  'safer-buffer': 'npm:@socketregistry/safer-buffer@^1'
-  'set-function-length': 'npm:@socketregistry/set-function-length@^1'
+  'aggregate-error': 'npm:@socketregistry/aggregate-error@^1.0.15'
+  'array-buffer-byte-length': 'npm:@socketregistry/array-buffer-byte-length@^1.0.7'
+  'array-flatten': 'npm:@socketregistry/array-flatten@^1.0.11'
+  'array-includes': 'npm:@socketregistry/array-includes@^1.0.9'
+  'array.prototype.findlast': 'npm:@socketregistry/array.prototype.findlast@^1.0.9'
+  'array.prototype.flat': 'npm:@socketregistry/array.prototype.flat@^1.0.9'
+  'array.prototype.flatmap': 'npm:@socketregistry/array.prototype.flatmap@^1.0.9'
+  'array.prototype.tosorted': 'npm:@socketregistry/array.prototype.tosorted@^1.0.10'
+  'arraybuffer.prototype.slice': 'npm:@socketregistry/arraybuffer.prototype.slice@^1.0.8'
+  'available-typed-arrays': 'npm:@socketregistry/available-typed-arrays@^1.0.8'
+  'deep-equal': 'npm:@socketregistry/deep-equal@^1.0.22'
+  'define-properties': 'npm:@socketregistry/define-properties@^1.0.8'
+  'es-define-property': 'npm:@socketregistry/es-define-property@^1.0.7'
+  'es-iterator-helpers': 'npm:@socketregistry/es-iterator-helpers@^1.0.14'
+  'es-set-tostringtag': 'npm:@socketregistry/es-set-tostringtag@^1.0.10'
+  'for-each': 'npm:@socketregistry/for-each@^1.0.8'
+  'function-bind': 'npm:@socketregistry/function-bind@^1.0.7'
+  'function.prototype.name': 'npm:@socketregistry/function.prototype.name@^1.0.8'
+  'functions-have-names': 'npm:@socketregistry/functions-have-names@^1.0.7'
+  'get-symbol-description': 'npm:@socketregistry/get-symbol-description@^1.0.7'
+  'globalthis': 'npm:@socketregistry/globalthis@^1.0.8'
+  'gopd': 'npm:@socketregistry/gopd@^1.0.7'
+  'has-property-descriptors': 'npm:@socketregistry/has-property-descriptors@^1.0.7'
+  'has-proto': 'npm:@socketregistry/has-proto@^1.0.7'
+  'has-symbols': 'npm:@socketregistry/has-symbols@^1.0.7'
+  'has-tostringtag': 'npm:@socketregistry/has-tostringtag@^1.0.7'
+  'hasown': 'npm:@socketregistry/hasown@^1.0.7'
+  'indent-string': 'npm:@socketregistry/indent-string@^1.0.14'
+  'internal-slot': 'npm:@socketregistry/internal-slot@^1.0.8'
+  'is-array-buffer': 'npm:@socketregistry/is-array-buffer@^1.0.10'
+  'is-bigint': 'npm:@socketregistry/is-bigint@^1.0.12'
+  'is-boolean-object': 'npm:@socketregistry/is-boolean-object@^1.0.12'
+  'is-core-module': 'npm:@socketregistry/is-core-module@^1.0.11'
+  'is-date-object': 'npm:@socketregistry/is-date-object@^1.0.10'
+  'is-generator-function': 'npm:@socketregistry/is-generator-function@^1.0.10'
+  'is-interactive': 'npm:@socketregistry/is-interactive@^1.0.6'
+  'is-map': 'npm:@socketregistry/is-map@^1.0.10'
+  'is-negative-zero': 'npm:@socketregistry/is-negative-zero@^1.0.7'
+  'is-number-object': 'npm:@socketregistry/is-number-object@^1.0.11'
+  'is-regex': 'npm:@socketregistry/is-regex@^1.0.10'
+  'is-set': 'npm:@socketregistry/is-set@^1.0.10'
+  'is-shared-array-buffer': 'npm:@socketregistry/is-shared-array-buffer@^1.0.10'
+  'is-string': 'npm:@socketregistry/is-string@^1.0.12'
+  'is-symbol': 'npm:@socketregistry/is-symbol@^1.0.12'
+  'is-typed-array': 'npm:@socketregistry/is-typed-array@^1.0.12'
+  'is-unicode-supported': 'npm:@socketregistry/is-unicode-supported@^1.0.5'
+  'is-weakmap': 'npm:@socketregistry/is-weakmap@^1.0.10'
+  'is-weakref': 'npm:@socketregistry/is-weakref@^1.0.8'
+  'is-weakset': 'npm:@socketregistry/is-weakset@^1.0.10'
+  'isarray': 'npm:@socketregistry/isarray@^1.0.8'
+  'iterator.prototype': 'npm:@socketregistry/iterator.prototype@^1.0.7'
+  'object-assign': 'npm:@socketregistry/object-assign@^1.0.5'
+  'object-keys': 'npm:@socketregistry/object-keys@^1.0.8'
+  'object.assign': 'npm:@socketregistry/object.assign@^1.0.8'
+  'object.entries': 'npm:@socketregistry/object.entries@^1.0.8'
+  'object.fromentries': 'npm:@socketregistry/object.fromentries@^1.0.8'
+  'object.values': 'npm:@socketregistry/object.values@^1.0.8'
+  'path-parse': 'npm:@socketregistry/path-parse@^1.0.8'
+  'querystringify': 'npm:@socketregistry/querystringify@^1.0.10'
+  'reflect.getprototypeof': 'npm:@socketregistry/reflect.getprototypeof@^1.0.8'
+  'regexp.prototype.flags': 'npm:@socketregistry/regexp.prototype.flags@^1.0.8'
+  'safe-array-concat': 'npm:@socketregistry/safe-array-concat@^1.0.8'
+  'safe-buffer': 'npm:@socketregistry/safe-buffer@^1.0.9'
+  'safe-regex-test': 'npm:@socketregistry/safe-regex-test@^1.0.8'
+  'safer-buffer': 'npm:@socketregistry/safer-buffer@^1.0.10'
+  'set-function-length': 'npm:@socketregistry/set-function-length@^1.0.10'
   'shell-quote': 'npm:shell-quote@^1.12.0'
-  'side-channel': 'npm:@socketregistry/side-channel@^1'
-  'string.prototype.matchall': 'npm:@socketregistry/string.prototype.matchall@^1'
-  'string.prototype.repeat': 'npm:@socketregistry/string.prototype.repeat@^1'
-  'string.prototype.trim': 'npm:@socketregistry/string.prototype.trim@^1'
-  'string.prototype.trimend': 'npm:@socketregistry/string.prototype.trimend@^1'
-  'string.prototype.trimstart': 'npm:@socketregistry/string.prototype.trimstart@^1'
-  'typed-array-buffer': 'npm:@socketregistry/typed-array-buffer@^1'
-  'typed-array-byte-length': 'npm:@socketregistry/typed-array-byte-length@^1'
-  'typed-array-byte-offset': 'npm:@socketregistry/typed-array-byte-offset@^1'
-  'typed-array-length': 'npm:@socketregistry/typed-array-length@^1'
-  'typedarray': 'npm:@socketregistry/typedarray@^1'
-  'unbox-primitive': 'npm:@socketregistry/unbox-primitive@^1'
-  'which-boxed-primitive': 'npm:@socketregistry/which-boxed-primitive@^1'
-  'which-collection': 'npm:@socketregistry/which-collection@^1'
-  'which-typed-array': 'npm:@socketregistry/which-typed-array@^1'
-  'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1'
+  'side-channel': 'npm:@socketregistry/side-channel@^1.0.10'
+  'string.prototype.matchall': 'npm:@socketregistry/string.prototype.matchall@^1.0.8'
+  'string.prototype.repeat': 'npm:@socketregistry/string.prototype.repeat@^1.0.8'
+  'string.prototype.trim': 'npm:@socketregistry/string.prototype.trim@^1.0.8'
+  'string.prototype.trimend': 'npm:@socketregistry/string.prototype.trimend@^1.0.8'
+  'string.prototype.trimstart': 'npm:@socketregistry/string.prototype.trimstart@^1.0.8'
+  'typed-array-buffer': 'npm:@socketregistry/typed-array-buffer@^1.0.7'
+  'typed-array-byte-length': 'npm:@socketregistry/typed-array-byte-length@^1.0.7'
+  'typed-array-byte-offset': 'npm:@socketregistry/typed-array-byte-offset@^1.0.7'
+  'typed-array-length': 'npm:@socketregistry/typed-array-length@^1.0.8'
+  'typedarray': 'npm:@socketregistry/typedarray@^1.0.8'
+  'unbox-primitive': 'npm:@socketregistry/unbox-primitive@^1.0.9'
+  'which-boxed-primitive': 'npm:@socketregistry/which-boxed-primitive@^1.0.9'
+  'which-collection': 'npm:@socketregistry/which-collection@^1.0.8'
+  'which-typed-array': 'npm:@socketregistry/which-typed-array@^1.0.9'
+  'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1.0.25'
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   # Vanta 2026-10-20: raised to 8.12.2 (AIKIDO-2026-159850/393834/846025/559914/609286/634008/740957, fixed in 8.12.2)
   'undici@<8.12.2': 8.12.2
@@ -627,7 +651,7 @@ overrides:
   # Vanta 2026-10-09: GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f (critical), GHSA-xw65-4hp5-5hc7 / AIKIDO-2026-258160, -970464, -869467; @verdaccio/hooks pins handlebars 4.7.9
   'handlebars@<4.7.10': 4.7.10
   # Vanta 2026-10-09: AIKIDO-2026-231269, AIKIDO-2026-154218 (follow-redirects header leak on redirect); axios declares ^1.15.x
-  'follow-redirects@<1.16.1': 1.16.1
+  'follow-redirects@<1.16.1': 1.16.2
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false

@@ -42,6 +42,7 @@ export interface FactorySessionsStateDependencies {
     | 'hasRunBindingForSession'
     | 'listSessionSubscriptions'
     | 'getForProject'
+    | 'listByIds'
     | 'listRunBindings'
     | 'findActiveRunBindingForSession'
     | 'listWorkItemSubscribers'
@@ -50,6 +51,8 @@ export interface FactorySessionsStateDependencies {
   boards: BoardRegistry | ProjectBoardSource;
   /** Whether the session's agent is mid-run in this process; `idle` when it isn't live here. */
   isRunning: (sessionId: string) => Promise<boolean>;
+  /** Whether the session is parked on a tool prompt; a parked run is still in flight but waits on a person. */
+  isParked?: (sessionId: string) => boolean;
   /** When a thread last changed; tells a long run that is still moving from one that stopped. */
   lastActivity?: (threadId: string) => Promise<Date | null>;
   notifications: () => Promise<Pick<NotificationsStorage, 'listNotifications'> | null>;
@@ -192,6 +195,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
         sessions: this.#deps.sessions,
         workItems: this.#deps.workItems,
         isRunning: this.#deps.isRunning,
+        isParked: this.#deps.isParked,
         notifications,
       },
       scope,
@@ -214,20 +218,25 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       factoryProjectId: scope.factoryProjectId,
       sessionId: scope.sessionId,
     });
+    const workItemIds = subscriptions.map(subscription => subscription.workItemId);
+    const [items, bindings] = await Promise.all([
+      this.#deps.workItems.listByIds({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        ids: workItemIds,
+      }),
+      this.#deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, workItemIds),
+    ]);
+    const itemsById = new Map(items.map(item => [item.id, item]));
     const following: Array<FollowedRow & { active: boolean }> = [];
     for (const subscription of subscriptions) {
-      const item = await this.#deps.workItems.getForProject(
-        scope.orgId,
-        scope.factoryProjectId,
-        subscription.workItemId,
-      );
+      const item = itemsById.get(subscription.workItemId);
       if (!item) continue;
       const stage = item.stages[0] ?? 'unknown';
       const boards = await toBoardSource(this.#deps.boards).load(scope);
       const terminal = boards.get(boardForWorkItem(item))?.isTerminal(stage) ?? false;
       if (terminal && now - item.updatedAt.getTime() > FACTORY_SESSIONS_MAX_AGE_MS) continue;
-      const bindings = await this.#deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id);
-      const active = bindings.find(binding => binding.status === 'active');
+      const active = bindings.find(binding => binding.workItemId === item.id && binding.status === 'active');
       const label = itemLabel(item);
       const last = newest(
         records,
@@ -235,7 +244,9 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
           record.attributes?.['work-item'] === label || (record.kind === 'stage' && record.sourceId === item.id),
       );
       const running = active ? await this.#deps.isRunning(active.sessionId) : false;
-      const lastActivity = active && running ? await this.#deps.lastActivity?.(active.threadId) : null;
+      // A run parked on a prompt is still in flight but waits on a person, so it reads as parked, never quiet.
+      const parked = active ? Boolean(this.#deps.isParked?.(active.sessionId)) : false;
+      const lastActivity = active && running && !parked ? await this.#deps.lastActivity?.(active.threadId) : null;
       // Only a quiet run is shown with its time; a moving one would change the snapshot on every step.
       const quiet = lastActivity && now - lastActivity.getTime() >= FACTORY_SESSIONS_QUIET_MS ? lastActivity : null;
       const lastFromWorker = active
@@ -250,7 +261,8 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
           ? {
               role: active.role,
               sessionId: active.sessionId,
-              state: running ? 'running' : lastFromWorker?.kind === 'blocked' ? 'parked' : 'idle',
+              state:
+                parked || (!running && lastFromWorker?.kind === 'blocked') ? 'parked' : running ? 'running' : 'idle',
               quietSince: quiet ? quiet.toISOString() : null,
             }
           : null,

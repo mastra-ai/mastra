@@ -222,7 +222,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     // Deployment context - extracted from metadata if present
     environment: getStringOrNull(metadata.environment),
     source: getStringOrNull(metadata.source),
-    serviceName: getStringOrNull(metadata.serviceName),
+    serviceName: span.serviceName ?? getStringOrNull(metadata.serviceName),
     scope: getObjectOrNull(metadata.scope),
 
     // Experimentation

@@ -20,7 +20,14 @@ import type { Mastra } from '../../mastra';
 import type { RunScope } from '../../mastra/run-scope';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
-import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
+import type {
+  AIModelGenerationSpan,
+  Span,
+  SpanTermination,
+  SpanType,
+  TracingContext,
+  TracingOptions,
+} from '../../observability';
 import type {
   InputProcessorOrWorkflow,
   LLMRequestProcessorOrWorkflow,
@@ -48,6 +55,7 @@ import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from
 import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
+import type { ResponseRecord } from './workflows/shared/schemas';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -408,6 +416,8 @@ export interface DurableLLMStepOutput {
     headers?: Record<string, string>;
     request?: LanguageModelRequestMetadata;
   };
+  /** Provider id and serving model of this step's response; absent when the provider sent none */
+  response?: ResponseRecord;
   /** Processor retry count */
   processorRetryCount?: number;
   /** Processor retry feedback message */
@@ -428,6 +438,8 @@ export interface DurableLLMStepOutput {
   completionStartTime?: Date;
   /** Time to first token of the inference that streamed this step's first chunk (kept with that chunk's clock) */
   timeToFirstTokenMs?: number;
+  /** Outcome of a step that ended the run itself (fatal model failure or a tripwire), for the root spans */
+  tracingTermination?: SpanTermination;
 }
 
 /**
@@ -533,6 +545,8 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * the same iteration on every engine (G3).
    */
   delegationBailed?: boolean;
+  /** Why the delegation that bailed failed, carried beside `delegationBailed` for the root spans */
+  tracingDelegationFailure?: SpanTermination;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -592,6 +606,12 @@ export interface DurableAgenticExecutionOutput {
   completionStartTime?: Date;
   /** Time to first token of the inference that streamed this iteration's first chunk */
   timeToFirstTokenMs?: number;
+  /** Provider id and model of this iteration's response */
+  response?: ResponseRecord;
+  /** Outcome of a step that ended the run itself, see DurableLLMStepOutput */
+  tracingTermination?: SpanTermination;
+  /** Failure behind this iteration's delegation bail, see DurableToolCallOutput */
+  tracingDelegationFailure?: SpanTermination;
 }
 
 /**
@@ -614,46 +634,7 @@ export interface DurableAgenticLoopOutput {
   state: SerializableDurableState;
 }
 
-/**
- * Event types emitted via pubsub for agent streaming
- */
-export type AgentStreamEventType =
-  | 'chunk'
-  | 'step-start'
-  | 'step-finish'
-  | 'finish'
-  | 'error'
-  | 'suspended'
-  | 'abort'
-  | 'iteration-complete'
-  | 'ownership-claimed';
-
-/**
- * Event emitted via pubsub for agent streaming
- */
-export interface AgentStreamEvent<T = unknown> {
-  /** Event type */
-  type: AgentStreamEventType;
-  /** Run identifier */
-  runId: string;
-  /** Event payload */
-  data: T;
-  /** Epoch ms at which a `chunk` event's chunk was produced. */
-  producedAt?: number;
-  /** Claim generation of the execution that published the event. See {@link Event.generation}. */
-  generation?: number;
-  /**
-   * Position of this event in its run topic's log. Only present on events read
-   * back from the topic; it is stripped before an event reaches an `observe()`
-   * consumer.
-   */
-  index?: number;
-  /**
-   * The `chunk` or `step-start` event's chunk already ran through the run's output processors
-   * before it was published, so the stream consumer must not run them again.
-   */
-  outputProcessed?: boolean;
-}
+export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';
 
 /**
  * Chunk event data
@@ -685,6 +666,12 @@ export interface AgentFinishEventData {
     user: ModelMessage[];
     nonUser: AIV5ResponseMessage[];
   };
+  /**
+   * Set when processOutputResult changed the reply after the last step-finish was streamed.
+   * The last entry of `output.steps` then holds the processed text, and callers must use it
+   * instead of the text they buffered from the stream.
+   */
+  textRewritten?: boolean;
 }
 
 /**
@@ -766,9 +753,9 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
-  /** Transient tracing fact; not part of the iteration state or finish payload. */
-  tracingTermination?: import('../../observability').SpanTermination;
-  tracingDelegationFailure?: import('../../observability').SpanTermination;
+  /** In-process copy of a tracing fact the iteration state carries across workers; not in the finish payload. */
+  tracingTermination?: SpanTermination;
+  tracingDelegationFailure?: SpanTermination;
   tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
   /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
   agentId?: string;
@@ -1048,6 +1035,8 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /** The evented engine may dispatch this execution to another process. */
+  eventedExecution?: boolean;
   /**
    * Tool call resumed by the `resume()` currently driving this run in this
    * process. Its in-flight marker is cleared when the segment suspends again.

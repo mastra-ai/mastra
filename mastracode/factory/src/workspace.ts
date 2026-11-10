@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
-import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/agents/tool-availability';
+import { createMastraCodeWorkspaceTools } from '@mastra/code-sdk/agents/tool-availability';
 import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
@@ -19,6 +19,7 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -59,12 +60,22 @@ import {
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
+// GitHub installation tokens live 60 minutes and minted access is cached for
+// up to 5, so replace an installed token well before it can expire. An
+// installed org PAT does not expire this way and is never age-refreshed.
+const GITHUB_TOKEN_REFRESH_AFTER_MS = 45 * 60_000;
+const isGithubTokenStale = (registration: { tokenIssuedAt: number; patInstalled: boolean }): boolean =>
+  !registration.patInstalled && Date.now() - registration.tokenIssuedAt >= GITHUB_TOKEN_REFRESH_AFTER_MS;
+/** The Factory UI renders plans only from `.artifacts/`, so every session writes them there. */
+export const FACTORY_PLANS_DIR = '.artifacts/plans';
+const FACTORY_WORKSPACE_TOOLS = createMastraCodeWorkspaceTools(false, FACTORY_PLANS_DIR);
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
 export const BUNDLED_FACTORY_SKILLS_PATH =
@@ -102,7 +113,7 @@ export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): stri
 export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
-  'factory-complete-issue',
+  'factory-build',
   'factory-gitlab-rereview',
   'factory-gitlab-review',
   'factory-plan',
@@ -183,6 +194,14 @@ class CodeSkillSource implements SkillSource {
   }
 }
 
+/** A project's edited SKILL.md, served in place of the original's. */
+export interface FactorySkillOverride {
+  content: string;
+  updatedAt: Date;
+}
+
+const NO_SKILL_OVERRIDES: ReadonlyMap<string, FactorySkillOverride> = new Map();
+
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
   readonly #localSource: LocalSkillSource | undefined;
@@ -197,6 +216,9 @@ export class FactorySkillSource implements SkillSource {
     readonly isReviewSession: () => Promise<boolean> = () => Promise.resolve(true),
     /** Skills passed as `MastraFactory({ skills })`; they win over local and bundled skills of the same name. */
     codeSkills: readonly InlineSkill[] = [],
+    /** The session project's edited SKILL.md files by skill name; read per call so saves and reverts apply on the next scan. */
+    readonly skillOverrides: () => Promise<ReadonlyMap<string, FactorySkillOverride>> = () =>
+      Promise.resolve(NO_SKILL_OVERRIDES),
   ) {
     this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
     this.#codeSource = codeSkills.length > 0 ? new CodeSkillSource(codeSkills) : undefined;
@@ -232,6 +254,17 @@ export class FactorySkillSource implements SkillSource {
     return this.#bundledSource;
   }
 
+  /**
+   * The edit replacing this path, when it is a skill's SKILL.md. Only the instructions are
+   * edited; the skill's other files still come from its layer. `exists` and `readdir` never
+   * consult edits, so an edit whose skill was removed from the app is never discovered.
+   */
+  async #overrideFor(relativePath: string): Promise<FactorySkillOverride | undefined> {
+    const [skillName, file, ...rest] = relativePath.split(path.sep);
+    if (!skillName || file !== 'SKILL.md' || rest.length > 0) return undefined;
+    return (await this.skillOverrides()).get(skillName);
+  }
+
   async exists(skillPath: string): Promise<boolean> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
@@ -245,6 +278,16 @@ export class FactorySkillSource implements SkillSource {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    const override = await this.#overrideFor(relative);
+    if (override) {
+      return {
+        name: 'SKILL.md',
+        type: 'file',
+        size: Buffer.byteLength(override.content),
+        createdAt: override.updatedAt,
+        modifiedAt: override.updatedAt,
+      };
+    }
     return (await this.#layerFor(relative)).stat(relative);
   }
 
@@ -252,6 +295,8 @@ export class FactorySkillSource implements SkillSource {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    const override = await this.#overrideFor(relative);
+    if (override) return override.content;
     return (await this.#layerFor(relative)).readFile(relative);
   }
 
@@ -364,6 +409,7 @@ class UnmaterializedAwareSkillSource implements SkillSource {
 function createFactorySkillExtension(
   isReviewSession: () => Promise<boolean>,
   codeSkills: readonly InlineSkill[],
+  skillOverrides: () => Promise<ReadonlyMap<string, FactorySkillOverride>>,
 ): WorkspaceSkillExtension {
   return {
     id: 'web-factory',
@@ -375,6 +421,7 @@ function createFactorySkillExtension(
         resolveLocalFactorySkillsPath(),
         isReviewSession,
         codeSkills,
+        skillOverrides,
       ),
   };
 }
@@ -383,7 +430,7 @@ function isActiveReviewBinding(
   runBinding: { role: string; status: string; orgId: string } | null | undefined,
   orgId: string | undefined,
 ): boolean {
-  return runBinding?.role === 'review' && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
+  return runBinding?.role === REVIEW_CONTEXT && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
 }
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
@@ -425,6 +472,8 @@ export interface CreateWorkspaceFactoryOptions {
   workspaceRegistry?: FactoryWorkspaceRegistry;
   /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
   skills?: readonly InlineSkill[];
+  /** Per-project SKILL.md edits served over the Factory skills of each session's project. */
+  skillOverrides?: Pick<SkillOverridesStorage, 'ensureReady' | 'revision' | 'snapshot'>;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -629,7 +678,7 @@ export function environmentSandboxContext(
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides } = options;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??
     (github
@@ -638,9 +687,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
-    inject: (token: string) => void;
+    inject: (token: string, pat?: boolean) => void;
     patKind: GithubPatKind;
     ghToken: string;
+    // Whether `ghToken` is an org PAT rather than a minted installation token.
+    patInstalled: boolean;
+    // When `ghToken` was installed. Minted installation tokens expire after
+    // an hour, so reconcile and reconnect re-mint once it is stale.
+    tokenIssuedAt: number;
     generation: number;
     tokenReplacementPending: boolean;
   };
@@ -655,13 +709,24 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // observe the same Workspace object even when no Mastra registry is wired
   // (the registry stays the source of truth when present).
   const constructedWorkspaces = new Map<string, Workspace>();
-  // Review-skill visibility last used to populate each workspace's skill cache.
-  const skillCacheReviewState = new Map<string, boolean>();
-  const skillCacheRefreshes = new Map<string, Promise<void>>();
+  // Review-skill visibility and override revision last used to populate each workspace's skill cache.
+  const skillCacheState = new Map<string, string>();
+  const skillCacheRefreshes = new Map<string, Promise<number>>();
   // The review check of the latest request to resolve each workspace. The skill
   // source outlives the request that built it, so it must gate on this rather
   // than on the context it was constructed with.
   const skillReviewChecks = new Map<string, () => Promise<boolean>>();
+  // The project skill edits each workspace's skill source serves, and the
+  // override revision they were read at. Loaded on first use, so building a
+  // workspace never suspends between the reuse check and construction.
+  const skillOverrideStates = new Map<
+    string,
+    Promise<{ revision: number; overrides: ReadonlyMap<string, FactorySkillOverride> }>
+  >();
+  // The revision recorded when skill edits could not be read. No stored
+  // revision equals it, so the next reuse that reads one rescans and retries.
+  const UNREAD_SKILL_OVERRIDES = -1;
+  const skillCacheKey = (isReview: boolean, revision: number) => `${isReview ? 'review' : 'work'}@${revision}`;
 
   const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -762,6 +827,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
         })
       : createSessionSetupHook(runSetupOn, session.id, repoFullName, projectRepository.setupCommand ?? undefined);
+    // Replaces the installed minted token once it is stale, so `gh` and the
+    // `gh auth git-credential` helper never run with an expired GH_TOKEN. An
+    // installed org PAT is never stale. Returns whether a fresh token was injected.
+    const refreshStaleGithubToken = async (): Promise<boolean> => {
+      const registration = githubTokenInjectors.get(workspaceId);
+      if (!githubProvider || !registration || !isGithubTokenStale(registration)) return false;
+      // Let an in-flight reconcile settle the role before choosing a credential.
+      await githubTokenReconciliations.get(workspaceId)?.catch(() => {});
+      if (githubTokenInjectors.get(workspaceId) !== registration || !isGithubTokenStale(registration)) return false;
+      const { ghToken, generation } = registration;
+      const token = await getRepositoryToken();
+      // A reconcile during the mint may have switched role or installed a PAT.
+      if (
+        githubTokenInjectors.get(workspaceId) !== registration ||
+        registration.generation !== generation ||
+        registration.ghToken !== ghToken
+      ) {
+        return false;
+      }
+      registration.inject(token);
+      return true;
+    };
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -832,17 +919,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // reconcileGithubToken owns role/generation and the active context's
         // injector, so replacing them here would reauthorize the stale
         // constructing context and reject the current one.
-        existingRegistration.inject = freshToken => {
+        existingRegistration.inject = (freshToken, pat = false) => {
           if (!target.setEnv) {
             throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
           }
           target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           existingRegistration.ghToken = freshToken;
+          existingRegistration.patInstalled = pat;
+          existingRegistration.tokenIssuedAt = Date.now();
         };
+        // A minted token may have expired while the VM was away; re-mint it
+        // instead of reinstalling it over the fresh one setup just used.
         // Install through inject (not optional-chained setEnv) so a provider
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
-        existingRegistration.inject(existingRegistration.ghToken);
+        // A failed mint keeps the reconnect usable with the current token.
+        const refreshed = await refreshStaleGithubToken().catch(() => false);
+        if (!refreshed) {
+          // Reinstalling the same credential must not reset its age.
+          const { tokenIssuedAt } = existingRegistration;
+          existingRegistration.inject(existingRegistration.ghToken, existingRegistration.patInstalled);
+          existingRegistration.tokenIssuedAt = tokenIssuedAt;
+        }
         await finishStart();
         return;
       }
@@ -852,20 +950,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
       const patKind = await resolveGithubPatKind();
-      const ghCliToken =
-        (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind)) ??
-        (await getRepositoryToken());
+      const ghCliPat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
+      const ghCliToken = ghCliPat ?? (await getRepositoryToken());
       target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
       const tokenRegistration: GithubTokenRegistration = {
-        inject: freshToken => {
+        inject: (freshToken, pat = false) => {
           if (!target.setEnv) {
             throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
           }
           target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           tokenRegistration.ghToken = freshToken;
+          tokenRegistration.patInstalled = pat;
+          tokenRegistration.tokenIssuedAt = Date.now();
         },
         patKind,
         ghToken: ghCliToken,
+        patInstalled: ghCliPat !== null,
+        tokenIssuedAt: Date.now(),
         generation: 0,
         tokenReplacementPending: false,
       };
@@ -913,6 +1014,32 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
+          // A turn can outlive the token installed when the workspace was
+          // resolved, so check its age before every command and background
+          // spawn. Best-effort: a failed re-mint leaves the current token in
+          // place. Concurrent callers share one refresh.
+          let commandRefresh: Promise<unknown> | undefined;
+          const refreshBeforeCommand = () =>
+            (commandRefresh ??= refreshStaleGithubToken()
+              .catch(() => {})
+              .finally(() => {
+                commandRefresh = undefined;
+              }));
+          const executeCommand = sandbox.executeCommand?.bind(sandbox);
+          if (executeCommand) {
+            sandbox.executeCommand = async (...args) => {
+              await refreshBeforeCommand();
+              return executeCommand(...args);
+            };
+          }
+          const processes = sandbox.processes;
+          if (processes) {
+            const spawn = processes.spawn.bind(processes);
+            processes.spawn = async (...args) => {
+              await refreshBeforeCommand();
+              return spawn(...args);
+            };
+          }
           // Attached inside the construction closure, so exactly once per
           // instance: `constructSessionEntry` runs on every open and would
           // stack a wrapper per call. Factory's setup runs first: a hook the
@@ -1024,11 +1151,49 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       createFactorySkillExtension(
         (): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)(),
         options.skills ?? [],
+        async () => (await (skillOverrideStates.get(workspaceId) ?? loadSkillOverrides())).overrides,
       );
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
     if (!skillExtension) skillReviewChecks.set(workspaceId, isReviewSession);
+    // A caller-supplied skill extension owns its own skills, so edits only apply to Factory's.
+    const overrideScope =
+      skillOverrides && !skillExtension ? { orgId: session.orgId, projectId: connection.factoryProjectId } : undefined;
+    // Edits are optional: like `isReviewSession`, a storage failure degrades to
+    // the original skills instead of failing the workspace or hiding skills.
+    const readOverrides = async <T>(read: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        await skillOverrides!.ensureReady();
+        return await read();
+      } catch (error) {
+        console.warn('[Mastra Factory] Could not read project skill edits; serving the original skills', {
+          factoryProjectId: connection.factoryProjectId,
+          error,
+        });
+        return undefined;
+      }
+    };
+    const currentOverrideRevision = async () =>
+      overrideScope
+        ? ((await readOverrides(() => skillOverrides!.revision(overrideScope))) ?? UNREAD_SKILL_OVERRIDES)
+        : 0;
+    const loadSkillOverrides = () => {
+      const loading = (async () => {
+        if (!overrideScope) return { revision: 0, overrides: NO_SKILL_OVERRIDES };
+        const snapshot = await readOverrides(() => skillOverrides!.snapshot(overrideScope));
+        if (!snapshot) return { revision: UNREAD_SKILL_OVERRIDES, overrides: NO_SKILL_OVERRIDES };
+        return {
+          revision: snapshot.revision,
+          overrides: new Map(
+            snapshot.overrides.map(o => [o.skillName, { content: o.content, updatedAt: o.updatedAt }] as const),
+          ),
+        };
+      })();
+      skillOverrideStates.set(workspaceId, loading);
+      return loading;
+    };
+    const loadedOverrideRevision = async () => (await skillOverrideStates.get(workspaceId))?.revision;
     const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryAccess = () =>
@@ -1091,12 +1256,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return 'default';
       }
     };
-    const githubTokenInjector = (registered: GithubTokenRegistration, generation: number) => (token: string) => {
-      if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
-        throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-      }
-      registered.inject(token);
-    };
+    const githubTokenInjector =
+      (registered: GithubTokenRegistration, generation: number) => (token: string, pat?: boolean) => {
+        if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
+          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+        }
+        registered.inject(token, pat);
+      };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       registerGithubTokenInjector(requestContext, githubTokenInjector(registered, registered.generation));
       registerGithubPatKind(requestContext, registered.patKind);
@@ -1143,13 +1309,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registered.tokenReplacementPending = true;
           }
 
-          let token = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
-          if (!token && registered.tokenReplacementPending) token = await getRepositoryToken();
+          const pat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
+          let token = pat;
+          if (!token && (registered.tokenReplacementPending || isGithubTokenStale(registered))) {
+            token = await getRepositoryToken();
+          }
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (token && token !== registered.ghToken) {
             try {
-              registered.inject(token);
+              registered.inject(token, token === pat);
             } catch (error) {
               if (registered.tokenReplacementPending) throw error;
               // Same-role rotations and reviewer upgrades remain best-effort.
@@ -1191,7 +1360,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
             constructedWorkspaces.delete(workspaceId);
-            skillCacheReviewState.delete(workspaceId);
+            skillCacheState.delete(workspaceId);
           }
         }
         throw error;
@@ -1211,9 +1380,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
-      existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+      existing.setToolsConfig(FACTORY_WORKSPACE_TOOLS);
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
+      // Likewise when the project's skill-override revision moves: a save or revert
+      // must reach the next session on this workspace, not wait for a staleness walk.
       if (!skillExtension) {
         // An outside rescan makes the recorded role untrustworthy. Wait for it to
         // settle first, so the refresh below starts a scan for the current role
@@ -1224,11 +1395,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           await outside;
           if (rescannedOutsideResolver.get(existing.skills!) === outside)
             rescannedOutsideResolver.delete(existing.skills!);
-          skillCacheReviewState.delete(workspaceId);
+          skillCacheState.delete(workspaceId);
           return true;
         };
         await consumeOutsideRescan();
-        let isReview = await isReviewSession();
+        const readTarget = async () => {
+          const [isReview, revision] = await Promise.all([isReviewSession(), currentOverrideRevision()]);
+          return { isReview, revision };
+        };
+        let target = await readTarget();
         // Concurrent reuses share one refresh, and the state is recorded only
         // once the rescan succeeds. Wait out any in-flight rescan (it may have
         // been started for the opposite role) and re-read the role afterwards.
@@ -1236,22 +1411,32 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const inFlight = skillCacheRefreshes.get(workspaceId);
           if (inFlight) {
             await inFlight;
-            isReview = await isReviewSession();
+            target = await readTarget();
             continue;
           }
           if (await consumeOutsideRescan()) {
-            isReview = await isReviewSession();
+            target = await readTarget();
             continue;
           }
-          if (skillCacheReviewState.get(workspaceId) === isReview) break;
-          const target = isReview;
+          if (skillCacheState.get(workspaceId) === skillCacheKey(target.isReview, target.revision)) break;
+          const { isReview, revision } = target;
           const pending = (async () => {
+            const served =
+              (await loadedOverrideRevision()) === revision ? revision : (await loadSkillOverrides()).revision;
             await existing.skills?.refresh();
-            skillCacheReviewState.set(workspaceId, target);
+            // Record the revision the source actually serves; a save landing after
+            // `readTarget` makes the next check rescan rather than skip it.
+            skillCacheState.set(workspaceId, skillCacheKey(isReview, served));
+            return served;
           })().finally(() => skillCacheRefreshes.delete(workspaceId));
           skillCacheRefreshes.set(workspaceId, pending);
-          await pending;
-          isReview = await isReviewSession();
+          const served = await pending;
+          // The snapshot could not be read, so this refresh served the original
+          // skills. Re-reading the target would refresh again for as long as the
+          // failure lasts; the unread sentinel stays recorded so a later
+          // resolution retries.
+          if (served === UNREAD_SKILL_OVERRIDES) break;
+          target = await readTarget();
         }
       }
       // A materialization kicked off by another caller may still be running.
@@ -1592,7 +1777,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       name: 'Mastra Code Factory Session Workspace',
       filesystem,
       sandbox: sessionSandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-      tools: MASTRACODE_WORKSPACE_TOOLS,
+      tools: FACTORY_WORKSPACE_TOOLS,
       skills: skillPaths,
       // Project skill roots live in the sandbox checkout; guard them so skill
       // discovery before materialization (e.g. kickoff skill resolution in the
@@ -1611,6 +1796,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // point, and a concurrent resolution for the same session must observe this
     // workspace rather than build a second one.
     constructedWorkspaces.set(workspaceId, workspace);
+    // A workspace evicted and rebuilt under this id reads the project's edits afresh.
+    skillOverrideStates.delete(workspaceId);
     // Retirement is registered against the workspace itself rather than the
     // sandbox: construction is eager while the VM start is lazy, so a session
     // retired before its first tool call still has a workspace (and possibly a
@@ -1622,8 +1809,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       async () => {
         githubTokenInjectors.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
-        skillCacheReviewState.delete(workspaceId);
+        skillCacheState.delete(workspaceId);
         skillReviewChecks.delete(workspaceId);
+        skillOverrideStates.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.

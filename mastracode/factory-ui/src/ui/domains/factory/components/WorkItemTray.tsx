@@ -1,10 +1,16 @@
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { History } from 'lucide-react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { boardOf } from '../boardFlow';
+import type { CardContextSession } from '../boardItems';
+import type { ReworkReason } from '../reworkReason';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import { CardSourceDescription } from './BoardCardDetails';
+import { CardSessions } from './CardSessions';
 import { ActivityEvent } from './WorkItemActivity';
 import { WorkItemDescription } from './WorkItemDescription';
 
@@ -15,14 +21,19 @@ export function WorkItemTray({
   projectRepositoryId,
   events,
   actors,
+  contextSessions,
+  rework,
 }: {
   item: WorkItem;
   factoryId: string;
   projectRepositoryId: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
+  contextSessions: readonly CardContextSession[];
+  rework?: ReworkReason;
 }) {
   const factoryProjectId = factoryId || undefined;
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
 
   return (
     <ScrollArea className="min-h-0 grow px-1">
@@ -37,6 +48,8 @@ export function WorkItemTray({
             factoryProjectId={factoryProjectId}
           />
           <WorkItemDescription item={item} factoryProjectId={factoryProjectId} />
+          {rework && <WhyItMovedBack rework={rework} />}
+          <CardSessions factoryId={factoryId} sessions={contextSessions} />
         </div>
         <div className="flex items-center gap-2 px-3 pt-2 pb-1">
           <span className="bg-border h-px flex-1" />
@@ -58,12 +71,33 @@ export function WorkItemTray({
               .sort((left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt))
               .map(event => (
                 <li key={event.id}>
-                  <ActivityEvent event={event} actors={actors} className="px-2 py-1.5" />
+                  <ActivityEvent event={event} actors={actors} board={board} className="px-2 py-1.5" />
                 </li>
               ))}
           </ol>
         )}
       </ScrollAreaViewport>
     </ScrollArea>
+  );
+}
+
+const MOVED_BY = { human: 'a person', agent: 'an agent', system: 'Factory' } as const;
+
+function WhyItMovedBack({ rework }: { rework: ReworkReason }) {
+  return (
+    <section aria-label="Why it moved back" className="flex flex-col gap-1">
+      <Txt as="h4" variant="eyebrow" tone="muted" className="m-0">
+        Why it moved back from {rework.fromLabel}
+      </Txt>
+      {rework.reason ? (
+        <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
+          {rework.reason}
+        </MarkdownRenderer>
+      ) : (
+        <Txt variant="meta" tone="muted" className="m-0">
+          Moved back by {MOVED_BY[rework.movedBy]}
+        </Txt>
+      )}
+    </section>
   );
 }

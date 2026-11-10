@@ -16,7 +16,7 @@ import type {
   FactoryAttentionReceiptRecord,
   FactoryDeferredDecisionRecord,
   FactoryDispatchStatus,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { factoryAttentionKey, factoryDecisionAttentionIdentity } from '../storage/domains/work-items/base.js';
@@ -149,7 +149,7 @@ export function matchesView(view: FactoryAttentionView, receipt: FactoryAttentio
   return receipt?.state !== 'archived';
 }
 
-function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined) {
+function attentionTarget(decision: FactoryDeferredDecisionRecord, item: Card | undefined) {
   if (!item) return { kind: 'rules' as const };
   const role = typeof decision.decision.role === 'string' ? decision.decision.role : undefined;
   const session = role ? item.sessions[role] : undefined;
@@ -173,10 +173,10 @@ export interface DecisionAttentionSpec {
   status: FactoryDispatchStatus;
   identity(decision: FactoryDeferredDecisionRecord): FactoryAttentionIdentity;
   occurredAt(decision: FactoryDeferredDecisionRecord): Date;
-  title(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
-  detail(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
+  title(decision: FactoryDeferredDecisionRecord, item: Card | undefined): string;
+  detail(decision: FactoryDeferredDecisionRecord, item: Card | undefined): string;
   extra?(decision: FactoryDeferredDecisionRecord, context: { overtaken: boolean }): Record<string, unknown>;
-  matches(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean;
+  matches(decision: FactoryDeferredDecisionRecord, item: Card | undefined, search: string): boolean;
 }
 
 export class DecisionAttentionProvider implements AttentionProvider {
@@ -299,10 +299,7 @@ export class DecisionAttentionProvider implements AttentionProvider {
     return new Map(receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]));
   }
 
-  async #linkedItems(
-    scope: AttentionScope,
-    decisions: FactoryDeferredDecisionRecord[],
-  ): Promise<Map<string, WorkItemRow>> {
+  async #linkedItems(scope: AttentionScope, decisions: FactoryDeferredDecisionRecord[]): Promise<Map<string, Card>> {
     const items = await this.#workItems.listByIds({
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,

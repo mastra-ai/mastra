@@ -32,7 +32,36 @@ async function seedCard(workItems: WorkItemsStorage, { factoryProjectId = PROJEC
 /** Counts reads of the card table, which is what a cache hit must avoid. */
 function countCardReads(seed: Seed) {
   const findMany = vi.spyOn(seed.storage.ops, 'findMany');
-  return () => findMany.mock.calls.filter(([collection]) => collection === 'work_items').length;
+  return () => findMany.mock.calls.filter(([collection]) => collection === 'factory_board_items').length;
+}
+
+/** Lets the next read of the work items, which carry the card fields, take its snapshot, then holds it until released. */
+function holdNextCardRead(seed: Seed) {
+  const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
+  const taken = Promise.withResolvers<void>();
+  const held = Promise.withResolvers<void>();
+  let holding = true;
+  vi.spyOn(seed.storage.ops, 'findMany').mockImplementation(async (...args: Parameters<typeof findMany>) => {
+    const rows = await findMany(...args);
+    if (!holding || args[0] !== 'factory_work_items') return rows;
+    holding = false;
+    taken.resolve();
+    await held.promise;
+    return rows;
+  });
+  return { taken: taken.promise, release: held.resolve };
+}
+
+/** Resolves once the next board version read has returned to its caller. */
+function nextVersionRead(seed: Seed) {
+  const findOne = seed.storage.ops.findOne.bind(seed.storage.ops);
+  const read = Promise.withResolvers<void>();
+  vi.spyOn(seed.storage.ops, 'findOne').mockImplementationOnce(async (...args: Parameters<typeof findOne>) => {
+    const row = await findOne(...args);
+    setImmediate(read.resolve);
+    return row;
+  });
+  return read.promise;
 }
 
 const poll = (workItems: WorkItemsStorage, factoryProjectId = PROJECT) =>
@@ -58,6 +87,62 @@ describe('board list cache', () => {
     expect(third.map(item => item.title).sort()).toEqual(['One', 'Two']);
   });
 
+  it('reads an uncached board once when several tabs poll it at the same moment', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seedCard(seed.workItems);
+    const cardReads = countCardReads(seed);
+
+    const [first, second] = await Promise.all([poll(seed.workItems), poll(seed.workItems)]);
+
+    expect(cardReads()).toBe(1);
+    first[0]!.title = 'mutated by a route';
+    expect(second[0]?.title).toBe('Fix login');
+  });
+
+  it('does not hand a poll made after an edit the cards read before it', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+    const staleRead = holdNextCardRead(seed);
+    const before = poll(seed.workItems);
+    await staleRead.taken;
+
+    await seed.workItems.update({
+      orgId: ORG,
+      id: card.id,
+      userId: 'user-alice',
+      patch: { title: 'Fix login on Safari' },
+    });
+    const versionRead = nextVersionRead(seed);
+    const after = poll(seed.workItems);
+    await versionRead;
+    staleRead.release();
+
+    expect((await after).map(item => item.title)).toEqual(['Fix login on Safari']);
+    expect((await before).map(item => item.title)).toEqual(['Fix login']);
+  });
+
+  it('keeps the edited board cached when a read begun before the edit finishes last', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+    const staleRead = holdNextCardRead(seed);
+    const before = poll(seed.workItems);
+    await staleRead.taken;
+    await seed.workItems.update({
+      orgId: ORG,
+      id: card.id,
+      userId: 'user-alice',
+      patch: { title: 'Fix login on Safari' },
+    });
+    await poll(seed.workItems);
+    staleRead.release();
+    await before;
+    vi.restoreAllMocks();
+    const cardReads = countCardReads(seed);
+
+    expect((await poll(seed.workItems)).map(item => item.title)).toEqual(['Fix login on Safari']);
+    expect(cardReads()).toBe(0);
+  });
+
   it('stops serving cards once every card is cleared', async () => {
     const seed = await createFactoryStorageForTests();
     await seedCard(seed.workItems);
@@ -74,7 +159,7 @@ describe('board list cache', () => {
     await poll(seed.workItems);
     const cardReads = countCardReads(seed);
 
-    await seed.workItems['ops'].updateAtomic('work_items', { id: card.id }, () => null);
+    await seed.workItems['ops'].updateAtomic('factory_board_items', { id: card.id }, () => null);
     await poll(seed.workItems);
 
     expect(cardReads()).toBe(0);
@@ -203,6 +288,31 @@ describe('board list cache', () => {
       vi.setSystemTime(Date.now() + 2_000);
       await poll(seed.workItems);
       expect(cardReads()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops sharing a card read that has run past the safety window', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const seed = await createFactoryStorageForTests();
+      await seedCard(seed.workItems);
+      const stuck = holdNextCardRead(seed);
+      const first = poll(seed.workItems);
+      await stuck.taken;
+      const cardReads = countCardReads(seed);
+      const readsWhileStuck = cardReads();
+
+      vi.setSystemTime(Date.now() + 61_000);
+      const versionRead = nextVersionRead(seed);
+      const later = poll(seed.workItems);
+      await versionRead;
+      stuck.release();
+
+      expect(cardReads()).toBe(readsWhileStuck + 1);
+      expect((await later).map(item => item.title)).toEqual(['Fix login']);
+      await first;
     } finally {
       vi.useRealTimers();
     }

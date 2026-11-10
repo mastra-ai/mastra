@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MetricsTableHeaderLabel } from './metrics-table-header';
-import { MetricsTableBody } from './metrics-table-rows';
+import { MetricsTableBody, MetricsTableFiller } from './metrics-table-rows';
 import type { MetricsTableColumn, MetricsTableProps, MetricsTableSort } from './metrics-table-types';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { TablePagination } from '@/ds/components/Table/table-pagination';
@@ -61,7 +61,7 @@ const columnWidth = <Row,>(column: MetricsTableColumn<Row>) =>
  * A table for the numbers behind a chart: one row per series or group, columns for its figures,
  * separated by lines that fade at the ends. With `SeriesMark` and `Sparkline` cells and the row
  * hover and click hooks it doubles as the chart's legend; without them it's a plain data table.
- * With `pageSize` it pages long lists. For a share of a total, a compact `ShareBar` fits better.
+ * With `pageSize` it pages long lists, and is always a full page tall. For a share of a total, a compact `ShareBar` fits better.
  */
 export function MetricsTable<Row>({
   columns,
@@ -115,7 +115,7 @@ export function MetricsTable<Row>({
           <div
             role="row"
             className={cn(
-              'relative col-span-full grid grid-cols-subgrid items-end px-3 pb-1.5 text-body-sm font-medium text-placeholder',
+              'relative col-span-full grid grid-cols-subgrid items-end px-3 pb-1.5 text-label text-placeholder',
               HEADER_LINE,
             )}
           >
@@ -148,10 +148,14 @@ export function MetricsTable<Row>({
             isRowActive={isRowActive}
             rowTitle={rowTitle}
             empty={empty}
-            skeletonRows={pageSize ?? 5}
+            pageSize={pageSize}
             isLoading={isLoading}
           />
         </div>
+        {/* Always a full page tall, so loading, paging and switching data don't move what's below. */}
+        {pageSize !== undefined && !isLoading && shown.length > 0 && (
+          <MetricsTableFiller count={pageSize - shown.length} />
+        )}
       </ScrollArea>
       {showsPagination && <TablePagination page={safePage} pageCount={pageCount} onPageChange={setPage} />}
     </div>

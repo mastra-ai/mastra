@@ -6,6 +6,7 @@ import type {
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
+  ProjectConnectionWithRepositories,
   ProjectRepository,
   ProjectSourceControlConnection,
   SessionBranchKey,
@@ -186,6 +187,33 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   readonly connections = {
     list: async ({ factoryProjectId }: { orgId: string; factoryProjectId: string }) =>
       this.connectionsRows.filter(row => row.factoryProjectId === factoryProjectId),
+    listWithRepositories: async ({
+      orgId,
+      factoryProjectIds,
+    }: {
+      orgId: string;
+      factoryProjectIds: string[];
+    }): Promise<ProjectConnectionWithRepositories[]> => {
+      const connections: ProjectConnectionWithRepositories[] = [];
+      for (const row of this.connectionsRows.filter(candidate =>
+        factoryProjectIds.includes(candidate.factoryProjectId),
+      )) {
+        const installation = await this.installations.get({ orgId, id: row.installationId });
+        if (!installation) continue;
+        const links = this.projectRepositoriesRows.filter(link => link.connectionId === row.id);
+        connections.push({
+          ...row,
+          installation,
+          repositories: await Promise.all(
+            links.map(async link => ({
+              ...link,
+              repository: await this.repositories.get({ orgId, id: link.repositoryId }),
+            })),
+          ),
+        });
+      }
+      return connections;
+    },
     get: async ({ orgId, id }: { orgId: string; id: string }): Promise<ProjectSourceControlConnection | null> => {
       const row = this.connectionsRows.find(candidate => candidate.id === id);
       if (!row) return null;

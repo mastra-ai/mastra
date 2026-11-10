@@ -76,7 +76,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
         onValueChange={handleAdd}
         onInputValueChange={setSearch}
         placeholder="Add tag"
-        searchPlaceholder="Search or create tag..."
+        searchPlaceholder="Search or create tag"
         emptyText="Type to create a tag"
         variant="ghost"
         size="sm"

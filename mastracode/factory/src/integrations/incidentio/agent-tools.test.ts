@@ -57,7 +57,6 @@ async function routeSourceToProject(factoryProjectId: string): Promise<void> {
     integrationId: 'incidentio',
     sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
     factoryProjectId,
-    board: 'work',
   });
 }
 

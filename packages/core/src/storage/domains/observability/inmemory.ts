@@ -128,6 +128,11 @@ export interface TraceEntry {
 
 /** In-memory implementation of ObservabilityStorage for testing and development. */
 export class ObservabilityInMemory extends ObservabilityStorage {
+  /** In-memory observability data is local to this process. */
+  public override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -2293,9 +2298,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       feedbackSource: args.feedback.feedbackSource ?? args.feedback.source ?? '',
       source: args.feedback.feedbackSource ?? args.feedback.source ?? '',
       feedbackUserId:
-        args.feedback.feedbackUserId ??
-        args.feedback.userId ??
-        (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
+        args.feedback.feedbackUserId !== undefined
+          ? args.feedback.feedbackUserId
+          : (args.feedback.userId ??
+            (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null)),
       reviewStatus: args.feedback.reviewStatus ?? 'needs-review',
     } as FeedbackRecord;
     this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
@@ -2308,7 +2314,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         feedbackSource: fb.feedbackSource ?? fb.source ?? '',
         source: fb.feedbackSource ?? fb.source ?? '',
         feedbackUserId:
-          fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+          fb.feedbackUserId !== undefined
+            ? fb.feedbackUserId
+            : (fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null)),
         reviewStatus: fb.reviewStatus ?? 'needs-review',
       } as FeedbackRecord;
       this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
@@ -2363,6 +2371,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         ),
       ),
     };
+  }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.db.feedbackRecords.find(record => record.feedbackId === feedbackId) ?? null;
   }
 
   async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {

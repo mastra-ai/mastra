@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getPackageMetadata, getPackageRootPath } from './package-info';
@@ -204,6 +204,111 @@ describe('getPackageMetadata', () => {
 
     await expect(getPackageMetadata('date-fns/esm/endOfDay/index.js', tempDir)).resolves.toMatchObject({
       version: '2.30.0',
+      packageSpec: undefined,
+    });
+  });
+
+  async function writeManifest(dir: string, manifest: Record<string, unknown>) {
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
+    await writeFile(join(dir, 'index.js'), 'export default 1;');
+  }
+
+  // Manifest shapes from the published packages (#28828).
+  const subpathPackages = [
+    {
+      title: 'read-excel-file/node, whose folder manifest is named "read-excel-file/node"',
+      name: 'read-excel-file',
+      subpath: 'node',
+      root: {
+        name: 'read-excel-file',
+        version: '9.3.12',
+        exports: { './node': { import: './node/index.js' }, './package.json': './package.json' },
+      },
+      nested: { private: true, name: 'read-excel-file/node', version: '1.0.0', exports: { '.': './index.js' } },
+    },
+    {
+      title: 'preact/jsx-runtime, whose folder manifest is named after the unrelated "jsx-runtime" package',
+      name: 'preact',
+      subpath: 'jsx-runtime',
+      root: {
+        name: 'preact',
+        version: '10.29.8',
+        exports: {
+          '.': './index.js',
+          './jsx-runtime': { import: './jsx-runtime/index.js' },
+          './jsx-runtime/package.json': './jsx-runtime/package.json',
+        },
+      },
+      nested: { name: 'jsx-runtime', version: '1.0.0', private: true, exports: { '.': './index.js' } },
+    },
+    {
+      title: 'a package that exports only subpaths, so its bare name does not resolve',
+      name: 'subpath-only-pkg',
+      subpath: 'node',
+      root: { name: 'subpath-only-pkg', version: '2.1.0', exports: { './node': { import: './node/index.js' } } },
+      nested: { name: 'subpath-only-pkg/node', version: '1.0.0', exports: { '.': './index.js' } },
+    },
+  ];
+
+  it.each(subpathPackages)(
+    'pins the installed package for $title (#28828)',
+    async ({ name, subpath, root, nested }) => {
+      const tempRoot = join(process.cwd(), '.tmp');
+      await mkdir(tempRoot, { recursive: true });
+      const tempDir = await mkdtemp(join(tempRoot, 'subpath-manifest-'));
+      tempDirs.push(tempDir);
+
+      const packageDir = join(tempDir, 'node_modules', name);
+      await writeManifest(packageDir, root);
+      await writeManifest(join(packageDir, subpath), nested);
+
+      await expect(getPackageMetadata(`${name}/${subpath}`, tempDir)).resolves.toEqual({
+        rootPath: packageDir,
+        version: root.version,
+        packageSpec: undefined,
+      });
+    },
+  );
+
+  it('pins the importing package itself when it imports its own name', async () => {
+    const tempRoot = join(process.cwd(), '.tmp');
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await realpath(await mkdtemp(join(tempRoot, 'self-reference-')));
+    tempDirs.push(tempDir);
+
+    // A published copy installed at the workspace root must not shadow the package importing itself.
+    await writeManifest(join(tempDir, 'node_modules', '@ws', 'lib'), { name: '@ws/lib', version: '0.0.9' });
+    const libDir = join(tempDir, 'packages', 'lib');
+    await writeManifest(libDir, { name: '@ws/lib', version: '0.1.0', exports: { './sub': './sub/index.js' } });
+    await writeManifest(join(libDir, 'sub'), { name: '@ws/lib/sub', version: '1.0.0' });
+
+    await expect(getPackageMetadata('@ws/lib/sub', join(libDir, 'index.js'))).resolves.toEqual({
+      rootPath: libDir,
+      version: '0.1.0',
+      packageSpec: undefined,
+    });
+  });
+
+  it('pins a symlinked workspace package when the workspace itself sits under node_modules', async () => {
+    const tempRoot = join(process.cwd(), '.tmp');
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await realpath(await mkdtemp(join(tempRoot, 'subpath-manifest-workspace-')));
+    tempDirs.push(tempDir);
+
+    // Guessing the root from the resolved path would pick node_modules/repo here.
+    const workspaceRoot = join(tempDir, 'node_modules', 'repo');
+    await writeManifest(workspaceRoot, { name: 'repo', version: '3.0.0' });
+    const libDir = join(workspaceRoot, 'packages', 'lib');
+    await writeManifest(libDir, { name: '@ws/lib', version: '0.1.0', exports: { './sub': './sub/index.js' } });
+    await writeManifest(join(libDir, 'sub'), { name: '@ws/lib/sub', version: '1.0.0' });
+    const appDir = join(workspaceRoot, 'apps', 'app');
+    await mkdir(join(appDir, 'node_modules', '@ws'), { recursive: true });
+    await symlink(libDir, join(appDir, 'node_modules', '@ws', 'lib'), 'dir');
+
+    await expect(getPackageMetadata('@ws/lib/sub', appDir)).resolves.toEqual({
+      rootPath: libDir,
+      version: '0.1.0',
       packageSpec: undefined,
     });
   });

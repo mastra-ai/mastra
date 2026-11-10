@@ -1,5 +1,342 @@
 # @mastra/pg
 
+## 1.36.0-alpha.2
+
+### Patch Changes
+
+- Fixed index creation for descending columns that use an operator class. ([#29594](https://github.com/mastra-ai/mastra/pull/29594))
+
+- Fixed slow startup when several processes initialize the same Postgres schema for the first time. Each index build waited about a second on the other processes, so two processes cold-booting together took around 20 seconds instead of a fraction of a second. Indexes on tables that did not exist when initialization began are now built directly instead of concurrently; indexes on tables that already existed are still built concurrently. ([#29092](https://github.com/mastra-ai/mastra/pull/29092))
+
+- Updated dependencies [[`58a66b0`](https://github.com/mastra-ai/mastra/commit/58a66b01d9b08e7b59c27fc3ab68eb90be13c0ed), [`ac2a640`](https://github.com/mastra-ai/mastra/commit/ac2a6401a09e2177555369cff2f7ad15f2cc7286), [`94b1641`](https://github.com/mastra-ai/mastra/commit/94b1641919dd90455131b16cd0572ce28008781b), [`8279c30`](https://github.com/mastra-ai/mastra/commit/8279c3073737dd1c228b5df15416ca4ce7e0c00c), [`bc9d8d4`](https://github.com/mastra-ai/mastra/commit/bc9d8d482cec626ef2107f1cbd5a05febceaa491), [`8a10dfe`](https://github.com/mastra-ai/mastra/commit/8a10dfe648610a6687d1e4ecc10a0a81e3d80c4c), [`d77893a`](https://github.com/mastra-ai/mastra/commit/d77893aed38eefe2dbac21e9fffd872137ee6b92), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`bfedbfe`](https://github.com/mastra-ai/mastra/commit/bfedbfe5a8e5721cba782efb4652be84e9fecc04), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`a836d09`](https://github.com/mastra-ai/mastra/commit/a836d09a43c3c471b5bfced711731355bf26db26), [`4854e36`](https://github.com/mastra-ai/mastra/commit/4854e3641931c984a5b3941371a4f0fa58eafd0e), [`7358ad7`](https://github.com/mastra-ai/mastra/commit/7358ad73a381765572858d520f8170ab59e88514), [`b93d804`](https://github.com/mastra-ai/mastra/commit/b93d804a7a406d834389e686687b06d22ea2e4f1), [`ed1cecb`](https://github.com/mastra-ai/mastra/commit/ed1cecba5c26a73600640f74e9a1c9d322271b23), [`4cd4c46`](https://github.com/mastra-ai/mastra/commit/4cd4c46e546d44c556fce4d731cac03cad4f88c4), [`9e5b108`](https://github.com/mastra-ai/mastra/commit/9e5b1082cbe2454c377b3328cd8a0085e7452d1a), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`28ddc16`](https://github.com/mastra-ai/mastra/commit/28ddc161a441fdc3ecbdcc1168dee773f1f25243), [`0f496bd`](https://github.com/mastra-ai/mastra/commit/0f496bd3c1cc7f07d2e4ecb3005d480406b3d342), [`de005a4`](https://github.com/mastra-ai/mastra/commit/de005a43d8703d36c5dd25d7ddd1f618ea98bf55)]:
+  - @mastra/core@1.83.0-alpha.3
+
+## 1.36.0-alpha.1
+
+### Minor Changes
+
+- Added direct feedback lookup to observability storage. `await storage.getFeedbackById(feedbackId)` returns the record or `null` when it is missing. ([#29529](https://github.com/mastra-ai/mastra/pull/29529))
+
+### Patch Changes
+
+- `listWorkflowRuns` no longer runs a separate count query when a page comes back with fewer runs than requested, so a paginated read such as listing an agent's suspended runs takes one query instead of two. The returned `total` is unchanged. ([#29553](https://github.com/mastra-ai/mastra/pull/29553))
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+
+## 1.36.0-alpha.0
+
+### Minor Changes
+
+- Added support for the experimental workflow `storageVersion: 2` option. Runs of workflows that set it are stored as a run header plus one row per step, and each write saves only what changed instead of rewriting the whole run: the steps that changed, the progress of a running `foreach`, and the changes to the workflow state. A nested workflow run stores its state as changes to the version of its parent's state it started from, and keeps that state when the parent run is deleted or pruned. This keeps writes small for long-running workflows and loops. Canceling a run from another process sharing the same database stops it before its next step. ([#28299](https://github.com/mastra-ai/mastra/pull/28299))
+
+  ```ts
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    options: { storageVersion: 2 },
+  });
+  ```
+
+  `init()` creates the new `mastra_workflow_runs` and `mastra_workflow_run_entries` tables, and the exported schema includes them. Existing runs keep working and are listed together with version 2 runs. Retention removes old version 2 runs along with their entries. Requires `@mastra/core` 1.83.0 or newer.
+
+### Patch Changes
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6)]:
+  - @mastra/core@1.83.0-alpha.0
+
+## 1.35.0
+
+### Minor Changes
+
+- Added `requestId`, `serviceName`, and `experimentId` filters to advanced trace queries at trace scope and inside `spans.some` / `spans.none`. No migration is needed. ([#29194](https://github.com/mastra-ai/mastra/pull/29194))
+
+- Changes to an experimental, upcoming memory feature. ([#28353](https://github.com/mastra-ai/mastra/pull/28353))
+
+  The Knowledge storage domain now stores Knowledge as pages, notes and pins (schema 4) instead of nodes and records. On startup, the tables of the earlier experimental Knowledge node store (shipped in 1.79.0) are dropped, with any rows in them, and the new tables are created; this also happens if an older process recreates them during a rolling deploy. Memory and other tables are never touched. On MongoDB, Knowledge collections found without a schema version (for example, left by an interrupted first start) are adopted as schema 4 rather than refused. Don't run `dangerouslyReset()` from an older version against a database the new version already uses. Knowledge pages need a `@mastra/core` release that includes them; with an older core, the other storage domains keep working.
+
+- Store Knowledge listing pins. The pins table gets a `kind` column (`page` or `list`) and a `depth` column, and a page now holds one pin per kind. Existing pins become page pins; no reset is needed. ([#29263](https://github.com/mastra-ai/mastra/pull/29263))
+
+  **Migration step on first start.** Each store upgrades its pins table once, the first time it starts with this version:
+
+  - LibSQL rebuilds the pins table (SQLite can't drop the old one-pin-per-page constraint in place): it creates the new table, copies every pin across as a page pin, and swaps it in, inside the init transaction.
+  - Postgres and MySQL alter the table in place (add `kind` and `depth`, replace the unique key on the page with one on page and kind).
+  - MongoDB sets `kind: 'page'` on existing pins and replaces the unique index on `pageId` with one on `pageId` and `kind`.
+
+- Added support for `timeToFirstToken.*` and `timeToFirstChunk.*` measures in trace and span aggregates. Rows without a recorded value are skipped, never counted as 0. ([#29055](https://github.com/mastra-ai/mastra/pull/29055))
+
+  ```typescript
+  import { planSpanAggregate } from '@mastra/core/storage';
+
+  const observability = await storage.getStore('observability');
+
+  if (observability?.getFeatures().includes('aggregate-time-to-first-measures')) {
+    const { rows } = await observability.aggregateSpans(
+      planSpanAggregate({
+        timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
+        where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_inference' } },
+        measures: ['timeToFirstToken.p50', 'timeToFirstToken.p95'],
+      }),
+    );
+  }
+  ```
+
+### Patch Changes
+
+- Database-backed agents now retain Editor changes to static model fallback lists across restarts, and existing LibSQL and PostgreSQL databases upgrade automatically. ([#27287](https://github.com/mastra-ai/mastra/pull/27287))
+
+- Knowledge stores can list and count only the child scopes a reader can see, so `knowledge_list` no longer reads every child scope to show the readable ones. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Added `knowledge_list`, a Knowledge read tool that lists the page tree under a starting point, so an agent can see how a scope or section is organized before searching. Each entry has the ref `knowledge_read` accepts, its name and child count; pass `descriptions: true` to add page descriptions. It goes up to 3 levels deep, takes a `limit` and a `cursor` for wide levels, and says when deeper levels were cut off. A result also stops at the same token cap as a `knowledge_read` body; `more` says how many entries were left out and gives the `cursor` that continues exactly where it stopped, at any depth. Scopes the run can't read are left out. `tools: { read: true }` includes it. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+  ```ts
+  // Agent tool call
+  knowledge_list({ from: 'docs:acme#guides', depth: 2 });
+  // → { from: { ref: 'docs:acme#guides', name: 'Guides' },
+  //     entries: [{ ref: 'docs:acme#guides/observability', name: 'Observability', depth: 1, children: 2 }, …] }
+  ```
+
+  Knowledge storage adapters gained `countChildPages({ parentIds, read })`, which counts the readable child pages under each parent in one query.
+
+- Postgres now stores the Knowledge page link index, so `countPageLinks()` and `listPageLinks()` work on Postgres Knowledge stores. The new `mastra_knowledge_page_links` table is created on startup without a schema change; links for existing pages fill in on `knowledge.reindexLinks()` or the page's next write. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Removing a Knowledge note that's already removed now fails with `KnowledgeNotFoundError` on PostgreSQL and MongoDB, as it already did on LibSQL, MySQL and in memory. Before, these two stores returned the removed note, so a note update that raced another one could leave both copies live. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- `knowledge_search` now finds pages that match any word of the query, not only pages that match every word. Pages with more of the query's words rank higher, so a long question still finds the page that holds most of its words. A page whose name contains the whole query still comes first. When several pages match the same number of words, a word in the name counts more than one in the description, and one in the description more than one in the body. A search uses the first 16 distinct words of the query; repeated words count once. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`7c242c5`](https://github.com/mastra-ai/mastra/commit/7c242c55c565e9c447ab74a6f529612f0030f061), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0
+
+## 1.35.0-alpha.3
+
+### Minor Changes
+
+- Store Knowledge listing pins. The pins table gets a `kind` column (`page` or `list`) and a `depth` column, and a page now holds one pin per kind. Existing pins become page pins; no reset is needed. ([#29263](https://github.com/mastra-ai/mastra/pull/29263))
+
+  **Migration step on first start.** Each store upgrades its pins table once, the first time it starts with this version:
+
+  - LibSQL rebuilds the pins table (SQLite can't drop the old one-pin-per-page constraint in place): it creates the new table, copies every pin across as a page pin, and swaps it in, inside the init transaction.
+  - Postgres and MySQL alter the table in place (add `kind` and `depth`, replace the unique key on the page with one on page and kind).
+  - MongoDB sets `kind: 'page'` on existing pins and replaces the unique index on `pageId` with one on `pageId` and `kind`.
+
+### Patch Changes
+
+- Knowledge stores can list and count only the child scopes a reader can see, so `knowledge_list` no longer reads every child scope to show the readable ones. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Postgres now stores the Knowledge page link index, so `countPageLinks()` and `listPageLinks()` work on Postgres Knowledge stores. The new `mastra_knowledge_page_links` table is created on startup without a schema change; links for existing pages fill in on `knowledge.reindexLinks()` or the page's next write. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Removing a Knowledge note that's already removed now fails with `KnowledgeNotFoundError` on PostgreSQL and MongoDB, as it already did on LibSQL, MySQL and in memory. Before, these two stores returned the removed note, so a note update that raced another one could leave both copies live. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0-alpha.3
+
+## 1.35.0-alpha.2
+
+### Minor Changes
+
+- Added `requestId`, `serviceName`, and `experimentId` filters to advanced trace queries at trace scope and inside `spans.some` / `spans.none`. No migration is needed. ([#29194](https://github.com/mastra-ai/mastra/pull/29194))
+
+### Patch Changes
+
+- Database-backed agents now retain Editor changes to static model fallback lists across restarts, and existing LibSQL and PostgreSQL databases upgrade automatically. ([#27287](https://github.com/mastra-ai/mastra/pull/27287))
+
+- Added `knowledge_list`, a Knowledge read tool that lists the page tree under a starting point, so an agent can see how a scope or section is organized before searching. Each entry has the ref `knowledge_read` accepts, its name and child count; pass `descriptions: true` to add page descriptions. It goes up to 3 levels deep, takes a `limit` and a `cursor` for wide levels, and says when deeper levels were cut off. A result also stops at the same token cap as a `knowledge_read` body; `more` says how many entries were left out and gives the `cursor` that continues exactly where it stopped, at any depth. Scopes the run can't read are left out. `tools: { read: true }` includes it. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+  ```ts
+  // Agent tool call
+  knowledge_list({ from: 'docs:acme#guides', depth: 2 });
+  // → { from: { ref: 'docs:acme#guides', name: 'Guides' },
+  //     entries: [{ ref: 'docs:acme#guides/observability', name: 'Observability', depth: 1, children: 2 }, …] }
+  ```
+
+  Knowledge storage adapters gained `countChildPages({ parentIds, read })`, which counts the readable child pages under each parent in one query.
+
+- `knowledge_search` finds pages that match any word of the query and ranks them by how many of the words they contain, so a long question still surfaces the page that holds most of its words. Among pages with the same number of words, a word in a page's name counts for more than one in its description, and one in its description for more than one in its body, then the newest page wins. A page whose name contains the whole query still comes first. Ranking happens inside each store (in-memory, LibSQL, PostgreSQL, MySQL and MongoDB) before the result limit, and access checks run before ranking as before. Quoted phrases are still searched as plain words. When nothing matches any word, the "no results" hint now says so. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+- Updated dependencies [[`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6)]:
+  - @mastra/core@1.82.0-alpha.2
+
+## 1.35.0-alpha.1
+
+### Minor Changes
+
+- Added support for `timeToFirstToken.*` and `timeToFirstChunk.*` measures in trace and span aggregates. Rows without a recorded value are skipped, never counted as 0. ([#29055](https://github.com/mastra-ai/mastra/pull/29055))
+
+  ```typescript
+  import { planSpanAggregate } from '@mastra/core/storage';
+
+  const observability = await storage.getStore('observability');
+
+  if (observability?.getFeatures().includes('aggregate-time-to-first-measures')) {
+    const { rows } = await observability.aggregateSpans(
+      planSpanAggregate({
+        timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
+        where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_inference' } },
+        measures: ['timeToFirstToken.p50', 'timeToFirstToken.p95'],
+      }),
+    );
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff)]:
+  - @mastra/core@1.82.0-alpha.1
+
+## 1.35.0-alpha.0
+
+### Minor Changes
+
+- Changes to an experimental, upcoming memory feature. ([#28353](https://github.com/mastra-ai/mastra/pull/28353))
+
+  The Knowledge storage domain now stores Knowledge as pages, notes and pins (schema 4) instead of nodes and records. On startup, the tables of the earlier experimental Knowledge node store (shipped in 1.79.0) are dropped, with any rows in them, and the new tables are created; this also happens if an older process recreates them during a rolling deploy. Memory and other tables are never touched. On MongoDB, Knowledge collections found without a schema version (for example, left by an interrupted first start) are adopted as schema 4 rather than refused. Don't run `dangerouslyReset()` from an older version against a database the new version already uses. Knowledge pages need a `@mastra/core` release that includes them; with an older core, the other storage domains keep working.
+
+### Patch Changes
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+
+## 1.34.0
+
+### Minor Changes
+
+- Added support for filtering and grouping span and trace queries by `outcome` and `stopReason`, and returned `outcome`, `stopReason`, and `stopReasonContext` on span and trace results. Trace-level values come from the root span. ([#28884](https://github.com/mastra-ai/mastra/pull/28884))
+
+  With one of these stores configured, query traces whose root span hit a limit:
+
+  ```ts
+  const { traces } = await client.queryTraces({
+    timeRange,
+    where: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+  });
+  ```
+
+- Span aggregates can group by `model` and `provider`, and count distinct models and providers. Like the `model` and `provider` filters, grouping reads only the dedicated `model` and `provider` columns, not span attributes. Spans exported before `@mastra/observability` filled the columns group under `null`; existing spans aren't backfilled. ([#28908](https://github.com/mastra-ai/mastra/pull/28908))
+
+  ```typescript
+  const { rows } = await mastraClient.aggregateSpans({
+    timeRange,
+    where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+    groupBy: ['model'],
+    measures: ['count', 'tokens.total.sum'],
+  });
+  // [{ dimensions: { model: 'claude-sonnet-5-5' }, measures: { count: 12, 'tokens.total.sum': 48210 } }, ...]
+  ```
+
+- Span queries and span aggregates can filter by `model` and `provider`. These filters read only the dedicated `model` and `provider` columns, not span attributes. `@mastra/observability` fills the columns only when a span has both a `model` and a `provider`, and versions before it filled them left them empty, so those spans count as missing: `eq`, `in` and `exists` don't match them, while `ne`, `notIn` and `notExists` do. Results still return `model` and `provider` for them, read from their attributes. ([#28859](https://github.com/mastra-ai/mastra/pull/28859))
+
+  ```typescript
+  const { spans } = await mastraClient.querySpans({
+    timeRange,
+    where: { op: 'eq', left: { path: 'provider' }, right: { literal: 'openai' } },
+  });
+  ```
+
+- PostgreSQL trace, span and thread queries now return and filter by `timeToFirstTokenMs`, and trace and span queries can sort by it, slowest or fastest first. Traces use the root span's value. Traces and spans without a value come last. ([#28699](https://github.com/mastra-ai/mastra/pull/28699))
+
+  ```typescript
+  orderBy: [{ field: 'timeToFirstTokenMs', direction: 'desc' }];
+  ```
+
+- Added storage for the optional background task fields `expiresAt` and `metadata`, plus filtering by `expiresAt`. Existing tables and collections gain the new fields automatically when the store initializes, and existing tasks keep using the global retention settings. Requires the matching `@mastra/core` release. ([#28425](https://github.com/mastra-ai/mastra/pull/28425))
+
+  Convex users must redeploy their Convex schema after upgrading, because the adapter now writes the `expiresAt` and `metadata` fields.
+
+### Patch Changes
+
+- Fixed a late background task write overwriting a newer suspension. A write meant for an earlier suspension of a task is now rejected instead of replacing the later one. Background task updates in this storage adapter now support the `expectedSuspendedAt` condition. ([#28590](https://github.com/mastra-ai/mastra/pull/28590))
+
+- Fixed `PgVector.query()` skipping HNSW indexes when a filter or `minScore` was set ([#28949](https://github.com/mastra-ai/mastra/issues/28949)). On pgvector 0.8.0 or newer, these searches now use the index, which speeds up memory recall. Like unfiltered HNSW searches, the results are approximate and can differ slightly from an exact search. If the index finds fewer than `topK` rows, the query reruns as an exact search. IVFFlat indexes still use the exact search. ([#29058](https://github.com/mastra-ai/mastra/pull/29058))
+
+- Experiments and their results now keep the run times they were given. Result timestamps used to read back as the time the row was written, so durations showed as zero and experiment summaries disagreed with the individual results. ([#28836](https://github.com/mastra-ai/mastra/pull/28836))
+
+- Fixed `PostgresStoreVNext` observability dropping every span, metric, log, score, and feedback event once the day partitions created by `init()` ran out. This affected native partition mode (no TimescaleDB or pg_partman). ([#28680](https://github.com/mastra-ai/mastra/pull/28680))
+
+  A write that lands on a day inside the partition window (yesterday to today + `futureDays`) with no partition now creates that partition and retries. Traces keep flowing without a redeploy or a scheduled `init()`.
+
+  If your app's database role cannot create tables, or does not own the observability tables, call the new `ensurePartitions()` on a schedule, at least every `futureDays` days, with a role that owns those tables. A write that fails for this reason now names the table, the missing day, and this fix.
+
+  ```ts
+  await storage.ensurePartitions();
+  ```
+
+  Fixes https://github.com/mastra-ai/mastra/issues/28644
+
+- Fixed `PgVector.createIndex()` timing out with `metadataIndexes` when the connection pool has a single connection (`pgPoolOptions: { max: 1 }`). ([#29058](https://github.com/mastra-ai/mastra/pull/29058))
+
+- Trace query `spans.some` and `spans.none` filters on `model` and `provider` now also match the dedicated span columns. Each span reads its `model` or `provider` column first and falls back to the span attributes when the column is empty, so existing filters keep matching spans written before the columns were filled. Field value discovery for `model` and `provider` reads the same values. ([#28859](https://github.com/mastra-ai/mastra/pull/28859))
+
+  ```typescript
+  const { traces } = await mastraClient.queryTraces({
+    timeRange,
+    where: { spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5.6' } } } },
+  });
+  ```
+
+- Fixed a startup crash when multiple processes, such as an API and a worker, initialize the same empty Postgres schema at the same time. Startup no longer waits unnecessarily for indexes another process is creating. It also repairs broken indexes left behind by interrupted index builds when the affected table is available. ([#28670](https://github.com/mastra-ai/mastra/pull/28670))
+
+- Updated dependencies [[`1b8b0ac`](https://github.com/mastra-ai/mastra/commit/1b8b0ac10e134e33b292f350f519c1d200288525), [`278ecce`](https://github.com/mastra-ai/mastra/commit/278ecceb2d4f0200fb9b8a8d6e9f6cfcd39ac3ff), [`1477aad`](https://github.com/mastra-ai/mastra/commit/1477aaddf9f0086aebf7c113cb6435353416aad3), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`fcfb773`](https://github.com/mastra-ai/mastra/commit/fcfb773428c7ded1188414ba9faa01df3fa8ccc3), [`4c56da4`](https://github.com/mastra-ai/mastra/commit/4c56da456f13d104adfb5bb69ed0937a8c1ba59a), [`dfc1bc6`](https://github.com/mastra-ai/mastra/commit/dfc1bc68646d4948e28aef9faa2a3d3ccfa96de5), [`7b3f759`](https://github.com/mastra-ai/mastra/commit/7b3f759e080364820f785ed6c6b422db1a4a6366), [`cf4c4b6`](https://github.com/mastra-ai/mastra/commit/cf4c4b6e8b66b13696c9217f62aa42f38a9b873c), [`e57fc08`](https://github.com/mastra-ai/mastra/commit/e57fc08fd839a1683115a247fefb4bb40ff0e451), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`1497362`](https://github.com/mastra-ai/mastra/commit/14973622f25aea84ff2fa7186214ca1262f9f6b3), [`52265cb`](https://github.com/mastra-ai/mastra/commit/52265cba91aecebdcc45b2d95ef7b18b6d738d8b), [`280fb9d`](https://github.com/mastra-ai/mastra/commit/280fb9d75e09a408783230e45dc287ba389952d5), [`253aa55`](https://github.com/mastra-ai/mastra/commit/253aa55d8ef301a2ebae6ae83352d0f89c57d0bd), [`3ee0f7b`](https://github.com/mastra-ai/mastra/commit/3ee0f7bddde204dc87e0e2351a750d54428ef70c), [`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`b79e61a`](https://github.com/mastra-ai/mastra/commit/b79e61a92d0982ba2daa25629576656d211753f8), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`292dd6c`](https://github.com/mastra-ai/mastra/commit/292dd6cd973f5821f943eb01ad081eefcb1285af), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`ba8b955`](https://github.com/mastra-ai/mastra/commit/ba8b955b1ad6022089feec253c111035e9e7b9b6), [`db7306f`](https://github.com/mastra-ai/mastra/commit/db7306fc1710942cc421e651121569ac8be804fe), [`c5527a3`](https://github.com/mastra-ai/mastra/commit/c5527a38db8e91e4f6a3f01d8ad3c5183cc96606), [`5480e7b`](https://github.com/mastra-ai/mastra/commit/5480e7b7caa5d8f8018d22f79e36a9a19697af4b), [`d4cd4cd`](https://github.com/mastra-ai/mastra/commit/d4cd4cde06300a2ceb79b9e1d32c053e33bbfe50), [`744aaab`](https://github.com/mastra-ai/mastra/commit/744aaab6ceebe03829e8851d6ac95dca671edd2b), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`91428b2`](https://github.com/mastra-ai/mastra/commit/91428b2f43199db6901d9dc3fa0a17e50f482507), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`f145b78`](https://github.com/mastra-ai/mastra/commit/f145b788c18849b0ca562d09a61e399fe93d146d), [`fbd5957`](https://github.com/mastra-ai/mastra/commit/fbd5957959481ffc030faa3ab2e3df35e085bc2d), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990), [`1607791`](https://github.com/mastra-ai/mastra/commit/1607791e919cd48dcdb0702dd33ffd7d30c30441), [`d6a6568`](https://github.com/mastra-ai/mastra/commit/d6a65687c4662d20236534ad1b263b40e771e02f), [`f3e1356`](https://github.com/mastra-ai/mastra/commit/f3e1356e60230badc2c3288b60cd2cf6a0587db5), [`1a2ff7f`](https://github.com/mastra-ai/mastra/commit/1a2ff7ff01230ad398e136d395f20d437ff37560), [`39edcee`](https://github.com/mastra-ai/mastra/commit/39edceea4f109db8cc02897e6e8ff5350aa9aec5), [`0443fd5`](https://github.com/mastra-ai/mastra/commit/0443fd5137071cc64b0d2730d57bfb9398527410), [`6a2b35f`](https://github.com/mastra-ai/mastra/commit/6a2b35fd4bc81071b0b6be755a9e3ec0b317db18), [`1966af4`](https://github.com/mastra-ai/mastra/commit/1966af4a622641b9172141a988aff5922f7221b0), [`49080fa`](https://github.com/mastra-ai/mastra/commit/49080fabe7a86b7fac94cdab2596b2d2b320e189), [`14290e1`](https://github.com/mastra-ai/mastra/commit/14290e18078712a02270ac45e50f49806624c4ce), [`b89557e`](https://github.com/mastra-ai/mastra/commit/b89557e0cc0db19922e391eff817505e36684ff9), [`69c79cf`](https://github.com/mastra-ai/mastra/commit/69c79cf07b6fc1ffe6f2f547729f1cb05bd54eca), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`2b05803`](https://github.com/mastra-ai/mastra/commit/2b05803437af081cc4fdea2d81e3980b5f52d897), [`8b781d0`](https://github.com/mastra-ai/mastra/commit/8b781d0308eec018e84b59809cc24b2953300300), [`299d4e3`](https://github.com/mastra-ai/mastra/commit/299d4e3d2887b1525abff64bad61a67425ae6a0d), [`c0918c0`](https://github.com/mastra-ai/mastra/commit/c0918c01b337947eeb54d5d1b3ab9ed0719bb4b7), [`690bd1b`](https://github.com/mastra-ai/mastra/commit/690bd1baee178d56a75994549c318e0089debdee), [`930f604`](https://github.com/mastra-ai/mastra/commit/930f604c30de2eb7fc94437e4208d0a2ec8dee58), [`f5136e5`](https://github.com/mastra-ai/mastra/commit/f5136e56c468be0b9ee623983f174366edb7573e), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`6deb7c0`](https://github.com/mastra-ai/mastra/commit/6deb7c0a1e613d19a979e255a906c07b11f7338d), [`e77a7d9`](https://github.com/mastra-ai/mastra/commit/e77a7d910b7943368b4df6688e7645fffb6a8891), [`d102756`](https://github.com/mastra-ai/mastra/commit/d102756c708797722d95ee73ab11ba614f2f9ec8), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`e9fc83e`](https://github.com/mastra-ai/mastra/commit/e9fc83e5d4427f49af147aec86eb3f7fcb6fb8ee), [`7d3dd2b`](https://github.com/mastra-ai/mastra/commit/7d3dd2b07b47d8cc5c52ccb97054e85ebed1619a), [`d9e26f4`](https://github.com/mastra-ai/mastra/commit/d9e26f485d2658a9dc84c0f20804e9a89a57d3a0)]:
+  - @mastra/core@1.81.0
+
+## 1.34.0-alpha.1
+
+### Minor Changes
+
+- Added support for filtering and grouping span and trace queries by `outcome` and `stopReason`, and returned `outcome`, `stopReason`, and `stopReasonContext` on span and trace results. Trace-level values come from the root span. ([#28884](https://github.com/mastra-ai/mastra/pull/28884))
+
+  With one of these stores configured, query traces whose root span hit a limit:
+
+  ```ts
+  const { traces } = await client.queryTraces({
+    timeRange,
+    where: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+  });
+  ```
+
+- Span aggregates can group by `model` and `provider`, and count distinct models and providers. Like the `model` and `provider` filters, grouping reads only the dedicated `model` and `provider` columns, not span attributes. Spans exported before `@mastra/observability` filled the columns group under `null`; existing spans aren't backfilled. ([#28908](https://github.com/mastra-ai/mastra/pull/28908))
+
+  ```typescript
+  const { rows } = await mastraClient.aggregateSpans({
+    timeRange,
+    where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+    groupBy: ['model'],
+    measures: ['count', 'tokens.total.sum'],
+  });
+  // [{ dimensions: { model: 'claude-sonnet-5-5' }, measures: { count: 12, 'tokens.total.sum': 48210 } }, ...]
+  ```
+
+- Span queries and span aggregates can filter by `model` and `provider`. These filters read only the dedicated `model` and `provider` columns, not span attributes. `@mastra/observability` fills the columns only when a span has both a `model` and a `provider`, and versions before it filled them left them empty, so those spans count as missing: `eq`, `in` and `exists` don't match them, while `ne`, `notIn` and `notExists` do. Results still return `model` and `provider` for them, read from their attributes. ([#28859](https://github.com/mastra-ai/mastra/pull/28859))
+
+  ```typescript
+  const { spans } = await mastraClient.querySpans({
+    timeRange,
+    where: { op: 'eq', left: { path: 'provider' }, right: { literal: 'openai' } },
+  });
+  ```
+
+- Added storage for the optional background task fields `expiresAt` and `metadata`, plus filtering by `expiresAt`. Existing tables and collections gain the new fields automatically when the store initializes, and existing tasks keep using the global retention settings. Requires the matching `@mastra/core` release. ([#28425](https://github.com/mastra-ai/mastra/pull/28425))
+
+  Convex users must redeploy their Convex schema after upgrading, because the adapter now writes the `expiresAt` and `metadata` fields.
+
+### Patch Changes
+
+- Fixed a late background task write overwriting a newer suspension. A write meant for an earlier suspension of a task is now rejected instead of replacing the later one. Background task updates in this storage adapter now support the `expectedSuspendedAt` condition. ([#28590](https://github.com/mastra-ai/mastra/pull/28590))
+
+- Experiments and their results now keep the run times they were given. Result timestamps used to read back as the time the row was written, so durations showed as zero and experiment summaries disagreed with the individual results. ([#28836](https://github.com/mastra-ai/mastra/pull/28836))
+
+- Trace query `spans.some` and `spans.none` filters on `model` and `provider` now also match the dedicated span columns. Each span reads its `model` or `provider` column first and falls back to the span attributes when the column is empty, so existing filters keep matching spans written before the columns were filled. Field value discovery for `model` and `provider` reads the same values. ([#28859](https://github.com/mastra-ai/mastra/pull/28859))
+
+  ```typescript
+  const { traces } = await mastraClient.queryTraces({
+    timeRange,
+    where: { spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5.6' } } } },
+  });
+  ```
+
+- Updated dependencies [[`278ecce`](https://github.com/mastra-ai/mastra/commit/278ecceb2d4f0200fb9b8a8d6e9f6cfcd39ac3ff), [`fcfb773`](https://github.com/mastra-ai/mastra/commit/fcfb773428c7ded1188414ba9faa01df3fa8ccc3), [`4c56da4`](https://github.com/mastra-ai/mastra/commit/4c56da456f13d104adfb5bb69ed0937a8c1ba59a), [`7b3f759`](https://github.com/mastra-ai/mastra/commit/7b3f759e080364820f785ed6c6b422db1a4a6366), [`cf4c4b6`](https://github.com/mastra-ai/mastra/commit/cf4c4b6e8b66b13696c9217f62aa42f38a9b873c), [`e57fc08`](https://github.com/mastra-ai/mastra/commit/e57fc08fd839a1683115a247fefb4bb40ff0e451), [`52265cb`](https://github.com/mastra-ai/mastra/commit/52265cba91aecebdcc45b2d95ef7b18b6d738d8b), [`3ee0f7b`](https://github.com/mastra-ai/mastra/commit/3ee0f7bddde204dc87e0e2351a750d54428ef70c), [`b79e61a`](https://github.com/mastra-ai/mastra/commit/b79e61a92d0982ba2daa25629576656d211753f8), [`292dd6c`](https://github.com/mastra-ai/mastra/commit/292dd6cd973f5821f943eb01ad081eefcb1285af), [`ba8b955`](https://github.com/mastra-ai/mastra/commit/ba8b955b1ad6022089feec253c111035e9e7b9b6), [`db7306f`](https://github.com/mastra-ai/mastra/commit/db7306fc1710942cc421e651121569ac8be804fe), [`5480e7b`](https://github.com/mastra-ai/mastra/commit/5480e7b7caa5d8f8018d22f79e36a9a19697af4b), [`d4cd4cd`](https://github.com/mastra-ai/mastra/commit/d4cd4cde06300a2ceb79b9e1d32c053e33bbfe50), [`744aaab`](https://github.com/mastra-ai/mastra/commit/744aaab6ceebe03829e8851d6ac95dca671edd2b), [`91428b2`](https://github.com/mastra-ai/mastra/commit/91428b2f43199db6901d9dc3fa0a17e50f482507), [`fbd5957`](https://github.com/mastra-ai/mastra/commit/fbd5957959481ffc030faa3ab2e3df35e085bc2d), [`39edcee`](https://github.com/mastra-ai/mastra/commit/39edceea4f109db8cc02897e6e8ff5350aa9aec5), [`0443fd5`](https://github.com/mastra-ai/mastra/commit/0443fd5137071cc64b0d2730d57bfb9398527410), [`6a2b35f`](https://github.com/mastra-ai/mastra/commit/6a2b35fd4bc81071b0b6be755a9e3ec0b317db18), [`1966af4`](https://github.com/mastra-ai/mastra/commit/1966af4a622641b9172141a988aff5922f7221b0), [`49080fa`](https://github.com/mastra-ai/mastra/commit/49080fabe7a86b7fac94cdab2596b2d2b320e189), [`14290e1`](https://github.com/mastra-ai/mastra/commit/14290e18078712a02270ac45e50f49806624c4ce), [`b89557e`](https://github.com/mastra-ai/mastra/commit/b89557e0cc0db19922e391eff817505e36684ff9), [`69c79cf`](https://github.com/mastra-ai/mastra/commit/69c79cf07b6fc1ffe6f2f547729f1cb05bd54eca), [`2b05803`](https://github.com/mastra-ai/mastra/commit/2b05803437af081cc4fdea2d81e3980b5f52d897), [`8b781d0`](https://github.com/mastra-ai/mastra/commit/8b781d0308eec018e84b59809cc24b2953300300), [`c0918c0`](https://github.com/mastra-ai/mastra/commit/c0918c01b337947eeb54d5d1b3ab9ed0719bb4b7), [`690bd1b`](https://github.com/mastra-ai/mastra/commit/690bd1baee178d56a75994549c318e0089debdee), [`930f604`](https://github.com/mastra-ai/mastra/commit/930f604c30de2eb7fc94437e4208d0a2ec8dee58), [`e77a7d9`](https://github.com/mastra-ai/mastra/commit/e77a7d910b7943368b4df6688e7645fffb6a8891), [`d102756`](https://github.com/mastra-ai/mastra/commit/d102756c708797722d95ee73ab11ba614f2f9ec8), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`e9fc83e`](https://github.com/mastra-ai/mastra/commit/e9fc83e5d4427f49af147aec86eb3f7fcb6fb8ee), [`7d3dd2b`](https://github.com/mastra-ai/mastra/commit/7d3dd2b07b47d8cc5c52ccb97054e85ebed1619a), [`d9e26f4`](https://github.com/mastra-ai/mastra/commit/d9e26f485d2658a9dc84c0f20804e9a89a57d3a0)]:
+  - @mastra/core@1.81.0-alpha.2
+
 ## 1.34.0-alpha.0
 
 ### Minor Changes

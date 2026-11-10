@@ -11,7 +11,7 @@ Each card now has a single `description` instead. Set it with `description` on `
 Breaking changes for API and agent-tool callers:
 
 - `factory_create_work_item` takes `description` instead of `brief`. `factory_update_work_item` also accepts `description`, and `factory_inspect_work_item` returns it in place of recent comments.
-- The `/web/factory/work-items/:id/comments`, `/web/factory/projects/:id/mention-roster` and `/web/factory/projects/:id/feed-events` routes are removed.
+- The `/web/factory/work-items/:id/comments` and `/web/factory/projects/:id/mention-roster` routes are removed. `/web/factory/projects/:id/feed-events` stays and still refreshes open boards, but its frames no longer carry a `workItemId`.
 - The `mention` and `activity` attention kinds are removed.
 - Work items no longer include `commentCount` or `feedActivityAt`.
 - Integrations can no longer declare a `feedPublisher`, and `IntegrationContext` no longer has `feed`.

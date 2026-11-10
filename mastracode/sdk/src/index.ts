@@ -19,7 +19,7 @@ import type {
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import { classifyProviderError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -63,7 +63,7 @@ import {
   withCredentialTenantPreparation,
 } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
+import { getDynamicMemory } from './agents/memory.js';
 import {
   canUseProvider,
   createMastraCodeGateway,
@@ -98,6 +98,7 @@ import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/ind
 import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
+import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
@@ -118,6 +119,7 @@ import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.j
 import { setAuthStorage } from './providers/claude-max.js';
 import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
+import { createGoogleVertexGateway } from './providers/google-vertex-gateway.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
@@ -340,6 +342,13 @@ export interface MastraCodeConfig {
    */
   disableBuiltinTools?: BuiltinToolId[];
   /**
+   * Workspace-relative directory agents write plan files into, overriding the
+   * per-session default (`.mastracode/plans`, or `.artifacts/plans` for Factory
+   * project sessions). Prompts and the plan-mode write guard of the default
+   * workspace use it; a custom `workspace` must apply its own guard.
+   */
+  plansDir?: string;
+  /**
    * Custom storage config instead of auto-detected default, or a pre-built
    * store instance. An instance is used as-is: no connection test and no
    * LibSQL fallback — if the injected store fails, that's a hard error.
@@ -351,8 +360,21 @@ export interface MastraCodeConfig {
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
-  /** Host-owned Knowledge instance and the key used to register it on the mounted Mastra runtime. */
-  knowledge?: { key: string; instance: Knowledge };
+  /**
+   * Knowledge for the code agent, attached like an Agent's `knowledge`. Unset, it follows the
+   * `signals.experimentalKnowledge` global setting (off; on means `true`). `false` keeps it off
+   * whatever the setting. `true` uses a Knowledge on Mastra Code's own storage with the read, write and pin tools, writing to a
+   * shared `org:local` scope (the TUI's `/settings` Knowledge toggle). A `Knowledge` instance is
+   * attached as configured and registered on the mounted Mastra under its `id`; pass
+   * `{ key, instance }` to register it under another key.
+   */
+  knowledge?: false | true | Knowledge | { key: string; instance: Knowledge };
+  /**
+   * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `'org:acme'`. What a
+   * run may do on each comes from the Knowledge instance's scope declarations. Factory sessions
+   * always add `org:` and `project:` scopes.
+   */
+  scopes?: string[];
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -608,7 +630,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
   if (storedGatewayKey) {
-    process.env['MASTRA_GATEWAY_API_KEY'] ??= storedGatewayKey;
+    // Through AuthStorage, so removeStoredApiKey() can undo the export later.
+    // Like before, a variable already set in the environment wins.
+    authStorage.loadStoredApiKeysIntoEnv({ [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY' });
   }
 
   if (storedGatewayUrl) {
@@ -658,6 +682,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     settingsPath: config?.settingsPath,
   });
   const amazonBedrockGateway = createAmazonBedrockGateway();
+  const googleVertexGateway = createGoogleVertexGateway();
   const githubCopilotGateway = createGitHubCopilotGateway();
 
   // Project detection
@@ -846,27 +871,36 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const configuredKnowledgeKey = config?.knowledge?.key.trim();
-  if (config?.knowledge && !configuredKnowledgeKey) {
+  const knowledgeOption = config?.knowledge ?? (globalSettings.signals?.experimentalKnowledge ? true : undefined);
+  const knowledgeEntry =
+    !knowledgeOption || knowledgeOption === true || knowledgeOption instanceof Knowledge ? undefined : knowledgeOption;
+  const entryKey = knowledgeEntry?.key.trim();
+  if (knowledgeEntry && !entryKey) {
     throw new Error('knowledge.key must be a non-empty string.');
   }
   const knowledge =
-    config?.knowledge?.instance ??
-    (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
-      ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
-      : undefined);
-  const knowledgeKey = configuredKnowledgeKey ?? 'default';
+    knowledgeOption === true
+      ? new Knowledge({
+          id: 'mastracode',
+          name: 'MastraCode Knowledge',
+          storage,
+          scopes: knowledgeMemoryScopes(),
+          tools: true,
+          pinnedContext: true,
+        })
+      : knowledgeOption instanceof Knowledge
+        ? knowledgeOption
+        : knowledgeEntry?.instance;
+  const knowledgeKey = entryKey ?? knowledge?.id ?? 'default';
+  const knowledgeHostScopes: string[] = [
+    ...(config?.scopes ?? []),
+    ...(knowledgeOption === true && !(config?.scopes ?? []).length ? [`org:${LOCAL_KNOWLEDGE_ORG_ID}`] : []),
+  ];
   const dynamicMemory =
     config?.memory === undefined
-      ? getDynamicMemory(
-          storage,
-          vector,
-          config?.settingsPath,
-          {
-            disableSettingsOmSeed: config?.disableSettingsOmSeed,
-          },
-          knowledge,
-        )
+      ? getDynamicMemory(storage, vector, config?.settingsPath, {
+          disableSettingsOmSeed: config?.disableSettingsOmSeed,
+        })
       : undefined;
   const memory =
     config?.memory === false
@@ -875,10 +909,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Keep settled() so shutdown still drains background memory work.
         (dynamicMemory &&
           Object.assign(withCredentialTenantPreparation(dynamicMemory), { settled: dynamicMemory.settled })));
-  // Only the default memory wiring registers the subconscious tools; a
-  // caller-supplied memory is opaque here, so its prompt must not advertise them.
-  const hasSubconscious =
-    config?.memory === undefined ? (state: MastraCodeState | undefined) => hasSubconsciousTools(vector, state) : false;
 
   // MCP
   const mcpManager = config?.disableMcp
@@ -1303,6 +1333,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   };
 
+  const resolveTenantSessionModel = withCredentialTenantPreparation(async (ctx: { requestContext: RequestContext }) => {
+    // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
+    const controller = ctx.requestContext.get('controller') as
+      | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+      | undefined;
+    const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+    return getDynamicModel(ctx, config?.settingsPath, {
+      modeless,
+      defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
+    });
+  });
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -1311,6 +1352,22 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // workspace. An explicit `undefined` is required: the factory only builds a
     // default when the `workspace` key is absent.
     workspace: undefined,
+    ...(knowledge
+      ? {
+          knowledge,
+          // Factory sessions add their org + project tags to the host's scopes, on top of the run's
+          // incoming scopes (identity and per-message scopes). An unresolved Factory session keeps
+          // only identity tags, so its writes stay private to the run, matching the inspector,
+          // which refuses to read for it.
+          scopes: ({ scopes, requestContext }) => {
+            const controller = requestContext.get('controller') as
+              | AgentControllerRequestContext<MastraCodeState>
+              | undefined;
+            const session = resolveKnowledgeSessionScopes(controller?.state, knowledgeHostScopes);
+            return [...scopes, ...(session.resolved ? session.scopes : knowledgeUnresolvedScopes(knowledgeHostScopes))];
+          },
+        }
+      : {}),
     instructions: async ({ requestContext }) => {
       const configured = config?.hostInstructions;
       const hostInstructions = typeof configured === 'function' ? await configured({ requestContext }) : configured;
@@ -1318,24 +1375,22 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         requestContext,
         hostInstructions,
         coAuthor: config?.coAuthor,
-        hasSubconscious,
         hasSubagents: subagents.length > 0,
         disabledBuiltinTools: config?.disableBuiltinTools,
+        plansDir: config?.plansDir,
+        disabledTools: config?.disabledTools,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: withCredentialTenantPreparation(async ctx => {
-      // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
-      const controller = ctx.requestContext.get('controller') as
-        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
-        | undefined;
-      const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
-      return getDynamicModel(ctx, config?.settingsPath, {
-        modeless,
-        defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
-      });
-    }),
+    // Without a controller session there is no model selection, so getDynamicModel
+    // throws "No model available" before reading any credential. Skip the tenant
+    // check (and its error log) and the host thinking lookup on that path, e.g.
+    // a host reading the agent's model at startup with an empty request context.
+    model: async ctx =>
+      ctx.requestContext.get('controller')
+        ? resolveTenantSessionModel(ctx)
+        : getDynamicModel(ctx, config?.settingsPath, { modeless }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1712,6 +1767,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  // Used when the host passes no `workspace`. Its plan-mode write guard must
+  // allow the same plans directory the prompts tell the agent to write to.
+  const defaultWorkspace = (args: { requestContext: RequestContext; mastra?: Mastra }) =>
+    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir });
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -1722,6 +1781,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           backgroundTasks: {
             enabled: true,
             recoverStaleTasksOnStart: false,
+            // The completion callbacks signal the task's session; core's own signal would run outside it.
+            notifyAgentOnFinish: false,
             ...createBackgroundCompletionCallbacks(() => sessionRouter, backgroundCompletionEvents),
           },
         }
@@ -1748,12 +1809,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       routesToOtherGateway(
         modelId,
         Object.values(controller.getMastra()?.listGateways() ?? {}),
-        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, githubCopilotGateway.id, 'models.dev']),
+        new Set([
+          mastraCodeGateway.id,
+          amazonBedrockGateway.id,
+          googleVertexGateway.id,
+          githubCopilotGateway.id,
+          'models.dev',
+        ]),
       )
         ? modelId
         : resolveModel(modelId, { requestContext }),
-    gateways: [amazonBedrockGateway, githubCopilotGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
+    gateways: [amazonBedrockGateway, googleVertexGateway, githubCopilotGateway, mastraCodeGateway],
+    workspace: config?.workspace ?? defaultWorkspace,
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
@@ -1872,12 +1939,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     storageMaintenance,
     createKnowledgeInspector: (session: Session<MastraCodeState>, knowledgeKey?: string) =>
       createScopedKnowledgeInspector({
-        storage,
         knowledge: knowledgeKey ?? knowledge,
         mastra: controller.getMastra(),
         session,
+        hostScopes: knowledgeHostScopes,
       }),
     observability,
+    // Without local tracing or Mastra Code cloud credentials every exporter above
+    // is disabled, so this Observability records spans but sends them nowhere.
+    observabilityExports: Boolean(observabilityDomain || cloudObservabilityConfig),
     memory,
     knowledge,
     knowledgeKey,
@@ -2096,12 +2166,12 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   let knowledgeInspectorUnavailableReason: string | undefined;
   if (!base.knowledge) {
     knowledgeInspectorUnavailableReason =
-      'Knowledge is off. Set MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1 or pass a `knowledge` instance to createMastraCode.';
+      'Knowledge is off. Turn it on in /settings, or pass `knowledge` to createMastraCode.';
   } else {
     try {
       knowledgeInspector = await base.createKnowledgeInspector(session);
       if (!knowledgeInspector) {
-        knowledgeInspectorUnavailableReason = 'Knowledge inspection requires a configured knowledge storage domain.';
+        knowledgeInspectorUnavailableReason = 'Knowledge inspection requires a configured Knowledge runtime.';
       }
     } catch (error) {
       knowledgeInspectorUnavailableReason = `Knowledge is unavailable: ${error instanceof Error ? error.message : String(error)}`;
@@ -2232,12 +2302,16 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
-    observability: base.observability,
+    // Only hand over an Observability that exports somewhere. A disabled one would
+    // stop the host from wiring its own, e.g. the platform deploy's exporter.
+    ...(base.observabilityExports ? { observability: base.observability } : {}),
     ...(backgroundToolsEnabled
       ? {
           backgroundTasks: {
             enabled: true,
             recoverStaleTasksOnStart: false,
+            // The completion callbacks signal the task's session; core's own signal would run outside it.
+            notifyAgentOnFinish: false,
             ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
           },
         }

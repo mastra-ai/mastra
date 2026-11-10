@@ -113,3 +113,11 @@ export type GetServiceNamesResponse = Response<'GET /observability/discovery/ser
 export type GetEnvironmentsResponse = Response<'GET /observability/discovery/environments'>;
 export type GetTagsArgs = Query<'GET /observability/discovery/tags'>;
 export type GetTagsResponse = Response<'GET /observability/discovery/tags'>;
+
+/** Full replacement supported by Platform; OSS server does not implement this PUT. */
+export type ReplaceFeedbackBody = {
+  feedback: Omit<CreateFeedbackBody['feedback'], 'feedbackId' | 'timestamp'> & {
+    feedbackId: string;
+    timestamp: string;
+  };
+};

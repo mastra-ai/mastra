@@ -1,0 +1,56 @@
+{
+  "name": "mongodb-bedrock-agent",
+  "version": "1.0.0",
+  "description": "Documentation assistant with RAG and memory on MongoDB Atlas, models on Amazon Bedrock, deployable to Bedrock AgentCore Runtime",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "postinstall": "patch-package",
+    "ingest": "tsx scripts/ingest.ts",
+    "dev": "mastra dev",
+    "build": "tsc",
+    "start": "node --require @opentelemetry/auto-instrumentations-node/register dist/agent.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-sdk/amazon-bedrock": "3.0.105",
+    "@aws-sdk/client-secrets-manager": "^3.1161.0",
+    "@aws-sdk/credential-providers": "^3.700.0",
+    "@mastra/core": "^1.50.1",
+    "@mastra/editor": "^0.13.6",
+    "@mastra/loggers": "^1.2.0",
+    "@mastra/memory": "^1.22.2",
+    "@mastra/mongodb": "^1.12.1",
+    "@mastra/observability": "^1.16.0",
+    "@mastra/rag": "^2.4.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
+    "ai": "^5.0.0",
+    "patch-package": "^8.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "mastra": "^1.15.0",
+    "mongodb": "^7.8.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "undici": "^7.30.1",
+    "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "@mastra/core": {
+      "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.28",
+      "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.33",
+      "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.1"
+    },
+    "compression": "1.8.2",
+    "image-size": "2.0.4",
+    "@modelcontextprotocol/sdk": {
+      "@hono/node-server": "2.1.6"
+    },
+    "@hono/node-server": "2.1.6",
+    "chat": "4.44.0"
+  }
+}

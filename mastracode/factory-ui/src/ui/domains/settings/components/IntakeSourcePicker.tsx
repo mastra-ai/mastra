@@ -1,5 +1,5 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Drawer,
   DrawerBody,
@@ -13,21 +13,25 @@ import {
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, RotateCcw, Trash2 } from 'lucide-react';
-import { Fragment, useRef, useState } from 'react';
+import { Check, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { Fragment, useId, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
+import { useSidePanelDrawer } from '../../../lib/hooks/useSidePanelDrawer';
 import { SettingsAddRow } from './common/SettingsAddRow';
 import { settingsRowLayout } from './common/settings-row-layout';
 
 export interface SourcePickerItem {
   id: string;
   label: string;
+  detail?: string;
   hint?: string;
-  disabled?: boolean;
+}
+
+export function sourcePickerItemText(item: SourcePickerItem): string {
+  return item.detail ? `${item.detail}: ${item.label}` : item.label;
 }
 
 export interface SourcePickerGroup {
@@ -42,16 +46,90 @@ export interface SourcePickerProps {
   itemIcon?: ReactNode;
   groups: SourcePickerGroup[];
   selectedIds: string[] | null;
-  pending: boolean;
+  /** A save is in flight: shown as status, never blocks a control. */
+  saving: boolean;
   loading?: boolean;
   error?: string;
   onRetry?: () => void;
-  onToggleItem: (id: string) => Promise<void>;
+  onToggleItem: (id: string) => void;
   itemDescription?: (id: string) => string | undefined;
+  /** Label for a saved source that is no longer listed; defaults to its ID. */
+  fallbackLabel?: (id: string) => string;
   itemActions?: (item: SourcePickerItem) => ReactNode;
   /** Full-width content under a selected item's row, for routing that doesn't fit beside it. */
   itemDetails?: (item: SourcePickerItem) => ReactNode;
-  addControl?: (item: SourcePickerItem, focusSearch: () => void) => ReactNode;
+  /** Replaces Add on available items in the drawer, and sits beside Remove on added ones. */
+  pickControl?: (item: SourcePickerItem, focusSearch: () => void) => ReactNode;
+}
+
+interface SelectedSource {
+  item: SourcePickerItem;
+  groupLabel?: string;
+}
+
+function resolveSelected(
+  groups: SourcePickerGroup[],
+  ids: string[],
+  fallbackLabel: SourcePickerProps['fallbackLabel'],
+): SelectedSource[] {
+  return ids.map(id => {
+    const group = groups.find(candidate => candidate.items.some(item => item.id === id));
+    const item = group?.items.find(candidate => candidate.id === id) ?? { id, label: fallbackLabel?.(id) ?? id };
+    return { item, groupLabel: groups.length > 1 ? group?.label : undefined };
+  });
+}
+
+function SourceItemSummary({
+  item,
+  icon,
+  context,
+  description,
+}: {
+  item: SourcePickerItem;
+  icon?: ReactNode;
+  context: (string | undefined)[];
+  description?: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
+      {icon && (
+        <span className="shrink-0" aria-hidden>
+          {icon}
+        </span>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Txt as="span" variant="caption" className="wrap-anywhere">
+          <Metadata>
+            {item.detail && <Metadata.Item>{item.detail}</Metadata.Item>}
+            <Metadata.Item>{item.label}</Metadata.Item>
+          </Metadata>
+        </Txt>
+        {context.some(Boolean) && (
+          <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
+            <Metadata>
+              {context.map((entry, position) => entry && <Metadata.Item key={position}>{entry}</Metadata.Item>)}
+            </Metadata>
+          </Txt>
+        )}
+        {description && (
+          <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
+            {description}
+          </Txt>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SavingStatus({ label }: { label: string }) {
+  return (
+    <span className="flex items-center gap-2">
+      <Spinner size="sm" aria-label={`Saving ${label} selection`} />
+      <Txt as="span" variant="caption" tone="muted" aria-hidden>
+        Saving…
+      </Txt>
+    </span>
+  );
 }
 
 export function SourcePicker(props: SourcePickerProps) {
@@ -61,74 +139,45 @@ export function SourcePicker(props: SourcePickerProps) {
     itemIcon,
     groups,
     selectedIds,
-    pending,
+    saving,
     loading,
     error,
     onRetry,
     onToggleItem,
     itemDescription,
+    fallbackLabel,
     itemActions,
     itemDetails,
   } = props;
-  const isMobile = useIsMobile();
+  const sidePanel = useSidePanelDrawer();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
-  const selected = selectedIds ?? [];
-  const savingIndicator = pending && <Spinner size="sm" aria-label={`Saving ${label} selection`} />;
+  const selected = resolveSelected(groups, selectedIds ?? [], fallbackLabel);
 
   return (
-    <Drawer
-      side={isMobile ? 'bottom' : 'right'}
-      variant={isMobile ? 'default' : 'floating'}
-      overlay="visible"
-      open={open}
-      onOpenChange={nextOpen => {
-        if (!pending) setOpen(nextOpen);
-      }}
-    >
+    <Drawer {...sidePanel} open={open} onOpenChange={setOpen}>
       <div role="group" aria-label={label} className="flex w-full min-w-0 flex-col">
         {selected.length > 0 && (
           <ul className="divide-border border-border divide-y border-b">
-            {selected.map(id => {
-              const group = groups.find(candidate => candidate.items.some(item => item.id === id));
-              const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? { id, label: id };
-              const context = [groups.length > 1 ? group?.label : undefined, item.hint].filter(Boolean).join(' · ');
-              const description = itemDescription?.(id);
+            {selected.map(({ item, groupLabel }) => {
               const details = itemDetails?.(item);
               return (
-                <li key={id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
-                  <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
-                    {itemIcon && (
-                      <span className="shrink-0" aria-hidden>
-                        {itemIcon}
-                      </span>
-                    )}
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <Txt as="span" variant="caption" className="wrap-anywhere">
-                        {item.label}
-                      </Txt>
-                      {context && (
-                        <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
-                          {context}
-                        </Txt>
-                      )}
-                      {description && (
-                        <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
-                          {description}
-                        </Txt>
-                      )}
-                    </div>
-                  </div>
+                <li key={item.id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
+                  <SourceItemSummary
+                    item={item}
+                    icon={itemIcon}
+                    context={[groupLabel, item.hint]}
+                    description={itemDescription?.(item.id)}
+                  />
                   <div className="ml-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2">
                     {itemActions?.(item)}
                     <Button
                       size="sm"
                       variant="ghost"
                       icon={<Trash2 />}
-                      aria-label={`Remove ${item.label}`}
-                      disabled={pending || item.disabled}
-                      onClick={async () => {
-                        await onToggleItem(id);
+                      aria-label={`Remove ${sourcePickerItemText(item)}`}
+                      onClick={() => {
+                        onToggleItem(item.id);
                         requestAnimationFrame(() => trigger.current?.focus());
                       }}
                     >
@@ -143,12 +192,16 @@ export function SourcePicker(props: SourcePickerProps) {
         )}
         <DrawerTrigger
           render={
-            <SettingsAddRow ref={trigger} aria-label={`${addLabel} to ${label}`} disabled={pending}>
+            <SettingsAddRow ref={trigger} aria-label={`${addLabel} to ${label}`}>
               {addLabel}
             </SettingsAddRow>
           }
         />
-        {!open && savingIndicator}
+        {!open && saving && (
+          <div className="px-4 py-3">
+            <SavingStatus label={label} />
+          </div>
+        )}
         {!open && error && (
           <div className="flex items-center gap-2 px-4 py-3">
             <Txt as="p" variant="caption" tone="muted" role="alert" className="min-w-0 flex-1 wrap-anywhere">
@@ -169,7 +222,7 @@ export function SourcePicker(props: SourcePickerProps) {
           </div>
         )}
       </div>
-      {open && <SourcePickerDrawer {...props} trigger={trigger} savingIndicator={savingIndicator} />}
+      {open && <SourcePickerDrawer {...props} trigger={trigger} />}
     </Drawer>
   );
 }
@@ -179,44 +232,39 @@ function SourcePickerDrawer({
   addLabel,
   groups,
   selectedIds,
-  pending,
+  saving,
   loading,
   error,
   onRetry,
   onToggleItem,
-  addControl,
+  itemDescription,
+  fallbackLabel,
+  pickControl,
   trigger,
-  savingIndicator,
-}: SourcePickerProps & {
-  trigger: RefObject<HTMLButtonElement | null>;
-  savingIndicator: ReactNode;
-}) {
+}: SourcePickerProps & { trigger: RefObject<HTMLButtonElement | null> }) {
   const [query, setQuery] = useState('');
   const searchInput = useRef<HTMLInputElement>(null);
+  const addedHeading = useId();
   const normalizedQuery = query.trim().toLowerCase();
+  const matches = (item: SourcePickerItem) => sourcePickerItemText(item).toLowerCase().includes(normalizedQuery);
   const selected = new Set(selectedIds);
-  const matchingGroups = groups
-    .map(group => ({
-      ...group,
-      items: group.items.filter(item => !selected.has(item.id) && item.label.toLowerCase().includes(normalizedQuery)),
-    }))
+  const added = resolveSelected(groups, selectedIds ?? [], fallbackLabel).filter(({ item }) => matches(item));
+  const available = groups
+    .map(group => ({ ...group, items: group.items.filter(item => !selected.has(item.id) && matches(item)) }))
     .filter(group => group.items.length > 0);
+  const emptyText = normalizedQuery ? (added.length === 0 ? 'No matches' : undefined) : 'No more sources available';
+  // The search box sits outside the scrolling list, so focusing it keeps the list where it was.
+  const focusSearch = () => searchInput.current?.focus();
 
   return (
-    <DrawerContent
-      initialFocus={searchInput}
-      finalFocus={trigger}
-      showCloseButton={!pending}
-      aria-busy={pending || undefined}
-      className="overflow-hidden"
-    >
+    <DrawerContent initialFocus={searchInput} finalFocus={trigger} className="overflow-hidden">
       <DrawerHeader className="shrink-0">
         <DrawerTitle>{addLabel}</DrawerTitle>
         <div className="mt-3">
           <SearchInput
             ref={searchInput}
             label={`Search ${label}`}
-            placeholder="Search…"
+            placeholder="Search"
             value={query}
             onValueChange={setQuery}
             className="w-full"
@@ -235,50 +283,94 @@ function SourcePickerDrawer({
         ) : loading ? (
           <SettingsRow label={`Loading ${label}…`} />
         ) : (
-          <div role="group" aria-label={label}>
-            {matchingGroups.length === 0 ? (
-              <Txt as="p" variant="caption" tone="muted">
-                {normalizedQuery ? 'No matches' : 'No more sources available'}
-              </Txt>
-            ) : (
-              matchingGroups.map(group => (
-                <Fragment key={group.id}>
-                  {group.label && (
-                    <SettingsRow
-                      label={
-                        <Txt as="span" variant="caption" tone="muted">
-                          {group.label}
-                        </Txt>
-                      }
-                    />
-                  )}
-                  {group.items.map(item => (
-                    <SettingsRow key={`${group.id}:${item.id}`} label={item.label} description={item.hint}>
-                      {addControl ? (
-                        addControl(item, () => searchInput.current?.focus())
-                      ) : (
-                        <Checkbox
-                          checked={false}
-                          aria-label={item.label}
-                          disabled={pending || item.disabled}
-                          onCheckedChange={() => {
+          <>
+            {added.length > 0 && (
+              <section aria-labelledby={addedHeading}>
+                <SectionHeading id={addedHeading}>Added</SectionHeading>
+                <ul>
+                  {added.map(({ item, groupLabel }) => (
+                    <li key={item.id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
+                      <SourceItemSummary
+                        item={item}
+                        context={[groupLabel, item.hint]}
+                        description={itemDescription?.(item.id)}
+                      />
+                      <div className="ml-auto flex max-w-full min-w-0 items-center justify-end gap-2">
+                        {pickControl?.(item, focusSearch)}
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          tooltip="Remove"
+                          aria-label={`Remove ${sourcePickerItemText(item)}`}
+                          onClick={() => {
                             onToggleItem(item.id);
-                            searchInput.current?.focus();
+                            focusSearch();
                           }}
+                        >
+                          <X />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {added.length > 0 && available.length > 0 && <SectionHeading>Available</SectionHeading>}
+            <div role="group" aria-label={label}>
+              {available.length === 0
+                ? emptyText && (
+                    <Txt as="p" variant="caption" tone="muted">
+                      {emptyText}
+                    </Txt>
+                  )
+                : available.map(group => (
+                    <Fragment key={group.id}>
+                      {group.label && (
+                        <SettingsRow
+                          label={
+                            <Txt as="span" variant="caption" tone="muted">
+                              {group.label}
+                            </Txt>
+                          }
                         />
                       )}
-                    </SettingsRow>
+                      <ul>
+                        {group.items.map(item => (
+                          <li
+                            key={`${group.id}:${item.id}`}
+                            className={cn(settingsRowLayout, 'flex flex-wrap items-center')}
+                          >
+                            <SourceItemSummary item={item} context={[item.hint]} />
+                            <div className="ml-auto flex max-w-full min-w-0 items-center justify-end gap-2">
+                              {pickControl ? (
+                                pickControl(item, focusSearch)
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  icon={<Plus />}
+                                  aria-label={`Add ${sourcePickerItemText(item)}`}
+                                  onClick={() => {
+                                    onToggleItem(item.id);
+                                    focusSearch();
+                                  }}
+                                >
+                                  Add
+                                </Button>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </Fragment>
                   ))}
-                </Fragment>
-              ))
-            )}
-          </div>
+            </div>
+          </>
         )}
       </DrawerBody>
       <DrawerFooter className="shrink-0">
-        {savingIndicator}
+        {saving && <SavingStatus label={label} />}
         <DrawerClose
-          disabled={pending}
           render={
             <Button size="sm" icon={<Check />}>
               Done
@@ -287,5 +379,13 @@ function SourcePickerDrawer({
         />
       </DrawerFooter>
     </DrawerContent>
+  );
+}
+
+function SectionHeading({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <Txt as="h3" id={id} variant="meta" tone="muted" className="m-0 px-4 pt-4 pb-1 uppercase">
+      {children}
+    </Txt>
   );
 }

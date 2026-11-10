@@ -27,7 +27,7 @@ export interface BoardCardStateInput {
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
-  moving?: { stage: string; label: string };
+  moving?: { stage: string; label: string; completes?: boolean };
   /** Status text for the window between the click and the session mutation. */
   preparing?: string;
   retryRequested?: boolean;
@@ -37,8 +37,8 @@ export interface BoardCardStateInput {
   transitionReason?: string;
   /** What the run registry and workspace records say about the card's bound sessions. */
   sessionStatus?: SessionRowStatus;
-  /** Triage classification a person still has to act on, e.g. `feature request`. */
-  heldAs?: string;
+  /** Triage left the card in Intake for a person to decide on. */
+  held?: boolean;
 }
 
 const FREE: BoardCardOwner = { kind: 'free' };
@@ -96,7 +96,7 @@ function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
 function yourRequest(input: BoardCardStateInput): { statusLabel: string; progressLabel: string } | undefined {
   const { moving } = input;
   if (moving) {
-    const statusLabel = moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…`;
+    const statusLabel = moving.completes ? `Marking ${moving.label.toLowerCase()}…` : `Moving to ${moving.label}…`;
     return { statusLabel, progressLabel: 'Moving…' };
   }
   if (input.preparing !== undefined) return { statusLabel: input.preparing, progressLabel: 'Starting…' };
@@ -124,7 +124,7 @@ function automationOnCard(
   // The server retries a failure on its own, so it offers no button.
   if (retriesAfterFailure(decision)) {
     return {
-      status: { kind: 'error', label: `${copy.failed} — retrying…`, detail },
+      status: { kind: 'error', label: `${copy.failed}. Retrying…`, detail },
       owner: { kind: 'automation', progressLabel: 'Retrying…' },
     };
   }
@@ -137,8 +137,8 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   if (sessionIsLive(input.sessionStatus)) return { kind: 'idle' };
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
-  if (input.heldAs !== undefined) {
-    return { kind: 'held', label: `${capitalize(input.heldAs)} · needs your approval` };
+  if (input.held) {
+    return { kind: 'held', label: 'Triaged and waiting for you' };
   }
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
@@ -229,8 +229,4 @@ function runAnnouncedByWick(
  */
 function retriesAfterFailure(decision: Pick<FactoryDecisionSummary, 'status' | 'attempts' | 'lastError'>): boolean {
   return decision.status === 'retry' && (decision.attempts > 0 || Boolean(decision.lastError));
-}
-
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }

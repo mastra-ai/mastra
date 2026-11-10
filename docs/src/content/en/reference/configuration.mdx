@@ -213,6 +213,22 @@ export const mastra = new Mastra({
       'Default idle timeout, in milliseconds, for `agent.stream(..., { untilIdle: true })` calls that do not set `maxIdleMs`. The stream closes when background tasks are still running but no event has arrived for this long. Set it above your longest expected background task so its completion still triggers a continuation turn. A per-call `untilIdle: { maxIdleMs }` takes precedence. Default: 5 minutes.',
   },
   {
+    name: 'notifyAgentOnFinish',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Whether a finished deferred task sends the agent a `background-task` signal when no `untilIdle` stream is open for its thread. Set to `false` when your app sends its own completion signal, for example from `onTaskComplete`.',
+  },
+  {
+    name: 'wokenRunsEndAfterTurn',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Temporary opt-in. When `true`, a run that a signal starts on an idle thread ends after its own turn instead of waiting for the background tasks it dispatched, which report back through the `background-task` signal. A signal's own `ifIdle.streamOptions.untilIdle` takes precedence. In the next major release this becomes the only behavior and the option is removed; pass `untilIdle: true` in `ifIdle.streamOptions` to keep a woken run open.",
+  },
+  {
     name: 'onTaskComplete',
     type: '(task: BackgroundTask) => void | Promise<void>',
     isOptional: true,
@@ -713,7 +729,7 @@ export const mastra = new Mastra({
 **Type:** `boolean`\
 **Default:** `false`
 
-Enables source map generation for the bundled output.
+Enables source map generation for the bundled output. When it's enabled, `mastra dev` and `mastra start` run the server with Node's `--enable-source-maps` flag, so stack traces point at your source files.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

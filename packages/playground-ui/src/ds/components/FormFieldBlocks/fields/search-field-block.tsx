@@ -44,7 +44,7 @@ export function SearchFieldBlock({
   label,
   labelIsHidden = false,
   layout = 'vertical',
-  placeholder = 'Search...',
+  placeholder = 'Search',
   onChange,
   onReset,
   className,

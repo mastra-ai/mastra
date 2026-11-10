@@ -9,6 +9,7 @@ import { SharedCredentialNotice } from '../../settings/components/SharedCredenti
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { useState } from 'react';
 import { useProviderModels } from '../hooks/useProviderModels';
+import { MastraGatewayCreditsNotice } from './MastraGatewayCreditsNotice';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
 export interface FactoryDefaultModelFormProps {
@@ -87,7 +88,7 @@ export function FactoryDefaultModelForm({
             setModelId(modelId);
             onPreviewModel?.(modelId);
           }}
-          placeholder="Select a default model…"
+          placeholder="Select a default model"
         />
       </Field>
       {selectedModelId && !modelId && (
@@ -101,6 +102,7 @@ export function FactoryDefaultModelForm({
         </Txt>
       )}
       {scope === 'org' && <SharedCredentialNotice modelId={modelId || undefined} />}
+      {provider.connectWithMastraAccount && <MastraGatewayCreditsNotice />}
       <Button variant="primary" className="w-full" disabled={!modelId} onClick={() => onContinue(modelId)}>
         {submitLabel}
       </Button>
