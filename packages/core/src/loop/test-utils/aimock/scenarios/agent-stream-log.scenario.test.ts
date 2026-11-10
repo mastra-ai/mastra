@@ -63,7 +63,10 @@ function scriptToolLoop(llm: any) {
       { toolCalls: [{ id: `call_${i}`, name: 'lookup', arguments: { q: String(i) } }] },
     );
   }
-  llm.on({ endpoint: 'chat', toolCallId: `call_${TOOL_STEPS - 1}`, hasToolResult: true }, { content: 'All done.' });
+  llm.on(
+    { endpoint: 'chat', toolCallId: `call_${TOOL_STEPS - 1}`, hasToolResult: true },
+    { content: 'All done.', reasoning: 'Every lookup came back.' },
+  );
 }
 
 async function waitForTerminal(bus: any, runId: string) {
@@ -88,6 +91,7 @@ const stepView = (step: any) =>
       content: step.content,
       responseMessages: step.response?.messages,
       tripwire: step.tripwire ?? null,
+      reasoningText: step.reasoningText ?? null,
     }),
   );
 
@@ -211,6 +215,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
         expect(observedFinish.text).toBe('All done.');
         expect(observedFinish.steps).toHaveLength(TOOL_STEPS + 1);
         expect(observedFinish.toolCalls).toHaveLength(TOOL_STEPS);
+        expect(observedFinish.steps.at(-1).reasoningText).toBe('Every lookup came back.');
       } finally {
         run.cleanup?.();
         if (engine !== 'inngest') await mastra.shutdown();
