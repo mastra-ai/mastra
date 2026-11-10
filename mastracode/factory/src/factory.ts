@@ -1292,6 +1292,8 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
+    // Set once the API routes mount with the live controller; tools and processors read parked runs through it.
+    let liveSessions: LiveSessions | undefined;
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
     const factoryToolDeps: FactoryToolDependencies = {
       workItems: workItemsStorage,
@@ -1319,6 +1321,7 @@ export class MastraFactory {
       intake: intakeStorage,
       startCoordinator: () => this.#startCoordinator,
       messaging: factoryMessaging,
+      liveSessions: () => liveSessions,
     };
     // Proactive environment builds exist only when the sandbox can build
     // templates on its own; the workflow is registered on the host's Mastra
@@ -1759,6 +1762,7 @@ export class MastraFactory {
                       const session = await this.#prepared?.base.controller.getSession(sessionId);
                       return session?.stream.isActive() ?? false;
                     },
+                    isParked: sessionId => liveSessions?.parked(sessionId) !== undefined,
                     lastActivity: async threadId => {
                       const thread = await this.#prepared?.base.controller.queryThreadById({ threadId });
                       return thread?.updatedAt ? new Date(thread.updatedAt) : null;
@@ -2001,7 +2005,7 @@ export class MastraFactory {
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
-            liveSessions: liveSessionsTouchingTheFeed(controller, eventBus),
+            liveSessions: (liveSessions = liveSessionsTouchingTheFeed(controller, eventBus)),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,

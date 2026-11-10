@@ -7,9 +7,11 @@ import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
+import { parkedRunLabel } from '../routes/attention-parked.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import { needsApproval } from '../rules/types.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
@@ -46,6 +48,8 @@ export interface FactoryReadToolDependencies {
   boards: BoardRegistry | ProjectBoardSource;
   /** The live controller, for whether a session is mid-run and when it last moved; absent before the mount is up. */
   messaging?: () => Promise<Pick<FactoryMessaging, 'controller'> | null>;
+  /** Which live sessions are parked on a tool prompt; absent before the mount is up. */
+  liveSessions?: () => Pick<LiveSessions, 'parked' | 'parkedIn'> | undefined;
 }
 
 export function truncate(text: string, max: number): string {
@@ -331,7 +335,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_list_attention: createTool({
       id: 'factory_list_attention',
       description:
-        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, and Work cards triage left in Intake for a person to move on.',
+        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, runs parked on a tool prompt (a plan to review, a question to answer) while still in flight, and Work cards triage left in Intake for a person to move on.',
       inputSchema: z.object({ limit: z.number().int().min(1).max(MAX_LIST).optional() }).strict(),
       execute: async ({ limit = DEFAULT_LIST }) => {
         const [decisions, items] = await Promise.all([
@@ -375,6 +379,9 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         );
         const proposals = decisions.filter(decision => decision.status === 'proposed');
         const held = items.filter(isHeld);
+        const waiting = (deps.liveSessions?.()?.parkedIn(scope.factoryProjectId) ?? []).sort(
+          (a, b) => a.run.suspendedAt - b.run.suspendedAt,
+        );
         return {
           incidents: incidents.map(group => ({
             failureCode: group.failureCode,
@@ -391,6 +398,12 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           proposals: proposals
             .slice(0, limit)
             .map(decision => ({ ...summarizeDecision(decision), ...ref(decision.workItemId) })),
+          waiting: waiting.slice(0, limit).map(({ sessionId, run }) => ({
+            sessionId,
+            toolName: run.toolName,
+            label: parkedRunLabel(run.toolName),
+            waitingSince: new Date(run.suspendedAt).toISOString(),
+          })),
           held: held.slice(0, limit).map(item => ({
             ...ref(item.id),
             stage: workItemStage(item),
@@ -399,6 +412,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             allIncidents.length > limit ||
             incidents.some(group => group.shown.length < group.decisions.length) ||
             proposals.length > limit ||
+            waiting.length > limit ||
             held.length > limit,
         };
       },
