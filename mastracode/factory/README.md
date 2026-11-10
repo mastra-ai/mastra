@@ -504,7 +504,7 @@ check: {
 },
 ```
 
-Projects stored before Work dropped its self-review phase keep it: their Work row is their board, so it still holds the `review` phase (named Review) between Building and PR review, and runs it as before. Nothing is migrated. To drop it from such a project, edit the Work board: remove the phase and Building's move to it.
+Projects stored before Work dropped its self-review phase still hold the `review` phase (named Review) in their Work row, which is their board. The one-time migration `self-review-switch-v1` follows the project's retired self-review setting. A project that had it on keeps the phase and runs it as before. A project that had it off loses the phase and every move into it, on every stored board, unless the board's code declares the phase, cards sit in it, the build phase can't reach pull request review without it, or it is another phase's only move; then Factory keeps it and logs a warning. While cards from before the work-item split are still being copied, the migration waits for a later load. To drop a kept phase, edit the board: remove the phase and the moves into it.
 
 The agent that finishes a card's work cleans up the source issue's status labels (removes `status: needs triage`, `status: auto-triaged` and `status: needs approval`, adds `status: pending-close` and posts a done comment) before it moves the card to Done; a merged pull request that closes the issue moves the card there through the intake routes. Done itself starts nothing: earlier releases ran that cleanup on every entry into Done, so an issue card a merge or a person moves to Done now keeps its labels and gets no comment. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 

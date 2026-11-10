@@ -5,7 +5,11 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { StoredBoardInput, StoredBoardScope } from '../storage/domains/boards/base.js';
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  demoteCardsToLegacyForTests,
+} from '../storage/test-utils.js';
 import { defineBoard } from './define-board.js';
 import { occupiedPhasesOf, ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
@@ -305,6 +309,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await load();
 
         expect((await work())!.phases.map(phase => phase.key)).not.toContain('review');
+      });
+
+      it('waits while cards from before the work-item split are still being copied', async () => {
+        const { load, work, warn, card, storage, scope } = await setup({ self_review_enabled: false }, [OLDER_WORK]);
+        const { item: held } = await card('review');
+        // The only card in self-review is still a legacy row the split hasn't copied.
+        await demoteCardsToLegacyForTests(storage, [held.id]);
+        const before = await work();
+
+        await load();
+
+        expect(await work()).toEqual(before);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("the project's cards can't be read yet"));
+        const versions = await storage.ops.findOne('factory_board_definition_versions', {
+          org_id: scope.orgId,
+          factory_project_id: scope.factoryProjectId,
+        });
+        expect(versions?.applied_migrations ?? []).not.toContain('self-review-switch-v1');
       });
 
       it.skipIf(backend === 'libsql')(

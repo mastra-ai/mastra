@@ -12,6 +12,6 @@ The board now decides what Factory does on its own. The project-wide **Auto-star
 
 Every board the project stores is rewritten, app boards included: Factory serves a project the stored row, not the code. Boards are only served from code, unmigrated, when the boards storage domain is unavailable.
 
-**API.** `PATCH /web/factory/projects/:id` still accepts `autoRunEnabled` and `selfReviewEnabled` for one more release and ignores them. Projects no longer return them. `autoApprovePlans` stays accepted and ignored as before. No migration carries it into a board: Planning's `exitTool.autoApprove` defaults to off, so a project that had plan auto-approval on now waits for a person to approve each plan until an admin turns on `autoApprove` for its Planning phase.
+**API.** `PATCH /web/factory/projects/:id` still accepts `autoRunEnabled` and `selfReviewEnabled` for one more release and ignores them. Projects no longer return them. `autoApprovePlans` stays accepted and ignored as before.
 
 Instead of `{ "autoRunEnabled": true }`, set `autoStart` on the phases that should start on their own, in Settings → Work board or with `PATCH /web/factory/projects/:id/boards/work`, sending the board's phases and the `expectedRevision` you read.

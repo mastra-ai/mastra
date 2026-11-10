@@ -122,7 +122,7 @@ export interface ProjectBoardCacheOptions {
   occupiedPhases?: (
     scope: StoredBoardScope,
     ops: FactoryStorageOps,
-  ) => Promise<ReadonlyMap<string, ReadonlySet<string>>>;
+  ) => Promise<ReadonlyMap<string, ReadonlySet<string>> | null>;
   codeSkills?: readonly InlineSkill[];
   /**
    * Whether the project still uses the retired Review board (an open card is stored on it). Such
@@ -138,9 +138,16 @@ function scopeKey(scope: StoredBoardScope): string {
   return `${scope.orgId}\0${scope.factoryProjectId}`;
 }
 
-/** Reads the phases cards sit in on each of a project's boards, for `occupiedPhases`. */
-export function occupiedPhasesOf(workItems: Pick<WorkItemsStorage, 'listWith'>) {
-  return async (scope: StoredBoardScope, ops: FactoryStorageOps): Promise<ReadonlyMap<string, ReadonlySet<string>>> => {
+/**
+ * Reads the phases cards sit in on each of a project's boards, for `occupiedPhases`. Null while
+ * cards from before the work-item split are still being copied: `listWith` can't see those yet.
+ */
+export function occupiedPhasesOf(workItems: Pick<WorkItemsStorage, 'listWith' | 'legacyBackfillPending'>) {
+  return async (
+    scope: StoredBoardScope,
+    ops: FactoryStorageOps,
+  ): Promise<ReadonlyMap<string, ReadonlySet<string>> | null> => {
+    if (workItems.legacyBackfillPending) return null;
     const occupied = new Map<string, Set<string>>();
     for (const item of await workItems.listWith(ops, scope)) {
       const board = boardForWorkItem(item);
