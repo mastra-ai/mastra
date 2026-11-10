@@ -105,15 +105,48 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-R1": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Pro/deepseek-ai/DeepSeek-V3.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Pro/zai-org/GLM-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "tencent/Hunyuan-A13B-Instruct": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.1-Terminus": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek-ai/DeepSeek-V4-Pro": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V3.2": [
+    "deepseek-ai/DeepSeek-V4-Flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-R1": [
@@ -123,41 +156,70 @@
         "max": 32768
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.1-Terminus": [
+    "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-4.5V": [
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.3": [
+      },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.2": [
+        "values": ["low", "medium", "xhigh"]
+      },
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "Qwen/Qwen3.5-27B": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ],
-    "Qwen/Qwen3-14B": [
+    "Qwen/Qwen3-VL-32B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-9B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-8B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-35B-A3B": [
       {
         "type": "toggle"
       },
@@ -187,7 +249,7 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-9B": [
+    "Qwen/Qwen3-14B": [
       {
         "type": "toggle"
       },
@@ -197,14 +259,7 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-VL-32B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.5-35B-A3B": [
+    "Qwen/Qwen3.5-4B": [
       {
         "type": "toggle"
       },
@@ -224,80 +279,25 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-8B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "toggle"
-      },
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
+        "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.5-4B": [
+    "zai-org/GLM-5.3": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.5-27B": [
+    "zai-org/GLM-5.2": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
-    "Pro/deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-R1": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Pro/zai-org/GLM-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "tencent/Hunyuan-A13B-Instruct": [
+    "zai-org/GLM-4.5V": [
       {
         "type": "toggle"
       }

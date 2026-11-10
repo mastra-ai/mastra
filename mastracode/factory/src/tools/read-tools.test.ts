@@ -130,7 +130,7 @@ function setup({
 }) {
   const deps: FactoryReadToolDependencies = {
     workItems: {
-      list: vi.fn(async ({ factoryProjectId }) => items.filter(row => row.factoryProjectId === factoryProjectId)),
+      listShared: vi.fn(async ({ factoryProjectId }) => items.filter(row => row.factoryProjectId === factoryProjectId)),
       getForProject: vi.fn(
         async (_orgId, factoryProjectId, id) =>
           items.find(row => row.id === id && row.factoryProjectId === factoryProjectId) ?? null,

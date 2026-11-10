@@ -111,7 +111,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     type: "Omit<ChatConfig, 'adapters' | 'state' | 'userName'>",
     isOptional: true,
     description:
-      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
+      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`. `logger` defaults to the Mastra logger. Set it to use a different logger or a Chat SDK log level.',
   },
   {
     name: 'resolveResourceId',
@@ -746,6 +746,74 @@ type InlineLinkEntry =
   | string // Domain pattern (HEAD determines mime type)
   | { match: string; mimeType: string } // Domain + forced mime type (skips HEAD)
 ```
+
+## `toChatLogger()`
+
+Adapts a Mastra logger to the Chat SDK `Logger` interface. Pass the result to an adapter's `logger` option so its logs go to the same logger as the rest of your app. See [Logging](/docs/channels#logging) for when to use it.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { toChatLogger } from '@mastra/core/channels'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { PinoLogger } from '@mastra/loggers'
+
+const logger = new PinoLogger({ name: 'app', level: 'info' })
+
+const discord = createDiscordAdapter({
+  logger: toChatLogger(logger, { component: 'discord', minLevel: 'warn' }),
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'logger',
+    type: 'IMastraLogger',
+    description: 'The Mastra logger that receives the records.',
+  },
+  {
+    name: 'options',
+    type: 'ToChatLoggerOptions',
+    isOptional: true,
+    description: 'Options for the bridge.',
+    properties: [
+      {
+        type: 'ToChatLoggerOptions',
+        parameters: [
+          {
+            name: 'minLevel',
+            type: "'debug' | 'info' | 'warn' | 'error' | 'silent'",
+            isOptional: true,
+            defaultValue: "'debug'",
+            description:
+              "Lowest level to forward. `'silent'` forwards nothing. With the default, the Mastra logger's own level decides what gets written.",
+          },
+          {
+            name: 'component',
+            type: 'string',
+            isOptional: true,
+            defaultValue: "'chat-sdk'",
+            description:
+              'Written as the `component` field on each record. `child(prefix)` extends it, so `chat-sdk` becomes `chat-sdk:discord`.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: a Chat SDK `Logger`.
+
+Extra log arguments become fields on the record:
+
+| Arguments | Fields |
+| - | - |
+| None | `component` |
+| One `Error` | `error`, `component` |
+| One non-array object | The object's fields, `component` |
+| Anything else | `args`, `component` |
+
+An `Error` passed directly or under an object's `error` key is normalized so it keeps its message and stack when serialized.
 
 ## Related
 

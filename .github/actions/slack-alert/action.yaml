@@ -8,10 +8,10 @@ inputs:
     description: 'Message text, in Slack mrkdwn'
     required: true
   channel:
-    # #eng-maintainers-club; the bot must be a member of this channel.
+    # #eng-maintainer-alerts; the bot must be a member of this channel.
     description: 'Slack channel ID'
     required: false
-    default: 'C08F5FH0KAM'
+    default: 'C0CD83YFFNF'
 runs:
   using: 'composite'
   steps:

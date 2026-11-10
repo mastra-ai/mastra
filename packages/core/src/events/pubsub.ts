@@ -271,6 +271,17 @@ export interface LeaseProvider {
    * silent caller-side fallback.
    */
   transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean>;
+
+  /**
+   * Optional. Returns `true` when `error`, thrown by one of the methods above,
+   * proves the backend is refusing every client, not just this one (e.g. Redis
+   * replaying its dataset after a restart answers `LOADING` to everybody). No
+   * other owner can be granted a lease meanwhile, so a caller whose lease
+   * lapsed may keep waiting for the backend instead of treating it as lost.
+   * Any other error, including a connection failure that may affect only this
+   * caller, must return `false`.
+   */
+  isUnavailableToAll?(error: unknown): boolean;
 }
 
 /**

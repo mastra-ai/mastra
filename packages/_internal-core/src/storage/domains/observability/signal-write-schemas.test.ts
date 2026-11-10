@@ -38,3 +38,19 @@ describe.each([
     expect(record.parse(value)).toMatchObject({ traceId: null });
   });
 });
+
+describe('feedback storage attribution', () => {
+  it('preserves an explicitly absent author without consuming the span user', () => {
+    const { feedback } = createFeedbackArgsSchema.parse({
+      feedback: {
+        timestamp: new Date(),
+        traceId: 'trace',
+        feedbackType: 'thumbs',
+        value: 1,
+        userId: 'span-user',
+        feedbackUserId: null,
+      },
+    });
+    expect(feedback).toMatchObject({ userId: 'span-user', feedbackUserId: null });
+  });
+});

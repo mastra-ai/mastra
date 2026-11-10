@@ -24,7 +24,7 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
-import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
+import type { ExportedSpan, ObservabilityContext, SpanTermination } from '../../../../observability';
 import { compactStopReasonContext } from '../../../../observability/outcome-schema';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
@@ -181,6 +181,8 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // the evented engine rehydrates a fresh RequestContext per step, so the
   // wrapper's by-reference flag write never reaches the mapping step there.
   delegationBailed: z.boolean().optional(),
+  // Why that delegation failed, carried the same way for the root spans' outcome.
+  tracingDelegationFailure: z.custom<SpanTermination>().optional(),
 });
 
 /**
@@ -1897,6 +1899,9 @@ export function createDurableToolCallStep() {
                   toolCallId: params.toolCallId,
                   toolName: params.toolName,
                   status: params.status === 'failed' ? 'failed' : 'completed',
+                  requestContext:
+                    registryEntry?.requestContext ??
+                    restoreRequestContext(initData.requestContextEntries, requestContext),
                 });
               }
             } catch (error) {
@@ -2005,19 +2010,22 @@ export function createDurableToolCallStep() {
       // flag here — same process and same instances as tool execution — and
       // carrying it on the serializable step output stops the loop in the
       // same iteration on every engine.
-      const consumeDelegationBailSignal = (): boolean => {
+      const consumeDelegationBailSignal = ():
+        | { delegationBailed: true; tracingDelegationFailure?: SpanTermination }
+        | undefined => {
         let bailed = false;
+        let failure: SpanTermination | undefined;
         for (const rc of [registryEntry?.requestContext, rebuiltRequestContext, requestContext]) {
           if (rc?.get('__mastra_delegationBailed')) {
-            // Reset once for this bail, before collecting causes from the live contexts.
-            if (!bailed && registryEntry) registryEntry.tracingDelegationFailure = undefined;
             bailed = true;
             rc.set('__mastra_delegationBailed', false);
-            const cause = takeDelegationFailure(rc);
-            if (cause && registryEntry) registryEntry.tracingDelegationFailure = cause;
+            failure = takeDelegationFailure(rc) ?? failure;
           }
         }
-        return bailed;
+        if (!bailed) return undefined;
+        // The run-registry copy keeps older @mastra/inngest finalizers working in-process.
+        if (registryEntry) registryEntry.tracingDelegationFailure = failure;
+        return { delegationBailed: true, ...(failure ? { tracingDelegationFailure: failure } : {}) };
       };
       let mappingFailure: { error: unknown } | undefined;
 
@@ -2262,7 +2270,7 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(transformMetadata ? { transformMetadata } : {}),
-          ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
+          ...consumeDelegationBailSignal(),
         };
       } catch (error) {
         ownership?.throwIfLost();
@@ -2332,7 +2340,7 @@ export function createDurableToolCallStep() {
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(errorTransformMetadata ? { transformMetadata: errorTransformMetadata } : {}),
           // A hook may bail on a FAILED delegation too (success: false).
-          ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
+          ...consumeDelegationBailSignal(),
         };
       }
     },

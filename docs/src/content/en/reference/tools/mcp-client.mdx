@@ -2,7 +2,6 @@
 title: "Reference: MCPClient | Tools and MCP"
 description: "The MCPClient class provides a way to manage multiple MCP server connections and their tools in a Mastra application."
 packages:
-  - "@mastra/core"
   - "@mastra/mcp"
 ---
 
@@ -557,6 +556,8 @@ Tool results returned by MCP servers flow into your agent's context as model inp
 Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
 Intended to be passed onto an Agent definition.
 
+App-only tools, whose `_meta.ui.visibility` omits `"model"`, are left out. `listToolsets()` and `listToolDefinitions()` leave them out too.
+
 ```ts
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
@@ -646,6 +647,8 @@ const retry = await mcp.listToolsetsWithErrors({ serverNames: timedOut })
 ### `listToolDefinitions()`
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
+
+Like `listTools()`, it leaves out app-only tools, whose `_meta.ui.visibility` omits `"model"`. An MCP App calls those through its host, so they never reach an agent.
 
 Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis or a database, as well as a build artifact. Each definition holds the data from the MCP `tools/list` response (name, title, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
 

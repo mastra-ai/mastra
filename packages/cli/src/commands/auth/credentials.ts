@@ -443,7 +443,7 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
   }
 }
 
-function isInteractive(): boolean {
+export function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
 }
 

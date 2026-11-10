@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+import { CONTINUATION_STOP_CAUSES } from '../../../../loop/shared/continuation-core';
+import type { SpanTermination } from '../../../../observability/types/outcome';
+
 /**
  * Shared Zod schemas for durable agentic workflows.
  *
@@ -194,7 +197,8 @@ export const baseIterationStateSchema = z.object({
   inputTripwire: baseDurableAgenticInputSchema.shape.inputTripwire,
   // Iteration tracking
   iterationCount: z.number(),
-  accumulatedSteps: z.array(z.any()),
+  // Absent when the run keeps its step records in workflow state.
+  accumulatedSteps: z.array(z.any()).optional(),
   accumulatedUsage: accumulatedUsageSchema,
   // Identifies states whose usage accumulator preserves unknown counters. Older
   // states have no marker and may contain partial totals presented as complete.
@@ -219,6 +223,12 @@ export const baseIterationStateSchema = z.object({
   timeToFirstTokenMs: z.number().optional(),
   // Provider id and model of the latest response, carried the same way
   lastResponse: responseRecordSchema.optional(),
+  // How the run ended, as decided at the runtime boundary. Carried in the state so the
+  // final step can end the root spans with the real outcome on a worker that never held
+  // the deciding process's run-registry entry.
+  tracingStopCause: z.enum(CONTINUATION_STOP_CAUSES).optional(),
+  tracingTermination: z.custom<SpanTermination>().optional(),
+  tracingDelegationFailure: z.custom<SpanTermination>().optional(),
 });
 
 /**

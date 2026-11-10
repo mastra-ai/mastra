@@ -29,6 +29,7 @@ import {
   StepContentExtractor,
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
+import { isPersistedCopy } from './conversion/utils';
 import { TypeDetector } from './detection/TypeDetector';
 import type { StoredMessageLoader } from './memory-message-refs';
 import { MessageMerger } from './merge';
@@ -292,6 +293,11 @@ export class MessageList {
   // are still part of the run's response — see getRunResponseMessages(). Keyed by id in pruning
   // order; the message is only held when pruned by this instance; a restored list has ids only.
   #prunedResponseMessages = new Map<string, MastraDBMessage | undefined>();
+
+  // Message id -> hash of the text this run already wrote to the semantic recall index. Both
+  // writers (the SemanticRecall output processor and Memory.saveMessages through the save queue)
+  // read and update it, so whichever runs second skips what the first one embedded.
+  #embeddedMessages = new Map<string, string>();
 
   // Legacy getters for backward compatibility - delegate to stateManager
   private get memoryMessages() {
@@ -593,7 +599,19 @@ export class MessageList {
       ...state,
       ...(lastStepBoundary ? { lastStepBoundary } : {}),
       ...(prunedResponseMessageIds.length > 0 ? { prunedResponseMessageIds } : {}),
+      ...(this.#embeddedMessages.size > 0 ? { embeddedMessages: Object.fromEntries(this.#embeddedMessages) } : {}),
     };
+  }
+
+  /**
+   * The run's record of messages already written to the semantic recall index, as
+   * message id -> hash of the embedded text. Returned live: embedding writers add to it after a
+   * successful write and skip messages recorded with the same text.
+   *
+   * @internal
+   */
+  public getEmbeddedMessages(): Map<string, string> {
+    return this.#embeddedMessages;
   }
 
   /**
@@ -638,6 +656,13 @@ export class MessageList {
       this.updateLastCreatedAt(message);
     }
     this.#prunedResponseMessages = new Map((state.prunedResponseMessageIds ?? []).map(id => [id, undefined]));
+    // Merged instead of replaced: durable runs restore older snapshots onto the live list at
+    // finalize, and the live list can hold entries the snapshot lacks (the input save writes
+    // them before the workflow starts). An entry only skips a message whose text still matches
+    // its hash, so keeping an older entry can at most cause one extra embedding.
+    for (const [messageId, textHash] of Object.entries(state.embeddedMessages ?? {})) {
+      this.#embeddedMessages.set(messageId, textHash);
+    }
     this.#lastStepBoundary = undefined;
     if (state.lastStepBoundary) {
       const { messageId, partIndex } = state.lastStepBoundary;
@@ -2657,8 +2682,11 @@ export class MessageList {
     if (messageSource === `memory`) {
       // messagesAreEqual only matches stored messages that share the incoming id
       for (const existingMessage of this.getMessagesWithId(messageV2.id)) {
-        // don't double store any messages
-        if (messagesAreEqual(existingMessage, messageV2)) {
+        // don't double store any messages. Memory cleans messages when it saves them
+        // (trimmed text, working memory removed), so a stored copy can differ from the live
+        // message only by that cleanup. Treating it as new content would re-add a sealed
+        // message under a new id with the same provider item ids (#29380).
+        if (messagesAreEqual(existingMessage, messageV2) || isPersistedCopy(existingMessage, messageV2)) {
           return;
         }
       }

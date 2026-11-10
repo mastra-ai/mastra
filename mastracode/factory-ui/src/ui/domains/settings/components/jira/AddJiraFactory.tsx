@@ -13,14 +13,14 @@ export function AddJiraFactory({
   unbound,
   anotherTakesAll,
   errors,
-  saving,
+  adding,
   onAdd,
 }: {
   project: string;
   unbound: Factory[];
   anotherTakesAll: boolean;
   errors: Record<string, string>;
-  saving: boolean;
+  adding: boolean;
   onAdd: (route: NewJiraRoute, onAdded: () => void) => void;
 }) {
   const [factoryProjectId, setFactoryProjectId] = useState<string>();
@@ -28,7 +28,7 @@ export function AddJiraFactory({
 
   return (
     <li className="flex flex-col gap-1">
-      <Select value={factory?.id ?? ''} disabled={saving} onValueChange={setFactoryProjectId}>
+      <Select value={factory?.id ?? ''} disabled={adding} onValueChange={setFactoryProjectId}>
         <SelectTrigger size="sm" aria-label={`Factory to add for ${project}`} className="w-fit max-w-full min-w-0">
           <Txt as="span" variant="caption" className="flex items-center gap-1">
             {factory ? (
@@ -56,7 +56,7 @@ export function AddJiraFactory({
           factory={factory}
           anotherTakesAll={anotherTakesAll}
           error={errors[factory.id]}
-          saving={saving}
+          adding={adding}
           onAdd={route => onAdd(route, () => setFactoryProjectId(undefined))}
         />
       )}

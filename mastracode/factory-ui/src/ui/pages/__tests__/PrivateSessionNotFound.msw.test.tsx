@@ -83,27 +83,13 @@ describe('opening a session the viewer cannot see', () => {
     );
   });
 
-  it('explains other failures and offers only a retry', async () => {
-    const route = stubSessionRoute('server-error');
-    openSession();
-
-    expect(await screen.findByRole('heading', { name: 'Could not load this session' })).toBeInTheDocument();
-    expect(screen.getByText(/Failed to load the session/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start a new session' })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(route.reads).toBe(2));
-  });
-
   it('asks the server again when the viewer comes back to a session that failed', async () => {
     const route = stubSessionRoute('server-error');
     const router = openSession();
-    expect(await screen.findByRole('heading', { name: 'Could not load this session' })).toBeInTheDocument();
+    expect(await screen.findByText(/Failed to load session \(500\)/)).toBeInTheDocument();
 
     await router.navigate(`/factories/${FACTORY_ID}/user/new/${crypto.randomUUID()}`);
-    await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: 'Could not load this session' })).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText(/Failed to load session/)).not.toBeInTheDocument());
     route.answer = 'not-found';
     await router.navigate(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
 

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ProviderLogo } from './provider-logo';
+import { Txt } from '@/ds/components/Txt';
 
 const meta = {
   title: 'Domains/LLM/ProviderLogo',
@@ -44,6 +45,10 @@ const providers = [
   ['moonshotai', 'Kimi K2'],
   ['x-ai', 'Grok 4'],
   ['typesafe', 'Jev Router'],
+  ['tencent', 'Hunyuan A13B'],
+  ['bytedance-seed', 'Seed 2.0 Lite'],
+  ['sakana', 'Fugu Max'],
+  ['microsoft', 'Phi 4'],
 ] as const;
 
 export const Default: Story = {};
@@ -90,30 +95,150 @@ export const Sizes: Story = {
 
 const fallbacks = [
   ['cerebras', 'Loaded from models.dev'],
-  ['groq', 'Local fallback icon'],
+  ['groq', 'Loaded from models.dev'],
   ['netlify', 'Gateway icon'],
-  ['unknown-provider', 'Unknown provider, models.dev default'],
-  ['', 'Placeholder without a provider'],
+  ['aion-labs', 'No logo, monogram'],
+  ['~stealth', 'Leading tilde, monogram'],
+  ['', 'No provider'],
 ] as const;
 
 export const Fallbacks: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Providers without a bundled mark load from models.dev, then a local icon, then a placeholder.',
+        story:
+          'A bundled mark wins first. Then a logo on the verified models.dev list. Everything else gets a neutral monogram, so a vendor without a logo never shows the generic models.dev placeholder.',
       },
     },
   },
   render: () => (
     <div className="flex w-80 flex-col gap-3">
       {fallbacks.map(([providerId, label]) => (
-        <div key={label} className="flex items-center gap-2 text-label text-foreground">
+        <div key={label + providerId} className="flex items-center gap-2 text-label text-foreground">
           <ProviderLogo providerId={providerId} size="md" />
           <span>{label}</span>
         </div>
       ))}
     </div>
   ),
+};
+
+const bundledVendors = [
+  'amazon',
+  'anthropic',
+  'bytedance',
+  'bytedance-seed',
+  'cohere',
+  'deepseek',
+  'fireworks',
+  'google',
+  'meituan',
+  'meta',
+  'meta-llama',
+  'microsoft',
+  'minimax',
+  'mistralai',
+  'moonshotai',
+  'morph',
+  'nousresearch',
+  'nvidia',
+  'openai',
+  'openrouter',
+  'perplexity',
+  'qwen',
+  'sakana',
+  'stepfun',
+  'tencent',
+  'typesafe',
+  'upstage',
+  'x-ai',
+  'z-ai',
+];
+
+const modelsDevVendors = ['inception', 'liquid', 'reflection', 'thinkingmachines', 'xiaomi'];
+
+const monogramVendors = [
+  'aion-labs',
+  'anthracite-org',
+  'cognitivecomputations',
+  'dots-studio',
+  'elorian',
+  'gryphe',
+  'ibm-granite',
+  'inclusionai',
+  'inference-net',
+  'mancer',
+  'moondream',
+  'nex-agi',
+  'particle-ai',
+  'perceptron',
+  'prism-ml',
+  'recursive',
+  'rekaai',
+  'relace',
+  'ricursiveai',
+  'sao10k',
+  'scaledown',
+  'stealth',
+  'thedrummer',
+  'unbiased',
+  'undi95',
+  'writer',
+  'xingchen-agi',
+];
+
+const catalogSections = [
+  ['Bundled marks', bundledVendors],
+  ['models.dev logos', modelsDevVendors],
+  ['Monogram fallback', monogramVendors],
+] as const;
+
+const GatewayCatalog = () => (
+  <div className="flex w-200 flex-col gap-6">
+    {catalogSections.map(([title, vendors]) => (
+      <section key={title} className="flex flex-col gap-3">
+        <Txt as="h3" variant="label" tone="muted">
+          {title} ({vendors.length})
+        </Txt>
+        <div className="grid grid-cols-4 gap-3">
+          {vendors.map(vendor => (
+            <div key={vendor} className="flex items-center gap-2">
+              <ProviderLogo providerId={vendor} size="lg" />
+              <Txt as="span" variant="label" tone="ink" className="truncate">
+                {vendor}
+              </Txt>
+            </div>
+          ))}
+        </div>
+      </section>
+    ))}
+  </div>
+);
+
+export const GatewayCatalogDark: Story = {
+  globals: { theme: 'dark' },
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        story: 'Every vendor prefix in the Gateway catalog on the dark theme, grouped by how its logo is drawn.',
+      },
+    },
+  },
+  render: () => <GatewayCatalog />,
+};
+
+export const GatewayCatalogLight: Story = {
+  globals: { theme: 'light' },
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        story: 'Every vendor prefix in the Gateway catalog on the light theme, grouped by how its logo is drawn.',
+      },
+    },
+  },
+  render: () => <GatewayCatalog />,
 };
 
 export const PixelSize: Story = {

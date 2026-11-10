@@ -262,6 +262,67 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
   });
 
+  it('reuses an inner CachingPubSub instead of double-wrapping it, reporting the configured cache', () => {
+    const wrapperCache = new InMemoryServerCache();
+    const configuredCache = new InMemoryServerCache();
+    const inner = new CachingPubSub(new EventEmitterPubSub(), wrapperCache);
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-reuse-caching'),
+      inngest,
+      pubsub: inner,
+      cache: configuredCache,
+    });
+
+    expect(durableAgent.pubsub).toBe(inner);
+    expect(durableAgent.cache).toBe(configuredCache);
+  });
+
+  it("reuses an inner CachingPubSub and reports Mastra's serverCache when no cache is configured", () => {
+    const serverCache = new InMemoryServerCache();
+    const inner = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache());
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-reuse-mastra'),
+      inngest,
+      pubsub: inner,
+    });
+    durableAgent.__setMastra({ serverCache } as unknown as Mastra);
+
+    expect(durableAgent.pubsub).toBe(inner);
+    expect(durableAgent.cache).toBe(serverCache);
+  });
+
+  it("wraps with Mastra's serverCache when registered first, and keeps the resolved bus afterwards", () => {
+    const serverCache = new InMemoryServerCache();
+    const inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-mastra-cache'),
+      inngest,
+      pubsub: inner,
+    });
+    durableAgent.__setMastra({ serverCache, pubsub: new EventEmitterPubSub() } as unknown as Mastra);
+
+    const pubsub = durableAgent.pubsub as CachingPubSub;
+    expect(pubsub.getInner()).toBe(inner);
+    expect(pubsub.getCache()).toBe(serverCache);
+    expect(durableAgent.cache).toBe(serverCache);
+
+    durableAgent.__setMastra({ serverCache: new InMemoryServerCache(), pubsub: new EventEmitterPubSub() } as any);
+    expect(durableAgent.pubsub).toBe(pubsub);
+    expect(durableAgent.cache).toBe(serverCache);
+  });
+
+  it('forks onto the same inner pubsub and resolved cache', () => {
+    const inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-fork'), inngest, pubsub: inner });
+    const cache = durableAgent.cache;
+
+    const fork = durableAgent.__fork();
+    const forkPubsub = fork.pubsub as CachingPubSub;
+    expect(forkPubsub.getInner()).toBe(inner);
+    expect(forkPubsub.getCache()).toBe(cache);
+    expect(fork.cache).toBe(cache);
+  });
+
   // The next two tests mirror packages/core/src/agent/durable/__tests__/resumable-streams.test.ts
   // ("Late subscriber replay") to prove createInngestAgent wires the same replay semantics
   // that the in-memory DurableAgent provides. Without the CachingPubSub wrapper these would
@@ -840,6 +901,14 @@ describe('InngestAgent parity surface', () => {
 
   async function publishStreamEvent(durableAgent: ReturnType<typeof makeIsolatedAgent>, runId: string, event: any) {
     await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
+  }
+
+  // Durable delivery stamps each chunk with its pubsub log index so late
+  // subscribers can order frames. The parity checks below assert the chunk
+  // sequence itself, so drop the index before comparing.
+  function withoutLogIndex<T extends { index?: number }>(chunk: T) {
+    const { index: _index, ...rest } = chunk;
+    return rest;
   }
 
   it.each([
@@ -1673,9 +1742,10 @@ describe('InngestAgent parity surface', () => {
       const received = [];
       for await (const chunk of result.fullStream) received.push(chunk);
 
-      expect(received).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
-      expect(received).not.toContainEqual(originalToolCall);
-      expect(received).not.toContainEqual(originalSuspension);
+      expect(received.map(withoutLogIndex)).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
+      const receivedWithoutIndex = received.map(withoutLogIndex);
+      expect(receivedWithoutIndex).not.toContainEqual(originalToolCall);
+      expect(receivedWithoutIndex).not.toContainEqual(originalSuspension);
     } finally {
       result.cleanup();
       globalRunRegistry.delete(runId);
@@ -1759,7 +1829,7 @@ describe('InngestAgent parity surface', () => {
 
       expect(result.finishReason).toBe('stop');
       expect(result.text).toBe('Done.');
-      expect(result.toolResults).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
+      expect(result.toolResults.map(withoutLogIndex)).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
       expect(result.toolCalls).toEqual([]);
     } finally {
       globalRunRegistry.delete(runId);
@@ -2537,6 +2607,34 @@ describe('InngestAgent observability tracing', () => {
       // Every span produced by the run shares the root's traceId.
       const traceIds = new Set(recording.spans.map(span => span.traceId));
       expect(traceIds).toEqual(new Set([agentRuns[0].traceId]));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('ends the spans opened at prepare with the dispatch failure when the start event cannot be sent', async () => {
+    // Nothing else ends them: the run never reaches a worker, and cleanup only drops the registry entry.
+    const durableAgent = makeTracedAgent('tracing-dispatch-failure');
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockRejectedValue(new Error('inngest unavailable'));
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const [agentRun] = recording.spansOfType('agent_run');
+      const [generation] = recording.spansOfType('model_generation');
+      await vi.waitFor(() => expect(agentRun.error).toHaveBeenCalled());
+      for (const span of [agentRun, generation]) {
+        expect(span.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.objectContaining({ message: 'inngest unavailable' }),
+            outcome: 'error',
+            stopReason: 'runtime_error',
+            endSpan: true,
+          }),
+        );
+      }
     } finally {
       result.cleanup();
       sendSpy.mockRestore();

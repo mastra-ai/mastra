@@ -271,9 +271,8 @@ describe('semanticRecall.filter during agent runs (#29352)', () => {
       expect(vector.queries.at(-1)!.filter).toEqual({ resource_id: RESOURCE_ID });
     });
 
-    // Some vector stores reject nested metadata values and the processor only logs a failed
-    // upsert, so thread metadata is written only when a filter needs it.
-    it('stores thread metadata on embeddings only when a filter is set', async () => {
+    // Embeddings always carry their thread's metadata, so a filter added later can match them.
+    it('stores thread metadata on embeddings with or without a filter', async () => {
       const filtered = await setup({
         mode,
         semanticRecall: { topK: 5, messageRange: 0, scope: 'resource', filter: WORK_FILTER },
@@ -289,7 +288,7 @@ describe('semanticRecall.filter during agent runs (#29352)', () => {
 
       const unfilteredRows = unfiltered.vector.storedMetadata();
       expect(unfilteredRows.length).toBeGreaterThan(0);
-      expect(unfilteredRows.some(row => 'mode' in row)).toBe(false);
+      expect(unfilteredRows.filter(row => row.thread_id === 'work-1').every(row => row.mode === 'work')).toBe(true);
     });
   });
 

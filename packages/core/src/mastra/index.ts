@@ -1,5 +1,4 @@
 import type { Agent } from '../agent';
-import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
@@ -2834,26 +2833,6 @@ export class Mastra<
   ): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
-    }
-
-    // Auto-wrap regular Agents that opted in via AgentConfig.durable.
-    // The wrapped agent then flows into the isDurableAgentLike branch below,
-    // which handles __setMastra, workflow registration, and channel routes.
-    //
-    // Statically importing `createDurableAgent` here is safe because `agent.ts`
-    // imports `Mastra` type-only, so there is no `agent → mastra` runtime edge
-    // to close the init cycle. See the import note in `agent/agent.ts`.
-    //
-    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
-    // self-referential `.agent` getter (see `Agent#agent`), so we must
-    // discriminate against a real wrapper by checking `agent.agent !== agent`.
-    // Real wrappers (e.g. `DurableAgent`, `InngestAgent`) point `.agent` at a
-    // distinct inner `Agent`; the standalone placeholder points at itself.
-    const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
-    if (!isRealDurableWrapper && (agent as Agent).durable) {
-      const durableOption = (agent as Agent).durable;
-      const opts = durableOption === true ? {} : { ...(durableOption as object) };
-      agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
     }
 
     // Handle durable agent wrappers (e.g., InngestAgent)
@@ -6594,8 +6573,11 @@ export class Mastra<
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
+        this.#agents?.[key]?.getChannels()?.__setLogger(this.#logger);
       });
     }
+
+    Object.values(this.#harnesses ?? {}).forEach(controller => controller.getChannels()?.__setLogger(this.#logger));
 
     if (this.#deployer) {
       this.#deployer.__setLogger(this.#logger);

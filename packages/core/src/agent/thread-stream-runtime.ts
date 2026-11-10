@@ -1163,6 +1163,32 @@ export class AgentThreadStreamRuntime {
     );
   }
 
+  /**
+   * @internal Renew the captured execution's thread lease, or take it back if it lapsed and nobody else holds it.
+   * Only for an execution whose run ownership was just verified: a lease that expired while Redis was unreachable
+   * (e.g. restarting) otherwise fences every redelivery of the run forever. Never takes a lease another owner holds.
+   */
+  async reclaimDurableThreadLease(
+    pubsub: PubSub,
+    runId: string,
+    threadId: string,
+    resourceId?: string,
+    generation?: number,
+    executionId?: string,
+  ): Promise<boolean> {
+    const { acquired } = await this.#getLeaseProvider(pubsub).acquireLease(
+      this.#threadKey(resourceId, threadId),
+      threadLeaseOwner(runId, generation, executionId),
+      AGENT_THREAD_LEASE_TTL_MS,
+    );
+    return acquired;
+  }
+
+  /** @internal Whether `error` from the thread lease backend means it is refusing every client, not just this one. */
+  isThreadLeaseBackendUnavailableToAll(pubsub: PubSub, error: unknown): boolean {
+    return this.#getLeaseProvider(pubsub).isUnavailableToAll?.(error) === true;
+  }
+
   /** @internal Release only the terminal execution's thread lease, never a recovered successor's. */
   async releaseDurableThreadLease(
     pubsub: PubSub,
@@ -1553,9 +1579,10 @@ export class AgentThreadStreamRuntime {
     };
     /**
      * `token` when it acquired a free lease under the token, `run` when the lease was still under the run id,
-     * `refused` when another owner holds it, and `unanswered` when the backend failed to answer.
+     * `refused` when another owner holds it, `unavailable` when the backend refused every client (so nobody else
+     * could take the thread either), and `unanswered` when the backend failed to answer.
      */
-    const take = async (asked: string): Promise<'token' | 'run' | 'refused' | 'unanswered'> => {
+    const take = async (asked: string): Promise<'token' | 'run' | 'refused' | 'unavailable' | 'unanswered'> => {
       // A token this retake already gave back, whose release hasn't landed yet: the thread is still this run's.
       const heldByReleasedToken = (owner: string | undefined) => owner !== undefined && released.has(owner);
       try {
@@ -1570,23 +1597,27 @@ export class AgentThreadStreamRuntime {
         return (await leaseProvider.acquireLease(key, expectedOwner, AGENT_THREAD_LEASE_TTL_MS)).acquired
           ? 'run'
           : 'refused';
-      } catch {
-        return 'unanswered';
+      } catch (error) {
+        return leaseProvider.isUnavailableToAll?.(error) ? 'unavailable' : 'unanswered';
       }
     };
     /**
      * While the run has a step running, a backend that doesn't answer is no reason to stop it: only another owner
      * is. The retake keeps asking, one renewal interval at a time, until it gets an answer or the run is idle, but
      * no longer than the grace period after the lease ran out: a backend silent that long is treated as lost too.
+     * A backend refusing every client (restarting, say) can't have given the thread to anyone else, so an idle run
+     * waits for it within the same grace period too.
      */
     const lapsedAt = (state.leaseDeadlines.get(runId)?.confirmedSentAt ?? sentAt) + AGENT_THREAD_LEASE_TTL_MS;
-    const stepRunning = () =>
+    let backendUnavailable = false;
+    const keepAsking = () =>
       state.leaseRenewalTimers.get(runId) === timer &&
       Date.now() < lapsedAt + AGENT_LEASE_LOST_TOOL_GRACE_MS &&
-      isRunStepActive(
-        state.preparedRunsById.get(runId)?.abortController.signal ?? record?.stepOwner?.(),
-        AGENT_THREAD_LEASE_RENEW_INTERVAL_MS,
-      );
+      (backendUnavailable ||
+        isRunStepActive(
+          state.preparedRunsById.get(runId)?.abortController.signal ?? record?.stepOwner?.(),
+          AGENT_THREAD_LEASE_RENEW_INTERVAL_MS,
+        ));
     const retake = (async () => {
       // One renewal interval bounds each attempt, handoff included: a thread this process can't take back within
       // it counts as lost unless a step is running, so the deadline, renewal and fence paths never wait on a silent
@@ -1618,7 +1649,10 @@ export class AgentThreadStreamRuntime {
         const attempt = () => {
           const attemptSentAt = Date.now();
           void take(asked).then(result => {
-            if (result === 'unanswered') return;
+            if (result === 'unavailable' || result === 'unanswered') {
+              backendUnavailable = result === 'unavailable';
+              return;
+            }
             if (settled) {
               if (result === 'token') releaseToken(asked);
               return;
@@ -1628,7 +1662,7 @@ export class AgentThreadStreamRuntime {
         };
         attempt();
         let first = await remaining(answered);
-        while (first === gaveUp && stepRunning()) {
+        while (first === gaveUp && keepAsking()) {
           giveUpAt = Date.now() + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
           attempt();
           first = await remaining(answered);
@@ -1649,7 +1683,7 @@ export class AgentThreadStreamRuntime {
           .transferLease(key, asked, expectedOwner, AGENT_THREAD_LEASE_TTL_MS)
           .catch(() => false);
         let handedOver = await remaining(transferring);
-        while (handedOver === gaveUp && stepRunning()) {
+        while (handedOver === gaveUp && keepAsking()) {
           // Keep the token alive while a slow handover runs, so it can still land.
           void leaseProvider.renewLease(key, asked, AGENT_THREAD_LEASE_TTL_MS).catch(() => false);
           giveUpAt = Date.now() + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
@@ -1674,10 +1708,10 @@ export class AgentThreadStreamRuntime {
         // known to hold the thread, so a run with a step running takes it again under a new token. A backend that
         // rejects every handoff at once would otherwise be asked in a tight loop, so wait a little longer each
         // round, never more than a quarter of the renewal interval so a retake can still land within one.
-        if (!stepRunning()) return false;
+        if (!keepAsking()) return false;
         handoverRetryDelay = Math.min(handoverRetryDelay * 2, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS / 4);
         await new Promise(resolve => setTimeout(resolve, handoverRetryDelay));
-        if (!stepRunning()) return false;
+        if (!keepAsking()) return false;
         token = newToken();
         giveUpAt = Date.now() + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
       }
@@ -3327,6 +3361,9 @@ export class AgentThreadStreamRuntime {
       // wait out the rest of its window so retries stay paced.
       const unusedMs = attemptMs - (Date.now() - attemptStartedAt);
       if (unusedMs > 0) await new Promise(resolve => setTimeout(resolve, unusedMs));
+      // Stop when this window ran to the deadline. Rereading Date.now() here can come up a
+      // millisecond short, since timers can fire just before it reaches their due time.
+      if (attemptStartedAt + attemptMs >= deadline) return undefined;
       attemptTimeoutMs *= 2;
     }
   }
@@ -3762,7 +3799,7 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     const abortController = new AbortController();
     const upstreamAbortSignal = options.abortSignal;
-    const abort = () => abortController.abort();
+    const abort = () => abortController.abort(upstreamAbortSignal?.reason);
     if (upstreamAbortSignal?.aborted) {
       abort();
     } else {
