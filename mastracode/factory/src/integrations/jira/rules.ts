@@ -6,11 +6,15 @@ import {
   eventBoardId,
   rulePhaseField,
   withBoardClosure,
+  withIntakeTarget,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryJiraRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
@@ -61,7 +65,8 @@ export interface JiraRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
   configVersion: string;
-  boards: BoardRegistry;
+  /** The code boards, or the per-project source so a project's stored boards run its cards. */
+  boards: BoardRegistry | ProjectBoardSource;
   jiraRules: JiraEventRules;
 }
 
@@ -90,9 +95,15 @@ export function boardEventFor(context: Pick<FactoryJiraRuleContext, 'event' | 'i
 export class JiraRules {
   constructor(private readonly options: JiraRulesOptions) {}
 
+  /** The project's boards, loaded at the start of {@link ingest}. */
+  #boards(scope: StoredBoardScope): BoardRegistry {
+    return toBoardSource(this.options.boards).forProject(scope);
+  }
+
   async ingest(input: JiraRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
+    await toBoardSource(this.options.boards).load(input);
 
     // A finished card may still be only in the legacy table; copy it so the issue finds it.
     await this.options.storage.copyLegacyCards({
@@ -129,7 +140,7 @@ export class JiraRules {
 
     const event = isClosed ? 'issueClosed' : 'issueObserved';
     const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.options.boards.get(boundBoardId) : undefined;
+    const boundBoard = boundBoardId ? this.#boards(input).get(boundBoardId) : undefined;
     const context: FactoryJiraRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -153,11 +164,11 @@ export class JiraRules {
             },
             board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
-            ...withBoardClosure(this.options.boards, relatedItem),
-            ...rulePhaseField(this.options.boards, relatedItem),
+            ...withBoardClosure(this.#boards(input), relatedItem),
+            ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
+      ...withIntakeTarget(this.#boards(input), boundBoard),
       event,
       issue,
     };
@@ -166,12 +177,12 @@ export class JiraRules {
 
     const ownedByDeployment = deploymentOwnsEvent(
       this.options.jiraRules,
-      boardEventHandlers(this.options.boards, eventBoardId(context), 'jira'),
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'jira'),
       context.event,
     );
     const rule = selectEventRule(
       this.options.jiraRules,
-      boardEventHandlers(this.options.boards, eventBoardId(context), 'jira'),
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'jira'),
       context.event,
     );
     let decision: FactoryRuleDecision | void = undefined;
@@ -185,7 +196,7 @@ export class JiraRules {
         decisions = validateFactoryRuleDecisions([decision]).map(entry => {
           assertFactoryDecisionTarget(
             entry,
-            this.options.boards,
+            this.#boards(input),
             relatedItem ? boardForWorkItem(relatedItem) : undefined,
           );
           return { ...entry };

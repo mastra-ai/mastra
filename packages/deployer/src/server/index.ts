@@ -81,13 +81,16 @@ const DEFAULT_CORS_EXPOSE_HEADERS = ['Content-Length', 'X-Requested-With'];
 
 function getCorsConfig(serverCors: CorsOptions | false | undefined, credentialsDefault: boolean) {
   const userCors = serverCors && typeof serverCors === 'object' ? serverCors : undefined;
-  const origin =
-    userCors && 'origin' in userCors && userCors.origin
-      ? userCors.origin
-      : credentialsDefault
-        ? (requestOrigin: string) => requestOrigin || undefined
-        : '*';
-  const credentials = userCors && 'credentials' in userCors ? userCors.credentials : credentialsDefault;
+  const hasExplicitOrigin = !!(userCors && 'origin' in userCors && userCors.origin);
+  const origin = hasExplicitOrigin
+    ? userCors!.origin
+    : credentialsDefault
+      ? (requestOrigin: string) => requestOrigin || undefined
+      : '*';
+  // Reflected origins never get credentials by default; that would let any site
+  // make cookie-authenticated requests. Set cors.origin to allow them.
+  const credentials =
+    userCors && 'credentials' in userCors ? userCors.credentials : credentialsDefault && hasExplicitOrigin;
 
   return {
     origin,
@@ -693,10 +696,11 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // rolling deploys can let long-running agent turns finish.
   if (serverOptions?.handleShutdownSignals !== false) {
     // Core teardown gets the drain window (for in-flight evented workflow
-    // runs) plus a fixed 5s for the teardown itself: it must always run (e.g.
-    // DuckDB's file lock release), but a hanging shutdown can't be allowed to
-    // block process exit.
-    const CORE_SHUTDOWN_TIMEOUT_MS = 5000;
+    // runs) plus a fixed 6.5s for the teardown itself: up to 1.5s to hand back
+    // agent thread runs, then cleanup that must always run (e.g. DuckDB's file
+    // lock release), but a hanging shutdown can't be allowed to block process
+    // exit.
+    const CORE_SHUTDOWN_TIMEOUT_MS = 6500;
     const timedOut = Symbol('shutdown-timeout');
     const race = async (work: Promise<unknown>, ms: number): Promise<unknown> => {
       let timeout: ReturnType<typeof setTimeout> | undefined;

@@ -647,8 +647,8 @@ describe('LinearRules', () => {
           building: {
             title: 'Building',
             kind: 'working',
-            role: 'work',
-            outcomes: { done: 'shipped', canceled: 'dropped' },
+            runner: { context: 'work' },
+            nextPhases: ['shipped', 'dropped'],
           },
           shipped: { title: 'Shipped', kind: 'terminal' },
           dropped: { title: 'Dropped', kind: 'terminal' },
@@ -682,7 +682,7 @@ describe('LinearRules', () => {
         type: 'transition' as const,
         board: context.board ?? '',
         stage:
-          context.issue.stateType === 'canceled' && context.phase?.outcomes.includes('canceled')
+          context.issue.stateType === 'canceled' && context.phase?.nextPhases.includes('dropped')
             ? 'dropped'
             : 'shipped',
         idempotencyKey: 'delivery-closed',
@@ -700,7 +700,7 @@ describe('LinearRules', () => {
       });
       expect(issueClosed.mock.calls[0]?.[0]).toMatchObject({
         board: 'delivery',
-        phase: { id: 'building', kind: 'working', role: 'work', outcomes: ['done', 'canceled'] },
+        phase: { id: 'building', kind: 'working', context: 'work', nextPhases: ['shipped', 'dropped'] },
       });
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
         { decision: { type: 'transition', board: 'delivery', stage: 'dropped' } },

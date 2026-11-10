@@ -27,7 +27,7 @@ export interface BoardCardStateInput {
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
-  moving?: { stage: string; label: string };
+  moving?: { stage: string; label: string; completes?: boolean };
   /** Status text for the window between the click and the session mutation. */
   preparing?: string;
   retryRequested?: boolean;
@@ -96,7 +96,7 @@ function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
 function yourRequest(input: BoardCardStateInput): { statusLabel: string; progressLabel: string } | undefined {
   const { moving } = input;
   if (moving) {
-    const statusLabel = moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…`;
+    const statusLabel = moving.completes ? `Marking ${moving.label.toLowerCase()}…` : `Moving to ${moving.label}…`;
     return { statusLabel, progressLabel: 'Moving…' };
   }
   if (input.preparing !== undefined) return { statusLabel: input.preparing, progressLabel: 'Starting…' };

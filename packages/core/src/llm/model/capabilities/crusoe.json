@@ -21,7 +21,12 @@
     "zai/GLM-5.2"
   ],
   "reasoning": {
-    "google/gemma-4-31b-it": [
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/GLM-5.2": [
       {
         "type": "toggle"
       }
@@ -32,12 +37,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "zai/GLM-5.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
       }

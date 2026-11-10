@@ -9,18 +9,18 @@ export type LinearEventRules = Readonly<
 >;
 
 function linearIssueObserved(context: FactoryLinearRuleContext) {
-  if (context.item) return;
+  if (context.item || !context.intake) return;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-triage`,
     // A source bound to a custom board lands on that board's initial phase;
-    // otherwise the issue waits in Work Intake.
-    board: context.intake?.board ?? 'work',
+    // otherwise it waits on the project's default board.
+    board: context.intake.board,
     source: 'linear-issue',
     sourceKey: `linear:${context.issue.identifier}`,
     title: `${context.issue.identifier}: ${context.issue.title}`,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'intake',
+    stage: context.intake.initialPhase,
     metadata: {
       linearIssueId: context.issue.id,
       ...(context.issue.projectId ? { linearProjectId: context.issue.projectId } : {}),
