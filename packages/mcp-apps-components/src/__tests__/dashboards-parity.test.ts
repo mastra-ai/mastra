@@ -40,9 +40,11 @@ describe("the strict schema's view checks", () => {
     },
   );
 
-  it('report a later issue as the renderer does once the views before it are fixed', () => {
-    const broken = threeKpiViews(readsMissingQuery);
-    const [, second] = viewIssues(broken, KIND_CHECKS.kpis, 'project');
+  it.each([
+    ['its options fail to parse', { ...kpis.views[0]!, options: { items: [] } }],
+    ['its kind finds a problem', readsMissingQuery],
+  ])('report a later issue as the renderer does once the view before it is fixed, when %s', (_, first) => {
+    const [, second] = viewIssues(threeKpiViews(first), KIND_CHECKS.kpis, 'project');
 
     const fixed = threeKpiViews(kpis.views[0]!);
 
