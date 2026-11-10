@@ -5,7 +5,9 @@ import { TextTransformer } from './text';
 
 function splitTextWithRegex(text: string, separator: string, separatorPosition?: 'start' | 'end'): string[] {
   if (!separator) {
-    return text.split('');
+    // Split by code point, not UTF-16 code unit, so a chunk never ends inside a
+    // surrogate pair (emoji, supplementary-plane CJK) and leaves a lone surrogate.
+    return Array.from(text);
   }
 
   if (!text) {

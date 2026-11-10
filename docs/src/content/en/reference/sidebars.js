@@ -635,6 +635,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/response-cache', label: 'ResponseCache' },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
         { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
+        { type: 'doc', id: 'processors/skills-processor', label: 'SkillsProcessor' },
         {
           type: 'doc',
           id: 'processors/stream-error-retry-processor',
@@ -702,6 +703,7 @@ const sidebars = {
         { type: 'doc', id: 'server/express-adapter', label: 'Express Adapter' },
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },
         { type: 'doc', id: 'server/hono-adapter', label: 'Hono Adapter' },
+        { type: 'doc', id: 'server/invoke-route', label: 'invokeRoute()' },
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
         { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },

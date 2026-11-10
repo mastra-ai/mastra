@@ -130,6 +130,8 @@ import { modelsPackActivationPersistenceScenario } from './models-pack-activatio
 import { modelsPackKimiModelScenario } from './models-pack-kimi-model.js';
 import { modelsPackMemoryAutoScenario } from './models-pack-memory-auto.js';
 import { modelsPackMemoryModelScenario } from './models-pack-memory-model.js';
+import { mouseInputModeScenario } from './mouse-input-mode.js';
+import { mouseModalAndAutocompleteScenario } from './mouse-modal-and-autocomplete.js';
 import { multiAccountLoginScenario } from './multi-account-login.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
@@ -373,6 +375,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-skipped-validation': mcpSkippedValidationScenario,
   'bedrock-model-discovery': bedrockModelDiscoveryScenario,
   'model-search': modelSearchScenario,
+  'mouse-modal-and-autocomplete': mouseModalAndAutocompleteScenario,
+  'mouse-input-mode': mouseInputModeScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
   'mode-switch-applies-pack-model': modeSwitchAppliesPackModelScenario,

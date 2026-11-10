@@ -7,6 +7,8 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
+  cancelReaderOnResponseClose,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
@@ -15,6 +17,7 @@ import {
   normalizeQueryParams,
   redactStreamChunk,
   serializeStreamChunk,
+  writeWithBackpressure,
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 export { createAuthMiddleware } from './auth-middleware';
@@ -154,6 +157,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           controller.abort();
         }
       });
+      // A client that dropped while an earlier hook ran (for example async auth in onRequest) fired 'close' before
+      // these listeners existed.
+      if (reply.raw.destroyed) {
+        controller.abort();
+      }
+
       request.abortSignal = controller.signal;
     };
   }
@@ -210,20 +219,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
-
-    let readerCanceled = false;
-    const cancelReader = (reason: string) => {
-      if (readerCanceled) return;
-      readerCanceled = true;
-      void reader.cancel(reason).catch(() => {});
-    };
-    const cancelReaderOnResponseClose = () => cancelReader('request aborted');
+    const readerCancel = cancelReaderOnResponseClose(reader, reply.raw);
     const cancelReaderOnRequestClose = () => {
       if (request && isRequestAborted(request.raw)) {
-        cancelReader('request aborted');
+        readerCancel.cancel('request aborted');
       }
     };
-    reply.raw.on('close', cancelReaderOnResponseClose);
     request?.raw.on('close', cancelReaderOnRequestClose);
 
     try {
@@ -233,7 +234,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         if (value) {
           if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
-            reply.raw.write(value);
+            await writeWithBackpressure(reply.raw, value);
             continue;
           }
 
@@ -251,9 +252,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             continue;
           }
           if (streamFormat === 'sse') {
-            reply.raw.write(`data: ${serialized.json}\n\n`);
+            await writeWithBackpressure(reply.raw, `data: ${serialized.json}\n\n`);
           } else {
-            reply.raw.write(serialized.json + '\x1E');
+            await writeWithBackpressure(reply.raw, serialized.json + '\x1E');
           }
         }
       }
@@ -262,7 +263,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
     } finally {
-      reply.raw.off('close', cancelReaderOnResponseClose);
+      readerCancel.dispose();
       request?.raw.off('close', cancelReaderOnRequestClose);
       if (!reply.raw.writableEnded && !reply.raw.destroyed) {
         reply.raw.end();
@@ -415,18 +416,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       reply.raw.writeHead(fetchResponse.status, headers);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
-        let readerCanceled = false;
-
-        const cancelReader = (reason: string) => {
-          if (readerCanceled) return;
-          readerCanceled = true;
-          void reader.cancel(reason).catch(() => {});
-        };
-
-        const cancelReaderOnResponseClose = () => cancelReader('request aborted');
+        const readerCancel = cancelReaderOnResponseClose(reader, reply.raw);
         const cancelReaderOnRequestClose = () => {
           if (request && isRequestAborted(request.raw)) {
-            cancelReader('request aborted');
+            readerCancel.cancel('request aborted');
           }
         };
 
@@ -434,17 +427,16 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          cancelReader('response write error');
+          readerCancel.cancel('response write error');
         };
         reply.raw.once('error', onResError);
-        reply.raw.on('close', cancelReaderOnResponseClose);
         request?.raw.on('close', cancelReaderOnRequestClose);
 
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            reply.raw.write(value);
+            await writeWithBackpressure(reply.raw, value);
           }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in datastream processing', {
@@ -452,7 +444,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           });
         } finally {
           reply.raw.off('error', onResError);
-          reply.raw.off('close', cancelReaderOnResponseClose);
+          readerCancel.dispose();
           request?.raw.off('close', cancelReaderOnRequestClose);
           if (!reply.raw.writableEnded && !reply.raw.destroyed) {
             reply.raw.end();
@@ -483,7 +475,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+        await applyMcpRequestAuth({ req: rawReq, requestContext: request.requestContext, setRequestAuth });
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
@@ -525,6 +519,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         if (request.body !== undefined) {
           rawReq.body = request.body;
         }
+
+        await applyMcpRequestAuth({
+          req: rawReq,
+          requestContext: request.requestContext,
+          setRequestAuth: this.mcpOptions?.setRequestAuth,
+        });
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),

@@ -231,6 +231,12 @@ export interface TeamsInstallation {
   entraObjectId?: string;
   /** Client secret the bot authenticates to Bot Framework with (encrypted at rest). */
   appPassword?: string;
+  /**
+   * Set when the stored secret could not be decrypted (the encryption key
+   * changed or was removed). The installation cannot route messages;
+   * disconnect and reconnect the agent to re-provision the bot.
+   */
+  secretUnreadable?: boolean;
   /** Entra tenant ID for single-tenant bots. */
   appTenantId?: string;
   /** Bot application audience. */

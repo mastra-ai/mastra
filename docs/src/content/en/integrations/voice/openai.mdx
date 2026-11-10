@@ -1,13 +1,30 @@
 ---
 title: "OpenAI | Voice"
-description: "Add OpenAI text-to-speech and speech-to-text to Mastra with configurable models, voices, audio formats, synthesis, and transcription."
+description: "Give Mastra agents OpenAI API tools through Mastra Connect, and add OpenAI text-to-speech, speech-to-text, and realtime voice to Mastra."
 packages:
+  - "@mastra/connect"
   - "@mastra/voice-openai"
   - "@mastra/node-audio"
   - "@mastra/voice-openai-realtime"
 ---
 
+import OpenaiConnectTools from "@site/src/components/connect/generated/openai.mdx";
+
 # OpenAI
+
+Use OpenAI with Mastra in three ways:
+
+- **Agent tools** let an agent call OpenAI APIs, for example to create images or manage files and vector stores, through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Voice](#voice)** adds text-to-speech and speech-to-text with `OpenAIVoice`.
+- **[Realtime](#realtime)** adds speech-to-speech conversations with `OpenAIRealtimeVoice`.
+
+To use an OpenAI model as the agent's language model, see [OpenAI models](/models/providers/openai) instead.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<OpenaiConnectTools />
 
 ## Voice
 

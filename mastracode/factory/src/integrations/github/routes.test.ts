@@ -230,21 +230,21 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
+const issue12 = {
+  number: 12,
+  title: 'Fix flaky test',
+  url: 'https://github.com/octo/hello/issues/12',
+  author: 'ada',
+  assignee: 'grace',
+  labels: ['bug'],
+  comments: 3,
+  createdAt: '2026-07-01T00:00:00Z',
+  updatedAt: '2026-07-02T00:00:00Z',
+};
+
 const listRepoOpenIssues = vi.fn(
   async (_installationId: number, _repoFullName: string, _page: number, _options?: { label?: string }) => ({
-    issues: [
-      {
-        number: 12,
-        title: 'Fix flaky test',
-        url: 'https://github.com/octo/hello/issues/12',
-        author: 'ada',
-        assignee: 'grace',
-        labels: ['bug'],
-        comments: 3,
-        createdAt: '2026-07-01T00:00:00Z',
-        updatedAt: '2026-07-02T00:00:00Z',
-      },
-    ],
+    issues: [issue12],
     nextPage: null as number | null,
   }),
 );
@@ -1675,14 +1675,60 @@ describe('prs route', () => {
     );
   });
 
+  it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
+    seedMaterializedProject();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+      `/web/github/projects/p1/${resource}`,
+    );
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
+    warn.mockRestore();
+  });
+});
+
+// Every open board polls the same issue and pull request pages, and each rules pass reads the
+// whole project, so both feeds share one pass per page (#29248 for pull requests).
+const polledFeeds = [
+  {
+    resource: 'issues',
+    lister: listRepoOpenIssues,
+    rowsKey: 'issues',
+    payloadKey: 'issue',
+    another: 13,
+    listWithAnotherOnce: () =>
+      listRepoOpenIssues.mockResolvedValueOnce({
+        issues: [issue12, { ...issue12, number: 13, url: 'https://github.com/octo/hello/issues/13' }],
+        nextPage: null,
+      }),
+  },
+  {
+    resource: 'prs',
+    lister: listRepoOpenPullRequests,
+    rowsKey: 'pullRequests',
+    payloadKey: 'pull_request',
+    another: 35,
+    listWithAnotherOnce: () =>
+      listRepoOpenPullRequests.mockResolvedValueOnce({
+        pullRequests: [pullRequest34, { ...pullRequest34, number: 35, url: 'https://github.com/octo/hello/pull/35' }],
+        nextPage: null,
+      }),
+  },
+] as const;
+
+describe.each(polledFeeds)('rules passes for polled $resource pages', feed => {
+  const path = `/web/github/projects/p1/${feed.resource}`;
+
   it('runs the rules once per page while several boards poll inside the window', async () => {
     seedMaterializedProject();
     const ingestFactoryEvent = vi.fn(async () => undefined);
     const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
 
-    for (const path of ['prs', 'prs', 'prs?page=2']) {
-      const res = await app.request(`/web/github/projects/p1/${path}`);
-      expect((await res.json()).pullRequests).toHaveLength(1);
+    for (const url of [path, path, `${path}?page=2`]) {
+      const res = await app.request(url);
+      expect((await res.json())[feed.rowsKey]).toHaveLength(1);
     }
 
     expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
@@ -1696,18 +1742,18 @@ describe('prs route', () => {
       const ingestFactoryEvent = vi.fn(() => pass.promise);
       const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
 
-      const first = app.request('/web/github/projects/p1/prs');
+      const first = app.request(path);
       await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
       vi.setSystemTime(Date.now() + 25_000);
       pass.resolve();
       await first;
 
       vi.setSystemTime(Date.now() + 19_000);
-      await app.request('/web/github/projects/p1/prs');
+      await app.request(path);
       expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
 
       vi.setSystemTime(Date.now() + 2_000);
-      await app.request('/web/github/projects/p1/prs');
+      await app.request(path);
       expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
@@ -1726,14 +1772,14 @@ describe('prs route', () => {
       });
       const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
 
-      const first = app.request('/web/github/projects/p1/prs');
+      const first = app.request(path);
       await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
       vi.setSystemTime(Date.now() + 25_000);
-      const second = Promise.resolve(app.request('/web/github/projects/p1/prs')).then(res => {
+      const second = Promise.resolve(app.request(path)).then(res => {
         order.push('second answered');
         return res;
       });
-      await vi.waitFor(() => expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(feed.lister).toHaveBeenCalledTimes(2));
       await setImmediate();
       pass.resolve();
 
@@ -1746,23 +1792,22 @@ describe('prs route', () => {
     }
   });
 
-  it('rules a pull request that shows up on a resting page on the first poll that lists it', async () => {
+  it('rules an entry that shows up on a resting page on the first poll that lists it', async () => {
     seedMaterializedProject();
-    const pullRequest35 = { ...pullRequest34, number: 35, url: 'https://github.com/octo/hello/pull/35' };
     const ingestFactoryEvent = vi.fn(async () => undefined);
     const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
 
-    await app.request('/web/github/projects/p1/prs');
+    await app.request(path);
     const listBoth = () => {
-      listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [pullRequest34, pullRequest35], nextPage: null });
-      return app.request('/web/github/projects/p1/prs');
+      feed.listWithAnotherOnce();
+      return app.request(path);
     };
 
     await listBoth();
     expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
     expect(ingestFactoryEvent).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        payload: expect.objectContaining({ pull_request: expect.objectContaining({ number: 35 }) }),
+        payload: expect.objectContaining({ [feed.payloadKey]: expect.objectContaining({ number: feed.another }) }),
       }),
     );
     await listBoth();
@@ -1777,7 +1822,7 @@ describe('prs route', () => {
       const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
       const answered: number[] = [];
       const poll = (board: number) =>
-        Promise.resolve(app.request('/web/github/projects/p1/prs')).then(res => {
+        Promise.resolve(app.request(path)).then(res => {
           answered.push(board);
           return res;
         });
@@ -1786,7 +1831,7 @@ describe('prs route', () => {
       await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
       vi.setSystemTime(Date.now() + 60_000);
       const second = poll(2);
-      await vi.waitFor(() => expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(feed.lister).toHaveBeenCalledTimes(2));
       await vi.advanceTimersByTimeAsync(10_000);
 
       expect(answered.sort()).toEqual([1, 2]);
@@ -1809,20 +1854,17 @@ describe('prs route', () => {
         .mockImplementationOnce(() => fresh.promise);
       const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
 
-      const first = app.request('/web/github/projects/p1/prs');
+      const first = app.request(path);
       await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalledTimes(1));
       vi.setSystemTime(Date.now() + 121_000);
-      const second = app.request('/web/github/projects/p1/prs');
+      const second = app.request(path);
       await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalledTimes(2));
 
       stuck.resolve(undefined);
       await setImmediate();
-      listRepoOpenPullRequests.mockResolvedValueOnce({
-        pullRequests: [pullRequest34, { ...pullRequest34, number: 35, url: 'https://github.com/octo/hello/pull/35' }],
-        nextPage: null,
-      });
-      const third = app.request('/web/github/projects/p1/prs');
-      await vi.waitFor(() => expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(3));
+      feed.listWithAnotherOnce();
+      const third = app.request(path);
+      await vi.waitFor(() => expect(feed.lister).toHaveBeenCalledTimes(3));
       await setImmediate();
 
       expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
@@ -1832,18 +1874,42 @@ describe('prs route', () => {
       vi.useRealTimers();
     }
   });
+});
 
-  it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
+describe('rules passes across polled feeds', () => {
+  // A board polls its issues, its triage issues (label-filtered) and its pull requests side by side.
+  // Each is its own page: joining another feed's running pass would leave its own entries unruled.
+  it.each([
+    { held: 'prs', polled: 'issues', listed: issue12 },
+    {
+      held: 'issues',
+      polled: 'issues?label=status%3A%20needs%20approval',
+      listed: { ...issue12, number: 13, labels: ['status: needs approval'] },
+    },
+  ])('rules /$polled while a slow pass holds /$held on the same page number', async ({ held, polled, listed }) => {
     seedMaterializedProject();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
-      `/web/github/projects/p1/${resource}`,
+    const pass = Promise.withResolvers<void>();
+    let calls = 0;
+    const ingestFactoryEvent = vi.fn(async (_event: unknown) => {
+      calls += 1;
+      if (calls === 1) await pass.promise;
+    });
+    const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+    const first = app.request(`/web/github/projects/p1/${held}`);
+    await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalledTimes(1));
+    listRepoOpenIssues.mockResolvedValueOnce({ issues: [listed], nextPage: null });
+    const second = app.request(`/web/github/projects/p1/${polled}`);
+
+    await vi.waitFor(() =>
+      expect(ingestFactoryEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ issue: expect.objectContaining({ number: listed.number }) }),
+        }),
+      ),
     );
-    expect(res.status).toBe(200);
-    expect(ingestFactoryEvent).toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
-    warn.mockRestore();
+    pass.resolve();
+    expect([(await first).status, (await second).status]).toEqual([200, 200]);
   });
 });
 

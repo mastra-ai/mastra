@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "68.0.0",
+  "version": "69.0.0-alpha.4",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -245,6 +245,9 @@
     "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@storybook/addon-a11y": "^10.6.2",
     "@storybook/addon-docs": "^10.6.2",

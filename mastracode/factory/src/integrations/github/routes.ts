@@ -20,6 +20,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { canReadSessionResource, canViewSourceControlSession } from '../../routes/session-access.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
@@ -93,11 +94,6 @@ import type { ParsedGithubWebhook } from './webhook.js';
  * we erase the path to a plain `Context` at the call boundary via `loose()`.
  */
 type RouteContext = Context;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
@@ -381,7 +377,7 @@ async function ingestPolledEvents(
   }
 }
 
-// Under the board's 30 s pull request poll: a lone board still runs the rules on every poll while passes take under 10 s.
+// Under the boards' 30 s issue and pull request polls: a lone board still runs the rules on every poll while passes take under 10 s.
 const POLLED_PAGE_INGEST_REST_MS = 20_000;
 // A stuck pass keeps its page so no other pass piles onto it, but stops holding the boards' lists after this.
 const POLLED_PAGE_INGEST_WAIT_MS = 10_000;
@@ -399,15 +395,16 @@ function waitAtMost(pass: Promise<void>): Promise<void> {
 /**
  * One rules pass per listed page at a time, whichever board asked, then a rest: each pass reads the
  * whole project, and every open board polls the same pages. A board joins a running pass unless it
- * looks stuck, and a resting page still ingests the pull requests its last pass did not list.
+ * looks stuck, and a resting page still ingests the issues or pull requests its last pass did not list.
+ * Keys name the feed as well as the page, so an issue page never joins a pull request pass.
  */
 function createPolledPageIngest() {
   const running = new Map<string, { startedAt: number; done: Promise<void> }>();
   const resting = new Map<string, { finishedAt: number; ingested: Set<number> }>();
   return <T extends { number: number }>(
     key: string,
-    pullRequests: readonly T[],
-    ingest: (pullRequests: readonly T[]) => Promise<void>,
+    listed: readonly T[],
+    ingest: (listed: readonly T[]) => Promise<void>,
   ): Promise<void> => {
     const pending = running.get(key);
     if (pending && Date.now() - pending.startedAt < POLLED_PAGE_INGEST_ABANDON_MS) return waitAtMost(pending.done);
@@ -417,13 +414,13 @@ function createPolledPageIngest() {
       resting.delete(rested);
     }
     const rest = resting.get(key);
-    const due = rest ? pullRequests.filter(pullRequest => !rest.ingested.has(pullRequest.number)) : pullRequests;
+    const due = rest ? listed.filter(entry => !rest.ingested.has(entry.number)) : listed;
     if (due.length === 0) return Promise.resolve();
     const done = ingest(due).finally(() => {
       if (running.get(key)?.done !== done) return;
       running.delete(key);
-      if (rest) for (const pullRequest of due) rest.ingested.add(pullRequest.number);
-      else resting.set(key, { finishedAt: Date.now(), ingested: new Set(due.map(pullRequest => pullRequest.number)) });
+      if (rest) for (const entry of due) rest.ingested.add(entry.number);
+      else resting.set(key, { finishedAt: Date.now(), ingested: new Set(due.map(entry => entry.number)) });
     });
     running.set(key, { startedAt: Date.now(), done });
     return waitAtMost(done);
@@ -866,9 +863,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));
-          await ingestPolledEvents(
-            responseIssues.map(issue => polledIssueEvent(loaded.project, issue)),
-            options.ingestFactoryEvent,
+          // The label is part of the page: the triage feed polls a filtered page beside the unfiltered one.
+          await ingestPolledPage(
+            `issues:${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}:${label ?? ''}`,
+            responseIssues,
+            listed =>
+              ingestPolledEvents(
+                listed.map(issue => polledIssueEvent(loaded.project, issue)),
+                options.ingestFactoryEvent,
+              ),
           );
           return c.json({
             issues: responseIssues,
@@ -960,7 +963,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             updatedAt: pr.updatedAt,
           }));
           await ingestPolledPage(
-            `${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}`,
+            `prs:${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}`,
             responsePullRequests,
             listed =>
               ingestPolledEvents(

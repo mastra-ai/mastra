@@ -5,7 +5,6 @@ export {
   defaultBoards,
   defineBoard,
   FACTORY_AGENT_ID,
-  reviewBoard,
   workBoard,
 } from './boards/index.js';
 export type {
@@ -23,13 +22,15 @@ export type {
   BoardTransitionPolicyContext,
   BoardTransitionPolicyResult,
   InstalledBoard,
-  ReviewBoardPhase,
   WorkBoardPhase,
 } from './boards/index.js';
+export { BoardWriteError } from './boards/board-writes.js';
+export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from './storage/domains/boards/base.js';
 export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
+  FactoryTools,
   MastraArgs,
   MastraFactoryConfig,
   MastraFactorySandboxConfig,
@@ -78,3 +79,6 @@ export type {
   IntegrationHooks,
   IntegrationTools,
 } from './integrations/base.js';
+export type { ReviewedChangeRequest, PublishReviewedCommitCheckInput } from './session/source-control-tools.js';
+export type { CommitCheck, CommitCheckStatus } from './capabilities/version-control.js';
+export { platformConnectTools } from './integrations/platform/connect/session-tools.js';

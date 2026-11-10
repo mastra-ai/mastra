@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.18.0",
+  "version": "1.19.0-alpha.3",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -78,6 +78,9 @@
     "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
+    "@mastra/voice-deepgram": "workspace:*",
+    "@mastra/voice-mistral": "workspace:*",
+    "@mastra/voice-openai": "workspace:*",
     "ai": "^7.0.159",
     "execa": "^9.6.1",
     "libsql": "^0.5.29",

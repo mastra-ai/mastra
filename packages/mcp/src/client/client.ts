@@ -65,7 +65,7 @@ import { EventClientActions } from './actions/events';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
-import { isReconnectableMCPError, isRecoverableTaskPollError } from './error-utils';
+import { isReconnectableMCPError, isRecoverableTaskPollError, isUnsentRequestError } from './error-utils';
 import type { DeliveryDriver } from './events/mode';
 import { EventStreamRouter } from './events/stream-router';
 import { EventSubscription } from './events/subscription';
@@ -1987,6 +1987,36 @@ export class InternalMastraMCPClient extends MastraBase {
               const isToolExecutionError =
                 e instanceof MastraError &&
                 (e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED' || e.id.startsWith('MCP_CLIENT_TOOL_TASK_'));
+
+              if (!isToolExecutionError && isReconnectableMCPError(e) && !isUnsentRequestError(e)) {
+                // Closing a transport that is still open would abort healthy calls in flight on
+                // it, so only reconnect when this failure already closed or replaced it.
+                if (annotations?.readOnlyHint === true || annotations?.idempotentHint === true) {
+                  this.log('debug', `Retrying replay-safe tool ${tool.name} after a transport error`, {
+                    error: errorKind(e),
+                  });
+                  // A reconnect already in flight is closing this transport, so wait for its replacement.
+                  if (this.transport !== failedTransport || this.reconnectPromise) {
+                    await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
+                  }
+                  return await executeToolCall();
+                }
+
+                // The server may already have run the tool, so sending it again could repeat a write.
+                this.log('error', `Lost the connection during tool ${tool.name}; it may have run`, {
+                  error: errorKind(e),
+                });
+                throw new MastraError(
+                  {
+                    id: 'MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN',
+                    domain: ErrorDomain.MCP,
+                    category: ErrorCategory.THIRD_PARTY,
+                    text: `The connection to MCP server "${this.name}" failed before tool "${tool.name}" returned a result. The tool may have run on the server, so it was not called again.`,
+                    details: { toolName: tool.name, serverName: this.name },
+                  },
+                  e,
+                );
+              }
 
               if (!isToolExecutionError && isReconnectableMCPError(e)) {
                 this.log('debug', `Transport error detected for tool ${tool.name}, attempting reconnection...`, {

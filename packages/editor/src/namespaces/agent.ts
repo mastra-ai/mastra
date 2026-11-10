@@ -1233,10 +1233,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     const skillsFormat = storedAgent.skillsFormat;
 
-    // Durable opt-in is persisted as a serializable subset (boolean or
-    // { maxSteps, cleanupTimeoutMs }). `cache`/`pubsub` are inherited from the
-    // Mastra instance by `createDurableAgent`, which `addAgent` invokes below
-    // whenever `agent.durable` is truthy.
+    // Stored durable options configure resumable streams on the plain Agent.
+    // Runtime cache and pubsub are inherited from Mastra when the stream bus is used.
     const durable = storedAgent.durable;
 
     // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the

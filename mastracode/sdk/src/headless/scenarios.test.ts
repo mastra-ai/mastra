@@ -71,7 +71,7 @@ interface HarnessOptions {
 }
 
 async function makeHarness(opts: HarnessOptions) {
-  const storage = new LibSQLStore({ id: 'test-store', url: 'file::memory:?cache=shared' });
+  const storage = new LibSQLStore({ id: 'test-store', url: ':memory:' });
 
   const tools: Record<string, ReturnType<typeof createTool>> = {};
   if (opts.withRequestAccessTool) tools.request_access = requestSandboxAccessTool;

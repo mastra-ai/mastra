@@ -9,7 +9,7 @@ import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspa
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { buildFactorySessionRow, buildUserSessionRow } from '../services/sessionRows';
+import { buildFactorySessionRow, buildUserSessionRow, oneRowPerCard } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
 import { sessionWorkItemIndex } from '../services/sessionWorkItems';
 import { usePinnedSessions } from './usePinnedSessions';
@@ -60,6 +60,7 @@ export function useSessionListRows(factoryId: string | undefined): {
         session,
         item: workItem?.item,
         boards: catalog.data,
+        context: workItem?.context,
         threadId: workItem?.threadId,
         pullRequest: workItem?.pullRequest,
         factoryId,
@@ -85,5 +86,5 @@ export function useSessionListRows(factoryId: string | undefined): {
     });
   });
 
-  return { rows: [...factoryRows, ...userRows], ...loadState };
+  return { rows: [...oneRowPerCard(factoryRows, catalog.data), ...userRows], ...loadState };
 }

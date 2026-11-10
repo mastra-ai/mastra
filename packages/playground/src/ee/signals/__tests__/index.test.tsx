@@ -521,9 +521,9 @@ describe('Trace Intelligence page', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
       fireEvent.click(await screen.findByText('Custom range...'));
-      const endPanel = (await screen.findByText('End')).parentElement;
-      if (!endPanel) throw new Error('Custom range end panel was not rendered');
-      fireEvent.click(within(endPanel).getByRole('gridcell', { name: '25' }));
+      // The preset only sets a start (July 20th), so one click picks the end.
+      fireEvent.click(await screen.findByRole('button', { name: /July 25th, 2026/ }));
+      fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '00:00' } });
       fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
       const expectedFrom = new Date(2026, 6, 20, 0, 0).toISOString();

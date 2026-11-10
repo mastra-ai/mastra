@@ -260,28 +260,33 @@ export function getScopeStreamSlot(
  */
 type StreamSlotCloseReason = 'replaced' | 'sameRun';
 
+/** Closes a wrapper. A newer wrapper passes `takeTasks` to receive the tasks the closed one was waiting for. */
+type StreamSlotCloser = (reason?: StreamSlotCloseReason, takeTasks?: Set<string>) => void;
+
 /** Register the active wrapper for a memory scope, aborting the prior wrapper for that scope. */
 export function acquireStreamSlot(
-  activeStreams: Map<string, (reason?: StreamSlotCloseReason) => void>,
+  activeStreams: Map<string, StreamSlotCloser>,
   scopeKey: string | null,
-  closer: (reason?: StreamSlotCloseReason) => void,
+  closer: StreamSlotCloser,
+  takeTasks?: Set<string>,
 ): void {
   if (!scopeKey) return;
   const priorClose = activeStreams.get(scopeKey);
-  priorClose?.('replaced');
+  priorClose?.('replaced', takeTasks);
   activeStreams.set(scopeKey, closer);
 }
 
 /** Register the active wrapper under its caller-visible run ID, replacing an older wrapper for that ID. */
 export function acquireRunStreamSlot(
-  activeStreams: Map<string, (reason?: StreamSlotCloseReason) => void>,
+  activeStreams: Map<string, StreamSlotCloser>,
   runId: string | undefined,
-  closer: (reason?: StreamSlotCloseReason) => void,
+  closer: StreamSlotCloser,
+  takeTasks?: Set<string>,
 ): void {
   if (!runId) return;
   const key = runStreamSlotKey(runId);
   const priorClose = activeStreams.get(key);
-  priorClose?.('sameRun');
+  priorClose?.('sameRun', takeTasks);
   activeStreams.set(key, closer);
 }
 
@@ -500,7 +505,7 @@ export async function runIdleLoop<
     }
   };
 
-  const abortWrapper = (reason?: StreamSlotCloseReason) => {
+  const abortWrapper: StreamSlotCloser = (reason, takeTasks) => {
     if ((closed && !detached) || aborting) return;
     // A wrapper taking over this run resumes it, so a parked run must stay resumable.
     if (parked && (reason === 'sameRun' || (reason === 'replaced' && hooks?.detachOnCancel))) {
@@ -509,11 +514,14 @@ export async function runIdleLoop<
     }
     aborting = true;
     // The caller stopped waiting, so a task this stream was waiting for must not wake the agent later.
-    if (runningTaskIds.size > 0) {
+    // A newer wrapper closing this one isn't a caller stop: it takes over waiting for the tasks, so its own
+    // caller stop still covers them.
+    if (reason === undefined && runningTaskIds.size > 0) {
       let stopped = callerStoppedTasks.get(deps.activeStreams);
       if (!stopped) callerStoppedTasks.set(deps.activeStreams, (stopped = new Set()));
       for (const taskId of runningTaskIds) stopped.add(taskId);
     }
+    if (takeTasks) for (const taskId of runningTaskIds) takeTasks.add(taskId);
     // External engines route abortRunStream back through this registry; release before forwarding.
     releaseWrapperSlots();
     initialAbort.abort();
@@ -655,8 +663,8 @@ export async function runIdleLoop<
 
   // --- Setup ---
   // Take the run slot first: a resume detaches its parked predecessor, which frees the scope slot too.
-  acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
-  acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper);
+  acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper, runningTaskIds);
+  acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper, runningTaskIds);
 
   streamOptions?.abortSignal?.addEventListener('abort', detachOrAbort, { once: true });
 

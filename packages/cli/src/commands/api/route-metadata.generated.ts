@@ -2097,6 +2097,7 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "pagination",
+      "textSearch",
       "timeRange",
       "where"
     ],
@@ -2178,6 +2179,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "orderBy",
       "page",
+      "textSearch",
       "timeRange",
       "where"
     ],
@@ -2383,6 +2385,7 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "contextMode",
       "score"
     ],
     "hasQuery": false,
@@ -2548,12 +2551,27 @@ export const API_ROUTE_METADATA = {
       "paginationProperty": "pagination"
     }
   },
+  "GET /observability/feedback/:feedbackId": {
+    "method": "GET",
+    "path": "/observability/feedback/:feedbackId",
+    "pathParams": [
+      "feedbackId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /observability/feedback": {
     "method": "POST",
     "path": "/observability/feedback",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "contextMode",
       "feedback"
     ],
     "hasQuery": false,

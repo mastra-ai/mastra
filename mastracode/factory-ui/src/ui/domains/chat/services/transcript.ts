@@ -1,4 +1,5 @@
 import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallExit } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
@@ -18,7 +19,7 @@ export interface ToolCall {
   output: string;
   // Epoch milliseconds.
   createdAt?: number;
-  exitCode?: number;
+  exit?: ToolCallExit;
 }
 
 export function toolCallStatus(status: ToolCall['status']): ActivityStatus {
@@ -312,7 +313,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'command_exit':
       return knownToolIndex(state.entries, event.toolCallId) === -1
         ? state
-        : withTool(state, event.toolCallId, t => ({ ...t, exitCode: event.exitCode }));
+        : withTool(state, event.toolCallId, t => ({ ...t, exit: commandExit(event) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
@@ -460,15 +461,31 @@ function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
   return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
 }
 
-const sandboxExitSchema = z.object({ toolCallId: z.string(), exitCode: z.number() });
+const sandboxExitSchema = z.object({
+  toolCallId: z.string(),
+  exitCode: z.number(),
+  // These only describe the exit, so a malformed one is dropped rather than the whole exit and its ✕.
+  killed: z.boolean().optional().catch(undefined),
+  timedOut: z.boolean().optional().catch(undefined),
+  error: z.string().optional().catch(undefined),
+});
+
+/** One shape for an exit, whether it streamed as `command_exit` or was saved as `data-sandbox-exit`. */
+function commandExit({ exitCode, killed = false, timedOut = false, error }: ToolCallExit): ToolCallExit {
+  return { exitCode, killed, timedOut, error };
+}
+
+function sameExit(a: ToolCallExit, b: ToolCallExit | undefined): boolean {
+  return a.exitCode === b?.exitCode && a.killed === b.killed && a.timedOut === b.timedOut && a.error === b.error;
+}
 
 /** The exit shares its call's message, unless a sealed message pushed it into a later one. */
-function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, number> {
-  const exits = new Map<string, number>();
+function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, ToolCallExit> {
+  const exits = new Map<string, ToolCallExit>();
   for (const part of messages.flatMap(message => message.content.parts)) {
     if (part.type !== 'data-sandbox-exit' || !('data' in part)) continue;
     const exit = sandboxExitSchema.safeParse(part.data);
-    if (exit.success) exits.set(exit.data.toolCallId, exit.data.exitCode);
+    if (exit.success) exits.set(exit.data.toolCallId, commandExit(exit.data));
   }
   return exits;
 }
@@ -490,14 +507,17 @@ function settleCommandExits(state: TranscriptState, messages: MastraDBMessage[])
   return changed ? { ...state, entries } : state;
 }
 
-function exitedTools(entry: MessageEntry, exits: ReadonlyMap<string, number>): Array<readonly [string, ToolCall]> {
+function exitedTools(
+  entry: MessageEntry,
+  exits: ReadonlyMap<string, ToolCallExit>,
+): Array<readonly [string, ToolCall]> {
   return entry.message.content.parts.flatMap(part => {
     const persisted = toolCallFromPart(part);
     if (!persisted) return [];
     const tool = entry.runtimeTools?.[persisted.toolCallId] ?? persisted;
-    const exitCode = exits.get(tool.toolCallId);
-    if (exitCode === undefined || exitCode === tool.exitCode) return [];
-    return [[tool.toolCallId, { ...tool, exitCode }] as const];
+    const exit = exits.get(tool.toolCallId);
+    if (exit === undefined || sameExit(exit, tool.exit)) return [];
+    return [[tool.toolCallId, { ...tool, exit }] as const];
   });
 }
 

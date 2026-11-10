@@ -22,8 +22,11 @@ overrides:
   '@mastra/memory': link:../../packages/memory
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/mcp': link:../../packages/mcp
+  '@mastra/mcp-apps-components': link:../../packages/mcp-apps-components
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
+  '@mastra/playground-ui': link:../../packages/playground-ui
+  '@mastra/server': link:../../packages/server
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
   '@mastra/auth-studio': link:../../auth/studio
@@ -51,7 +54,7 @@ overrides:
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.11.0
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   jose@>=4.14.0 <6.2.12: 6.2.12
-  better-auth: ^1.7.7
+  better-auth: ^1.7.16
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.7: 4.6.7
   es-toolkit@<1.52.0: 1.52.0
@@ -64,6 +67,8 @@ overrides:
   yargs@<18.1.0: 18.2.0
   raw-body@<4.0.0: 4.0.0
   nanoid@<5.1.16: 5.1.16
+  '@modelcontextprotocol/sdk>@hono/node-server': 2.1.6
+  '@modelcontextprotocol/node>@hono/node-server': 2.1.6
 
 packageExtensionsChecksum: sha256-E1uC6ipRR7MoF7R/5oDB8SEpSulsYWlFaGB0bv3k/Mo=
 
@@ -133,12 +138,21 @@ importers:
       '@mastra/mcp':
         specifier: link:../../packages/mcp
         version: link:../../packages/mcp
+      '@mastra/mcp-apps-components':
+        specifier: link:../../packages/mcp-apps-components
+        version: link:../../packages/mcp-apps-components
       '@mastra/memory':
         specifier: link:../../packages/memory
         version: link:../../packages/memory
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/playground-ui':
+        specifier: link:../../packages/playground-ui
+        version: link:../../packages/playground-ui
+      '@mastra/server':
+        specifier: link:../../packages/server
+        version: link:../../packages/server
       '@mastra/slack':
         specifier: link:../../channels/slack
         version: link:../../channels/slack
@@ -155,7 +169,7 @@ importers:
         specifier: npm:ai@^5.0.93
         version: ai@5.0.285(zod@4.6.7)
       better-auth:
-        specifier: ^1.7.7
+        specifier: ^1.7.16
         version: 1.7.16(@opentelemetry/api@1.9.0)(react@19.3.1)(vitest@4.1.12(@opentelemetry/api@1.9.0)(@types/node@26.6.6)(msw@2.15.0(@types/node@26.6.6)(typescript@5.9.3))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)))
       fetch-to-node:
         specifier: ^2.1.0
@@ -468,9 +482,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@hono/node-server@1.19.15':
-    resolution: {integrity: sha512-Za2ai6TLdKjUvnur+eenO6nuYYipVAEhyCAdaV8IRvmU9kK8crOZUSYvIXn72E4f8fJqyAbpcJuTsYYmZp9Deg==}
-    engines: {node: '>=18.14.1'}
+  '@hono/node-server@2.1.6':
+    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
+    engines: {node: '>=20'}
     peerDependencies:
       hono: 4.13.11
 
@@ -1842,7 +1856,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@hono/node-server@1.19.15(hono@4.13.11)':
+  '@hono/node-server@2.1.6(hono@4.13.11)':
     dependencies:
       hono: 4.13.11
 
@@ -1877,7 +1891,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.2(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 1.19.15(hono@4.13.11)
+      '@hono/node-server': 2.1.6(hono@4.13.11)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5

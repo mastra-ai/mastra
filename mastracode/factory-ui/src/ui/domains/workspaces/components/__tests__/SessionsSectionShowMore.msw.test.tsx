@@ -15,7 +15,7 @@ import { groupSessionsByBoard } from './fixtures/sessionProperties';
 const projectRepositoryId = 'ghp-1';
 
 function reviewSession(index: number): FactoryUserSession {
-  const createdAt = `2026-07-23T00:00:${String(index).padStart(2, '0')}.000Z`;
+  const createdAt = new Date(Date.parse('2026-07-23T00:00:00.000Z') + index * 1_000).toISOString();
   return {
     id: `row-${index}`,
     sessionId: `sess-${index}`,
@@ -40,13 +40,14 @@ function stubSessions(sessions: FactoryUserSession[]) {
   );
 }
 
-function renderSection() {
+function renderSection(sessionId?: string) {
   stubSessionsFactory('fp-1', [projectRepositoryId]);
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1']}>
+    <MemoryRouter initialEntries={[sessionId ? `/factories/fp-1/workspaces/${sessionId}` : '/factories/fp-1']}>
       <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
         <Routes>
           <Route path="/factories/:factoryId" element={<SessionsSection />} />
+          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<SessionsSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,
@@ -59,13 +60,13 @@ describe('Sessions sidebar show more', () => {
     groupSessionsByBoard();
   });
 
-  it('caps a group at 5 sessions and expands to the full list on demand', async () => {
+  it('caps a group at 5 sessions and reveals a small remainder on demand', async () => {
     stubSessions(Array.from({ length: 8 }, (_, index) => reviewSession(index + 1)));
     const user = userEvent.setup();
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
     expect(within(group).queryByRole('link', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
@@ -77,13 +78,94 @@ describe('Sessions sidebar show more', () => {
     expect(within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
   });
 
+  it('reveals at most 20 more sessions per click and can collapse before reaching the end', async () => {
+    stubSessions(Array.from({ length: 68 }, (_, index) => reviewSession(index + 1)));
+    const user = userEvent.setup();
+
+    renderSection();
+
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
+    const links = () => within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ });
+    expect(links()).toHaveLength(5);
+
+    await user.click(within(group).getByRole('button', { name: /Show \d+ more/ }));
+    expect(links()).toHaveLength(25);
+    expect(within(group).queryByRole('link', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
+
+    await user.click(within(group).getByRole('button', { name: 'Show less' }));
+    expect(links()).toHaveLength(5);
+
+    await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
+    expect(links()).toHaveLength(25);
+    await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
+    expect(links()).toHaveLength(45);
+    await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
+    expect(links()).toHaveLength(65);
+    await user.click(within(group).getByRole('button', { name: 'Show 3 more' }));
+    expect(links()).toHaveLength(68);
+    expect(within(group).queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
+
+    await user.click(within(group).getByRole('button', { name: 'Show less' }));
+    expect(links()).toHaveLength(5);
+  });
+
+  it.each([1, 30])(
+    'keeps open session %i visible across batches and after collapsing without duplicating it',
+    async index => {
+      stubSessions(Array.from({ length: 48 }, (_, index) => reviewSession(index + 1)));
+      const user = userEvent.setup();
+
+      renderSection(`sess-${index}`);
+
+      const group = await screen.findByRole('region', { name: 'Work sessions' });
+      const links = () => within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ });
+      expect(links()).toHaveLength(6);
+      const activeName = `factory/pr-${20000 + index}`;
+      expect(within(group).getByRole('link', { name: activeName })).toHaveAttribute('aria-current', 'page');
+
+      await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
+      expect(links()).toHaveLength(26);
+      await user.click(within(group).getByRole('button', { name: 'Show 20 more' }));
+      expect(links()).toHaveLength(46);
+      await user.click(within(group).getByRole('button', { name: 'Show 2 more' }));
+      expect(links()).toHaveLength(48);
+
+      await user.click(within(group).getByRole('button', { name: 'Show less' }));
+      expect(links()).toHaveLength(6);
+      expect(within(group).getByRole('link', { name: activeName })).toHaveAttribute('aria-current', 'page');
+    },
+  );
+
+  it('keeps keyboard focus on a toggle when the pressed one disappears', async () => {
+    stubSessions(Array.from({ length: 28 }, (_, index) => reviewSession(index + 1)));
+    const user = userEvent.setup();
+
+    renderSection();
+
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
+    const showMore = within(group).getByRole('button', { name: 'Show 20 more' });
+    expect(showMore).not.toHaveAttribute('aria-expanded');
+    showMore.focus();
+
+    await user.keyboard('{Enter}');
+    expect(within(group).getByRole('button', { name: 'Show 3 more' })).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    const showLess = within(group).getByRole('button', { name: 'Show less' });
+    expect(showLess).toHaveFocus();
+    expect(showLess).not.toHaveAttribute('aria-expanded');
+
+    await user.keyboard('{Enter}');
+    expect(within(group).getByRole('button', { name: 'Show 20 more' })).toHaveFocus();
+  });
+
   it('keeps a pinned session visible and persists the pin', async () => {
     stubSessions(Array.from({ length: 8 }, (_, index) => reviewSession(index + 1)));
     const user = userEvent.setup();
 
     const rendered = renderSection();
     await waitForMutationsIdle(rendered.client);
-    const group = screen.getByRole('region', { name: 'Review sessions' });
+    const group = screen.getByRole('region', { name: 'Work sessions' });
     await user.click(within(group).getByRole('button', { name: 'Show 3 more' }));
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20001' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Pin session' }));
@@ -96,7 +178,7 @@ describe('Sessions sidebar show more', () => {
 
     rendered.unmount();
     renderSection();
-    const remountedGroup = await screen.findByRole('region', { name: 'Review sessions' });
+    const remountedGroup = await screen.findByRole('region', { name: 'Work sessions' });
     expect(within(remountedGroup).getByRole('link', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(remountedGroup).getByLabelText('factory/pr-20001 pinned')).toBeInTheDocument();
 
@@ -110,7 +192,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
   });

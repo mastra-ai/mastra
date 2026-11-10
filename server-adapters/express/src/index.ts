@@ -8,6 +8,8 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
+  cancelReaderOnResponseClose,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
@@ -16,6 +18,7 @@ import {
   normalizeQueryParams,
   redactStreamChunk,
   serializeStreamChunk,
+  writeWithBackpressure,
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 export { createAuthMiddleware } from './auth-middleware';
@@ -148,6 +151,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           controller.abort();
         }
       });
+      // A client that dropped while earlier middleware ran (async auth, body parsing) fired 'close' before this
+      // listener existed.
+      if (res.destroyed) {
+        controller.abort();
+      }
+
       res.locals.abortSignal = controller.signal;
       next();
     };
@@ -172,6 +181,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
+    const readerCancel = cancelReaderOnResponseClose(reader, res);
 
     try {
       while (true) {
@@ -180,7 +190,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         if (value) {
           if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
-            res.write(value);
+            await writeWithBackpressure(res, value);
             continue;
           }
 
@@ -198,9 +208,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             continue;
           }
           if (streamFormat === 'sse') {
-            res.write(`data: ${serialized.json}\n\n`);
+            await writeWithBackpressure(res, `data: ${serialized.json}\n\n`);
           } else {
-            res.write(serialized.json + '\x1E');
+            await writeWithBackpressure(res, serialized.json + '\x1E');
           }
         }
       }
@@ -209,6 +219,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
     } finally {
+      readerCancel.dispose();
       res.end();
     }
   }
@@ -353,12 +364,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       response.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+        const readerCancel = cancelReaderOnResponseClose(reader, response);
 
         const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error').catch(() => {});
+          readerCancel.cancel('response write error');
         };
         response.once('error', onResError);
 
@@ -366,7 +378,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            response.write(value);
+            await writeWithBackpressure(response, value);
           }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in datastream processing', {
@@ -374,6 +386,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           });
         } finally {
           response.off('error', onResError);
+          readerCancel.dispose();
           response.end();
         }
       } else {
@@ -390,7 +403,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
       try {
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+        await applyMcpRequestAuth({ req: request, requestContext: response.locals.requestContext, setRequestAuth });
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
@@ -419,6 +434,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
 
       try {
+        await applyMcpRequestAuth({
+          req: request,
+          requestContext: response.locals.requestContext,
+          setRequestAuth: this.mcpOptions?.setRequestAuth,
+        });
+
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
           ssePath: `${resolvedPrefix}${ssePath}`,

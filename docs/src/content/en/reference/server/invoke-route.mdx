@@ -1,0 +1,137 @@
+---
+title: "Reference: invokeRoute() | Server"
+description: "Use invokeRoute() to run a Mastra server route in-process as the calling user, with the same validation, permission, and authorization checks as its HTTP endpoint."
+packages:
+  - "@mastra/server"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# invokeRoute()
+
+The `invokeRoute()` function runs a server route in-process as the calling user and returns what the route would have answered over HTTP. It expects a request context that Mastra server auth already authenticated, then applies the same checks as the route's HTTP endpoint on every adapter: your auth provider's `authorize`, `authorizeUser`, and `rules`, schema validation, RBAC permission, and fine-grained authorization (FGA).
+
+Use it to expose a route through another channel, such as an MCP tool, without proxying through the HTTP server and without the two drifting apart.
+
+## Usage example
+
+```typescript title="src/mastra/tools/metric-aggregate.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { RequestContext } from '@mastra/core/request-context'
+import { createTool } from '@mastra/core/tools'
+import { GET_METRIC_AGGREGATE } from '@mastra/server/handlers/observability'
+import { invokeRoute } from '@mastra/server/server-adapter'
+import { z } from 'zod'
+
+export const agentRunCount = createTool({
+  id: 'agentRunCount',
+  description: 'Counts agent runs',
+  inputSchema: z.object({}),
+  execute: async (_input, { mastra, requestContext = new RequestContext() }) => {
+    if (!(mastra instanceof Mastra)) throw new Error('agentRunCount must run inside Mastra')
+
+    const { status, body } = await invokeRoute(GET_METRIC_AGGREGATE, {
+      mastra,
+      requestContext,
+      body: { name: ['mastra_agent_duration_ms'], aggregation: 'count' },
+    })
+    if (status !== 200) throw new Error(`Metric aggregate failed with status ${status}`)
+    return body
+  },
+})
+```
+
+## Import
+
+```typescript
+import { invokeRoute } from '@mastra/server/server-adapter'
+```
+
+## Signature
+
+```typescript
+function invokeRoute(route: ServerRoute, options: InvokeRouteOptions): Promise<InvokeRouteResult>
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'route',
+    type: 'ServerRoute',
+    description:
+      "The route to run, such as one created with [`createRoute()`](/reference/server/create-route) or exported from `@mastra/server/handlers/*`. Must have `responseType: 'json'`.",
+    isOptional: false,
+  },
+  {
+    name: 'options.mastra',
+    type: 'Mastra',
+    description: 'The Mastra instance the route runs against.',
+    isOptional: false,
+  },
+  {
+    name: 'options.requestContext',
+    type: 'RequestContext',
+    description:
+      "The caller's request context, already authenticated by Mastra server auth. Its user, permissions, and auth mode decide what the caller may do.",
+    isOptional: false,
+  },
+  {
+    name: 'options.pathParams',
+    type: 'Record<string, string>',
+    description: "Path parameters, validated against the route's `pathParamSchema`.",
+    isOptional: true,
+  },
+  {
+    name: 'options.query',
+    type: 'Record<string, string | string[]>',
+    description: "Query parameters, validated against the route's `queryParamSchema`. Use an array for a repeated key.",
+    isOptional: true,
+  },
+  {
+    name: 'options.body',
+    type: 'unknown',
+    description: "Request body, validated against the route's `bodySchema`.",
+    isOptional: true,
+  },
+  {
+    name: 'options.abortSignal',
+    type: 'AbortSignal',
+    description: 'Cancels the route handler.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'status',
+    type: 'number',
+    description: 'The HTTP status the route would have answered with, such as `200`, `400`, `401`, or `403`.',
+  },
+  {
+    name: 'body',
+    type: 'unknown',
+    description: "The route's response body, or an error body when a check fails or the handler throws.",
+  },
+]}
+/>
+
+Failed checks and errors thrown by the handler are returned as a status and body, not thrown.
+
+## Behavior
+
+- **Authentication isn't re-run.** When server or Studio auth is configured, the request context must already carry the user Mastra server auth resolved. Otherwise `invokeRoute()` returns `401` without running the handler. Requests reaching an MCP tool through a Mastra server adapter carry this context.
+- **Authorization hooks see the HTTP path.** `authorize()` and `rules` receive the route's path under the server's `apiPrefix` (`/api` by default), with path parameters filled in, and the route's method. `authorize()` gets no adapter-specific request context.
+- **Only JSON routes are supported.** `invokeRoute()` throws for routes with any other `responseType`, such as streaming or MCP transport routes.
+- **HTTP-only handler parameters aren't supplied.** The handler receives the parsed parameters, `mastra`, `requestContext`, and `abortSignal`, but not `request`, `registeredTools`, `taskStore`, or `routePrefix`. Routes that read those aren't suitable.
+
+## Related
+
+- [`createRoute()`](/reference/server/create-route)
+- [Server routes](/reference/server/routes)
+- [Build MCP Apps](/docs/connections/mcp#build-mcp-apps)

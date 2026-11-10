@@ -29,6 +29,27 @@ describe('fitViewport', () => {
     expect((ring.y + ring.height) * view.zoom + view.y).toBeLessThanOrEqual(HEIGHT);
   });
 
+  it('frames the ring in the part of the pane the drawers leave uncovered', () => {
+    const insets = { left: 200, right: 300 };
+    const view = fitViewport({ bounds: ring, width: WIDTH, height: HEIGHT, ring: true, anchor, insets });
+    expect(ring.x * view.zoom + view.x).toBeGreaterThanOrEqual(insets.left);
+    expect((ring.x + ring.width) * view.zoom + view.x).toBeLessThanOrEqual(WIDTH - insets.right);
+  });
+
+  it('centres a floored focus between the drawers', () => {
+    const insets = { left: 300, right: 100 };
+    const view = fitViewport({ bounds: ring, width: WIDTH, height: HEIGHT, anchor, insets });
+    expect(view.x).toBeCloseTo(insets.left + (WIDTH - insets.left - insets.right) / 2, 5);
+  });
+
+  it('centres in the whole pane when the drawers are wider than it', () => {
+    const narrow = 600;
+    const insets = { left: 296, right: 392 };
+    expect(fitViewport({ bounds: ring, width: narrow, height: HEIGHT, anchor, insets })).toEqual(
+      fitViewport({ bounds: ring, width: narrow, height: HEIGHT, anchor }),
+    );
+  });
+
   it('keeps the readable floor for a focus without a ring, and centres on the focus when it bites', () => {
     const view = fitViewport({ bounds: ring, width: WIDTH, height: HEIGHT, anchor });
     expect(view.zoom).toBe(READABLE_MIN_ZOOM);
@@ -118,6 +139,24 @@ describe('fitAllViewport', () => {
       expect(at.right).toBeLessThanOrEqual(WIDTH);
       expect(at.bottom).toBeLessThanOrEqual(HEIGHT);
     }
+  });
+
+  it('frames every node between the drawers laid over the pane', () => {
+    const insets = { left: 300, right: 200 };
+    const view = fitAllViewport({ bounds, nodes, width: WIDTH, height: HEIGHT, insets });
+    for (const n of nodes) {
+      const at = screen(view, n);
+      expect(at.left).toBeGreaterThanOrEqual(insets.left);
+      expect(at.right).toBeLessThanOrEqual(WIDTH - insets.right);
+    }
+  });
+
+  it('fits the whole pane when the drawers are wider than it', () => {
+    const narrow = 600;
+    const insets = { left: 296, right: 392 };
+    expect(fitAllViewport({ bounds, nodes, width: narrow, height: HEIGHT, insets })).toEqual(
+      fitAllViewport({ bounds, nodes, width: narrow, height: HEIGHT }),
+    );
   });
 
   it('leaves the fit alone when nothing is under the legend', () => {

@@ -7,6 +7,9 @@ import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import type { ProjectBoardCache } from '../boards/project-boards.js';
+import { createBoardRegistry } from '../boards/registry.js';
+import { workItemPhaseSemantics } from '../boards/semantics.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
@@ -24,12 +27,11 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
-import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { ProjectListRepository } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -38,10 +40,6 @@ const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
 const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
-
-function loose(context: unknown): Context {
-  return context as Context;
-}
 
 async function readJson(context: Context): Promise<unknown | undefined> {
   try {
@@ -202,6 +200,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   environmentBuilds?: EnvironmentBuildRunner;
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
+  /** The per-project boards; loading a new project stores its copies of the code boards. */
+  boards?: Pick<ProjectBoardCache, 'describe'>;
 }
 
 /** Provider output is shown to the user; strip any clone credential from it first. */
@@ -590,6 +590,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          // The project's first board load retries anything this misses.
+          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+            console.warn('[factory] could not store the boards of a new project:', error);
+          });
           return context.json({ project }, 201);
         },
       }),
@@ -643,8 +647,16 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               403,
             );
           }
-          // Plans are approved per board (`exitTool.autoApprove`); the old project switch is ignored.
-          const { autoApprovePlans: _ignored, ...input } = parsedBody.data;
+          // Retired project switches an old client may still send: the board owns automation now
+          // (`autoStart`, `exitTool.autoApprove`, a self-review phase), and the review skill decides
+          // whether to publish its test check.
+          const {
+            autoApprovePlans: _plans,
+            autoRunEnabled: _autoRun,
+            reviewTestChecksEnabled: _testChecks,
+            selfReviewEnabled: _selfReview,
+            ...input
+          } = parsedBody.data;
           const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
@@ -684,6 +696,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
             binding => binding.status === 'active',
           );
+          const boards =
+            (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
+            createBoardRegistry();
           const seen = new Set<string>();
           const applied: string[] = [];
           const skipped: Array<{
@@ -707,7 +722,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
               continue;
             }
-            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+            // A bound run can still act on its card anywhere short of a terminal phase.
+            const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
+            if (phaseKind === undefined || phaseKind === 'terminal') {
               skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
               continue;
             }

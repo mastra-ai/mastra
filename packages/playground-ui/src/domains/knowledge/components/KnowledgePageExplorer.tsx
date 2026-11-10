@@ -1,8 +1,25 @@
-import { ArrowLeft, Hash, Link2, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  FileText,
+  Folder,
+  Hash,
+  Link2,
+  ListTree,
+  Network,
+  PanelLeftClose,
+  PanelLeftOpen,
+  SquareArrowOutUpRight,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 
 import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
+import { scopeTitle } from '../lib/pageAddress';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
+import { KnowledgePagesByRef } from '../lib/pagesByRefContext';
 import { childCountLabel } from '../lib/pageTree';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
 import { useStableWhile } from '../lib/useStableWhile';
@@ -15,13 +32,28 @@ import type {
   KnowledgePinPayload,
   KnowledgeScopeGrantPayload,
 } from '../pageTypes';
-import { KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
+import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
+import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
+import { KnowledgeTooltip } from './KnowledgeTooltip';
 
+import { ActionRow } from '@/ds/components/ActionRow';
+import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { DataPanel } from '@/ds/components/DataPanel';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { SearchInput } from '@/ds/components/SearchInput';
+import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
+import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
+import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { menuItemButtonClass } from '@/ds/primitives/menu-item';
+import { frameSurfaceStyle, overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { cn } from '@/lib/utils';
 
 /** `tree` is only a choice below `lg`; wider screens always show the tree beside the graph or the page. */
 export type KnowledgeExplorerView = 'tree' | 'graph' | 'page';
@@ -122,6 +154,8 @@ export interface KnowledgePageExplorerProps {
   onSelect: (pageId: string | null) => void;
   view: KnowledgeExplorerView;
   onViewChange: (view: KnowledgeExplorerView) => void;
+  toolbarEnd?: ReactNode;
+  flush?: boolean;
 }
 
 const MIN_SEARCH_LENGTH = 2;
@@ -200,11 +234,27 @@ function visibleLinks(
   return { edges: [...unique.values()].filter(edge => shown.has(edgeKey(edge))), hidden, more };
 }
 /** The round buttons floating over the graph: muted when off or idle, a solid fill when pressed. */
-const FLOAT_BUTTON =
-  'flex size-9 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-overlay transition-colors hover:bg-fill-subtle hover:text-foreground aria-pressed:border-transparent aria-pressed:bg-fill-inverse aria-pressed:text-background aria-pressed:hover:bg-fill-inverse disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card';
-
 /** How many earlier focuses Back remembers. */
 const FOCUS_HISTORY_CAP = 50;
+function explorerTab(view: KnowledgeExplorerView, showPage: boolean): KnowledgeExplorerView {
+  if (showPage) return 'page';
+  if (view === 'tree') return 'tree';
+  return 'graph';
+}
+
+const TREE_DRAWER_INSET = 296;
+const TREE_TOGGLE_INSET = 44;
+
+function treeInset(overlay: boolean, treeOpen: boolean): number {
+  if (!overlay) return 0;
+  return treeOpen ? TREE_DRAWER_INSET : TREE_TOGGLE_INSET;
+}
+const PAGE_DRAWER_INSET = 392;
+type InsetStyle = CSSProperties & {
+  '--knowledge-tree-inset': string;
+  '--knowledge-tree-drawer-inset': string;
+  '--knowledge-drawer-inset': string;
+};
 const noTreeLevels = () => [];
 const noKeys: string[] = [];
 const noLinkedPages = (): Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>> => [];
@@ -273,6 +323,59 @@ function withinScope(pages: KnowledgePagePayload[], scopeId: string | null): Kno
   return pages.filter(isInside);
 }
 
+const SKELETON_ROW_WIDTHS = ['w-32', 'w-24', 'w-40', 'w-28', 'w-36', 'w-20'];
+
+function TreeRowsSkeleton({ label, rows }: { label: string; rows: number }) {
+  return (
+    <div role="status" aria-label={label} className="flex flex-col">
+      {SKELETON_ROW_WIDTHS.slice(0, rows).map((width, index) => (
+        <div
+          key={width}
+          className="flex h-8 items-center gap-2 px-1"
+          style={{ paddingLeft: `${(index % 3) * 12 + 4}px` }}
+        >
+          <Skeleton className="size-3.5 shrink-0" />
+          <SkeletonText className={width} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NotesSkeleton() {
+  return (
+    <div role="status" aria-label="Loading notes" className="flex flex-col gap-2">
+      {[0, 1].map(index => (
+        <div key={index} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+          <SkeletonText className="w-24" />
+          <SkeletonText className="w-full" />
+          <SkeletonText className="w-2/3" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PageSkeleton({ compact }: { compact?: boolean }) {
+  return (
+    <div role="status" aria-label="Loading page" className="flex flex-col">
+      <div
+        className={`flex flex-col gap-2 border-b border-border ${compact ? 'px-4 pt-3 pb-4' : 'bg-fill-subtle px-6 pt-5 pb-4'}`}
+      >
+        <SkeletonText line="text-caption" className="w-28" />
+        {compact ? null : <SkeletonText line="text-title" className="h-5 w-56" />}
+        <SkeletonText className="w-72 max-w-full" />
+        <SkeletonText line="text-caption" className="w-40" />
+      </div>
+      <div className={`flex flex-col gap-3 ${compact ? 'p-4' : 'p-6'}`}>
+        <SkeletonText className="w-full max-w-3xl" />
+        <SkeletonText className="w-5/6 max-w-2xl" />
+        <SkeletonText className="w-2/3 max-w-xl" />
+      </div>
+    </div>
+  );
+}
+
 function MoreButton({ onClick, label = 'Load more' }: { onClick: () => void; label?: string }) {
   return (
     <button
@@ -302,7 +405,7 @@ function MoreNotes({
   const chunk = source.usePage(pageId, cursor);
   const [showNext, setShowNext] = useState(false);
   const known = useMemo(() => withPages(pagesById, chunk.data?.related ?? []), [chunk.data, pagesById]);
-  if (chunk.isPending) return <p className="text-caption text-muted-foreground">Loading notes…</p>;
+  if (chunk.isPending) return <NotesSkeleton />;
   if (!chunk.data) return null;
   const next = chunk.data.notesNextCursor;
   return (
@@ -327,46 +430,151 @@ function MoreNotes({
 function ChildPages({
   useTreeLevels,
   parentId,
-  onPageClick,
+  onOpen,
 }: {
   useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
   parentId: string;
-  onPageClick: (page: KnowledgePagePayload) => void;
+  onOpen: (pageId: string) => void;
 }) {
   const [cursors, setCursors] = useState<string[]>([]);
   const requests = useMemo(() => [{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))], [parentId, cursors]);
   const levels = useTreeLevels(requests);
   const pages = levels.flatMap(level => level.data?.pages ?? []);
   const last = levels[levels.length - 1];
-  if (levels[0]?.isPending) return <p className="text-caption text-muted-foreground">Loading pages…</p>;
-  if (pages.length === 0) {
+  if (levels[0]?.isPending) {
     return (
-      <p className="text-body text-muted-foreground" data-testid="knowledge-no-child-pages">
-        No pages under this one.
-      </p>
+      <KnowledgeDetailSection label="Pages">
+        <TreeRowsSkeleton label="Loading pages" rows={3} />
+      </KnowledgeDetailSection>
     );
   }
   const next = last?.data?.nextCursor;
+  if (pages.length === 0 && !next) return null;
+  return (
+    <KnowledgeDetailSection label="Pages">
+      <div className={`rounded-xl p-1 ${raisedSurfaceStyle}`}>
+        <Tree className="rounded-lg bg-background p-1" onSelect={onOpen}>
+          <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
+        </Tree>
+      </div>
+      {next ? <MoreButton onClick={() => setCursors(current => [...current, next])} /> : null}
+    </KnowledgeDetailSection>
+  );
+}
+
+function ChildPageItems({
+  pages,
+  useTreeLevels,
+  onOpen,
+}: {
+  pages: KnowledgePagePayload[];
+  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
+  onOpen: (pageId: string) => void;
+}) {
+  return pages.map(child =>
+    child.childCount !== 0 ? (
+      <ChildPageFolder key={child.id} page={child} useTreeLevels={useTreeLevels} onOpen={onOpen} />
+    ) : (
+      <Tree.File key={child.id} id={child.id}>
+        <Tree.Icon className="text-muted-foreground">
+          <FileText />
+        </Tree.Icon>
+        <ChildPageLabel page={child} />
+      </Tree.File>
+    ),
+  );
+}
+
+function ChildPageLabel({ page }: { page: KnowledgePagePayload }) {
+  if (!page.description) return <Tree.Label>{page.name}</Tree.Label>;
+  return (
+    <KnowledgeTooltip label={page.description}>
+      <Tree.Label>{page.name}</Tree.Label>
+    </KnowledgeTooltip>
+  );
+}
+
+function ChildPageFolder({
+  page,
+  useTreeLevels,
+  onOpen,
+}: {
+  page: KnowledgePagePayload;
+  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
+  onOpen: (pageId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Tree.Folder id={page.id} open={open} onOpenChange={setOpen}>
+      <Tree.FolderTrigger
+        actions={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            tooltip={`Open ${page.name}`}
+            aria-label={`Open ${page.name}`}
+            onClick={() => onOpen(page.id)}
+          >
+            <ArrowRight />
+          </Button>
+        }
+      >
+        <Tree.Icon className="text-muted-foreground">
+          <Folder />
+        </Tree.Icon>
+        <ChildPageLabel page={page} />
+        {page.childCount ? (
+          <Txt as="span" variant="caption" tone="muted" className="ml-auto pl-2 tabular-nums">
+            {page.childCount}
+          </Txt>
+        ) : null}
+      </Tree.FolderTrigger>
+      <Tree.FolderContent>
+        {open ? <ChildPageLevel parentId={page.id} useTreeLevels={useTreeLevels} onOpen={onOpen} /> : null}
+      </Tree.FolderContent>
+    </Tree.Folder>
+  );
+}
+
+function ChildPageLevel({
+  parentId,
+  useTreeLevels,
+  onOpen,
+}: {
+  parentId: string;
+  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
+  onOpen: (pageId: string) => void;
+}) {
+  const [cursors, setCursors] = useState<string[]>([]);
+  const levels = useTreeLevels([{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))]);
+  const pages = levels.flatMap(level => level.data?.pages ?? []);
+  const next = levels[levels.length - 1]?.data?.nextCursor;
+  if (levels[0]?.isPending) {
+    return (
+      <li role="none" className="pl-6">
+        <TreeRowsSkeleton label="Loading pages" rows={2} />
+      </li>
+    );
+  }
+  if (levels[0]?.isError) return <ChildPageLevelNote>Couldn’t load the pages under this one.</ChildPageLevelNote>;
+  if (pages.length === 0 && !next) return <ChildPageLevelNote>No pages under this one.</ChildPageLevelNote>;
   return (
     <>
-      <ul className="flex flex-col gap-1">
-        {pages.map(child => (
-          <li key={child.id} className="flex flex-col">
-            <button
-              type="button"
-              className="text-left text-body font-medium text-info-indicator hover:underline"
-              onClick={() => onPageClick(child)}
-            >
-              {child.name}
-            </button>
-            {child.description ? (
-              <span className="truncate text-caption text-muted-foreground">{child.description}</span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {next ? <MoreButton onClick={() => setCursors(current => [...current, next])} /> : null}
+      <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
+      {next ? (
+        <li role="none" className="pl-9">
+          <MoreButton onClick={() => setCursors(current => [...current, next])} />
+        </li>
+      ) : null}
     </>
+  );
+}
+
+function ChildPageLevelNote({ children }: { children: ReactNode }) {
+  return (
+    <li role="none" className="flex h-8 items-center pl-9 text-caption text-muted-foreground">
+      {children}
+    </li>
   );
 }
 
@@ -432,9 +640,7 @@ function MentionPopup({
       </div>
       <div className="min-h-0 overflow-y-auto">
         {detail.isPending ? (
-          <Txt variant="caption" tone="muted">
-            Loading notes…
-          </Txt>
+          <NotesSkeleton />
         ) : notes.length === 0 ? (
           <Txt variant="caption" tone="muted">
             The notes that make this mention aren't in the first page of notes. Open {mention.source.name} to read them
@@ -446,7 +652,10 @@ function MentionPopup({
               <KnowledgeNoteItem
                 key={note.id}
                 note={note}
-                pagesById={withPages(pagesById, detail.data?.related ?? [])}
+                pagesById={withPages(
+                  pagesById,
+                  detail.data ? [...detail.data.related, ...detail.data.ancestors, detail.data.page] : [],
+                )}
                 onPageClick={page => onOpen(page.id)}
                 compact
               />
@@ -464,12 +673,14 @@ function SelectedPage({
   pagesById,
   onSelect,
   highlightMentionOf,
+  compact,
 }: {
   source: KnowledgeExplorerSource;
   pageId: string;
   pagesById: ReadonlyMap<string, KnowledgePagePayload>;
   onSelect: (pageId: string) => void;
   highlightMentionOf?: string;
+  compact?: boolean;
 }) {
   const detail = source.usePage(pageId);
   const activity = (source.useActivity ?? noActivity)(pageId);
@@ -479,7 +690,7 @@ function SelectedPage({
     [detail.data, pagesById],
   );
 
-  if (detail.isPending) return <p className="text-ui-md p-4 text-muted-foreground">Loading page…</p>;
+  if (detail.isPending) return <PageSkeleton compact={compact} />;
   if (detail.isError || !detail.data) {
     const notFound = isNotFound(detail.error);
     return (
@@ -495,6 +706,7 @@ function SelectedPage({
   const next = detail.data.notesNextCursor;
   return (
     <KnowledgePageDetail
+      compact={compact}
       page={detail.data.page}
       notes={detail.data.notes}
       pin={detail.data.pin ?? undefined}
@@ -506,7 +718,7 @@ function SelectedPage({
       activity={activity.data?.events}
       childPages={
         source.useTreeLevels ? (
-          <ChildPages key={pageId} useTreeLevels={source.useTreeLevels} parentId={pageId} onPageClick={onPageClick} />
+          <ChildPages key={pageId} useTreeLevels={source.useTreeLevels} parentId={pageId} onOpen={onSelect} />
         ) : undefined
       }
       notesMore={
@@ -532,35 +744,35 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
     .filter(page => (seen.has(page.id) ? false : (seen.add(page.id), true)))
     .slice(0, 10);
   return (
-    <div className="relative min-w-60 flex-1">
-      <input
-        aria-label="Search knowledge"
+    <div className="relative w-64 min-w-0">
+      <SearchInput
+        label="Search knowledge"
         placeholder="Search pages and notes"
-        className="text-ui-md h-8 w-full rounded border border-border bg-card px-2"
+        size="sm"
         value={query}
-        onChange={event => setQuery(event.target.value)}
+        onValueChange={setQuery}
       />
       {pages.length > 0 ? (
-        <ul
-          role="listbox"
-          aria-label="Search results"
-          className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded border border-border bg-card shadow-raised"
-        >
-          {pages.map(page => (
-            <li key={page.id} role="option" aria-selected={false}>
-              <button
-                type="button"
-                className="text-ui-md w-full px-2 py-1.5 text-left hover:bg-muted"
-                onClick={() => {
-                  onSelect(page.id);
-                  setQuery('');
-                }}
-              >
-                {page.name}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className={`absolute z-20 mt-1 w-full overflow-hidden rounded-xl ${overlaySurfaceStyle}`}>
+          <ScrollArea maxHeight="18rem">
+            <ul role="listbox" aria-label="Search results" className="p-1">
+              {pages.map(page => (
+                <li key={page.id} role="option" aria-selected={false}>
+                  <button
+                    type="button"
+                    className={cn(menuItemButtonClass, 'whitespace-normal')}
+                    onClick={() => {
+                      onSelect(page.id);
+                      setQuery('');
+                    }}
+                  >
+                    <div className="line-clamp-2">{page.name}</div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+        </div>
       ) : null}
     </div>
   );
@@ -687,9 +899,13 @@ export function KnowledgePageExplorer({
   source,
   selectedPageId,
   onSelect,
-  view,
+  view: requestedView,
   onViewChange,
+  toolbarEnd,
+  flush = false,
 }: KnowledgePageExplorerProps) {
+  const narrow = useIsMobile(1024);
+  const view = !narrow && requestedView === 'tree' ? 'graph' : requestedView;
   const selected = source.usePage(selectedPageId);
   const lazyMode = !!source.useTreeLevels;
   // Parents whose next level the graph loads: the focus and its parent (or the root scopes), plus any
@@ -911,8 +1127,14 @@ export function KnowledgePageExplorer({
   const closeMention = useCallback(() => setMention(null), []);
   // Below lg the graph shares its slot with the tree. Mount it only when it is showing: a graph mounted
   // into a hidden 0×0 pane has nothing to fit and was left unfitted when the toggle revealed it.
-  const narrow = useIsMobile(1024);
   const graphShown = !narrow || view === 'graph';
+  const overlay = !narrow;
+  const [treeOpen, setTreeOpen] = useState(true);
+  const [drawerLastId, setDrawerLastId] = useState<string>();
+  const viewTabs = useRef<HTMLDivElement>(null);
+  const showPagesButton = useRef<HTMLElement>(null);
+  const hidePagesButton = useRef<HTMLElement>(null);
+  const focusTabOnPageOpen = useRef(false);
   const highlightMentionOf = marked && marked.source === selectedPageId ? marked.target : undefined;
   const showPage = view === 'page' && !!selectedPageId;
   // The pages focused before this one, most recent last, so Back retraces a walk through the levels.
@@ -940,12 +1162,16 @@ export function KnowledgePageExplorer({
     onSelect(pageId);
     onViewChange('page');
   };
+  const frameInGraph = (pageId: string) => {
+    onSelect(pageId);
+    if (requestedView !== 'graph') onViewChange('graph');
+  };
   // From the tree: in the graph, a first click frames the page there and a second click on the same
   // page opens it, like clicking a node. Elsewhere it opens. A lazily loaded graph loads around whatever
   // is focused; a host's fixed graph that lacks the page has nothing to frame, so it opens as a page.
   const selectFromTree = (page: KnowledgePagePayload) => {
     if (page.isScope) setFocusScopeId(page.id);
-    if (view === 'graph' && (lazyMode || pagesById.has(page.id)) && page.id !== selectedPageId) onSelect(page.id);
+    if (view === 'graph' && (lazyMode || pagesById.has(page.id)) && page.id !== selectedPageId) frameInGraph(page.id);
     else openPage(page.id);
   };
   // Pages reached from outside the tree (search, links, mentions) clear a focus they fall outside of.
@@ -963,7 +1189,7 @@ export function KnowledgePageExplorer({
   const selectFromSearch = (pageId: string) => {
     if (view === 'graph' && (lazyMode || pagesById.has(pageId)) && pageId !== selectedPageId) {
       leaveScopeFocusFor(pageId);
-      onSelect(pageId);
+      frameInGraph(pageId);
     } else openAnywhere(pageId);
   };
   const focusScope = focusScopeId
@@ -977,210 +1203,377 @@ export function KnowledgePageExplorer({
   // With nothing selected the graph still centres on its first root scope, so that scope's "more" note shows.
   const focusedInGraph = view === 'graph' ? pagesById.get(selectedPageId ?? drawn.hub ?? '') : undefined;
   const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
-  const views: Array<{ value: KnowledgeExplorerView; label: string; narrowOnly?: boolean }> = [
-    { value: 'tree', label: 'Tree', narrowOnly: true },
-    { value: 'graph', label: 'Graph' },
-    { value: 'page', label: 'Page' },
+  const views: Array<{ value: KnowledgeExplorerView; label: string; icon: ReactNode; narrowOnly?: boolean }> = [
+    { value: 'tree', label: 'Tree', icon: <ListTree />, narrowOnly: true },
+    { value: 'graph', label: 'Graph', icon: <Network />, narrowOnly: false },
+    { value: 'page', label: 'Page', icon: <FileText />, narrowOnly: false },
   ];
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchBox source={source} onSelect={selectFromSearch} />
-        <div role="group" aria-label="View" className="flex overflow-hidden rounded border border-border">
-          {views.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={
-                option.value === 'page'
-                  ? showPage
-                  : option.value === 'graph'
-                    ? !showPage && view !== 'tree'
-                    : view === 'tree'
-              }
-              disabled={option.value === 'page' && !selectedPageId}
-              className={`text-ui-md px-3 py-1 text-muted-foreground disabled:opacity-50 aria-pressed:bg-fill-inverse aria-pressed:text-background ${option.narrowOnly ? 'lg:hidden' : ''}`}
-              onClick={() => onViewChange(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {!lazyMode && graph.truncated && !showPage ? (
-        <p className="text-ui-sm text-muted-foreground">
-          The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
-        </p>
-      ) : null}
-      {selectedPageId && !showPage && isNotFound(selected.error) ? (
-        <p role="alert" className="text-ui-sm text-destructive-foreground">
-          Page not found. The linked page may have been deleted or merged.
-        </p>
-      ) : null}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
-        <aside
-          className={`min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card lg:flex lg:w-72 lg:flex-none lg:shrink-0 ${view === 'tree' ? 'flex' : 'hidden'}`}
+  const tabValue = explorerTab(view, showPage);
+  const drawerOpen = overlay && !showPage && !!selectedPageId && !isNotFound(selected.error);
+  const drawerPageId = drawerOpen && selectedPageId ? selectedPageId : undefined;
+  if (drawerPageId && drawerPageId !== drawerLastId) setDrawerLastId(drawerPageId);
+  const drawerShownId = drawerPageId ?? drawerLastId;
+  const graphInsets = {
+    left: treeInset(overlay, treeOpen),
+    right: drawerPageId ? PAGE_DRAWER_INSET : 0,
+  };
+  const insetStyle: InsetStyle = {
+    '--knowledge-tree-inset': `${graphInsets.left}px`,
+    '--knowledge-tree-drawer-inset': `${overlay && treeOpen ? TREE_DRAWER_INSET : 0}px`,
+    '--knowledge-drawer-inset': `${graphInsets.right}px`,
+  };
+  const focusViewTab = () =>
+    viewTabs.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+  const focusPageTabOnMount = (section: HTMLElement | null) => {
+    if (!section || !focusTabOnPageOpen.current) return;
+    focusTabOnPageOpen.current = false;
+    focusViewTab();
+  };
+  const toggleTree = (open: boolean) => {
+    flushSync(() => setTreeOpen(open));
+    (open ? hidePagesButton : showPagesButton).current?.focus();
+  };
+
+  const treeClosed = overlay && !treeOpen;
+  const treeHeader = overlay ? (
+    <DataPanel.Header>
+      <DataPanel.Heading>Pages</DataPanel.Heading>
+      <DataPanel.HeaderActions>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          tooltip="Hide pages"
+          aria-label="Hide pages"
+          ref={hidePagesButton}
+          onClick={() => toggleTree(false)}
         >
-          {focusScope ? (
-            <div
-              className="flex items-center gap-2 border-b border-border bg-fill-subtle px-3 py-2"
-              data-testid="knowledge-scope-focus"
-            >
-              <div className="flex min-w-0 flex-1 flex-col">
-                <Txt as="span" variant="eyebrow" tone="muted" className="uppercase">
-                  {focusScope.displayLabel ?? 'Scope'}
-                </Txt>
+          <PanelLeftClose />
+        </Button>
+      </DataPanel.HeaderActions>
+    </DataPanel.Header>
+  ) : null;
+  const treeBody = (
+    <>
+      {focusScope ? (
+        <div
+          className="flex items-center gap-2 border-b border-surface-rim bg-fill-subtle px-3 py-2"
+          data-testid="knowledge-scope-focus"
+        >
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Txt as="span" variant="eyebrow" tone="muted" className="uppercase">
+              {focusScope.displayLabel ?? 'Scope'}
+            </Txt>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <KnowledgeSourceIcon page={focusScope} className="size-3.5" />
+              <KnowledgeTooltip label={focusScope.address ?? focusScope.name}>
                 <Txt as="span" variant="label" tone="ink" className="truncate">
-                  {focusScope.address ?? focusScope.name}
+                  {scopeTitle(focusScope)}
                 </Txt>
-              </div>
-              <button
-                type="button"
-                className="text-ui-sm shrink-0 rounded px-2 py-1 text-muted-foreground hover:bg-fill hover:text-foreground"
-                onClick={() => setFocusScopeId(null)}
-              >
-                All scopes
-              </button>
-            </div>
-          ) : null}
-          <div className="min-h-0 flex-1 overflow-auto">
-            {source.useTreeLevels && lazy.rootsPending ? (
-              <p className="px-3 py-2 text-body text-muted-foreground">Loading pages…</p>
-            ) : (
-              <KnowledgePageTree
-                key={focusScope ? focusScope.id : 'all'}
-                pages={treePages}
-                pinnedIds={graph.pinnedIds}
-                selectedPageId={selectedPageId}
-                onSelect={selectFromTree}
-                initiallyExpanded={focusScope ? [focusScope.id] : undefined}
-                {...(source.useTreeLevels
-                  ? {
-                      mayHaveChildren: lazy.mayHaveChildren,
-                      onExpandedChange: lazy.onExpandedChange,
-                      loadMore: lazy.loadMore,
-                    }
-                  : {})}
-              />
-            )}
+              </KnowledgeTooltip>
+            </span>
           </div>
-        </aside>
-        {showPage ? (
-          <section
-            aria-label="Selected page"
-            className="min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-card"
-          >
-            <SelectedPage
-              source={source}
-              pageId={selectedPageId}
-              pagesById={pagesById}
-              onSelect={openAnywhere}
-              highlightMentionOf={highlightMentionOf}
-            />
-          </section>
+          <Button variant="ghost" size="sm" onClick={() => setFocusScopeId(null)}>
+            All scopes
+          </Button>
+        </div>
+      ) : null}
+      <div className="min-h-0 flex-1 overflow-auto">
+        {source.useTreeLevels && lazy.rootsPending ? (
+          <div className="p-2">
+            <TreeRowsSkeleton label="Loading pages" rows={6} />
+          </div>
         ) : (
-          <div
-            className={`relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-background lg:block lg:h-full ${view === 'graph' ? 'block' : 'hidden'}`}
-            data-testid="knowledge-graph-container"
-          >
-            {graphShown ? (
-              <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
-                <button
-                  type="button"
-                  data-testid="knowledge-graph-back"
-                  aria-label="Back"
-                  title={backTo ? 'Back to the page you focused before this one' : 'Back (nothing to go back to yet)'}
-                  disabled={!backTo}
-                  className={FLOAT_BUTTON}
-                  onClick={goBack}
-                >
-                  <ArrowLeft aria-hidden className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="All links"
-                  aria-pressed={allLinks}
-                  data-testid="knowledge-graph-all-links"
-                  title={`All links: ${allLinks ? 'on' : 'off'}. Draw every link between the pages in the graph, not only the selected page's`}
-                  className={FLOAT_BUTTON}
-                  onClick={() => setAllLinks(current => !current)}
-                >
-                  <Link2 aria-hidden className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Link counts"
-                  aria-pressed={dotCounts}
-                  data-testid="knowledge-graph-dot-counts"
-                  title={`Link counts: ${dotCounts ? 'on' : 'off'}. Write how many links go in and out of each dot inside it`}
-                  className={FLOAT_BUTTON}
-                  onClick={() => setDotCounts(current => !current)}
-                >
-                  <Hash aria-hidden className="size-4" />
-                </button>
-              </div>
-            ) : null}
-            {graphShown ? (
-              <KnowledgePageGraph
-                pages={graphPages}
-                edges={linkEdges}
-                pinnedIds={graph.pinnedIds}
-                grants={graph.grants}
-                selectedPageId={selectedPageId}
-                centerId={drawn.hub}
-                hiddenLinks={hiddenLinks}
-                knownLinks={knownLinks}
-                fetchedLinks={hoverEdges}
-                exactLinkCounts={exactCounts}
-                onHover={setHoveredId}
-                nearIds={focusLinkIds}
-                settled={graphSettled}
-                showCounts={dotCounts}
-                onPreview={page => {
-                  if (isChildPlaceholder(page) && page.parentId) previewParent(page.parentId);
-                }}
-                onSelect={page => {
-                  // A stand-in loads its parent's children; a scope group opens into its scopes.
-                  if (isChildPlaceholder(page)) return page.parentId ? previewParent(page.parentId) : undefined;
-                  if (isRestCircle(page)) {
-                    const parentId = page.parentId;
-                    if (!parentId) return undefined;
-                    setRevealed(current => new Map(current).set(parentId, (current.get(parentId) ?? 0) + REST_BATCH));
-                    // Past the children loaded so far, fetch the next chunk too.
-                    return lazy.loadMore.get(parentId)?.();
-                  }
-                  if (isScopeGroup(page)) return setOpenGroups(current => new Set(current).add(page.id));
-                  onSelect(page.id);
-                  // Hosts resolve a `?page=` with no view to the page view, so say graph outright.
-                  if (view !== 'graph') onViewChange('graph');
-                }}
-                onOpen={page => openPage(page.id)}
-                onClearSelection={() => {
-                  setMention(null);
-                  if (selectedPageId) onSelect(null);
-                }}
-                onMentionSelect={setMention}
-              />
-            ) : null}
-            {mention && graphShown ? (
-              <MentionPopup
-                source={source}
-                mention={mention}
-                pagesById={pagesById}
-                onClose={closeMention}
-                onOpen={pageId => {
-                  setMarked(
-                    pageId === mention.source.id ? { source: mention.source.id, target: mention.target.id } : null,
-                  );
-                  setMention(null);
-                  openAnywhere(pageId);
-                }}
-              />
-            ) : null}
-          </div>
+          <KnowledgePageTree
+            key={focusScope ? focusScope.id : 'all'}
+            pages={treePages}
+            pinnedIds={graph.pinnedIds}
+            selectedPageId={selectedPageId}
+            onSelect={selectFromTree}
+            initiallyExpanded={focusScope ? [focusScope.id] : undefined}
+            {...(source.useTreeLevels
+              ? {
+                  mayHaveChildren: lazy.mayHaveChildren,
+                  onExpandedChange: lazy.onExpandedChange,
+                  loadMore: lazy.loadMore,
+                }
+              : {})}
+          />
         )}
       </div>
-    </div>
+    </>
+  );
+  const drawerPage = drawerShownId
+    ? (pagesById.get(drawerShownId) ?? lazy.pages.find(page => page.id === drawerShownId))
+    : undefined;
+
+  return (
+    <KnowledgePagesByRef.Provider value={fetchedPages}>
+      <div className={`flex min-h-0 flex-1 flex-col ${flush ? '' : 'gap-2'}`}>
+        <ActionRow className={flush ? 'shrink-0 border-b border-surface-rim px-3 py-2' : undefined}>
+          <ActionRow.Start>
+            <Tabs<KnowledgeExplorerView>
+              ref={viewTabs}
+              value={tabValue}
+              defaultTab={tabValue}
+              onValueChange={next => onViewChange(next)}
+              aria-label="View"
+            >
+              <TabList variant="pill-ghost" size="sm">
+                {views.map(option => (
+                  <Tab
+                    key={option.value}
+                    value={option.value}
+                    disabled={option.value === 'page' && !selectedPageId}
+                    className={option.narrowOnly ? 'lg:hidden' : undefined}
+                  >
+                    <Icon size="xs">{option.icon}</Icon>
+                    <Txt variant="caption" className="text-inherit">
+                      {option.label}
+                    </Txt>
+                  </Tab>
+                ))}
+              </TabList>
+            </Tabs>
+            <SearchBox source={source} onSelect={selectFromSearch} />
+          </ActionRow.Start>
+          {toolbarEnd ? <ActionRow.End>{toolbarEnd}</ActionRow.End> : null}
+        </ActionRow>
+        {!lazyMode && graph.truncated && !showPage ? (
+          <Txt variant="caption" tone="muted" className={flush ? 'px-3 pt-2' : undefined}>
+            The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
+          </Txt>
+        ) : null}
+        {selectedPageId && !showPage && isNotFound(selected.error) ? (
+          <Txt role="alert" variant="caption" className={`text-destructive-foreground ${flush ? 'px-3 pt-2' : ''}`}>
+            Page not found. The linked page may have been deleted or merged.
+          </Txt>
+        ) : null}
+        <div style={insetStyle} className="relative flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+          {overlay ? (
+            <div
+              inert={treeClosed}
+              aria-hidden={treeClosed || undefined}
+              data-state={treeClosed ? 'closed' : 'open'}
+              className={`absolute inset-y-2 left-2 z-10 flex w-72 transition duration-slow ease-out-custom motion-reduce:transition-none ${treeClosed ? 'pointer-events-none -translate-x-4 opacity-0' : 'translate-x-0 opacity-100'}`}
+            >
+              <DataPanel variant="inline" title="Pages" className="shadow-overlay">
+                {treeHeader}
+                {treeBody}
+              </DataPanel>
+            </div>
+          ) : (
+            <aside
+              aria-label="Pages"
+              className={`min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card lg:w-72 lg:flex-none lg:shrink-0 ${view === 'tree' ? 'flex' : 'hidden'}`}
+            >
+              {treeBody}
+            </aside>
+          )}
+          {overlay ? (
+            <Button
+              tooltip="Show pages"
+              aria-label="Show pages"
+              size="icon-sm"
+              inert={!treeClosed}
+              aria-hidden={!treeClosed || undefined}
+              className={`absolute top-3 left-3 z-10 shadow-overlay transition-opacity duration-slow ease-out-custom motion-reduce:transition-none ${treeClosed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+              ref={showPagesButton}
+              onClick={() => toggleTree(true)}
+            >
+              <PanelLeftOpen />
+            </Button>
+          ) : null}
+          {showPage ? (
+            <section
+              ref={focusPageTabOnMount}
+              aria-label="Selected page"
+              className={`flex min-h-0 min-w-0 flex-1 flex-col ${overlay ? `bg-background p-2 pl-[calc(var(--knowledge-tree-inset)+0.5rem)] transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'overflow-hidden rounded-lg border border-border bg-card'}`}
+            >
+              <div
+                className={
+                  overlay
+                    ? `flex min-h-0 flex-1 flex-col overflow-hidden rounded-studio-frame ${frameSurfaceStyle}`
+                    : 'contents'
+                }
+              >
+                <SelectedPage
+                  source={source}
+                  pageId={selectedPageId}
+                  pagesById={pagesById}
+                  onSelect={openAnywhere}
+                  highlightMentionOf={highlightMentionOf}
+                />
+              </div>
+            </section>
+          ) : (
+            <div
+              className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background lg:block lg:h-full ${flush ? '' : 'rounded-xl border border-border'} ${view === 'graph' ? 'block' : 'hidden'}`}
+              data-testid="knowledge-graph-container"
+            >
+              {graphShown ? (
+                <div className="absolute top-3 right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
+                  <ButtonsGroup
+                    orientation="vertical"
+                    size="sm"
+                    aria-label="Graph options"
+                    className="rounded-xl shadow-overlay"
+                  >
+                    <Button
+                      data-testid="knowledge-graph-back"
+                      aria-label="Back"
+                      tooltip={backTo ? 'Back to the previous page' : 'Nothing to go back to yet'}
+                      tooltipPosition="left"
+                      size="icon-sm"
+                      disabled={!backTo}
+                      onClick={goBack}
+                    >
+                      <ArrowLeft />
+                    </Button>
+                    <Button
+                      aria-label="All links"
+                      aria-pressed={allLinks}
+                      data-testid="knowledge-graph-all-links"
+                      tooltip={allLinks ? 'Show only the selected page’s links' : 'Show every link between pages'}
+                      tooltipPosition="left"
+                      size="icon-sm"
+                      className={allLinks ? '[--control-icon:var(--foreground)]' : undefined}
+                      onClick={() => setAllLinks(current => !current)}
+                    >
+                      <Link2 />
+                    </Button>
+                    <Button
+                      aria-label="Link counts"
+                      aria-pressed={dotCounts}
+                      data-testid="knowledge-graph-dot-counts"
+                      tooltip={dotCounts ? 'Hide link counts' : 'Show link counts on each dot'}
+                      tooltipPosition="left"
+                      size="icon-sm"
+                      className={dotCounts ? '[--control-icon:var(--foreground)]' : undefined}
+                      onClick={() => setDotCounts(current => !current)}
+                    >
+                      <Hash />
+                    </Button>
+                  </ButtonsGroup>
+                </div>
+              ) : null}
+              {graphShown ? (
+                <KnowledgePageGraph
+                  pages={graphPages}
+                  edges={linkEdges}
+                  pinnedIds={graph.pinnedIds}
+                  grants={graph.grants}
+                  selectedPageId={selectedPageId}
+                  centerId={drawn.hub}
+                  hiddenLinks={hiddenLinks}
+                  knownLinks={knownLinks}
+                  fetchedLinks={hoverEdges}
+                  exactLinkCounts={exactCounts}
+                  onHover={setHoveredId}
+                  nearIds={focusLinkIds}
+                  settled={graphSettled}
+                  insets={graphInsets}
+                  collapsibleLegend={overlay}
+                  showCounts={dotCounts}
+                  onPreview={page => {
+                    if (isChildPlaceholder(page) && page.parentId) previewParent(page.parentId);
+                  }}
+                  onSelect={page => {
+                    // A stand-in loads its parent's children; a scope group opens into its scopes.
+                    if (isChildPlaceholder(page)) return page.parentId ? previewParent(page.parentId) : undefined;
+                    if (isRestCircle(page)) {
+                      const parentId = page.parentId;
+                      if (!parentId) return undefined;
+                      setRevealed(current => new Map(current).set(parentId, (current.get(parentId) ?? 0) + REST_BATCH));
+                      // Past the children loaded so far, fetch the next chunk too.
+                      return lazy.loadMore.get(parentId)?.();
+                    }
+                    if (isScopeGroup(page)) return setOpenGroups(current => new Set(current).add(page.id));
+                    // Hosts resolve a `?page=` with no view to the page view, so say graph outright.
+                    frameInGraph(page.id);
+                  }}
+                  onOpen={page => openPage(page.id)}
+                  onClearSelection={() => {
+                    setMention(null);
+                    if (selectedPageId) onSelect(null);
+                  }}
+                  onMentionSelect={setMention}
+                />
+              ) : null}
+              {overlay ? (
+                <div
+                  inert={!drawerPageId}
+                  aria-hidden={!drawerPageId || undefined}
+                  data-state={drawerPageId ? 'open' : 'closed'}
+                  onTransitionEnd={event => {
+                    if (!drawerPageId && event.target === event.currentTarget) setDrawerLastId(undefined);
+                  }}
+                  className={`absolute inset-y-2 right-2 z-10 flex w-96 transition duration-slow ease-out-custom motion-reduce:transition-none ${drawerPageId ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-4 opacity-0'}`}
+                >
+                  {drawerShownId ? (
+                    <DataPanel variant="inline" title="Page details" className="shadow-overlay">
+                      <DataPanel.Header>
+                        <DataPanel.Heading className="min-w-0 flex-1 shrink">
+                          <span className="truncate">{drawerPage?.name ?? 'Page'}</span>
+                        </DataPanel.Heading>
+                        <DataPanel.HeaderActions>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            tooltip="Open page"
+                            aria-label="Open page"
+                            onClick={() => {
+                              focusTabOnPageOpen.current = true;
+                              openPage(drawerShownId);
+                            }}
+                          >
+                            <SquareArrowOutUpRight />
+                          </Button>
+                          <DataPanel.CloseButton
+                            icon="x"
+                            label="Close page details"
+                            tooltip="Close"
+                            onClick={() => {
+                              focusViewTab();
+                              onSelect(null);
+                            }}
+                          />
+                        </DataPanel.HeaderActions>
+                      </DataPanel.Header>
+                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <SelectedPage
+                          source={source}
+                          pageId={drawerShownId}
+                          pagesById={pagesById}
+                          onSelect={selectFromSearch}
+                          highlightMentionOf={highlightMentionOf}
+                          compact
+                        />
+                      </div>
+                    </DataPanel>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {mention && graphShown ? (
+                <MentionPopup
+                  source={source}
+                  mention={mention}
+                  pagesById={pagesById}
+                  onClose={closeMention}
+                  onOpen={pageId => {
+                    setMarked(
+                      pageId === mention.source.id ? { source: mention.source.id, target: mention.target.id } : null,
+                    );
+                    setMention(null);
+                    openAnywhere(pageId);
+                  }}
+                />
+              ) : null}
+            </div>
+          )}
+        </div>
+      </div>
+    </KnowledgePagesByRef.Provider>
   );
 }

@@ -649,9 +649,9 @@ export function registerApiCommand(program: CommanderCommand): void {
 
   const factoryBoard = factory
     .command('board')
-    .description("Manage a Factory project's boards; built-in and app boards are read-only");
+    .description("Manage a Factory project's boards; the built-in Work board and app boards are edited per project");
   addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
-    description: "Get a board's definition and, for a board the project stored, its revision",
+    description: "Get a board's definition and, except for the legacy Review board, its revision",
     routePlacement: 'origin',
   });
   addAction(factoryBoard, 'create', FACTORY_API_ROUTE_CATALOG.boardCreate, {
@@ -666,18 +666,31 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
   addAction(factoryBoard, 'update', FACTORY_API_ROUTE_CATALOG.boardReplace, {
-    description: "Replace a stored board's definition using its expected revision",
+    description:
+      "Replace a board's definition, including the project's Work and app boards, using its expected revision",
     input: 'required',
     routePlacement: 'origin',
   });
   addAction(factoryBoard, 'delete', FACTORY_API_ROUTE_CATALOG.boardDelete, {
-    description: 'Delete a stored board that has no cards, using its expected revision',
+    description: 'Delete a board that has no cards (not the Work board), using its expected revision',
     input: 'required',
     routePlacement: 'origin',
     examples: [
       {
         description: 'Delete a board at revision 2',
         command: `mastra api factory board delete <project-id> bugs '{"expectedRevision":2}'`,
+      },
+    ],
+  });
+  addAction(factoryBoard, 'reset', FACTORY_API_ROUTE_CATALOG.boardReset, {
+    description:
+      "Rewrite a project's Work or app board to Factory's current definition at the next revision, using its expected revision",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Reset the Work board at revision 3',
+        command: `mastra api factory board reset <project-id> work '{"expectedRevision":3}'`,
       },
     ],
   });

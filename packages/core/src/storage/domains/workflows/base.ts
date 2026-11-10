@@ -186,12 +186,19 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * from `{}`. Earlier state entries are kept, so a nested run built on an earlier version of this
    * run's state still reads it. Writes the header, creating the run if it isn't stored. Returns the
    * run's `lastSeq`, or null when `expectedStatus` rejected the write (see `appendWorkflowRunEntries`).
+   * Throws when `stateBase` names a version that isn't stored (its run was deleted, or a checkpoint
+   * of it dropped that version), rather than starting the run's state from `{}`, or one past its
+   * run's `lastSeq` (not written yet): a run only builds on state that already exists.
+   *
+   * `threadId` is the whole run's thread (`getSnapshotMemoryInfo`), passed on every write.
+   * Stores that keep it next to the header filter `listWorkflowRuns` by it without reading entries.
    * @experimental
    */
   async writeWorkflowRunCheckpoint(_args: {
     workflowName: string;
     runId: string;
     resourceId?: string;
+    threadId?: string;
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
@@ -211,6 +218,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * With `startStateSeq` (a resumed run's first append), records it as the run's `startStateSeq`.
    * Returns the run's `lastSeq`.
    *
+   * `threadId` is the whole run's thread, as for `writeWorkflowRunCheckpoint`, not only the given steps'.
+   *
    * `expectedStatus` is a compare-and-set guard, which every storage v2 store enforces atomically
    * with the write (`supportsGuardedSnapshotWrites` is about v1 snapshots): when the run is stored
    * and its header's status is not one of these values, nothing is written and the call resolves
@@ -221,6 +230,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
     workflowName: string;
     runId: string;
     resourceId?: string;
+    threadId?: string;
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     stepPatches?: Record<string, StatePatchOp[]>;
@@ -383,5 +393,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
     storageVersion?: 1 | 2;
   }): Promise<WorkflowRun | null>;
 
-  abstract deleteWorkflowRunById(args: { runId: string; workflowName: string; fence?: RunFence }): Promise<void>;
+  abstract deleteWorkflowRunById(args: {
+    runId: string;
+    workflowName: string;
+    storageVersion?: 1 | 2;
+    fence?: RunFence;
+  }): Promise<void>;
 }

@@ -5,7 +5,6 @@ import type { ReactNode } from 'react';
 
 import type { ActivityCallState } from '../model/activity-members';
 import { callsOutcome, liveWords, outcomeText, settledWords, stretchPose, wordsName } from '../model/activity-words';
-import { ActivityTimedTrigger } from './activity-timed-trigger';
 import { useFadingEdge } from './use-fading-edge';
 import { useRollingWords } from './use-rolling-words';
 import { AgentIndicator, agentGlyph } from '@/ds/components/AgentIndicator';
@@ -17,6 +16,7 @@ import {
   ActivityHeader,
   ActivityIcon,
   ActivityLabel,
+  ActivityTrigger,
   useRelativePaths,
 } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
@@ -101,7 +101,7 @@ export function ActivityFold({
       foldable={foldable}
       aria-label={wordsName({ ...words, detail: words.detail && relative(words.detail) })}
     >
-      <ActivityTimedTrigger at={calls[0]?.startedAt}>
+      <ActivityTrigger>
         <ActivityHeader>
           <ActivityIcon className={cn(pose && '[&_svg]:size-4')}>
             <FoldIcon pose={pose} animates={animates} live={live} fallback={words.icon} />
@@ -138,7 +138,7 @@ export function ActivityFold({
           </span>
           <ActivityDisclosure />
         </ActivityHeader>
-      </ActivityTimedTrigger>
+      </ActivityTrigger>
       {children}
     </Activity>
   );
