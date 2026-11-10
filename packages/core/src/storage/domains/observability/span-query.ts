@@ -6,6 +6,7 @@
  * define its version rule; endedAt alone is not a general-purpose revision number.
  */
 import { z } from 'zod/v4';
+import { observabilityTextSearchSchema } from './text-search';
 import {
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
@@ -45,6 +46,7 @@ const requestSchema = z
   .object({
     timeRange: timeRangeSchema,
     where: traceQueryScalarPredicateSchema.optional(),
+    textSearch: observabilityTextSearchSchema.optional(),
     orderBy: z
       .array(z.object({ field: z.enum(TRACE_QUERY_ORDER_FIELDS), direction: z.enum(['asc', 'desc']) }).strict())
       .length(1)
@@ -228,6 +230,7 @@ export interface TrustedSpanQueryPlan {
   result: 'spans';
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryScalarPredicate;
+  textSearch?: string;
   scope?: TraceQueryPlanOptions['scope'];
   orderBy: NormalizedSpanQueryRequest['orderBy'][number];
   limit: number;
@@ -256,6 +259,7 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
   // Page size may change without invalidating a cursor.
   const binding = digestBinding({
     version: 1,
+    textSearch: request.textSearch,
     result: 'spans',
     timeRange,
     where,
@@ -290,7 +294,17 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
       throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
     }
   }
-  return { result: 'spans', timeRange, where, scope, orderBy, limit: request.page.limit, binding, cursor };
+  return {
+    result: 'spans',
+    textSearch: request.textSearch,
+    timeRange,
+    where,
+    scope,
+    orderBy,
+    limit: request.page.limit,
+    binding,
+    cursor,
+  };
 }
 
 export function encodeSpanQueryCursor(plan: TrustedSpanQueryPlan, values: z.infer<typeof cursorValuesSchema>): string {

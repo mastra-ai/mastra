@@ -16,8 +16,8 @@ describe('Board source filters', () => {
     const params = new URLSearchParams(
       'source=github&source=linear&linearProject=project-a&linearProject=project-b&author=github%3Aalice&assignee=github%3Abob&label=needs%2Creview&label=p0&sort=created-newest',
     );
-    const state = boardFiltersFromParams(params, 'work');
-    const restored = boardFilterStateFromItems(boardFilterItems(state), 'work');
+    const state = boardFiltersFromParams(params, true);
+    const restored = boardFilterStateFromItems(boardFilterItems(state), true);
     const url = boardFilterParams(params, restored);
     expect(url.getAll('source')).toEqual(['github', 'linear']);
     expect(url.getAll('linearProject')).toEqual(['project-a', 'project-b']);
@@ -29,7 +29,7 @@ describe('Board source filters', () => {
 
   it('does not use an old stored project when the live issue has no project', () => {
     const card = sourceCards[0];
-    const filters = boardFiltersFromParams(new URLSearchParams('linearProject=project-a'), 'work');
+    const filters = boardFiltersFromParams(new URLSearchParams('linearProject=project-a'), true);
     expect(cardMatchesSourceFilters(card, filters)).toBe(true);
     expect(cardMatchesSourceFilters(card, filters, linearCandidate(linearIssue('ENG-102', null)))).toBe(false);
   });
@@ -38,17 +38,17 @@ describe('Board source filters', () => {
     const github: Pick<WorkItem, 'source' | 'metadata'> = { source: 'github-issue', metadata: {} };
     const filters = boardFiltersFromParams(
       new URLSearchParams('source=github&source=linear&linearProject=project-b'),
-      'work',
+      true,
     );
     expect(cardMatchesSourceFilters(github, filters)).toBe(true);
     expect(cardMatchesSourceFilters(sourceCards[0], filters)).toBe(false);
     expect(
-      cardMatchesSourceFilters(github, boardFiltersFromParams(new URLSearchParams('linearProject=project-b'), 'work')),
+      cardMatchesSourceFilters(github, boardFiltersFromParams(new URLSearchParams('linearProject=project-b'), true)),
     ).toBe(false);
   });
 
   it('drops picked Linear projects once Linear is no longer a picked source', () => {
-    const filters = boardFiltersFromParams(new URLSearchParams('source=linear&linearProject=project-a'), 'work');
+    const filters = boardFiltersFromParams(new URLSearchParams('source=linear&linearProject=project-a'), true);
     expect([...withBoardFilterValues(filters, 'source', ['linear', 'github']).linearProject]).toEqual(['project-a']);
     expect(withBoardFilterValues(filters, 'source', ['github']).linearProject.size).toBe(0);
   });

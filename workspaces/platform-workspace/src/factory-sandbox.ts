@@ -24,10 +24,18 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   docker?: boolean;
   /** Minutes idle before the sandbox pauses. Runtime only. */
   idleTimeoutMinutes?: number;
+  /** Let anyone with a port's URL open it without signing in. Fixed when a sandbox is created. */
+  publicPorts?: boolean;
 }
 
 /** Applied when neither the environment setting nor a host default is set. */
-const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, docker: false, idleTimeoutMinutes: 5 } as const;
+const DEFAULT_SETTINGS = {
+  cpuCount: 2,
+  memoryMb: 1024,
+  docker: false,
+  idleTimeoutMinutes: 5,
+  publicPorts: false,
+} as const;
 
 const SETTINGS_SCHEMA = {
   type: 'object',
@@ -69,14 +77,21 @@ const SETTINGS_SCHEMA = {
       minimum: 1,
       maximum: 1440,
     },
+    publicPorts: {
+      type: 'boolean',
+      title: 'Public preview links',
+      description:
+        "Anyone with a sandbox's preview link can open it without signing in. Applies to newly created sandboxes, not existing ones.",
+      default: DEFAULT_SETTINGS.publicPorts,
+    },
   },
   additionalProperties: false,
 } as const satisfies PublicSchema;
 
 /**
  * The settings schema with the provider's effective defaults as `default`:
- * the built-in values, overridden by the host's `idleTimeoutMinutes` option and
- * then its `defaults` option. The schema
+ * the built-in values, overridden by the host's `idleTimeoutMinutes` and
+ * `publicPorts` options and then its `defaults` option. The schema
  * is what clients show as placeholders, so it must match what the provider
  * applies when a setting is unset.
  */
@@ -144,6 +159,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
     this.#options = options;
     this.settings = settingsSchema({
       ...(options.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: options.idleTimeoutMinutes } : {}),
+      ...(options.publicPorts !== undefined ? { publicPorts: options.publicPorts } : {}),
       ...options.defaults,
     });
   }
@@ -179,6 +195,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
         defaults?.idleTimeoutMinutes ??
         options.idleTimeoutMinutes ??
         DEFAULT_SETTINGS.idleTimeoutMinutes,
+      publicPorts: settings.publicPorts ?? defaults?.publicPorts ?? options.publicPorts ?? DEFAULT_SETTINGS.publicPorts,
     });
   }
 

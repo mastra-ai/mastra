@@ -146,6 +146,11 @@ function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId |
   return kind ? undefined : boardStage(stage);
 }
 
+/** The `kind` to draw a phase with: built-in boards get each phase's own art, other boards are drawn by kind. */
+export function phaseIconKind(boardId: string, kind: BoardPhaseKind): BoardPhaseKind | undefined {
+  return boardId === 'work' || boardId === 'review' ? undefined : kind;
+}
+
 function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {
   const builtin = builtinStageFor(stage, kind);
   return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];

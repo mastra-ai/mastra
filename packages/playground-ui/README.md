@@ -29,6 +29,12 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
+To use Mastra's product fonts, Mona Sans for text and Commit Mono for code, add `fonts.css`. The font files ship inside the package as woff2, split by script so a page only downloads the characters it renders, and the stylesheet points the font tokens at them. Without it, text uses the system font stacks.
+
+```css
+@import '@mastra/playground-ui/fonts.css';
+```
+
 ### Metadata
 
 Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows.
@@ -464,9 +470,11 @@ Foundations/Color has one story each for monochrome and chromatic ramps, semanti
 
 Text uses roles, not sizes. A role such as `body-sm` or `caption` sets size, line height, weight, and tracking together. Render text with `Txt`, or use the matching `text-<role>` utility inside a component's own markup.
 
+Roles use two weights. Regular (`--font-weight-normal`, 465) is for anything read: `body`, `body-sm`, `caption`, `lead`, and `menu`. Strong (`--font-weight-medium`, 515) is for anything that labels or heads something: `label`, `column`, `eyebrow`, `meta`, and every heading role. Text without a role inherits regular. `font-normal` and `font-medium` resolve to the same two weights, so inline emphasis such as a highlighted name in a sentence stays on the scale. Before adding `font-medium` to a role, check whether another role already pairs that size with the strong weight: `text-body font-medium` is `subheading`, and `text-body-sm font-medium` is `label`.
+
 Shared components own their typography. Use their existing size and semantic variant APIs, and let compound slots style direct children through inheritance. Use `Txt` for text that the call site owns. Do not add a generic text-role prop or wrap arbitrary children just to migrate a CSS class. A specialized surface can use the existing `className` escape hatch with a DS role when the component's defaults do not fit.
 
-Floating menu rows, values, and search fields use `menu`: 13px text at weight 450 with a 20px line height and −0.01em tracking. DropdownMenu, ContextMenu, Select, and Combobox share this role; their triggers keep the button label role. Labels use the muted foreground tone, with lighter icons. Hover, keyboard highlight, and open submenus increase the contrast of both labels and icons together.
+Floating menu rows, values, and search fields use `menu`: 13px text at the regular weight with a 20px line height and −0.01em tracking. DropdownMenu, ContextMenu, Select, and Combobox share this role; their triggers keep the button label role. Labels use the muted foreground tone, with lighter icons. Hover, keyboard highlight, and open submenus increase the contrast of both labels and icons together.
 
 `hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
 
@@ -515,7 +523,7 @@ Card titles use 13px text with a 150% line height. Choose the complete role rath
 </Txt>
 ```
 
-These roles preserve the existing Factory card typography. Control labels remain `label` at 500 weight.
+These roles preserve the existing Factory card typography. Control labels remain `label` at the strong weight.
 
 #### Monospace
 
@@ -541,9 +549,9 @@ Mono pairs with the text roles: `body` for logs, `body-sm` for values in tables 
 
 Product code never writes the `font-mono` class, and lint rejects it outside the design system. Use `Txt font="mono"` for identifiers, timestamps, and durations, `InlineCode` or `CodeBlock` for code, and `tabular-nums` for numbers. A raw `<pre>` or `<code>` element is already monospace.
 
-`--font-mono` defaults to the system monospace stack. Override it in an unlayered rule in your own CSS to use a product face, and every mono value follows.
+`--font-mono` defaults to the system monospace stack, and `fonts.css` points it at Commit Mono. To use another face, override it in an unlayered rule in your own CSS, and every mono value follows.
 
-At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `0.508` is Mona Sans. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
+At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `fonts.css` sets `0.508` for Mona Sans. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
 
 ```css
 :root {

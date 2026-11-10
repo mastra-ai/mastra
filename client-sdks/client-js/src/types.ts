@@ -1,5 +1,6 @@
 import type {
   AgentExecutionOptions,
+  AgentExecutionOptionsBase,
   MultiPrimitiveExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
@@ -417,6 +418,9 @@ export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
 > & {
   schema: PublicSchema<OUTPUT>;
 };
+// Built on `AgentExecutionOptionsBase`, not `AgentExecutionOptions`: omitting from the full type,
+// which adds `structuredOutput` through a conditional, made inferring OUTPUT from a zod v3 schema
+// fail with TS2590. See https://github.com/mastra-ai/mastra/issues/29574
 export type StreamParamsBase<OUTPUT = undefined> = {
   model?: string;
   tracingOptions?: TracingOptions;
@@ -429,10 +433,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
    */
   abortSignal?: AbortSignal;
 } & WithoutMethods<
-  Omit<
-    AgentExecutionOptions<OUTPUT>,
-    'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput' | 'scopes'
-  >
+  Omit<AgentExecutionOptionsBase<OUTPUT>, 'model' | 'requestContext' | 'clientTools' | 'options' | 'scopes'>
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {

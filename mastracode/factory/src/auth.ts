@@ -1,3 +1,4 @@
+import { MastraAuthStudio } from '@mastra/auth-studio';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import type { MessageAuthor } from '@mastra/core/agent-controller';
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
@@ -424,6 +425,15 @@ export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined
     ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c),
     tenant: (c: Context) => factoryAuthTenant(c),
     isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(provider, c, organizationId),
+    ...(provider instanceof MastraAuthStudio
+      ? {
+          fetchPlatformAsUser: async (c: Context, path: string, init?: RequestInit) => {
+            const res = await provider.fetchAsRequestUser(c.req.raw, path, init);
+            forwardPendingResponseHeaders(provider, c);
+            return res;
+          },
+        }
+      : {}),
   };
 }
 

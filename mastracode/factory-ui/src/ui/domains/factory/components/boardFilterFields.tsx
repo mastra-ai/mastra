@@ -7,8 +7,7 @@ import { boardFilterFieldIds } from '../boardFilters';
 import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
 import { factoryParticipantId } from '../boardPeople';
 import type { BoardParticipant } from '../boardPeople';
-import type { BoardKind } from '../boardStages';
-import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
+import { BOARD_SOURCE_OPTIONS, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
 import type { LinearProject } from '../services/linear';
 import { BoardSourceIcon } from './BoardSourceIcon';
 import { IconElectrocardiogram } from '@mastra/playground-ui/icons/central/IconElectrocardiogram';
@@ -54,7 +53,7 @@ function peopleOptions(
 }
 
 interface BoardFilterFieldsOptions {
-  kind: BoardKind;
+  reviewsPullRequests: boolean;
   filters: BoardFilterState;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
@@ -64,7 +63,7 @@ interface BoardFilterFieldsOptions {
 }
 
 export function boardFilterFields({
-  kind,
+  reviewsPullRequests,
   filters,
   participants,
   availableLabels,
@@ -76,7 +75,12 @@ export function boardFilterFields({
   const suggestions: Record<BoardFilterFieldId, FilterBarOption[]> = {
     // Keep already-picked sources so saved views still label and edit them after a provider disconnects.
     source: BOARD_SOURCE_OPTIONS.filter(
-      option => option.value === 'manual' || connectedSources?.has(option.value) || filters.source.has(option.value),
+      option =>
+        option.value === 'manual' ||
+        connectedSources?.has(option.value) ||
+        (option.value === PULL_REQUEST_SOURCE_FILTER &&
+          (connectedSources?.has('github') === true || connectedSources?.has('gitlab') === true)) ||
+        filters.source.has(option.value),
     ).map(option => ({ ...option, start: <BoardSourceIcon source={option.value} /> })),
     linearProject: linearProjects.map(project => ({
       value: project.id,
@@ -92,7 +96,7 @@ export function boardFilterFields({
   };
   const linearProjectOffered = filters.source.has('linear') || filters.linearProject.size > 0;
 
-  return boardFilterFieldIds(kind).map(fieldId => ({
+  return boardFilterFieldIds(reviewsPullRequests).map(fieldId => ({
     id: fieldId,
     ...FIELD_PRESENTATION[fieldId],
     operators: ['in'],

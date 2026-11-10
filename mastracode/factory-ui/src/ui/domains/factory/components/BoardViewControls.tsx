@@ -9,7 +9,6 @@ import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardPeople';
 import type { BoardViewSettings } from '../boardSavedViews';
 import { BOARD_SORT_LABELS } from '../boardSort';
-import type { BoardKind } from '../boardStages';
 import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, boardFilterFields } from './boardFilterFields';
@@ -32,14 +31,14 @@ function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
 }
 
 export function BoardViewControls({
-  kind,
+  reviewsPullRequests,
   view,
   participants,
   availableLabels,
   currentUserId,
   aside,
 }: {
-  kind: BoardKind;
+  reviewsPullRequests: boolean;
   view: BoardView;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
@@ -49,7 +48,7 @@ export function BoardViewControls({
   const { savedViews } = view;
   const { connectedSources, linearProjects } = useBoardFilterSources();
   const fields = boardFilterFields({
-    kind,
+    reviewsPullRequests,
     filters: view.filters,
     participants,
     availableLabels,

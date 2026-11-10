@@ -14,6 +14,8 @@ export type SidebarNavStackViewProps = ComponentPropsWithoutRef<'div'> & {
   backLabel?: string;
   returnFocusRef?: React.RefObject<HTMLElement | null>;
   onBack?: () => void;
+  /** Escape goes back, as it should from a menu. Turn it off for a view that accompanies a whole page. */
+  closeOnEscape?: boolean;
 };
 
 export function SidebarNavStackView({
@@ -22,6 +24,7 @@ export function SidebarNavStackView({
   backLabel = 'Back to main navigation',
   returnFocusRef,
   onBack,
+  closeOnEscape = true,
   children,
   className,
   ...props
@@ -38,7 +41,7 @@ export function SidebarNavStackView({
   }, [active]);
 
   React.useEffect(() => {
-    if (!active) return;
+    if (!active || !closeOnEscape) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
@@ -49,7 +52,7 @@ export function SidebarNavStackView({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [active, closeView, onBack, returnFocusRef]);
+  }, [active, closeOnEscape, closeView, onBack, returnFocusRef]);
 
   function handleBack() {
     closeView(returnFocusRef);

@@ -410,6 +410,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -1206,7 +1209,7 @@ importers:
     dependencies:
       '@chat-adapter/teams':
         specifier: 'catalog:'
-        version: 4.44.0(ai@7.0.162(zod@4.6.7))(supports-color@10.2.2)(zod@4.6.7)
+        version: 4.44.0(ai@7.0.162(zod@4.6.7))(bufferutil@4.1.0)(encoding@0.1.14)(supports-color@10.2.2)(zod@4.6.7)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -1872,6 +1875,9 @@ importers:
       '@vercel/analytics':
         specifier: ^2.0.1
         version: 2.0.1(react@19.3.1)
+      algoliasearch:
+        specifier: ^5.53.0
+        version: 5.61.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1946,8 +1952,8 @@ importers:
         specifier: ^3.10.2
         version: 3.10.2(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(uglify-js@3.19.3)
       '@mastra/lint-docs':
-        specifier: ^1.1.3
-        version: 1.1.3(oxfmt@0.59.0)(prettier@3.9.10)(supports-color@10.2.2)
+        specifier: ^1.2.0
+        version: 1.2.0(oxfmt@0.59.0)(prettier@3.9.10)(supports-color@10.2.2)
       '@playwright/test':
         specifier: ^1.64.1
         version: 1.64.1
@@ -1984,6 +1990,9 @@ importers:
       postcss:
         specifier: 8.5.23
         version: 8.5.23
+      remark:
+        specifier: ^15.0.1
+        version: 15.0.1(supports-color@10.2.2)
       remark-cli:
         specifier: ^12.0.1
         version: 12.0.1(bluebird@3.7.2)(supports-color@10.2.2)
@@ -2014,6 +2023,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@5.9.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
 
   e2e-tests/client-js/_test-utils:
     dependencies:
@@ -2516,9 +2528,6 @@ importers:
 
   mastracode/factory-ui:
     dependencies:
-      '@fontsource-variable/mona-sans':
-        specifier: 5.3.0
-        version: 5.3.0
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../client-sdks/client-js
@@ -4860,6 +4869,9 @@ importers:
       '@internal/voice':
         specifier: workspace:*
         version: link:../_internals/voice
+      '@json-render/chat':
+        specifier: ^0.22.0
+        version: 0.22.0(chat@4.44.0(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
       '@modelcontextprotocol/server':
         specifier: 2.4.0
         version: 2.4.0
@@ -5490,6 +5502,9 @@ importers:
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0
@@ -6832,6 +6847,9 @@ importers:
       '@mastra/server-adapters-test-suite':
         specifier: workspace:*
         version: link:../server-adapters-test-suite
+      '@types/compression':
+        specifier: ^1.8.1
+        version: 1.8.1
       '@types/cors':
         specifier: ^2.8.19
         version: 2.8.19
@@ -6844,6 +6862,9 @@ importers:
       '@types/swagger-ui-express':
         specifier: ^4.1.8
         version: 4.1.8
+      compression:
+        specifier: ^1.8.2
+        version: 1.8.2(supports-color@10.2.2)
       cors:
         specifier: ^2.8.6
         version: 2.8.6
@@ -7097,6 +7118,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^2.0.139
         version: 2.0.140(zod@4.6.7)
+      '@copilotkit/aimock':
+        specifier: ^1.46.0
+        version: 1.47.0(vitest@5.1.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7136,6 +7160,9 @@ importers:
       '@nestjs/testing':
         specifier: ^12.3.2
         version: 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.3.2)(@nestjs/platform-express@12.3.2)
+      '@types/compression':
+        specifier: ^1.8.1
+        version: 1.8.1
       '@types/cors':
         specifier: ^2.8.19
         version: 2.8.19
@@ -7148,6 +7175,9 @@ importers:
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
+      compression:
+        specifier: ^1.8.2
+        version: 1.8.2(supports-color@10.2.2)
       cors:
         specifier: ^2.8.6
         version: 2.8.6
@@ -11666,17 +11696,9 @@ packages:
     resolution: {integrity: sha512-i2CKKyuCuOZEBZJiAoFK/viYZAP6CRaqqlkeHl3ViteDHOUE/tkI/Slq1cdGnwhkIB+k1OE0g00QGl9O0gAFNQ==}
     engines: {node: '>=0.8.0'}
 
-  '@azure/msal-common@16.13.0':
-    resolution: {integrity: sha512-rOAy0KUcyBbdwVJ+f3uPpthXatFLLZN+/KWAsTLzk1aB23Xl9DRmmXYwSvBFOZyXj4jUQQ5FKxxRkhAFW1fOow==}
-    engines: {node: '>=0.8.0'}
-
   '@azure/msal-common@16.15.0':
     resolution: {integrity: sha512-lwdLb1B9Q5nEhPLVIKe78XH5wFMN15fCiDkY7ylPDSWZuWcD93G3jpJajrKhO3CQld8SLKz0sHiOi24mxdvtsg==}
     engines: {node: '>=0.8.0'}
-
-  '@azure/msal-node@5.6.0':
-    resolution: {integrity: sha512-uFY9NxrWHw8PwZx7gAX6PDn+9vdfS05+levc/kwkx77IkjfaldnQbbcQzzDIZ5Hq5Zdr6/z92oAIoRWKp6MnOA==}
-    engines: {node: '>=20'}
 
   '@azure/msal-node@7.1.2':
     resolution: {integrity: sha512-52hKQLGpEQzwNufIXG1SPVU+wQ3RIe7Rp2+g+VdAmZojCAZ6yCdGEffzQEQ6RnBZGBEs40nl14rWBmfJpCoHsg==}
@@ -14733,9 +14755,6 @@ packages:
     bundledDependencies:
       - '@fly/client-signals'
 
-  '@fontsource-variable/mona-sans@5.3.0':
-    resolution: {integrity: sha512-PkxRB3KI4z9Gjpk7vVqgO3GMSyQuOIIj4TaRDbvbcDj8SzWwI38jvLTQxJM/cTRorhcT7h8qjcllR+qjRtM/Fg==}
-
   '@google-cloud/common@6.1.0':
     resolution: {integrity: sha512-Ohjxjvusr65+SiEVBrilpyn1ir9CM8ZqWjcf7bA8ph1GCunxI6bbwtcl7iGl67A7Lr4Nz7WpNzITNETwggc7pw==}
     engines: {node: '>=18'}
@@ -15546,6 +15565,17 @@ packages:
   '@jsdevtools/ono@7.1.3':
     resolution: {integrity: sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg==}
 
+  '@json-render/chat@0.22.0':
+    resolution: {integrity: sha512-5X88BgOWLyC1B2ko7kHFM3BO2LygsN+79wy6Gin6EIxYvT4v+6wp9gRcUMQZP3hLGhEbuIE4sawk5OsZzPkGTQ==}
+    peerDependencies:
+      chat: ^4.43.0
+      zod: 4.6.7
+
+  '@json-render/core@0.22.0':
+    resolution: {integrity: sha512-BIfJ2V3bLYETetBu2KWoxxRPU5cSAf77dDTBgqaV54kEAfyHta1psPJgNk0fDcB3FCrnCZ5KO/X41VDkrNSYgw==}
+    peerDependencies:
+      zod: 4.6.7
+
   '@json-schema-tools/meta-schema@1.8.3':
     resolution: {integrity: sha512-YfiOLIOq3YV83mqppXg7K4RFvHcajcr/ZlrCX33VcReoVoLJxZbn4UQT5jldwEi8oQBETL+BrotBgOQ4S0JaKg==}
 
@@ -16148,8 +16178,8 @@ packages:
       react: ^19.0.0
       react-dom: ^19.0.0
 
-  '@mastra/lint-docs@1.1.3':
-    resolution: {integrity: sha512-o04O36xiy3PaQ3XQAs3JUm6qzBbDYWpIRrwkbdQc8KjqJF8Ew/DeCw9SFfnqQ0AyEmdXmp6YDsKPFFcWufeUCg==}
+  '@mastra/lint-docs@1.2.0':
+    resolution: {integrity: sha512-tX6FX9ecZng5uPelhshFVMduwgiGWQm5KfoxAETuddzd8GdBWwgSIblYjosTvgXUcKg3UoNZypbv11LSxbbaGA==}
     engines: {node: '>=22.13.0'}
     hasBin: true
     peerDependencies:
@@ -16248,28 +16278,31 @@ packages:
     engines: {node: '>=20.9.0'}
     hasBin: true
 
-  '@microsoft/teams.api@2.1.1':
-    resolution: {integrity: sha512-42m4z4fbvb7dq7gJFrMnOuBDDMmLk3GYQGHlIYPLWOBH0KRFtWjEh15Z5XMzkyUFp06uVjsyNnnCgOaea0FKyQ==}
+  '@microsoft/signalr@10.0.11':
+    resolution: {integrity: sha512-FulOJ2EEtKvLQcswe/U7v8pzyXyk7Jua5xgWJPPwyQU/2Z9ORvKcVjyO75VvLsem+CJ1ORRexJ+7Bz1FCei2aw==}
+
+  '@microsoft/teams.api@2.2.0':
+    resolution: {integrity: sha512-fzHAz4IDFdMs6MsBIVlBdRRFFAN2uehAJ3kMs1zkpod0Iy+3WxndrQTrnElyMg3Opt0xA3JaCPnbxc0A9yxV/Q==}
     engines: {node: '>=22.12.0'}
 
-  '@microsoft/teams.apps@2.1.1':
-    resolution: {integrity: sha512-/MY2nPH8njX7F5Rw18r09SbBrmQ4BsjSCmNx2+Q4S8X+m/ptzz/hyme8naRlPxgx3/Jrxnef4jUOhqhcLjs06Q==}
+  '@microsoft/teams.apps@2.2.0':
+    resolution: {integrity: sha512-XmIpj/qYyCL/XUe9PeOmwR1nSsUpALD+0N5BajKkazGd0ug28wRkba+96qT4UkhhIbDBOGZ5PkOdjXJ3FAUYYA==}
     engines: {node: '>=22.12.0'}
 
-  '@microsoft/teams.cards@2.1.1':
-    resolution: {integrity: sha512-MSI2xk+3l/9h6sOWNCKrUY94b4OwRNB2iyk8j3IASxsTVFEK+E9BzsTR/afWynZ4NCLFXgy3tapDbmDy/hujtw==}
+  '@microsoft/teams.cards@2.2.0':
+    resolution: {integrity: sha512-kYiqHEJFP/3+Hiiikv9n0sQetCxecw4/xtr3dt/BRlZC24SEDrM1spauFQQvqZrEsqIavKdZWdIZUokLnvQsSw==}
     engines: {node: '>=22.12.0'}
 
-  '@microsoft/teams.common@2.1.1':
-    resolution: {integrity: sha512-chbBLXOJj+hHWl0Cls2VQExvq1l+UK2adxChhxkrvypcnDDamDY9frHVTrPUZxWgEZ9bzmCG+HvJJKR1EcnXRw==}
+  '@microsoft/teams.common@2.2.0':
+    resolution: {integrity: sha512-kuprVXivgHAx00YnwnCg/mk6/ZL2RcVjHrn4jopt1LvjVh689boX2VafOLvMJnzP0t5EabCfkgukEhiGIUasWA==}
     engines: {node: '>=22.12.0'}
 
-  '@microsoft/teams.graph-endpoints@2.1.1':
-    resolution: {integrity: sha512-0J+M0Aru6oa24dZNODRxy5aeTD1iWZCELy6uTjsspxNwhM9hJ6Miy81bcelkYLcvJeHpPrxv3PSLV+Mla0id1Q==}
+  '@microsoft/teams.graph-endpoints@2.2.0':
+    resolution: {integrity: sha512-1bjKzXwFc60yjwFH3t9xfC8X1umJQZUdxtuHEkxBnEoV2mPLLdmssqPOWcPH6Bd2/QqoWK4mdhPDIAXPC751HQ==}
     engines: {node: '>=22.12.0'}
 
-  '@microsoft/teams.graph@2.1.1':
-    resolution: {integrity: sha512-oBSvhsUoBx1EPNIK0/UfmipSSYyojVJ5/yvQlO/nQcUV8ZAUQ99KC/QSQY7NLacMplZ+5N4nVO9DuhWvS3/ZpQ==}
+  '@microsoft/teams.graph@2.2.0':
+    resolution: {integrity: sha512-ktR7V2e9tg5MxtXtOo40N1EvrIGEW6RNln7V5MWDKt+Ba3mJkANV8Yex4sI58p/QSaHExt3KEtk9/TgbEEEafg==}
     engines: {node: '>=22.12.0'}
 
   '@microsoft/tsdoc-config@0.18.3':
@@ -21240,6 +21273,9 @@ packages:
   '@types/command-line-usage@5.0.4':
     resolution: {integrity: sha512-BwR5KP3Es/CSht0xqBcUXS3qCAUVXwpRKsV2+arxeb65atasuXG9LykC9Ab10Cw3s2raH92ZqOeILaQbsB2ACg==}
 
+  '@types/compression@1.8.1':
+    resolution: {integrity: sha512-kCFuWS0ebDbmxs0AXYn6e2r2nrGAb5KwQhknjSPSPgJcGd8+HVSILlUyFhGqML2gk39HcG7D1ydW9/qpYkN00Q==}
+
   '@types/concat-stream@2.0.3':
     resolution: {integrity: sha512-3qe4oQAPNwVNwK4C9c8u+VJqv9kez+2MR4qJpoPFfXtgxxif1QbFusvXzK0/Wra2VX07smostI2VMmJNSpZjuQ==}
 
@@ -24845,6 +24881,10 @@ packages:
     resolution: {integrity: sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==}
     engines: {node: '>=18.0.0'}
 
+  eventsource@2.0.2:
+    resolution: {integrity: sha512-IzUmBGPR3+oUG9dUeXynyNmf91/3zUSJg1lCktzKw47OXuhco54U3r9B7O4XX+Rb1Itm9OZ2b0RkTs10bICOxA==}
+    engines: {node: '>=12.0.0'}
+
   eventsource@3.0.7:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
@@ -25044,6 +25084,9 @@ packages:
   fetch-blob@3.2.0:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
     engines: {node: ^12.20 || >= 14.13}
+
+  fetch-cookie@2.2.0:
+    resolution: {integrity: sha512-h9AgfjURuCgA2+2ISl8GbavpUdR+WGAM2McW/ovn4tVccegp8ZqCKWSBR8uRdM8dDNlx5WdKRWxBYUwteLDCNQ==}
 
   fetch-cookie@3.2.0:
     resolution: {integrity: sha512-n61pQIxP25C6DRhcJxn7BDzgHP/+S56Urowb5WFxtcRMpU6drqXD90xjyAsVQYsNSNNVbaCcYY1DuHsdkZLuiA==}
@@ -33741,14 +33784,7 @@ snapshots:
     dependencies:
       '@azure/msal-common': 16.15.0
 
-  '@azure/msal-common@16.13.0': {}
-
   '@azure/msal-common@16.15.0': {}
-
-  '@azure/msal-node@5.6.0':
-    dependencies:
-      '@azure/msal-common': 16.13.0
-      jsonwebtoken: 9.0.3
 
   '@azure/msal-node@7.1.2':
     dependencies:
@@ -35351,19 +35387,22 @@ snapshots:
       - workflow
       - zod
 
-  '@chat-adapter/teams@4.44.0(ai@7.0.162(zod@4.6.7))(supports-color@10.2.2)(zod@4.6.7)':
+  '@chat-adapter/teams@4.44.0(ai@7.0.162(zod@4.6.7))(bufferutil@4.1.0)(encoding@0.1.14)(supports-color@10.2.2)(zod@4.6.7)':
     dependencies:
       '@chat-adapter/shared': 4.44.0(ai@7.0.162(zod@4.6.7))(supports-color@10.2.2)(zod@4.6.7)
-      '@microsoft/teams.api': 2.1.1(supports-color@10.2.2)
-      '@microsoft/teams.apps': 2.1.1(supports-color@10.2.2)
-      '@microsoft/teams.cards': 2.1.1
-      '@microsoft/teams.graph': 2.1.1(supports-color@10.2.2)
-      '@microsoft/teams.graph-endpoints': 2.1.1
+      '@microsoft/teams.api': 2.2.0(supports-color@10.2.2)
+      '@microsoft/teams.apps': 2.2.0(bufferutil@4.1.0)(encoding@0.1.14)(supports-color@10.2.2)
+      '@microsoft/teams.cards': 2.2.0
+      '@microsoft/teams.graph': 2.2.0(supports-color@10.2.2)
+      '@microsoft/teams.graph-endpoints': 2.2.0
       chat: 4.44.0(ai@7.0.162(zod@4.6.7))(supports-color@10.2.2)(zod@4.6.7)
     transitivePeerDependencies:
       - ai
+      - bufferutil
       - debug
+      - encoding
       - supports-color
+      - utf-8-validate
       - workflow
       - zod
 
@@ -38043,8 +38082,6 @@ snapshots:
 
   '@fly/sprites@0.2.4': {}
 
-  '@fontsource-variable/mona-sans@5.3.0': {}
-
   '@google-cloud/common@6.1.0(supports-color@10.2.2)':
     dependencies:
       '@google-cloud/projectify': 4.0.0
@@ -38872,6 +38909,16 @@ snapshots:
 
   '@jsdevtools/ono@7.1.3': {}
 
+  '@json-render/chat@0.22.0(chat@4.44.0(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)':
+    dependencies:
+      '@json-render/core': 0.22.0(zod@4.6.7)
+      chat: 4.44.0(ai@7.0.162(zod@4.6.7))(supports-color@10.2.2)(zod@4.6.7)
+      zod: 4.6.7
+
+  '@json-render/core@0.22.0(zod@4.6.7)':
+    dependencies:
+      zod: 4.6.7
+
   '@json-schema-tools/meta-schema@1.8.3': {}
 
   '@json-schema-tools/traverse@1.15.1':
@@ -39528,8 +39575,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/lint-docs@1.1.3(oxfmt@0.59.0)(prettier@3.9.10)(supports-color@10.2.2)':
+  '@mastra/lint-docs@1.2.0(oxfmt@0.59.0)(prettier@3.9.10)(supports-color@10.2.2)':
     dependencies:
+      '@types/mdast': 4.0.4
       remark: 15.0.1(supports-color@10.2.2)
       remark-frontmatter: 5.0.0(supports-color@10.2.2)
       remark-gfm: 4.0.1(supports-color@10.2.2)
@@ -39542,8 +39590,10 @@ snapshots:
       remark-preset-lint-consistent: 6.0.1(supports-color@10.2.2)
       remark-preset-lint-recommended: 7.0.1(supports-color@10.2.2)
       tinyglobby: 0.2.17
+      unified-lint-rule: 3.0.1
       unist-util-visit: 5.2.0
       vfile: 6.0.3
+      vfile-location: 5.0.3
       vfile-reporter: 8.1.1
     optionalDependencies:
       oxfmt: 0.59.0
@@ -39704,10 +39754,22 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@microsoft/teams.api@2.1.1(supports-color@10.2.2)':
+  '@microsoft/signalr@10.0.11(bufferutil@4.1.0)(encoding@0.1.14)':
     dependencies:
-      '@microsoft/teams.cards': 2.1.1
-      '@microsoft/teams.common': 2.1.1(supports-color@10.2.2)
+      abort-controller: 3.0.0
+      eventsource: 2.0.2
+      fetch-cookie: 2.2.0
+      node-fetch: 2.7.0(encoding@0.1.14)
+      ws: 7.5.13(bufferutil@4.1.0)
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - utf-8-validate
+
+  '@microsoft/teams.api@2.2.0(supports-color@10.2.2)':
+    dependencies:
+      '@microsoft/teams.cards': 2.2.0
+      '@microsoft/teams.common': 2.2.0(supports-color@10.2.2)
       '@opentelemetry/api': 1.10.0
       jwt-decode: 4.0.0
       qs: 6.16.1
@@ -39715,12 +39777,13 @@ snapshots:
       - debug
       - supports-color
 
-  '@microsoft/teams.apps@2.1.1(supports-color@10.2.2)':
+  '@microsoft/teams.apps@2.2.0(bufferutil@4.1.0)(encoding@0.1.14)(supports-color@10.2.2)':
     dependencies:
-      '@azure/msal-node': 5.6.0
-      '@microsoft/teams.api': 2.1.1(supports-color@10.2.2)
-      '@microsoft/teams.common': 2.1.1(supports-color@10.2.2)
-      '@microsoft/teams.graph': 2.1.1(supports-color@10.2.2)
+      '@azure/msal-node': 7.1.2
+      '@microsoft/signalr': 10.0.11(bufferutil@4.1.0)(encoding@0.1.14)
+      '@microsoft/teams.api': 2.2.0(supports-color@10.2.2)
+      '@microsoft/teams.common': 2.2.0(supports-color@10.2.2)
+      '@microsoft/teams.graph': 2.2.0(supports-color@10.2.2)
       '@opentelemetry/api': 1.10.0
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       cors: 2.8.6
@@ -39729,23 +39792,26 @@ snapshots:
       jwks-rsa: 4.1.0(supports-color@10.2.2)
       reflect-metadata: 0.2.2
     transitivePeerDependencies:
+      - bufferutil
       - debug
+      - encoding
       - supports-color
+      - utf-8-validate
 
-  '@microsoft/teams.cards@2.1.1': {}
+  '@microsoft/teams.cards@2.2.0': {}
 
-  '@microsoft/teams.common@2.1.1(supports-color@10.2.2)':
+  '@microsoft/teams.common@2.2.0(supports-color@10.2.2)':
     dependencies:
-      axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+      axios: 1.21.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
     transitivePeerDependencies:
       - debug
       - supports-color
 
-  '@microsoft/teams.graph-endpoints@2.1.1': {}
+  '@microsoft/teams.graph-endpoints@2.2.0': {}
 
-  '@microsoft/teams.graph@2.1.1(supports-color@10.2.2)':
+  '@microsoft/teams.graph@2.2.0(supports-color@10.2.2)':
     dependencies:
-      '@microsoft/teams.common': 2.1.1(supports-color@10.2.2)
+      '@microsoft/teams.common': 2.2.0(supports-color@10.2.2)
       qs: 6.16.1
     transitivePeerDependencies:
       - debug
@@ -43919,7 +43985,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.6
       tslib: 2.8.1
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@supabase/auth-js@2.118.0':
     dependencies:
@@ -44707,6 +44773,11 @@ snapshots:
   '@types/command-line-args@5.2.3': {}
 
   '@types/command-line-usage@5.0.4': {}
+
+  '@types/compression@1.8.1':
+    dependencies:
+      '@types/express': 5.0.6
+      '@types/node': 22.19.15
 
   '@types/concat-stream@2.0.3':
     dependencies:
@@ -45693,7 +45764,7 @@ snapshots:
       obug: 3.0.0
       std-env: 4.3.0
       tinyrainbow: 3.2.0
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@5.9.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -45771,7 +45842,7 @@ snapshots:
       pathe: 2.0.3
       sirv: 3.0.2
       tinyrainbow: 3.2.0
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@5.9.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -48908,6 +48979,8 @@ snapshots:
 
   eventsource-parser@3.1.1: {}
 
+  eventsource@2.0.2: {}
+
   eventsource@3.0.7:
     dependencies:
       eventsource-parser: 3.1.1
@@ -49204,6 +49277,11 @@ snapshots:
     dependencies:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
+
+  fetch-cookie@2.2.0:
+    dependencies:
+      set-cookie-parser: 2.7.3
+      tough-cookie: 4.1.4
 
   fetch-cookie@3.2.0:
     dependencies:

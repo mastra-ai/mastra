@@ -666,6 +666,12 @@ export interface AgentFinishEventData {
     user: ModelMessage[];
     nonUser: AIV5ResponseMessage[];
   };
+  /**
+   * Set when processOutputResult changed the reply after the last step-finish was streamed.
+   * The last entry of `output.steps` then holds the processed text, and callers must use it
+   * instead of the text they buffered from the stream.
+   */
+  textRewritten?: boolean;
 }
 
 /**

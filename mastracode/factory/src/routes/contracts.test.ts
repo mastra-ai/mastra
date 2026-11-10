@@ -97,9 +97,9 @@ describe('Factory route contracts', () => {
       description: null,
     });
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
-    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', autoRunEnabled: true })).toEqual({
+    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', reviewTestChecksEnabled: true })).toEqual({
       defaultModelId: null,
-      autoRunEnabled: true,
+      reviewTestChecksEnabled: true,
     });
     expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
     expect(updateProjectBodySchema.safeParse({ modelScope: 'org' }).success).toBe(false);

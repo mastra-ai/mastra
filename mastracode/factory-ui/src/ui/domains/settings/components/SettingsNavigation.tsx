@@ -10,17 +10,16 @@ import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
 import type { SettingsSection } from '../settingsSections';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
-import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconBug } from '@mastra/playground-ui/icons/central/IconBug';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
-import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
-import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
-import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { IconCirclePerson } from '@mastra/playground-ui/icons/central/IconCirclePerson';
 import { IconColorPalette } from '@mastra/playground-ui/icons/central/IconColorPalette';
-import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
 import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -79,12 +78,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
           'memory personal memory factory memory your memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
-        id: 'skills',
-        label: SETTINGS_SECTION_LABELS.skills,
-        icon: IconBook,
-        searchText: 'skills factory triage plan review agent instructions prompts stages',
-      },
-      {
         id: 'tools',
         label: SETTINGS_SECTION_LABELS.tools,
         icon: IconMaintenance,
@@ -113,14 +106,8 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
         icon: IconInboxEmpty,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
-      },
-      {
-        id: 'board',
-        label: SETTINGS_SECTION_LABELS.board,
-        icon: IconKanbanView,
         searchText:
-          'work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
+          'work intake sources tasks issues pull requests github linear feed sync intake routes routing board catch-all',
       },
       {
         id: 'factory',
@@ -128,6 +115,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: IconBuildings,
         searchText:
           'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
+      },
+      {
+        id: 'debug',
+        label: SETTINGS_SECTION_LABELS.debug,
+        icon: IconBug,
+        searchText: 'debug versions packages release build node mastra core factory installed running',
       },
     ],
   },

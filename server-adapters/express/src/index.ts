@@ -3,12 +3,12 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
+  cancelReaderOnResponseClose,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
@@ -17,6 +17,7 @@ import {
   normalizeQueryParams,
   redactStreamChunk,
   serializeStreamChunk,
+  writeWithBackpressure,
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 export { createAuthMiddleware } from './auth-middleware';
@@ -149,6 +150,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           controller.abort();
         }
       });
+      // A client that dropped while earlier middleware ran (async auth, body parsing) fired 'close' before this
+      // listener existed.
+      if (res.destroyed) {
+        controller.abort();
+      }
+
       res.locals.abortSignal = controller.signal;
       next();
     };
@@ -173,17 +180,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
-
-    let readerCanceled = false;
-    const cancelReader = (reason: string) => {
-      if (readerCanceled) return;
-      readerCanceled = true;
-      void reader.cancel(reason).catch(() => {});
-    };
-    const cancelReaderOnClose = () => cancelReader('request aborted');
-    res.on('close', cancelReaderOnClose);
-    // The client may have dropped while the handler was still running, in which case 'close' already fired.
-    if (res.destroyed) cancelReaderOnClose();
+    const readerCancel = cancelReaderOnResponseClose(reader, res);
 
     try {
       while (true) {
@@ -192,7 +189,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         if (value) {
           if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
-            res.write(value);
+            await writeWithBackpressure(res, value);
             continue;
           }
 
@@ -210,9 +207,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             continue;
           }
           if (streamFormat === 'sse') {
-            res.write(`data: ${serialized.json}\n\n`);
+            await writeWithBackpressure(res, `data: ${serialized.json}\n\n`);
           } else {
-            res.write(serialized.json + '\x1E');
+            await writeWithBackpressure(res, serialized.json + '\x1E');
           }
         }
       }
@@ -221,7 +218,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
     } finally {
-      res.off('close', cancelReaderOnClose);
+      readerCancel.dispose();
       res.end();
     }
   }
@@ -366,31 +363,21 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       response.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
-
-        let readerCanceled = false;
-        const cancelReader = (reason: string) => {
-          if (readerCanceled) return;
-          readerCanceled = true;
-          void reader.cancel(reason).catch(() => {});
-        };
-        const cancelReaderOnClose = () => cancelReader('request aborted');
+        const readerCancel = cancelReaderOnResponseClose(reader, response);
 
         const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          cancelReader('response write error');
+          readerCancel.cancel('response write error');
         };
         response.once('error', onResError);
-        response.on('close', cancelReaderOnClose);
-        // The client may have dropped while the handler was still running, in which case 'close' already fired.
-        if (response.destroyed) cancelReaderOnClose();
 
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            response.write(value);
+            await writeWithBackpressure(response, value);
           }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in datastream processing', {
@@ -398,7 +385,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           });
         } finally {
           response.off('error', onResError);
-          response.off('close', cancelReaderOnClose);
+          readerCancel.dispose();
           response.end();
         }
       } else {
@@ -702,28 +689,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     if (!(await this.buildCustomRouteHandler(routes))) return;
 
     this.app.use(async (req: Request, res: Response, next: NextFunction) => {
-      // Check if this request matches a protected custom route and run auth
+      // Check auth against the custom route the custom-route app will actually run for
+      // the URL it's forwarded, which can differ from what Express matched.
       const path = String(req.path || '/');
       const method = String(req.method || 'GET');
-      const matchedRoute = findMatchingCustomRoute(
-        path,
-        method,
-        this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
-      );
-      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, this.customRouteAuthConfig);
+      const dispatchUrl = `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`;
+      const {
+        match: matchedRoute,
+        requiresAuth: shouldRunCustomRouteAuth,
+        serverRoute,
+        customRouteAuthConfig,
+      } = this.resolveCustomRouteAuth(dispatchUrl, method, path);
       const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
       if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
-        const serverRoute: ServerRoute = {
-          method: (matchedRoute?.route.method ?? method) as any,
-          path: matchedRoute?.route.path ?? path,
-          responseType: 'json',
-          handler: async () => {},
-          requiresAuth: matchedRoute?.route.requiresAuth,
-          requiresPermission: matchedRoute?.route.requiresPermission,
-          fga: matchedRoute?.route.fga,
-        };
-
         if (shouldRunCustomRouteAuth) {
           const authError = await this.checkRouteAuth(serverRoute, {
             path,
@@ -733,6 +712,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             requestContext: res.locals.requestContext,
             request: toWebRequest(req),
             buildAuthorizeContext: () => toWebRequest(req),
+            customRouteAuthConfig,
           });
 
           if (authError) {
@@ -783,7 +763,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
 
       const response = await this.handleCustomRouteRequest(
-        `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
+        dispatchUrl,
         req.method,
         req.headers as Record<string, string | string[] | undefined>,
         req.body,

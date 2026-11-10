@@ -41,6 +41,7 @@ function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProp
     return (
       <Button
         type="button"
+        variant="ghost"
         size="icon-sm"
         tooltip="Set up voice input in settings"
         onClick={() =>
@@ -59,6 +60,7 @@ function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProp
   return (
     <Button
       type="button"
+      variant="ghost"
       size="icon-sm"
       disabled={blocked}
       onClick={recording ? stop : () => void start()}

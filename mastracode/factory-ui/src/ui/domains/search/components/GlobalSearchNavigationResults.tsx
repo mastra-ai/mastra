@@ -1,13 +1,15 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
+import { PULL_REQUEST_SOURCE_FILTER } from '../../factory/boardSourceFilters';
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconChecklist } from '@mastra/playground-ui/icons/central/IconChecklist';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
-import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 
 export function GlobalSearchNavigationResults({
   factoryId,
@@ -23,14 +25,14 @@ export function GlobalSearchNavigationResults({
         title="Work"
         subtitle="Factory navigation"
         value={`Work Factory navigation /factories/${factoryId}/work`}
-        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, DEFAULT_BOARD_ID), false)}
       />
       <CommandPaletteItem
         icon={<IconPullRequest />}
-        title="Review"
+        title="Pull requests"
         subtitle="Factory navigation"
-        value={`Review Factory navigation /factories/${factoryId}/review`}
-        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
+        value={`Pull requests Review Factory navigation /factories/${factoryId}/work`}
+        onSelect={() => onSelect(`/factories/${factoryId}/work?source=${PULL_REQUEST_SOURCE_FILTER}`, false)}
       />
       <CommandPaletteItem
         icon={<IconChecklist />}

@@ -252,7 +252,7 @@ export const DateTimePickerContent = ({
         aria-label="Time"
         value={timeStrValue}
         onChange={e => handleTimeStrChange(e.target.value)}
-        className="m-4 mt-0 w-auto [&::-webkit-calendar-picker-indicator]:hidden"
+        className="m-4 mt-0 w-auto"
       />
 
       <div className="m-4 mt-0 grid grid-cols-[1fr_2fr] gap-2">

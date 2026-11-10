@@ -1,5 +1,5 @@
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
-import { CalendarRange, Circle, LoaderCircle, PlusCircle } from 'lucide-react';
+import { CalendarRange, Circle, LoaderCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import {
@@ -25,6 +25,7 @@ import { IconHand5Finger } from '@mastra/playground-ui/icons/central/IconHand5Fi
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconUserAdded } from '@mastra/playground-ui/icons/central/IconUserAdded';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
+import { IconCirclePlus } from '@mastra/playground-ui/icons/central/IconCirclePlus';
 
 function withIcons<V extends string>(options: readonly DropdownMenuRadioOption<V>[], icons: Record<V, LucideIcon>) {
   return options.map(option => {
@@ -36,7 +37,7 @@ function withIcons<V extends string>(options: readonly DropdownMenuRadioOption<V
 export const SESSION_SORT_MENU_OPTIONS = withIcons(SESSION_SORT_OPTIONS, {
   activity: IconElectrocardiogram,
   updated: IconHistory,
-  created: PlusCircle,
+  created: IconCirclePlus,
 });
 
 export const SESSION_STATUS_MENU_OPTIONS = withIcons(SESSION_STATUS_OPTIONS, {

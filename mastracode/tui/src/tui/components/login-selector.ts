@@ -56,6 +56,10 @@ export class LoginSelectorComponent extends Box {
       paddingX: 1,
       paddingY: 1,
       renderItem: (provider, isSelected) => [this.renderProvider(provider, isSelected)],
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.handleInput('\r');
+      },
     });
     this.addChild(this.listContainer);
 
