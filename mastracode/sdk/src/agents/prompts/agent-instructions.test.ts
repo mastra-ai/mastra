@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
+import { deflateSync } from 'node:zlib';
 import { createSignal, MessageList } from '@mastra/core/agent';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -446,6 +447,45 @@ describe('git-ref instruction readers', () => {
       ['instructions both checkouts share'],
       ['instructions both checkouts share'],
     ]);
+  });
+
+  // Rewrites a loose object in place, the way anything able to write the checkout's .git could.
+  const tamperWithObject = (id: string, type: 'blob' | 'tree', body: Buffer) => {
+    const file = join(repo, '.git', 'objects', id.slice(0, 2), id.slice(2));
+    rmSync(file, { force: true });
+    writeFileSync(file, deflateSync(Buffer.concat([Buffer.from(`${type} ${body.length}\0`), body])));
+  };
+  const gitOutput = (args: string[], input?: string) =>
+    execFileSync('git', ['-C', repo, ...args], { encoding: 'utf-8', input }).trim();
+
+  it("keeps a tampered file object in one checkout out of every checkout's instructions", () => {
+    writeFileSync(join(repo, 'AGENTS.md'), 'instructions with a tampered copy');
+    git('commit', '-am', 'shared');
+    const clone = join(root, 'clone');
+    execFileSync('git', ['clone', '--quiet', '--no-checkout', repo, clone], { stdio: 'ignore' });
+    tamperWithObject(
+      gitOutput(['rev-parse', 'HEAD:AGENTS.md']),
+      'blob',
+      Buffer.from('INJECTED through a tampered object'),
+    );
+    expect([loadAtRef(), loadAtRef('main', clone)]).toEqual([[], ['instructions with a tampered copy']]);
+  });
+
+  it("keeps a tampered folder listing in one checkout out of every checkout's instructions", () => {
+    git('rm', '--cached', '--quiet', 'AGENTS.md');
+    mkdirSync(join(repo, '.claude'));
+    writeFileSync(join(repo, '.claude', 'AGENTS.md'), 'instructions in a tampered folder');
+    git('add', '.claude/AGENTS.md');
+    git('commit', '-m', 'nested');
+    const clone = join(root, 'clone');
+    execFileSync('git', ['clone', '--quiet', '--no-checkout', repo, clone], { stdio: 'ignore' });
+    const injected = gitOutput(['hash-object', '-w', '--stdin'], 'INJECTED through a tampered listing');
+    tamperWithObject(
+      gitOutput(['rev-parse', 'HEAD:.claude']),
+      'tree',
+      Buffer.concat([Buffer.from('100644 AGENTS.md\0'), Buffer.from(injected, 'hex')]),
+    );
+    expect([loadAtRef(), loadAtRef('main', clone)]).toEqual([[], ['instructions in a tampered folder']]);
   });
 
   it('reminder reader resolves project paths at the ref and falls back to fs outside the project', () => {
