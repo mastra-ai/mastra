@@ -1011,7 +1011,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     entry.abortSignal = totalTimeout.signal;
     const deadline = timeoutMs !== undefined && timeoutMs > 0 ? { at: Date.now() + timeoutMs, timeoutMs } : undefined;
     void totalTimeout.timeoutPromise?.catch(async error => {
-      if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
+      // A worker in this process can abort the shared controller with its own copy of the
+      // deadline a tick earlier; that is still this deadline, not a caller abort.
+      if (!isMastraTimeoutError(error) || !isMastraTimeoutError(totalTimeout.signal?.reason)) return;
       // A step running on another worker only sees this process's abort through pubsub. Not
       // awaited: a slow publish must not hold back the caller's error.
       void requestRemoteAbort(runId, error);
