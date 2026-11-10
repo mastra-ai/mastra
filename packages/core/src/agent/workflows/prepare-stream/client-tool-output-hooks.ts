@@ -1,13 +1,8 @@
 import type { IMastraLogger } from '../../../logger';
 import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
-import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList, MessageListInput } from '../../message-list';
-import {
-  MODEL_OUTPUT_SIGNATURE_KEY,
-  hasValidServerMapping,
-  serverComputedParts,
-} from '../../message-list/utils/server-computed-parts';
+import { serverComputedParts } from '../../message-list/utils/server-computed-parts';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 
 type ToolCall = { toolCallId: string; toolName: string };
@@ -151,12 +146,10 @@ export async function fireClientToolOutputHooks({
  * building reads these same part objects, and messages saved to memory carry
  * the enrichment so memory reloads restore it without recomputing.
  *
- * Mapping markers found on any wire-delivered tool result are NOT trusted: a
- * client could forge `mastra.modelOutput` to inject arbitrary prompt content,
- * so they are stripped and the mapping is recomputed from the raw result by
- * the agent's own tool. That covers server tools too: their execution-time
- * mapping comes back in returned history (e.g. `response.messages`) carrying
- * the raw result, so a deterministic toModelOutput gives the same output.
+ * Mapping markers found on wire-delivered results of client-mapped tools are
+ * NOT trusted: a client could forge `mastra.modelOutput` to inject arbitrary
+ * prompt content, so they are stripped and the mapping is recomputed from the
+ * raw result.
  */
 export async function applyClientToolModelOutput({
   messageList,
@@ -167,6 +160,10 @@ export async function applyClientToolModelOutput({
   tools?: Record<string, CoreTool>;
   logger?: Pick<IMastraLogger, 'error'>;
 }): Promise<void> {
+  const isClientTool = (tool: CoreTool) => !tool.execute && tool.type !== 'provider-defined';
+  if (!tools) return;
+  if (!Object.values(tools).some(isClientTool)) return;
+
   for (const message of messageList.get.input.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
 
@@ -174,7 +171,13 @@ export async function applyClientToolModelOutput({
       if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
 
       const { toolName, toolCallId } = part.toolInvocation;
-      const tool = tools?.[toolName];
+      const tool = tools[toolName];
+      // Client-side tools only: tools WITH execute get toModelOutput applied at
+      // execution time by the tool-call step, and provider-executed tools are
+      // mapped by the provider round trip, not by us. Their stored mapping is
+      // left alone: it cannot be recomputed here, and conversation history
+      // passed back as input (e.g. `response.messages`) relies on it.
+      if (!tool || !isClientTool(tool)) continue;
 
       // Trust boundary: `mastra.modelOutput` / `modelOutputComputed` are
       // server-computed markers. A client could forge them on its input to
@@ -182,11 +185,6 @@ export async function applyClientToolModelOutput({
       // below, so markers on wire-delivered parts are stripped and the
       // mapping is recomputed from the raw result. Only parts this process
       // enriched itself (tracked by identity) keep their markers.
-      if (!serverComputedParts.has(part) && hasValidServerMapping(part)) {
-        // Signed by this process when it produced the result: trusted as is.
-        serverComputedParts.add(part);
-        continue;
-      }
       if (!serverComputedParts.has(part)) {
         const wireMastra = part.providerMetadata?.mastra;
         if (
@@ -197,7 +195,6 @@ export async function applyClientToolModelOutput({
           const {
             modelOutput: _untrustedOutput,
             modelOutputComputed: _untrustedMarker,
-            [MODEL_OUTPUT_SIGNATURE_KEY]: _untrustedSignature,
             ...restMastra
           } = wireMastra as Record<string, unknown>;
           part.providerMetadata = {
@@ -207,24 +204,9 @@ export async function applyClientToolModelOutput({
         }
       }
 
-      // Provider-executed results are never mapped by the server, and a tool this
-      // agent doesn't define (or defines without a mapping) can't be vetted, so
-      // those keep the raw result.
-      if (!tool || tool.type === 'provider-defined' || part.providerExecuted) continue;
+      // The server never stores a mapping for a client tool without one.
       const toModelOutput = tool.toModelOutput;
       if (typeof toModelOutput !== 'function') continue;
-      // Results the server stored without mapping them keep the raw result:
-      // failures, background tasks that haven't completed (placeholder or error
-      // text), and results rewritten by a transcript payload transform, which no
-      // longer hold the value toModelOutput originally saw.
-      const backgroundTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
-      if (
-        part.toolInvocation.isError ||
-        (backgroundTask && backgroundTask.status !== 'completed') ||
-        hasTransformedToolPayload(getTransformedToolPayload(part.providerMetadata, 'transcript', 'output-available'))
-      ) {
-        continue;
-      }
 
       const mastraMetadata = part.providerMetadata?.mastra;
       // Idempotency: skip parts this process already mapped (retries and

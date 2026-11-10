@@ -60,7 +60,7 @@ import type { MastraToolInvocation, MastraToolInvocationPart } from './state/typ
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
-import { serverComputedParts, signServerMapping } from './utils/server-computed-parts';
+import { serverComputedParts } from './utils/server-computed-parts';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
 
@@ -1907,7 +1907,6 @@ export class MessageList {
         const part = msg.content.parts[i];
         if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
           this.mergeToolResultIntoPart(msg, i, inputPart, metadata);
-          signServerMapping(msg.content.parts[i]!);
           return true;
         }
       }
@@ -1941,7 +1940,6 @@ export class MessageList {
           const previousToolCallId = candidate.toolInvocation.toolCallId;
           candidate.toolInvocation.toolCallId = toolCallId;
           this.mergeToolResultIntoPart(msg, i, inputPart, metadata, previousToolCallId);
-          signServerMapping(msg.content.parts[i]!);
           return true;
         }
       }

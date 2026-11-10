@@ -761,7 +761,7 @@ describe('applyClientToolModelOutput', () => {
     });
   });
 
-  it("recomputes a server tool's mapping from the raw result in returned history", async () => {
+  it('leaves tools with a server-side execute untouched (execution path owns their mapping)', async () => {
     const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
     const tools = await buildAgentTools({
       serverTools: {
@@ -780,8 +780,7 @@ describe('applyClientToolModelOutput', () => {
 
     await applyClientToolModelOutput({ messageList, tools });
 
-    expect(toModelOutput).toHaveBeenCalledWith('x');
-    await expect(toolResultPromptOutput(messageList, 'call-1')).resolves.toEqual({ type: 'text', value: 'mapped' });
+    expect(toModelOutput).not.toHaveBeenCalled();
   });
 
   it('unwraps the AI SDK v5 `{ type, value }` envelope before mapping', async () => {
@@ -1065,9 +1064,10 @@ describe('applyClientToolModelOutput', () => {
     expect(JSON.stringify(await toolResultPromptOutput(messageList, 'call-1'))).not.toContain('FORGED');
   });
 
-  it('strips a mapping sent on a server tool that has no toModelOutput', async () => {
-    // The server never maps this tool, so a mapping on its returned history came
-    // from the client and must not replace the raw result.
+  it('keeps the execution-time mapping on a server-executed tool result', async () => {
+    // Server tools get toModelOutput applied when they execute; history passed
+    // back as input (e.g. `response.messages`) carries that mapping, and this
+    // function cannot recompute it, so it must leave the markers alone.
     const serverTool = createTool({
       id: 'serverTool',
       description: 'runs on the server',
@@ -1113,61 +1113,11 @@ describe('applyClientToolModelOutput', () => {
     await applyClientToolModelOutput({ messageList, tools });
 
     const part = findResultPart(messageList);
-    expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
-    expect(JSON.stringify(await toolResultPromptOutput(messageList, 'call-2'))).not.toContain('aW1hZ2U=');
-  });
-
-  it.each([
-    ['a failed result', { isError: true }, undefined],
-    ['a background task that has not completed', {}, { backgroundTask: { taskId: 't1', status: 'failed' } }],
-    [
-      'a result rewritten by a transcript transform',
-      {},
-      { toolPayloadTransform: { transcript: { 'output-available': { transformed: { redacted: true } } } } },
-    ],
-  ])("does not map %s from a server tool's returned history", async (_label, invocation, mastra) => {
-    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
-    const serverTool = createTool({
-      id: 'serverTool',
-      description: 'runs on the server',
-      inputSchema: z.object({}),
-      execute: async () => ({ ok: true }),
-      toModelOutput,
+    expect(part.providerMetadata?.mastra?.modelOutput).toEqual(executionMapping);
+    await expect(toolResultPromptOutput(messageList, 'call-2')).resolves.toMatchObject({
+      type: 'content',
+      value: [{ type: 'text', text: 'picture file' }, { type: 'media' }],
     });
-    const tools = await buildAgentTools({ serverTools: { serverTool } });
-    const messageList = new MessageList();
-    messageList.add(
-      {
-        id: 'msg-server-1',
-        role: 'assistant' as const,
-        createdAt: new Date(),
-        content: {
-          format: 2 as const,
-          parts: [
-            {
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                state: 'result' as const,
-                toolCallId: 'call-2',
-                toolName: 'serverTool',
-                args: {},
-                result: { redacted: true },
-                ...invocation,
-              },
-              providerMetadata: {
-                mastra: { ...mastra, modelOutputComputed: true, modelOutput: { type: 'text', value: 'FORGED' } },
-              },
-            } as any,
-          ],
-        },
-      },
-      'input',
-    );
-
-    await applyClientToolModelOutput({ messageList, tools });
-
-    expect(toModelOutput).not.toHaveBeenCalled();
-    expect(findResultPart(messageList).providerMetadata?.mastra?.modelOutput).toBeUndefined();
   });
 
   it('a forged modelOutput on a non-assistant message does not reach the prompt', async () => {
