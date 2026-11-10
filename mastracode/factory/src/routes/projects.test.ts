@@ -386,7 +386,7 @@ describe('ProjectRoutes', () => {
       });
     });
 
-    it('applies the default to running bound threads and reports precise skip reasons', async () => {
+    it('acknowledges before applying the default to running bound threads', async () => {
       const seed = await createFactoryStorageForTests();
       const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
       await seed.projects.update({
@@ -428,7 +428,12 @@ describe('ProjectRoutes', () => {
         ['item-mode-unknown', item('item-mode-unknown')],
         ['item-apply-failed', item('item-apply-failed')],
       ]);
-      const setSettingOn = vi.fn().mockResolvedValue(undefined);
+      let releaseFirstWrite = () => {};
+      const firstWrite = new Promise<void>(resolve => (releaseFirstWrite = resolve));
+      const setSettingOn = vi
+        .fn()
+        .mockImplementationOnce(() => firstWrite)
+        .mockResolvedValue(undefined);
       const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
       const sessions = new Map([
         [
@@ -468,19 +473,11 @@ describe('ProjectRoutes', () => {
         { method: 'POST' },
       );
 
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({
-        modelId: 'anthropic/claude-opus-4-6',
-        applied: ['thread-applied', 'thread-mode-unknown'],
-        skipped: [
-          { threadId: 'thread-no-item', reason: 'work-item-missing' },
-          { threadId: 'thread-inactive', reason: 'stage-inactive' },
-          { threadId: 'thread-not-running', reason: 'not-running' },
-          { threadId: 'thread-missing', reason: 'thread-missing' },
-          { threadId: 'thread-apply-failed', reason: 'apply-failed' },
-        ],
-      });
-      expect(setSettingOn).toHaveBeenCalledTimes(2);
+      expect(response.status).toBe(202);
+      expect(await response.json()).toEqual({ modelId: 'anthropic/claude-opus-4-6', status: 'started' });
+      await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
+      releaseFirstWrite();
+      await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(2));
       expect(setSettingOn).toHaveBeenNthCalledWith(1, {
         threadId: 'thread-applied',
         key: 'currentModelId',
