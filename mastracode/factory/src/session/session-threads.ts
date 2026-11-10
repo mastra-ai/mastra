@@ -16,7 +16,24 @@ export interface FactorySessionOwnership {
 /** Run bindings: the server-side record that a session runs work for its Factory. */
 export type SessionRunBindings = Pick<WorkItemsStorage, 'hasRunBindingForSession'>;
 
-type ThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
+/** Run bindings by thread: historical membership, for model and billing policy only. */
+export type ThreadRunBindings = Pick<WorkItemsStorage, 'findRunBindingByThread'>;
+
+export async function threadRunBinding(
+  runs: ThreadRunBindings | undefined,
+  thread: { orgId: string; resourceId: string; sessionId: string; threadId: string | null | undefined },
+) {
+  if (!runs || !thread.threadId) return null;
+  return runs.findRunBindingByThread({
+    orgId: thread.orgId,
+    resourceId: thread.resourceId,
+    sessionId: thread.sessionId,
+    threadId: thread.threadId,
+    rejectAmbiguous: true,
+  });
+}
+
+export type SessionThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
 
 /**
  * The one memory resource a Factory session runs under. A Slack session uses
@@ -28,7 +45,7 @@ type ThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
  * session's id, so the thread alone never makes a session the Factory's.
  */
 export async function sessionMemoryResourceId(
-  controller: ThreadLookup | undefined,
+  controller: SessionThreadLookup | undefined,
   session: FactorySessionOwnership,
   runs: SessionRunBindings | undefined,
 ): Promise<string> {

@@ -13,6 +13,7 @@ export function ComposerPrimaryAction({ showAbort, sendDisabled, sendTitle, onAb
     return (
       <Button
         type="button"
+        variant="primary"
         size="icon-sm"
         onClick={event => {
           // Send turns into Abort under the pointer: a double-click on Send must not abort.
@@ -27,7 +28,14 @@ export function ComposerPrimaryAction({ showAbort, sendDisabled, sendTitle, onAb
   }
 
   return (
-    <Button type="submit" size="icon-sm" disabled={sendDisabled} aria-label="Send message" title={sendTitle}>
+    <Button
+      type="submit"
+      variant="primary"
+      size="icon-sm"
+      disabled={sendDisabled}
+      aria-label="Send message"
+      title={sendTitle}
+    >
       <ArrowUp size={16} />
     </Button>
   );

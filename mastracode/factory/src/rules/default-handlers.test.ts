@@ -413,17 +413,20 @@ describe('built-in board and integration handlers', () => {
     ];
 
     it.each(cases)('$name keeps closing Work cards into Done and Canceled', async ({ source, run, cancelSuffix }) => {
+      // The board's move, which the project's close routes replace when they handle closes.
       expect(await run(false, onBoard('work', ['execute'], source))).toMatchObject({
         type: 'transition',
         board: 'work',
         stage: 'done',
         message: { text: expect.stringMatching(/; this Work card was moved to Done\.$/) },
+        event: { type: 'work_item.closed', reason: 'completed' },
       });
       if (cancelSuffix === undefined) return;
       expect(await run(true, onBoard('work', ['execute'], source))).toMatchObject({
         board: 'work',
         stage: 'canceled',
         message: { text: expect.stringMatching(/; this Work card was moved to Canceled\.$/) },
+        event: { type: 'work_item.closed', reason: 'canceled' },
       });
     });
 

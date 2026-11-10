@@ -9,7 +9,7 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "MiniMax-M2.7": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -21,7 +21,7 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
+    "MiniMax-M2.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

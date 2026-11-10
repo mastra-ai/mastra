@@ -10,14 +10,12 @@ import { LinearWorkspaceControl } from './LinearWorkspaceControl';
 export function PausedLinearWorkspace({
   workspace,
   count,
-  pending,
   reconnect,
   onRetry,
   onRemove,
 }: {
   workspace: LinearWorkspaceConnection;
   count: number;
-  pending: boolean;
   reconnect: LinearReconnectResult;
   onRetry: () => void;
   onRemove: () => void;
@@ -46,7 +44,6 @@ export function PausedLinearWorkspace({
           size="sm"
           variant="ghost"
           icon={<Trash2 />}
-          disabled={pending}
           aria-label={`Remove sources from ${workspace.name}`}
           onClick={onRemove}
         >

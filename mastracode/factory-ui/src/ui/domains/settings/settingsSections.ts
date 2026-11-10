@@ -13,7 +13,9 @@ export type SettingsSection =
   | 'models'
   | 'memory'
   | 'skills'
-  | 'behavior';
+  | 'tools'
+  | 'behavior'
+  | 'debug';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   account: 'My account',
@@ -26,7 +28,9 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   models: 'Models',
   memory: 'Memory',
   skills: 'Skills',
+  tools: 'Tools',
   behavior: 'Behavior',
+  debug: 'Debug',
 };
 
 export const MODEL_DEFAULTS_ANCHORS = {
@@ -40,6 +44,10 @@ export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined)
   if (!modelScope) return MODEL_DEFAULTS_ANCHORS.personal;
   return MODEL_DEFAULTS_ANCHORS[MODEL_ROUTES[modelScope].chats];
 }
+
+export const VOICE_INPUT_ANCHOR = 'voice-input';
+
+type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
 
@@ -60,7 +68,7 @@ export function isSettingsSection(value: unknown): value is SettingsSection {
   return typeof value === 'string' && value in SETTINGS_SECTION_LABELS;
 }
 
-export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: ModelDefaultsAnchor): string {
+export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: SettingsAnchor): string {
   const path = `/factories/${factoryId}/settings/${section}`;
   return anchor ? `${path}#${anchor}` : path;
 }

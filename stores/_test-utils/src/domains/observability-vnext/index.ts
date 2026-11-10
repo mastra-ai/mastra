@@ -4983,6 +4983,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           // Compare against the input so a lossy read mapper cannot hide missing fields.
           const before = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
           expect(before.feedback).toMatchObject([feedback]);
+          expect(await storage.getFeedbackById(feedback.feedbackId)).toMatchObject(feedback);
 
           const updated = await storage.updateFeedbackReviewStatus({
             feedbackId: feedback.feedbackId,
@@ -4990,6 +4991,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           });
           const expected = { ...feedback, reviewStatus: 'reviewed' };
           expect(updated).toMatchObject(expected);
+          expect(await storage.getFeedbackById(feedback.feedbackId)).toMatchObject(expected);
 
           // Append-only stores (ClickHouse) implement the update as a replacement
           // row; the read side must still expose a single, latest version.
@@ -4998,6 +5000,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           expect(result.pagination?.total).toBe(1);
         },
       );
+
+      it('returns null when retrieving a missing feedback record', async () => {
+        expect(await storage.getFeedbackById('feedback-does-not-exist')).toBeNull();
+      });
 
       it('throws when updating reviewStatus of a missing feedback record', async () => {
         await expect(

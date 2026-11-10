@@ -20,6 +20,15 @@ export function effectiveModelScope(scope: FactoryModelScope, context: 'run' | '
   return scope;
 }
 
+/**
+ * Sentinel `user_id` for a Factory's own settings rows (memory, voice) in the
+ * per-`(org, user)` settings tables. Real user ids are WorkOS ids (`user_…`) or
+ * the `local` sentinel, so the prefix cannot collide.
+ */
+export function factoryProjectSettingsUserId(factoryProjectId: string): string {
+  return `factory-project:${factoryProjectId}`;
+}
+
 export interface FactoryProject {
   id: string;
   orgId: string;

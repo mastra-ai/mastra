@@ -10,6 +10,7 @@ import type {
 import type { CreateSpanRecord } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 import { EventBuffer } from './event-buffer';
+import { StorageByteTracker, resolveStorageByteBatching } from './storage-byte-tracker';
 
 function createTracingEvent(
   type: TracingEventType,
@@ -528,5 +529,51 @@ describe('EventBuffer', () => {
 
       expect(buffer.updates).toHaveLength(1);
     });
+  });
+});
+
+describe('Byte batch scheduling', () => {
+  function buffer() {
+    const result = new EventBuffer({
+      maxRetries: 1,
+      byteTracker: new StorageByteTracker(resolveStorageByteBatching({})),
+    });
+    result.init({ strategy: 'batch-with-updates' });
+    return result;
+  }
+
+  it('makes progress on span ends even when creates fill every batch', () => {
+    const events = buffer();
+    events.addCreatedSpans({ records: [createSpanRecord('trace-1', 'finished')] });
+    events.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'finished'));
+    for (let i = 0; i < 10; i++) events.addEvent(createLogEvent());
+    const written = [];
+    for (let batch = 0; batch < 2; batch++) {
+      events.addEvent(createLogEvent());
+      const next = events.takeByteBatch(1);
+      written.push(...next.updates);
+      events.releaseByteBatch([...next.creates, ...next.updates]);
+    }
+    expect(written).toHaveLength(1);
+    expect(written[0]?.type).toBe(TracingEventType.SPAN_ENDED);
+    expect(events.creates.length).toBeGreaterThan(0);
+  });
+
+  it('waits for only its own create without consuming update retries', () => {
+    const events = buffer();
+    const start = createTracingEvent(TracingEventType.SPAN_STARTED);
+    events.addEvent(start);
+    const creating = events.takeByteBatch(1);
+    events.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
+    for (let i = 0; i < 5; i++) {
+      events.addEvent(createLogEvent());
+      const batch = events.takeByteBatch(1);
+      expect(batch.updates).toHaveLength(0);
+      events.releaseByteBatch(batch.creates);
+    }
+    expect(events.updates[0]?.retryCount).toBe(0);
+    events.addCreatedSpans({ records: [createSpanRecord('trace-1', 'span-1')] });
+    events.releaseByteBatch(creating.creates);
+    expect(events.takeByteBatch(1).updates).toHaveLength(1);
   });
 });

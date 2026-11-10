@@ -1,4 +1,4 @@
-import { MastraError, ErrorDomain } from '@mastra/core/error';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   TracingEvent,
@@ -26,9 +26,13 @@ import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
 import { withSpanPreviews } from './span-previews';
+import { StorageByteTracker, resolveStorageByteBatching } from './storage-byte-tracker';
+import type { StorageByteBatchingConfig, StorageByteBatchingStats } from './storage-byte-tracker';
+export type { StorageByteBatchingConfig, StorageByteBatchingStats } from './storage-byte-tracker';
 
 /** Configuration for the MastraStorageExporter's batching, retry, and strategy behavior. */
 export interface MastraStorageExporterConfig extends BaseExporterConfig {
+  byteBatching?: StorageByteBatchingConfig;
   maxBatchSize?: number; // Default: 1000 spans
   maxBufferSize?: number; // Default: 10000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
@@ -84,6 +88,10 @@ export class MastraStorageExporter extends BaseExporter {
   #initializationPromise?: Promise<void>;
   #wasUnavailable = false;
   #eventBuffer: EventBuffer;
+  #byteTracker?: StorageByteTracker;
+  // Back off the shared storage connection across signals after a failed write.
+  #byteRetryAt = 0;
+  #byteDrainers = 0;
 
   #storage?: MastraCompositeStore;
   #observabilityStorage?: ObservabilityStorage;
@@ -111,7 +119,13 @@ export class MastraStorageExporter extends BaseExporter {
       strategy: config.strategy ?? 'auto',
     };
 
-    this.#eventBuffer = new EventBuffer({ maxRetries: this.#config.maxRetries ?? 4 });
+    if (config.byteBatching) {
+      if (!Number.isSafeInteger(this.#config.maxBatchSize) || this.#config.maxBatchSize! <= 0) {
+        throw new Error('maxBatchSize must be a positive safe integer in byte mode');
+      }
+      this.#byteTracker = new StorageByteTracker(resolveStorageByteBatching(config.byteBatching));
+    }
+    this.#eventBuffer = new EventBuffer({ maxRetries: this.#config.maxRetries ?? 4, byteTracker: this.#byteTracker });
   }
 
   /**
@@ -165,6 +179,13 @@ export class MastraStorageExporter extends BaseExporter {
       this.logger,
     );
 
+    if (this.#resolvedStrategy === 'realtime' && this.#byteTracker) {
+      this.logger.warn('MastraStorageExporter: byteBatching is ignored for the realtime strategy.');
+      // Strategy is resolved before any event is accepted. Keep realtime's
+      // existing immediate, awaited writes even when byte batching is configured.
+      this.#byteTracker = undefined;
+      this.#eventBuffer = new EventBuffer({ maxRetries: this.#config.maxRetries! });
+    }
     this.#eventBuffer.init({ strategy: this.#resolvedStrategy });
     this.logger.debug('tracing storage exporter initialized', {
       strategy: this.#resolvedStrategy,
@@ -195,6 +216,7 @@ export class MastraStorageExporter extends BaseExporter {
    * Checks if buffer should be flushed based on size or time triggers
    */
   private shouldFlush(): boolean {
+    if (this.#byteTracker && this.#byteTracker.queuedBytes >= this.#byteTracker.config.maxBatchBytes) return true;
     if (this.#resolvedStrategy === 'realtime') {
       return true;
     }
@@ -290,7 +312,12 @@ export class MastraStorageExporter extends BaseExporter {
    */
   private async handleBatchedFlush(): Promise<void> {
     if (this.shouldFlush()) {
-      await this.trackFlushBuffer();
+      const writing = this.trackFlushBuffer();
+      if (this.#byteTracker) {
+        void writing.catch(error => this.logger.error('Byte batch flush failed', { error }));
+      } else {
+        await writing;
+      }
     } else if (this.#eventBuffer.totalSize === 1) {
       this.scheduleFlush();
     }
@@ -512,10 +539,34 @@ export class MastraStorageExporter extends BaseExporter {
    * that a timer or size trigger started on their own.
    */
   private trackFlushBuffer(): Promise<void> {
-    const promise = this.flushBuffer().finally(() => {
-      this.#inFlightFlushes.delete(promise);
-      this.scheduleRetry();
-    });
+    if (this.#byteTracker) {
+      const concurrency =
+        this.#resolvedStrategy === 'insert-only' || this.#resolvedStrategy === 'event-sourced'
+          ? this.#byteTracker.config.maxConcurrentWrites
+          : 1;
+      if (this.#inFlightFlushes.size >= concurrency) return Promise.resolve();
+      const delay = this.#byteRetryAt - Date.now();
+      if (delay > 0) {
+        this.scheduleFlush(delay);
+        return Promise.resolve();
+      }
+    }
+    let reschedule = true;
+    const promise = this.flushBuffer()
+      .catch(error => {
+        // Storage retry failures are handled inside flushBuffer. An unexpected
+        // failure must not schedule an immediate loop over the same stalled data.
+        reschedule = false;
+        throw error;
+      })
+      .finally(() => {
+        this.#inFlightFlushes.delete(promise);
+        if (reschedule && this.#byteTracker && this.#eventBuffer.totalSize > 0) {
+          const delay = Math.max(0, this.#byteRetryAt - Date.now());
+          this.scheduleFlush(delay || (this.#byteDrainers || this.shouldFlush() ? 0 : this.#config.maxBatchWaitMs!));
+        }
+        this.scheduleRetry();
+      });
     this.#inFlightFlushes.add(promise);
     return promise;
   }
@@ -554,107 +605,132 @@ export class MastraStorageExporter extends BaseExporter {
     const batchSize = this.#eventBuffer.totalSize;
 
     // Snapshot and reset buffer so new events can accumulate during flush
-    const creates = this.#eventBuffer.creates;
-    const updates = this.#eventBuffer.updates;
-    this.#eventBuffer.reset();
-
-    const createFeedbackEvents: (FeedbackEvent & RetryCount)[] = [];
-    const createLogEvents: (LogEvent & RetryCount)[] = [];
-    const createMetricEvents: (MetricEvent & RetryCount)[] = [];
-    const createScoreEvents: (ScoreEvent & RetryCount)[] = [];
-    const createSpanEvents: (TracingEvent & RetryCount)[] = [];
-
-    const updateSpanEvents: (TracingEvent & RetryCount)[] = [];
-    const endSpanEvents: (TracingEvent & RetryCount)[] = [];
-
-    for (const createEvent of creates) {
-      switch (createEvent.type) {
-        case 'feedback':
-          createFeedbackEvents.push(createEvent);
-          break;
-        case 'log':
-          createLogEvents.push(createEvent);
-          break;
-        case 'metric':
-          createMetricEvents.push(createEvent);
-          break;
-        case 'score':
-          createScoreEvents.push(createEvent);
-          break;
-        default:
-          createSpanEvents.push(createEvent);
-          break;
-      }
+    const { creates, updates } = this.#byteTracker
+      ? this.#eventBuffer.takeByteBatch(this.#config.maxBatchSize!)
+      : { creates: this.#eventBuffer.creates, updates: this.#eventBuffer.updates };
+    if (this.#byteTracker && creates.length === 0 && updates.length === 0 && this.#inFlightFlushes.size === 0) {
+      const message = 'MastraStorageExporter flush made no progress: queued events have no eligible batch.';
+      this.logger.error(message, { bufferedEvents: this.#eventBuffer.totalSize });
+      throw new Error(message);
     }
+    if (!this.#byteTracker) this.#eventBuffer.reset();
+    try {
+      const createFeedbackEvents: (FeedbackEvent & RetryCount)[] = [];
+      const createLogEvents: (LogEvent & RetryCount)[] = [];
+      const createMetricEvents: (MetricEvent & RetryCount)[] = [];
+      const createScoreEvents: (ScoreEvent & RetryCount)[] = [];
+      const createSpanEvents: (TracingEvent & RetryCount)[] = [];
 
-    for (const updateEvent of updates) {
-      switch (updateEvent.type) {
-        case TracingEventType.SPAN_UPDATED:
-          updateSpanEvents.push(updateEvent);
-          break;
-        case TracingEventType.SPAN_ENDED:
-          endSpanEvents.push(updateEvent);
-          break;
+      const updateSpanEvents: (TracingEvent & RetryCount)[] = [];
+      const endSpanEvents: (TracingEvent & RetryCount)[] = [];
+
+      for (const createEvent of creates) {
+        switch (createEvent.type) {
+          case 'feedback':
+            createFeedbackEvents.push(createEvent);
+            break;
+          case 'log':
+            createLogEvents.push(createEvent);
+            break;
+          case 'metric':
+            createMetricEvents.push(createEvent);
+            break;
+          case 'score':
+            createScoreEvents.push(createEvent);
+            break;
+          default:
+            createSpanEvents.push(createEvent);
+            break;
+        }
       }
-    }
 
-    // Flush all creates in parallel — signals are independent
-    const flushResults = await Promise.all([
-      this.flushCreates('feedback', createFeedbackEvents, events =>
-        this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
-      ),
-      this.flushCreates('log', createLogEvents, events =>
-        this.#observabilityStorage!.batchCreateLogs({ logs: events.map(l => buildLogRecord(l)) }),
-      ),
-      this.flushCreates('metric', createMetricEvents, events =>
-        this.#observabilityStorage!.batchCreateMetrics({ metrics: events.map(m => buildMetricRecord(m)) }),
-      ),
-      this.flushCreates('score', createScoreEvents, events =>
-        this.#observabilityStorage!.batchCreateScores({ scores: events.map(s => buildScoreRecord(s)) }),
-      ),
-      this.flushCreates('tracing', createSpanEvents, async events => {
-        const records = events.map(t => buildCreateSpanRecord(t.exportedSpan));
-        await this.#observabilityStorage!.batchCreateSpans({ records });
-        this.#eventBuffer.addCreatedSpans({ records });
-      }),
-    ]);
+      for (const updateEvent of updates) {
+        switch (updateEvent.type) {
+          case TracingEventType.SPAN_UPDATED:
+            updateSpanEvents.push(updateEvent);
+            break;
+          case TracingEventType.SPAN_ENDED:
+            endSpanEvents.push(updateEvent);
+            break;
+        }
+      }
 
-    // Flush span updates and ends — check span existence, defer if not yet created
-    const deferredUpdates: BufferedEvent[] = [];
-
-    flushResults.push(await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false));
-    flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true));
-
-    let deferredDropCount = 0;
-    if (deferredUpdates.length > 0) {
-      if (this.#unsupportedSignals.has('tracing')) {
-        deferredDropCount = deferredUpdates.length;
-        this.emitDrop('tracing', 'unsupported-storage', deferredDropCount);
-        deferredUpdates.length = 0;
+      // Flush all creates in parallel — signals are independent
+      const createTasks = [
+        () =>
+          this.flushCreates('feedback', createFeedbackEvents, events =>
+            this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
+          ),
+        () =>
+          this.flushCreates('log', createLogEvents, events =>
+            this.#observabilityStorage!.batchCreateLogs({ logs: events.map(l => buildLogRecord(l)) }),
+          ),
+        () =>
+          this.flushCreates('metric', createMetricEvents, events =>
+            this.#observabilityStorage!.batchCreateMetrics({ metrics: events.map(m => buildMetricRecord(m)) }),
+          ),
+        () =>
+          this.flushCreates('score', createScoreEvents, events =>
+            this.#observabilityStorage!.batchCreateScores({ scores: events.map(s => buildScoreRecord(s)) }),
+          ),
+        () =>
+          this.flushCreates('tracing', createSpanEvents, async events => {
+            const records = events.map(t => buildCreateSpanRecord(t.exportedSpan));
+            await this.#observabilityStorage!.batchCreateSpans({ records });
+            this.#eventBuffer.addCreatedSpans({ records });
+          }),
+      ];
+      const flushResults: FlushResult[] = [];
+      if (this.#byteTracker) {
+        for (const task of createTasks) flushResults.push(await task());
       } else {
-        const dropped = this.#eventBuffer.reAddUpdates(deferredUpdates);
-        deferredDropCount = dropped.length;
-        this.emitDrop('tracing', 'retry-exhausted', deferredDropCount);
+        flushResults.push(...(await Promise.all(createTasks.map(task => task()))));
       }
-    }
 
-    const retryAttempt = flushResults.reduce<number | undefined>((earliestAttempt, result) => {
-      if (result.retryAttempt === undefined) return earliestAttempt;
-      return earliestAttempt === undefined ? result.retryAttempt : Math.min(earliestAttempt, result.retryAttempt);
-    }, undefined);
-    if (retryAttempt !== undefined) {
-      this.scheduleFlush(this.retryDelay(retryAttempt));
-    }
+      // Flush span updates and ends — check span existence, defer if not yet created
+      const deferredUpdates: BufferedEvent[] = [];
 
-    if (!flushResults.some(result => result.failed) && deferredDropCount === 0) {
-      const elapsed = Date.now() - startTime;
-      this.logger.debug('Batch flushed', {
-        strategy: this.#resolvedStrategy,
-        batchSize,
-        durationMs: elapsed,
-        deferredUpdates: deferredUpdates.length > 0 ? deferredUpdates.length : undefined,
-      });
+      flushResults.push(await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false));
+      flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true));
+
+      let deferredDropCount = 0;
+      if (deferredUpdates.length > 0) {
+        if (this.#unsupportedSignals.has('tracing')) {
+          deferredDropCount = deferredUpdates.length;
+          this.emitDrop('tracing', 'unsupported-storage', deferredDropCount);
+          deferredUpdates.length = 0;
+        } else {
+          const dropped = this.#eventBuffer.reAddUpdates(deferredUpdates);
+          deferredDropCount = dropped.length;
+          this.emitDrop('tracing', 'retry-exhausted', deferredDropCount);
+        }
+      }
+
+      const retryAttempt = flushResults.reduce<number | undefined>((earliestAttempt, result) => {
+        if (result.retryAttempt === undefined) return earliestAttempt;
+        return earliestAttempt === undefined ? result.retryAttempt : Math.min(earliestAttempt, result.retryAttempt);
+      }, undefined);
+      if (retryAttempt !== undefined) {
+        if (this.#byteTracker) this.#byteRetryAt = Date.now() + this.retryDelay(retryAttempt);
+        this.scheduleFlush(this.retryDelay(retryAttempt));
+      }
+
+      if (!flushResults.some(result => result.failed) && deferredDropCount === 0) {
+        const elapsed = Date.now() - startTime;
+        this.logger.debug('Batch flushed', {
+          strategy: this.#resolvedStrategy,
+          batchSize,
+          durationMs: elapsed,
+          deferredUpdates: deferredUpdates.length > 0 ? deferredUpdates.length : undefined,
+        });
+      }
+    } finally {
+      this.#eventBuffer.releaseByteBatch([...creates, ...updates]);
     }
+  }
+
+  getByteBatchingStats(): StorageByteBatchingStats | undefined {
+    return this.#byteTracker?.stats(this.#inFlightFlushes.size);
   }
 
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
@@ -718,6 +794,21 @@ export class MastraStorageExporter extends BaseExporter {
    * are exported before the runtime instance is terminated.
    */
   async flush(): Promise<void> {
+    if (this.#byteTracker) {
+      if (!this.#observabilityStorage) return;
+      this.#byteDrainers++;
+      try {
+        while (this.#eventBuffer.totalSize || this.#inFlightFlushes.size) {
+          if (this.#inFlightFlushes.size) await Promise.allSettled([...this.#inFlightFlushes]);
+          const delay = this.#byteRetryAt - Date.now();
+          if (delay > 0 && this.#eventBuffer.totalSize) await new Promise(resolve => setTimeout(resolve, delay));
+          if (this.#eventBuffer.totalSize) await this.trackFlushBuffer();
+        }
+      } finally {
+        this.#byteDrainers--;
+      }
+      return;
+    }
     // A timer or size trigger may have taken a batch out of the buffer and still be
     // writing it, so an empty buffer doesn't mean the data reached storage. Each round
     // joins those writes first (they can defer span updates back into the buffer), then
@@ -752,10 +843,23 @@ export class MastraStorageExporter extends BaseExporter {
     // A held end gets one last try, because its row may have landed since its last one.
     this.#eventBuffer.releaseHeldRetries(Infinity);
 
-    // Flush any remaining events
-    await this.flush();
-
-    this.clearTimers();
+    try {
+      await this.flush();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN',
+          domain: ErrorDomain.MASTRA_OBSERVABILITY,
+          category: ErrorCategory.SYSTEM,
+          details: { remainingEvents: this.#eventBuffer.totalSize },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to flush remaining events during shutdown', mastraError);
+    } finally {
+      this.clearTimers();
+    }
     this.emitDrop('tracing', 'span-not-updatable', this.#eventBuffer.takeHeldRetries().length);
     this.emitDrop('tracing', 'retry-exhausted', this.#eventBuffer.updates.length);
 

@@ -161,7 +161,7 @@ describe('run id ownership', () => {
 
   it("does not clear a reused run id when the previous run's cleanup timer fires", async () => {
     const pubsub = new RecordingPubSub();
-    const agent = makeAgent({ streams: { cleanupTimeoutMs: 50 } });
+    const agent = makeAgent({ durable: { cleanupTimeoutMs: 50 } });
     new Mastra({ agents: { agent }, pubsub, logger: false });
 
     const first = await agent.stream('Say hello.', { runId: 'reused-run', requestContext: resource('tenant-a') });

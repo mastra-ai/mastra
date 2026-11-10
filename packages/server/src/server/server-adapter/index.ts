@@ -54,6 +54,7 @@ export { propagateRequestAbort } from './mcp-disconnect';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
+export { cancelReaderOnResponseClose, writeWithBackpressure } from './stream-disconnect';
 export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,

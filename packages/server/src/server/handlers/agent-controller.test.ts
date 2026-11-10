@@ -1196,6 +1196,33 @@ describe('agent-controller routes', () => {
       expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
     });
 
+    // The adapter can hand the route a signal that aborted while earlier middleware ran. Without checking
+    // `aborted` up front the session subscription and its 25 s heartbeat stay alive until something cancels the
+    // stream, which a client that already left never does. (#28480)
+    it('ends the stream when the client left before the stream started', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-gone-early',
+        id: 'user-gone-early',
+        ownerId: 'code',
+      });
+      const client = new AbortController();
+      client.abort();
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-gone-early',
+        abortSignal: client.signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+
+      const frames: unknown[] = [];
+      for (let next = await reader.read(); !next.done; next = await reader.read()) frames.push(next.value);
+
+      expect(frames.map(frame => (frame as { type: string }).type)).toEqual(['display_state_changed']);
+    });
+
     it('still sends live display state changes by default', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
@@ -2164,6 +2191,43 @@ describe('agent-controller routes', () => {
       const thread = res.threads.find(t => t.title === 'p1');
       expect(thread?.tags).toEqual({ projectPath: '/repo' });
     });
+
+    it.each([
+      { key: 'projectPath', storageFilter: { resourceId: 'user-tags', metadata: { projectPath: '/repo/a' } } },
+      { key: 'project-path', storageFilter: { resourceId: 'user-tags' } },
+    ])(
+      'lists only the threads tagged $key, filtering in storage when it accepts the key',
+      async ({ key, storageFilter }) => {
+        const memory = (await mastra.getStorage()!.getStore('memory'))!;
+        const now = new Date();
+        for (const [id, path] of [
+          ['a1', '/repo/a'],
+          ['b1', '/repo/b'],
+        ] as const) {
+          await memory.saveThread({
+            thread: {
+              id,
+              resourceId: 'user-tags',
+              title: id,
+              metadata: { [key]: path },
+              createdAt: now,
+              updatedAt: now,
+            },
+          });
+        }
+        const listThreads = vi.spyOn(memory, 'listThreads');
+
+        const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId: 'user-tags',
+          tags: { [key]: '/repo/a' },
+        } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
+
+        expect(listThreads).toHaveBeenCalledWith(expect.objectContaining({ filter: storageFilter }));
+        expect(res.threads).toEqual([expect.objectContaining({ title: 'a1', tags: { [key]: '/repo/a' } })]);
+      },
+    );
 
     it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
       // Thread state comes from the agent thread-stream runtime — the same
