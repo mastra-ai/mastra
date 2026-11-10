@@ -114,7 +114,21 @@ export function createAssistantServer(
             return c.res;
           }
         }
-        if (c.req.method === 'POST' && c.req.path.includes('/agents/') && c.req.raw.body) {
+        if (c.req.method === 'POST' && c.req.path.includes('/agents/')) {
+          const executionOptions = new Set([
+            'maxSteps',
+            'hooks',
+            'toolCallConcurrency',
+            'eagerToolExecution',
+            'streamOptions',
+            'ifIdle',
+            'autoResumeSuspendedTools',
+            'toolsets',
+            'clientTools',
+            'resumeData',
+          ]);
+          if (Object.keys(c.req.queries()).some(key => executionOptions.has(key.split(/[.\[\]]/)[0]!)))
+            return c.json({ error: 'Supply execution options in the validated request body, never the query.' }, 400);
           let value: unknown;
           try {
             const request = c.req.raw.clone();

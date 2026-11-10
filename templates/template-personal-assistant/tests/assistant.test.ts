@@ -319,6 +319,18 @@ test('ordinary execution limits protect native message and approval options', { 
         assert.match(denied.error, /maxSteps/);
       }
     }
+    for (const route of ['generate', 'stream', 'stream-until-idle', 'send-message', 'send-tool-approval']) {
+      for (const query of ['maxSteps=20', 'maxSteps=1&maxSteps=20', 'streamOptions[maxSteps]=20', 'hooks={}']) {
+        const denied = await json(
+          await app.request(`/agents/${agent}/${route}?${query}`, 'POST', {
+            messages: [{ role: 'user', content: 'Do not start an unbounded run.' }],
+            memory: { thread: 'owner-thread' },
+          }),
+          400,
+        );
+        assert.match(denied.error, /query/i);
+      }
+    }
     assert.equal(model.requests.length, 0, 'Rejected limits must never start a model run.');
     assert.deepEqual(await readState(dataDir), before);
 
