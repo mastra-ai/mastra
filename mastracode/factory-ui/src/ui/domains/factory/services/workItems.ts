@@ -22,8 +22,73 @@ export type WorkItemSource =
   | 'slack-thread'
   | 'manual';
 
-export function isPullRequestSource(source: WorkItemSource): boolean {
+/** Takes any source string so callers holding a wider union (a user session's `'user'`) need no guard. */
+export function isPullRequestSource(source: string): source is 'github-pr' | 'gitlab-pr' {
   return source === 'github-pr' || source === 'gitlab-pr';
+}
+
+/** The pull and merge requests a card carries, oldest first: its own, or those attached to its issue. */
+export function cardPullRequestSources(item: Pick<WorkItem, 'workItem'>): NonNullable<WorkItemRow['sources']> {
+  return (item.workItem?.sources ?? []).filter(source => source.sourceType === 'pull-request');
+}
+
+type CardPullRequestSource = NonNullable<WorkItemRow['sources']>[number];
+
+function sourcePullRequestNumber(source: CardPullRequestSource): number | undefined {
+  const metadata = source.metadata ?? {};
+  const value = metadata.githubPullRequestNumber ?? metadata.gitlabMergeRequestIid ?? metadata.number;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function openPullRequestSource(source: CardPullRequestSource): boolean {
+  const state = source.state ?? source.metadata?.state;
+  return state !== 'closed' && state !== 'merged' && source.metadata?.merged !== true;
+}
+
+/**
+ * The pull request attached to an issue card that Review (`pr-review`) looks at: the one the card points
+ * at, else the newest open one, else the newest. Mirrors the server's `reviewedPullRequest`.
+ */
+export function attachedPullRequestSource(
+  item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
+): CardPullRequestSource | undefined {
+  if (isPullRequestSource(item.source)) return undefined;
+  const sources = cardPullRequestSources(item);
+  const pointer = item.metadata.openPullRequestNumber;
+  return (
+    sources.find(source => typeof pointer === 'number' && sourcePullRequestNumber(source) === pointer) ??
+    sources.filter(openPullRequestSource).at(-1) ??
+    sources.at(-1)
+  );
+}
+
+export interface CardPullRequestLink {
+  url: string;
+  provider: 'github' | 'gitlab';
+  number: number | undefined;
+  state: 'open' | 'merged' | 'closed';
+}
+
+/** The pull and merge requests attached to the card that have a URL, open ones first, newest first within each. */
+export function cardPullRequestLinks(item: Pick<WorkItem, 'workItem'>): CardPullRequestLink[] {
+  const links = cardPullRequestSources(item).flatMap((source): CardPullRequestLink[] => {
+    if (!source.url) return [];
+    const merged = source.metadata?.merged === true || (source.state ?? source.metadata?.state) === 'merged';
+    return [
+      {
+        url: source.url,
+        provider: source.provider === 'gitlab' ? 'gitlab' : 'github',
+        number: sourcePullRequestNumber(source),
+        state: openPullRequestSource(source) ? 'open' : merged ? 'merged' : 'closed',
+      },
+    ];
+  });
+  return links.toReversed().toSorted((a, b) => Number(b.state === 'open') - Number(a.state === 'open'));
+}
+
+/** Whether the card carries a pull or merge request, as its own source or one attached to its issue. */
+export function cardHasPullRequest(item: Pick<WorkItem, 'source' | 'workItem'>): boolean {
+  return isPullRequestSource(item.source) || cardPullRequestSources(item).length > 0;
 }
 
 export interface WorkItemSessionRef {
@@ -44,7 +109,8 @@ export interface WorkItemStageEntry {
 
 export interface WorkItem {
   /** Optional during the one-release legacy wire migration. */
-  workItem?: Pick<WorkItemRow, 'provider' | 'key' | 'url' | 'title' | 'state' | 'labels' | 'author' | 'metadata'>;
+  workItem?: Pick<WorkItemRow, 'provider' | 'key' | 'url' | 'title' | 'state' | 'labels' | 'author' | 'metadata'> &
+    Partial<Pick<WorkItemRow, 'sources'>>;
   id: string;
   orgId: string;
   createdBy: string;

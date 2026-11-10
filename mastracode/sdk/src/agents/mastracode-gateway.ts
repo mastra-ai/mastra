@@ -532,7 +532,8 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    if (args.providerId === 'moonshotai') {
+    // A gateway model's key is the gateway's: it must not go to Moonshot's own API.
+    if (args.providerId === 'moonshotai' && !this.#routeThroughMastraGateway) {
       // Prefer the gateway-resolved key (stored credentials), then the canonical
       // registry env var. Keep the legacy typo name as a fallback for anyone who
       // set it because of the previous error message.

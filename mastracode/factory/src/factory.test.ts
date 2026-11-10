@@ -56,6 +56,7 @@ import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
+import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsRecord, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -543,9 +544,11 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(3);
+    expect(first).toHaveLength(4);
     expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(first[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(first[2]).toBeInstanceOf(FactoryPhaseStateProcessor);
+    expect(first[3]).toBeInstanceOf(FactoryWorkItemStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });

@@ -18,6 +18,7 @@ import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
 import { markNonRedeliverable } from '../../../workflows/evented/helpers';
+import { markFrameworkCondition } from '../../../workflows/framework-condition';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
@@ -1047,7 +1048,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           { id: 'init-iteration-state' },
         )
         // Run the agentic loop with dowhile
-        .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
+        .dowhile(this.buildIterationWorkflow(), markFrameworkCondition(this.buildContinuationPredicate()))
         // Map final state to output format, run output processors, persist memory, emit finish
         .map(
           async params => {
@@ -1092,7 +1093,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 steps,
               },
             });
-            if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
+            const textRewritten = !!lastStep && finishResult.outputTextChanged;
+            if (lastStep && finishResult.outputTextChanged) {
               lastStep.text = finishResult.outputText;
               steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
               finalText = finishResult.outputText;
@@ -1157,6 +1159,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
                 messages: finishMessages,
+                ...(textRewritten && { textRewritten }),
               });
             }
 

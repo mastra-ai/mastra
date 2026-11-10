@@ -7,7 +7,7 @@
       "headers": [
         {
           "key": "Link",
-          "value": "</llms.txt>; rel=\"llms-txt\""
+          "value": "</llms.txt>; rel=\"llms-txt\", <https://mastra.ai/.well-known/ard.json>; rel=\"ard\", <https://mastra.ai/.well-known/ai-catalog.json>; rel=\"ai-catalog\""
         },
         {
           "key": "X-Llms-Txt",

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.83.0-alpha.2",
+  "version": "1.83.0-alpha.5",
   "description": "",
   "type": "module",
   "files": [
@@ -137,7 +137,6 @@
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@mastra/server": "workspace:*",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.19.15",
     "@types/semver": "^7.8.0",

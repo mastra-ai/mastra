@@ -15,7 +15,6 @@ packages:
   - browser/*
   - code-mode/*
   - voice/*
-  - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
   - signals/*
@@ -27,7 +26,6 @@ packages:
   - observability/*
   - channels/*
   - explorations/longmemeval
-  - explorations/agent-builder-gh-repro
   - e2e-tests/client-js/_test-utils
   - e2e-tests/client-js/zod-v3
   - e2e-tests/client-js/zod-v4
@@ -77,6 +75,8 @@ patchedDependencies:
   react-docgen-typescript@2.4.0: patches/react-docgen-typescript@2.4.0.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
   zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
+  # minimatch 11 removed makeRe(); match package-access patterns with minimatch() instead (same nocase full-string match).
+  '@verdaccio/core@8.4.0': patches/@verdaccio__core@8.4.0.patch
 
 packageExtensions:
   # platform-express 12.2 imports rxjs (multer utils) without declaring it; the
@@ -389,7 +389,10 @@ overrides:
   better-auth: ^1.7.18
   '@better-auth/drizzle-adapter@<1.7.7': 1.7.18
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
-  glob@<=10.5.0: 10.5.0
+  # Vanta 2026-11-10: CVE-2026-118773 (glob >=9.0.0 <=14.0.1, fixed only in 14.0.2). Cross-major, approved.
+  # Parents (rimraf 5, archiver-utils, @npmcli/*, unified-engine, @wdio/config, @fastify/static, @sentry/bundler-plugins,
+  # react-docgen plugin) only use the promise/sync API, which 14.x keeps. Replaces the old glob@<=10.5.0 floor.
+  glob@<14.0.2: 14.0.4
   body-parser@<2.4.0: 2.4.0
   inngest: ^4.26.1
   fast-xml-parser@<5.5.7: ^5.10.1
@@ -402,7 +405,9 @@ overrides:
   simple-git@<3.36.0: 4.0.1
   axios@>=1.0.0 <1.20.0: 1.20.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
-  minimatch@>=9.0.0 <9.0.7: 9.0.7
+  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1). Cross-major, approved.
+  # 11.x drops makeRe()/Minimatch#regexp; @verdaccio/core 8.4.0 (e2e registry) is patched to use minimatch().
+  minimatch@>=7.0.0 <11.0.1: 11.0.5
   ws@>=8.0.0 <8.21.3: 8.22.0
   webpack-dev-server@<5.2.5: 5.2.6
   # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1

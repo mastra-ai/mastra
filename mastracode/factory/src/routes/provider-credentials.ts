@@ -15,6 +15,8 @@
  */
 
 import type { CredentialScope as RunCredentialScope } from '@mastra/code-sdk/agents/credential-resolver';
+import { MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
+import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
@@ -34,7 +36,15 @@ import type { RouteAuth } from './route.js';
  * Tenant rows use the same keying so one lookup serves both OAuth tokens and
  * API keys, and match what model resolution reads.
  */
-export { getCredentialProviderId as getAuthProviderId } from '@mastra/code-sdk/providers/model-ids';
+export function getAuthProviderId(provider: string): string {
+  return provider === MASTRA_GATEWAY_CATALOG_PROVIDER ? MASTRA_GATEWAY_PROVIDER : getCredentialProviderId(provider);
+}
+
+/**
+ * Catalog provider id of Mastra Gateway models (`mastra/<provider>/<model>`).
+ * Their credential is the tenant's gateway key, stored as `mastra-gateway`.
+ */
+export const MASTRA_GATEWAY_CATALOG_PROVIDER = 'mastra';
 
 /**
  * Providers that support a browser-driven OAuth sign-in flow, keyed by

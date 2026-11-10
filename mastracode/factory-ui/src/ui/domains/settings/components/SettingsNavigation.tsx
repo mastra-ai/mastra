@@ -3,7 +3,6 @@ import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
-  BookOpen,
   Bot,
   Brain,
   Bug,
@@ -14,7 +13,6 @@ import {
   Inbox,
   Palette,
   SlidersHorizontal,
-  SquareKanban,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -82,12 +80,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
           'memory personal memory factory memory your memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
-        id: 'skills',
-        label: SETTINGS_SECTION_LABELS.skills,
-        icon: BookOpen,
-        searchText: 'skills factory triage plan review agent instructions prompts stages',
-      },
-      {
         id: 'tools',
         label: SETTINGS_SECTION_LABELS.tools,
         icon: Wrench,
@@ -116,14 +108,8 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
         icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
-      },
-      {
-        id: 'board',
-        label: SETTINGS_SECTION_LABELS.board,
-        icon: SquareKanban,
         searchText:
-          'work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
+          'work intake sources tasks issues pull requests github linear feed sync intake routes routing board catch-all',
       },
       {
         id: 'factory',

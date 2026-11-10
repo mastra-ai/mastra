@@ -1,5 +1,9 @@
 import type { Agent } from '../agent';
-import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
+import {
+  abandonDurableAgentExecutions,
+  getActiveDurableAgentWorkflowExecutions,
+  isDurableAgentExecutionDetached,
+} from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -66,7 +70,7 @@ import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, ServerConfigInput, StudioConfig } from '../server/types';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
@@ -123,6 +127,14 @@ import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, normalizeConcurrency, runWithConcurrency } from './run-with-concurrency';
 import type { VersionOverrides, VersionSelector } from './types';
+
+function normalizeApiRoutes(routes: NonNullable<ServerConfigInput['apiRoutes']>): ApiRoute[] {
+  return routes.flatMap(route => (Array.isArray(route) ? route : [route]));
+}
+
+function normalizeServerConfig({ apiRoutes, ...server }: ServerConfigInput): ServerConfig {
+  return apiRoutes ? { ...server, apiRoutes: normalizeApiRoutes(apiRoutes) } : server;
+}
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -415,7 +427,7 @@ export interface Config<
   /**
    * Server configuration for HTTP endpoints and middleware.
    */
-  server?: ServerConfig;
+  server?: ServerConfigInput;
 
   /**
    * Studio-specific authentication and authorization configuration.
@@ -805,6 +817,9 @@ const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 // Mirrors BackgroundTaskManager's grace period and the deployer's
 // `server.drainTimeout` default.
 const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
+// A thread run still executing at shutdown is aborted and gets at least this long to wind down before its thread is
+// handed back, even when the drain budget is already spent. A tool call already executing may still finish after.
+const SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS = 500;
 // Spreads re-checks of durable-agent runs other instances still drove at boot,
 // so replicas that skipped the same run don't all try it at the same instant.
 const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
@@ -1510,8 +1525,8 @@ export class Mastra<
    * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
    * ```
    */
-  public setServer(server: ServerConfig): void {
-    this.#server = server;
+  public setServer(server: ServerConfigInput): void {
+    this.#server = normalizeServerConfig(server);
   }
 
   /**
@@ -1994,7 +2009,7 @@ export class Mastra<
     }
 
     if (config?.server) {
-      this.#server = config.server;
+      this.#server = normalizeServerConfig(config.server);
       this.#serverExplicit = true;
     }
 
@@ -7595,6 +7610,34 @@ export class Mastra<
   }
 
   /**
+   * Hand back the thread runs this Mastra still holds once its durable executions are abandoned: announce each run's
+   * end, stop its lease renewal and release its thread lease, so another process can take the thread right away.
+   */
+  async #shutdownThreadRuns(deadline: number): Promise<void> {
+    // Agents can carry their own pubsub; thread runs live in a separate runtime state per pubsub.
+    const pubsubs = new Set<PubSub | undefined>([this.pubsub]);
+    for (const agent of Object.values(this.#agents as Record<string, Agent<any>>)) {
+      if (typeof agent?.getPubSub === 'function') pubsubs.add(agent.getPubSub());
+    }
+    const abortGraceMs = Math.max(SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS, deadline - Date.now());
+    const executesElsewhere = (runId: string) => isDurableAgentExecutionDetached(this, runId);
+    const results = await this.#awaitBounded(
+      Promise.allSettled(
+        [...pubsubs].map(pubsub =>
+          agentThreadStreamRuntime.shutdown(pubsub, this, { abortGraceMs, executesElsewhere }),
+        ),
+      ),
+      abortGraceMs + 1_000,
+      'thread run handback',
+    );
+    results?.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Handing back thread runs failed during shutdown', { error: result.reason });
+      }
+    });
+  }
+
+  /**
    * Await an already-started promise for at most `timeoutMs`. Returns its value
    * when it settles in time, or `undefined` after logging a warning when the
    * budget is exhausted — the work keeps running in the background so teardown
@@ -7932,6 +7975,17 @@ export class Mastra<
    * reach during the drain. An abandoned durable agent run then stops without
    * writing and is released. It can be recovered only if a checkpoint was
    * persisted.
+   *
+   * Agent thread runs this instance still holds are then handed back. A run
+   * still executing is aborted so it starts no further steps, and other
+   * processes watching its thread see it end; its partial response is not
+   * saved. A run parked on a tool approval or suspension stays parked and
+   * resumable. Either way the thread lease is released right away instead of
+   * at expiry, so another process can use the thread immediately. Release is
+   * best-effort: if an aborted run doesn't stop in time (for example, a tool
+   * call that ignores the abort), or the lease backend doesn't answer or
+   * fails the release, the lease is kept until it expires. Handing runs back can take up to about 1.5 seconds past
+   * `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
@@ -7996,6 +8050,10 @@ export class Mastra<
     // the next boot recovers it right away. Storage must still be open.
     await abandonDurableAgentExecutions(this);
 
+    // Hand back the thread runs this instance still holds: announce each run's end to observers in other
+    // processes and release its thread lease, so the thread is free right away instead of after the lease
+    // lapses. Pubsub must still be open.
+    await this.#shutdownThreadRuns(deadline);
     // The shared BackgroundTaskWorker deliberately delegates manager ownership
     // to Mastra. Stop the manager while workers, pubsub, and storage are still
     // available so it can abort active tasks, preserve retry recovery, and

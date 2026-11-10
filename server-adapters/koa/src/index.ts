@@ -4,7 +4,6 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -956,15 +955,17 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
     const server = this;
     this.app.use(async function mastraCustomRouteDispatcher(ctx: Context, next: Next) {
-      // Check if this request matches a protected custom route and run auth
+      // Check auth against the custom route the custom-route app will actually run for
+      // the URL it's forwarded, which can differ from what Koa matched.
       const path = String(ctx.path || '/');
       const method = String(ctx.method || 'GET');
-      const matchedRoute = findMatchingCustomRoute(
-        path,
-        method,
-        server.customApiRoutes ?? server.mastra.getServer()?.apiRoutes,
-      );
-      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, server.customRouteAuthConfig);
+      const dispatchUrl = `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`;
+      const {
+        match: matchedRoute,
+        requiresAuth: shouldRunCustomRouteAuth,
+        serverRoute,
+        customRouteAuthConfig,
+      } = server.resolveCustomRouteAuth(dispatchUrl, method, path);
       const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
       const customRouteAbortController = new AbortController();
@@ -982,16 +983,6 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       try {
         if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
-          const serverRoute: ServerRoute = {
-            method: (matchedRoute?.route.method ?? method) as any,
-            path: matchedRoute?.route.path ?? path,
-            responseType: 'json',
-            handler: async () => {},
-            requiresAuth: matchedRoute?.route.requiresAuth,
-            requiresPermission: matchedRoute?.route.requiresPermission,
-            fga: matchedRoute?.route.fga,
-          };
-
           if (shouldRunCustomRouteAuth) {
             const authError = await server.checkRouteAuth(serverRoute, {
               path,
@@ -1001,6 +992,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
               requestContext: ctx.state.requestContext,
               request: toWebRequest(ctx),
               buildAuthorizeContext: () => toWebRequest(ctx),
+              customRouteAuthConfig,
             });
 
             if (authError) {
@@ -1060,7 +1052,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
 
         const response = await server.handleCustomRouteRequest(
-          `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`,
+          dispatchUrl,
           ctx.method,
           ctx.headers as Record<string, string | string[] | undefined>,
           ctx.request.body,

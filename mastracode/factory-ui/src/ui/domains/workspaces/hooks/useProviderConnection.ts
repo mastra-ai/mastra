@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { OAuthStartResponse, ProviderInfo } from '../../../../api/types';
 import {
   useCancelProviderOAuth,
+  useConnectMastraGateway,
   useOrgKeyAdminQuery,
   useProvidersQuery,
   useStartProviderOAuth,
@@ -37,11 +38,13 @@ export interface ProviderConnection {
   canWriteAtScope: boolean;
   signInProviders: ProviderInfo[];
   keyProviders: ProviderInfo[];
+  gatewayProvider?: ProviderInfo;
   provider?: ProviderInfo;
   connected: boolean;
   method?: ProviderConnectionMethod;
   hasConfiguredProvider: boolean;
   pending: boolean;
+  connectingGateway: boolean;
   error?: string;
   keyDialogProvider?: ProviderInfo;
   activeOAuth?: ActiveProviderOAuth;
@@ -52,6 +55,7 @@ export interface ProviderConnection {
   chooseSignInProvider: (provider: ProviderInfo) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
   chooseCustomProvider: (providerId: string) => void;
+  chooseGateway: () => void;
   closeKeyDialog: () => void;
   closeOAuth: () => void;
   completeOAuth: () => void;
@@ -116,6 +120,7 @@ export function useProviderConnection({
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const startOAuthMutation = useStartProviderOAuth();
   const cancelOAuthMutation = useCancelProviderOAuth();
+  const connectGatewayMutation = useConnectMastraGateway();
   const [selection, setSelection] = useState(initialSelection);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
   const [activeOAuth, setActiveOAuth] = useState<ActiveProviderOAuth>();
@@ -133,6 +138,8 @@ export function useProviderConnection({
   };
   const providers = (providersQuery.data ?? []).toSorted(byConfiguredThenName);
   const provider = providers.find(candidate => candidate.provider === selection?.providerId);
+  const gatewayProvider = providers.find(candidate => candidate.connectWithMastraAccount);
+  const providerChoices = providers.filter(candidate => candidate !== gatewayProvider);
 
   const select = (nextSelection: typeof selection) => {
     setSelection(nextSelection);
@@ -162,6 +169,20 @@ export function useProviderConnection({
     !(hidesDeploymentKeys && candidate.source === 'deployment') &&
     (candidate.custom ? isConfigured(candidate) : offersApiKey(candidate));
 
+  const connectGateway = async (gateway: ProviderInfo) => {
+    if (!canConfigure(gateway, 'api_key')) return;
+    setError(undefined);
+    if (!isConfigured(gateway, 'api_key')) {
+      try {
+        await connectGatewayMutation.mutateAsync({ scope: credentialScope });
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Failed to connect the Mastra Gateway');
+        return;
+      }
+    }
+    select({ providerId: gateway.provider, method: 'api_key' });
+  };
+
   return {
     isPending:
       providersQuery.isPending ||
@@ -172,13 +193,15 @@ export function useProviderConnection({
     orgKeyAdmin,
     credentialScope,
     canWriteAtScope,
-    signInProviders: providers.filter(candidate => candidate.oauth?.supported === true),
-    keyProviders: providers.filter(offeredForKey),
+    signInProviders: providerChoices.filter(candidate => candidate.oauth?.supported === true),
+    keyProviders: providerChoices.filter(offeredForKey),
     provider,
     connected: provider ? isConfigured(provider, selection?.method) : false,
     method: selection?.method,
     hasConfiguredProvider: providers.some(candidate => isConfigured(candidate)),
-    pending: startOAuthMutation.isPending,
+    gatewayProvider,
+    pending: startOAuthMutation.isPending || connectGatewayMutation.isPending,
+    connectingGateway: connectGatewayMutation.isPending,
     error,
     keyDialogProvider,
     activeOAuth,
@@ -200,6 +223,9 @@ export function useProviderConnection({
       if (!isConfigured(chosen, 'api_key')) setKeyDialogProvider(chosen);
     },
     chooseCustomProvider: providerId => select({ providerId, method: 'api_key' }),
+    chooseGateway: () => {
+      if (gatewayProvider) void connectGateway(gatewayProvider);
+    },
     closeKeyDialog: () => setKeyDialogProvider(undefined),
     closeOAuth: () => {
       const flow = activeOAuth;

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { CustomProviderInfo, OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import { useCustomProvidersQuery } from '../../../../../../hooks/use-custom-providers';
 import { useCancelProviderOAuth, useProvidersQuery } from '../../../../../../hooks/use-providers';
+import { MastraGatewayCreditsNotice } from '../../../../workspaces/components/MastraGatewayCreditsNotice';
 import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
 import {
@@ -116,6 +117,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           />
         ))}
       </ProviderRows>
+      {connections.some(connection => connection.provider.connectWithMastraAccount) && <MastraGatewayCreditsNotice />}
       {memberReason && (
         <Txt as="p" variant="caption" tone="muted">
           {memberReason}

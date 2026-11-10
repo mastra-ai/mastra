@@ -11,6 +11,7 @@ import { CustomProviderForm } from '../../settings/components/CustomProviderForm
 import { ORG_SCOPE_MEMBER_REASON } from '../../settings/components/provider-credential';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
+import { MastraGatewayOption } from './MastraGatewayOption';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
 type ProviderPickerTab = ProviderConnectionMethod | 'custom';
@@ -53,13 +54,29 @@ export function ModelProviderPicker({
 
   const visible = connection.keyProviders.filter(provider => matchesProviderQuery(provider, search));
   const restore = () => onPreviewProvider?.(connection.provider?.provider, connection.method);
+  const gateway = connection.gatewayProvider;
   return (
     <div
+      className="flex flex-col gap-5"
       onMouseLeave={restore}
       onBlur={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) restore();
       }}
     >
+      {gateway && (
+        <>
+          <MastraGatewayOption
+            provider={gateway.provider}
+            disabled={connection.pending || !connection.canConfigure(gateway, 'api_key')}
+            connecting={connection.connectingGateway}
+            onConnect={connection.chooseGateway}
+            onPreview={() => onPreviewProvider?.(gateway.provider, 'api_key')}
+          />
+          <Txt as="h2" variant="meta" tone="muted" className="m-0">
+            Or bring your own provider
+          </Txt>
+        </>
+      )}
       <Tabs
         defaultTab="api_key"
         value={tab}

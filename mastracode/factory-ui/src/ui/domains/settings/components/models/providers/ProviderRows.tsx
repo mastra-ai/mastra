@@ -55,14 +55,15 @@ export function ProviderRowsSkeleton() {
   );
 }
 
-function RowTitle({ title, detail }: { title: string; detail: string | undefined }) {
+/** The row's name on one line, and a detail that wraps rather than hiding a URL or a balance. */
+function RowTitle({ title, detail }: { title: string; detail: ReactNode }) {
   return (
     <span className="flex min-w-0 flex-1 flex-col">
       <Txt as="span" variant="caption" className="truncate">
         {title}
       </Txt>
       {detail && (
-        <Txt as="span" variant="meta" tone="muted" className="truncate">
+        <Txt as="span" variant="meta" tone="muted" className="break-words">
           {detail}
         </Txt>
       )}
@@ -106,7 +107,7 @@ export function OptionRow({
 }: {
   icon: ReactNode;
   title: string;
-  detail: string | undefined;
+  detail: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -132,7 +133,7 @@ export function ProviderOptionRow({
   children,
 }: {
   provider: string;
-  label: string | undefined;
+  label: ReactNode;
   children: ReactNode;
 }) {
   return (

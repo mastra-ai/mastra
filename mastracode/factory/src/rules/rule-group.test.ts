@@ -82,6 +82,30 @@ describe('evaluateRuleGroup', () => {
     );
   });
 
+  it('tests a list fact by its members, and an empty list as no value', () => {
+    const assigned = { 'item.assignees': ['Ada', 'grace'] };
+    const unassigned = { 'item.assignees': [] };
+    const test = (operator: RuleCondition['operator'], value: unknown, facts: Record<string, unknown>) =>
+      evaluateRuleGroup(all({ field: 'item.assignees', operator, value } as RuleCondition), facts);
+
+    expect(test('equals', 'ada', assigned)).toBe(true);
+    expect(test('equals', 'linus', assigned)).toBe(false);
+    expect(test('not_equals', 'ada', assigned)).toBe(false);
+    expect(test('not_equals', 'linus', assigned)).toBe(true);
+    expect(test('in', ['linus', 'Grace'], assigned)).toBe(true);
+    expect(test('not_in', ['linus', 'Grace'], assigned)).toBe(false);
+    expect(test('not_in', ['linus'], assigned)).toBe(true);
+    expect(test('exists', undefined, assigned)).toBe(true);
+    expect(test('not_exists', undefined, assigned)).toBe(false);
+
+    expect(test('exists', undefined, unassigned)).toBe(false);
+    expect(test('not_exists', undefined, unassigned)).toBe(true);
+    expect(test('equals', 'ada', unassigned)).toBe(false);
+    expect(test('not_equals', 'ada', unassigned)).toBe(true);
+    expect(test('contains', 'ada', unassigned)).toBe(false);
+    expect(test('not_contains', 'ada', unassigned)).toBe(true);
+  });
+
   it('combines AND and OR groups', () => {
     const releaseOrDocs = any(
       { field: 'item.labels', operator: 'contains', value: 'release' },
