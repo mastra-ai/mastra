@@ -1,6 +1,6 @@
 import greetingHtml from '../apps-dist/greeting.html?raw';
 import observabilityWidgetHtml from '../apps-dist/observability-widget.html?raw';
-import traceViewerHtml from '../apps-dist/trace-viewer.html?raw';
+import type { McpAppResource } from './app-resource';
 
 export {
   OBSERVABILITY_DATE_PRESETS,
@@ -29,12 +29,8 @@ export type {
   ObservabilityWidgetDraft,
 } from './observability-dashboard';
 
-/** An MCP App resource: register it under a `ui://` URI in `MCPServer`'s `appResources`. */
-export interface McpAppResource {
-  name: string;
-  description: string;
-  html: string;
-}
+export type { McpAppResource } from './app-resource';
+export { traceViewerApp } from './trace-viewer';
 
 /**
  * Greets the `name` argument of the tool that opens it, fetching the greeting from the server's
@@ -57,15 +53,4 @@ export const observabilityDashboardApp: McpAppResource = {
   name: 'Observability dashboard',
   description: 'Draws an observability dashboard',
   html: observabilityWidgetHtml,
-};
-
-/**
- * Draws a trace with Studio's timeline. The tool that opens it returns a light trace
- * (`{ traceId, spans, nextOffset? }`, as the built-in server's `get_trace` does); the app pages the
- * rest through `get_trace` and loads a picked span through `get_span`, on the server that opened it.
- */
-export const traceViewerApp: McpAppResource = {
-  name: 'Trace viewer',
-  description: 'Draws a trace timeline and its span details',
-  html: traceViewerHtml,
 };

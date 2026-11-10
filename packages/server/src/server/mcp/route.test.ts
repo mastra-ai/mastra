@@ -122,3 +122,62 @@ describe('built-in MCP route module load', () => {
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('requestState.key'));
   });
 });
+
+describe('built-in MCP route without @mastra/mcp-apps-components installed', () => {
+  const appsNotInstalled = {
+    esm: () =>
+      Object.assign(
+        new Error("Cannot find package '@mastra/mcp-apps-components' imported from /app/.mastra/output/index.mjs"),
+        { code: 'ERR_MODULE_NOT_FOUND' },
+      ),
+    cjs: () =>
+      Object.assign(new Error("Cannot find module '@mastra/mcp-apps-components/trace-viewer'"), {
+        code: 'MODULE_NOT_FOUND',
+      }),
+    // An older version without the app's subpath.
+    olderVersion: () =>
+      Object.assign(
+        new Error(
+          'Package subpath \'./trace-viewer\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
+        ),
+        { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
+      ),
+    workerd: () => new Error('No such module "@mastra/mcp-apps-components/trace-viewer".'),
+  };
+
+  afterEach(() => vi.doUnmock('@mastra/mcp-apps-components/trace-viewer'));
+
+  async function serveWithAppsImport(load: () => unknown) {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    vi.doMock('@mastra/mcp-apps-components/trace-viewer', load);
+    const app = await serveWithMCPImport(() => vi.importActual('@mastra/mcp'));
+    const { server } = (await app.request()) as { server: { appResourceList: { uri: string }[] } };
+    return server.appResourceList.map(resource => resource.uri);
+  }
+
+  for (const [kind, error] of Object.entries(appsNotInstalled)) {
+    it(`serves the tools without apps (${kind})`, async () => {
+      const apps = await serveWithAppsImport(() => {
+        throw error();
+      });
+      expect(apps).toEqual([]);
+    });
+  }
+
+  it('serves the trace viewer when installed', async () => {
+    const apps = await serveWithAppsImport(() => vi.importActual('@mastra/mcp-apps-components/trace-viewer'));
+    expect(apps).toEqual(['ui://mastra/trace-viewer']);
+  });
+
+  it('rethrows other load failures', async () => {
+    const broken = Object.assign(
+      new Error("Cannot find package 'react' imported from /app/node_modules/@mastra/mcp-apps-components/dist/x.js"),
+      { code: 'ERR_MODULE_NOT_FOUND' },
+    );
+    await expect(
+      serveWithAppsImport(() => {
+        throw broken;
+      }),
+    ).rejects.toThrow();
+  });
+});

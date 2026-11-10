@@ -22,6 +22,8 @@ export type MCPPrimitiveKind = keyof ServerMCPPrimitiveFilter;
 export interface ResolvedBuiltinMCPConfig {
   toolsets: ReadonlySet<MastraMCPToolset>;
   readOnly: boolean;
+  /** Whether to serve MCP Apps when `@mastra/mcp-apps-components` is installed. */
+  apps: boolean;
   enumLimit: number;
   featured: { agents: string[]; workflows: string[] };
   /**
@@ -143,6 +145,7 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
   return {
     toolsets,
     readOnly,
+    apps: config.apps ?? true,
     enumLimit: config.enumLimit ?? DEFAULT_ENUM_LIMIT,
     featured: { agents: config.featured?.agents ?? [], workflows: config.featured?.workflows ?? [] },
     isSelected: (kind, names) => {

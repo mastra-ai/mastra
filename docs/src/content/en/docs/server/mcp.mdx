@@ -5,6 +5,7 @@ packages:
   - '@mastra/core'
   - '@mastra/server'
   - '@mastra/mcp'
+  - '@mastra/mcp-apps-components'
   - '@mastra/auth'
 ---
 
@@ -176,6 +177,28 @@ export const mastra = new Mastra({
 ```
 
 :::
+
+### MCP Apps
+
+Clients that render [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview), such as the Claude app, can show tool results as interactive views. Install `@mastra/mcp-apps-components` next to `@mastra/server` to turn them on:
+
+```bash npm2yarn
+npm install @mastra/mcp-apps-components
+```
+
+With it installed, `get_trace` opens the trace in Studio's trace timeline. Select a span to see its input, output, and attributes. The view loads the rest of a long trace and each span through `get_trace` and `get_span`, so it shows only what the caller's permissions allow.
+
+Apps are served only to clients that declare MCP Apps support. Other clients, such as Claude Code in a terminal, get the same tools and JSON results as without the package. Set `apps: false` to turn them off:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcp: { apps: false },
+  },
+})
+```
 
 ### Agents creating agents
 

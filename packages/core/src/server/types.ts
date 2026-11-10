@@ -270,6 +270,12 @@ export type ServerMCPConfig = {
    * @default false
    */
   readOnly?: boolean;
+  /**
+   * Serve MCP Apps (interactive views such as the trace viewer) to clients that support them. Needs
+   * `@mastra/mcp-apps-components` installed; clients without MCP Apps support get plain tool results either way.
+   * @default true
+   */
+  apps?: boolean;
   /** When set for a primitive type, only these ids are exposed. */
   include?: ServerMCPPrimitiveFilter;
   /** Ids that are never exposed. Takes precedence over `include`. */

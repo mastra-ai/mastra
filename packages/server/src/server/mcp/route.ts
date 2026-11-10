@@ -3,6 +3,7 @@ import type { MCPHttpTransportResult } from '../handlers/mcp';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import type { BuiltinMCPApps } from './catalogue';
 import {
   BUILTIN_MCP_SERVER_ID,
   DEFAULT_BUILTIN_MCP_PATH,
@@ -74,32 +75,50 @@ async function loadBuiltinMCP(mastra: Mastra) {
 }
 
 const TRACE_VIEWER_URI = 'ui://mastra/trace-viewer';
+const APPS_PACKAGE = '@mastra/mcp-apps-components';
+
+type BuiltinApps = {
+  appResources: Record<string, { name: string; description?: string; html: string }>;
+  apps: BuiltinMCPApps;
+};
+let builtinApps: Promise<BuiltinApps | undefined> | undefined;
 
 /**
  * The MCP Apps the built-in server ships, from `@mastra/mcp-apps-components` (an optional peer dependency
- * like `@mastra/mcp`): without it, tools carry no app link and hosts get their JSON results as before.
+ * like `@mastra/mcp`): without it, tools carry no app link and clients get their JSON results as before.
+ * Loaded once per process.
  */
-async function loadBuiltinApps() {
-  try {
-    // A variable specifier: the package builds on @mastra/client-js, which builds on this one.
-    const specifier = '@mastra/mcp-apps-components';
-    const { traceViewerApp } = (await import(/* @vite-ignore */ specifier)) as {
-      traceViewerApp: { name: string; description?: string; html: string };
-    };
-    return { appResources: { [TRACE_VIEWER_URI]: traceViewerApp }, apps: { traceViewer: TRACE_VIEWER_URI } };
-  } catch (error) {
-    if (!isMissingPackage(error, '@mastra/mcp-apps-components')) throw error;
-    return undefined;
-  }
+function loadBuiltinApps(): Promise<BuiltinApps | undefined> {
+  builtinApps ??= (async () => {
+    try {
+      // Keep this import directly inside `try`, like `@mastra/mcp` above.
+      const { traceViewerApp } = await import('@mastra/mcp-apps-components/trace-viewer');
+      return { appResources: { [TRACE_VIEWER_URI]: traceViewerApp }, apps: { traceViewer: TRACE_VIEWER_URI } };
+    } catch (error) {
+      if (isMissingAppsPackage(error)) return undefined;
+      builtinApps = undefined;
+      throw error;
+    }
+  })();
+  return builtinApps;
 }
 
-function isMissingPackage(error: unknown, name: string): boolean {
+/** Whether `error` says `@mastra/mcp-apps-components` (or, in an older version, its app subpath) isn't installed. */
+export function isMissingAppsPackage(error: unknown): boolean {
   for (let current = error; current instanceof Error; current = current.cause) {
     const code = (current as { code?: unknown }).code;
-    if ((code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') && current.message.includes(`'${name}'`)) {
+    if (
+      (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') &&
+      current.message.includes(`'${APPS_PACKAGE}`)
+    ) {
       return true;
     }
-    if (current.message.startsWith(`No such module "${name}"`)) return true;
+    // An older version, without the app's subpath.
+    if (code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && current.message.includes(`/${APPS_PACKAGE}/package.json`)) {
+      return true;
+    }
+    // Cloudflare Workers (workerd) throws a plain Error without a `code`.
+    if (/^No such module "@mastra\/mcp-apps-components[/"]/.test(current.message)) return true;
   }
   return false;
 }
@@ -141,7 +160,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     }
     const config = resolveBuiltinMCPConfig(mastra, request);
     const { MCPServer, buildBuiltinMCPTools } = await loadBuiltinMCP(mastra);
-    const builtinApps = await loadBuiltinApps();
+    const apps = config.apps ? await loadBuiltinApps() : undefined;
     const tools = await buildBuiltinMCPTools(
       {
         mastra,
@@ -152,7 +171,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
         abortSignal,
         request: bearerOnly(request),
         mcpRoute: BUILTIN_MCP_HTTP_ROUTE,
-        apps: builtinApps?.apps,
+        apps: apps?.apps,
       },
       config,
     );
@@ -164,8 +183,10 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       title: serverInfo.title,
       instructions: serverInfo.instructions,
       tools,
-      // Served whenever installed: an app only opens from a tool the caller was given, and its own calls are tool calls.
-      appResources: builtinApps?.appResources,
+      // An app only opens from a tool the caller was given, and its own calls are tool calls.
+      appResources: apps?.appResources,
+      // Clients without MCP Apps support see no app links, resources, or `ui` capability.
+      appsRequireClientSupport: true,
       legacy: 'stateless',
       requestState: { key: getRequestStateKey() },
     });

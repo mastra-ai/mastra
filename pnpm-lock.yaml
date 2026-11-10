@@ -6483,6 +6483,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@mastra/mcp-apps-components':
+        specifier: workspace:>=0.1.0-0 <1.0.0-0
+        version: link:../mcp-apps-components
       hono:
         specifier: ^4.13.13
         version: 4.13.16
@@ -7022,6 +7025,9 @@ importers:
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@mastra/mcp-apps-components':
+        specifier: workspace:*
+        version: link:../../packages/mcp-apps-components
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -7031,6 +7037,9 @@ importers:
       '@mastra/server-adapters-test-suite':
         specifier: workspace:*
         version: link:../server-adapters-test-suite
+      '@modelcontextprotocol/client':
+        specifier: 2.4.0
+        version: 2.4.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

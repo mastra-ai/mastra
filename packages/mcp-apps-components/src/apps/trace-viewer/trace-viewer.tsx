@@ -2,9 +2,11 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SpanDataPanelView, TraceSpanTimeline, formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces';
-import type { LightSpanRecord, SpanRecord } from '@mastra/playground-ui/domains/traces/types';
+import { formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces/components/format-hierarchical-spans';
+import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
+import { TraceSpanTimeline } from '@mastra/playground-ui/domains/traces/components/trace-span-timeline';
 import { TraceSummaryDescription } from '@mastra/playground-ui/domains/traces/components/trace-summary-description';
+import type { LightSpanRecord, SpanRecord } from '@mastra/playground-ui/domains/traces/types';
 import { applyDocumentTheme } from '@modelcontextprotocol/ext-apps';
 import type { App, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
@@ -163,7 +165,7 @@ export function TraceViewer() {
     () => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }),
   );
   const { app, error } = useApp({
-    appInfo: { name: 'Mastra trace viewer', version: '0.0.0' },
+    appInfo: { name: 'Mastra trace viewer', version: __PACKAGE_VERSION__ },
     capabilities: {},
     onAppCreated: app => {
       app.ontoolresult = result => {

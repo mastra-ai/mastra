@@ -1,2 +1,2 @@
 .env.mastra
-*.d.ts
+*.d.ts!src/server/mcp/apps-module.d.ts
