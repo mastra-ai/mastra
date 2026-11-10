@@ -152,7 +152,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
         </Txt>
       </div>
       <Txt variant="meta" tone="muted">
-        .json · an array of items · up to {MAX_IMPORT_LABEL}
+        .json files containing an array of items, up to {MAX_IMPORT_LABEL}
       </Txt>
     </div>
   );

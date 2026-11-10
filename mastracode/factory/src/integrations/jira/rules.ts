@@ -1,19 +1,23 @@
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
   eventBoardId,
-  isTerminalWorkItem,
   rulePhaseField,
   withBoardClosure,
+  withIntakeTarget,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { selectEventRule } from '../../rules/event-rules.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
+import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryJiraRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
-import { jiraClaimKey, jiraIssueCards } from './claim.js';
 import type { JiraEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -53,7 +57,7 @@ export interface JiraIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** Jira source the issue was read from; resolves the bound board via `intakeBoards`. */
+  /** Jira source the issue was read from. */
   sourceId?: string | null;
 }
 
@@ -61,7 +65,8 @@ export interface JiraRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
   configVersion: string;
-  boards: BoardRegistry;
+  /** The code boards, or the per-project source so a project's stored boards run its cards. */
+  boards: BoardRegistry | ProjectBoardSource;
   jiraRules: JiraEventRules;
 }
 
@@ -70,55 +75,56 @@ export interface JiraRulesIngress {
   userId: string;
   factoryProjectId: string;
   issues: JiraIssueIngress[];
-  /** Board id per bound Jira source id, from the project's intake bindings. */
-  intakeBoards?: Readonly<Record<string, string>>;
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
 
+/**
+ * The status change a Jira sync reports: a issue seen for the first time is created, and a
+ * completed or canceled one is closed for that reason. Later sightings of an open issue report none.
+ */
+export function boardEventFor(context: Pick<FactoryJiraRuleContext, 'event' | 'issue' | 'item'>): BoardEventFacts | undefined {
+  if (context.event === 'issueClosed') {
+    return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
+  }
+  return context.item ? undefined : { type: 'work_item.created' };
+}
+
 export class JiraRules {
   constructor(private readonly options: JiraRulesOptions) {}
+
+  /** The project's boards, loaded at the start of {@link ingest}. */
+  #boards(scope: StoredBoardScope): BoardRegistry {
+    return toBoardSource(this.options.boards).forProject(scope);
+  }
 
   async ingest(input: JiraRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
+    await toBoardSource(this.options.boards).load(input);
 
+    // A finished card may still be only in the legacy table; copy it so the issue finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId: input.orgId,
+      factoryProjectId: input.factoryProjectId,
+      sources: input.issues.map(issue => ({ integrationId: 'jira', type: 'issue', externalId: issue.id })),
+    });
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
-    const itemsByClaimKey = new Map(items.filter(item => item.claimKey).map(item => [item.claimKey, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      // The claim finds the card even after a metadata drift; the raw issue
-      // reference covers cards filed before claims existed.
-      const relatedItem = itemsByClaimKey.get(jiraClaimKey(issue.id)) ?? itemsBySourceKey.get(issue.id);
-      // One live card per Jira issue per org. The store's claim index is the
-      // guarantee; this check spares the dispatcher a refused upsert.
-      if (!relatedItem && (await this.#heldElsewhere(input, issue))) {
-        statuses.push('missing');
-        continue;
-      }
-      statuses.push(await this.#ingestIssue(input, issue, relatedItem));
+      // One card per Jira issue per project; other projects may file their own.
+      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(issue.id)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
     return { status: 'missing', ingested: statuses.length };
   }
 
-  async #heldElsewhere(input: JiraRulesIngress, issue: JiraIssueIngress): Promise<boolean> {
-    const cards = await jiraIssueCards(this.options.storage, { orgId: input.orgId, issueRef: issue.id });
-    const liveElsewhere = cards.filter(
-      row => row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row),
-    );
-    for (const row of liveElsewhere) {
-      if (await this.options.projects.get({ orgId: input.orgId, id: row.factoryProjectId })) return true;
-    }
-    return false;
-  }
-
   async #ingestIssue(
     input: JiraRulesIngress,
     issue: JiraIssueIngress,
-    relatedItem: WorkItemRow | undefined,
+    relatedItem: Card | undefined,
     attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `jira:${issue.id}:${issue.updatedAt}`;
@@ -131,8 +137,6 @@ export class JiraRules {
     }
 
     const event = isClosed ? 'issueClosed' : 'issueObserved';
-    const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.options.boards.get(boundBoardId) : undefined;
     const context: FactoryJiraRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -150,26 +154,34 @@ export class JiraRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              workItem: relatedItem.workItem,
               acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
             board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
-            ...withBoardClosure(this.options.boards, relatedItem),
-            ...rulePhaseField(this.options.boards, relatedItem),
+            ...withBoardClosure(this.#boards(input), relatedItem),
+            ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
+      ...withIntakeTarget(this.#boards(input)),
       event,
       issue,
     };
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
 
-    const rule = selectEventRule(
+    const ownedByDeployment = deploymentOwnsEvent(
       this.options.jiraRules,
-      boardEventHandlers(this.options.boards, eventBoardId(context), 'jira'),
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'jira'),
       context.event,
     );
-    let decision: FactoryRuleDecision | void;
+    const rule = selectEventRule(
+      this.options.jiraRules,
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'jira'),
+      context.event,
+    );
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -180,7 +192,7 @@ export class JiraRules {
         decisions = validateFactoryRuleDecisions([decision]).map(entry => {
           assertFactoryDecisionTarget(
             entry,
-            this.options.boards,
+            this.#boards(input),
             relatedItem ? boardForWorkItem(relatedItem) : undefined,
           );
           return { ...entry };
@@ -197,6 +209,14 @@ export class JiraRules {
             ? error.message.slice(0, 2_000)
             : 'Factory Jira rule failed.',
       };
+    }
+    if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
+    if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
+      const routed = await routeEventDecision(context, this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+      });
+      if (routed) decisions = [{ ...routed }];
     }
 
     const committed = await this.options.storage.commitRuleEvaluation({

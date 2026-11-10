@@ -61,6 +61,81 @@ function getWorkflowIdMetadata(
   throw new Error(`Unable to determine workflow id for ${workflowName} in ${filePath}`);
 }
 
+type StaticProperty = { readable: true; value?: t.Node } | { readable: false };
+
+function getStaticKey(property: t.ObjectProperty | t.ObjectMethod): string | null {
+  if (property.computed && t.isTemplateLiteral(property.key) && property.key.expressions.length === 0) {
+    return property.key.quasis[0]?.value.cooked ?? null;
+  }
+
+  if (property.computed && t.isStringLiteral(property.key)) {
+    return property.key.value;
+  }
+
+  return getObjectPropertyName(property);
+}
+
+function isDynamicKey(property: t.ObjectProperty | t.ObjectMethod): boolean {
+  return (
+    property.computed &&
+    !t.isStringLiteral(property.key) &&
+    !(t.isTemplateLiteral(property.key) && property.key.expressions.length === 0)
+  );
+}
+
+// A later property overrides an earlier one, so a spread or `[key]` hides `name` only when it
+// comes after the last `name` written out in source.
+function findStaticProperty(object: t.ObjectExpression, name: string): StaticProperty {
+  let found: StaticProperty = { readable: true };
+
+  for (const property of object.properties) {
+    if (t.isSpreadElement(property) || isDynamicKey(property)) {
+      found = { readable: false };
+      continue;
+    }
+
+    if (getStaticKey(property) === name) {
+      found = t.isObjectProperty(property) ? { readable: true, value: property.value } : { readable: false };
+    }
+  }
+
+  return found;
+}
+
+/**
+ * Read at build time so runs started outside `TemporalRun` (Schedules, the Temporal CLI) use the
+ * workflow's setting too. `TemporalRun` also sends the setting, which covers `options` the build
+ * cannot read.
+ */
+function getWorkflowValidateInputs(
+  workflowConfig: t.ObjectExpression,
+  workflowName: string,
+  filePath: string,
+): boolean | undefined {
+  const options = findStaticProperty(workflowConfig, 'options');
+  if (options.readable && !options.value) {
+    return undefined;
+  }
+
+  if (options.readable && t.isObjectExpression(options.value)) {
+    const validateInputs = findStaticProperty(options.value, 'validateInputs');
+    if (validateInputs.readable && !validateInputs.value) {
+      return undefined;
+    }
+
+    if (validateInputs.readable && t.isBooleanLiteral(validateInputs.value)) {
+      return validateInputs.value.value;
+    }
+  }
+
+  console.warn(
+    `[@mastra/temporal] Could not read options.validateInputs of ${workflowName} in ${filePath} at build time. ` +
+      'Runs started with run.start() or run.startAsync() use the workflow setting. ' +
+      'Runs started another way, such as from a Temporal Schedule, check step input.',
+  );
+  return undefined;
+}
+
 /**
  * The helper runtime lives in its own `.mjs` module so it can be linted and unit-tested
  * like normal code. We parse that file directly here instead of using `Function#toString()`,
@@ -474,12 +549,19 @@ function createTemporalWorkflowStatements(
   stepBindings: Map<string, string>,
   workflowBindings: Map<string, WorkflowBinding>,
   runtimeOptions?: t.ObjectExpression,
+  validateInputs?: boolean,
 ): t.Statement[] {
   // Start from `createWorkflow(<static id>)` and rebuild the chain one call at a time
   // using normalized arguments from `rewriteChainMethod`.
   const createWorkflowArgs = [t.cloneNode(workflowId, true)];
-  if (runtimeOptions) {
-    createWorkflowArgs.push(t.cloneNode(runtimeOptions, true));
+  const optionProperties = runtimeOptions ? runtimeOptions.properties.map(property => t.cloneNode(property, true)) : [];
+
+  if (validateInputs !== undefined) {
+    optionProperties.push(t.objectProperty(t.identifier('validateInputs'), t.booleanLiteral(validateInputs)));
+  }
+
+  if (optionProperties.length > 0) {
+    createWorkflowArgs.push(t.objectExpression(optionProperties));
   }
 
   let expression: t.Expression = t.callExpression(t.identifier('createWorkflow'), createWorkflowArgs);
@@ -806,6 +888,7 @@ function rewriteWorkflowVariableDeclaration(
         state.stepBindings,
         state.workflowBindings,
         state.runtimeOptions,
+        getWorkflowValidateInputs(workflowConfig, declaration.id.name, filePath),
       ),
     );
   }

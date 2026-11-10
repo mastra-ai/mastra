@@ -121,7 +121,7 @@ bash .claude/skills/docs-audit/scripts/run-checks.sh \
   --docs <all-audited-files>
 ```
 
-Invoke the documented command directly; do not inspect the checker source before or after running it. Use the diagnostics and five summary lines printed to stdout. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Treat `validate-target=warn` as ambiguous attribution that needs report context, not as a target failure or a clean pass. Do not run write-formatting, package installation, temporary project setup, code-example eval projects, or ad hoc compiler/parser probes.
+Invoke the documented command directly; do not inspect the checker source before or after running it. Use the diagnostics and five summary lines printed to stdout. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Treat `*-target=warn` as warning-level findings on the page, a skipped check, or (for `validate-target`) ambiguous attribution; it needs report context and is not a target failure or a clean pass. Do not run write-formatting, package installation, temporary project setup, code-example eval projects, or ad hoc compiler/parser probes.
 
 ### 8. Report and stop
 

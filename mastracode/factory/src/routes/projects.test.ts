@@ -5,13 +5,18 @@ import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/w
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
+import { boardDefinitionOf } from '../boards/stored-board.js';
+import { workBoard } from '../boards/work.js';
 import { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { scheduleIdFor } from '../environment/build-schedule.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../environment/build-workflow.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+
+vi.mock('../integrations/github/commits.js', () => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }));
 
 const projectRoutes = (
   seed: FactoryStorageTestSeed,
@@ -85,7 +90,6 @@ describe('ProjectRoutes', () => {
         integrationId: 'jira',
         sourceId: '10000',
         factoryProjectId,
-        board: 'work',
         labels,
       });
     await bind(platform.id, null);
@@ -130,6 +134,77 @@ describe('ProjectRoutes', () => {
     const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
     expect(updated.name).toBe('Renamed');
     expect(updated).not.toHaveProperty('slackWorkItemsEnabled');
+  });
+
+  it('accepts and ignores the retired automation switches from an old client, and changes no board', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await seed.boards.insertIfMissing(scope, boardDefinitionOf(workBoard), 'factory');
+    const boardBefore = await seed.boards.get(scope, 'work');
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const patch = (body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // An old Board settings toggle still gets a 200, so it does not show an error; the board's
+    // phases own automation now, so nothing is stored or returned.
+    for (const field of ['autoApprovePlans', 'autoRunEnabled', 'selfReviewEnabled']) {
+      const alone = await patch({ [field]: true });
+      expect(alone.status, field).toBe(200);
+      expect(((await alone.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty(field);
+
+      const mixed = await patch({ name: `Renamed ${field}`, [field]: true });
+      expect(mixed.status, field).toBe(200);
+      const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
+      expect(updated.name).toBe(`Renamed ${field}`);
+      expect(updated).not.toHaveProperty(field);
+    }
+    expect(await seed.projects.retiredAutomationSettings({ orgId: 'org-1', id: project.id })).toEqual({
+      autoRunEnabled: false,
+      selfReviewEnabled: false,
+    });
+    expect(await seed.boards.get(scope, 'work')).toEqual(boardBefore);
+  });
+
+  it('accepts and ignores the retired reviewTestChecksEnabled switch from an old client', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const patch = (body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // The review skill decides whether to publish its test check, so the old toggle
+    // gets a 200 and changes nothing.
+    const alone = await patch({ reviewTestChecksEnabled: true });
+    expect(alone.status).toBe(200);
+    expect(((await alone.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty(
+      'reviewTestChecksEnabled',
+    );
+
+    const mixed = await patch({ name: 'Renamed', reviewTestChecksEnabled: false });
+    expect(mixed.status).toBe(200);
+    const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
+    expect(updated.name).toBe('Renamed');
+    expect(updated).not.toHaveProperty('reviewTestChecksEnabled');
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).not.toHaveProperty('reviewTestChecksEnabled');
   });
 
   it('requires an organization and scopes project access by organization', async () => {
@@ -884,6 +959,180 @@ describe('ProjectRoutes', () => {
     // Orphaned connection is either omitted or returned in a
     // needs-reconnect shape — either is fine, but the request MUST succeed.
     expect(Array.isArray(staleBody.connections)).toBe(true);
+
+    const list = await app.request('/web/factory/projects');
+    expect(list.status).toBe(200);
+    expect(await list.json()).toMatchObject({ projects: [{ id: project.id, repositories: [] }] });
+  });
+
+  describe('repositories in the project list', () => {
+    async function factoriesWithRepositories(factoryCount: number) {
+      const seed = await createFactoryStorageForTests();
+      const github = seed.sourceControl.forIntegration('github');
+      const gitlab = seed.sourceControl.forIntegration('gitlab');
+      const githubInstallation = await github.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: 'gh-1',
+      });
+      const gitlabInstallation = await gitlab.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: 'gl-1',
+      });
+      const factories = [];
+      for (let index = 0; index < factoryCount; index++) {
+        const project = await seed.projects.create({
+          orgId: 'org-1',
+          userId: 'user-1',
+          input: { name: `Factory ${index}` },
+        });
+        const links = [];
+        for (const [handle, installationId, slug, branch] of [
+          [github, githubInstallation.id, `acme/api-${index}`, 'release'],
+          [gitlab, gitlabInstallation.id, `acme/web-${index}`, null],
+        ] as const) {
+          const connection = await handle.connections.create({
+            orgId: 'org-1',
+            factoryProjectId: project.id,
+            installationId,
+            createdByUserId: 'user-1',
+          });
+          const repository = await handle.repositories.upsert({
+            orgId: 'org-1',
+            input: { installationId, externalId: `${slug}-id`, slug, defaultBranch: 'main' },
+          });
+          const link = await handle.projectRepositories.link({
+            orgId: 'org-1',
+            connectionId: connection.id,
+            repositoryId: repository.id,
+            createdByUserId: 'user-1',
+            branch,
+            sandboxProvider: 'local',
+            sandboxWorkdir: `/workspace/${slug}`,
+          });
+          links.push({ connection, repository, link });
+        }
+        factories.push({ project, links });
+      }
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(app as never, projectRoutes(seed, ['github', 'gitlab']));
+      return { seed, app, factories };
+    }
+
+    it('lists each factory with its linked repositories and nothing about the installations', async () => {
+      const { seed, app, factories } = await factoriesWithRepositories(1);
+      const [{ project, links }] = factories;
+      const empty = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Empty' } });
+      const otherOrgGithub = seed.sourceControl.forIntegration('github');
+      const otherOrgInstallation = await otherOrgGithub.installations.upsert({
+        orgId: 'org-2',
+        connectedByUserId: 'user-2',
+        externalId: 'gh-2',
+      });
+      const otherOrgProject = await seed.projects.create({
+        orgId: 'org-2',
+        userId: 'user-2',
+        input: { name: 'Other' },
+      });
+      const otherOrgConnection = await otherOrgGithub.connections.create({
+        orgId: 'org-2',
+        factoryProjectId: otherOrgProject.id,
+        installationId: otherOrgInstallation.id,
+        createdByUserId: 'user-2',
+      });
+      const otherOrgRepository = await otherOrgGithub.repositories.upsert({
+        orgId: 'org-2',
+        input: {
+          installationId: otherOrgInstallation.id,
+          externalId: 'secret',
+          slug: 'rival/secret',
+          defaultBranch: 'main',
+        },
+      });
+      await otherOrgGithub.projectRepositories.link({
+        orgId: 'org-2',
+        connectionId: otherOrgConnection.id,
+        repositoryId: otherOrgRepository.id,
+        createdByUserId: 'user-2',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace/secret',
+      });
+
+      const response = await app.request('/web/factory/projects');
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { projects: Array<{ id: string; repositories: unknown[] }> };
+      expect(FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse(body).success).toBe(true);
+      expect(body.projects.map(({ id }) => id).sort()).toEqual([project.id, empty.id].sort());
+      const [githubLink, gitlabLink] = links;
+      expect(body.projects.find(({ id }) => id === project.id)?.repositories).toEqual([
+        {
+          projectRepositoryId: githubLink!.link.id,
+          connectionId: githubLink!.connection.id,
+          integrationId: 'github',
+          repositoryId: githubLink!.repository.id,
+          externalId: 'acme/api-0-id',
+          slug: 'acme/api-0',
+          defaultBranch: 'main',
+          branch: 'release',
+          sandboxWorkdir: '/workspace/acme/api-0',
+        },
+        {
+          projectRepositoryId: gitlabLink!.link.id,
+          connectionId: gitlabLink!.connection.id,
+          integrationId: 'gitlab',
+          repositoryId: gitlabLink!.repository.id,
+          externalId: 'acme/web-0-id',
+          slug: 'acme/web-0',
+          defaultBranch: 'main',
+          branch: null,
+          sandboxWorkdir: '/workspace/acme/web-0',
+        },
+      ]);
+      expect(body.projects.find(({ id }) => id === empty.id)?.repositories).toEqual([]);
+      expect(JSON.stringify(body)).not.toContain('rival/secret');
+
+      const connections = (await (
+        await app.request(`/web/factory/projects/${project.id}/source-control-connections`)
+      ).json()) as {
+        connections: Array<{
+          integrationId: string;
+          installation: { externalId: string };
+          repositories: Array<{ id: string; repository: { slug: string } | null }>;
+        }>;
+      };
+      expect(
+        connections.connections.map(connection => ({
+          integrationId: connection.integrationId,
+          installation: connection.installation.externalId,
+          links: connection.repositories.map(link => [link.id, link.repository?.slug]),
+        })),
+      ).toEqual([
+        { integrationId: 'github', installation: 'gh-1', links: [[githubLink!.link.id, 'acme/api-0']] },
+        { integrationId: 'gitlab', installation: 'gl-1', links: [[gitlabLink!.link.id, 'acme/web-0']] },
+      ]);
+    });
+
+    it('reads the same number of queries for one factory as for many', async () => {
+      const queriesForProjectList = async (factoryCount: number) => {
+        const { seed, app } = await factoriesWithRepositories(factoryCount);
+        const findMany = vi.spyOn(seed.storage.ops, 'findMany');
+        const findOne = vi.spyOn(seed.storage.ops, 'findOne');
+        const response = await app.request('/web/factory/projects');
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { projects: Array<{ repositories: unknown[] }> };
+        expect(body.projects).toHaveLength(factoryCount);
+        expect(body.projects.every(({ repositories }) => repositories.length === 2)).toBe(true);
+        return findMany.mock.calls.length + findOne.mock.calls.length;
+      };
+
+      const one = await queriesForProjectList(1);
+      expect(await queriesForProjectList(5)).toBe(one);
+    });
   });
 
   it('rejects invalid create and update payloads', async () => {
@@ -1303,8 +1552,6 @@ describe('ProjectRoutes', () => {
 
     describe('builds', () => {
       const SHA = 'f'.repeat(40);
-      vi.mock('../integrations/github/commits.js', () => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }));
-
       type Settings = Record<string, unknown>;
       class BuildingSandbox extends FactorySandbox<Settings> {
         readonly provider = 'building';

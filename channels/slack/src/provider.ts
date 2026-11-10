@@ -65,6 +65,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     typingStatus,
     toolApprovers,
     toolDisplay: topLevelToolDisplay,
+    generativeUI,
   } = channelConfig;
   const topLevel = {
     cors,
@@ -76,6 +77,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     typingStatus,
     toolApprovers,
     toolDisplay: topLevelToolDisplay,
+    generativeUI,
   };
   const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));
   const filteredAdapterConfig = Object.fromEntries(

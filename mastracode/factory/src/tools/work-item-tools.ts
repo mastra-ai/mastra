@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
@@ -21,7 +22,7 @@ import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
-import type { UpdateWorkItemInput, WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { UpdateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import type { FactoryAuditEmit } from '../work-items/create-work-item.js';
 import {
@@ -46,6 +47,8 @@ export interface FactoryWorkItemToolDependencies {
   workItems: WorkItemsStorage;
   /** A fixed registry, or the per-project boards. */
   boards: BoardRegistry | ProjectBoardSource;
+  /** The project's intake routes, which place a filed card. */
+  intakeRoutes?: IntakeRoutesReader;
   /** Governed stage moves; filing and moving items refuse while it is unavailable. */
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
@@ -66,7 +69,7 @@ const repositorySchema = z
 
 const decisionId = z.string().trim().uuid().describe('Decision id, from factory_list_attention or inspect.');
 
-function briefItem(item: WorkItemRow) {
+function briefItem(item: Card) {
   return {
     id: item.id,
     number: workItemNumber(item),
@@ -113,14 +116,17 @@ export function createFactoryWorkItemTools(
    * `metadata` would run in it (a card synced from an issue follows the
    * issue's repository, which a slug can't override).
    */
-  const requireRepository = async (slug: string, metadata: Record<string, unknown> | null = null) => {
+  const requireRepository = async (slug: string, item?: Pick<Card, 'metadata' | 'workItem'>) => {
     const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
     if (!sourceControl) throw new Error('This session has no source-control provider to look repositories up in.');
     const resolve = (repository?: string) =>
       resolveWorkItemRepository({
         sourceControl,
         ...project,
-        item: { metadata: repository ? { ...metadata, repository } : metadata },
+        item: {
+          metadata: repository ? { repository } : (item?.metadata ?? null),
+          workItem: item?.workItem ?? { metadata: null },
+        },
       });
     const resolution = await resolve(slug);
     if (resolution.status === 'resolved' && resolution.slug === slug) return;
@@ -136,7 +142,7 @@ export function createFactoryWorkItemTools(
         : `${slug} is not linked to this Factory, and it has no linked repositories.`,
     );
   };
-  const follow = (item: WorkItemRow, reason: 'created' | 'subscribed') =>
+  const follow = (item: Card, reason: 'created' | 'subscribed') =>
     deps.workItems.subscribeToWorkItem({
       ...project,
       workItemId: item.id,
@@ -151,7 +157,7 @@ export function createFactoryWorkItemTools(
     factory_create_work_item: createTool({
       id: 'factory_create_work_item',
       description:
-        "File a new work item on this Factory's Work board for the person you are working with. It lands in the board's first phase, exactly like pressing New card, and this session follows it. Check factory_list_work_items for an existing item first. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
+        "File a new work item on this Factory's Work board (or wherever the project's intake routes send it) for the person you are working with. It enters its board's first phase, or the phase an intake route names, and this session follows it. Check factory_list_work_items for an existing item first. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
@@ -170,6 +176,7 @@ export function createFactoryWorkItemTools(
           workItems: deps.workItems,
           boards: await toBoardSource(deps.boards).load(project),
           transitionService: deps.transitionService,
+          intakeRoutes: deps.intakeRoutes,
           audit,
           ...project,
           userId: scope.userId,
@@ -257,7 +264,7 @@ export function createFactoryWorkItemTools(
     factory_update_work_item: createTool({
       id: 'factory_update_work_item',
       description:
-        "Edit a work item's fields as the person you are working with: its title, the repository its runs use, its parent item, or pre-approving its plans. Move stages with factory_transition_work_item and start roles with factory_start_session; post to the card's feed for anything else.",
+        "Edit a work item's fields as the person you are working with: its title, the repository its runs use, or its parent item. Move stages with factory_transition_work_item and start roles with factory_start_session; post to the card's feed for anything else.",
       inputSchema: z
         .object({
           workItem: workItemRefSchema,
@@ -267,20 +274,12 @@ export function createFactoryWorkItemTools(
             .nullable()
             .optional()
             .describe('Parent work item (id or #number), or null to detach it from its parent.'),
-          plansPreapproved: z
-            .literal(true)
-            .optional()
-            .describe(
-              "Pre-approve the item's plans, so its runs no longer stop for plan approval. Can't be undone here.",
-            ),
         })
         .strict()
         .refine(input => Object.keys(input).some(key => key !== 'workItem'), 'Pass at least one field to change.'),
-      execute: async ({ workItem, title, repository, parentWorkItem, plansPreapproved }) => {
-        // Pre-approval drops the plan-approval gate for good, so it is the person's call.
-        if (plansPreapproved) requirePerson(scope, 'pre-approve plans');
+      execute: async ({ workItem, title, repository, parentWorkItem }) => {
         const item = await requireItem(workItem);
-        if (repository) await requireRepository(repository, item.metadata);
+        if (repository) await requireRepository(repository, item);
         let parentWorkItemId: string | null | undefined;
         if (parentWorkItem === null) parentWorkItemId = null;
         else if (parentWorkItem !== undefined) parentWorkItemId = (await requireItem(parentWorkItem)).id;
@@ -288,7 +287,6 @@ export function createFactoryWorkItemTools(
           ...(title !== undefined ? { title } : {}),
           ...(repository ? { metadata: { repository } } : {}),
           ...(parentWorkItemId !== undefined ? { parentWorkItemId } : {}),
-          ...(plansPreapproved ? { plansPreapproved } : {}),
         };
         let updated: Awaited<ReturnType<WorkItemsStorage['update']>>;
         try {
@@ -302,7 +300,6 @@ export function createFactoryWorkItemTools(
           ...(title !== undefined ? ['title'] : []),
           ...(repository ? ['metadata'] : []),
           ...(parentWorkItemId !== undefined ? ['parentWorkItemId'] : []),
-          ...(plansPreapproved ? ['plansPreapproved'] : []),
         ];
         await audit({
           action: 'factory.work_item.updated',
@@ -316,7 +313,6 @@ export function createFactoryWorkItemTools(
           updated: fields.map(field => (field === 'metadata' ? 'repository' : field)),
           repository: typeof metadata.repository === 'string' ? metadata.repository : null,
           parentWorkItemId: updated.item.parentWorkItemId,
-          plansPreapproved: updated.item.plansPreapprovedAt !== null,
         };
       },
     }),

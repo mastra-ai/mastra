@@ -4,7 +4,7 @@ import type { LiveSessions } from '../session/live-sessions.js';
 import type {
   FactoryAttentionIdentity,
   FactoryAttentionReceiptRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { factoryAgentWaitingAttentionIdentity, factoryAttentionKey } from '../storage/domains/work-items/base.js';
@@ -21,7 +21,7 @@ import type {
 import { matchesView, receiptScope } from './attention-providers.js';
 
 interface ParkedSession {
-  item: WorkItemRow;
+  item: Card;
   role: string;
   sessionId: string;
   threadId: string;
@@ -35,7 +35,7 @@ interface ReceiptedParkedSession {
   receipt: FactoryAttentionReceiptRecord | undefined;
 }
 
-function parkedRunLabel(toolName: string): string {
+export function parkedRunLabel(toolName: string): string {
   return toolName === 'submit_plan' ? 'Plan waiting for review' : 'Agent is waiting for an answer';
 }
 

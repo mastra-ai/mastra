@@ -13,6 +13,7 @@ import { streamSSE } from 'hono/streaming';
 
 import { getFactoryAuthUser } from '../../../auth.js';
 import { feedTopic } from '../../../feed-events.js';
+import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
@@ -44,10 +45,6 @@ export interface CommentRouteDependencies {
 interface Tenant {
   orgId: string;
   userId: string;
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiRoute[] {
@@ -328,10 +325,13 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
             // every new connection as spurious invalidations.
             await pubsub.subscribe(topic, onEvent, { startFrom: 'latest' });
             if (!stream.aborted) {
-              keepalive = setInterval(() => {
+              const ping = () => {
                 if (stream.aborted) return;
                 void stream.write(': ping\n\n');
-              }, FEED_KEEPALIVE_MS);
+              };
+              // A proxy that holds the response until its first byte would keep the reader waiting a whole keepalive.
+              ping();
+              keepalive = setInterval(ping, FEED_KEEPALIVE_MS);
               // `streamSSE` closes the stream the moment this callback returns.
               await closed;
             }

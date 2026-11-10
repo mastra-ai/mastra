@@ -115,7 +115,7 @@ export function SavedViewPicker<TSettings>({
             )}
           </ComboboxTrigger>
           <ComboboxContent align="end">
-            <ComboboxSearch placeholder="Search views…" />
+            <ComboboxSearch placeholder="Search views" />
             <ComboboxEmpty>No views found.</ComboboxEmpty>
             <ComboboxList>
               {(item: PickerItem) => {

@@ -19,7 +19,6 @@ import type { ObserverRunner } from '../observer-runner';
 import { getLineageHead } from '../record-lineage';
 import type { ReflectorRunner } from '../reflector-runner';
 import { withRetry } from '../retry';
-import { stripSubconsciousSignals } from '../subconscious/origin';
 import { getMaxThreshold } from '../thresholds';
 import type { TokenCounter } from '../token-counter';
 import type {
@@ -172,15 +171,10 @@ export abstract class ObservationStrategy {
         // timestamped earlier but not yet observed.
         return { observed: false };
       }
-      const observationMessages = stripSubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
       // The Observer sees the budgeted context; composition below still builds on the full text.
       const observerContext = this.deps.prepareObserverContext(existingObservations, contextRecord ?? record);
-      const output = await this.observe(
-        observerContext.context ?? '',
-        observationMessages,
-        observerContext.wasTruncated,
-      );
+      const output = await this.observe(observerContext.context ?? '', messages, observerContext.wasTruncated);
       abortSignal?.throwIfAborted();
       let processed = await this.process(output, existingObservations);
       abortSignal?.throwIfAborted();

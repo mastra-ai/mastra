@@ -1131,6 +1131,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/wally',
+          label: 'Wally',
+        },
+        {
+          type: 'doc',
           id: 'providers/xiaomi',
           label: 'Xiaomi',
         },

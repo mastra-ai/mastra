@@ -3,13 +3,20 @@ import type { AgentEditorConfig } from '@mastra/core/agent';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import AgentPlayground from '..';
-import { AGENT_ID, makeCodeAgent, versionsList } from './fixtures/agent-editor-lock';
+import {
+  AGENT_ID,
+  DRAFT_VERSION_ID,
+  makeCodeAgent,
+  modelOwnedStoredAgent,
+  versionsList,
+  versionsWithModelListDraft,
+} from './fixtures/agent-editor-lock';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -35,13 +42,26 @@ const renderAgentPlayground = () => {
 };
 
 /** Endpoints AgentPlayground and its children hit that aren't the point of this test. */
-const registerHandlers = (editor: AgentEditorConfig | undefined) => {
+const registerHandlers = (
+  editor: AgentEditorConfig | undefined,
+  options?: { hasModelListDraft?: boolean; onActivateDraft?: () => void },
+) => {
+  const hasModelListDraft = options?.hasModelListDraft ?? false;
+
   server.use(
     http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
       HttpResponse.json({ ...makeCodeAgent(editor), modelList: [] }),
     ),
-    http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () => HttpResponse.json(versionsList)),
-    http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => HttpResponse.json(null)),
+    http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () =>
+      HttpResponse.json(hasModelListDraft ? versionsWithModelListDraft : versionsList),
+    ),
+    http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () =>
+      HttpResponse.json(hasModelListDraft ? modelOwnedStoredAgent : null),
+    ),
+    http.post(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/${DRAFT_VERSION_ID}/activate`, () => {
+      options?.onActivateDraft?.();
+      return HttpResponse.json({ success: true, activeVersionId: DRAFT_VERSION_ID });
+    }),
     http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json({ result: false })),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
     http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json({ packages: [], editorSource: 'code' })),
@@ -60,8 +80,11 @@ const registerHandlers = (editor: AgentEditorConfig | undefined) => {
   );
 };
 
-const renderWithEditorConfig = async (editor: AgentEditorConfig | undefined) => {
-  registerHandlers(editor);
+const renderWithEditorConfig = async (
+  editor: AgentEditorConfig | undefined,
+  options?: { hasModelListDraft?: boolean; onActivateDraft?: () => void },
+) => {
+  registerHandlers(editor, options);
   await act(async () => {
     renderAgentPlayground();
   });
@@ -100,6 +123,28 @@ describe('AgentPlayground — code agent editor lock', () => {
       await renderWithEditorConfig(undefined);
 
       expect(screen.queryByText('Read-only')).toBeNull();
+    });
+  });
+
+  describe('when a code-source agent has an unpublished model-list version', () => {
+    it('saves the version to the filesystem', async () => {
+      let activationCount = 0;
+      await renderWithEditorConfig(
+        { model: true },
+        {
+          hasModelListDraft: true,
+          onActivateDraft: () => {
+            activationCount += 1;
+          },
+        },
+      );
+
+      const saveButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Save to filesystem' });
+      expect(saveButton.disabled).toBe(false);
+
+      fireEvent.click(saveButton);
+
+      await waitFor(() => expect(activationCount).toBe(1));
     });
   });
 });

@@ -668,7 +668,7 @@ function generateIndexPage(grouped: GroupedProviders): string {
 
   // Link each provider's markdown page so agents reading /models/llms.txt can reach any provider.
   const providerLinks = [...grouped.popular, ...grouped.other]
-    .map(provider => `  - [${provider.name}](https://mastra.ai/models/providers/${provider.id})`)
+    .map(provider => `  - [${provider.name}](/models/providers/${provider.id})`)
     .join('\n');
 
   return `---
@@ -1110,7 +1110,51 @@ const agent = new Agent({
 })
 \`\`\`
 
-When \`api\` is omitted it defaults to \`"chat"\`, so existing configurations are unchanged. Provider options are read from the \`openai\` namespace for the Responses API, whereas the Chat Completions path reads the \`openai-compatible\` namespace.
+When \`api\` is omitted it defaults to \`"chat"\`, so existing configurations are unchanged.
+
+### Provider options for custom endpoints
+
+The \`providerOptions\` key that reaches a custom endpoint depends on the API it uses.
+
+On the default Chat Completions path, use the first segment of the model \`id\` as the key. For \`id: "lmstudio/qwen/qwen3-30b-a3b-2507"\`, the key is \`lmstudio\`, and for \`id: "openrouter/google/gemini-2.5-flash"\`, it's \`openrouter\`. A camelCase form also works, for example \`myServer\` for \`id: "my-server/my-model"\`. If the segment contains a period, use the part before the first period.
+
+The exception is an \`id\` that starts with the prefix of an enabled gateway, where the key is the segment after the prefix. Netlify's gateway is always enabled, so for \`id: "netlify/openai/gpt-4o"\`, the key is \`openai\`. When \`MASTRA_GATEWAY_API_KEY\` is set or a \`MastraGateway\` with an API key is configured, \`id: "mastra/google/gemini-2.5-flash"\` uses \`google\`.
+
+Typed options such as \`reasoningEffort\` are mapped to their request field (\`reasoning_effort\`). Other keys, such as \`parallel_tool_calls\`, are copied into the request body as written. They replace any field of the same name that the AI SDK sets before them, including \`model\`, \`temperature\` from \`modelSettings\`, and the structured-output \`response_format\`. \`reasoning_effort\`, \`verbosity\`, \`messages\`, \`tools\`, and \`tool_choice\` are set after them, as are \`stream\` and \`stream_options\` when streaming, so those can't be replaced this way. Use \`reasoningEffort\` and \`textVerbosity\` instead of the first two.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "lmstudio/qwen/qwen3-30b-a3b-2507",
+    url: "http://localhost:1234/v1"
+  }
+})
+\`\`\`
+
+Pass the options under \`lmstudio\` when you call the agent:
+
+\`\`\`typescript
+const response = await agent.generate("Hello", {
+  providerOptions: {
+    lmstudio: {
+      reasoningEffort: "low",
+      parallel_tool_calls: false
+    }
+  }
+})
+\`\`\`
+
+Other keys behave differently unless they match the key from the \`id\`:
+
+- \`openaiCompatible\`: Applies only the typed options \`user\`, \`reasoningEffort\`, \`textVerbosity\`, and \`strictJsonSchema\`. Other keys under it are dropped. The \`openai-compatible\` spelling is deprecated. It still works but adds a warning to the result.
+- \`openai\`: Ignored on the Chat Completions path, unless \`openai\` is itself the key from the \`id\`, as in \`openai/my-model\` or \`openai.foo/my-model\`. Then it works as described above. With \`api: "responses"\`, only \`openai\` applies, whatever the \`id\` prefix. On that path it takes only the OpenAI provider's typed options, such as \`parallelToolCalls\`, and other keys, such as \`parallel_tool_calls\`, are dropped.
+
+Options under a key that doesn't apply are dropped without a warning. If an option has no effect on the request, check the key first.
 
 ## Use AI SDK with Mastra
 
@@ -1213,7 +1257,7 @@ function generateProvidersIndexPage(grouped: GroupedProviders): string {
 
   return `---
 title: "Providers"
-description: "Direct access to AI model providers."
+description: "Direct access to AI model providers through their AI SDK provider packages."
 ---
 
 ${getGeneratedComment()}
@@ -1284,7 +1328,7 @@ For detailed provider-specific documentation, see the [AI SDK ${provider.name} p
 
   return `---
 title: "${provider.name}"
-description: "Use ${provider.name} models via the AI SDK."
+description: "Use ${provider.name} models in Mastra through the AI SDK provider package."
 ---
 
 ${getGeneratedComment()}

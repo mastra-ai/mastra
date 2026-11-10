@@ -7,6 +7,7 @@ import { useIncidentioIssueDetail } from '../../../../hooks/useIncidentioData';
 import { useJiraIssueDetail } from '../../../../hooks/useJiraData';
 import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
 import {
+  changeRequestNumberForItem,
   githubNumberForItem,
   incidentioIssueRefForItem,
   jiraIdentifierForItem,
@@ -18,7 +19,7 @@ import type { WorkItem } from '../services/workItems';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
-type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>;
+type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'workItem' | 'metadata'>;
 
 function descriptionSource(
   item: SourceItem,
@@ -28,7 +29,7 @@ function descriptionSource(
     if (item.source === 'github-pr') return 'pull';
   }
   if (item.source === 'gitlab-issue' && item.sourceKey) return 'gitlab';
-  if (item.source === 'gitlab-pr' && typeof item.metadata.gitlabMergeRequestIid === 'number') return 'gitlab-pr';
+  if (item.source === 'gitlab-pr' && changeRequestNumberForItem(item) !== undefined) return 'gitlab-pr';
   if (linearIdentifierForItem(item) !== undefined) return 'linear';
   if (jiraIdentifierForItem(item) !== undefined && jiraIssueRefForItem(item) !== undefined) return 'jira';
   if (incidentioIssueRefForItem(item) !== undefined) return 'incidentio';
@@ -64,7 +65,7 @@ export function useSourceDescription(
   const gitlabPull = useGitLabMergeRequestDetail(
     source === 'gitlab-pr' ? factoryProjectId : undefined,
     source === 'gitlab-pr' ? projectRepositoryId : undefined,
-    source === 'gitlab-pr' ? (item.metadata.gitlabMergeRequestIid as number) : undefined,
+    source === 'gitlab-pr' ? changeRequestNumberForItem(item) : undefined,
   );
   const linear = useLinearIssueDetail(
     source === 'linear' ? factoryProjectId : undefined,

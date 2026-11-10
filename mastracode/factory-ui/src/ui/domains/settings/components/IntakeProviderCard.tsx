@@ -1,18 +1,11 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
 import type { IntakeConfig } from '../../factory/services/intake';
-import { settingsSectionPath } from '../settingsSections';
-import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 import { SettingsSectionHeader } from './common/SettingsSectionHeader';
 
 export interface IntakeSectionProps {
   config: IntakeConfig;
-  busy: boolean;
-  update: (next: IntakeConfig) => Promise<void>;
   listed: boolean;
 }
 
@@ -27,9 +20,9 @@ export function IntakeProviderCard({
   icon,
   account,
   listed,
-  connectable = true,
   description,
   action,
+  connection,
   syncControl,
   children,
 }: {
@@ -37,30 +30,17 @@ export function IntakeProviderCard({
   icon: ReactNode;
   account?: string;
   listed: boolean;
-  connectable?: boolean;
   description?: string;
   action?: ReactNode;
+  connection?: ReactNode;
   syncControl?: ReactNode;
   children?: ReactNode;
 }) {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const connectionsPath = factoryId ? settingsSectionPath(factoryId, 'connections') : undefined;
-  const showConnectionAction = listed || connectable;
   const connectionAction = (
     <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:w-auto">
       {listed && syncControl}
       {action}
-      {connectionsPath &&
-        showConnectionAction &&
-        (listed ? (
-          <ConnectionManagementButton render={<Link to={connectionsPath} />}>
-            Manage connection
-          </ConnectionManagementButton>
-        ) : (
-          <Button size="sm" icon={<Link2 />} render={<Link to={`${connectionsPath}?add=1`} />}>
-            Connect {name}
-          </Button>
-        ))}
+      {connection}
     </div>
   );
   if (!listed) {

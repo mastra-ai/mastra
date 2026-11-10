@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.16.6",
+  "version": "0.17.1-alpha.3",
   "description": "Mastra Editor for agent management and instantiation",
   "license": "Apache-2.0",
   "main": "dist/index.cjs",
@@ -64,6 +64,7 @@
   ],
   "scripts": {
     "build": "tsdown",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "dev": "tsdown --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
@@ -98,12 +99,13 @@
     "@types/node": "22.19.15",
     "hono": "^4.13.13",
     "tsdown": "0.23.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^4.6.7"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "@mastra/mcp": ">=1.0.0-0 <3.0.0-0"
   },
   "peerDependenciesMeta": {

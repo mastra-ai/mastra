@@ -49,12 +49,22 @@ const SPAN_QUERY_CONTEXT_FIELDS = new Set([
 const OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE = 'span-query-model-fields';
 const SPAN_QUERY_MODEL_FIELDS = new Set(['model', 'provider']);
 const OBSERVABILITY_SPAN_AGGREGATE_MODEL_DIMENSIONS_STORAGE_FEATURE = 'span-aggregate-model-dimensions';
+const OBSERVABILITY_AGGREGATE_TIME_TO_FIRST_MEASURES_STORAGE_FEATURE = 'aggregate-time-to-first-measures';
 const OBSERVABILITY_SPAN_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE = 'span-query-outcome-fields';
 const OBSERVABILITY_TRACE_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE = 'trace-query-outcome-fields';
 const OUTCOME_FIELDS = new Set(['outcome', 'stopReason']);
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
-const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
+const OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE = 'trace-query-context-fields';
+const TRACE_QUERY_CONTEXT_FIELD_FEATURES = new Map([
+  ['runId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
+  ['sessionId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
+  ['userId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
+  ['organizationId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
+  ['requestId', OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE],
+  ['serviceName', OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE],
+  ['experimentId', OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE],
+]);
 const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE = 'trace-query-time-to-first-chunk';
 const TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS = new Set(['timeToFirstChunkMs']);
 const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_TOKEN_STORAGE_FEATURE = 'trace-query-time-to-first-token';
@@ -194,6 +204,19 @@ export function assertObservabilitySpanAggregateSupported(observabilityStore: Ob
   });
 }
 
+/** Reject unsupported search instead of silently returning unfiltered results. */
+export function assertObservabilityTextSearchSupported(
+  observabilityStore: ObservabilityStorage,
+  textSearch: string | undefined,
+  kind: 'span' | 'trace',
+) {
+  if (textSearch !== undefined && !getFeatures(observabilityStore)?.includes(`${kind}-query-text-search`)) {
+    throw new HTTPException(501, {
+      message: 'Text search is not supported by the configured observability store',
+    });
+  }
+}
+
 export function assertObservabilitySpanQuerySupported(observabilityStore: ObservabilityStorage) {
   if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE)) return;
 
@@ -257,6 +280,44 @@ export function assertObservabilitySpanAggregateModelDimensionsSupported(
 
   throw new HTTPException(501, {
     message: 'Grouping spans by model or provider is not supported by the configured observability store',
+  });
+}
+
+function isTimeToFirstMeasure(name: string): boolean {
+  return name.startsWith('timeToFirstToken.') || name.startsWith('timeToFirstChunk.');
+}
+
+/** `timeToFirstToken.*` / `timeToFirstChunk.*` aggregate measures need a store that compiles them. */
+export function supportsObservabilityAggregateTimeToFirstMeasures(observabilityStore: ObservabilityStorage) {
+  return (
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_AGGREGATE_TIME_TO_FIRST_MEASURES_STORAGE_FEATURE) === true
+  );
+}
+
+/** Drops the time-to-first measures from aggregate discovery when the store cannot compile them. */
+export function filterObservabilityAggregateMeasureDescriptors<T extends { name: string }>(
+  observabilityStore: ObservabilityStorage,
+  descriptors: readonly T[],
+): T[] {
+  return supportsObservabilityAggregateTimeToFirstMeasures(observabilityStore)
+    ? [...descriptors]
+    : descriptors.filter(descriptor => !isTimeToFirstMeasure(descriptor.name));
+}
+
+/** Rejects `timeToFirstToken.*` / `timeToFirstChunk.*` measures on stores that do not compile them. */
+export function assertObservabilityAggregateTimeToFirstMeasuresSupported(
+  observabilityStore: ObservabilityStorage,
+  plan: { measures: readonly { name: string }[] },
+) {
+  if (
+    !plan.measures.some(measure => isTimeToFirstMeasure(measure.name)) ||
+    supportsObservabilityAggregateTimeToFirstMeasures(observabilityStore)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Time to first token and chunk measures are not supported by the configured observability store',
   });
 }
 
@@ -353,27 +414,24 @@ function usesField(
   return fields.has(predicate.field);
 }
 
-export function supportsObservabilityTraceQueryContextIds(observabilityStore: ObservabilityStorage) {
-  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE) === true;
+export function supportsObservabilityTraceQueryContextField(observabilityStore: ObservabilityStorage, path: string) {
+  const feature = TRACE_QUERY_CONTEXT_FIELD_FEATURES.get(path);
+  return feature === undefined || getFeatures(observabilityStore)?.includes(feature) === true;
 }
 
-export function isTraceQueryContextIdField(path: string): boolean {
-  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(path);
-}
-
-export function assertObservabilityTraceQueryContextIdsSupported(
+export function assertObservabilityTraceQueryContextFieldsSupported(
   observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
 ) {
-  if (
-    !usesField(predicate, TRACE_QUERY_CONTEXT_ID_FIELDS) ||
-    supportsObservabilityTraceQueryContextIds(observabilityStore)
-  ) {
-    return;
-  }
+  const unsupported = new Set(
+    [...TRACE_QUERY_CONTEXT_FIELD_FEATURES.keys()].filter(
+      field => !supportsObservabilityTraceQueryContextField(observabilityStore, field),
+    ),
+  );
+  if (!usesField(predicate, unsupported)) return;
 
   throw new HTTPException(501, {
-    message: 'Context identifier predicates are not supported by the configured observability store',
+    message: 'Context field predicates are not supported by the configured observability store',
   });
 }
 
@@ -614,8 +672,10 @@ export type ObservabilityStorageCapabilities = {
   discovery: ObservabilityDiscoveryCapabilities;
   deltaPolling: boolean;
   traceQuery: boolean;
+  traceQueryTextSearch: boolean;
   traceQueryRootDuration: boolean;
   traceQueryContextIds: boolean;
+  traceQueryContextFields: boolean;
   traceQueryTimeToFirstChunk: boolean;
   traceQueryRootSpanFields: boolean;
   traceQueryRootEntityId: boolean;
@@ -628,12 +688,14 @@ export type ObservabilityStorageCapabilities = {
   threadQuery: boolean;
   threadQueryRows: boolean;
   spanQuery: boolean;
+  spanQueryTextSearch: boolean;
   spanQueryContextFields: boolean;
   spanQueryModelFields: boolean;
   spanQueryOutcomeFields: boolean;
   traceQueryOutcomeFields: boolean;
   spanAggregate: boolean;
   spanAggregateModelDimensions: boolean;
+  aggregateTimeToFirstMeasures: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
@@ -652,8 +714,10 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   },
   deltaPolling: false,
   traceQuery: false,
+  traceQueryTextSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
+  traceQueryContextFields: false,
   traceQueryTimeToFirstChunk: false,
   traceQueryRootSpanFields: false,
   traceQueryRootEntityId: false,
@@ -666,10 +730,12 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
+  spanQueryTextSearch: false,
   spanAggregate: false,
   spanQueryContextFields: false,
   spanQueryModelFields: false,
   spanAggregateModelDimensions: false,
+  aggregateTimeToFirstMeasures: false,
   spanQueryOutcomeFields: false,
   traceQueryOutcomeFields: false,
   feedback: false,
@@ -738,10 +804,14 @@ export function getObservabilityStorageCapabilities(
     deltaPolling:
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
     traceQuery,
+    traceQueryTextSearch:
+      traceQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('trace-query-text-search'),
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
     traceQueryContextIds:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE),
+    traceQueryContextFields:
+      (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE),
     traceQueryTimeToFirstChunk:
       (traceQuery || threadQuery || spanQuery) &&
       declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE),
@@ -768,6 +838,8 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
+    spanQueryTextSearch:
+      spanQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('span-query-text-search'),
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     spanQueryModelFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE),
     spanQueryOutcomeFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE),
@@ -778,6 +850,12 @@ export function getObservabilityStorageCapabilities(
       supportsSpanAggregateCore() &&
       declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE) &&
       declares(OBSERVABILITY_SPAN_AGGREGATE_MODEL_DIMENSIONS_STORAGE_FEATURE),
+    aggregateTimeToFirstMeasures:
+      newApiCore &&
+      supportsTraceAggregateCore() &&
+      (declares(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE) ||
+        declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE)) &&
+      declares(OBSERVABILITY_AGGREGATE_TIME_TO_FIRST_MEASURES_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }
@@ -977,6 +1055,13 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/feedback',
     summary: 'List feedback',
     description: 'Returns a paginated list of feedback with optional filtering and sorting',
+  },
+
+  GET_FEEDBACK: {
+    method: 'GET',
+    path: '/observability/feedback/:feedbackId',
+    summary: 'Get feedback',
+    description: 'Returns a single feedback record by feedbackId',
   },
 
   CREATE_FEEDBACK: {

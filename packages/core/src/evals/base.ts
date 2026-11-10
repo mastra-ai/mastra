@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import type { AgentExecutionOptions } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
-import type { AgentMemoryOption, ToolsInput } from '../agent/types';
+import type { AgentInstructions, AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
@@ -33,11 +33,12 @@ import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../processors/index';
-import { RequestContext } from '../request-context';
+import { isReservedRequestContextKey, RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { JSONValue, MastraOnFinishCallback } from '../stream';
 import type { MastraOnStepFinishCallback } from '../stream/types';
+import type { DynamicArgument } from '../types';
 import { selectFields } from '../utils';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
@@ -81,7 +82,12 @@ type ScorerTypeShortcuts = {
  */
 export interface ScorerJudgeConfig {
   model: MastraModelConfig;
-  instructions: string;
+  /**
+   * System instructions for the judge. Accepts the same forms as `Agent` instructions:
+   * text, system messages (which can carry `providerOptions` such as a cache setting),
+   * or a function of `requestContext` that returns either.
+   */
+  instructions: DynamicArgument<AgentInstructions, any>;
   /**
    * Controls how the judge's structured output schema reaches the model.
    * Defaults to automatic capability-based routing.
@@ -142,7 +148,8 @@ export interface ScorerJudgeConfig {
    * Optional request context forwarded to the judge agent execution. When the judge
    * agent has memory with OM observers that read dynamic model config from controller
    * state (e.g. mastracode's `getObserverModel`), this lets the OM system resolve the
-   * correct observer model and provider credentials.
+   * correct observer model and provider credentials. Values from the run's `requestContext`
+   * override these values, except for reserved Mastra keys and `MastraMemory`.
    */
   requestContext?: RequestContext<any>;
 }
@@ -151,7 +158,7 @@ export interface ScorerJudgeConfig {
  * Step-level fields override scorer-level judge fields. Processor arrays replace
  * the scorer-level arrays; omit maxProcessorRetries to inherit its numeric cap.
  */
-export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
+export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions' | 'requestContext'> & {
   /** Per-step memory options merged onto scorer-level `judge.defaultMemoryOptions`. */
   memory?: AgentMemoryOption;
 };
@@ -203,7 +210,10 @@ interface ScorerRun<TInput = any, TOutput = any> {
   /** Expected trajectory config for trajectory scorers. Flows from dataset items or scorer constructor. */
   expectedTrajectory?: TrajectoryExpectation;
 
-  /** Optional request context forwarded to scorers and judge prompts. */
+  /**
+   * Optional request context forwarded to scorer steps and the judge. The judge doesn't
+   * receive the run's reserved Mastra keys or its `MastraMemory` binding.
+   */
   requestContext?: Record<string, any> | RequestContext;
 
   /**
@@ -976,6 +986,24 @@ class MastraScorer<
     return new RequestContext(Object.entries(requestContext));
   }
 
+  private mergeJudgeRequestContext(
+    runRequestContext?: Record<string, any> | RequestContext,
+  ): RequestContext<any> | undefined {
+    const scorerRequestContext = this.config.judge?.requestContext;
+    // Only the caller's own data passes from the run to the judge. Thread, resource, and scope keys and the
+    // memory binding would put the judge on the caller's thread. The other reserved keys, such as the auth token,
+    // stay out by least privilege. A judge that needs one can set it on `judge.requestContext`.
+    const runEntries = [...(this.normalizeRunRequestContext(runRequestContext)?.entries() ?? [])].filter(
+      ([key]) => key !== 'MastraMemory' && !isReservedRequestContextKey(key),
+    );
+
+    if (runEntries.length === 0) {
+      return scorerRequestContext;
+    }
+
+    return new RequestContext<any>([...(scorerRequestContext?.entries() ?? []), ...runEntries]);
+  }
+
   /**
    * Projects the run's RequestContext down to the keys that should be persisted
    * on the scorer-run span input for repeatability.
@@ -1448,6 +1476,7 @@ class MastraScorer<
     }
 
     const prompt = await originalStep.createPrompt(context);
+    const judgeRequestContext = this.mergeJudgeRequestContext(context.run.requestContext);
     const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
@@ -1497,11 +1526,7 @@ class MastraScorer<
 
     // Resolve the model configuration to a LanguageModel instance
     // Pass the Mastra instance to enable custom gateway resolution
-    const resolvedModel = await resolveModelConfig(
-      modelConfig,
-      this.config.judge?.requestContext ?? undefined,
-      this.#mastra,
-    );
+    const resolvedModel = await resolveModelConfig(modelConfig, judgeRequestContext, this.#mastra);
     const judgeModel = resolvedModel.modelId;
     const telemetry: ScorerJudgeTelemetryAccumulator = {
       usage: {},
@@ -1682,7 +1707,7 @@ class MastraScorer<
       ...(memoryOptions ? { memory: memoryOptions } : {}),
       ...(maxSteps ? { maxSteps } : {}),
       ...(modelSettings ? { modelSettings } : {}),
-      ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
+      ...(judgeRequestContext ? { requestContext: judgeRequestContext } : {}),
     };
     const createJudgeStreamRunOptions = () => ({
       ...judgeRunOptions,

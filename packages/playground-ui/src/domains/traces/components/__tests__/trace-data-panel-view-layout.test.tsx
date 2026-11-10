@@ -165,3 +165,98 @@ describe('TraceDataPanelView — persisted widths', () => {
     });
   });
 });
+
+describe('TraceDataPanelView — opening a span while the drawer widens', () => {
+  // A browser rounds each column to whole pixels, so the measured total flips between 627px and
+  // 628px from one clamped layout to the next.
+  let groupWidth = 627.52;
+  const observers = new Set<{ callback: ResizeObserverCallback; target: Element; observer: ResizeObserver }>();
+  class ResizableObserver {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      const entry = { callback: this.callback, target, observer: this as unknown as ResizeObserver };
+      observers.add(entry);
+      queueMicrotask(() => report(entry));
+    }
+    unobserve() {}
+    disconnect() {}
+  }
+  const report = ({
+    callback,
+    target,
+    observer,
+  }: {
+    callback: ResizeObserverCallback;
+    target: Element;
+    observer: ResizeObserver;
+  }) =>
+    callback(
+      [{ target, borderBoxSize: [{ inlineSize: groupWidth, blockSize: 800 }] } as unknown as ResizeObserverEntry],
+      observer,
+    );
+  const resizeDrawer = (width: number) => {
+    groupWidth = width;
+    observers.forEach(report);
+  };
+
+  // A frozen tab is microtasks queueing microtasks with no break for timers or paint. The chain is
+  // capped so a regression fails here instead of hanging the test run.
+  let starved = false;
+  let resetChain: ReturnType<typeof setInterval>;
+  beforeEach(() => {
+    groupWidth = 627.52;
+    observers.clear();
+    starved = false;
+    vi.stubGlobal('ResizeObserver', ResizableObserver);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute('data-separator')) return 0;
+      if (!this.hasAttribute('data-panel')) return groupWidth;
+      const panels = Array.from(this.parentElement?.querySelectorAll<HTMLElement>(':scope > [data-panel]') ?? []);
+      const grows = panels.map(panel => Number.parseFloat(panel.style.flexGrow));
+      if (grows.some(Number.isNaN)) return Math.round(groupWidth / panels.length);
+      const total = grows.reduce((sum, grow) => sum + grow, 0);
+      return Math.round((groupWidth * Number.parseFloat(this.style.flexGrow)) / total);
+    });
+    const queueMicrotask = globalThis.queueMicrotask;
+    let chain = 0;
+    vi.stubGlobal('queueMicrotask', (callback: VoidFunction) => {
+      if (++chain > 1000) {
+        starved = true;
+        return;
+      }
+      queueMicrotask(callback);
+    });
+    resetChain = setInterval(() => (chain = 0), 0);
+  });
+  afterEach(() => clearInterval(resetChain));
+
+  const openSpan = async () => {
+    const workflowTrace = props('workflow_run');
+    const { rerender } = render(<TraceDataPanelView {...workflowTrace} />);
+    await waitFor(() => expect(sidePanelFlexGrow()).toBeTruthy());
+
+    rerender(<TraceDataPanelView {...workflowTrace} spanPanelSlot={<div>span details</div>} />);
+    await screen.findByText('span details');
+    await new Promise(resolve => setTimeout(resolve, 50));
+  };
+
+  it('keeps the tab responsive when a workflow step span opens in a narrow drawer', async () => {
+    await openSpan();
+
+    expect(starved, 'selecting the span froze the tab').toBe(false);
+  });
+
+  it('brings the side and span columns back to their pixel widths once the drawer has widened', async () => {
+    await openSpan();
+
+    resizeDrawer(1200);
+
+    const flexGrow = (id: string) =>
+      Number((document.body.querySelector(`[data-panel][id="${id}"]`) as HTMLElement | null)?.style.flexGrow);
+    await waitFor(() => {
+      expect(flexGrow('trace-side')).toBeCloseTo((320 / 1200) * 100);
+      expect(flexGrow('trace-span')).toBeCloseTo((480 / 1200) * 100);
+    });
+    expect(starved).toBe(false);
+  });
+});

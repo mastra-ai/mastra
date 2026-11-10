@@ -7,6 +7,7 @@ import {
   paginationArgsSchema,
   paginationInfoSchema,
 } from '../shared';
+import { observabilityTextSearchSchema } from './text-search';
 import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
@@ -273,8 +274,8 @@ export const traceAggregateDimensionDescriptorSchema = z
 export const traceAggregateMeasureDescriptorSchema = z
   .object({
     name: z.string(),
-    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost']),
-    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum']).optional(),
+    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost', 'timeToFirstToken', 'timeToFirstChunk']),
+    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum', 'count']).optional(),
     unit: z.enum(['count', 'milliseconds', 'ratio', 'tokens', 'currency']),
     approximate: z.boolean(),
   })
@@ -342,6 +343,7 @@ const pageSchema = z
 
 const traceQueryRequestObjectSchema = z
   .object({
+    textSearch: observabilityTextSearchSchema.optional(),
     timeRange: traceQueryTimeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
     /**
@@ -371,7 +373,7 @@ const traceQueryRequestObjectSchema = z
   .strict()
   .superRefine((request, context) => {
     if (request.mode === 'delta') {
-      for (const field of ['page', 'pagination', 'group', 'orderBy'] as const) {
+      for (const field of ['page', 'pagination', 'group', 'orderBy', 'textSearch'] as const) {
         if (request[field] !== undefined) {
           context.addIssue({ code: 'custom', path: [field], message: `Delta trace queries do not support ${field}` });
         }
@@ -621,6 +623,9 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     sessionId: stringField(false),
     userId: stringField(false),
     organizationId: stringField(false),
+    requestId: stringField(false),
+    serviceName: stringField(false),
+    experimentId: stringField(false),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
@@ -661,6 +666,9 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     sessionId: stringField(false),
     userId: stringField(false),
     organizationId: stringField(false),
+    requestId: stringField(false),
+    serviceName: stringField(false),
+    experimentId: stringField(false),
   },
   scores: {
     scorerId: stringField(true),
@@ -852,6 +860,7 @@ export interface TraceQueryTenantScope {
 
 export interface TrustedTraceQueryBasePlan {
   timeRange: { from: string; to: string };
+  textSearch?: string;
   where?: TrustedTraceQueryPredicate;
   scope?: TraceQueryTenantScope;
 }

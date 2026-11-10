@@ -16,9 +16,10 @@ import type {
   RestartExecutionParams,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  NestedWorkflowParent,
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
-import type { WorkflowEventProcessor } from './workflow-event-processor';
+import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
 import { getStepId } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
@@ -106,6 +107,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
   async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -169,6 +171,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
       isForeignExecution = undefined;
     }
 
+    let watchExecutionLoss:
+      | ((requestContext: RequestContext, runId: string, onLost: (error: Error) => void) => () => void)
+      | undefined;
+    try {
+      watchExecutionLoss = this.resolveWorkflow(params.workflowId, params.runId)?.options?.watchExecutionLoss;
+    } catch {
+      watchExecutionLoss = undefined;
+    }
+
     let pendingCleanupFinish: Event | undefined;
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
       // Another execution of this run (one that lost it to recover(), say) still
@@ -229,6 +240,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
       throw err;
     }
 
+    // A caller whose execution lost the run would otherwise wait forever: a successor's finish is foreign to it,
+    // and a run released with nobody left to finish it publishes none. Stop waiting, without writing anything.
+    const stopWatchingLoss = watchExecutionLoss?.(params.requestContext, params.runId, error => {
+      void pubsub
+        .unsubscribe('workflows-finish', finishCb)
+        .catch(err => this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', err))
+        .finally(() => rejectResult(error));
+    });
+    if (stopWatchingLoss) void resultPromise.then(stopWatchingLoss, stopWatchingLoss);
+
     // NOW safe to publish - listener is guaranteed to be registered
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
     try {
@@ -244,6 +265,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
           data: {
             workflowId: params.workflowId,
             runId: params.runId,
+            parentWorkflow: params.parentWorkflow
+              ? await this.eventProcessor.restoreParentWorkflow(params.parentWorkflow)
+              : undefined,
             executionPath: params.resume.resumePath,
             stepResults: params.resume.stepResults,
             resumeSteps: params.resume.steps,

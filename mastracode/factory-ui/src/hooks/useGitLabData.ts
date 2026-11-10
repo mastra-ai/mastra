@@ -1,4 +1,4 @@
-import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { queryOptions, skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -12,13 +12,13 @@ import {
 } from '../ui/domains/factory/services/gitlab';
 import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 
+export function gitLabStatusQueryOptions(baseUrl: string) {
+  return queryOptions({ queryKey: queryKeys.gitlabStatus(baseUrl), queryFn: () => fetchGitLabStatus(baseUrl) });
+}
+
 export function useGitLabStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.gitlabStatus(baseUrl),
-    queryFn: () => fetchGitLabStatus(baseUrl),
-    enabled,
-  });
+  return useQuery({ ...gitLabStatusQueryOptions(baseUrl), enabled });
 }
 
 export function useGitLabProjectsQuery(enabled: boolean) {
@@ -30,17 +30,16 @@ export function useGitLabProjectsQuery(enabled: boolean) {
   });
 }
 
-export function useGitLabIssuesQuery(factoryProjectId: string | undefined, board: string | undefined) {
+export function useGitLabIssuesQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.gitlabIssues(baseUrl, factoryProjectId, board),
-    queryFn:
-      factoryProjectId && board
-        ? ({ pageParam }) => listGitLabIssues(baseUrl, factoryProjectId, board, pageParam || undefined)
-        : skipToken,
+    queryKey: queryKeys.gitlabIssues(baseUrl, factoryProjectId),
+    queryFn: factoryProjectId
+      ? ({ pageParam }) => listGitLabIssues(baseUrl, factoryProjectId, pageParam || undefined)
+      : skipToken,
     initialPageParam: '',
     getNextPageParam: lastPage => lastPage.nextCursor,
-    enabled: factoryProjectId !== undefined && board !== undefined,
+    enabled: factoryProjectId !== undefined,
     select: data => data.pages.flatMap(page => page.issues),
     refetchInterval: INTAKE_POLL_MS,
     refetchOnWindowFocus: true,

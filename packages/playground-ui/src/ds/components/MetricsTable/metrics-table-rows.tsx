@@ -16,7 +16,9 @@ const ROW_LINE =
  * Rows are 34.5px: 7px above 13px text (a 19.5px line) and 8px below, one more pixel for the
  * separator drawn in the row's last pixel, so text sits centered between the lines.
  */
-const ROW = cn('relative col-span-full grid grid-cols-subgrid items-center px-3 pt-1.75 pb-2 text-body-sm', ROW_LINE);
+const ROW_BOX = 'pt-1.75 pb-2 text-body-sm';
+
+const ROW = cn('relative col-span-full grid grid-cols-subgrid items-center px-3', ROW_BOX, ROW_LINE);
 
 /** Skeleton widths for the first column's names, so loading rows don't look stamped. */
 const SKELETON_NAMES = ['w-32', 'w-24', 'w-36', 'w-20', 'w-28'];
@@ -49,8 +51,8 @@ export type MetricsTableBodyProps<Row> = RowBehavior<Row> & {
   rows: Row[];
   getRowKey: (row: Row) => string;
   empty: MetricsTableProps<Row>['empty'];
-  /** Rows drawn while loading. */
-  skeletonRows: number;
+  /** A paged table's rows per page: drawn while loading, and kept as the empty table's height. */
+  pageSize: number | undefined;
   isLoading: boolean;
 };
 
@@ -60,16 +62,32 @@ export function MetricsTableBody<Row>({
   rows,
   getRowKey,
   empty,
-  skeletonRows,
+  pageSize,
   isLoading,
   ...behavior
 }: MetricsTableBodyProps<Row>) {
   if (isLoading) {
-    return Array.from({ length: skeletonRows }, (_, i) => (
+    return Array.from({ length: pageSize ?? 5 }, (_, i) => (
       <MetricsTableSkeletonRow key={i} columns={columns} rowIndex={i} />
     ));
   }
   if (rows.length === 0) {
+    if (pageSize) {
+      if (empty === undefined) return <MetricsTableFiller count={pageSize} />;
+      // Empty, a paged table keeps at least a full page's height, with the message in its middle.
+      // Both share one grid cell, so a message taller than the page still grows the row.
+      return (
+        <div role="row" className="col-span-full grid *:col-start-1 *:row-start-1">
+          <MetricsTableFiller count={pageSize} />
+          <p
+            role="cell"
+            className="flex items-center justify-center px-3 py-4 text-center text-body-sm text-muted-foreground"
+          >
+            {empty}
+          </p>
+        </div>
+      );
+    }
     if (empty === undefined) return null;
     return (
       <div role="row" className="col-span-full">
@@ -80,6 +98,23 @@ export function MetricsTableBody<Row>({
     );
   }
   return rows.map(row => <MetricsTableRow key={getRowKey(row)} row={row} columns={columns} {...behavior} />);
+}
+
+/**
+ * Blank space as tall as `count` rows, so a paged table is a full page tall however many rows it
+ * shows. Rows of the same box, not a fixed height, so it follows the row's text size.
+ */
+export function MetricsTableFiller({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <div aria-hidden data-slot="metrics-table-filler" className="col-span-full">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className={ROW_BOX}>
+          {'\u200b'}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** A loading row: the real row's markup with a bar in each cell, so it has the same height. */

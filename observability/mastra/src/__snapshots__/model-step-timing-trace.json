@@ -297,7 +297,11 @@
                         "role": "user",
                         "content": "Hello"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Hello world",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

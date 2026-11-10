@@ -13,6 +13,7 @@ import {
   MASTRA_AUTH_MODE_KEY,
 } from '../constants';
 import { HTTPException } from '../http-exception';
+import { CustomRouteMatcher, getCustomRouteAuthConfigMatcher } from './custom-route-matcher';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -20,87 +21,127 @@ import { parse } from './path-pattern';
 // auth state without importing internal paths.
 export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
 
+type CustomRouteAuthDecision = 'protected' | 'public' | 'none';
+
 /**
- * Check if a route is a registered custom route that requires authentication.
- * Returns true only if the route is explicitly registered with requiresAuth: true.
- * Returns false if the route is not in the config or has requiresAuth: false.
+ * Decide auth for a request from the custom route the custom-route app will dispatch
+ * it to (see `CustomRouteMatcher`), not from whichever pattern happens to match.
+ *
+ * Fails closed:
+ * - an exact `METHOD:path` (or `ALL:path`) entry that requires auth always wins, so a
+ *   path registered as protected is never served without auth;
+ * - `path` may be a raw request path (Express, Koa, Fastify) or one Hono already
+ *   decoded, so it's resolved both ways and is only public if every reading lands on
+ *   a public route, and protected if any reading lands on a protected one;
+ * - if the routes or the path can't be parsed, the request is treated as protected.
+ */
+const resolveCustomRouteAuth = (
+  path: string,
+  method: string,
+  customRouteAuthConfig: Map<string, boolean>,
+): CustomRouteAuthDecision => {
+  const upperMethod = method.toUpperCase();
+  const methods = upperMethod === 'HEAD' ? ['HEAD', 'GET'] : [upperMethod];
+  for (const m of methods) {
+    if (customRouteAuthConfig.get(`${m}:${path}`) === true || customRouteAuthConfig.get(`ALL:${path}`) === true) {
+      return 'protected';
+    }
+  }
+
+  // Adapters pin the current request by appending `METHOD:path` to a copy of the map.
+  // As the last entry it only decides when no earlier route matches, so resolve the
+  // rest with a cached matcher and fall back to it, instead of building a new router
+  // for every request path.
+  const keys = [...customRouteAuthConfig.keys()];
+  const lastKey = keys[keys.length - 1];
+  const pinnedKey =
+    lastKey !== undefined && methods.some(m => lastKey === `${m}:${path}` || lastKey === `ALL:${path}`)
+      ? lastKey
+      : undefined;
+
+  let matcher: ReturnType<typeof getCustomRouteAuthConfigMatcher>;
+  const candidates = new Set<string>([path]);
+  try {
+    matcher = getCustomRouteAuthConfigMatcher(pinnedKey ? keys.slice(0, -1) : keys);
+    candidates.add(matcher.dispatchPathForRawPath(path));
+  } catch {
+    return 'protected';
+  }
+
+  let matchedPublic = false;
+  let unmatched = false;
+  for (const candidate of candidates) {
+    let key: string | undefined;
+    try {
+      key = matcher.matchPath(candidate, upperMethod)?.entry.key;
+    } catch {
+      return 'protected';
+    }
+    if (key === undefined && pinnedKey && candidate === path) {
+      key = pinnedKey;
+    }
+    if (key === undefined) {
+      unmatched = true;
+      continue;
+    }
+    if (customRouteAuthConfig.get(key) !== false) {
+      return 'protected';
+    }
+    matchedPublic = true;
+  }
+
+  return matchedPublic && !unmatched ? 'public' : 'none';
+};
+
+/**
+ * Check if a request will be handled by a registered custom route that requires
+ * authentication. The route that decides is the one the custom-route app dispatches
+ * to (first registered match), using Hono's own matching. Returns false when no
+ * custom route handles the request.
  */
 export const isProtectedCustomRoute = (
   path: string,
   method: string,
   customRouteAuthConfig?: Map<string, boolean>,
 ): boolean => {
-  if (!customRouteAuthConfig) {
+  if (!customRouteAuthConfig || customRouteAuthConfig.size === 0) {
     return false;
   }
-
-  // Check exact match first (fast path for static routes)
-  const exactRouteKey = `${method}:${path}`;
-  if (customRouteAuthConfig.has(exactRouteKey)) {
-    return customRouteAuthConfig.get(exactRouteKey) === true;
-  }
-
-  // Check exact match for ALL method
-  const allRouteKey = `ALL:${path}`;
-  if (customRouteAuthConfig.has(allRouteKey)) {
-    return customRouteAuthConfig.get(allRouteKey) === true;
-  }
-
-  // Check pattern matches for dynamic routes (e.g., '/users/:id')
-  for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
-    const colonIndex = routeKey.indexOf(':');
-    if (colonIndex === -1) {
-      continue; // Skip malformed keys
-    }
-
-    const routeMethod = routeKey.substring(0, colonIndex);
-    const routePattern = routeKey.substring(colonIndex + 1);
-
-    // Check if method matches (exact match or ALL)
-    if (routeMethod !== method && routeMethod !== 'ALL') {
-      continue;
-    }
-
-    // Check if path matches the pattern
-    if (pathMatchesPattern(path, routePattern)) {
-      return requiresAuth === true;
-    }
-  }
-
-  return false; // Not in config = not a protected custom route
+  return resolveCustomRouteAuth(path, method, customRouteAuthConfig) === 'protected';
 };
 
+const apiRouteMatchers = new WeakMap<
+  readonly ApiRoute[],
+  { signature: string; matcher: CustomRouteMatcher<ApiRoute> }
+>();
+
 /**
- * Find a matching custom API route for the given path and method.
- * Returns the matched route and any extracted path parameters.
+ * Find the custom API route Hono dispatches `path` to, with its decoded path params.
+ * `path` is in the form Hono's `c.req.path` returns (no query string, decoded once).
+ * Matching follows Hono: first registered match wins, case-sensitive, strict
+ * trailing slash, and HEAD is served by GET routes.
  */
 export const findMatchingCustomRoute = (
   path: string,
   method: string,
   apiRoutes?: ApiRoute[],
 ): { route: ApiRoute; params: Record<string, string> } | undefined => {
-  if (!apiRoutes) return undefined;
+  if (!apiRoutes || apiRoutes.length === 0) return undefined;
 
-  for (const route of apiRoutes) {
-    if (route.method !== method && route.method !== 'ALL') continue;
-
-    const { keys, pattern: regex } = parse(route.path);
-    const match = regex.exec(path);
-    if (!match) continue;
-
-    const params: Record<string, string> = {};
-    if (keys && keys.length > 0) {
-      for (let i = 0; i < keys.length; i++) {
-        if (match[i + 1] !== undefined) {
-          params[keys[i]!] = match[i + 1]!;
-        }
-      }
-    }
-
-    return { route, params };
+  const signature = JSON.stringify(apiRoutes.map(route => `${route.method}:${route.path}`));
+  let cached = apiRouteMatchers.get(apiRoutes);
+  if (!cached || cached.signature !== signature) {
+    cached = { signature, matcher: new CustomRouteMatcher(apiRoutes) };
+    apiRouteMatchers.set(apiRoutes, cached);
   }
 
-  return undefined;
+  try {
+    const match = cached.matcher.matchPath(path, method);
+    return match ? { route: match.entry, params: match.params } : undefined;
+  } catch {
+    // Hono can't route these paths either, so no custom route handles the request.
+    return undefined;
+  }
 };
 
 /**
@@ -125,53 +166,21 @@ export const isDevPlaygroundRequest = (
   );
 };
 
+/**
+ * Check if a request will be handled by a custom route registered as public
+ * (`requiresAuth: false`). Uses the same dispatch-order resolution as
+ * `isProtectedCustomRoute`, and returns false (not public) when no custom route
+ * handles the request or the answer is ambiguous.
+ */
 export const isCustomRoutePublic = (
   path: string,
   method: string,
   customRouteAuthConfig?: Map<string, boolean>,
 ): boolean => {
-  if (!customRouteAuthConfig) {
+  if (!customRouteAuthConfig || customRouteAuthConfig.size === 0) {
     return false;
   }
-
-  // Check exact match first (fast path for static routes)
-  const exactRouteKey = `${method}:${path}`;
-  if (customRouteAuthConfig.has(exactRouteKey)) {
-    return !customRouteAuthConfig.get(exactRouteKey); // True when route opts out of auth
-  }
-
-  // Check exact match for ALL method
-  const allRouteKey = `ALL:${path}`;
-  if (customRouteAuthConfig.has(allRouteKey)) {
-    return !customRouteAuthConfig.get(allRouteKey);
-  }
-
-  // Check pattern matches for dynamic routes (e.g., '/users/:id').
-  // Any matching pattern that requires auth wins over overlapping public patterns.
-  let matchedPublic = false;
-  for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
-    const colonIndex = routeKey.indexOf(':');
-    if (colonIndex === -1) {
-      continue; // Skip malformed keys
-    }
-
-    const routeMethod = routeKey.substring(0, colonIndex);
-    const routePattern = routeKey.substring(colonIndex + 1);
-
-    // Check if method matches (exact match or ALL)
-    if (routeMethod !== method && routeMethod !== 'ALL') {
-      continue;
-    }
-
-    if (pathMatchesPattern(path, routePattern)) {
-      if (requiresAuth) {
-        return false;
-      }
-      matchedPublic = true;
-    }
-  }
-
-  return matchedPublic;
+  return resolveCustomRouteAuth(path, method, customRouteAuthConfig) === 'public';
 };
 
 // NOTE: This uses isProtectedCustomRoute (default-allow for unknown paths) rather than
@@ -294,6 +303,31 @@ export type AuthResult =
   | { action: 'error'; status: number; body: Record<string, unknown>; headers?: Record<string, string> };
 
 const pass: AuthResult = { action: 'next' };
+
+/**
+ * Lets an app's `authorize(path, method, user, context)` read `context.get('requestContext')` and
+ * `context.get('mastra')` on every adapter, as it can on Hono, so per-caller values (the Knowledge scope) bind
+ * the same way everywhere. Hono and NestJS contexts already answer `get`; Express, Fastify and Koa pass a web
+ * Request, Elysia its own context, and adapters with no builder pass nothing.
+ */
+const withAuthorizeVariables = (
+  base: unknown,
+  ctx: Pick<AuthMiddlewareContext, 'mastra' | 'requestContext' | 'customRouteAuthConfig' | 'rawRequest'>,
+): unknown => {
+  const variables: Record<string, unknown> = {
+    mastra: ctx.mastra,
+    requestContext: ctx.requestContext,
+    customRouteAuthConfig: ctx.customRouteAuthConfig,
+  };
+  const get = (key: string) => variables[key];
+  if (base === null || base === undefined) {
+    return { get, req: ctx.rawRequest };
+  }
+  if (typeof base === 'object' && typeof (base as { get?: unknown }).get !== 'function') {
+    Object.defineProperty(base, 'get', { value: get, configurable: true });
+  }
+  return base;
+};
 
 const adaptToMastraAuthRequest = (request: MastraAuthRequest): MastraAuthRequest => {
   if (!(request instanceof Request)) {
@@ -570,63 +604,98 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   // ── Authorization ──
 
+  const authorizationError = await authorizeAuthenticatedUser({
+    path,
+    method,
+    user,
+    mastra,
+    authConfig,
+    customRouteAuthConfig,
+    requestContext,
+    rawRequest,
+    buildAuthorizeContext: ctx.buildAuthorizeContext,
+  });
+  if (authorizationError) {
+    return { action: 'error', ...authorizationError, headers: refreshHeaders };
+  }
+
+  return refreshHeaders ? { action: 'next', headers: refreshHeaders } : pass;
+};
+
+export interface AuthorizeAuthenticatedUserContext {
+  path: string;
+  method: string;
+  user: unknown;
+  mastra: Mastra;
+  authConfig: MastraAuthConfig;
+  customRouteAuthConfig?: Map<string, boolean>;
+  requestContext: AuthMiddlewareContext['requestContext'];
+  rawRequest: MastraAuthRequest;
+  buildAuthorizeContext: () => unknown;
+}
+
+/**
+ * The authorization step of server auth for an already authenticated user:
+ * `authorizeUser`, `authorize(path, method, user)`, `rules`, or the RBAC default rules.
+ * Returns null when the user may access `method path`.
+ */
+export const authorizeAuthenticatedUser = async (
+  ctx: AuthorizeAuthenticatedUserContext,
+): Promise<{ status: number; body: Record<string, unknown> } | null> => {
+  const { path, method, user, mastra, authConfig, requestContext, rawRequest } = ctx;
+  const denied = { status: 403, body: { error: 'Access denied' } };
+
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {
-      const isAuthorized = await authConfig.authorizeUser(user, authRequest);
-
-      if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+      const isAuthorized = await authConfig.authorizeUser(user, adaptToMastraAuthRequest(rawRequest));
+      return isAuthorized ? null : denied;
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorizeUser', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
+      return { status: 500, body: { error: 'Authorization error' } };
     }
-  } else if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
-    try {
-      const authorizeCtx = ctx.buildAuthorizeContext();
-      const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
+  }
 
-      if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+  if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
+    try {
+      const authorizeCtx = withAuthorizeVariables(ctx.buildAuthorizeContext(), {
+        mastra,
+        requestContext,
+        customRouteAuthConfig: ctx.customRouteAuthConfig,
+        rawRequest,
+      });
+      const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
+      return isAuthorized ? null : denied;
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorize', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
         path,
         method,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
-    }
-  } else if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
-    const isAuthorized = await checkRules(authConfig.rules, path, method, user);
-
-    if (!isAuthorized) {
-      return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-    }
-  } else {
-    // No explicit authorization configured (authorizeUser, authorize, or rules)
-    // Check if RBAC is configured - if not, allow authenticated users through
-    // (auth-only mode = authenticated users get full access)
-    const rbacProvider =
-      requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
-        ? (mastra.getStudio?.()?.rbac ?? mastra.getServer()?.rbac)
-        : mastra.getServer()?.rbac;
-    if (rbacProvider) {
-      if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
-        const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
-
-        if (!isAuthorized) {
-          return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-        }
-      } else {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+      return { status: 500, body: { error: 'Authorization error' } };
     }
   }
 
-  return refreshHeaders ? { action: 'next', headers: refreshHeaders } : pass;
+  if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
+    return (await checkRules(authConfig.rules, path, method, user)) ? null : denied;
+  }
+
+  // No explicit authorization configured (authorizeUser, authorize, or rules)
+  // Check if RBAC is configured - if not, allow authenticated users through
+  // (auth-only mode = authenticated users get full access)
+  const rbacProvider =
+    requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
+      ? (mastra.getStudio?.()?.rbac ?? mastra.getServer()?.rbac)
+      : mastra.getServer()?.rbac;
+  if (rbacProvider) {
+    if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
+      return (await checkRules(defaultAuthConfig.rules, path, method, user)) ? null : denied;
+    }
+    return denied;
+  }
+
+  return null;
 };
 
 // Check authorization rules

@@ -11,7 +11,9 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { boardFlow, boardPhaseOutcomes } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource, StoredBoardDetails } from '../boards/project-boards.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
@@ -23,7 +25,7 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { WorkItemSource } from '../rules/types.js';
+import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -36,7 +38,7 @@ import type {
   CreateWorkItemInput,
   FactoryDeferredDecisionRecord,
   UpdateWorkItemInput,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import {
@@ -51,7 +53,7 @@ import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/deci
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -62,6 +64,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Boards installed for this Factory instance. */
   /** A fixed registry, or the per-project boards. Defaults to the built-in boards. */
   boardRegistry?: BoardRegistry | ProjectBoardSource;
+  /** The project's intake routes, which place a card filed without a board. */
+  intakeRoutes?: IntakeRoutesReader;
   /** Comments domain — backs the mention attention provider. */
   comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
@@ -75,20 +79,17 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
-function toWireWorkItem(item: WorkItemRow): WorkItemRow {
-  if (
-    !item.metadata ||
-    (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
-      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata) &&
-      !(EXTERNAL_SOURCE_MISSING_KEY in item.metadata))
-  ) {
-    return item;
-  }
-  return { ...item, metadata: publicWorkItemMetadata(item.metadata) ?? {} };
+function toWireWorkItem(item: Card): Card {
+  return {
+    ...item,
+    workItem: { ...item.workItem, metadata: publicWorkItemMetadata(item.workItem.metadata) },
+    // Keep the legacy wire metadata for one release; storage remains strictly split.
+    metadata: publicWorkItemMetadata({ ...item.workItem.metadata, ...item.metadata }) ?? {},
+  };
 }
 
 /** Session ids of the listed cards that the predicate picks, each once. */
-function sessionIdsWhere(items: readonly WorkItemRow[], predicate: (sessionId: string) => boolean): string[] {
+function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) => boolean): string[] {
   const picked = new Set<string>();
   for (const item of items) {
     for (const { sessionId } of Object.values(item.sessions)) {
@@ -96,10 +97,6 @@ function sessionIdsWhere(items: readonly WorkItemRow[], predicate: (sessionId: s
     }
   }
   return [...picked];
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -282,7 +279,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     patch,
   }: {
     context: Context;
-    item: WorkItemRow;
+    item: Card;
     patch: Record<string, unknown>;
   }): Promise<void> {
     await this.deps.audit.emit({
@@ -351,6 +348,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               title: board.name,
               ...(board.description !== undefined ? { description: board.description } : {}),
               initialPhase: board.initialPhase,
+              flow: catalogFlow(boardFlow(board)),
               phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
                 id: phaseId,
                 name: phase.name,
@@ -363,6 +361,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                       role: phase.runner.context,
                       context: phase.runner.context,
                       ...(phase.runner.skill ? { skill: phase.runner.skill } : {}),
+                      ...(phase.runner.goal ? { goal: { ...phase.runner.goal } } : {}),
                       autoStart: phase.autoStart === true,
                       ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
                       ...(phase.exitTool
@@ -376,6 +375,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                             },
                           }
                         : {}),
+                      ...(phase.tools ? { tools: [...phase.tools] } : {}),
                     }
                   : {}),
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
@@ -424,7 +424,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ metrics: computeFactoryMetrics(items, { windowStart, windowEnd }) });
+          const boards = await this.#boards.load({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({
+            metrics: computeFactoryMetrics(items, { windowStart, windowEnd }, boardPhaseOutcomes(boards)),
+          });
         },
       }),
 
@@ -541,6 +547,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               workItems,
               boards: await this.#boards.load(resolved),
               transitionService,
+              intakeRoutes: this.deps.intakeRoutes,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
               userId: resolved.userId,
@@ -756,4 +763,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       }),
     ];
   }
+}
+
+/** A board's loop parts, by phase key, as the catalog reports them. */
+function catalogFlow(flow: FactoryRuleBoardFlow) {
+  return {
+    ...(flow.triage ? { triage: flow.triage } : {}),
+    ...(flow.build ? { build: flow.build } : {}),
+    ...(flow.selfReview ? { selfReview: flow.selfReview } : {}),
+    ...(flow.pullRequestReview ? { pullRequestReview: flow.pullRequestReview } : {}),
+    ...(flow.completed ? { completed: flow.completed.phase } : {}),
+    ...(flow.canceled ? { canceled: flow.canceled.phase } : {}),
+  };
 }
