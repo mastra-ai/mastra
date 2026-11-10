@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { compileStoredBoard } from '@mastra/factory/boards/stored-board';
 import { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -661,14 +661,22 @@ describe('BoardsSection', () => {
       it('closes Settings to the Factory after its last board is deleted', async () => {
         const stored = [bugs];
         serveProject({ work: false, stored });
+        const readAfterDelete = vi.fn();
         server.use(
           http.delete(`${CATALOG_URL}/bugs`, () => {
             stored.length = 0;
             return new HttpResponse(null, { status: 204 });
           }),
-          http.get(CATALOG_URL, () =>
-            HttpResponse.json({ boards: stored.map(({ board }) => catalogInfo(compileStoredBoard(board))) }),
-          ),
+          http.get(`${CATALOG_URL}/bugs`, () => {
+            if (stored.length > 0) return HttpResponse.json(bugs);
+            readAfterDelete();
+            return HttpResponse.json({ error: 'board_not_found', message: 'Board not found.' }, { status: 404 });
+          }),
+          // Slow enough that the deleted board is still listed when Settings picks what to show next.
+          http.get(CATALOG_URL, async () => {
+            if (stored.length === 0) await delay(150);
+            return HttpResponse.json({ boards: stored.map(({ board }) => catalogInfo(compileStoredBoard(board))) });
+          }),
         );
         const user = userEvent.setup();
         renderSection('', '/factories/fp-1/boards/bugs');
@@ -680,6 +688,7 @@ describe('BoardsSection', () => {
         expect(screen.queryByText('Board not found.')).not.toBeInTheDocument();
         expect(screen.getByRole('status', { name: 'Closes to' })).toHaveTextContent(/^\/factories\/fp-1$/);
         expect(location()).toHaveTextContent(/\/factories\/fp-1\/settings\/board$/);
+        expect(readAfterDelete).not.toHaveBeenCalled();
       });
     });
 

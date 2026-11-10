@@ -3,7 +3,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/r
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { CreateBoardBody, ReplaceBoardBody, StoredBoardResponse } from '../api/types';
+import type { BoardCatalogResponse, CreateBoardBody, ReplaceBoardBody, StoredBoardResponse } from '../api/types';
 
 /** A refused board request, keeping the server's error code and, for code-behaviour refusals, every conflict. */
 export class BoardRequestError extends Error {
@@ -142,6 +142,11 @@ export function useDeleteBoardMutation(factoryProjectId: string | undefined, boa
       if (!res.ok) throw refusal(res.status, (await res.json().catch(() => undefined)) as BoardRefusal | undefined);
     },
     onSuccess: async () => {
+      // The list still names the board until it is read again, and what shows next is picked from it.
+      queryClient.setQueryData<BoardCatalogResponse>(
+        queryKeys.boardCatalog(factoryProjectId),
+        catalog => catalog && { ...catalog, boards: catalog.boards.filter(board => board.id !== boardKey) },
+      );
       onDeleted();
       queryClient.removeQueries({ queryKey: queryKeys.board(factoryProjectId, boardKey), exact: true });
       await queryClient.invalidateQueries({ queryKey: queryKeys.boardCatalog(factoryProjectId), exact: true });
