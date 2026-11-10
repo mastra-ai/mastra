@@ -121,13 +121,26 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
 
       /** Waits for the run's finish event, then reports the Redis memory its stream log takes. */
       async function storedRunBytes(runId: string): Promise<number> {
+        // The stream key and, with a Redis cache, the replay list are appended separately: wait
+        // until each holds the finish event, so both runs are measured complete.
+        const logKeys = cache === 'redis' ? 2 : 1;
+        let keys: string[] = [];
         await vi.waitFor(async () => {
-          expect(await storedRunLog(runId)).toMatch(/\\?"type\\?":\\?"finish\\?"/);
+          keys = [];
+          for (const key of await redis.keys(`*agent.stream.${runId}*`)) {
+            const type = await redis.type(key);
+            if (type !== 'stream' && type !== 'list') continue;
+            const entries =
+              type === 'stream'
+                ? (await redis.xRange(key, '-', '+')).map(entry => JSON.stringify(entry.message))
+                : await redis.lRange(key, 0, -1);
+            expect(entries.join('\n')).toMatch(/\\?"type\\?":\\?"finish\\?"/);
+            keys.push(key);
+          }
+          expect(keys).toHaveLength(logKeys);
         });
         let bytes = 0;
-        for (const key of await redis.keys(`*agent.stream.${runId}*`)) {
-          bytes += Number((await redis.memoryUsage(key, { SAMPLES: 0 })) ?? 0);
-        }
+        for (const key of keys) bytes += Number((await redis.memoryUsage(key, { SAMPLES: 0 })) ?? 0);
         return bytes;
       }
 
