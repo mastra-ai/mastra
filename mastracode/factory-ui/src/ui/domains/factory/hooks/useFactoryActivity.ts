@@ -1,4 +1,5 @@
 import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { liveSessionCounts, periodActivity } from '../periodActivity';
@@ -17,11 +18,13 @@ export function useFactoryActivity(factoryId: string, period: ActivityPeriod) {
   const runs = useRunStarts(factoryId, period);
   const running = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
   const parked = useParkedSessions(factoryId);
+  const boards = useBoardCatalog(factoryId).data;
   const cards = workItems.data ?? [];
   const activity = periodActivity({
     period,
     now: Math.max(workItems.dataUpdatedAt, runs.dataUpdatedAt),
     cards,
+    boards,
     runStarts: runs.data ?? NO_RUN_STARTS,
   });
   const runsState: RunsState = { status: runs.status, complete: activity.ranComplete };

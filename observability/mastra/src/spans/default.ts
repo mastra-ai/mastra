@@ -10,6 +10,13 @@ import type {
 import { BaseSpan } from './base';
 import { deepClean } from './serialization';
 
+/**
+ * @internal End options with an explicit end time, for spans whose work finished
+ * before the data they report on was available (MODEL_INFERENCE ends at the
+ * provider finish but takes its output from the processed step).
+ */
+export type EndSpanOptionsWithTime<TType extends SpanType> = EndSpanOptions<TType> & { endTime?: Date };
+
 /** Every AI SDK `APICallError` (v4, v5 and v6) carries this shared marker symbol. */
 const API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
 
@@ -131,7 +138,8 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
     if (options) this.applyOutcome(options);
     if (this.outcome === null) this.outcome = 'unknown';
-    this.endTime = new Date();
+    const endTime = (options as EndSpanOptionsWithTime<TType> | undefined)?.endTime;
+    this.endTime = endTime instanceof Date && endTime >= this.startTime ? endTime : new Date();
     this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).
     if (options?.metadata) {

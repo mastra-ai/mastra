@@ -382,12 +382,17 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return scopes.some(scope => scope === 'comments:create' || scope === 'write' || scope === 'admin');
   }
 
-  async checkConnection(orgId: string): Promise<LinearConnectionCheck> {
-    const connection = await this.loadConnection(orgId);
+  async checkConnection(_orgId: string): Promise<LinearConnectionCheck> {
+    // One snapshot for everything, so the count and the slug can't disagree.
+    // A single link pattern is only accurate with one connected workspace;
+    // with several, agents must link issues by their own `url`.
+    const workspaces = await this.#listWorkspaces();
+    const connected = workspaces.length > 0;
     return {
-      connected: connection !== null,
-      canComment: connection !== null && this.canPostComments(connection),
-      workspaceUrlKey: connection?.workspaceUrlKey ?? null,
+      connected,
+      // Platform-managed connections always carry the `comments:create` scope.
+      canComment: connected,
+      workspaceUrlKey: workspaces.length === 1 ? (workspaces[0]?.urlKey ?? null) : null,
       checkedAt: Date.now(),
     };
   }

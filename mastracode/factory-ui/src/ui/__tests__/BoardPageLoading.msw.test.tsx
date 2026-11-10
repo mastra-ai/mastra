@@ -18,7 +18,7 @@ const WORK_COLUMNS = [
   { id: 'triage', label: 'Triage' },
   { id: 'planning', label: 'Planning' },
   { id: 'execute', label: 'Building' },
-  { id: 'review', label: 'Review' },
+  { id: 'pr-review', label: 'Review' },
   { id: 'done', label: 'Done' },
   { id: 'canceled', label: 'Canceled' },
 ] as const;

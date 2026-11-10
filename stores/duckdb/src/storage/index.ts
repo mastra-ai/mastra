@@ -112,6 +112,10 @@ type ObservabilityStoreImpl = ObservabilityStorageDuckDBImpl;
  * which lets DuckDBStore degrade cleanly when paired with an older @mastra/core runtime.
  */
 export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
+  override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   private db: DuckDBConnection;
   private delegate: ObservabilityStoreImpl | null = null;
   private loadPromise: Promise<ObservabilityStoreImpl | null> | null = null;

@@ -356,6 +356,34 @@ describe('Factory rule validation', () => {
     }
   });
 
+  it('carries a goal on an invokeSkill decision and refuses a malformed one', () => {
+    const base = {
+      type: 'invokeSkill',
+      idempotencyKey: 'build-goal',
+      role: 'work',
+      skillName: 'factory-build',
+    } as const;
+    expect(validateFactoryRuleDecision({ ...base, goal: { objective: '  Ship the plan.  ', maxRuns: 20 } })).toEqual({
+      ...base,
+      goal: { objective: 'Ship the plan.', maxRuns: 20 },
+    });
+    expect(validateFactoryRuleDecision({ ...base, goal: { objective: 'Ship the plan.' } })).toEqual({
+      ...base,
+      goal: { objective: 'Ship the plan.' },
+    });
+    for (const goal of [
+      'Ship the plan.',
+      { objective: '' },
+      { objective: 'x'.repeat(2001) },
+      { objective: 'Ship.', maxRuns: 0 },
+      { objective: 'Ship.', maxRuns: 51 },
+      { objective: 'Ship.', maxRuns: 1.5 },
+      { objective: 'Ship.', judge: 'model' },
+    ]) {
+      expect(() => validateFactoryRuleDecision({ ...base, goal } as never)).toThrow(/Factory skill goal/);
+    }
+  });
+
   it('accepts and normalizes the optional cancelInFlight flag on invokeSkill decisions', () => {
     expect(
       validateFactoryRuleDecision({
