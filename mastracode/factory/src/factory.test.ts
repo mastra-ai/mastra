@@ -432,7 +432,9 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("duplicate board id 'work'");
+    ).toThrow(
+      "MastraFactory: board id 'work' is Factory's Work board, which every project has. To run your own, store it under 'work' with factory.upsertBoard(board, { projects: 'all' }).",
+    );
   });
 
   describe('app skills', () => {
@@ -488,16 +490,18 @@ describe('MastraFactory constructor', () => {
     });
   });
 
-  it('allows replacing a built-in board when default boards are disabled', () => {
-    expect(
-      () =>
-        new MastraFactory({
-          secretEncryption,
-          storage: fakeStorage(),
-          includeDefaultBoards: false,
-          boards: [createTestBoard({ id: 'work' })],
-        }),
-    ).not.toThrow();
+  it('accepts and ignores the retired includeDefaultBoards, warning once per process', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const retired = (message: unknown) => String(message).includes('MastraFactory({ includeDefaultBoards })');
+    for (const includeDefaultBoards of [false, true, false]) {
+      expect(() => new MastraFactory({ secretEncryption, storage: fakeStorage(), includeDefaultBoards })).not.toThrow();
+    }
+    expect(warn.mock.calls.filter(([message]) => retired(message))).toEqual([
+      [
+        "[Mastra Factory] MastraFactory({ includeDefaultBoards }) is deprecated and ignored: every project gets Factory's Work board when it has no boards yet, and one that has any keeps what it has. To run your own Work board, store it under the 'work' key with factory.upsertBoard(board, { projects: 'all' }).",
+      ],
+    ]);
+    warn.mockRestore();
   });
 });
 

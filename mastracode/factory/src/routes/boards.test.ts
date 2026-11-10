@@ -13,6 +13,7 @@ import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import type { InstalledBoard } from '../boards/registry.js';
 import { boardDefinitionOf } from '../boards/stored-board.js';
+import { workSeedWithTriage } from '../boards/work-seeds.js';
 import { workBoard } from '../boards/work.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
@@ -346,9 +347,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     ]);
   });
 
-  it('returns the Work and app boards the project stored, editable at revision 1, and no Review board', async () => {
-    const { a, scope, base, replicaA } = await setup();
+  it('returns the Work and app boards a new project stored, editable at revision 1, and no Review board', async () => {
+    const { a, orgId, replicaA } = await setup();
+    const created = await replicaA.send('POST', '/web/factory/projects', { name: 'Shipyard' });
+    expect(created.status).toBe(201);
+    const scope = { orgId, factoryProjectId: created.body.project.id as string };
+    const base = `/web/factory/projects/${scope.factoryProjectId}/boards`;
     const work = await getBoard(replicaA.send, base, 'work');
+    // A project created now gets today's Work: no Triage.
+    expect(work.phases.map(phase => phase.key)).not.toContain('triage');
     const { description, ...definition } = boardDefinitionOf(workBoard);
     // Stored rows spell unset phase fields as null.
     expect(work).toMatchObject({
@@ -391,9 +398,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       canEdit: true,
       board: {
         codeBehaviour: {
-          intake: { requiredNextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'] },
-          triage: { requiredNextPhases: ['intake', 'planning', 'done', 'canceled'] },
-          planning: { requiredNextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'] },
+          intake: { requiredNextPhases: ['planning', 'pr-review', 'done', 'canceled'] },
+          planning: { requiredNextPhases: ['execute', 'intake', 'done', 'canceled'] },
           'pr-review': { requiredNextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'] },
           canceled: { requiredNextPhases: ['intake', 'pr-review'] },
         },
@@ -402,6 +408,26 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     for (const locks of Object.values(read.body.board.codeBehaviour as Record<string, object>)) {
       expect(Object.keys(locks)).toEqual(['requiredNextPhases']);
     }
+  });
+
+  it('stores Work with Triage, as Factory always did, for a project created before new projects dropped it', async () => {
+    // setup() stores the project directly, as older releases did: no creation route ran for it.
+    const { a, scope, base, replicaA } = await setup();
+    const work = await getBoard(replicaA.send, base, 'work');
+    const { description, ...definition } = workSeedWithTriage();
+    expect(work).toMatchObject({
+      ...definition,
+      description: description ?? null,
+      revision: 1,
+      source: 'builtin',
+      editable: true,
+      problems: [],
+    });
+    expect(work.phases.find(phase => phase.key === 'triage')).toMatchObject({
+      kind: 'working',
+      runner: { skill: 'factory-triage', context: 'triage' },
+    });
+    expect((await a.boards.get(scope, 'work'))!.createdBy).toBe('factory');
   });
 
   it("lets an admin edit the Work board's automation, which another replica serves after the recheck window", async () => {
@@ -501,7 +527,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     // Removing Planning also drops the moves code makes into it.
     const removal = await replicaA.send('PATCH', `${base}/work`, cases[0]);
     expect(removal.body.conflicts).toContainEqual(
-      'Phase "triage": Factory\'s code moves cards from it to "planning"; keep it in nextPhases.',
+      'Phase "intake": Factory\'s code moves cards from it to "planning"; keep it in nextPhases.',
     );
     const both = editPhase({ ...cases[1]!, revision: 1 }, 'done', phase => ({ ...phase, kind: 'resting' }));
     expect((await replicaA.send('PATCH', `${base}/work`, both)).body.conflicts).toHaveLength(2);
@@ -579,7 +605,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(reset.status).toBe(200);
     // Reset rewrites the row at the next revision; it never deletes it.
     expect(reset.body.board).toMatchObject({ revision: 3 });
-    expect(reset.body.board.phases).toMatchObject(boardDefinitionOf(workBoard).phases);
+    // setup()'s project predates new projects' Work, so reset restores Work as it stored it: with Triage.
+    expect(reset.body.board.phases).toMatchObject(workSeedWithTriage().phases);
     expect((await catalogBoard(replicaA.send, base, 'work'))!.phases.find((p: any) => p.id === 'planning').name).toBe(
       'Planning',
     );
@@ -608,6 +635,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect((await replicaA.send('POST', `${base}/nope/reset`, { expectedRevision: 1 })).status).toBe(404);
     const trail = await a.audit.list({ orgId, actions: ['factory.board.reset'] });
     expect(trail.events.map(event => event.action)).toEqual(['factory.board.reset']);
+  });
+
+  it("resets a new project's edited Work board to today's Work, without Triage", async () => {
+    const { replicaA } = await setup();
+    const created = await replicaA.send('POST', '/web/factory/projects', { name: 'New' });
+    const base = `/web/factory/projects/${created.body.project.id}/boards`;
+    const work = await getBoard(replicaA.send, base, 'work');
+    const edited = await replicaA.send(
+      'PATCH',
+      `${base}/work`,
+      editPhase(work, 'planning', phase => ({ ...phase, name: 'Plan it' })),
+    );
+    expect(edited.status).toBe(200);
+
+    const reset = await replicaA.send('POST', `${base}/work/reset`, { expectedRevision: 2 });
+
+    expect(reset.status).toBe(200);
+    expect(reset.body.board.phases).toMatchObject(boardDefinitionOf(workBoard).phases);
+    expect(reset.body.board.phases.map((phase: { key: string }) => phase.key)).not.toContain('triage');
   });
 
   it("keeps an edited app board when the app's code changes, and reset writes the app's current definition at the next revision", async () => {

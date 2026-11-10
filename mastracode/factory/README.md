@@ -116,7 +116,7 @@ There is no dual-write rollback: an older Factory version sees the legacy snapsh
 
 Each project's boards live in its database, and the stored row is the board.
 
-- **Factory's boards**: the built-in Work board and the boards you pass to `new MastraFactory({ boards })` (app boards). Factory stores each in a project once: when the project is created, and in existing projects the first time a process loads them, which includes the preload at startup. The project keeps a key's board from then on. A Factory release or an app change never rewrites it (except through a [board migration](#board-migrations)), and a board the project deleted is not stored again. A key you add later is stored once in every project that hasn't had it. The retired Review board is never stored, and its `review` key is reserved: no board can be created or written under it. A project that still has open cards on it is served the code Review board, read-only (see [The retired Review board](#the-retired-review-board)).
+- **Factory's boards**: the built-in Work board and the boards you pass to `new MastraFactory({ boards })` (app boards). Factory stores each in a project once: when the project is created, and in existing projects the first time a process loads them, which includes the preload at startup. Work goes only into a project that has no boards yet: a project that already holds a board, such as one your app wrote with `factory.upsertBoard()`, gets no Work from Factory. A project created now (the create call onboarding makes) gets Work without a Triage phase: Intake, Planning, Building, Review, Done and Canceled. Every other project, including one created on an older release that stores its boards only now, gets Work with Triage, as Factory always stored it, and resetting a project's Work restores the shape it was stored with. Add Triage back in Settings › Work board if you want it. The project keeps a key's board from then on. A Factory release or an app change never rewrites it (except through a [board migration](#board-migrations)), and a board the project deleted is not stored again. A key you add later is stored once in every project that hasn't had it. The retired Review board is never stored, and its `review` key is reserved: no board can be created or written under it. A project that still has open cards on it is served the code Review board, read-only (see [The retired Review board](#the-retired-review-board)).
 - **The project's own boards**: boards an admin created through the boards API, or that an app wrote with [`factory.upsertBoard()`](#writing-a-board-into-projects).
 
 A project's boards are the Work and app boards in code order, followed by the others. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. Existing apps need no change.
@@ -150,7 +150,7 @@ A release that changes what Factory's own boards need can carry a board migratio
 
 #### Writing a board into projects
 
-`factory.upsertBoard()` writes a board definition into projects after `prepare()`: each named project (or all of them) that has no board under its key gets it, and each one that has it, edited or not, has it replaced at the next revision. Factory doesn't run it for you, so projects created later don't get the board until you run it again; run it from an admin script, or after `prepare()` when you want every project to have the definition you ship. The board is checked once, as the boards API checks it, each replacement passes the checks an edit does (cards in a removed phase refuse it with `phase_in_use` there), and each write is audited as `factory.board.created` or `factory.board.updated` by `system:factory`. It returns the projects it stored the board in, the ones it replaced it in, and the ones that already had it unchanged. A refused board throws `BoardWriteError`, whose `code` is the boards API's error code (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use`, `project_not_found`, or `reserved_board` for the retired Review board's `review` key). A board under a new key has no code behaviour; an app board's key keeps the app board's, so it also brings back an app board a project deleted.
+`factory.upsertBoard()` writes a board definition into projects after `prepare()`: each named project (or all of them) that has no board under its key gets it, and each one that has it, edited or not, has it replaced at the next revision. Run it after `prepare()` at every startup to ship your boards: with `projects: 'all'`, a project that has no boards yet when it first loads (one created later, during onboarding, or one that never loaded) gets the board too, before Factory's own, so a project that gets your `work` board never gets Factory's Work beside it. Factory only adds Work to a project with no boards. That lasts for the process, which is why it runs at every startup; a project that already has boards is changed only by the call itself. The board is checked once, as the boards API checks it, each replacement passes the checks an edit does (cards in a removed phase refuse it with `phase_in_use` there), and each write is audited as `factory.board.created` or `factory.board.updated` by `system:factory`. It returns the projects it stored the board in, the ones it replaced it in, and the ones that already had it unchanged. A refused board throws `BoardWriteError`, whose `code` is the boards API's error code (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use`, `project_not_found`, or `reserved_board` for the retired Review board's `review` key). A board under a new key has no code behaviour; an app board's key keeps the app board's, so it also brings back an app board a project deleted.
 
 ```ts
 const bugs = {
@@ -232,7 +232,7 @@ Admins can make the same edits in the Factory UI under **Settings → Boards**, 
 [Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Write board definitions into projects with factory.upsertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.
 ```
 
-`includeDefaultBoards` decides whether projects get the built-in Work board.
+`includeDefaultBoards` is deprecated and ignored, with a warning logged once: every project with no boards gets Factory's Work, and a project that has any keeps what it has. To run your own Work board, write it under the `work` key with `factory.upsertBoard(board, { projects: 'all' })` at startup (see below).
 
 Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no policies or rules, can move off code: write its definition under a new key into projects with `factory.upsertBoard()`, move its cards, then stop passing the code board. Keep passing a board while it needs code behaviors.
 
@@ -276,19 +276,17 @@ export function createFactory(storage: MastraFactoryConfig['storage']) {
 
 To migrate, move each handler's skill into the phase's `runner.skill` (its prompt into `runner.instructions` or the skill), put card context the handler read into the skill (agents get it from the [`factory-work-item` signal](#the-factory-work-item-signal)), and list outcome targets in `nextPhases`. A handler that refused a move becomes a `transitionPolicy` rejection (`nextPhases` is the only limit on where a card may go).
 
-To replace Work, disable the default board and install a board with the same ID. Projects created after that store your board. Existing projects keep the Work board they already stored until an admin resets it or you write yours into them with `factory.upsertBoard()`. You can reinstall the exported `workBoard` definition unchanged, or use its phases as the starting point for a customized definition:
+To replace Work, write your board under the `work` key with `factory.upsertBoard()` at every startup, after `prepare()`. It replaces the Work board every existing project stored, and a project created later gets yours instead of Factory's. Work's code rules still attach by the key, so the definition passes the checks an edit of Work does. Start from the exported `workBoard` phases (`boardDefinitionOf(workBoard)` gives its stored definition):
 
 ```typescript
-import { MastraFactory, workBoard } from '@mastra/factory';
+import { MastraFactory } from '@mastra/factory';
 
-const factory = new MastraFactory({
-  storage,
-  includeDefaultBoards: false,
-  boards: [workBoard],
-});
+const factory = new MastraFactory({ storage });
+await factory.prepare();
+await factory.upsertBoard(ourWorkBoard, { projects: 'all' });
 ```
 
-Board IDs must be unique among the installed boards, so a same-ID board still throws while the defaults are enabled. Cards stored before board tracking resolve to `work`, and some runtime and UI behavior is keyed to those IDs, including Work issue intake and triage, the review-requested filter, and funnel metrics. Keep the built-in phase names and contexts in a replacement unless you intend to change that behavior.
+Passing a board with the `work` ID in `boards` throws: Work is always installed, so store yours under its key instead. Cards stored before board tracking resolve to `work`, and some runtime and UI behavior is keyed to those IDs, including Work issue intake and triage, the review-requested filter, and funnel metrics. Keep the built-in phase names and contexts in a replacement unless you intend to change that behavior.
 
 **Preferred intake behavior:** By default, every integration arrival lands in its routed board's initial phase—Intake for Work—and does not start or suggest a run. This includes GitHub, GitLab, Linear, Jira, and incident.io. An [intake route](#intake-routes) can file new cards straight into another phase, such as Triage, whose runner then starts (on its own when the phase's `autoStart` or `autoStartWhen` allows it). Trusted maintainer requests to review a GitHub pull request with no existing card file it directly in Work's Review.
 
@@ -417,12 +415,11 @@ Contexts that carried `ruleSetVersion` now carry `configVersion`. To add a tool-
 
 Boards own two separate concerns: topology (`nextPhases`) declares which moves exist, and each working phase's runner starts the work on entry. `nextPhases` binds everyone: people dragging cards on the Factory board, agents calling `factory_transition_work_item`, and board rules. A move it does not list is rejected with `invalid_transition`. Staying in the same phase is always allowed.
 
-The built-in Work board lists these moves:
+The built-in Work board lists these moves (projects stored before new projects' Work dropped Triage also have Triage, entered from Intake and Planning, and leaving to Intake, Planning, Done or Canceled: a confirmed bug goes to Planning, any other open issue waits in Intake for a person):
 
 | From     | To                                         | Why                                                                                                                                          |
 | -------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Intake   | Triage, Planning, Review, Done, Canceled   | Never straight to Building: a plan comes first. Review takes a card that carries a pull request; Done is where a completed source closes it. |
-| Triage   | Intake, Planning, Done, Canceled           | A confirmed bug goes to Planning; any other open issue waits in Intake for a person.                                                         |
+| Intake   | Planning, Review, Done, Canceled           | Never straight to Building: a plan comes first. Review takes a card that carries a pull request; Done is where a completed source closes it. |
 | Planning | Building, Intake, Done, Canceled           | Into Building only through the approved plan (see `exitTool` below).                                                                         |
 | Building | Review, Planning, Done, Canceled           | Review once the builder opened the change request; Planning again when the build shows the plan was wrong.                                   |
 | Review   | Intake, Planning, Building, Done, Canceled | A card with a pull request: merged, closed, or set aside in Intake. A pull request's own card never reaches the builder's lanes.             |
@@ -433,7 +430,7 @@ Work's Review phase is keyed `pr-review`: it reviews a card's pull request.
 
 A pull request's own card only enters Intake, Review, Done and Canceled, and only a card that carries a pull request (its own, or one attached to an issue card) enters Review, for people too. An issue card with an attached pull request can still go back to Planning or Building for a fix; Intake leads to both Triage and Review and which one fits depends on the card, so this one rule stays in code (`workPullRequestCardRejection`). Planning ends with `submit_plan`, its exit tool: a plan waits for a person to approve it, and the approved plan moves the card to Building. Whether work is finished (no open pull request, no review asking for changes) is not checked by the board: the build instructions tell the agent when to move a card to Done. Intake is resting, so nothing runs on a card parked there; an agent in another session could still move it.
 
-**Triage.** The triage agent sends a confirmed bug to Planning, an open non-bug back to Intake, and closures to Done or Canceled. A person moving the card on from Intake is the approval; Factory records no classification or acceptance, and that move removes the `status: needs approval` label from the GitHub issue. On boot, Factory moves any card left in Triage by the old classify-and-accept rule back to Intake, once.
+**Triage** (projects that have it). The triage agent sends a confirmed bug to Planning, an open non-bug back to Intake, and closures to Done or Canceled. A person moving the card on from Intake is the approval; Factory records no classification or acceptance, and that move removes the `status: needs approval` label from the GitHub issue. On boot, Factory moves any card left in Triage by the old classify-and-accept rule back to Intake, once.
 
 **A board without an approval wait.** A board that should start work on its own says so in its triage phase's `runner.instructions` (for example `This board needs no approval before work starts.`). factory-triage then sends an open feature request, docs or maintenance item from a trusted author, that the repository would take on, to the phase a confirmed bug goes to (Planning on Work) instead of back to rest, and adds no `status: needs approval` label. Untrusted authors, questions and anything to close still rest or close as before. The agent's move starts the planning run without a person, whether or not that phase has `autoStart`: an agent's move consents to the runs it queues. Work's triage phase has no instructions, so Work keeps its approval wait.
 
@@ -479,12 +476,12 @@ const releaseBoard = defineBoard({
 
 Work declares `intake` resting; `triage`, `planning`, `execute` and `pr-review` (named Review, the independent review of a card's pull request) working; `done` and `canceled` terminal. Its working phases run on stored runners, which an admin can edit:
 
-| Phase    | Runner                                               | Also                                                                                                             |
-| -------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Triage   | `factory-triage` in `triage`                         | Investigates the issue; a card labelled `status: needs approval` gets a summary of the decision needed instead.  |
-| Planning | `factory-plan` in `work`                             | Exit tool `submit_plan`, never auto-approved; once the plan is approved the planner moves the card to Building.  |
-| Building | `factory-build` in `work`, as a goal (up to 20 runs) | Builds the approved plan, runs its gates and pushes, then opens the change request and moves the card to Review. |
-| Review   | `factory-review` in `review`                         | Grants `factory_record_review_verdict` and `factory_review_source`.                                              |
+| Phase    | Runner                                               | Also                                                                                                                                                                      |
+| -------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Triage   | `factory-triage` in `triage`                         | Projects stored before new projects' Work dropped Triage. Investigates the issue; a card labelled `status: needs approval` gets a summary of the decision needed instead. |
+| Planning | `factory-plan` in `work`                             | Exit tool `submit_plan`, never auto-approved; once the plan is approved the planner moves the card to Building.                                                           |
+| Building | `factory-build` in `work`, as a goal (up to 20 runs) | Builds the approved plan, runs its gates and pushes, then opens the change request and moves the card to Review.                                                          |
+| Review   | `factory-review` in `review`                         | Grants `factory_record_review_verdict` and `factory_review_source`.                                                                                                       |
 
 The review skills post their test results in a `## Factory test report` comment on the change request. Factory gives sessions no tool to publish a commit check; an app that wants one passes its own tool and builds it on `factory.reviewedChangeRequest()` (see [Mastra Connect and your own tools in sessions](#mastra-connect-and-your-own-tools-in-sessions)). Earlier releases had a per-project `reviewTestChecksEnabled` setting; `PATCH /web/factory/projects/:id` still accepts it for one release and ignores it.
 
@@ -775,17 +772,16 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
   },
 });
 
-export function createFactory(config: Omit<MastraFactoryConfig, 'boards' | 'includeDefaultBoards'>) {
+export function createFactory(config: Omit<MastraFactoryConfig, 'boards'>) {
   return new MastraFactory({
     ...config,
     boards: [releaseBoard],
     skills: [prepareRelease, checkRelease],
-    includeDefaultBoards: true,
   });
 }
 ```
 
-Use the host's normal `prepare()`, `new Mastra(...)`, and `finalize()` sequence. Change the hardcoded `includeDefaultBoards: true` in `createFactory` to `false` to run without Work. Working roles name bindings on the shared Code Agent; they do not register separate agents. Factory has no per-role agent configuration option. Each phase's skill supplies the role-specific instructions.
+Use the host's normal `prepare()`, `new Mastra(...)`, and `finalize()` sequence. Working roles name bindings on the shared Code Agent; they do not register separate agents. Factory has no per-role agent configuration option. Each phase's skill supplies the role-specific instructions.
 
 Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `backlog`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The move starts the preparer. Its bound tool advances to `build`; the publisher's completed check produces a deferred transition to `done`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
 

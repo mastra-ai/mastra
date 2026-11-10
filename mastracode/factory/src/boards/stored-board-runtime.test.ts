@@ -21,10 +21,12 @@ import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/b
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { compileBoardDefinition } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
 import type { InstalledBoard } from './registry.js';
+import { workSeedWithTriage } from './work-seeds.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -215,6 +217,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       return created.json.project.id as string;
     }
 
+    /**
+     * A project created before new projects' Work dropped Triage. It is stored without the creation
+     * route, so its first board load stores Work with Triage, as Factory did for every project then.
+     */
+    async function createOlderProject(replica: Awaited<ReturnType<typeof boot>>, orgId: string, name: string) {
+      const project = await replica.storage
+        .getDomain<FactoryProjectsStorage>('projects')
+        .create({ orgId, userId: 'admin-user', input: { name } });
+      await catalog(replica, project.id);
+      return project.id;
+    }
+
     /** The admin's create, written straight to storage the way the boards API writes it. */
     async function addBugs(replica: Awaited<ReturnType<typeof boot>>, orgId: string, projectId: string) {
       await replica.boards.create({ orgId, factoryProjectId: projectId }, bugsBoard, 'admin-user');
@@ -268,9 +282,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         ['bugs', 'stored', true],
       ]);
       const work = boards.find(board => board.id === 'work')!;
+      // A project created now gets Work without Triage.
       expect(work.phases.map(phase => `${phase.id}:${phase.name}`)).toEqual([
         'intake:Intake',
-        'triage:Triage',
         'planning:Planning',
         'execute:Building',
         'pr-review:Review',
@@ -484,8 +498,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       }
 
       /** A project whose runs can start: a model, its credential, and a linked GitHub repository. */
-      async function runnableProject(replica: Awaited<ReturnType<typeof boot>>, orgId: string) {
-        const projectId = await createProject(replica, 'Shipyard');
+      async function runnableProject(
+        replica: Awaited<ReturnType<typeof boot>>,
+        orgId: string,
+        { created = false } = {},
+      ) {
+        // Shipyard's project predates Work without Triage, and most tests here run its Triage.
+        const projectId = created
+          ? await createProject(replica, 'Onboarded')
+          : await createOlderProject(replica, orgId, 'Shipyard');
         const configured = await replica.send('PATCH', `/web/factory/projects/${projectId}`, {
           defaultModelId: 'openai/gpt-5.6-sol',
         });
@@ -687,6 +708,52 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect(runsOf(requests, 'factory-review', 'Add rate limiting')).not.toEqual([]);
       }, 120_000);
 
+      it("moves a card through a new project's Work, which has no Triage, starting Planning's run from Intake", async () => {
+        const requests = stubModel();
+        const orgId = `org-${randomUUID()}`;
+        const replica = await boot(database(), orgId);
+        const projectId = await runnableProject(replica, orgId, { created: true });
+        const work = (await catalog(replica, projectId)).find(board => board.id === 'work')!;
+        expect(work.phases.map(phase => phase.id)).toEqual([
+          'intake',
+          'planning',
+          'execute',
+          'pr-review',
+          'done',
+          'canceled',
+        ]);
+
+        const card = await githubIssue(replica, projectId, 'Straight to planning', { trusted: true, labels: [] });
+        expect(card.stages).toEqual(['intake']);
+        const move = (current: { id: string; revision: number }, stage: string) =>
+          replica.send('POST', `/web/factory/projects/${projectId}/work-items/${current.id}/transition`, {
+            board: 'work',
+            stage,
+            expectedRevision: current.revision,
+            requestId: randomUUID(),
+            cause: 'card_action',
+          });
+        // Nothing moves a card into Triage: the board has none.
+        expect((await move(card, 'triage')).json.result).toMatchObject({ status: 'rejected' });
+        const planned = await move((await replica.workItems.get({ orgId, id: card.id }))!, 'planning');
+        expect(planned.json.result, JSON.stringify(planned.json)).toMatchObject({
+          status: 'accepted',
+          stage: 'planning',
+        });
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-plan', card.title)).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        expect(runsOf(requests, 'factory-triage', card.title)).toEqual([]);
+
+        for (const stage of ['execute', 'done']) {
+          const result = await move((await replica.workItems.get({ orgId, id: card.id }))!, stage);
+          expect(result.json.result, `${stage}: ${JSON.stringify(result.json)}`).toMatchObject({
+            status: 'accepted',
+            stage,
+          });
+        }
+      }, 120_000);
+
       it("runs a project's unedited Work board from its row", async () => {
         const requests = stubModel();
         const orgId = `org-${randomUUID()}`;
@@ -873,9 +940,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           expect(again.updated).toEqual([]);
           expect(again.unchanged).toHaveLength(2);
 
-          // It isn't stored for you: a project created later has no board under the key.
+          // A project created later gets it too, and so has boards: Factory adds no Work to it.
           const later = await createProject(replica, 'Later');
-          expect((await catalog(replica, later)).map(board => board.id)).not.toContain('bugs');
+          expect((await catalog(replica, later)).map(board => board.id)).toEqual(['bugs']);
 
           const audit = (projectId: string) =>
             replica.storage
@@ -914,6 +981,72 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           await expect(
             replica.factory.upsertBoard(bugsBoard, { projects: [{ orgId, factoryProjectId: randomUUID() }] }),
           ).rejects.toMatchObject({ code: 'project_not_found' });
+        }, 60_000);
+
+        it('stores the boards an app upserts for all projects in a project created later, and no Work beside them', async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const db = await isolatedDatabase();
+          const replica = await boot(db, orgId);
+          // The app installs its boards at startup, before anyone has onboarded.
+          const appWork = { ...workSeedWithTriage(), name: 'Ship work' };
+          expect(await replica.factory.upsertBoard(appWork, { projects: 'all' })).toEqual({
+            inserted: [],
+            updated: [],
+            unchanged: [],
+          });
+          await replica.factory.upsertBoard(bugsBoard, { projects: 'all' });
+
+          const projectId = await createProject(replica, 'Onboarded');
+          const scope = { orgId, factoryProjectId: projectId };
+
+          expect((await replica.boards.list(scope)).map(row => [row.key, row.name, row.revision])).toEqual([
+            ['work', 'Ship work', 1],
+            ['bugs', 'Bugs', 1],
+          ]);
+          expect((await catalog(replica, projectId)).map(board => board.id)).toEqual(['work', 'bugs']);
+          // A restart stores nothing more: the project has the app's boards, so Factory's Work never goes in.
+          const version = await replica.boards.readVersion(scope);
+          const restarted = await boot(db, orgId);
+          expect((await catalog(restarted, projectId)).map(board => board.id)).toEqual(['work', 'bugs']);
+          expect((await restarted.boards.get(scope, 'work'))!).toMatchObject({ name: 'Ship work', revision: 1 });
+          expect(await restarted.boards.readVersion(scope)).toBe(version);
+        }, 60_000);
+
+        it("gives a project the app's board alone when the app upserts only another key", async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const replica = await boot(await isolatedDatabase(), orgId);
+          await replica.factory.upsertBoard(bugsBoard, { projects: 'all' });
+
+          const projectId = await createProject(replica, 'Bugs only');
+
+          expect((await replica.boards.list({ orgId, factoryProjectId: projectId })).map(row => row.key)).toEqual([
+            'bugs',
+          ]);
+        }, 60_000);
+
+        it("keeps a new project's edited Work board across a restart that upserts another board", async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const db = await isolatedDatabase();
+          const replica = await boot(db, orgId);
+          const projectId = await createProject(replica, 'Edited after onboarding');
+          const scope = { orgId, factoryProjectId: projectId };
+          const work = (await replica.send('GET', `/web/factory/projects/${projectId}/boards/work`)).json.board;
+          expect(work.phases.map((phase: { key: string }) => phase.key)).not.toContain('triage');
+          const edited = await replica.send('PATCH', `/web/factory/projects/${projectId}/boards/work`, {
+            name: 'Our work',
+            phases: work.phases,
+            expectedRevision: work.revision,
+          });
+          expect(edited.status, JSON.stringify(edited.json)).toBe(200);
+
+          const restarted = await boot(db, orgId);
+          await restarted.factory.upsertBoard(bugsBoard, { projects: 'all' });
+
+          expect((await restarted.boards.get(scope, 'work'))!).toMatchObject({ name: 'Our work', revision: 2 });
+          expect((await catalog(restarted, projectId)).map(board => board.id)).toEqual(['work', 'bugs']);
         }, 60_000);
 
         it('lets two replicas write the same board into a project at once, each write landing', async () => {

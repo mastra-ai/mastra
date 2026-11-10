@@ -2,9 +2,9 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
-
-import { createBoardRegistry } from '../../boards/index.js';
 import { ProjectBoardCache } from '../../boards/project-boards.js';
+
+import { createTriageWorkRegistry } from '../../boards/test-utils.js';
 import { workSeedWithSelfReview } from '../../boards/work-migrations.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { createFactoryTransitionTools } from '../../rules/tools.js';
@@ -235,7 +235,7 @@ async function harness(
     );
   }
 
-  const boards = new ProjectBoardCache({ codeRegistry: createBoardRegistry(), storage: seeded.boards, recheckMs: 0 });
+  const boards = new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: seeded.boards, recheckMs: 0 });
   const configVersion = 'any-board-pr-loop-v1';
   const transitionService = new FactoryTransitionService({ storage: workItems, configVersion, boards });
   const rules = new GithubRules({

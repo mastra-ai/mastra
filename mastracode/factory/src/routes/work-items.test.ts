@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -72,7 +73,8 @@ function buildApp(
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
-  boardRegistry: BoardRegistry = createBoardRegistry(),
+  // Work as projects stored before new projects' Work dropped Triage: these tests walk its lanes.
+  boardRegistry: BoardRegistry = createTriageWorkRegistry(),
   parked: ReadonlySet<string> = new Set(),
 ) {
   const app = new Hono();
@@ -160,7 +162,7 @@ afterEach(() => {
 });
 
 describe('installed board catalog', () => {
-  it.each([true, false])('returns only structural metadata (defaults: %s)', async includeDefaultBoards => {
+  it.each([true, false])('returns only structural metadata (with Work: %s)', async withWork => {
     const board = defineBoard({
       id: 'release',
       title: 'Release Preview',
@@ -183,14 +185,12 @@ describe('installed board catalog', () => {
       undefined,
       undefined,
       new Set(),
-      createBoardRegistry({ boards: [board], includeDefaultBoards }),
+      withWork ? createBoardRegistry({ boards: [board] }) : boardRegistryOf([board]),
     );
     const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
     expect(response.status).toBe(200);
     const { boards } = await response.json();
-    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
-      includeDefaultBoards ? ['work', 'release'] : ['release'],
-    );
+    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(withWork ? ['work', 'release'] : ['release']);
     // Deprecated `title`/`role` stay beside their replacements for older clients.
     expect(boards.at(-1)).toEqual({
       id: 'release',
@@ -228,7 +228,15 @@ describe('installed board catalog', () => {
     const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry());
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    // Factory's Work has no Triage, so its flow names none.
+    expect(body.boards[0].flow).not.toHaveProperty('triage');
     expect(body.boards[0]).toMatchObject({
+      id: 'work',
+      flow: { build: 'execute', pullRequestReview: 'pr-review', completed: 'done', canceled: 'canceled' },
+    });
+    // A project's Work that kept Triage names it.
+    const older = await (await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(older.boards[0]).toMatchObject({
       id: 'work',
       flow: {
         triage: 'triage',
@@ -266,13 +274,7 @@ describe('installed board catalog', () => {
         shipped: { name: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
-    );
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([board]));
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     const [, planning, shipping] = body.boards[0].phases;
@@ -298,13 +300,7 @@ describe('installed board catalog', () => {
         shipped: { name: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
-    );
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([board]));
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     const [queued, drafting] = body.boards[0].phases;
@@ -313,13 +309,7 @@ describe('installed board catalog', () => {
   });
 
   it('supports an empty installation', async () => {
-    const app = buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      createBoardRegistry({ includeDefaultBoards: false }),
-    );
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([]));
     const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
     expect(await response.json()).toEqual({ boards: [] });
   });
@@ -417,7 +407,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
         shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
-    const boardRegistry = createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false });
+    const boardRegistry = boardRegistryOf([releaseBoard]);
     const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistry);
     const importedItems = [
       {
@@ -676,13 +666,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
         shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false }),
-    );
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([releaseBoard]));
 
     const response = await app.request(`/web/factory/work-items/${item.id}`, {
       method: 'PATCH',
@@ -713,13 +697,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
       initialPhase: 'backlog',
       phases: { backlog: { title: 'Backlog', kind: 'resting' } },
     });
-    const app = buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      createBoardRegistry({ boards: [releaseBoard, supportBoard], includeDefaultBoards: false }),
-    );
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([releaseBoard, supportBoard]));
 
     const responses = await Promise.all([
       app.request(`/web/factory/work-items/${item.id}`, {
@@ -2119,7 +2097,11 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     // finishes it (triage → planning), then a human approves planning into done.
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
-    const service = new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems });
+    const service = new FactoryTransitionService({
+      configVersion: 'factory-config-v1',
+      storage: seed.workItems,
+      boards: createTriageWorkRegistry(),
+    });
     const move = (stage: 'triage' | 'planning', expectedRevision: number, identity: string, actor: FactoryRuleActor) =>
       service.transition({
         orgId: 'org1',
