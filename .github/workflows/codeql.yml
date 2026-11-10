@@ -78,14 +78,15 @@ jobs:
             exit 0
           fi
 
-          # Prints "<analyze> <notified>" for a run or attempt: analyze is failure, success, or
-          # ignored when it was cancelled or unreadable; notified is yes when its notify job
-          # passed, which means it read the alerts it was due to report.
+          # Prints "<analyze> <notified> <checked_from>" for a run or attempt: analyze is failure,
+          # success, or ignored when it was cancelled or unreadable; notified is yes when its
+          # notify job passed, which means it read the alerts it was due to report; checked_from
+          # is when that notify job started, before it read the alerts (- when unknown).
           run_state() {
-            local jobs conclusions analyze=ignored notified=no
+            local jobs conclusions analyze=ignored notified=no checked_from
             if ! jobs=$(gh api --paginate "$1/jobs?per_page=100" \
-              --jq '.jobs[] | "\(.name)\t\(.conclusion)"' 2>/dev/null); then
-              echo "ignored no"
+              --jq '.jobs[] | "\(.name)\t\(.conclusion)\t\(.started_at // "-")"' 2>/dev/null); then
+              echo "ignored no -"
               return 0
             fi
             conclusions=$(awk -F'\t' '$1 ~ /^Analyze/ {print $2}' <<< "$jobs")
@@ -94,10 +95,11 @@ jobs:
             elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
               analyze=success
             fi
-            if awk -F'\t' '$1 == "Notify Slack of CodeQL results" && $2 == "success" {found=1} END {exit !found}' <<< "$jobs"; then
+            checked_from=$(awk -F'\t' '$1 == "Notify Slack of CodeQL results" && $2 == "success" {print $3; exit}' <<< "$jobs")
+            if [ -n "$checked_from" ]; then
               notified=yes
             fi
-            echo "$analyze $notified"
+            echo "$analyze $notified ${checked_from:--}"
           }
 
           # Earlier attempts of this run come first (a re-run keeps its run ID), then earlier
@@ -105,13 +107,12 @@ jobs:
           base="repos/$GITHUB_REPOSITORY/actions/runs"
           candidates=''
           for ((attempt = GITHUB_RUN_ATTEMPT - 1; attempt >= 1; attempt--)); do
-            ended=$(gh api "$base/$GITHUB_RUN_ID/attempts/$attempt" --jq .updated_at 2>/dev/null) || ended=''
-            candidates+="$base/$GITHUB_RUN_ID/attempts/$attempt $ended"$'\n'
+            candidates+="$base/$GITHUB_RUN_ID/attempts/$attempt"$'\n'
           done
           runs_read=true
           if runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/codeql.yml/runs" \
             -f branch=main -f status=completed -F per_page=30 \
-            --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"$base/\(.id) \(.updated_at)\""); then
+            --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"$base/\(.id)\""); then
             candidates+="$runs"$'\n'
           else
             echo "::warning::Could not read earlier scans."
@@ -121,24 +122,25 @@ jobs:
           # The newest finished scan whose notify job passed gives the previous state, for failure
           # and recovery alerts: a scan whose Slack post failed never announced its state, so the
           # next scan must announce it. A repeat failure that posted nothing still counts, as its
-          # notify job passed. The cutoff for "new" alerts is the end of the newest scan that fully
-          # passed and whose notify job read the alerts: anything created after it has not been
-          # reported yet. When earlier scans exist but none of them can be the cutoff (they all
-          # failed, or none delivered, or they are older than the runs read), every open alert is
-          # reported: they may never have been. Only a repository with no earlier scan at all gets
-          # a silent first baseline.
+          # notify job passed. The cutoff for "new" alerts is when the notify job of the newest scan
+          # that fully passed and read the alerts started, before its query: anything created
+          # since may not have been reported yet. The run's own end time is no cutoff, as alerts
+          # can still appear after the query and a re-run moves it. When earlier scans exist but
+          # none of them can be the cutoff (they all failed, or none delivered, or they are older
+          # than the runs read), every open alert is reported: they may never have been. Only a
+          # repository with no earlier scan at all gets a silent first baseline.
           previous=''
           since=''
           earlier=no
-          while read -r path ended; do
+          while read -r path; do
             [ -n "$path" ] || continue
             earlier=yes
-            read -r analyze notified <<< "$(run_state "$path")"
+            read -r analyze notified checked_from <<< "$(run_state "$path")"
             case "$analyze" in success | failure) ;; *) continue ;; esac
             [ "$notified" = "yes" ] || continue
             previous=${previous:-$analyze}
-            if [ "$analyze" = "success" ] && [ -n "$ended" ]; then
-              since=$ended
+            if [ "$analyze" = "success" ] && [ "$checked_from" != "-" ]; then
+              since=$checked_from
               break
             fi
           done <<< "$candidates"
@@ -165,7 +167,7 @@ jobs:
             elif [ -n "$since" ] || [ "$earlier" = "yes" ]; then
               if new=$(gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/code-scanning/alerts" \
                 -f ref=refs/heads/main -f state=open -f tool_name=CodeQL -F per_page=100 \
-                --jq ".[] | select(.created_at > \"$since\") | .number"); then
+                --jq ".[] | select(.created_at >= \"$since\") | .number"); then
                 count=$(grep -c . <<< "$new" || true)
                 echo "Open alerts on main created after '${since:-the start}': $count"
                 if [ "$count" -gt 0 ] && [ -n "$since" ]; then
