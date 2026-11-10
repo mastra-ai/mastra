@@ -76,6 +76,9 @@ export function fitRows(
   const rows = result[key] as unknown[];
   const without = (fields: string[]) =>
     Object.fromEntries(Object.entries(result).filter(([field]) => field !== key && !fields.includes(field)));
+  // Every row fits once the other views are gone: nothing was skipped, so the cursors stay.
+  const allRows = { ...without(views), [key]: rows };
+  if (views.length > 0 && fits(allRows)) return allRows;
   const rest = without([...cursors, ...views]);
   const build = (count: number) => ({
     ...rest,

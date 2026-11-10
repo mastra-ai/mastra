@@ -48,6 +48,19 @@ describe('fitRows', () => {
     expect(result.messages[0].content.parts[0].text).toMatch(/\[truncated \d+ chars\]$/);
   });
 
+  it('keeps every row and the cursor when dropping the other views is enough to fit', () => {
+    const messages = Array.from({ length: 10 }, (_, index) => ({ id: `m${index}`, text: 'x'.repeat(2_500) }));
+    const result = fitRows({ messages, uiMessages: messages, hasMore: true }, 'messages', HINT, {
+      cursors: ['hasMore'],
+      views: ['uiMessages'],
+    }) as any;
+    expect(size(result)).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(result.messages).toEqual(messages);
+    expect(result).not.toHaveProperty('uiMessages');
+    expect(result.hasMore).toBe(true);
+    expect(result).not.toHaveProperty('truncated');
+  });
+
   it('drops the cursor when rows were cut, since it would skip them', () => {
     const rows = Array.from({ length: 10 }, (_, index) => ({ spanId: `s${index}`, input: 'x'.repeat(10_000) }));
     const result = fitRows({ spans: rows, page: { next: 'after-s9' } }, 'spans', HINT, { cursors: ['page'] }) as any;
