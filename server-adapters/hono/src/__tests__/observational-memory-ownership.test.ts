@@ -261,7 +261,11 @@ describe('gateway observational memory ownership over HTTP', () => {
       // orphan-thread has alice's observation record but no thread (deleted, or mid-deletion)
       const owner = threadId ? (threads[threadId] ?? (match[2] ? orphanRecords[threadId] : undefined)) : undefined;
       res.setHeader('Content-Type', 'application/json');
-      if (!match || !owner) return res.writeHead(404).end('{}');
+      // Like the real gateway, observation lookups are filtered by the resourceId query param
+      const requestedResource = url.searchParams.get('resourceId');
+      if (!match || !owner || (match[2] && requestedResource && requestedResource !== owner)) {
+        return res.writeHead(404).end('{}');
+      }
       if (!match[2] && failThreadLookup) return res.writeHead(503).end('{}');
       const now = new Date().toISOString();
       if (!match[2]) {
@@ -315,14 +319,18 @@ describe('gateway observational memory ownership over HTTP', () => {
     failThreadLookup = false;
   });
 
-  async function gatewayApp() {
+  async function gatewayApp(authConfig: MastraAuthConfig | null = auth, fga?: IFGAProvider) {
     const agent = new Agent({
       id: 'gw-agent',
       name: 'gw-agent',
       instructions: 'Test',
       model: 'mastra/openai/gpt-5-mini',
     });
-    const mastra = new Mastra({ logger: false, agents: { 'gw-agent': agent }, server: { auth } });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { 'gw-agent': agent },
+      ...(authConfig ? { server: { auth: authConfig, fga } } : {}),
+    });
     const app = new Hono();
     await new MastraServer({ app, mastra }).init();
     return app;
@@ -358,10 +366,11 @@ describe('gateway observational memory ownership over HTTP', () => {
 
   it('returns no observations for a gateway thread that no longer exists', async () => {
     const app = await gatewayApp();
-    const orphanIds = 'agentId=gw-agent&resourceId=bob&threadId=orphan-thread';
+    // bob names alice's resource; the server must use bob's own resource and find no thread to show
+    const orphanIds = 'agentId=gw-agent&resourceId=alice&threadId=orphan-thread';
     const responses = [
       await getOM(app, orphanIds, 'bob'),
-      await bufferStatus(app, { agentId: 'gw-agent', resourceId: 'bob', threadId: 'orphan-thread' }, 'bob'),
+      await bufferStatus(app, { agentId: 'gw-agent', resourceId: 'alice', threadId: 'orphan-thread' }, 'bob'),
       await request(app, `/memory/status?${orphanIds}`, 'bob'),
     ];
     for (const res of responses) {
@@ -369,5 +378,33 @@ describe('gateway observational memory ownership over HTTP', () => {
       expect(JSON.stringify(await res.json())).not.toContain('alice gateway secret');
     }
     expect(hits.some(path => path.includes('/observations/'))).toBe(false);
+  });
+
+  it('denies a mismatched thread and resource when auth is not configured', async () => {
+    const app = await gatewayApp(null);
+    const own = await getOM(app, ids);
+    expect(own.status).toBe(200);
+    expect((await own.json()).record.activeObservations).toBe('alice gateway secret');
+
+    const mismatched = await getOM(app, 'agentId=gw-agent&resourceId=bob&threadId=alice-thread');
+    expect(mismatched.status).toBe(403);
+    expect(JSON.stringify(await mismatched.json())).not.toContain('alice gateway secret');
+  });
+
+  it('denies a missing gateway thread when the FGA provider denies memory:read on it', async () => {
+    const app = await gatewayApp(auth, new ThreadOwnerFGA({ 'bob-thread': 'bob' }));
+    const newIds = 'agentId=gw-agent&resourceId=bob&threadId=new-thread';
+    for (const res of [
+      await getOM(app, newIds, 'bob'),
+      await bufferStatus(app, { agentId: 'gw-agent', resourceId: 'bob', threadId: 'new-thread' }, 'bob'),
+      await request(app, `/memory/status?${newIds}`, 'bob'),
+    ]) {
+      expect(res.status).toBe(403);
+    }
+    expect(hits.some(path => path.includes('/observations/'))).toBe(false);
+
+    const own = await getOM(app, 'agentId=gw-agent&resourceId=bob&threadId=bob-thread', 'bob');
+    expect(own.status).toBe(200);
+    expect((await own.json()).record.activeObservations).toBe('bob gateway secret');
   });
 });
