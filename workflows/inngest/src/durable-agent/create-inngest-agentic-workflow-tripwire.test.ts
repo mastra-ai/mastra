@@ -14,6 +14,8 @@ vi.mock('@mastra/core/agent/durable', async importOriginal => {
     ...actual,
     runDurableFinishSideEffects: vi.fn(async (args: any) => ({
       messageListState: args.messageListState,
+      outputText: args.outputResult.text,
+      outputTextChanged: false,
       tripwire,
     })),
   };

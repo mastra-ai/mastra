@@ -48,12 +48,13 @@ export interface DurableFinishSideEffectsOptions {
 
 export interface DurableFinishSideEffectsResult {
   messageListState: SerializedMessageListState;
+  outputText: string;
   /**
-   * The reply text after processOutputResult, set only when a processor changed it ('' when it
-   * emptied the reply). Callers apply it to the run's last step. Unset means the step's own
-   * text stands, which also covers runs whose last message has no text (a final tool step).
+   * True when processOutputResult changed `outputText`, including emptying it. Only then should
+   * callers apply `outputText` to the run's last step: otherwise the step's own text stands,
+   * e.g. the narration of a final tool step whose last message has no text.
    */
-  outputText?: string;
+  outputTextChanged: boolean;
   titleGeneration?: Promise<void>;
   /**
    * Set when this stream() run should emit a `data-thread-title` chunk (`generateTitle.emitEvent`).
@@ -284,10 +285,6 @@ export async function runDurableFinishSideEffects({
   };
 
   const outputTextBeforeProcessing = resolveOutputText(messageList);
-  const changedOutputText = () => {
-    const text = resolveOutputText(messageList);
-    return text !== outputTextBeforeProcessing ? text : undefined;
-  };
 
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
@@ -333,9 +330,11 @@ export async function runDurableFinishSideEffects({
           logger: effectiveLogger,
           runId,
         });
+        const outputText = resolveOutputText(messageList);
         return {
           messageListState: messageList.serialize(),
-          outputText: changedOutputText(),
+          outputText,
+          outputTextChanged: outputText !== outputTextBeforeProcessing,
           outputResultChunks,
           tripwire: {
             reason: error.message,
@@ -354,7 +353,8 @@ export async function runDurableFinishSideEffects({
 
   // SaveQueueManager may reclassify flushed response messages as persisted
   // memory, so resolve the final response text before persistence runs.
-  const outputText = changedOutputText();
+  const outputText = resolveOutputText(messageList);
+  const outputTextChanged = outputText !== outputTextBeforeProcessing;
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
   const memory = registryEntry?.memory ?? rebuiltMemory;
@@ -462,6 +462,7 @@ export async function runDurableFinishSideEffects({
   return {
     messageListState: messageList.serialize(),
     outputText,
+    outputTextChanged,
     titleGeneration,
     titleForStream,
     structuredOutputChunks,

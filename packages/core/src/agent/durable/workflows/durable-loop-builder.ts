@@ -1092,13 +1092,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 steps,
               },
             });
-            const { outputText } = finishResult;
-            let textRewritten = false;
-            if (lastStep && outputText !== undefined) {
-              lastStep.text = outputText;
-              steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: outputText };
-              finalText = outputText;
-              textRewritten = true;
+            const textRewritten = !!lastStep && finishResult.outputTextChanged;
+            if (lastStep && finishResult.outputTextChanged) {
+              lastStep.text = finishResult.outputText;
+              steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
+              finalText = finishResult.outputText;
             }
 
             const tripwire = finishResult.tripwire;

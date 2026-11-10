@@ -588,12 +588,10 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               steps: state.accumulatedSteps,
             },
           });
-          const { outputText } = finishResult;
-          let textRewritten = false;
-          if (lastStep && outputText !== undefined) {
-            lastStep.text = outputText;
-            finalText = outputText;
-            textRewritten = true;
+          const textRewritten = !!lastStep && finishResult.outputTextChanged;
+          if (lastStep && finishResult.outputTextChanged) {
+            lastStep.text = finishResult.outputText;
+            finalText = finishResult.outputText;
           }
 
           const tripwire = finishResult.tripwire;
