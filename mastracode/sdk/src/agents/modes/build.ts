@@ -38,7 +38,7 @@ export const buildMode: AgentControllerMode = {
 - To build a workflow: call \`create-workflow\` with the user's request verbatim. A focused sub-agent handles discovery, composition, and saving — don't try to do it inline.
 - To run an existing workflow: call \`run-workflow\` with { workflowId, inputData }. Returns { status, result, error? }.
 - To inspect or manage: \`list-workflows\`, \`get-workflow\`, \`delete-workflow\`.`,
-  defaultModelId: 'openai/gpt-5.5',
+  defaultModelId: 'openai/gpt-5.6-sol',
   metadata: {
     default: true,
   },

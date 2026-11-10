@@ -107,7 +107,20 @@ describe('GraphRAG', () => {
         type: 'semantic',
       };
       graph.addEdge(edge);
-      expect(graph['edges'].length).toBe(2);
+      expect(graph.getEdges()).toEqual([edge, { ...edge, source: '2', target: '1' }]);
+    });
+
+    it('stores a self-link only once in edges and snapshots (#29365)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: 'a', content: 'Node A', embedding: [1, 0] });
+      const edge: GraphEdge = { source: 'a', target: 'a', weight: 0.5, type: 'semantic' };
+
+      graph.addEdge(edge);
+
+      expect(graph.getEdges()).toEqual([edge]);
+      expect(graph.getEdgesByType('semantic')).toEqual([edge]);
+      expect(graph.serialize().edges).toEqual([edge]);
+      expect(GraphRAG.deserialize(graph.serialize()).getEdges()).toEqual([edge]);
     });
   });
 
@@ -223,22 +236,22 @@ describe('GraphRAG', () => {
       expect(() => graph.query({ query: [, 1] })).toThrow('Query embedding must contain only finite numbers');
     });
 
-    it('topK must be greater than 0', () => {
+    it('topK must be a positive integer', () => {
       const graph = new GraphRAG(3);
       const queryEmbedding = [1, 2, 3];
       const topK = 0;
       expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps: 3, restartProb: 0.1 })).toThrowError(
-        'TopK must be greater than 0',
+        'TopK must be a positive integer',
       );
     });
 
-    it('randomWalkSteps must be greater than 0', () => {
+    it('randomWalkSteps must be a positive integer', () => {
       const graph = new GraphRAG(3);
       const queryEmbedding = [1, 2, 3];
       const topK = 2;
       const randomWalkSteps = 0;
       expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps, restartProb: 0.1 })).toThrowError(
-        'Random walk steps must be greater than 0',
+        'Random walk steps must be a positive integer',
       );
     });
 
@@ -251,6 +264,26 @@ describe('GraphRAG', () => {
       expect(() => graph.query({ query: queryEmbedding, topK, randomWalkSteps, restartProb })).toThrowError(
         'Restart probability must be between 0 and 1',
       );
+    });
+
+    // Invalid controls must fail even when an empty graph would otherwise skip retrieval and walking. (#29608)
+    it.each([
+      ['NaN topK', { topK: NaN }, 'TopK must be a positive integer'],
+      ['infinite topK', { topK: Infinity }, 'TopK must be a positive integer'],
+      ['fractional topK', { topK: 1.5 }, 'TopK must be a positive integer'],
+      ['NaN random walk steps', { randomWalkSteps: NaN }, 'Random walk steps must be a positive integer'],
+      ['infinite random walk steps', { randomWalkSteps: Infinity }, 'Random walk steps must be a positive integer'],
+      ['fractional random walk steps', { randomWalkSteps: 1.5 }, 'Random walk steps must be a positive integer'],
+      ['NaN restart probability', { restartProb: NaN }, 'Restart probability must be between 0 and 1'],
+      ['infinite restart probability', { restartProb: Infinity }, 'Restart probability must be between 0 and 1'],
+      [
+        'negative infinite restart probability',
+        { restartProb: -Infinity },
+        'Restart probability must be between 0 and 1',
+      ],
+    ] as const)('rejects %s', (_description, options, error) => {
+      const graph = new GraphRAG(2);
+      expect(() => graph.query({ query: [1, 0], ...options })).toThrowError(error);
     });
 
     it('should apply metadata filters correctly', () => {
@@ -537,6 +570,23 @@ describe('GraphRAG', () => {
       const snapshot = buildGraph().serialize();
       snapshot.nodes[0]!.embedding![0] = -Infinity;
       expect(() => GraphRAG.deserialize(snapshot)).toThrow('Embedding must contain only finite numbers');
+    });
+
+    it('should reject duplicate snapshot node IDs instead of replacing the original node (#29689)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: 'a', content: 'Original', embedding: [1, 0] });
+      const snapshot = graph.serialize();
+      snapshot.nodes.push({ id: 'a', content: 'Replacement', embedding: [0, 1] });
+
+      expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Duplicate node id in snapshot: a');
+    });
+
+    it('should still allow updating an existing node through addNode', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: 'a', content: 'Original', embedding: [1, 0] });
+      graph.addNode({ id: 'a', content: 'Replacement', embedding: [0, 1] });
+
+      expect(graph.getNodes()).toEqual([{ id: 'a', content: 'Replacement', embedding: [0, 1] }]);
     });
 
     it('should reject an edge referencing an unknown node', () => {
