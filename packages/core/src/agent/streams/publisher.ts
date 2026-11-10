@@ -91,11 +91,11 @@ export function createAgentStreamPublisher({
   // request published before the subscription lands is missed, like one sent
   // to a run that already finished.
   let stopListening: (() => Promise<void>) | undefined;
-  let listening: Promise<void> | undefined = subscribeToAbortRequests(pubsub, runId, () => {
+  let listening: Promise<void> | undefined = subscribeToAbortRequests(pubsub, runId, reason => {
     // A request that lands while the subscription is being released has
     // nothing left to stop; leave it unconfirmed.
     if (ended) return false;
-    abort();
+    abort(reason);
     return true;
   })
     .then(unsubscribe => {
