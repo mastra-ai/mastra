@@ -162,9 +162,9 @@ By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accept
 
 Shutdown then hands back the agent thread runs the process still holds:
 
-- A run still executing is aborted, so it starts no further steps. Clients watching the thread from other processes see it end, and its partial response isn't saved. A tool call already executing when the run is aborted may still finish after the thread is handed back.
+- A run still executing is aborted, so it starts no further steps. Clients watching the thread from other processes see it end, and its partial response isn't saved.
 - A run waiting on a tool approval or suspension stays suspended and can be resumed from another process. A tool call from the same step that's still executing is aborted first, like a run still executing.
-- The thread lease is released right away, so another process can start a run on the thread without waiting for the lease to expire. Release is best-effort: if an aborted run doesn't stop in time, or the lease backend doesn't answer or fails the release, the lease is kept until it expires.
+- The thread lease is released right away, so another process can start a run on the thread without waiting for the lease to expire. Release is best-effort: if an aborted run doesn't stop in time (for example, a tool call that ignores the abort), or the lease backend doesn't answer or fails the release, the lease is kept until it expires.
 
 Handing runs back can take up to about 1.5 seconds past the drain timeout.
 

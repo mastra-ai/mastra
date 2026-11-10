@@ -7971,13 +7971,12 @@ export class Mastra<
    * Agent thread runs this instance still holds are then handed back. A run
    * still executing is aborted so it starts no further steps, and other
    * processes watching its thread see it end; its partial response is not
-   * saved. A tool call already executing may still finish after the thread
-   * is handed back. A run parked on a tool approval or suspension stays
-   * parked and resumable. Either way the thread lease is released right away
-   * instead of at expiry, so another process can use the thread immediately.
-   * Release is best-effort: if an aborted run doesn't stop in time, or the
-   * lease backend doesn't answer or fails the release, the lease is kept
-   * until it expires. Handing runs back can take up to about 1.5 seconds past
+   * saved. A run parked on a tool approval or suspension stays parked and
+   * resumable. Either way the thread lease is released right away instead of
+   * at expiry, so another process can use the thread immediately. Release is
+   * best-effort: if an aborted run doesn't stop in time (for example, a tool
+   * call that ignores the abort), or the lease backend doesn't answer or
+   * fails the release, the lease is kept until it expires. Handing runs back can take up to about 1.5 seconds past
    * `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {

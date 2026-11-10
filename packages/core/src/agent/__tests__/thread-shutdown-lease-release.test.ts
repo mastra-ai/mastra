@@ -467,6 +467,49 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     await observer.mastra.shutdown({ drainTimeout: 200 });
   }, 20_000);
 
+  it('keeps the thread until the lease expires while an aborted tool keeps executing', async () => {
+    const threadId = `shutdown-stubborn-${engine}`;
+    const key = [RESOURCE, threadId].join('\u0000');
+    llm.on({ userMessage: 'ignore abort' }, { toolCalls: [{ id: 'call_stubborn', name: 'stubborn', arguments: {} }] });
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    const stubborn = { started: false, finished: false };
+    const stubbornTool = createTool({
+      id: 'stubborn',
+      description: 'Ignores the abort and keeps working',
+      inputSchema: z.object({}),
+      execute: async () => {
+        stubborn.started = true;
+        await new Promise(resolve => setTimeout(resolve, 3_000));
+        stubborn.finished = true;
+        return 'done';
+      },
+    });
+    const running = replica(shared, events, memory, { stubborn: stubbornTool });
+    const observer = replica(shared, events, memory, {});
+    const follower = await follow(observer.agent, threadId);
+
+    await startStream(running.agent, 'ignore abort', threadId, {});
+    await vi.waitFor(() => expect(stubborn.started).toBe(true), { timeout: 5_000 });
+    const owner = shared.owner(key);
+    expect(owner).toBeDefined();
+
+    await running.mastra.shutdown({ drainTimeout: 200 });
+    // The tool is still executing, so the thread isn't handed over: its lease lapses at the TTL instead.
+    expect(stubborn.finished).toBe(false);
+    expect(shared.owner(key)).toBe(owner);
+    const renewalsAtShutdown = running.pubsub.renewals;
+    await vi.waitFor(() => expect(shared.owner(key)).toBeUndefined(), { timeout: 2_000 });
+    expect(running.pubsub.renewals).toBe(renewalsAtShutdown);
+    expect(follower.errors.filter(error => error.includes(LEASE_LOST))).toEqual([]);
+
+    follower.unsubscribe();
+    running.pubsub.dead = true;
+    await observer.mastra.shutdown({ drainTimeout: 200 });
+  }, 20_000);
+
   it('announces a run parked on an approval as suspended and frees its thread (5)', async () => {
     const threadId = `shutdown-parked-${engine}`;
     const key = [RESOURCE, threadId].join('\u0000');

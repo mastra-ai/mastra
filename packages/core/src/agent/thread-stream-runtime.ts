@@ -1306,9 +1306,8 @@ export class AgentThreadStreamRuntime {
    * A run still executing here is aborted and gets up to `abortGraceMs` to stop. A run parked on a suspension is
    * announced as `run-suspended`, so it stays resumable; any other run as an unpersisted `run-completed`. Each lease
    * is released only after that event is published, so no observer finds the thread free while the run still looks
-   * live there. Aborting stops the run from starting further steps, but a tool call already executing may still
-   * finish after the thread is handed back. A run whose output doesn't finish within the grace keeps its lease
-   * until it expires, and its remaining tool calls fail. Every lease renewal
+   * live there. A run that hasn't stopped within the grace, such as one whose tool call ignores the abort, keeps its
+   * lease until it expires, and its remaining tool calls fail. Every lease renewal
    * of the owner's runs stops, whether or not the run still held its thread. A run `executesElsewhere` reports as
    * executed by another process is left to that process, lease included.
    */
