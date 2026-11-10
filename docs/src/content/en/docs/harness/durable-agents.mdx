@@ -441,12 +441,12 @@ To reduce writes and keep crash recovery:
 - Return small tool results, such as IDs or URLs, instead of large documents.
 - Split long tasks into shorter runs.
 
-Each `PostgresStore` opens up to `max` connections, 20 by default, per process. Keep `replicas × stores per process × max` below the server's `max_connections`, or put a transaction-mode pooler such as PgBouncer in front. See [PostgreSQL](/integrations/databases/postgresql).
+Each `PostgresStore` opens up to `max` connections, 20 by default, per process. A `pool`, `writePool`, or separate `readPool` you pass in uses its own limit. Add up the limits of every pool that connects to the server, across all replicas and processes, and keep the total below the server's `max_connections` with room for other clients. If you put a transaction-mode pooler such as PgBouncer in front, budget its server-side connections the same way. See [PostgreSQL](/integrations/databases/postgresql).
 
-Mastra deletes a run's snapshot rows when the run finishes, so `mastra_workflow_snapshot` collects dead rows quickly. Make autovacuum more aggressive for this table, for example:
+Mastra deletes a run's snapshot rows when the run finishes, so `mastra_workflow_snapshot` collects dead rows quickly. Deletion is best-effort: if it fails, Mastra logs a `Failed to delete workflow snapshot rows` warning and the row stays until you delete it or [prune](/reference/storage/retention) it. Make autovacuum more aggressive for this table. Replace `public` with your `schemaName` if you set one:
 
 ```sql
-ALTER TABLE mastra_workflow_snapshot SET (
+ALTER TABLE public.mastra_workflow_snapshot SET (
   autovacuum_vacuum_scale_factor = 0.01,
   toast.autovacuum_vacuum_scale_factor = 0.01
 );
@@ -454,7 +454,7 @@ ALTER TABLE mastra_workflow_snapshot SET (
 
 To decide whether to add capacity or tune the workload, watch:
 
-- `n_dead_tup` and `last_autovacuum` for `mastra_workflow_snapshot` in `pg_stat_user_tables`
+- `n_dead_tup` and `last_autovacuum` for `mastra_workflow_snapshot` in `pg_stat_user_tables`, and for its TOAST table in `pg_stat_all_tables`, where large snapshots are stored
 - The snapshot upsert's share of total time in `pg_stat_statements`
 - WAL bytes per second (`pg_stat_wal`)
 - Active connections compared with the pool `max`
