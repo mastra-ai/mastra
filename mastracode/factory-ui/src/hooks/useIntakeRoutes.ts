@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -36,11 +36,24 @@ async function sendRouteRequest<T>(
 /** The project's intake routes in the order they are tried, and whether the caller may change them. */
 export function useIntakeRoutesQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
+  return useQuery({ ...intakeRoutesQueryOptions(baseUrl, factoryProjectId ?? ''), enabled: !!factoryProjectId });
+}
+
+/** The read behind `useIntakeRoutesQuery`, also used to load the routes ahead of the page. */
+export function intakeRoutesQueryOptions(baseUrl: string, factoryProjectId: string) {
+  return queryOptions({
     queryKey: queryKeys.intakeRoutes(factoryProjectId),
-    enabled: !!factoryProjectId,
-    queryFn: () => sendRouteRequest<IntakeRouteListResponse>(baseUrl, routesPath(factoryProjectId!)),
+    queryFn: () => sendRouteRequest<IntakeRouteListResponse>(baseUrl, routesPath(factoryProjectId)),
   });
+}
+
+/**
+ * Whether the caller may create, edit and delete this project's boards (an organization admin).
+ * Read off the intake routes, which answer for the project whatever boards it has: a project
+ * need not have a Work board. The server enforces it on every write.
+ */
+export function useCanEditBoards(factoryProjectId: string | undefined): boolean {
+  return useIntakeRoutesQuery(factoryProjectId).data?.canEdit ?? false;
 }
 
 type RouteWrite =

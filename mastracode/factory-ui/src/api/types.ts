@@ -24,6 +24,7 @@ export type IntakeRouteListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.int
 export type IntakeRouteInfo = IntakeRouteListResponse['intakeRoutes'][number];
 export type IntakeRouteInput = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteCreate.bodySchema>;
 export type IntakeRoutePatch = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteUpdate.bodySchema>;
+export type CreateBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardCreate.bodySchema>;
 
 import type {
   CustomProviderInfo,
