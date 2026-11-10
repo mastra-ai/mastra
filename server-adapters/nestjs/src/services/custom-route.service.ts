@@ -5,6 +5,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import {
   cancelReaderOnResponseClose,
   getCustomRouteHTTPExceptionResponse,
+  registerDispatchAdapter,
   writeWithBackpressure,
 } from '@mastra/server/server-adapter';
 import { Inject, Injectable } from '@nestjs/common';
@@ -53,6 +54,13 @@ export class CustomRouteService {
         this.authConfig.set(key, route.requiresAuth !== false);
       }
     }
+
+    // NestMastraServer is not built on @mastra/server's MastraServer, so tell dispatchRoute where routes are served.
+    registerDispatchAdapter(mastra, {
+      prefix: options.prefix ?? '',
+      getCustomRouteAuthConfig: () => this.authConfig,
+      getCustomApiRoutes: () => mastra.getServer()?.apiRoutes ?? [],
+    });
   }
 
   /** Auth config for custom routes, keyed by `METHOD:path`. */

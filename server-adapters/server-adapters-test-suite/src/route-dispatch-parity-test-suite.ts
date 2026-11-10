@@ -3,12 +3,13 @@ import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { DEFAULT_ROLES, FGADeniedError, StaticRBACProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
-import { SimpleAuth } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute, SimpleAuth } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import type { DispatchRouteInput, ServerRoute } from '@mastra/server/server-adapter';
+import type { DispatchRouteInput, ServerContext, ServerRoute } from '@mastra/server/server-adapter';
 import { createRoute, dispatchRoute, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -24,10 +25,73 @@ export interface RouteDispatchParityTestSuiteConfig {
    * Build an app for the given Mastra instance, run the adapter's `init()`, and
    * return a way to send HTTP requests to it by path (e.g. `/api/agents?x=1`).
    */
-  startServer: (mastra: Mastra) => Promise<{
+  startServer: (
+    mastra: Mastra,
+    options?: {
+      /** Serve the built-in routes under this prefix instead of the adapter's default `/api`. */ prefix?: string;
+    },
+  ) => Promise<{
     request: (path: string, init?: RequestInit) => Promise<Response>;
     close?: () => Promise<void>;
   }>;
+
+  /**
+   * How the route that calls `dispatchRoute` is registered: as a schema route (`createRoute`, the default)
+   * or as a Hono-style `registerApiRoute()` for adapters that only serve those as custom routes.
+   */
+  probe?: ProbeStyle;
+
+  /**
+   * Compare error bodies as well as statuses (default). Turn off for adapters that put errors in
+   * their own envelope; `dispatchRoute` always answers with the bare `@mastra/server` error body.
+   */
+  sameErrorBodies?: boolean;
+}
+
+type ProbeStyle = 'schema' | 'hono';
+
+/**
+ * The route standing in for an in-process caller such as the `/api/mcp` server: it is authenticated
+ * by the adapter like any custom route, then runs `run` with the server context the adapter gave it.
+ */
+function createProbe(
+  style: ProbeStyle,
+  run: (query: Record<string, string>, context: ServerContext) => Promise<unknown>,
+): ApiRoute {
+  if (style === 'hono') {
+    return registerApiRoute('/__dispatch', {
+      method: 'ALL',
+      handler: async c =>
+        c.json(
+          (await run(c.req.query(), {
+            mastra: c.get('mastra'),
+            requestContext: c.get('requestContext'),
+            abortSignal: c.req.raw.signal,
+            request: c.req.raw,
+          })) as any,
+        ),
+    });
+  }
+  return createRoute({
+    method: 'ALL',
+    path: '/__dispatch',
+    responseType: 'json',
+    queryParamSchema: z.object({ case: z.string(), prefix: z.string().optional() }),
+    handler: async ({
+      case: caseId,
+      prefix,
+      mastra,
+      requestContext,
+      abortSignal,
+      registeredTools,
+      taskStore,
+      request,
+    }) =>
+      run(
+        { case: caseId, ...(prefix === undefined ? {} : { prefix }) },
+        { mastra, requestContext, abortSignal, registeredTools, taskStore, request },
+      ),
+  }) as unknown as ApiRoute;
 }
 
 type TestUser = { id: string; role: string; studioRole: string };
@@ -82,7 +146,10 @@ function findRoute(method: string, path: string): ServerRoute {
   return route as ServerRoute;
 }
 
-function createParityMastra(probeCases: Map<string, { route: ServerRoute; input: DispatchRouteInput }>) {
+function createParityMastra(
+  probeCases: Map<string, { route: ServerRoute; input: DispatchRouteInput }>,
+  probeStyle: ProbeStyle,
+) {
   const memory = new MockMemory({ storage: new InMemoryStore() });
   const makeAgent = (id: string) =>
     new Agent({
@@ -122,23 +189,9 @@ function createParityMastra(probeCases: Map<string, { route: ServerRoute; input:
 
   // Same shape step 3's `/api/mcp` route has: method ALL, so no RBAC permission of its own;
   // it forwards the adapter-authenticated ServerContext to dispatchRoute.
-  const probe = createRoute({
-    method: 'ALL',
-    path: '/__dispatch',
-    responseType: 'json',
-    queryParamSchema: z.object({ case: z.string() }),
-    handler: async ({ case: caseId, mastra, requestContext, abortSignal, registeredTools, taskStore, request }) => {
-      const probeCase = probeCases.get(caseId)!;
-      return dispatchRoute(probeCase.route, probeCase.input, {
-        mastra,
-        requestContext,
-        abortSignal,
-        registeredTools,
-        taskStore,
-        routePrefix: '/api',
-        request,
-      });
-    },
+  const probe = createProbe(probeStyle, async ({ case: caseId }, context) => {
+    const probeCase = probeCases.get(caseId!)!;
+    return dispatchRoute(probeCase.route, probeCase.input, { ...context, routePrefix: '/api' });
   });
 
   const tokens = Object.fromEntries(Object.entries(USERS));
@@ -182,7 +235,12 @@ type Outcome = { status: number; body: any };
  * and handler-level ownership checks.
  */
 export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTestSuiteConfig) {
-  const { suiteName = 'Route dispatch parity', startServer } = config;
+  const {
+    suiteName = 'Route dispatch parity',
+    startServer,
+    probe: probeStyle = 'schema',
+    sameErrorBodies = true,
+  } = config;
 
   describe(suiteName, () => {
     const probeCases = new Map<string, { route: ServerRoute; input: DispatchRouteInput }>();
@@ -190,7 +248,7 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
     let memory: MockMemory;
 
     beforeAll(async () => {
-      const setup = createParityMastra(probeCases);
+      const setup = createParityMastra(probeCases, probeStyle);
       memory = setup.memory;
       server = await startServer(setup.mastra);
     });
@@ -240,7 +298,7 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
       const dispatched = await viaDispatch(req);
       expect(http.status, JSON.stringify(http.body)).toBe(expectedStatus);
       expect(dispatched.status).toBe(http.status);
-      if (expectedStatus >= 400) {
+      if (expectedStatus >= 400 && sameErrorBodies) {
         expect(dispatched.body).toEqual(http.body);
       }
       return { http: http.body, dispatched: dispatched.body };
@@ -261,8 +319,8 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
 
     describe('agents', () => {
       it('denies generate without agents:execute (RBAC)', async () => {
-        const { http } = await expectParity(generate('viewer-token', 'test-agent'), 403);
-        expect(http.message).toBe('Missing required permission: agents:execute');
+        const { dispatched } = await expectParity(generate('viewer-token', 'test-agent'), 403);
+        expect(dispatched.message).toBe('Missing required permission: agents:execute');
       });
 
       it('allows generate for a member and returns the same text', async () => {
@@ -272,8 +330,8 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
       });
 
       it('denies generate on an agent the FGA provider does not grant', async () => {
-        const { http } = await expectParity(generate('member-token', 'locked-agent'), 403);
-        expect(http.message).toContain('FGA authorization denied');
+        const { dispatched } = await expectParity(generate('member-token', 'locked-agent'), 403);
+        expect(dispatched.message).toContain('FGA authorization denied');
       });
 
       it('allows the FGA-granted owner on the locked agent', async () => {
@@ -558,20 +616,12 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
         });
 
         beforeAll(async () => {
-          const probe = createRoute({
-            method: 'ALL',
-            path: '/__dispatch',
-            responseType: 'json',
-            queryParamSchema: z.object({ case: z.string() }),
-            handler: async ({ case: caseId, mastra, requestContext, abortSignal, request }) => {
-              const probeCase = probeCases.get(caseId)!;
-              return dispatchRoute(probeCase.route, probeCase.input, {
-                mastra,
-                requestContext,
-                abortSignal,
-                ...(variant.forwardRequest === false ? {} : { request }),
-              });
-            },
+          const probe = createProbe(probeStyle, async ({ case: caseId }, { request, ...context }) => {
+            const probeCase = probeCases.get(caseId!)!;
+            return dispatchRoute(probeCase.route, probeCase.input, {
+              ...context,
+              ...(variant.forwardRequest === false ? {} : { request }),
+            });
           });
           const mastra = new Mastra({
             logger: false,
@@ -633,7 +683,7 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
           expect(result.dispatched.status, `dispatch ${JSON.stringify(result.dispatched.body).slice(0, 120)}`).toBe(
             expectedStatus,
           );
-          if (expectedStatus >= 400) expect(result.dispatched.body).toEqual(result.http.body);
+          if (expectedStatus >= 400 && sameErrorBodies) expect(result.dispatched.body).toEqual(result.http.body);
         };
 
         it(`agent generate → ${variant.generate} both ways`, async () => {
@@ -663,7 +713,8 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
           });
         }
 
-        if (variant.custom) {
+        // Schema custom routes; adapters probed through a Hono-style route do not serve them.
+        if (variant.custom && probeStyle === 'schema') {
           const { open, secure } = variant.custom;
           it(`a custom route on a public path → ${open} both ways`, async () => {
             expectAgree(await both('GET', openRoute as unknown as ServerRoute, '/custom/open', {}), open);
@@ -681,15 +732,9 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
     let server: Awaited<ReturnType<RouteDispatchParityTestSuiteConfig['startServer']>>;
 
     beforeAll(async () => {
-      const probe = createRoute({
-        method: 'ALL',
-        path: '/__dispatch',
-        responseType: 'json',
-        queryParamSchema: z.object({ case: z.string() }),
-        handler: async ({ case: caseId, mastra, requestContext, abortSignal }) => {
-          const probeCase = probeCases.get(caseId)!;
-          return dispatchRoute(probeCase.route, probeCase.input, { mastra, requestContext, abortSignal });
-        },
+      const probe = createProbe(probeStyle, async ({ case: caseId }, context) => {
+        const probeCase = probeCases.get(caseId!)!;
+        return dispatchRoute(probeCase.route, probeCase.input, context);
       });
       const mastra = new Mastra({
         logger: false,
@@ -723,6 +768,131 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
       const dispatched = await (await server.request('/__dispatch?case=0')).json();
       expect(http.status).toBe(200);
       expect(dispatched).toEqual({ ok: true, result: await http.json() });
+    });
+  });
+
+  describe(`${suiteName} when routes are not served under /api`, () => {
+    const probeCases = new Map<string, { route: ServerRoute; input: DispatchRouteInput }>();
+    type Server = Awaited<ReturnType<RouteDispatchParityTestSuiteConfig['startServer']>>;
+    let mastra: Mastra;
+    let server: Server;
+    let second: Server | undefined;
+    const headers = { authorization: 'Bearer member-token', 'content-type': 'application/json' };
+
+    beforeAll(async () => {
+      // The probe only names a prefix when the test asks it to, like a caller that does not know it.
+      const probe = createProbe(probeStyle, async ({ case: caseId, prefix }, context) => {
+        const probeCase = probeCases.get(caseId!)!;
+        return dispatchRoute(probeCase.route, probeCase.input, {
+          ...context,
+          ...(prefix === undefined ? {} : { routePrefix: prefix }),
+        });
+      });
+      mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': new Agent({
+            id: 'test-agent',
+            name: 'test-agent',
+            instructions: 'You are a test agent',
+            model: createMockModel({ mockText: 'hello from test-agent' }),
+          }),
+        },
+        tools: {
+          'test-tool': createTool({
+            id: 'test-tool',
+            description: 'Echoes its input',
+            inputSchema: z.object({ text: z.string() }),
+            execute: async ({ text }) => ({ echoed: text }),
+          }),
+        },
+        server: {
+          auth: {
+            authenticateToken: async (token: string) => USERS[token] ?? null,
+            protected: ['/mastra/*', '/internal/*'],
+            // Agents are allowed where they are really served; everything else, tools included, is denied.
+            rules: [{ path: ['/__dispatch', '/mastra/agents/*', '/internal/agents/*'], allow: true }],
+          } as any,
+          apiRoutes: [probe],
+        },
+      });
+      server = await startServer(mastra, { prefix: '/mastra' });
+    });
+
+    afterAll(async () => {
+      await server?.close?.();
+      await second?.close?.();
+    });
+
+    type Target = { route: () => ServerRoute; path: string; input: DispatchRouteInput };
+    const generate: Target = {
+      route: () => findRoute('POST', '/agents/:agentId/generate'),
+      path: '/agents/test-agent/generate',
+      input: { pathParams: { agentId: 'test-agent' }, body: { messages: 'hi' } },
+    };
+    const tool: Target = {
+      route: () => findRoute('POST', '/tools/:toolId/execute'),
+      path: '/tools/test-tool/execute',
+      input: { pathParams: { toolId: 'test-tool' }, body: { data: { text: 'ping' } } },
+    };
+
+    const viaHttp = async (target: Server, prefix: string, request: Target) => {
+      const response = await target.request(`${prefix}${request.path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(request.input.body),
+      });
+      const text = await response.text();
+      return { status: response.status, body: text ? JSON.parse(text) : undefined };
+    };
+
+    const probeResponse = (target: Server, request: Target, routePrefix?: string) => {
+      const caseId = String(probeCases.size);
+      probeCases.set(caseId, { route: request.route(), input: request.input });
+      const prefixQuery = routePrefix === undefined ? '' : `&prefix=${encodeURIComponent(routePrefix)}`;
+      return target.request(`/__dispatch?case=${caseId}${prefixQuery}`, { headers });
+    };
+
+    const viaDispatch = async (target: Server, request: Target, routePrefix?: string) => {
+      const response = await probeResponse(target, request, routePrefix);
+      expect(response.status).toBe(200);
+      const outcome = (await response.json()) as
+        | { ok: true; result: unknown }
+        | { ok: false; status: number; body: unknown };
+      return outcome.ok ? { status: 200, body: outcome.result } : { status: outcome.status, body: outcome.body };
+    };
+
+    it('applies the rules written for the real paths, both ways', async () => {
+      expect((await viaHttp(server, '/mastra', generate)).status).toBe(200);
+      expect((await viaDispatch(server, generate)).status).toBe(200);
+
+      const http = await viaHttp(server, '/mastra', tool);
+      expect(http.status).toBe(403);
+      const dispatched = await viaDispatch(server, tool);
+      expect(dispatched.status).toBe(403);
+      if (sameErrorBodies) expect(dispatched.body).toEqual(http.body);
+    });
+
+    it('does not guess between two adapters serving the same Mastra instance', async () => {
+      second = await startServer(mastra, { prefix: '/internal' });
+
+      // Nothing says which server's paths the rules should be read against, so nothing runs.
+      expect((await probeResponse(server, generate)).status).toBe(500);
+      expect((await probeResponse(second, generate)).status).toBe(500);
+
+      // Told which prefix it is serving, each one agrees with its own HTTP routes again.
+      for (const [target, prefix] of [
+        [server, '/mastra'],
+        [second, '/internal'],
+      ] as const) {
+        expect((await viaHttp(target, prefix, generate)).status).toBe(200);
+        expect((await viaDispatch(target, generate, prefix)).status).toBe(200);
+        const http = await viaHttp(target, prefix, tool);
+        expect(http.status).toBe(403);
+        const dispatched = await viaDispatch(target, tool, prefix);
+        expect(dispatched.status).toBe(403);
+        if (sameErrorBodies) expect(dispatched.body).toEqual(http.body);
+      }
     });
   });
 }

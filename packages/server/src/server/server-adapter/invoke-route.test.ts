@@ -31,6 +31,17 @@ const failingRoute = createRoute({
   },
 });
 
+/** An adapter that only needs to exist: constructing it records where routes are served. */
+class TestAdapter extends MastraServer<any, any, any> {
+  stream = vi.fn();
+  getParams = vi.fn();
+  sendResponse = vi.fn();
+  registerRoute = vi.fn();
+  registerContextMiddleware = vi.fn();
+  registerAuthMiddleware = vi.fn();
+  registerHttpLoggingMiddleware = vi.fn();
+}
+
 function securedMastra(
   auth: Record<string, unknown> = { authorize: async () => true },
   server: Record<string, unknown> = {},
@@ -261,18 +272,9 @@ describe('invokeRoute', () => {
     });
 
     it('asks authorize about the path under server.apiPrefix even when an adapter is mounted elsewhere', async () => {
-      class MountedServer extends MastraServer<any, any, any> {
-        stream = vi.fn();
-        getParams = vi.fn();
-        sendResponse = vi.fn();
-        registerRoute = vi.fn();
-        registerContextMiddleware = vi.fn();
-        registerAuthMiddleware = vi.fn();
-        registerHttpLoggingMiddleware = vi.fn();
-      }
       const authorize = vi.fn(async () => true);
       const mastra = securedMastra({ authorize }, { apiPrefix: '/mastra' });
-      new MountedServer({ app: {}, mastra, prefix: '/mounted' });
+      new TestAdapter({ app: {}, mastra, prefix: '/mounted' });
 
       const result = await invokeRoute(traceRoute(), {
         mastra,
@@ -310,7 +312,7 @@ describe('dispatchRoute', () => {
     const result = await dispatchRoute(
       greetRoute,
       { body: { name: 'Ada' } },
-      { mastra: securedMastra(), requestContext, abortSignal },
+      { mastra: securedMastra(), requestContext, abortSignal, routePrefix: '/api' },
     );
 
     expect(result).toMatchObject({ ok: false, status: 401 });
@@ -332,7 +334,7 @@ describe('dispatchRoute', () => {
     const dispatched = await dispatchRoute(
       publicRoute,
       {},
-      { mastra, requestContext: new RequestContext(), abortSignal },
+      { mastra, requestContext: new RequestContext(), abortSignal, routePrefix: '/api' },
     );
     const invoked = await invokeRoute(publicRoute, { mastra, requestContext: new RequestContext() });
 
@@ -356,5 +358,139 @@ describe('dispatchRoute', () => {
     );
 
     expect(result).toEqual({ ok: true, result: { traceId: 'mine' } });
+  });
+
+  describe('never allows more than an HTTP request to the route would', () => {
+    const user = () => {
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_USER_KEY, { id: 'user-1' });
+      return requestContext;
+    };
+
+    /** Callers may list things but not touch a single one. */
+    function thingsSetup() {
+      const ran = vi.fn(async ({ thingId }: { thingId: string }) => ({ deleted: thingId }));
+      const route = createRoute({
+        method: 'DELETE',
+        path: '/things/:thingId',
+        responseType: 'json',
+        pathParamSchema: z.object({ thingId: z.string() }),
+        handler: ran as any,
+      });
+      const mastra = new Mastra({
+        logger: false,
+        server: {
+          auth: {
+            authenticateToken: async () => null,
+            rules: [{ path: '/api/things', methods: ['GET', 'DELETE'], allow: true }],
+          },
+        },
+      });
+      const run = (thingId: unknown) =>
+        dispatchRoute(
+          route,
+          { pathParams: { thingId } },
+          { mastra, requestContext: user(), abortSignal, routePrefix: '/api' },
+        );
+      return { ran, run };
+    }
+
+    it('denies a single thing the rules do not allow', async () => {
+      const { ran, run } = thingsSetup();
+      expect(await run('x')).toMatchObject({ ok: false, status: 403 });
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    // No URL reaches `/things/:thingId` with an empty id, so the rules for `/api/things` must not decide it.
+    it.each([
+      ['an empty id', ''],
+      ['a missing id', undefined],
+      ['a "." id', '.'],
+      ['a ".." id', '..'],
+      ['an id that is not text', { nested: true }],
+    ])('rejects %s instead of authorizing a different path', async (_label, thingId) => {
+      const { ran, run } = thingsSetup();
+      const result = await run(thingId);
+      expect(result).toMatchObject({
+        ok: false,
+        status: 400,
+        body: { error: 'Invalid path parameters', issues: [{ field: 'thingId' }] },
+      });
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('refuses an anonymous caller on a server whose prefix is outside the protected paths', async () => {
+      const ran = vi.fn(async () => ({ ran: true }));
+      const route = createRoute({ method: 'GET', path: '/things', responseType: 'json', handler: ran as any });
+      const mastra = new Mastra({ logger: false, server: { auth: { authenticateToken: async () => null } } });
+
+      const result = await dispatchRoute(
+        route,
+        {},
+        { mastra, requestContext: new RequestContext(), abortSignal, routePrefix: '/internal' },
+      );
+
+      expect(result).toMatchObject({ ok: false, status: 401 });
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('refuses to guess the path when it is not told where the routes are served', async () => {
+      const ran = vi.fn(async () => ({ ran: true }));
+      const route = createRoute({ method: 'GET', path: '/things', responseType: 'json', handler: ran as any });
+      const mastra = new Mastra({
+        logger: false,
+        server: { auth: { authenticateToken: async () => null, authorize: async () => true } },
+      });
+
+      // Not served by an adapter and no routePrefix: an anonymous caller is refused, a user cannot be authorized.
+      expect(
+        await dispatchRoute(route, {}, { mastra, requestContext: new RequestContext(), abortSignal }),
+      ).toMatchObject({ ok: false, status: 401 });
+      await expect(dispatchRoute(route, {}, { mastra, requestContext: user(), abortSignal })).rejects.toThrow(
+        /routePrefix/,
+      );
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('refuses a prefix the server adapter does not serve, such as the empty one custom routes are given', async () => {
+      const ran = vi.fn(async () => ({ ran: true }));
+      const route = createRoute({ method: 'GET', path: '/things', responseType: 'json', handler: ran as any });
+      const mastra = new Mastra({
+        logger: false,
+        server: { auth: { authenticateToken: async () => null, rules: [{ path: '/things', allow: true }] } },
+      });
+      // Serves the route at /api/things, which the rules deny.
+      new TestAdapter({ app: {}, mastra, prefix: '/api' });
+
+      await expect(
+        dispatchRoute(route, {}, { mastra, requestContext: user(), abortSignal, routePrefix: '' }),
+      ).rejects.toThrow(/routePrefix/);
+      expect(await dispatchRoute(route, {}, { mastra, requestContext: user(), abortSignal })).toMatchObject({
+        ok: false,
+        status: 403,
+      });
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('does not let the request body stand in for what the server provides to handlers', async () => {
+      const seen = vi.fn(async (params: Record<string, unknown>) => ({
+        routePrefix: params.routePrefix ?? null,
+        registeredTools: params.registeredTools ?? null,
+        taskStore: params.taskStore ?? null,
+        request: params.request ?? null,
+      }));
+      const route = createRoute({ method: 'POST', path: '/things', responseType: 'json', handler: seen as any });
+
+      const result = await dispatchRoute(
+        route,
+        { body: { routePrefix: '/evil', registeredTools: { t: 1 }, taskStore: 'fake', request: 'fake' } },
+        { mastra: new Mastra({ logger: false }), requestContext: new RequestContext(), abortSignal },
+      );
+
+      expect(result).toEqual({
+        ok: true,
+        result: { routePrefix: null, registeredTools: null, taskStore: null, request: null },
+      });
+    });
   });
 });

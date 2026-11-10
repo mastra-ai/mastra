@@ -9,10 +9,8 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
-  authorizeRoute,
   cancelReaderOnResponseClose,
   checkRouteFGA,
-  checkRouteRBAC,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
   isSafeObjectKey,
@@ -498,8 +496,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     };
 
     // Check route permission (RBAC) and FGA authorization (EE features)
-    const authzError = await authorizeRoute(
-      this.mastra,
+    const authzError = await this.authorizeRoute(
       route,
       {
         ...params.urlParams,
@@ -984,7 +981,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             }
           }
 
-          const permissionError = checkRouteRBAC(server.mastra, serverRoute, ctx.state.requestContext);
+          const permissionError = server.checkRouteRBAC(serverRoute, ctx.state.requestContext);
           if (permissionError) {
             ctx.status = permissionError.status;
             ctx.body = {

@@ -7,10 +7,10 @@ import { MastraServer } from '../index';
 
 createRouteDispatchParityTestSuite({
   suiteName: 'Express route dispatch parity',
-  startServer: async mastra => {
+  startServer: async (mastra, options) => {
     const app = express();
     app.use(express.json());
-    await new MastraServer({ app, mastra }).init();
+    await new MastraServer({ app, mastra, prefix: options?.prefix }).init();
     const server: Server = await new Promise(resolve => {
       const s = app.listen(0, () => resolve(s));
     });

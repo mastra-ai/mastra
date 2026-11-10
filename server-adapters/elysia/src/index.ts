@@ -8,7 +8,6 @@ import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
   checkRouteFGA,
-  checkRouteRBAC,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
   isSafeObjectKey,
@@ -767,7 +766,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       }
 
       // Check route permission (RBAC). Elysia checks it before schema validation.
-      const permissionError = checkRouteRBAC(this.mastra, route, ctx.requestContext);
+      const permissionError = this.checkRouteRBAC(route, ctx.requestContext);
       if (permissionError) {
         return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
           status: permissionError.status,
@@ -1018,7 +1017,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
               });
             }
 
-            const permissionError = checkRouteRBAC(this.mastra, serverRoute, ctx.requestContext);
+            const permissionError = this.checkRouteRBAC(serverRoute, ctx.requestContext);
             if (permissionError) {
               return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
                 status: permissionError.status,

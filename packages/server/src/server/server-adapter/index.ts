@@ -24,7 +24,7 @@ import {
   authorizeAuthenticatedUser,
   coreAuthMiddleware,
   findMatchingCustomRoute,
-  isAuthBypassed,
+  canAccessPublicly,
   isCustomRoutePublic,
   isProtectedCustomRoute,
   pathMatchesPattern,
@@ -629,10 +629,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
     this.prefix = normalizeRoutePath(prefix);
-    dispatchAdapterInfo.set(mastra, {
+    registerDispatchAdapter(mastra, {
       prefix: this.prefix,
       getCustomRouteAuthConfig: () => this.customRouteAuthConfig,
       getCustomApiRoutes: () => this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [],
+      checkRouteRBAC: (route, requestContext) => this.checkRouteRBAC(route, requestContext),
     });
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
@@ -776,6 +777,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
   /**
    * Gets the effective RBAC provider for the current request based on auth mode.
+   *
+   * @deprecated Never consulted by route permission checks, so overriding it has no effect.
+   * Override `checkRoutePermission` to change how a route's permission is decided.
    */
   protected getEffectiveRBACProvider(requestContext: RequestContext) {
     return getEffectiveRBACProvider(this.mastra, requestContext);
@@ -928,6 +932,29 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     requestContext: RequestContext,
   ): { status: number; error: string; message: string } | null {
     return getRoutePermissionError(this.mastra, route, userPermissions, hasPermissionFn, requestContext);
+  }
+
+  /**
+   * RBAC check for a route this adapter serves. Skipped when no auth is configured;
+   * otherwise decided by `checkRoutePermission`, so a subclass override of it still applies.
+   */
+  protected checkRouteRBAC(route: ServerRoute, requestContext: RequestContext): RouteAuthorizationError | null {
+    if (!this.mastra.getStudio?.()?.auth && !this.mastra.getServer()?.auth) {
+      return null;
+    }
+    const userPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
+    return this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
+  }
+
+  /** RBAC (`checkRouteRBAC`) then FGA on the parsed params, after authentication and validation. */
+  protected async authorizeRoute(
+    route: ServerRoute,
+    params: Record<string, unknown>,
+    requestContext: RequestContext,
+  ): Promise<RouteAuthorizationError | null> {
+    return (
+      this.checkRouteRBAC(route, requestContext) ?? (await checkRouteFGA(this.mastra, route, requestContext, params))
+    );
   }
 
   /**
@@ -1756,15 +1783,51 @@ export interface DispatchRouteInput {
 
 export type DispatchRouteResult = { ok: true; result: unknown } | { ok: false; status: number; body: unknown };
 
-/** What `dispatchRoute` needs from the adapter serving a Mastra instance to rebuild a route's request path. */
-const dispatchAdapterInfo = new WeakMap<
-  Mastra,
-  {
-    prefix?: string;
-    getCustomRouteAuthConfig: () => Map<string, boolean> | undefined;
-    getCustomApiRoutes: () => ApiRoute[];
+/** What `dispatchRoute` needs to know about an adapter serving a Mastra instance's routes over HTTP. */
+export interface DispatchAdapterInfo {
+  /** The prefix built-in routes are served under, as request paths reach server auth (e.g. `/api`). */
+  prefix?: string;
+  getCustomRouteAuthConfig?: () => Map<string, boolean> | undefined;
+  getCustomApiRoutes?: () => ApiRoute[];
+  /** The adapter's own RBAC check, so its overrides also apply in-process. */
+  checkRouteRBAC?: (route: ServerRoute, requestContext: RequestContext) => RouteAuthorizationError | null;
+}
+
+const dispatchAdapters = new WeakMap<Mastra, DispatchAdapterInfo[]>();
+
+/**
+ * Tell `dispatchRoute` where an adapter serves a Mastra instance's routes. Adapters built on
+ * `MastraServer` register themselves; adapters that are not must call this.
+ */
+export function registerDispatchAdapter(mastra: Mastra, info: DispatchAdapterInfo): void {
+  const adapters = dispatchAdapters.get(mastra) ?? [];
+  adapters.push(info);
+  dispatchAdapters.set(mastra, adapters);
+}
+
+/**
+ * The adapter whose HTTP paths a dispatched route is authorized against: the one serving
+ * `routePrefix` when given, otherwise the only one registered. `prefix` is undefined when that
+ * cannot be told: several adapters and no `routePrefix`, a `routePrefix` none of the registered
+ * adapters serves (a custom route's own `routePrefix` is empty, for one), or nothing to go on.
+ */
+function resolveDispatchAdapter(
+  mastra: Mastra,
+  routePrefix: string | undefined,
+): { prefix: string | undefined; adapter?: DispatchAdapterInfo } {
+  const adapters = dispatchAdapters.get(mastra) ?? [];
+  if (routePrefix === undefined) {
+    return adapters.length === 1
+      ? { prefix: normalizeRoutePath(adapters[0]!.prefix ?? ''), adapter: adapters[0] }
+      : { prefix: undefined };
   }
->();
+  const prefix = normalizeRoutePath(routePrefix);
+  const serving = adapters.filter(adapter => normalizeRoutePath(adapter.prefix ?? '') === prefix);
+  if (adapters.length > 0 && serving.length === 0) {
+    return { prefix: undefined };
+  }
+  return { prefix, adapter: serving.length === 1 ? serving[0] : undefined };
+}
 
 /** Studio auth for Studio requests when `studio.auth` is configured, otherwise `server.auth`. */
 function resolveEffectiveAuthConfig(
@@ -1790,27 +1853,52 @@ function resolveEffectiveAuthConfig(
   return null;
 }
 
+const ROUTE_PATH_PARAM = /\/:([A-Za-z0-9_]+)(\?)?/g;
+
+/**
+ * A URL can only carry a path param as a non-empty segment, and `.` / `..` segments are
+ * resolved away before routing. Anything else names a path no HTTP request to this route
+ * has, so it is rejected instead of being authorized as some other path.
+ */
+function findInvalidPathParams(
+  path: string,
+  pathParams: Record<string, unknown>,
+): Array<{ field: string; message: string }> {
+  const issues: Array<{ field: string; message: string }> = [];
+  for (const [, name, optional] of path.matchAll(ROUTE_PATH_PARAM)) {
+    const value = pathParams[name!];
+    if (value === undefined && optional) continue;
+    if (typeof value !== 'string' || value === '') {
+      issues.push({ field: name!, message: 'Path parameter must be a non-empty string' });
+    } else if (value === '.' || value === '..') {
+      issues.push({ field: name!, message: 'Path parameter cannot be "." or ".."' });
+    }
+  }
+  return issues;
+}
+
 /** Fill `:param` / `:param?` segments of a route path the way a client would put them in a URL. */
 function fillRoutePath(path: string, pathParams: Record<string, unknown>): string {
-  return path.replace(/\/:([A-Za-z0-9_]+)(\?)?/g, (_segment, name: string) => {
+  return path.replace(ROUTE_PATH_PARAM, (_segment, name: string) => {
     const value = pathParams[name];
-    return value === undefined || value === null || value === '' ? '' : `/${encodeURIComponent(String(value))}`;
+    return value === undefined ? '' : `/${encodeURIComponent(String(value))}`;
   });
 }
 
 /** Where the in-process pipeline deliberately differs between `dispatchRoute` and `invokeRoute`. */
 interface RoutePipelinePolicy {
   /**
-   * Skip auth for paths an HTTP request reaches without it (public or unprotected paths,
-   * the dev playground). When false, every route that requires auth needs an authenticated user.
+   * Skip auth for paths server auth declares public (and for the dev playground). When false,
+   * every route that requires auth needs an authenticated user.
    */
   honorPublicPaths: boolean;
   /** Path params override same-named query/body fields, instead of the adapters' path < query < body. */
   pathParamsWin: boolean;
   /**
-   * The path server auth's hooks are asked about. `adapter`: the registered adapter's prefix
-   * (custom routes unprefixed, with their auth config) and unsupplied path params dropped, as a
-   * client URL would be. `apiPrefix`: always under `server.apiPrefix`, each `:param` replaced in place.
+   * The path server auth's hooks are asked about. `adapter`: under the prefix of the adapter
+   * serving the routes (custom routes unprefixed, with their auth config), refusing path params
+   * no URL could carry and refusing to run when that prefix is not known. `apiPrefix`: always
+   * under `server.apiPrefix`, each `:param` replaced in place.
    */
   authPath: 'adapter' | 'apiPrefix';
   /** Order inputs are validated in, which decides the error reported when several are invalid. */
@@ -1819,6 +1907,8 @@ interface RoutePipelinePolicy {
   nonZodParseError: 'respond' | 'throw';
   /** Answer with the `Response` an HTTPException carries, instead of the standard error body. */
   customErrorResponses: boolean;
+  /** Handlers only see the server context the caller passed, never same-named request fields. */
+  reserveServerContext: boolean;
 }
 
 const DISPATCH_ROUTE_POLICY: RoutePipelinePolicy = {
@@ -1828,6 +1918,7 @@ const DISPATCH_ROUTE_POLICY: RoutePipelinePolicy = {
   validationOrder: 'query-body-path',
   nonZodParseError: 'respond',
   customErrorResponses: true,
+  reserveServerContext: true,
 };
 
 /** `invokeRoute`'s contract as it shipped; changing any of these changes a public API. */
@@ -1838,6 +1929,7 @@ const INVOKE_ROUTE_POLICY: RoutePipelinePolicy = {
   validationOrder: 'path-query-body',
   nonZodParseError: 'throw',
   customErrorResponses: false,
+  reserveServerContext: false,
 };
 
 /**
@@ -1882,31 +1974,51 @@ async function checkDispatchedRouteAuth(
 
   // Server auth's authorization hooks see the route's own HTTP path, not the
   // path of whatever request (such as an MCP call) is running it.
-  const apiPrefix = normalizeRoutePath(mastra.getServer()?.apiPrefix ?? '/api');
-  const adapter = policy.authPath === 'adapter' ? dispatchAdapterInfo.get(mastra) : undefined;
-  let path: string;
+  const method = route.method;
+  let path: string | undefined;
+  let customRouteAuthConfig: Map<string, boolean> | undefined;
   if (policy.authPath === 'adapter') {
-    const isCustomRoute = (adapter?.getCustomApiRoutes() ?? mastra.getServer()?.apiRoutes ?? []).includes(
-      route as unknown as ApiRoute,
-    );
-    path = `${isCustomRoute ? '' : (adapter?.prefix ?? apiPrefix)}${fillRoutePath(route.path, pathParams)}` || '/';
+    const { prefix, adapter } = resolveDispatchAdapter(mastra, context.routePrefix);
+    customRouteAuthConfig = adapter?.getCustomRouteAuthConfig?.();
+    const customRoutes = adapter?.getCustomApiRoutes?.() ?? mastra.getServer()?.apiRoutes ?? [];
+    // Opt-in built-in routes are listed as custom routes but served under the prefix.
+    const isUnprefixed =
+      customRoutes.includes(route as unknown as ApiRoute) && !(OPT_IN_ROUTES as readonly unknown[]).includes(route);
+    if (isUnprefixed || prefix !== undefined) {
+      path = `${isUnprefixed ? '' : prefix}${fillRoutePath(route.path, pathParams)}` || '/';
+    }
   } else {
+    const apiPrefix = normalizeRoutePath(mastra.getServer()?.apiPrefix ?? '/api');
     path = `${apiPrefix}${route.path.replace(/:(\w+)/g, (_, name: string) =>
       encodeURIComponent(String(pathParams[name] ?? '')),
     )}`;
   }
-  const method = route.method;
-  const customRouteAuthConfig = adapter?.getCustomRouteAuthConfig();
 
-  if (
-    policy.honorPublicPaths &&
-    isAuthBypassed({ path, method, getHeader, authConfig, customRouteAuthConfig, requiresAuth: route.requiresAuth })
-  ) {
-    return null;
+  // Unlike an HTTP request, a path outside the protected patterns is not let through: the
+  // path here is rebuilt, and a wrong prefix must not turn auth off. Only paths declared
+  // public skip auth, plus the dev playground when no auth provider is configured.
+  if (policy.honorPublicPaths && path !== undefined) {
+    const isDevPlayground =
+      typeof authConfig.authenticateToken !== 'function' &&
+      process.env.MASTRA_DEV === 'true' &&
+      getHeader('x-mastra-dev-playground') === 'true';
+    const isPublic =
+      !route.requiresAuth &&
+      (canAccessPublicly(path, method, authConfig) || isCustomRoutePublic(path, method, customRouteAuthConfig));
+    if (isDevPlayground || isPublic) {
+      return null;
+    }
   }
 
   if (!user) {
     return { status: 401, body: { error: 'Invalid or expired token' } };
+  }
+
+  if (path === undefined) {
+    throw new Error(
+      `dispatchRoute cannot tell which path ${method} ${route.path} is served under, so it cannot apply server auth to it. ` +
+        'Set `routePrefix` in the context to the prefix the server adapter serves its built-in routes under (such as "/api").',
+    );
   }
 
   // Hooks get the caller's own headers when the request is forwarded, otherwise the token it authenticated with.
@@ -1935,6 +2047,13 @@ async function runRoutePipeline(
   policy: RoutePipelinePolicy,
 ): Promise<DispatchRouteResult> {
   const { mastra, requestContext } = context;
+
+  if (policy.authPath === 'adapter') {
+    const issues = findInvalidPathParams(route.path, input.pathParams ?? {});
+    if (issues.length > 0) {
+      return { ok: false, status: 400, body: { error: 'Invalid path parameters', issues } };
+    }
+  }
 
   const pathAuthError = await checkDispatchedRouteAuth(route, input.pathParams ?? {}, context, policy);
   if (pathAuthError) {
@@ -2007,13 +2126,28 @@ async function runRoutePipeline(
     ...(policy.pathParamsWin ? parsed.path : {}),
   };
 
-  const authError = await authorizeRoute(mastra, route, params, requestContext);
+  // With an adapter serving the routes, its own RBAC check runs so subclass overrides apply here too.
+  const adapter =
+    policy.authPath === 'adapter' ? resolveDispatchAdapter(mastra, context.routePrefix).adapter : undefined;
+  const authError = adapter?.checkRouteRBAC
+    ? (adapter.checkRouteRBAC(route, requestContext) ?? (await checkRouteFGA(mastra, route, requestContext, params)))
+    : await authorizeRoute(mastra, route, params, requestContext);
   if (authError) {
     return { ok: false, status: authError.status, body: { error: authError.error, message: authError.message } };
   }
 
   try {
-    return { ok: true, result: await route.handler({ ...params, ...context }) };
+    // HTTP adapters always set every server-context field, so request fields never stand in for them.
+    const serverContext: ServerContext = policy.reserveServerContext
+      ? {
+          registeredTools: undefined,
+          taskStore: undefined,
+          routePrefix: undefined,
+          request: undefined,
+          ...context,
+        }
+      : context;
+    return { ok: true, result: await route.handler({ ...params, ...serverContext }) };
   } catch (error) {
     const customResponse = policy.customErrorResponses ? getCustomHTTPExceptionResponse(error) : undefined;
     if (customResponse) {
@@ -2032,26 +2166,38 @@ async function runRoutePipeline(
 }
 
 /**
- * Invoke a route in-process, enforcing what an adapter enforces for an HTTP request to it:
+ * Invoke a route in-process, enforcing what an adapter enforces for an HTTP request to it,
+ * and never allowing more than that request would:
  *
- * 1. Path-scoped authorization from `checkRouteAuth`, evaluated against the route's own
- *    path (adapter prefix + filled path params) and method: `requiresAuth: false`,
- *    protected/public paths, and `authorizeUser` / `authorize` / `rules` / the RBAC default
- *    rules. Authentication is not repeated: the user (`MASTRA_USER_KEY`), permissions, and
- *    auth mode must already be in `context.requestContext` from the caller's authenticated
- *    request, and the auth config used is the one recorded there (`studio.auth` or
- *    `server.auth`), falling back to the request's client-type header only when none was
- *    recorded. `authorizeUser` receives the same `{ raw, headers, header() }` shape as over
- *    HTTP, wrapping a synthetic `Request` for the route's path/method with the caller's
- *    headers (no body).
- * 2. Schema validation: query, then body, then path params.
- * 3. RBAC (`checkRouteRBAC`), then FGA (`checkRouteFGA`) on the parsed params.
- * 4. `route.handler` with the parsed params and `context`.
+ * 1. Path params must be what a URL can carry: a non-empty string for every `:param` (optional
+ *    `:param?` may be left out), and never `.` or `..`. Anything else is a 400.
+ * 2. Path-scoped authorization from `checkRouteAuth`, evaluated against the route's own
+ *    path (the serving adapter's prefix + filled path params) and method: `requiresAuth: false`,
+ *    public paths, and `authorizeUser` / `authorize` / `rules` / the RBAC default rules.
+ *    Authentication is not repeated: the user (`MASTRA_USER_KEY`), permissions, and auth mode
+ *    must already be in `context.requestContext` from the caller's authenticated request, and
+ *    the auth config used is the one recorded there (`studio.auth` or `server.auth`), falling
+ *    back to the request's client-type header only when none was recorded. `authorizeUser`
+ *    receives the same `{ raw, headers, header() }` shape as over HTTP, wrapping a synthetic
+ *    `Request` for the route's path/method with the caller's headers (no body).
+ * 3. Schema validation: query, then body, then path params.
+ * 4. RBAC (the serving adapter's `checkRoutePermission`), then FGA (`checkRouteFGA`) on the
+ *    parsed params.
+ * 5. `route.handler` with the parsed params and `context`.
  *
- * Path params always win over same-named query or body fields, so authorization and the
- * handler both act on the resource named in the path. Failures resolve to the status and
- * JSON body an adapter would send; successful calls return the raw handler result (streams
- * are not converted).
+ * The prefix comes from the adapter serving the Mastra instance. With several adapters, set
+ * `context.routePrefix` to the one whose paths apply; with none registered it is required.
+ * When the prefix cannot be told, or `routePrefix` is one no registered adapter serves, a
+ * caller without a user gets 401 and the call otherwise throws rather than guess a path.
+ *
+ * It is stricter than HTTP in three ways. With auth configured, a route needs a user unless
+ * its path is declared public; a path merely outside the `protected` patterns is not let
+ * through. Path params win over same-named query or body fields, so authorization and the
+ * handler act on the resource named in the path. And request fields never stand in for
+ * server context (`request`, `routePrefix`, `registeredTools`, `taskStore`) left out of `context`.
+ *
+ * Failures resolve to the status and JSON body an adapter would send; successful calls
+ * return the raw handler result (streams are not converted).
  *
  * `invokeRoute` runs the same pipeline for JSON routes with a stricter contract: it never
  * skips auth for public paths and answers with `{ status, body }`.

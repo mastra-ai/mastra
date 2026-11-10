@@ -9,9 +9,7 @@ import {
   MASTRA_FRAMEWORK_PUBLIC_KEY,
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
-  authorizeRoute,
   checkRouteFGA,
-  checkRouteRBAC,
   getFGAProvider,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
@@ -657,8 +655,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         };
 
         // Check route permission (RBAC) and FGA authorization (EE features)
-        const authzError = await authorizeRoute(
-          this.mastra,
+        const authzError = await this.authorizeRoute(
           route,
           {
             ...params.urlParams,
@@ -741,7 +738,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
-        const permissionError = checkRouteRBAC(this.mastra, serverRoute, c.get('requestContext'));
+        const permissionError = this.checkRouteRBAC(serverRoute, c.get('requestContext'));
         if (permissionError) {
           return c.json(
             { error: permissionError.error, message: permissionError.message },
