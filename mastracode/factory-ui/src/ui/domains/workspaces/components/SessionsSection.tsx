@@ -194,7 +194,12 @@ export function SessionsSection() {
         ))}
       </div>
 
-      {loadFailed && <SidebarLoadError onRetry={retry}>Couldn’t load sessions</SidebarLoadError>}
+      {loadFailed && (
+        // Sessions has always reported a failed load without an alert; sharing the row doesn't change that.
+        <SidebarLoadError onRetry={retry} announce={false}>
+          Couldn’t load sessions
+        </SidebarLoadError>
+      )}
       {loaded && emptyMessage !== undefined && <SidebarEmptyNote>{emptyMessage}</SidebarEmptyNote>}
 
       {deletion.pendingConfirmation && (

@@ -81,9 +81,18 @@ export function LoadErrorState({ title, error, onRetry, retrying }: RetryProps &
  * A sidebar list that failed to load. Retry is an icon, like the section header's actions above it, so the message
  * keeps the narrow sidebar's width.
  */
-export function SidebarLoadError({ children, onRetry, retrying }: RetryProps & { children: ReactNode }) {
+export function SidebarLoadError({
+  children,
+  onRetry,
+  retrying,
+  announce = true,
+}: RetryProps & {
+  children: ReactNode;
+  /** Read the failure out as an alert. Off for a list that has always failed quietly. */
+  announce?: boolean;
+}) {
   return (
-    <div role="alert" className="flex min-w-0 items-center justify-between gap-2 py-0.5 pl-3">
+    <div role={announce ? 'alert' : undefined} className="flex min-w-0 items-center justify-between gap-2 py-0.5 pl-3">
       <Txt as="p" variant="label" className="text-destructive-foreground m-0 min-w-0 truncate">
         {children}
       </Txt>
