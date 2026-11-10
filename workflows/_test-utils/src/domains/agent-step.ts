@@ -8,7 +8,6 @@ import { z } from 'zod';
 // @ts-ignore
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
 import { createTextStreamModel } from '../mock-models';
 import { stepsOf } from '../steps';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
@@ -591,10 +590,10 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
     it.skipIf(skipTests.agentStepMastraInstance)(
       'should be able to use an agent as a step via mastra instance',
       async ({ skip }) => {
-        const { createWorkflow, createStep, Agent } = ctx;
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return skip('engine factory does not provide Agent');
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
 
         const agent1Prompts: string[] = [];
@@ -739,10 +738,10 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
     it.skipIf(skipTests.agentStepNestedMastraInstance)(
       'should be able to use an agent as a step in nested workflow via mastra instance',
       async ({ skip }) => {
-        const { createWorkflow, createStep, cloneStep, Agent } = ctx;
+        const { createWorkflow, createStep, cloneStep, Agent, Mastra } = ctx;
 
-        if (!Agent || !cloneStep) {
-          return skip('engine factory does not provide Agent or cloneStep');
+        if (!Agent || !Mastra || !cloneStep) {
+          return skip('engine factory does not provide Agent, Mastra or cloneStep');
         }
 
         const agent1Prompts: string[] = [];

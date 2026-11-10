@@ -592,6 +592,7 @@ export function createWorkflowTestSuite(config: WorkflowTestConfig) {
       createStep: factory.createStep,
       createTool: factory.createTool,
       Agent: factory.Agent,
+      Mastra: factory.Mastra,
       mapVariable,
       cloneStep,
       cloneWorkflow,
