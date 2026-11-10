@@ -130,6 +130,15 @@ Failed checks and errors thrown by the handler are returned as a status and body
 - **Only JSON routes are supported.** `invokeRoute()` throws for routes with any other `responseType`, such as streaming or MCP transport routes.
 - **HTTP-only handler parameters aren't supplied.** The handler receives the parsed parameters, `mastra`, `requestContext`, and `abortSignal`, but not `request`, `registeredTools`, `taskStore`, or `routePrefix`. Routes that read those aren't suitable.
 
+## Differences from `dispatchRoute()`
+
+[`dispatchRoute()`](/reference/server/dispatch-route) runs the same checks for any route, including streaming routes, and differs in these ways:
+
+- `invokeRoute()` always needs an authenticated user when auth is configured. `dispatchRoute()` lets a caller without a user reach paths your auth config declares public.
+- `invokeRoute()` builds the path for `authorize()` and `rules` from the server's `apiPrefix`. `dispatchRoute()` uses the prefix of the server adapter that serves the route.
+- `invokeRoute()` lets a body field override a path parameter with the same name, as the HTTP adapters do. `dispatchRoute()` lets the path parameter win.
+- `invokeRoute()` returns `{ status, body }`. `dispatchRoute()` returns the handler's raw result, or a status and error body when a check fails.
+
 ## Related
 
 - [`dispatchRoute()`](/reference/server/dispatch-route)

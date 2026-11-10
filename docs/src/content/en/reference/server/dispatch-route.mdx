@@ -161,6 +161,8 @@ A `DispatchRouteResult`, which is one of two shapes:
 - **Path parameters win.** A body or query field with the same name as a path parameter is overridden, so authorization and the handler act on the resource named in the path.
 - **Protected patterns don't open other paths.** With auth configured, a route needs a user unless its path is declared public, even when it's outside your `protected` patterns.
 - **Adapter overrides apply.** A `checkRoutePermission()` override on the serving `MastraServer` subclass also runs for dispatched routes.
+- **`authorizeUser()` gets a stand-in request.** It receives a request for the dispatched route's path and method that carries the headers of `context.request` and no body.
+- **Server context can't come from the input.** `request`, `routePrefix`, `registeredTools`, and `taskStore` reach the handler only from `context`, never from body or query fields with those names.
 
 ## Custom adapters
 
@@ -170,6 +172,16 @@ Adapters that extend `MastraServer` tell `dispatchRoute()` where they serve rout
 import { registerDispatchAdapter } from '@mastra/server/server-adapter'
 
 registerDispatchAdapter(mastra, { prefix: '/api' })
+```
+
+An adapter that doesn't extend `MastraServer` can run the route permission and FGA checks of the built-in adapters with `authorizeRoute()`, after authenticating the request and validating its parameters. It resolves to `null` when the call is allowed, or to a `403` error to send back. `checkRouteRBAC()` runs the permission check alone.
+
+```typescript
+import { authorizeRoute } from '@mastra/server/server-adapter'
+
+const denied = await authorizeRoute(mastra, route, params, requestContext)
+if (denied)
+  return Response.json({ error: denied.error, message: denied.message }, { status: denied.status })
 ```
 
 ## Related
