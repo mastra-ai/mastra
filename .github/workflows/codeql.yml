@@ -192,6 +192,9 @@ jobs:
           text: ${{ steps.state.outputs.text }}
           # #eng-maintainer-alerts
           channel: 'C0CD83YFFNF'
+          # An undelivered alert fails this job, so this scan is not used as the cutoff
+          # for "new" alerts and the next scan reports them again.
+          strict: 'true'
 
       - name: Fail when the alerts could not be checked
         if: steps.state.outputs.checked == 'false'
