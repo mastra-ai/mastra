@@ -29,7 +29,7 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
-To use Mastra's product fonts, Mona Sans for text and Commit Mono for code, add `fonts.css`. It loads both as woff2 split by script, so a page only downloads the characters it renders, and points the font tokens at them. Without it, text uses the system font stacks.
+To use Mastra's product fonts, Mona Sans for text and Commit Mono for code, add `fonts.css`. The font files ship inside the package as woff2, split by script so a page only downloads the characters it renders, and the stylesheet points the font tokens at them. Without it, text uses the system font stacks.
 
 ```css
 @import '@mastra/playground-ui/fonts.css';

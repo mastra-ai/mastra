@@ -6,6 +6,15 @@ settings:
 
 catalogs:
   default:
+    '@stryker-mutator/core':
+      specifier: 10.0.0
+      version: 10.0.0
+    '@stryker-mutator/vitest-runner':
+      specifier: 10.0.0
+      version: 10.0.0
+    '@vitest/ui':
+      specifier: 5.1.0
+      version: 5.1.0
     date-fns:
       specifier: 4.4.0
       version: 4.4.0
@@ -18,16 +27,15 @@ catalogs:
     react-dom:
       specifier: ^19.3.1
       version: 19.3.1
+    sonner:
+      specifier: 2.0.7
+      version: 2.0.7
+    typescript:
+      specifier: ^7.0.2
+      version: 7.0.2
     vitest:
       specifier: 5.1.0
       version: 5.1.0
-    zod:
-      specifier: ^4.6.7
-      version: 4.6.7
-  ts6:
-    typescript:
-      specifier: ^6.0.3
-      version: 6.0.3
 
 overrides:
   '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
@@ -6007,12 +6015,6 @@ importers:
       '@dagrejs/dagre':
         specifier: ^1.1.8
         version: 1.1.8
-      '@fontsource-variable/mona-sans':
-        specifier: 5.3.0
-        version: 5.3.0
-      '@fontsource/commit-mono':
-        specifier: 5.3.0
-        version: 5.3.0
       '@hello-pangea/dnd':
         specifier: ^18.0.1
         version: 18.0.1(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -6030,7 +6032,7 @@ importers:
         version: 7.1.1(@cfworker/json-schema@4.1.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)
       '@nangohq/frontend':
         specifier: 0.71.9
-        version: 0.71.9(supports-color@10.2.2)
+        version: 0.71.9(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       '@pierre/diffs':
         specifier: 1.5.1
         version: 1.5.1(@shikijs/themes@4.6.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -14712,12 +14714,6 @@ packages:
     engines: {node: '>=24.0.0'}
     bundledDependencies:
       - '@fly/client-signals'
-
-  '@fontsource-variable/mona-sans@5.3.0':
-    resolution: {integrity: sha512-PkxRB3KI4z9Gjpk7vVqgO3GMSyQuOIIj4TaRDbvbcDj8SzWwI38jvLTQxJM/cTRorhcT7h8qjcllR+qjRtM/Fg==}
-
-  '@fontsource/commit-mono@5.3.0':
-    resolution: {integrity: sha512-Bs+zlEWHDgk/cCVWEMJJaA7LbBU3Ixi5Zums+SSwMKdm2N7RJ4P7jCJTwsMHRt5WFiXYB0tu0q9HMfkn0YsLsQ==}
 
   '@google-cloud/common@6.1.0':
     resolution: {integrity: sha512-Ohjxjvusr65+SiEVBrilpyn1ir9CM8ZqWjcf7bA8ph1GCunxI6bbwtcl7iGl67A7Lr4Nz7WpNzITNETwggc7pw==}
@@ -38046,10 +38042,6 @@ snapshots:
 
   '@fly/sprites@0.2.4': {}
 
-  '@fontsource-variable/mona-sans@5.3.0': {}
-
-  '@fontsource/commit-mono@5.3.0': {}
-
   '@google-cloud/common@6.1.0(supports-color@10.2.2)':
     dependencies:
       '@google-cloud/projectify': 4.0.0
@@ -40072,9 +40064,9 @@ snapshots:
       - debug
       - supports-color
 
-  '@nangohq/frontend@0.71.9(supports-color@10.2.2)':
+  '@nangohq/frontend@0.71.9(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
-      '@nangohq/types': 0.71.9(supports-color@10.2.2)
+      '@nangohq/types': 0.71.9(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -40088,7 +40080,7 @@ snapshots:
       - debug
       - supports-color
 
-  '@nangohq/types@0.71.9(supports-color@10.2.2)':
+  '@nangohq/types@0.71.9(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       json-schema: 0.4.0
@@ -45732,7 +45724,7 @@ snapshots:
       obug: 3.0.0
       std-env: 4.3.0
       tinyrainbow: 3.2.0
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -45810,7 +45802,7 @@ snapshots:
       pathe: 2.0.3
       sirv: 3.0.2
       tinyrainbow: 3.2.0
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/utils@3.2.4':
     dependencies:

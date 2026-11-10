@@ -12,6 +12,7 @@
     "components.css",
     "sources.css",
     "fonts.css",
+    "fonts",
     "theme",
     "oxlint"
   ],
@@ -194,8 +195,6 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
     "@dagrejs/dagre": "^1.1.8",
-    "@fontsource-variable/mona-sans": "5.3.0",
-    "@fontsource/commit-mono": "5.3.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@lezer/common": "^1.5.4",
     "@lezer/highlight": "^1.2.5",

@@ -1,5 +1,4 @@
 import fs from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
 import path, { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,18 +10,7 @@ import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/**
- * The product fonts come from `@mastra/playground-ui/fonts.css`, which imports
- * them from Playground UI's own Fontsource dependencies. pnpm links those into
- * its store, outside the workspace root, so Vite may only serve their font files
- * once each package's real folder is allowed. Resolving through Playground UI
- * keeps the rest of the store out of reach.
- */
-const playgroundUiRoot = realpathSync(resolve(here, '../node_modules/@mastra/playground-ui'));
-const fontPackageRoots = ['@fontsource-variable/mona-sans', '@fontsource/commit-mono'].map(name =>
-  realpathSync(resolve(playgroundUiRoot, 'node_modules', name)),
-);
-const fsAllow = [searchForWorkspaceRoot(here), ...fontPackageRoots];
+const fsAllow = [searchForWorkspaceRoot(here)];
 
 /**
  * Dev-proxy target for the API server and the UI dev-server port. Overridable

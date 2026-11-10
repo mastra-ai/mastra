@@ -8,4 +8,4 @@ Added `@mastra/playground-ui/fonts.css`, which loads Mastra's product fonts, Mon
 @import '@mastra/playground-ui/fonts.css';
 ```
 
-Fonts load as woff2 split by script, so a page only downloads the characters it renders.
+The font files ship inside the package as woff2, split by script, so a page only downloads the characters it renders and an app needs no font dependencies or files of its own.
