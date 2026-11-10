@@ -214,7 +214,7 @@ describe('LiveSessions', () => {
 });
 
 describe('liveSessionsTouchingTheFeed', () => {
-  it("touches the feed of a recovered session's Factory, read from its row since its state lost it", async () => {
+  it('touches the feed of a session whose state names no Factory, read from its row', async () => {
     const controller = fakeController();
     const eventBus = new EventEmitterPubSub();
     const rows = {

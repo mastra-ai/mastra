@@ -992,9 +992,10 @@ function decisionRowPayload(decision: unknown): Record<string, unknown> {
  * A route move is claimed and handed back every few seconds while its card's run is in flight.
  * Claimed from `pending` it shows nothing new until it moves the card, and that move announces itself.
  */
-function claimShowsNothing(table: string, row: GovernanceDbRow): boolean {
-  if (table !== 'factory_deferred_decisions') return true;
-  return row.status === 'pending' && isStatusEventDecision(decisionRowPayload(row.decision));
+function claimShowsOnBoard(table: string, row: GovernanceDbRow): boolean {
+  if (table !== 'factory_deferred_decisions') return false;
+  const routeMoveStillWaiting = row.status === 'pending' && isStatusEventDecision(decisionRowPayload(row.decision));
+  return !routeMoveStillWaiting;
 }
 
 function safeJsonParse(value: string): unknown {
@@ -1847,8 +1848,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
               if (!currentClaimable && !currentExpired) return null;
               didClaim = true;
-              if (!claimShowsNothing(table, current)) {
-                shown.add({ orgId: current.org_id as string, factoryProjectId: current.factory_project_id as string });
+              if (claimShowsOnBoard(table, current)) {
+                shown.add({ orgId: current.org_id, factoryProjectId: current.factory_project_id });
               }
               return {
                 status: 'leased',

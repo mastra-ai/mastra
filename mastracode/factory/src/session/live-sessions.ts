@@ -131,7 +131,7 @@ export function liveSessionsTouchingTheFeed(
       touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
       return;
     }
-    // A session recovered after a restart comes back with its org only.
+    // Only a Factory run carries its project in state, and a recovered one can come back without it: its row names it.
     rows
       .getBySessionId(session.identity.getId())
       .then(row => {

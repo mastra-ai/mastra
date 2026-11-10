@@ -17,17 +17,17 @@ export async function streamFeedEvents(
   signal: AbortSignal,
 ): Promise<void> {
   const silence = new AbortController();
-  let silent: ReturnType<typeof setTimeout> | undefined;
+  let silenceTimer: ReturnType<typeof setTimeout> | undefined;
   const heard = () => {
-    clearTimeout(silent);
-    silent = setTimeout(() => silence.abort(), FEED_SILENCE_LIMIT_MS);
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => silence.abort(), FEED_SILENCE_LIMIT_MS);
   };
   heard();
-  const stopped = AbortSignal.any([signal, silence.signal]);
+  const closedOrSilent = AbortSignal.any([signal, silence.signal]);
   try {
     const response = await fetch(
       `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/feed-events`,
-      { headers: { Accept: 'text/event-stream' }, credentials: 'include', signal: stopped },
+      { headers: { Accept: 'text/event-stream' }, credentials: 'include', signal: closedOrSilent },
     );
     if (!response.ok || !response.body) {
       throw new RequestError(`Feed stream failed (${response.status})`, response.status);
@@ -39,13 +39,13 @@ export async function streamFeedEvents(
         controller.enqueue(chunk);
       },
     });
-    await readSSE(response.body.pipeThrough(heardBytes, { signal: stopped }), (event, data) => {
+    await readSSE(response.body.pipeThrough(heardBytes, { signal: closedOrSilent }), (event, data) => {
       if (event !== 'feed') return;
       const parsed: unknown = JSON.parse(data);
       if (!isRecord(parsed)) return;
       handlers.onEvent(typeof parsed.workItemId === 'string' ? { workItemId: parsed.workItemId } : {});
     });
   } finally {
-    clearTimeout(silent);
+    clearTimeout(silenceTimer);
   }
 }
