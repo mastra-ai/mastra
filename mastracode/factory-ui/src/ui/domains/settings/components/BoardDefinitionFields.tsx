@@ -125,7 +125,7 @@ function PhaseEditor({
                 });
               }}
             >
-              <SelectTrigger size="sm" aria-label={`${phase.name} kind`}>
+              <SelectTrigger size="sm" className="w-32" aria-label={`${phase.name} kind`}>
                 {PHASE_KINDS.find(option => option.kind === phase.kind)?.label}
               </SelectTrigger>
               <SelectContent>

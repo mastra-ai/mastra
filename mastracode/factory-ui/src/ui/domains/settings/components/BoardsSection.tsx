@@ -48,9 +48,15 @@ function useSkillNames(factoryId: string): string[] {
 function IntakeNote({ factoryId }: { factoryId: string }) {
   return (
     <Notice variant="info">
-      New cards land on the Work board unless an intake route sends them to this one. Choose where each source files its
-      cards in <Link to={settingsSectionPath(factoryId, 'intake')}>Work Intake</Link>, or add routes with the Factory
-      API.
+      {/* One element: the notice stacks its children. */}
+      <span>
+        New cards land on the Work board unless an intake route sends them to this one. Choose where each source files
+        its cards in{' '}
+        <Link to={settingsSectionPath(factoryId, 'intake')} className="underline">
+          Work Intake
+        </Link>
+        , or add routes with the Factory API.
+      </span>
     </Notice>
   );
 }
