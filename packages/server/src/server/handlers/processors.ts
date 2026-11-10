@@ -12,6 +12,7 @@ import {
   executeProcessorResponseSchema,
 } from '../schemas/processors';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { listAgentsVisibleTo } from './agent-access';
 import { handleError } from './error';
 
 // ============================================================================
@@ -155,7 +156,7 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific processor including its phases and configurations',
   tags: ['Processors'],
   requiresAuth: true,
-  handler: async ({ mastra, processorId }) => {
+  handler: async ({ mastra, requestContext, processorId }) => {
     try {
       // Get the processor from Mastra's registered processors
       let processorEntry: Processor | ProcessorWorkflow | undefined;
@@ -178,8 +179,12 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
       const phases = detectProcessorPhases(processorEntry);
 
       // Get agent configurations for this processor
-      const configs = mastra.getProcessorConfigurations(processorId);
-      const agents = mastra.listAgents() || {};
+      // Hydrated stored agents register their configurations too; leave out those the caller can't see.
+      const allAgents = mastra.listAgents() || {};
+      const agents = listAgentsVisibleTo(allAgents, requestContext);
+      const configs = mastra
+        .getProcessorConfigurations(processorId)
+        .filter(c => !(c.agentId in allAgents) || c.agentId in agents);
       const configurations = configs.map(c => ({
         agentId: c.agentId,
         agentName: agents[c.agentId]?.name || c.agentId,
