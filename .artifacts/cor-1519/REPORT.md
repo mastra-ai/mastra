@@ -202,3 +202,38 @@ Memory: at this load (~29k pending frames of 16 chars each), the outage memory d
   - This matches the documented retry budget, so F2 may be considered by design. It is reported, not fixed.
 
 Not covered: `docker stop/start` (connection loss, as opposed to a hung connection), multiple processes, payloads larger than 16-char chunks, more than 6 concurrent runs.
+
+### 5-minute failure: read-only attribution (no reruns)
+
+Source refs are at merge 82fffe73 (main 66c620c0).
+
+**Transport contract** (`pubsub/redis-streams/src/index.ts`):
+- `#publishRemote` (619–660) races each XADD against the time left in `publishRetryBudgetMs` (default 120000) and rejects with `PublishRetryBudgetExhaustedError` when that time runs out.
+- The losing XADD is not cancelled. It stays written to the socket (or in node-redis's offline queue) and can still be applied later.
+- Documented: a retry after a lost reply can append the event twice. At-least-once delivery and duplicate event ids are documented in the code comment at 631–634 and in CHANGELOG #29512.
+- Not documented: the error's own docstring (341–345) says the publish "could not reach Redis". That is inaccurate when the connection is alive but hung, as with `docker pause`. In that case the outcome is unknown, not a guaranteed failure.
+- Existing test: `publish-transient-retry.test.ts` "publish gives up when Redis stays down after the drop" (58–85) only covers a proxy that closes its listener. No test covers a timed-out XADD that lands later.
+
+**Plain runs (F1).**
+- Per run p0–p4: 6306 caller frames, 6306 bus publishes started, 6304 acked, 2 rejected after the budget. Redis XRANGE has 6306 entries with exact text and no duplicates. Caller, observer and replay are exact.
+- The plain publisher (`packages/core/src/agent/streams/publisher.ts`, queue `.catch(warn)`) logs these as failed frames, but they were delivered.
+- Classification: missing contract. "Budget exhausted" is reported, and treated by callers, as a delivery failure when it actually means the outcome is unknown. There was no data loss in this run.
+
+**Durable run (F2).**
+- Timeline for d0 (runId f70a48e4…), from Redis entries:
+  - index 96, text-delta, produced 16:12:00.270Z. Its publish started during the pause, was rejected about 120s later (budget failure #1), and still landed after the unpause.
+  - The durable model step awaits each chunk publish (`agent/durable/workflows/steps/llm-execution.ts` 1931–1946). The publish error is wrapped in `DurableChunkPublishError` and rethrown as its cause, so it becomes the step's fatal error.
+  - index 97, a chunk with type `error` and `PublishRetryBudgetExhaustedError`, produced 16:14:00.817Z. `emitFatalErrorBail` emits this (llm-execution 421–431). Its own publish then hung and was rejected 120s later (budget failure #2), so the step-finish that normally follows was never emitted and the step threw. This chunk also landed after the unpause.
+  - index 98, a top-level `error` event created 16:16:00.821Z. `DurableAgent.settleExecution` → `emitError` → `emitErrorEvent` emits this (`agent/durable/durable-agent.ts` 2581–2586, 2700–2722). Redis acked it after the unpause.
+  - The caller read back nothing during the outage. It got all 99 frames when Redis returned (~305.8s, 16:17:00Z), ending in an `error` chunk then the `error` event. Text: 1504 of 100800 chars.
+- The two error frames are one fault (the stalled bus) reported by two layers: the step's error chunk, and the agent's terminal error event. The duplication only happens because the error chunk's own publish also failed. When a fatal error's chunk publishes normally, the run ends through the bail path without a second error event.
+- Classification: the run failing after the budget matches the documented transport budget and the durable step's design that a failed chunk publish is fatal (`DurableChunkPublishError`, added in 234d7a3e / #29263). Silence until recovery follows from that design: the caller's only channel is the same stalled bus, and a read-back idle timeout is opt-in (`idleTimeoutMs`, no default).
+- Missing contract: there is no stated behavior for a durable run when the bus is down longer than the budget. The run is marked failed even though every frame it published eventually landed.
+- Not shown to be a regression. Not checked against older baselines, because no claim here depends on that.
+
+| run | caller frames | bus started/acked/failed | Redis entries | text | caller closed |
+|---|---|---|---|---|---|
+| p0–p4 (each) | 6306 | 6306/6304/2 | 6306 | exact (100800) | 323.8s |
+| d0 | 99 | 99/97/2 | 99 | 1504/100800 | 305.8s (`error,error`) |
+
+Outage: down at 5.1s, up at 305.8s. Qualification stays OPEN on the 5-minute cell. No ticket is proposed until the parent decides.
