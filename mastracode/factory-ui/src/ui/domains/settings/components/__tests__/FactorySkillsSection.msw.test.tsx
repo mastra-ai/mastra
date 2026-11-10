@@ -148,11 +148,10 @@ describe('FactorySkillsSection', () => {
     const work = await screen.findByRole('region', { name: 'Work board' });
     expect(within(work).getByText('factory-triage')).toBeInTheDocument();
     expect(within(work).getByText('factory-plan')).toBeInTheDocument();
-    expect(within(work).queryByText('factory-review')).not.toBeInTheDocument();
-
-    const review = screen.getByRole('region', { name: 'Review board' });
-    expect(within(review).getByText('factory-review')).toBeInTheDocument();
-    expect(within(review).getByText('factory-rereview')).toBeInTheDocument();
+    // Work's PR review lane took over the retired Review board's skills.
+    expect(within(work).getByText('factory-review')).toBeInTheDocument();
+    expect(within(work).getByText('factory-rereview')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Review board' })).not.toBeInTheDocument();
 
     const release = screen.getByRole('region', { name: 'Release Preview board' });
     expect(within(release).getByText('release-preparer')).toBeInTheDocument();
@@ -161,7 +160,7 @@ describe('FactorySkillsSection', () => {
     expect(within(release).queryByText(/factory-/)).not.toBeInTheDocument();
 
     // Built-ins come first regardless of registry order.
-    const expected = ['Work board', 'Review board', 'Release Preview board'].map(name =>
+    const expected = ['Work board', 'Release Preview board'].map(name =>
       screen.getByRole('region', { name }),
     );
     expect(screen.getAllByRole('region', { name: / board$/ })).toEqual(expected);

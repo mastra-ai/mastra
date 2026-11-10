@@ -40,11 +40,14 @@ export function BoardAutomationSettings({
   autoRunEnabled,
   reviewTestChecksEnabled,
   selfReviewEnabled,
+  offersSelfReview,
 }: {
   factoryProjectId: string;
   autoRunEnabled: boolean;
   reviewTestChecksEnabled: boolean;
   selfReviewEnabled: boolean;
+  /** Whether this board has a self-review phase for the setting to turn on. */
+  offersSelfReview: boolean;
 }) {
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
   const testChecks = useSetFactoryAutomationMutation(factoryProjectId, 'reviewTestChecksEnabled');
@@ -71,12 +74,14 @@ export function BoardAutomationSettings({
             mutation={autoRun}
             description="Start incoming work automatically."
           />
-          <AutomationSwitch
-            label="Self-review before pull requests"
-            enabled={selfReviewEnabled}
-            mutation={selfReview}
-            description="An independent agent reviews and tests the branch before the pull request opens."
-          />
+          {offersSelfReview && (
+            <AutomationSwitch
+              label="Self-review before pull requests"
+              enabled={selfReviewEnabled}
+              mutation={selfReview}
+              description="An independent agent reviews and tests the branch before the pull request opens."
+            />
+          )}
           <AutomationSwitch
             label="Publish review test checks"
             enabled={reviewTestChecksEnabled}

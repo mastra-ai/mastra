@@ -37,10 +37,9 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "gemma-4-31b-it:free": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "glm-5.3": [
@@ -55,15 +54,16 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "nemotron-3-ultra-550b-a55b:free": [
       {
         "type": "effort",
         "values": ["none", "medium", "high"]
-      }
-    ],
-    "gemma-4-31b-it:free": [
-      {
-        "type": "toggle"
       }
     ]
   }

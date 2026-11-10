@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -39,12 +40,12 @@ export function useCreateFactoryFromDraft({
   const saveLinearSelection = useSaveIntakeSelectionMutation('linear');
   const saveJiraSelection = useSaveIntakeSelectionMutation('jira');
 
-  // Issues belong on Work. An app that replaced the built-in boards leaves the
-  // source routed but boardless, so intake settings prompt for a board instead
-  // of guessing one.
+  // Issues belong on the default board. An app that replaced the built-in boards
+  // leaves the source routed but boardless, so intake settings prompt for a board
+  // instead of guessing one.
   const resolveIntakeBoard = async (factoryProjectId: string) => {
     const { boards } = await queryClient.query(boardCatalogQueryOptions(client, factoryProjectId));
-    return boards.some(board => board.id === 'work') ? 'work' : null;
+    return boards.find(board => board.id === DEFAULT_BOARD_ID)?.id ?? null;
   };
 
   const feedProject = async (input: {

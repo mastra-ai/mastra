@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -29,22 +30,13 @@ interface DisplayedSkill {
   title: string;
 }
 
-const BUILT_IN_BOARD_SKILLS: Record<'work' | 'review', DisplayedSkill[]> = {
-  work: [
-    { name: 'factory-triage', title: 'Triage' },
-    { name: 'factory-plan', title: 'Planning' },
-  ],
-  review: [
-    { name: 'factory-review', title: 'Review' },
-    { name: 'factory-rereview', title: 'Re-review' },
-  ],
-};
-
-const DISPLAYED_SKILLS: DisplayedSkill[] = [...BUILT_IN_BOARD_SKILLS.work, ...BUILT_IN_BOARD_SKILLS.review];
-
-function isBuiltInBoard(id: string): id is 'work' | 'review' {
-  return id === 'work' || id === 'review';
-}
+// The default board runs every built-in skill: its Review lane (`pr-review`) took over from the retired Review board.
+const DISPLAYED_SKILLS: DisplayedSkill[] = [
+  { name: 'factory-triage', title: 'Triage' },
+  { name: 'factory-plan', title: 'Planning' },
+  { name: 'factory-review', title: 'Review' },
+  { name: 'factory-rereview', title: 'Re-review' },
+];
 
 function SkillContent({ content }: { content: string }) {
   const [raw, setRaw] = useState(false);
@@ -262,8 +254,8 @@ function BoardGroup({
 }) {
   return (
     <SettingsSubsection scope="factory" title={`${board.title} board`} description={SKILLS_DESCRIPTION}>
-      {isBuiltInBoard(board.id) ? (
-        <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} loading={skillsLoading} />
+      {board.id === DEFAULT_BOARD_ID ? (
+        <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} loading={skillsLoading} />
       ) : (
         <SettingsContainer>
           <CustomBoardPhases board={board} skills={skills} skillsLoaded={skillsLoaded} />

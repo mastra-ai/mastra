@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -40,7 +41,7 @@ export function GithubLabelRouting({
   const [draftBoard, setDraftBoard] = useState<string | null>(null);
 
   const routes = (routesQuery.data ?? []).filter(route => route.integrationId === 'github');
-  const boards = (catalog.data ?? []).filter(board => board.id !== 'work' && board.id !== 'review');
+  const boards = (catalog.data ?? []).filter(board => board.id !== DEFAULT_BOARD_ID);
 
   const scope = showScope ? `Applies to issues from ${repositories.join(', ')}` : undefined;
   const label = (

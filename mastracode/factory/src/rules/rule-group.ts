@@ -34,6 +34,7 @@ export const CARD_RULE_FIELDS = [
   'author.trusted',
   'source.kind',
   'source.integration',
+  'item.pullRequest',
 ] as const;
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;

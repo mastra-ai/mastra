@@ -30,24 +30,18 @@
     "kimi-latest"
   ],
   "reasoning": {
-    "glm-flash-latest": [
+    "glm-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-latest": [
+    "kimi-k2.6": [
       {
         "type": "toggle"
       }
     ],
-    "glm-latest": [
+    "glm-flash-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -59,15 +53,21 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "kimi-latest": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

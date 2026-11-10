@@ -93,7 +93,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(factoryId);
-  const catalog = useBoardCatalog(factoryId);
+  const boards = useBoardCatalog(factoryId);
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
@@ -101,22 +101,19 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
   const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
-  const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
+  const board = currentItem ? itemBoard(currentItem) : undefined;
+  const boardEntry = boards.data?.find(entry => entry.id === board);
+  const boardTitle = boardEntry?.title ?? (board ? board.charAt(0).toUpperCase() + board.slice(1) : '');
   const contextCrumb =
     currentItem && sessionId && threadId
-      ? sessionContextCrumb(
-          currentItem,
-          catalog.data?.find(board => board.id === itemBoard(currentItem))?.phases,
-          sessionId,
-          threadId,
-        )
+      ? sessionContextCrumb(currentItem, boardEntry?.phases, sessionId, threadId)
       : undefined;
 
   const crumbs =
-    currentItem && factoryId ? (
+    currentItem && factoryId && board ? (
       <>
-        <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
-          {isReview ? 'Review' : 'Work'}
+        <Crumb as={Link} to={rememberedBoardPath(factoryId, board)}>
+          {boardTitle}
         </Crumb>
         <Crumb as="span" isCurrent={!contextCrumb}>
           {sessionTitle(currentItem)}

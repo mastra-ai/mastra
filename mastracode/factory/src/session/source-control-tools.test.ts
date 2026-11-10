@@ -6,6 +6,8 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/registry.js';
+import { selfReviewWorkBoard } from '../boards/test-utils.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
@@ -262,7 +264,8 @@ describe('createSourceControlTools', () => {
     });
 
     // The gate as the Factory wires it, reading the bound card and project from real storage.
-    const boundTo = async (source: 'github-issue' | 'github-pr', role: 'work' | 'review') => {
+    // `olderWork`: the project's Work was stored while Work still had its `review` self-review phase.
+    const boundTo = async (source: 'github-issue' | 'github-pr', role: 'work' | 'review', olderWork = true) => {
       const seeded = await createFactoryStorageForTests();
       const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
       await seeded.projects.update({ orgId: 'org-1', id: project.id, input: { selfReviewEnabled: true } });
@@ -279,7 +282,7 @@ describe('createSourceControlTools', () => {
               externalId: `${source}:1`,
             },
             title: 'Factory item',
-            stages: ['review'],
+            stages: [olderWork ? 'review' : 'execute'],
             sessions: {},
             metadata: { authorTrusted: true },
           },
@@ -303,7 +306,12 @@ describe('createSourceControlTools', () => {
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
         selfReviewApprovedHead: () =>
-          selfReviewApprovedHead({ requestContext: context, workItems: seeded.workItems, projects: seeded.projects }),
+          selfReviewApprovedHead({
+            requestContext: context,
+            workItems: seeded.workItems,
+            projects: seeded.projects,
+            boards: olderWork ? new Map([['work', selfReviewWorkBoard]]) : createBoardRegistry(),
+          }),
       });
       return { setup, run: () => (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' }) };
     };
@@ -314,10 +322,16 @@ describe('createSourceControlTools', () => {
       expect(setup.createPullRequest).toHaveBeenCalled();
     });
 
-    it('still holds a Work issue card to self-review in the same project', async () => {
+    it("still holds an older Work's issue card to self-review in the same project", async () => {
       const { setup, run } = await boundTo('github-issue', 'work');
       await expect(run()).rejects.toThrow('Self-review has not approved');
       expect(setup.createPullRequest).not.toHaveBeenCalled();
+    });
+
+    it("lets the builder on a new project's Work, which has no self-review phase, open its change request with self-review on", async () => {
+      const { setup, run } = await boundTo('github-issue', 'work', false);
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.createPullRequest).toHaveBeenCalled();
     });
   });
 

@@ -18,12 +18,12 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "google/gemma-4-31b-it": [
+    "minimax/minimax-m3": [
       {
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m3": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
       }

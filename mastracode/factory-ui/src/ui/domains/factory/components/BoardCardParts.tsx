@@ -17,9 +17,11 @@ import {
   metadataLabelColors,
   metadataLabels,
   pullRequestStatusForItem,
+  pullRequestStatusForSource,
   workItemKey,
 } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
+import { attachedPullRequestSource } from '../services/workItems';
 import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
@@ -40,7 +42,14 @@ export function CardKey({ item }: { item: Pick<WorkItem, 'source' | 'metadata'> 
 
 export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
   if (item.source === 'github-pr') return <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />;
-  return <SourceIcon source={item.source} />;
+  const attached = attachedPullRequestSource(item);
+  if (!attached) return <SourceIcon source={item.source} />;
+  return (
+    <>
+      <SourceIcon source={item.source} />
+      <PullRequestStatusIcon status={pullRequestStatusForSource(attached)} />
+    </>
+  );
 }
 
 // The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
