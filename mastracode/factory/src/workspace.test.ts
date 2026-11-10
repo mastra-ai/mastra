@@ -446,7 +446,8 @@ describe('bundled Factory skill assets', () => {
     expect(selfReview).toContain('## Blocking vs. follow-up');
     expect(selfReview).toContain('correctness, safety, or test coverage of the stated fix');
     expect(selfReview).toContain('Follow-ups never send the card back to Building.');
-    expect(selfReview).toContain('Request changes only for blocking findings.');
+    expect(selfReview).toContain('Request changes only for blocking findings or a failed approval gate.');
+    expect(selfReview).toContain("Carry the previous report's unresolved follow-ups");
     expect(selfReview).toContain('**Follow-ups**');
     expect(selfReview).toContain('"no optional or follow-up tiers" rule do not apply here');
   });

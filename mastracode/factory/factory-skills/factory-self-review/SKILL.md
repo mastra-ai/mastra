@@ -30,13 +30,13 @@ Judge the branch against the work item's stated problem and its approved plan, n
 - **Blocking**: a finding about the correctness, safety, or test coverage of the stated fix. For example: the fix does not solve the reported problem, breaks existing behavior, is unsafe, or has no test that fails without it. Diff growth beyond the stated problem (unrelated refactors, adjacent fixes, contract changes the problem does not require) is also blocking: ask for it to be removed, never for more to be added.
 - **Follow-up**: everything else, including adjacent bugs, hardening elsewhere, extra warnings, wording, style, and tests beyond proportionate coverage of the fix. Follow-ups never send the card back to Building.
 
-Push for the smallest change that fixes the reported problem, with proportionate tests. Approve when no blocking findings remain, even if follow-ups exist. Request changes only for blocking findings.
+Push for the smallest change that fixes the reported problem, with proportionate tests. Approve when no blocking findings remain, even if follow-ups exist. Request changes only for blocking findings or a failed approval gate. When verification could not complete, use the `Verification incomplete` result and name the blocker instead of presenting it as a defect in the change.
 
 ## Checkout
 
 1. Fetch the work branch the session is on (`git rev-parse --abbrev-ref HEAD`) from `origin` and reset the checkout to `origin/<branch>`. If it does not exist on `origin`, the builder never pushed: request changes saying so.
 2. Record the full head SHA (`git rev-parse HEAD`). That is the only head you review and test. Determine the base with `git merge-base HEAD origin/<default branch>` and review `base...HEAD`.
-3. If the factory-phase arguments say this is a later round, read the previous findings from the work item and confirm each blocking finding is fixed on this head. Then look for new problems only in what changed since the previous round, and only for blocking findings or regressions. Do not widen the review or raise follow-ups as required changes.
+3. If the factory-phase arguments say this is a later round, read the previous findings from the work item and confirm each blocking finding is fixed on this head. Then look for new problems only in what changed since the previous round, and only for blocking findings or regressions. Do not widen the review or raise follow-ups as required changes. Carry the previous report's unresolved follow-ups into this report's **Follow-ups**, because each verdict replaces the stored report.
 
 ## Report
 
