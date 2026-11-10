@@ -5,7 +5,13 @@ Let Mastra agents compose [json-render](https://json-render.dev) interfaces from
 ## Installation
 
 ```bash
-npm install @mastra/json-render @json-render/core @json-render/react
+npm install @mastra/json-render
+```
+
+It needs `@json-render/core` on the server and `@json-render/react` to render on the client:
+
+```bash
+npm install @json-render/core @json-render/react
 ```
 
 ## Usage
@@ -24,7 +30,11 @@ export const uiAgent = new Agent({
   id: 'ui-agent',
   name: 'UI Agent',
   model: 'openai/gpt-6.1-sol',
-  instructions: catalog.prompt({ mode: 'inline', editModes: ['patch'] }),
+  instructions: catalog.prompt({
+    mode: 'inline',
+    editModes: ['patch'],
+    system: 'You are a travel assistant. Prefer showing an interface over describing it.',
+  }),
   inputProcessors: [ui],
   outputProcessors: [ui],
   maxProcessorRetries: 2,
@@ -37,6 +47,10 @@ On the client, render each message's `data-spec` parts with `useJsonRenderMessag
 ## Documentation
 
 - [json-render](https://mastra.ai/integrations/agentic-ui/json-render)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/integrations/json-render/CHANGELOG.md) for version history and release notes.
 
 ## Support
 
