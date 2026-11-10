@@ -289,8 +289,8 @@ Saving environment settings never starts a build. Scheduled and push builds skip
 
 Factory members add environment variables for every sandbox of a factory in **Settings › Manage Factory › Environment variables**. Each variable applies to one of:
 
-- **Runtime**: every command in every session sandbox. Adding, editing or deleting one takes effect on the next command in a running sandbox, without a restart. A process that is already running keeps the environment it started with.
-- **Build**: the template build and the setup commands Factory runs itself, never runtime commands. Factory passes them to the provider as `buildEnv` and `buildEnvRevision`, so an edit rebuilds the template on the next build. A running sandbox doesn't rerun setup; sandboxes started from the rebuilt template see the new values.
+- **Runtime**: every command in every session sandbox. Adding, editing or deleting one takes effect on the next command in a running sandbox, without a restart. A process that's already running keeps the environment it started with.
+- **Build**: the template build and the setup commands Factory runs itself, never runtime commands. Factory passes them to the provider as `buildEnv` and `buildEnvRevision`. An edit rebuilds the template on the next build. A running sandbox doesn't rerun setup. Sandboxes started from the rebuilt template see the new values.
 - **Both**: runtime and build.
 
 A runtime variable with the same name as a key from the provider's `env` option replaces it, and deleting the variable restores the host value. Names that Factory sets itself, such as `GH_TOKEN`, are reserved.
