@@ -9,6 +9,7 @@ import {
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   TABLE_KNOWLEDGE_PAGES_STATE,
 } from '@internal/core/knowledge-compat';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { KnowledgeSchemaResetRequiredError, KnowledgeStorage } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -68,6 +69,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #client: Client;
   readonly #db: LibSQLDB;
   readonly #pages: LibSQLKnowledgePages;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     const client = resolveClient(config);

@@ -6,6 +6,7 @@ import type {
   UpdateBackgroundTask,
   UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -82,6 +83,11 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
 
   #db: LibSQLDB;
   #client: Client;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();

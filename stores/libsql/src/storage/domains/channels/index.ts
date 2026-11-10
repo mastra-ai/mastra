@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '@mastra/core/logger';
 import {
   ChannelsStorage,
   TABLE_CHANNEL_INSTALLATIONS,
@@ -13,6 +14,11 @@ import type { SqliteClient as Client } from '../../db/client';
 export class ChannelsLibSQL extends ChannelsStorage {
   #db: LibSQLDB;
   #client: Client;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   static readonly MANAGED_TABLES = [TABLE_CHANNEL_INSTALLATIONS, TABLE_CHANNEL_CONFIG] as const;
 

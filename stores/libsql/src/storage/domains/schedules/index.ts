@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   Schedule,
   ScheduleFilter,
@@ -95,6 +96,11 @@ export class SchedulesLibSQL extends SchedulesStorage {
 
   #db: LibSQLDB;
   #client: Client;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();

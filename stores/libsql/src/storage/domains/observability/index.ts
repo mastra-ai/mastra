@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import {
   createStorageErrorId,
   listTracesArgsSchema,
@@ -48,6 +49,11 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   };
 
   #db: LibSQLDB;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();

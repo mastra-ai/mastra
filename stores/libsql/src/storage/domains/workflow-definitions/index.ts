@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   CreateWorkflowDefinitionInput,
   ListWorkflowDefinitionsInput,
@@ -69,6 +70,11 @@ function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
 export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
   #db: LibSQLDB;
   #client: Client;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();

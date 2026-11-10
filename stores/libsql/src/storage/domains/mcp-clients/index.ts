@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import {
   MCPClientsStorage,
   createStorageErrorId,
@@ -30,6 +31,11 @@ import { buildSelectColumns } from '../../db/utils';
 export class MCPClientsLibSQL extends MCPClientsStorage {
   #db: LibSQLDB;
   #client: Client;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();

@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import {
   FavoritesStorage,
   createStorageErrorId,
@@ -31,6 +32,11 @@ const ENTITY_TABLE: Record<StorageFavoriteEntityType, typeof TABLE_AGENTS | type
 export class FavoritesLibSQL extends FavoritesStorage {
   #db: LibSQLDB;
   #client: Client;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();

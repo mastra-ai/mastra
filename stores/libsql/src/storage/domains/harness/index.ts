@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '@mastra/core/logger';
 import { HarnessStorage, TABLE_HARNESS_SESSIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   HarnessPendingItemRecord,
@@ -129,6 +130,11 @@ export class HarnessLibSQL extends HarnessStorage {
   };
 
   #db: LibSQLDB;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();

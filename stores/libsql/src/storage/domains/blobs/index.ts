@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '@mastra/core/logger';
 import { BlobStore, TABLE_SKILL_BLOBS, SKILL_BLOBS_SCHEMA } from '@mastra/core/storage';
 import type { StorageBlobEntry } from '@mastra/core/storage';
 
@@ -9,6 +10,11 @@ import { buildSelectColumns } from '../../db/utils';
 export class BlobsLibSQL extends BlobStore {
   #db: LibSQLDB;
   #client: Client;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   static readonly MANAGED_TABLES = [TABLE_SKILL_BLOBS] as const;
 

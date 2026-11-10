@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '@mastra/core/logger';
 import { NotificationsStorage, TABLE_CONFIGS, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   CreateNotificationInput,
@@ -103,6 +104,11 @@ export class NotificationsLibSQL extends NotificationsStorage {
 
   #db: LibSQLDB;
   #client: Client;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();

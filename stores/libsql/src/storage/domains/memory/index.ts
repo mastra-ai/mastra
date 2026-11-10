@@ -10,6 +10,7 @@ import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult }
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageResourceType,
@@ -161,6 +162,11 @@ export class MemoryLibSQL extends MemoryStorage {
   #client: Client;
   #embeddedReplica: boolean;
   #db: LibSQLDB;
+
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    this.#db.__setLogger(logger);
+  }
 
   constructor(config: LibSQLDomainConfig) {
     super();
