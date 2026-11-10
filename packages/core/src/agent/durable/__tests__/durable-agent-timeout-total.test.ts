@@ -749,7 +749,8 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
-  // The resumed run input persists recalled messages as refs; the deadline save must not read them unhydrated.
+  // The approved tool's result settles before the deadline, so this save serializes the live list and keeps
+  // the recalled history. It does not reach the persisted, ref-bearing fallback that finalize-run hydrates.
   it('saves a cold-resumed run with recalled history at its total deadline', async () => {
     const storage = new InMemoryStore();
     const memory = new MockMemory({ storage });

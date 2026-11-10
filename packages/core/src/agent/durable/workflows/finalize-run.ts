@@ -590,7 +590,9 @@ export async function runDurableDeadlineOutputPass({
     threadId: durableState?.threadId,
     resourceId: durableState?.resourceId,
   }).deserialize(
-    // A recovered or resumed run's persisted input keeps messages memory already stores as refs.
+    // A recovered or resumed run's persisted input keeps messages memory already stores as refs. Defensive:
+    // only reached when the deadline fires before the first step snapshot with no settled tool results,
+    // which no test drives.
     await hydrateMessageListState(
       { state: undefined, getInitData: () => initData, mastra, requestContext },
       messageListState,
