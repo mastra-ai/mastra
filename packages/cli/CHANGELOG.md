@@ -1,5 +1,23 @@
 # mastra
 
+## 1.39.0-alpha.5
+
+### Patch Changes
+
+- Factory boards now update from the live connection instead of a fixed 2 to 5 second poll. ([#29777](https://github.com/mastra-ai/mastra/pull/29777))
+
+  - **Faster updates.** On a connected board, a change typically shows within a second when the board hasn't refreshed in the last 5 seconds, and at the 5 second mark otherwise. While you are moving a card, the card list waits for the move to finish before it refreshes.
+  - **Fewer requests.** A connected board no longer asks for its cards and decisions every 2 to 5 seconds. It checks once a minute as a safety net, and every 5 seconds if the live connection drops. Running sessions are still checked every 5 seconds.
+  - **Self-healing connection.** A live connection that goes silent, for example after a server restart behind a proxy, is reopened within about a minute instead of staying dead until the page is reloaded, so comments and boards pick up live updates again.
+
+- Improved Studio page navigation: pages now switch instantly. Clicking a sidebar item no longer freezes the old page and fades it into the new one, so the selected item and the page content update together right away. ([#29918](https://github.com/mastra-ai/mastra/pull/29918))
+
+- Fixed the "g" in Studio. Studio switched on a Mona Sans stylistic set that drew an old-style double-storey "g", so Studio didn't match Factory, Platform or GitHub. Studio now uses Mona Sans's default letters and downloads smaller font files. ([#29915](https://github.com/mastra-ai/mastra/pull/29915))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/deployer@1.83.0-alpha.5
+
 ## 1.39.0-alpha.4
 
 ### Minor Changes
