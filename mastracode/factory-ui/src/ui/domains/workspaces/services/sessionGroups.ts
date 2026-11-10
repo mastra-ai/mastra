@@ -70,7 +70,7 @@ const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> 
       : row.board === undefined
         ? USER_GROUP.key
         : boardGroupKey(row.board),
-  status: row => statusGroupKey(row.status),
+  status: row => statusGroupKey(row.cardStatus ?? row.status),
   owner: row => ownerGroupKey(row.session.userId),
   none: () => ALL_GROUP.key,
 };

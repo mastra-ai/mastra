@@ -86,6 +86,8 @@ export interface SessionListRow {
   cardSessionIds?: readonly string[];
   /** The card's other sessions, listed under its row when child sessions are revealed. */
   childRows?: readonly SessionListRow[];
+  /** A card row's carried status (waiting or working wins across its sessions), for grouping when its children are revealed. */
+  cardStatus?: SessionActivityStatus;
   /** What a child row is named in the sidebar: the phase its session ran in. */
   phaseLabel?: string;
   createdAt: string;
@@ -294,9 +296,11 @@ export function oneRowPerCard(
       pinned: cardRows.some(candidate => candidate.pinned),
       cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
     };
-    // Listed, each session shows its own state and the open one highlights.
-    if (revealChildSessions) return [{ ...shown, ...shared, childRows: others }];
     const carried = CARRIED_STATUSES.find(status => cardRows.some(candidate => candidate.status === status));
+    // Listed, each session shows its own state and the open one highlights.
+    if (revealChildSessions) {
+      return [{ ...shown, ...shared, cardStatus: carried ?? shown.status, childRows: others }];
+    }
     return [
       {
         ...shown,

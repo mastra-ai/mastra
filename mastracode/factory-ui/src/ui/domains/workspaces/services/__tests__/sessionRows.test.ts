@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { releaseBoard, workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
 import { providerFactsCard } from '../../../../__tests__/fixtures/providerFactsCard';
+import { EMPTY_SESSION_FILTERS, filterSessionRows } from '../sessionFilters';
+import { groupSessionRows, sessionGroupHeadings } from '../sessionGroups';
 import { oneRowPerCard, pinnedSessionsAfter, sessionActivityStatus, sessionBoard } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
@@ -155,6 +157,36 @@ describe('oneRowPerCard', () => {
 
     expect(listed(pinnedSessionsAfter(pinned, shown, false)).pinned).toBe(false);
     expect([...pinnedSessionsAfter(new Set(), shown, true)]).toEqual(['work']);
+  });
+
+  describe('with child sessions revealed', () => {
+    const revealed = () =>
+      oneRowPerCard([cardRow('triage'), cardRow('work'), cardRow('review', { running: true })], boards, {
+        revealChildSessions: true,
+      });
+    const byStatus = (status: 'working' | 'idle') =>
+      filterSessionRows(revealed(), { ...EMPTY_SESSION_FILTERS, status }, 'user-1');
+    const listed = (rows: ReturnType<typeof revealed>) =>
+      rows.map(row => [row.session.sessionId, row.childRows?.map(child => child.session.sessionId)]);
+
+    it('keeps a card under a status filter when one of its sessions matches, listing only the ones that do', () => {
+      expect(listed(byStatus('working'))).toEqual([['work', ['review']]]);
+      expect(listed(byStatus('idle'))).toEqual([['work', ['triage']]]);
+    });
+
+    it("groups a card by what its sessions carry, as it does when they're hidden", () => {
+      const rows = revealed();
+      const groups = groupSessionRows(
+        rows,
+        'status',
+        sessionGroupHeadings(rows, 'status', { boards, viewerUserId: 'user-1' }),
+        [],
+      );
+
+      expect(groups.map(group => [group.key, group.rows.map(row => row.session.sessionId)])).toEqual([
+        ['status:working', ['work']],
+      ]);
+    });
   });
 
   it('leaves sessions without a card alone', () => {
