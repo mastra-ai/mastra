@@ -138,11 +138,19 @@ import type {
 } from './types';
 import { matchesUriTemplate } from './uri-template';
 
+const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
+
 export interface MCPServerConfig extends CoreMCPServerConfig {
   resources?: MCPServerResources;
   prompts?: MCPServerPrompts;
   /** MCP Apps (SEP-1865) HTML resources served under `ui://`. */
   appResources?: AppResources;
+  /**
+   * Serve MCP Apps only to clients that declare the `io.modelcontextprotocol/ui` extension. Other
+   * clients get no `ui://` resources, no tool app links, no app-only tools and no UI capability.
+   * The declaration is read per request, so on 2025-era stateless HTTP only `initialize` carries one.
+   */
+  appsRequireClientSupport?: boolean;
   /** Custom JSON Schema validator, for runtimes where the SDK default is unavailable. */
   jsonSchemaValidator?: jsonSchemaValidator;
   cacheHints?: MCPServerCacheHints;
@@ -289,6 +297,7 @@ export class MCPServer extends MCPServerBase {
   private readonly promptOptions?: MCPServerPrompts;
   private readonly appResourceList: Resource[] = [];
   private readonly appResourceHtml = new Map<string, string>();
+  private readonly appsRequireClientSupport: boolean;
   private readonly jsonSchemaValidator?: jsonSchemaValidator;
   private readonly cacheHints?: MCPServerCacheHints;
   private readonly mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
@@ -323,6 +332,7 @@ export class MCPServer extends MCPServerBase {
     this.promptOptions = config.prompts;
     this.resourceOptions = config.resources;
     this.loadAppResources(config.appResources);
+    this.appsRequireClientSupport = config.appsRequireClientSupport ?? false;
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
@@ -620,7 +630,7 @@ export class MCPServer extends MCPServerBase {
   }
 
   /** Builds the wire tool description, validated against the spec schema. */
-  private toMCPTool(name: string, tool: InternalCoreTool): MCPTool {
+  private toMCPTool(name: string, tool: InternalCoreTool, apps = true): MCPTool {
     const info = this.toolInfo(name, tool);
     const validation = specTypeSchemas.Tool['~standard'].validate({
       name,
@@ -629,7 +639,7 @@ export class MCPServer extends MCPServerBase {
       inputSchema: info.inputSchema,
       outputSchema: info.outputSchema,
       annotations: tool.mcp?.annotations,
-      _meta: normalizeUiMeta(info._meta),
+      _meta: apps ? normalizeUiMeta(info._meta) : withoutUiMeta(info._meta),
     });
     if (validation instanceof Promise || validation.issues) {
       throw new Error(`Tool '${name}' does not describe a valid MCP tool (input schemas must be objects)`);
@@ -639,6 +649,19 @@ export class MCPServer extends MCPServerBase {
 
   private hasUiMetadata(): boolean {
     return Object.values(this.convertedTools).some(tool => Boolean(uiResourceUri(tool.mcp?._meta)));
+  }
+
+  /**
+   * Whether this request may see MCP Apps. Unless `appsRequireClientSupport` is set, every client may;
+   * otherwise the client must declare the UI extension, in the request's envelope or at `initialize`.
+   */
+  private servesApps(server: Server, ctx?: ServerContext): boolean {
+    if (!this.appsRequireClientSupport) return true;
+    const envelope = ctx?.mcpReq.envelope as Record<string, unknown> | undefined;
+    const declared =
+      (envelope?.[CLIENT_CAPABILITIES_META_KEY] as ClientCapabilities | undefined) ?? server.getClientCapabilities();
+    const entry = declared?.extensions?.[UI_EXTENSION_ID];
+    return typeof entry === 'object' && entry !== null && !Array.isArray(entry);
   }
 
   // ---------------------------------------------------------------------------
@@ -656,7 +679,7 @@ export class MCPServer extends MCPServerBase {
     }
     if (this.promptOptions) capabilities.prompts = { listChanged: true };
     if (this.appResourceList.length > 0 || this.hasUiMetadata()) {
-      capabilities.extensions = { 'io.modelcontextprotocol/ui': {} };
+      capabilities.extensions = { [UI_EXTENSION_ID]: {} };
     }
     if (this.eventRegistry.size > 0) {
       capabilities.extensions = { ...capabilities.extensions, [EVENTS_EXTENSION_ID]: this.eventsCapability() };
@@ -665,6 +688,17 @@ export class MCPServer extends MCPServerBase {
       capabilities.extensions = { ...capabilities.extensions, ...tasksCapabilityEntry() };
     }
     return capabilities;
+  }
+
+  /** The capabilities a server without MCP Apps would declare. */
+  private withoutAppCapabilities(capabilities: ServerCapabilities): ServerCapabilities {
+    const { resources, extensions, ...rest } = capabilities;
+    const { [UI_EXTENSION_ID]: _ui, ...otherExtensions } = extensions ?? {};
+    return {
+      ...rest,
+      ...(this.resourceOptions && resources ? { resources } : {}),
+      ...(Object.keys(otherExtensions).length > 0 ? { extensions: otherExtensions } : {}),
+    };
   }
 
   /**
@@ -699,6 +733,12 @@ export class MCPServer extends MCPServerBase {
     // Deprecated session-level log control (SEP-2577): not served on 2026-07-28. 2025-era clients
     // still send it because `logging` is advertised, so legacy (stateless) instances keep it.
     if (era === 'modern') server.removeRequestHandler('logging/setLevel');
+    if (this.appsRequireClientSupport) {
+      // `initialize` and `server/discover` both answer with getCapabilities(), after the client's declaration is known.
+      const capabilities = server.getCapabilities.bind(server);
+      server.getCapabilities = () =>
+        this.servesApps(server) ? capabilities() : this.withoutAppCapabilities(capabilities());
+    }
     this.registerToolHandlers(server);
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
@@ -1011,15 +1051,23 @@ export class MCPServer extends MCPServerBase {
   }
 
   private registerToolHandlers(server: Server): void {
-    this.setTracedHandler(server, 'tools/list', async (_request, _ctx, trace) => {
+    this.setTracedHandler(server, 'tools/list', async (_request, ctx, trace) => {
       const entries = await this.authorizedToolEntries(trace.requestContext);
-      return { tools: entries.map(([name, tool]) => this.toMCPTool(name, tool)) };
+      const apps = this.servesApps(server, ctx);
+      return {
+        tools: entries
+          .filter(([, tool]) => apps || !isAppOnly(tool.mcp?._meta))
+          .map(([name, tool]) => this.toMCPTool(name, tool, apps)),
+      };
     });
 
     this.setTracedHandler(server, 'tools/call', async (request, ctx, trace) => {
       const name = request.params.name;
+      const apps = this.servesApps(server, ctx);
       // `name` comes from the client, so names like `constructor` must not resolve to Object.prototype members.
-      const tool = Object.hasOwn(this.convertedTools, name) ? this.convertedTools[name] : undefined;
+      const known = Object.hasOwn(this.convertedTools, name) ? this.convertedTools[name] : undefined;
+      // A client that may not see apps does not know their app-only tools either.
+      const tool = known && (apps || !isAppOnly(known.mcp?._meta)) ? known : undefined;
       if (!tool) {
         this.logger.warn('Unknown tool requested', { tool: name });
         // The spec makes an unknown tool a protocol error; `isError` is for a tool that ran and failed.
@@ -1096,7 +1144,7 @@ export class MCPServer extends MCPServerBase {
           this.toolInfo(name, tool).outputSchema,
         );
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
-        return result;
+        return apps ? result : { ...result, _meta: withoutUiMeta(result._meta) };
       } catch (error) {
         if (error instanceof ProtocolError) throw error;
         const mastraError = this.toolError(name, error);
@@ -1956,8 +2004,15 @@ export class MCPServer extends MCPServerBase {
     const hasAppResources = this.appResourceList.length > 0;
     if (!options && !hasAppResources) return;
 
+    // Without app access a server holding only apps answers as one without resources.
+    const appResourcesFor = (ctx: ServerContext): Resource[] => {
+      if (this.servesApps(server, ctx)) return this.appResourceList;
+      if (!options) throw new ProtocolError(ProtocolErrorCode.MethodNotFound, 'Method not found');
+      return [];
+    };
+
     const listResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
-      ...this.appResourceList,
+      ...appResourcesFor(ctx),
       ...((await options?.listResources({
         extra: toToolExecutionContext(ctx, this.name).extra,
         requestContext,
@@ -1992,7 +2047,7 @@ export class MCPServer extends MCPServerBase {
       const resource = await findResource(uri, ctx, trace.requestContext);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
-      const html = this.appResourceHtml.get(uri);
+      const html = this.servesApps(server, ctx) ? this.appResourceHtml.get(uri) : undefined;
       if (html !== undefined) return { contents: [this.resourceContents(resource, { text: html })] };
       if (!options) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
@@ -2669,6 +2724,19 @@ function persistableRequestContext(requestContext: RequestContext): {
 function uiResourceUri(meta: Record<string, unknown> | undefined): string | undefined {
   const ui = meta?.ui as { resourceUri?: string } | undefined;
   return ui?.resourceUri || (meta?.[RESOURCE_URI_META_KEY] as string | undefined) || undefined;
+}
+
+/** Whether the tool is visible only to apps, per `_meta.ui.visibility`. */
+function isAppOnly(meta: Record<string, unknown> | undefined): boolean {
+  const visibility = (meta?.ui as { visibility?: unknown } | undefined)?.visibility;
+  return Array.isArray(visibility) && !visibility.includes('model');
+}
+
+/** `_meta` without the MCP Apps keys, or `undefined` when nothing else is left. */
+function withoutUiMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!meta) return meta;
+  const { ui: _ui, [RESOURCE_URI_META_KEY]: _resourceUri, ...rest } = meta;
+  return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 /** Writes the tool's MCP App URI to both the nested and the flat key, so every host opens the same app. */

@@ -251,6 +251,14 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description:
       'A map of `ui://` URIs to app resource configurations. Each entry defines an interactive HTML UI served via the MCP Apps extension (SEP-1865). See the MCP Apps section for details.',
   },
+  {
+    name: 'appsRequireClientSupport',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Serve MCP Apps only to clients that declare MCP Apps support. Other clients see the server as if it had no apps. See [Serving apps only to supporting clients](#serving-apps-only-to-supporting-clients).',
+  },
 ]}
 />
 
@@ -1722,6 +1730,27 @@ const server = new MCPServer({
 ```
 
 Link a tool to its app resource by setting `mcp._meta.ui.resourceUri` in `createTool()` to the matching `ui://` URI. The server normalizes this metadata for older hosts when listing tools, and returns the same link on successful tool call results. Visit [MCP Apps](/docs/connections/mcp) for the full app bridge API and usage patterns.
+
+### Serving apps only to supporting clients
+
+By default, every client sees the app resources, the app links on tools, and tools marked `visibility: ['app']`. Set `appsRequireClientSupport: true` to serve them only to clients that declare the `io.modelcontextprotocol/ui` extension:
+
+```typescript
+const server = new MCPServer({
+  id: 'app-server',
+  name: 'App Server',
+  version: '1.0.0',
+  tools: { calculatorTool },
+  appResources: {
+    'ui://calculator/main': { name: 'Interactive Calculator', html: '<html>...</html>' },
+  },
+  appsRequireClientSupport: true,
+})
+```
+
+A client that doesn't declare the extension sees the server as if it had no apps: no `ui://` resources, no app links on tools or tool results, no app-only tools, and no MCP Apps capability.
+
+The declaration is read on every request. Clients on the 2026-07-28 protocol send it with each request. On older protocol versions over stateless HTTP, only the `initialize` request carries it, so those clients never receive apps.
 
 ## Events (experimental)
 
