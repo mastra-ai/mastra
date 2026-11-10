@@ -36,6 +36,32 @@ describe('GraphRAG', () => {
       expect(graph.getNodes()).toEqual([]);
     });
 
+    it('rejects an embedding with a missing component (#29609)', () => {
+      const graph = new GraphRAG(2);
+      expect(() => graph.addNode({ id: '1', content: 'Node 1', embedding: [, 1] })).toThrow(
+        'Embedding must contain only finite numbers',
+      );
+      expect(graph.getNodes()).toEqual([]);
+    });
+
+    it('keeps a valid embedding after the caller mutates the added node (#29609)', () => {
+      const graph = new GraphRAG(2);
+      const node = { id: '1', content: 'Node 1', embedding: [1, 0] };
+      graph.addNode(node);
+      node.embedding[0] = NaN;
+      node.embedding = [NaN, 0];
+      expect(graph.query({ query: [1, 0] })[0]).toMatchObject({ id: '1', score: 1 });
+    });
+
+    it('keeps a valid embedding after a caller mutates getNodes results (#29609)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: '1', content: 'Node 1', embedding: [1, 0] });
+      const node = graph.getNodes()[0]!;
+      node.embedding![0] = NaN;
+      node.embedding = [NaN, 0];
+      expect(graph.query({ query: [1, 0] })[0]).toMatchObject({ id: '1', score: 1 });
+    });
+
     it('should add a node to the graph', () => {
       const graph = new GraphRAG(3);
       const node = {
@@ -165,6 +191,14 @@ describe('GraphRAG', () => {
       );
       expect(graph.getNodes()).toEqual([]);
     });
+
+    it('keeps a valid embedding after the caller mutates createGraph input (#29609)', () => {
+      const graph = new GraphRAG(2);
+      const embeddings = [{ vector: [1, 0] }];
+      graph.createGraph([{ text: 'Chunk 1', metadata: {} }], embeddings);
+      embeddings[0]!.vector[0] = NaN;
+      expect(graph.query({ query: [1, 0] })[0]).toMatchObject({ id: '0', score: 1 });
+    });
   });
 
   describe('query', () => {
@@ -181,6 +215,12 @@ describe('GraphRAG', () => {
       graph.addNode({ id: '1', content: 'Node 1', embedding: [1, 0] });
       expect(() => graph.query({ query: [component, 0] })).toThrow('Query embedding must contain only finite numbers');
       expect(graph.query({ query: [1, 0] })[0]).toMatchObject({ id: '1', score: 1 });
+    });
+
+    it('rejects a sparse query embedding (#29609)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: '1', content: 'Node 1', embedding: [1, 0] });
+      expect(() => graph.query({ query: [, 1] })).toThrow('Query embedding must contain only finite numbers');
     });
 
     it('topK must be greater than 0', () => {

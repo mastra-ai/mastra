@@ -71,10 +71,12 @@ export class GraphRAG {
     if (node.embedding.length !== this.dimension) {
       throw new Error(`Embedding dimension must be ${this.dimension}`);
     }
-    if (!node.embedding.every(Number.isFinite)) {
-      throw new Error('Embedding must contain only finite numbers');
+    for (const component of node.embedding) {
+      if (!Number.isFinite(component)) {
+        throw new Error('Embedding must contain only finite numbers');
+      }
     }
-    this.nodes.set(node.id, node);
+    this.nodes.set(node.id, { ...node, embedding: [...node.embedding] });
   }
 
   // Add an edge between two nodes
@@ -94,7 +96,10 @@ export class GraphRAG {
 
   // Helper method to get all nodes
   getNodes(): GraphNode[] {
-    return Array.from(this.nodes.values());
+    return Array.from(this.nodes.values(), node => ({
+      ...node,
+      ...(node.embedding ? { embedding: [...node.embedding] } : {}),
+    }));
   }
 
   // Helper method to get all edges
@@ -241,7 +246,6 @@ export class GraphRAG {
         metadata: { ...chunk.metadata },
       };
       this.addNode(node);
-      this.nodes.set(node.id, node);
     });
 
     // Create edges based on cosine similarity
@@ -353,8 +357,10 @@ export class GraphRAG {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
     }
-    if (!query.every(Number.isFinite)) {
-      throw new Error('Query embedding must contain only finite numbers');
+    for (const component of query) {
+      if (!Number.isFinite(component)) {
+        throw new Error('Query embedding must contain only finite numbers');
+      }
     }
     if (topK < 1) {
       throw new Error('TopK must be greater than 0');
