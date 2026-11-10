@@ -73,7 +73,20 @@ describe('GraphRAG', () => {
         type: 'semantic',
       };
       graph.addEdge(edge);
-      expect(graph['edges'].length).toBe(2);
+      expect(graph.getEdges()).toEqual([edge, { ...edge, source: '2', target: '1' }]);
+    });
+
+    it('stores a self-link only once in edges and snapshots (#29365)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: 'a', content: 'Node A', embedding: [1, 0] });
+      const edge: GraphEdge = { source: 'a', target: 'a', weight: 0.5, type: 'semantic' };
+
+      graph.addEdge(edge);
+
+      expect(graph.getEdges()).toEqual([edge]);
+      expect(graph.getEdgesByType('semantic')).toEqual([edge]);
+      expect(graph.serialize().edges).toEqual([edge]);
+      expect(GraphRAG.deserialize(graph.serialize()).getEdges()).toEqual([edge]);
     });
   });
 
