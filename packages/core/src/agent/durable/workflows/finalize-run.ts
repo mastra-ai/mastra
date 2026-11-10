@@ -502,6 +502,7 @@ export function deadlineMessageListState(
         toolCallId: result.toolCallId,
         toolName: result.toolName,
         toolArgs: result.args,
+        approval: result.approval,
         providerMetadata: result.providerMetadata,
       });
     }

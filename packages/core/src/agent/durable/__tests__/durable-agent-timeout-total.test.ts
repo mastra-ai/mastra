@@ -700,6 +700,8 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
         warnings: [],
       }),
     });
+    const runId = 'timeout-slow-stream-run';
+    let pendingAtDeadline = false;
     const agent = createDurableAgent({
       agent: new Agent({
         id: 'timeout-slow-stream',
@@ -712,8 +714,21 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
             id: 'slow-stream',
             processOutputStream: async ({ part }: any) => {
               if (part.type === 'tool-result' && part.payload.toolCallId === 'tc-fast') {
-                // Past the deadline, but inside the grace window the deadline save waits for.
-                await new Promise(resolve => setTimeout(resolve, 600));
+                // Still processing when the deadline fires; returns inside the grace window the save waits for.
+                const signal = globalRunRegistry.get(runId)?.abortSignal;
+                if (!signal) throw new Error('Missing timeout signal');
+                await new Promise<void>(resolve => {
+                  if (signal.aborted) return resolve();
+                  signal.addEventListener(
+                    'abort',
+                    () => {
+                      pendingAtDeadline = true;
+                      resolve();
+                    },
+                    { once: true },
+                  );
+                });
+                await new Promise(resolve => setTimeout(resolve, 50));
               }
               return part;
             },
@@ -733,12 +748,14 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     });
     new Mastra({ agents: { agent }, storage, pubsub, logger: false });
     const result = await agent.stream('hello', {
+      runId,
       memory: { thread: 'timeout-slow-stream-thread', resource: 'timeout-resource' },
       modelSettings: { timeout: { totalMs: 300 } },
     });
     try {
       const chunks = await drain(result.fullStream);
       expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      expect(pendingAtDeadline).toBe(true);
       await vi.waitFor(async () => {
         const { messages } = await memory.recall({ threadId: 'timeout-slow-stream-thread' });
         const saved = JSON.stringify(messages);
@@ -903,6 +920,67 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
         const { messages } = await memory.recall({ threadId, resourceId });
         expect(messages.map(message => message.id).slice(0, 2)).toEqual(['history-user', 'history-assistant']);
         expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
+      });
+    } finally {
+      resumed.cleanup();
+    }
+  });
+
+  it('keeps the approval of an approved tool whose result the total deadline saves', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const threadId = 'timeout-approval-thread';
+    const resourceId = 'timeout-resource';
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-approval',
+        name: 'Timeout approval',
+        instructions: 'Use the tool.',
+        memory,
+        model: toolCallingModel('approve'),
+        tools: {
+          approve: createTool({
+            id: 'approve',
+            description: 'Needs approval',
+            inputSchema: z.object({ city: z.string() }),
+            requireApproval: true,
+            // Returns inside the deadline's grace window, so the deadline save records it.
+            execute: async (_input, { abortSignal }) => {
+              await new Promise<void>(resolve => abortSignal?.addEventListener('abort', () => resolve()));
+              await new Promise(resolve => setTimeout(resolve, 50));
+              return 'APPROVED-RESULT';
+            },
+          }),
+        },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    let suspended = false;
+    const initial = await agent.stream('hello', {
+      memory: { thread: threadId, resource: resourceId },
+      modelSettings: { timeout: { totalMs: 500 } },
+      onSuspended: () => {
+        suspended = true;
+      },
+    });
+    await vi.waitFor(() => expect(suspended).toBe(true));
+    initial.cleanup();
+
+    const resumed = await agent.resume(initial.runId, { approved: true });
+    try {
+      const chunks = await drain(resumed.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId, resourceId });
+        const part = messages
+          .flatMap(message => (message.content as any).parts ?? [])
+          .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === 'tc-1');
+        expect(part?.toolInvocation).toMatchObject({
+          state: 'result',
+          result: 'APPROVED-RESULT',
+          approval: { id: 'tc-1', approved: true },
+        });
       });
     } finally {
       resumed.cleanup();

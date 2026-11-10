@@ -2162,6 +2162,7 @@ export function createDurableToolCallStep() {
                 toolName,
                 args: cleanedArgs,
                 outcome: lateOutcome,
+                ...(approvalGrant ?? {}),
                 providerMetadata: lateProviderMetadata,
               });
             } else if (registryEntry?.timeoutTotalMs) {
@@ -2393,6 +2394,7 @@ export function createDurableToolCallStep() {
             toolName,
             args: cleanedArgs,
             outcome: { kind: 'result', result },
+            ...(approvalGrant ?? {}),
             providerMetadata: withToolPayloadTransformProviderMetadata(
               providerMetadata as Record<string, any> | undefined,
               transformMetadata,

@@ -805,7 +805,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
-  // The saved result keeps what toModelOutput returns, also when the deadline save writes it.
+  // A tool result hidden by a stream processor is still saved by the deadline pass.
   itDeadline(
     'total-timeout saves a tool result a stream processor hid alongside a call cut off',
     async () => {
@@ -860,7 +860,10 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
         await vi.waitFor(async () => {
           const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-          expect(JSON.stringify(messages)).toContain('QUIET-RESULT');
+          const saved = JSON.stringify(messages);
+          expect(saved).toContain('QUIET-RESULT');
+          // Only the hanging call carries the abort notice.
+          expect(saved.split(TOOL_ABORT_NOTICE)).toHaveLength(2);
         });
       } finally {
         hang.resolve({});

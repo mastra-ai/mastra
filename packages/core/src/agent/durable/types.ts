@@ -831,6 +831,8 @@ export interface RunRegistryEntry {
     toolName: string;
     args: unknown;
     outcome: ToolResultCommitOutcome;
+    /** The approval decision of an approved approval-gated tool, so it round-trips on recall. */
+    approval?: { id: string; approved: boolean; reason?: string };
     /** Includes the tool payload transform metadata, so transcript transforms apply on recall. */
     providerMetadata?: Record<string, any>;
   }>;
