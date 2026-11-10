@@ -439,6 +439,18 @@ describe('bundled Factory skill assets', () => {
     }
   });
 
+  it('limits self-review requested changes to blocking findings about the stated fix', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const selfReview = await fs.readFile(path.join(assetRoot, 'factory-self-review', 'SKILL.md'), 'utf8');
+
+    expect(selfReview).toContain('## Blocking vs. follow-up');
+    expect(selfReview).toContain('correctness, safety, or test coverage of the stated fix');
+    expect(selfReview).toContain('Follow-ups never send the card back to Building.');
+    expect(selfReview).toContain('Request changes only for blocking findings.');
+    expect(selfReview).toContain('**Follow-ups**');
+    expect(selfReview).toContain('"no optional or follow-up tiers" rule do not apply here');
+  });
+
   it('guards the initial triage label when any status label is present', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');

@@ -119,6 +119,9 @@ describe('work board build prompt', () => {
     });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
     expect(decision.prompt).toContain(`Self-review requested changes on branch head ${'a'.repeat(40)}`);
+    expect(decision.prompt).toContain('Address every required change');
+    expect(decision.prompt).toContain('Do not implement the follow-ups.');
+    expect(decision.prompt).not.toContain('Address every finding');
     expect(decision.prompt).toContain('1. Fix the test');
   });
 
