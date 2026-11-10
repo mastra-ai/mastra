@@ -133,14 +133,13 @@ function stubModel(decide: (input: string) => ToolCall | undefined = () => undef
  */
 function documentedWorkBoard(path: string): StoredBoardInput {
   const text = readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
-  const code = /\nconst work = boardDefinitionOf\(workBoard\);\n[\s\S]*?\n\};\n/.exec(text)?.[0];
-  if (!code) throw new Error(`${path} shows no ourWorkBoard built from boardDefinitionOf(workBoard).`);
+  const code = /\nconst work = workSeedWithTriage\(\);\n[\s\S]*?\n\};\n/.exec(text)?.[0];
+  if (!code) throw new Error(`${path} shows no ourWorkBoard built from workSeedWithTriage().`);
   const run = new Function(
-    'boardDefinitionOf',
-    'workBoard',
+    'workSeedWithTriage',
     `${code.replace('const ourWorkBoard: StoredBoardInput =', 'const ourWorkBoard =')}\nreturn ourWorkBoard;`,
   );
-  return run(boardDefinitionOf, workBoard) as StoredBoardInput;
+  return run(workSeedWithTriage) as StoredBoardInput;
 }
 
 const bugsBoard: StoredBoardInput = {
@@ -1027,56 +1026,75 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ).rejects.toMatchObject({ code: 'project_not_found' });
         }, 60_000);
 
-        it.each([
-          ['the changeset', '../../../../.changeset/work-board-no-triage.md'],
-          ['the README', '../../README.md'],
-        ])(
-          'stores the Work board %s shows for replacing Work in every project, over edits, and keeps it through a reset',
-          async (_, path) => {
-            stubModel();
-            const ourWorkBoard = documentedWorkBoard(path);
-            const orgId = `org-${randomUUID()}`;
-            const replica = await boot(await isolatedDatabase(), orgId);
-            const created = await createProject(replica, 'Onboarded');
-            const older = await createOlderProject(replica, orgId, 'Older');
-            const [createdScope, olderScope] = [created, older].map(factoryProjectId => ({ orgId, factoryProjectId }));
-            const read = await replica.send('GET', `/web/factory/projects/${created}/boards/work`);
-            const before = read.json.board as { phases: unknown[]; revision: number };
-            const edit = await replica.send('PATCH', `/web/factory/projects/${created}/boards/work`, {
-              expectedRevision: before.revision,
-              name: 'Our edit',
-              phases: before.phases,
-            });
-            expect(edit.status, JSON.stringify(edit.json)).toBe(200);
+        it('stores the Work board the README shows for replacing Work in every project, over edits and cards in Triage, and keeps it through a reset', async () => {
+          stubModel();
+          // The README, not the changeset: `changeset version` deletes changesets.
+          const ourWorkBoard = documentedWorkBoard('../../README.md');
+          const orgId = `org-${randomUUID()}`;
+          const replica = await boot(await isolatedDatabase(), orgId);
+          const created = await createProject(replica, 'Onboarded');
+          const older = await createOlderProject(replica, orgId, 'Older');
+          const [createdScope, olderScope] = [created, older].map(factoryProjectId => ({ orgId, factoryProjectId }));
+          const read = await replica.send('GET', `/web/factory/projects/${created}/boards/work`);
+          const before = read.json.board as { phases: unknown[]; revision: number };
+          const edit = await replica.send('PATCH', `/web/factory/projects/${created}/boards/work`, {
+            expectedRevision: before.revision,
+            name: 'Our edit',
+            phases: before.phases,
+          });
+          expect(edit.status, JSON.stringify(edit.json)).toBe(200);
+          // An older project's Work has Triage, and a card sits in it.
+          const filed = await replica.send('POST', `/web/factory/projects/${older}/work-items`, {
+            board: 'work',
+            title: 'Investigating a crash',
+          });
+          expect(filed.status, JSON.stringify(filed.json)).toBe(200);
+          const card = filed.json.workItem as { id: string; revision: number };
+          const triaged = await replica.send(
+            'POST',
+            `/web/factory/projects/${older}/work-items/${card.id}/transition`,
+            {
+              board: 'work',
+              stage: 'triage',
+              expectedRevision: card.revision,
+              requestId: randomUUID(),
+              cause: 'stored-board-test',
+            },
+          );
+          expect(triaged.json.result, JSON.stringify(triaged.json)).toMatchObject({
+            status: 'accepted',
+            stage: 'triage',
+          });
 
-            const result = await replica.factory.upsertBoard(ourWorkBoard, { projects: 'all' });
+          const result = await replica.factory.upsertBoard(ourWorkBoard, { projects: 'all' });
 
-            expect(result.updated).toEqual(expect.arrayContaining([createdScope, olderScope]));
-            expect(result.inserted).toEqual([]);
-            for (const scope of [createdScope, olderScope]) {
-              const row = (await replica.boards.get(scope, 'work'))!;
-              // Replaced at the row's current revision: the Settings edit is gone.
-              expect(row.name).toBe('Work');
-              expect(row.phases.map(phase => [phase.key, phase.name])).toEqual(
-                ourWorkBoard.phases.map(phase => [phase.key, phase.name]),
-              );
-            }
-            const later = await createProject(replica, 'Later');
-            expect(
-              (await replica.boards.get({ orgId, factoryProjectId: later }, 'work'))!.phases.map(p => p.key),
-            ).toEqual(ourWorkBoard.phases.map(phase => phase.key));
+          expect(result.updated).toEqual(expect.arrayContaining([createdScope, olderScope]));
+          expect(result.inserted).toEqual([]);
+          for (const scope of [createdScope, olderScope]) {
+            const row = (await replica.boards.get(scope, 'work'))!;
+            // Replaced at the row's current revision: the Settings edit is gone.
+            expect(row.name).toBe('Work');
+            expect(row.phases.map(phase => [phase.key, phase.name])).toEqual(
+              ourWorkBoard.phases.map(phase => [phase.key, phase.name]),
+            );
+          }
+          const later = await createProject(replica, 'Later');
+          expect(
+            (await replica.boards.get({ orgId, factoryProjectId: later }, 'work'))!.phases.map(p => p.key),
+          ).toEqual(ourWorkBoard.phases.map(phase => phase.key));
 
-            // Reset restores the app's board, not Factory's Work.
-            const row = (await replica.boards.get(olderScope, 'work'))!;
-            const reset = await replica.send('POST', `/web/factory/projects/${older}/boards/work/reset`, {
-              expectedRevision: row.revision,
-            });
-            expect(reset.status).toBe(200);
-            const restored = (await replica.boards.get(olderScope, 'work'))!.phases.map(phase => phase.key);
-            expect(restored).toEqual(ourWorkBoard.phases.map(phase => phase.key));
-          },
-          60_000,
-        );
+          // Reset restores the app's board, not Factory's Work.
+          const row = (await replica.boards.get(olderScope, 'work'))!;
+          const reset = await replica.send('POST', `/web/factory/projects/${older}/boards/work/reset`, {
+            expectedRevision: row.revision,
+          });
+          expect(reset.status).toBe(200);
+          const restored = (await replica.boards.get(olderScope, 'work'))!.phases.map(phase => phase.key);
+          expect(restored).toEqual(ourWorkBoard.phases.map(phase => phase.key));
+          const listed = await replica.send('GET', `/web/factory/projects/${older}/work-items`);
+          const kept = (listed.json.workItems as { id: string; stages: string[] }[]).find(item => item.id === card.id);
+          expect(kept?.stages).toEqual(['triage']);
+        }, 60_000);
 
         it('stores the boards an app upserts for all projects in a project created later, and no Work beside them', async () => {
           stubModel();
