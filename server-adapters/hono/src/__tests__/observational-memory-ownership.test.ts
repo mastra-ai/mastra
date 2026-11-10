@@ -319,7 +319,7 @@ describe('gateway observational memory ownership over HTTP', () => {
     failThreadLookup = false;
   });
 
-  async function gatewayApp(authConfig: MastraAuthConfig | null = auth) {
+  async function gatewayApp(authConfig: MastraAuthConfig | null = auth, fga?: IFGAProvider) {
     const agent = new Agent({
       id: 'gw-agent',
       name: 'gw-agent',
@@ -329,7 +329,7 @@ describe('gateway observational memory ownership over HTTP', () => {
     const mastra = new Mastra({
       logger: false,
       agents: { 'gw-agent': agent },
-      ...(authConfig ? { server: { auth: authConfig } } : {}),
+      ...(authConfig ? { server: { auth: authConfig, fga } } : {}),
     });
     const app = new Hono();
     await new MastraServer({ app, mastra }).init();
@@ -389,5 +389,22 @@ describe('gateway observational memory ownership over HTTP', () => {
     const mismatched = await getOM(app, 'agentId=gw-agent&resourceId=bob&threadId=alice-thread');
     expect(mismatched.status).toBe(403);
     expect(JSON.stringify(await mismatched.json())).not.toContain('alice gateway secret');
+  });
+
+  it('denies a missing gateway thread when the FGA provider denies memory:read on it', async () => {
+    const app = await gatewayApp(auth, new ThreadOwnerFGA({ 'bob-thread': 'bob' }));
+    const newIds = 'agentId=gw-agent&resourceId=bob&threadId=new-thread';
+    for (const res of [
+      await getOM(app, newIds, 'bob'),
+      await bufferStatus(app, { agentId: 'gw-agent', resourceId: 'bob', threadId: 'new-thread' }, 'bob'),
+      await request(app, `/memory/status?${newIds}`, 'bob'),
+    ]) {
+      expect(res.status).toBe(403);
+    }
+    expect(hits.some(path => path.includes('/observations/'))).toBe(false);
+
+    const own = await getOM(app, 'agentId=gw-agent&resourceId=bob&threadId=bob-thread', 'bob');
+    expect(own.status).toBe(200);
+    expect((await own.json()).record.activeObservations).toBe('bob gateway secret');
   });
 });
