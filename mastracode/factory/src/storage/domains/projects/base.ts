@@ -75,8 +75,6 @@ export interface FactoryProject {
   buildOnPushEnabled: boolean;
   /** Minutes after a push-triggered attempt during which further pushes do not build. */
   buildPushDebounceMinutes: number;
-  /** Whether Review agents publish their test results as a commit check. Defaults to off. */
-  reviewTestChecksEnabled: boolean;
   /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
   selfReviewEnabled: boolean;
   createdAt: Date;
@@ -108,7 +106,6 @@ export interface UpdateFactoryProjectInput {
   lastBuildAttemptedAt?: Date | null;
   buildOnPushEnabled?: boolean;
   buildPushDebounceMinutes?: number;
-  reviewTestChecksEnabled?: boolean;
   selfReviewEnabled?: boolean;
 }
 
@@ -145,6 +142,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
+    // Retired project switch: no longer read or written. The review skill decides whether to publish its test check.
     review_test_checks_enabled: { type: 'boolean', default: false },
     self_review_enabled: { type: 'boolean', default: false },
     /** Set once the source-control domain has backfilled repository positions and environment membership. */
@@ -181,7 +179,6 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   build_start_claim_expires_at: Date | null;
   build_on_push_enabled: boolean | null;
   build_push_debounce_minutes: number | null;
-  review_test_checks_enabled: boolean | null;
   self_review_enabled: boolean | null;
   environment_backfilled_at: Date | null;
   created_at: Date;
@@ -214,7 +211,6 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     buildStartUncertain: row.build_start_uncertain ?? false,
     buildOnPushEnabled: row.build_on_push_enabled ?? false,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
-    reviewTestChecksEnabled: row.review_test_checks_enabled ?? false,
     selfReviewEnabled: row.self_review_enabled ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -333,9 +329,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.buildOnPushEnabled !== undefined ? { build_on_push_enabled: changes.buildOnPushEnabled } : {}),
           ...(changes.buildPushDebounceMinutes !== undefined
             ? { build_push_debounce_minutes: changes.buildPushDebounceMinutes }
-            : {}),
-          ...(changes.reviewTestChecksEnabled !== undefined
-            ? { review_test_checks_enabled: changes.reviewTestChecksEnabled }
             : {}),
           ...(changes.selfReviewEnabled !== undefined ? { self_review_enabled: changes.selfReviewEnabled } : {}),
           updated_at: new Date(),

@@ -102,19 +102,15 @@ describe('Board automation settings', () => {
     expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeChecked();
   });
 
-  it('turns review test checks on, defaulting to off for older projects', async () => {
-    stubBoard({ items: [], factory: project() });
+  it('offers no review test checks switch, because the review skill decides whether to publish', async () => {
+    // A project an older server still reports with the retired switch.
+    stubBoard({ items: [], factory: project({ reviewTestChecksEnabled: false }) });
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    renderBoard('review');
 
     await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    const testChecks = await screen.findByRole('switch', { name: 'Publish review test checks' });
-    expect(testChecks).not.toBeChecked();
-    await user.click(testChecks);
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ reviewTestChecksEnabled: true }]);
-    expect(await screen.findByRole('switch', { name: 'Publish review test checks' })).toBeChecked();
+    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Publish review test checks' })).not.toBeInTheDocument();
   });
 
   it('turns self-review on, defaulting to off, on a board that has a self-review phase', async () => {
@@ -145,18 +141,5 @@ describe('Board automation settings', () => {
     await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
     expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'Self-review before pull requests' })).not.toBeInTheDocument();
-  });
-
-  it('keeps the automation switches separate', async () => {
-    stubBoard({ items: [], factory: project() });
-    const user = userEvent.setup();
-    const { client } = renderBoard('review');
-
-    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    await user.click(await screen.findByRole('switch', { name: 'Auto-start runs' }));
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
-    expect(screen.getByRole('switch', { name: 'Publish review test checks' })).not.toBeChecked();
   });
 });

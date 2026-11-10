@@ -917,7 +917,6 @@ describe('createSourceControlTools', () => {
       overrides: {
         publishCommitCheck?: unknown;
         pullRequest?: unknown;
-        testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
         boundChangeRequestId?: () => Promise<string | undefined>;
       } = {},
     ) {
@@ -942,7 +941,6 @@ describe('createSourceControlTools', () => {
         requestContext: requestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl }],
         audit: setup.audit,
-        ...(overrides.testChecksEnabled ? { testChecksEnabled: overrides.testChecksEnabled } : {}),
         ...('boundChangeRequestId' in overrides
           ? overrides.boundChangeRequestId
             ? { boundChangeRequestId: overrides.boundChangeRequestId }
@@ -965,14 +963,6 @@ describe('createSourceControlTools', () => {
       };
     }
 
-    it('refuses to publish when the project turned test checks off', async () => {
-      const testChecksEnabled = vi.fn(async () => false);
-      const { run, publishCommitCheck } = await publish({}, { testChecksEnabled });
-      await expect(run()).rejects.toThrow(/turned off for this Factory project/);
-      expect(testChecksEnabled).toHaveBeenCalledWith({ orgId: expect.any(String), factoryProjectId: 'project-1' });
-      expect(publishCommitCheck).not.toHaveBeenCalled();
-    });
-
     it('refuses to publish on a change request other than the one the session reviews', async () => {
       const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => '18' });
       await expect(run()).rejects.toThrow(/reviews change request 18, not 17/);
@@ -994,12 +984,6 @@ describe('createSourceControlTools', () => {
     it('publishes on the change request the session reviews', async () => {
       const { run } = await publish({}, { boundChangeRequestId: async () => '17' });
       await expect(run()).resolves.toMatchObject({ id: '9' });
-    });
-
-    it('publishes when the project keeps test checks on', async () => {
-      const { run, publishCommitCheck } = await publish({}, { testChecksEnabled: async () => true });
-      await expect(run()).resolves.toMatchObject({ id: '9' });
-      expect(publishCommitCheck).toHaveBeenCalledOnce();
     });
 
     it('publishes under the fixed Factory check name on the current head', async () => {

@@ -1846,11 +1846,6 @@ export class MastraFactory {
                 requestContext,
                 providers: sourceControlToolProviders,
                 audit: auditDomain,
-                testChecksEnabled: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.reviewTestChecksEnabled ?? false;
-                },
                 ...(workItemsStorage
                   ? {
                       selfReviewApprovedHead: () =>

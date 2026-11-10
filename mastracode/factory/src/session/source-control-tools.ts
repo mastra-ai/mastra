@@ -239,15 +239,12 @@ export async function createSourceControlTools({
   requestContext,
   providers,
   audit,
-  testChecksEnabled,
   selfReviewApprovedHead,
   boundChangeRequestId,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   audit: AuditAgentEmitter;
-  /** Per-project switch for `source_control_publish_test_check`. The host decides the default; Factory projects default to off. */
-  testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   /**
    * Self-review gate for opening a change request. `undefined` means the session
    * is not gated (no Work item, or its change request predates Self-review);
@@ -713,20 +710,6 @@ export async function createSourceControlTools({
       }),
       execute: async input => {
         const target = await targetFor(input);
-        if (testChecksEnabled) {
-          const connection = await target.provider.storage.connections.get({
-            orgId: target.orgId,
-            id: target.projectRepository.connectionId,
-          });
-          if (
-            connection?.factoryProjectId &&
-            !(await testChecksEnabled({ orgId: target.orgId, factoryProjectId: connection.factoryProjectId }))
-          ) {
-            throw new Error(
-              'Test check publishing is turned off for this Factory project; nothing was published. Report the test results in the test report comment instead.',
-            );
-          }
-        }
         const publishCommitCheck = target.provider.versionControl.publishCommitCheck;
         if (!publishCommitCheck) {
           throw new Error(`${target.provider.id} does not support publishing commit checks; nothing was published.`);
