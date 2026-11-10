@@ -351,6 +351,81 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     20_000,
   );
 
+  // Durable engines don't dispatch the sibling tool of a step that suspends on an approval.
+  it.skipIf(isDurableEngineVariant(engine))(
+    'stops a run whose step is still executing after it raised an approval',
+    async () => {
+      const threadId = `shutdown-suspending-${engine}`;
+      const key = [RESOURCE, threadId].join('\u0000');
+      llm.on(
+        { userMessage: 'approve and sleep' },
+        {
+          toolCalls: [
+            { id: 'call_guarded', name: 'guarded', arguments: {} },
+            { id: 'call_slow', name: 'slow', arguments: {} },
+          ],
+        },
+      );
+      const shared = new SharedLeases();
+      const events = new EventEmitter();
+      events.setMaxListeners(0);
+      const memory = new MockMemory();
+      const slow = { started: false, finished: false, abortedAt: undefined as number | undefined };
+      const guarded = createTool({
+        id: 'guarded',
+        description: 'Needs approval',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        execute: async () => 'guarded',
+      });
+      const slowTool = createTool({
+        id: 'slow',
+        description: 'Sleeps, ignoring aborts',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          slow.started = true;
+          context?.abortSignal?.addEventListener('abort', () => (slow.abortedAt ??= Date.now()), { once: true });
+          await new Promise(resolve => setTimeout(resolve, 3_000));
+          slow.finished = true;
+          return 'slept';
+        },
+      });
+      const running = replica(shared, events, memory, { guarded, slow: slowTool });
+      const observer = replica(shared, events, memory, {});
+      const follower = await follow(observer.agent, threadId);
+
+      await startStream(running.agent, 'approve and sleep', threadId, {});
+      await vi.waitFor(
+        () => {
+          expect(follower.types).toContain('tool-call-approval');
+          expect(slow.started).toBe(true);
+        },
+        { timeout: 5_000 },
+      );
+      const owner = shared.owner(key);
+      expect(owner).toBeDefined();
+
+      const shutdownStarted = Date.now();
+      await running.mastra.shutdown({ drainTimeout: 200 });
+      // The step was still executing, so shutdown aborted it rather than treating the run as parked.
+      expect(slow.abortedAt).toBeGreaterThanOrEqual(shutdownStarted);
+      // The slow tool ignores the abort and still runs, so the thread isn't handed over: no release, no renewal.
+      expect(slow.finished).toBe(false);
+      expect(shared.owner(key)).toBe(owner);
+      const renewalsAtShutdown = running.pubsub.renewals;
+      // The kept lease lapses by its TTL; until the tool returns, nothing has released it early.
+      await vi.waitFor(() => expect(shared.owner(key)).toBeUndefined(), { timeout: 2_000 });
+      expect(slow.finished).toBe(false);
+      expect(running.pubsub.renewals).toBe(renewalsAtShutdown);
+      expect(follower.errors.filter(error => error.includes(LEASE_LOST))).toEqual([]);
+
+      follower.unsubscribe();
+      running.pubsub.dead = true;
+      await observer.mastra.shutdown({ drainTimeout: 200 });
+    },
+    20_000,
+  );
+
   it('announces a run parked on an approval as suspended and frees its thread (5)', async () => {
     const threadId = `shutdown-parked-${engine}`;
     const key = [RESOURCE, threadId].join('\u0000');

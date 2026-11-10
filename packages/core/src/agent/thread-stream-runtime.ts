@@ -26,7 +26,13 @@ import type { AgentExecutionOptions } from './agent.types';
 import { DurableStepIds } from './durable/constants';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
-import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSettle } from './run-lease-fence';
+import {
+  clearRunLeaseFence,
+  hasRunningRunStep,
+  isRunStepActive,
+  setRunLeaseFence,
+  whenRunStepsSettle,
+} from './run-lease-fence';
 import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
@@ -452,6 +458,11 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   ownershipLost?: () => boolean;
   /** See {@link AgentThreadRunClaim.stepOwner}. */
   stepOwner?: () => object | undefined;
+  /**
+   * The abort controller of the run's last prepared segment, kept once that segment is cleaned up: a step raising a
+   * suspension can end the segment while a sibling tool call of the same step still executes under it.
+   */
+  segmentAbortController?: AbortController;
   /** This process read the record's own `run-registered` back from the thread topic. */
   registrationSeen?: boolean;
   /** Another process registered the run after this record did, so it executes the run now. */
@@ -1324,15 +1335,17 @@ export class AgentThreadStreamRuntime {
         this.#stopLeaseRenewal(resolved, runId);
         return;
       }
-      // A partially resumed run is still parked on its sibling suspensions while its resumed segment executes; its
-      // lifecycle, not its suspension bookkeeping or the output it reuses across the suspension, says it is running.
-      const preparedRun =
-        this.#isParkedRun(state, runId) && record.lifecycle !== 'running'
-          ? undefined
-          : state.preparedRunsById.get(runId);
+      // A run is parked only once its suspension settled and no step of it still executes. A partially resumed run is
+      // still parked on its sibling suspensions while its resumed segment executes, and a step raising a suspension
+      // can end its segment while a sibling tool call of that step still executes: both are aborted like any executing
+      // run. Neither its suspension bookkeeping nor the output a resumed segment reuses says whether it still executes.
+      const preparedRun = state.preparedRunsById.get(runId);
+      const controller = preparedRun?.abortController ?? record.segmentAbortController;
+      const executing = (!!preparedRun && record.lifecycle !== 'suspended') || hasRunningRunStep(controller?.signal);
+      const abortController = executing ? controller : undefined;
       if (!state.leaseRenewalTimers.has(runId) || record.registeredElsewhere || record.lateRetakeHandoff) {
         // Another execution has the thread; it ends the run and releases the thread.
-        preparedRun?.abortController.abort();
+        abortController?.abort();
         this.#stopLeaseRenewal(resolved, runId);
         return;
       }
@@ -1340,11 +1353,12 @@ export class AgentThreadStreamRuntime {
       const leaseOwner = state.leaseOwners.get(runId) ?? record.leaseOwner ?? this.#threadLeaseOwner(resolved, runId);
       // From here the run's own end neither publishes nor gives up its lease: shutdown does both below.
       state.shutdownStreams.set(streamId, 'ending');
-      preparedRun?.abortController.abort();
+      abortController?.abort();
       // Ask the lease backend rather than the record: a durable run this Mastra just abandoned counts as having lost
       // its execution, yet still holds its thread here until released. The read runs while the run winds down and
       // shares its grace, so a slow backend can neither keep the run executing nor outlast shutdown; a backend that
-      // doesn't answer in time leaves the lease to expire.
+      // doesn't answer in time leaves the lease to expire. The run has stopped once its output finished and no step
+      // of it, such as a tool call ignoring the abort, still executes.
       const [holdsLease, stopped] = await Promise.all([
         isFallback ||
           this.#withinGrace(
@@ -1355,11 +1369,12 @@ export class AgentThreadStreamRuntime {
             abortGraceMs,
             false,
           ),
-        preparedRun
+        abortController
           ? this.#withinGrace(
               Promise.allSettled([
-                (record.currentSegmentOutput ?? record.output)._waitUntilFinished(),
-                record.broadcastFinished,
+                preparedRun && (record.currentSegmentOutput ?? record.output)._waitUntilFinished(),
+                preparedRun && record.broadcastFinished,
+                new Promise<void>(resolve => whenRunStepsSettle(abortController.signal, resolve)),
               ]).then(() => true),
               abortGraceMs,
               false,
@@ -4386,6 +4401,8 @@ export class AgentThreadStreamRuntime {
     }
     preparedRun?.cleanup();
     if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer?.unregister(preparedRun.finalizerToken);
+    const record = state.threadRunsById.get(runId);
+    if (preparedRun && record) record.segmentAbortController = preparedRun.abortController;
     state.preparedRunsById.delete(runId);
     state.pendingSignalListenersByRunId.delete(runId);
     state.abortedRunIds.delete(runId);
