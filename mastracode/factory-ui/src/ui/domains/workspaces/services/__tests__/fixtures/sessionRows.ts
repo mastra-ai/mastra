@@ -41,7 +41,7 @@ export function testWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-09-04T09:00:00.000Z',
     updatedAt: '2026-09-04T09:00:00.000Z',

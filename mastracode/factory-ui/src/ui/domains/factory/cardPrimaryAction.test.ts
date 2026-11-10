@@ -49,7 +49,7 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-08-30T00:00:00.000Z',
     updatedAt: '2026-08-30T00:00:00.000Z',

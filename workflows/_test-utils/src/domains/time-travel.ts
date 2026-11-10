@@ -1096,6 +1096,60 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: timeTravel delivers schema-valid falsy resumeData (#29390)
+  {
+    const createFalsyResumeWorkflow = (id: string, resumeSchema: z.ZodTypeAny) => {
+      mockRegistry.register(`${id}:ask`, () =>
+        vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+          if (resumeData === undefined) {
+            return suspend({ reason: 'answer required' });
+          }
+          return { answer: resumeData };
+        }),
+      );
+
+      const prep = createStep({
+        id: 'prep',
+        execute: async () => ({}),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const ask = createStep({
+        id: 'ask',
+        execute: async ctx => mockRegistry.get(`${id}:ask`)(ctx),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ answer: z.unknown() }),
+        resumeSchema,
+      });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ answer: z.unknown() }),
+        steps: [prep, ask],
+      });
+
+      workflow.then(prep).then(ask).commit();
+
+      workflows[id] = {
+        workflow,
+        mocks: {
+          get ask() {
+            return mockRegistry.get(`${id}:ask`);
+          },
+        },
+        resetMocks: () => mockRegistry.reset(),
+      };
+    };
+
+    createFalsyResumeWorkflow(
+      'tt-falsy-resume-workflow',
+      z.union([z.literal(false), z.literal(0), z.literal(''), z.null()]),
+    );
+    createFalsyResumeWorkflow('tt-boolean-resume-workflow', z.boolean());
+  }
+
   return workflows;
 }
 
@@ -1739,5 +1793,71 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         expect(mocks.promptAgent).toHaveBeenCalledTimes(2);
       },
     );
+
+    // A user answers a suspended step with a value that is valid for its
+    // resumeSchema but falsy. timeTravel used to drop these because resume data
+    // was checked by truthiness instead of presence. (#29390)
+    describe('timeTravel with falsy resumeData (#29390)', () => {
+      const startSuspendedRun = async (workflowId: string) => {
+        const { workflow, mocks, resetMocks } = registry![workflowId]!;
+        resetMocks?.();
+        const runId = `${workflowId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const started = await execute(workflow, {}, { runId });
+        expect(started.steps['ask']?.status).toBe('suspended');
+        resetMocks?.();
+
+        const resumeDataSeenByAsk = () => mocks.ask.mock.calls.map(([stepContext]: any[]) => stepContext.resumeData);
+        return { workflow, runId, resumeDataSeenByAsk };
+      };
+
+      const falsyAnswers = [
+        { label: 'false', value: false },
+        { label: '0', value: 0 },
+        { label: "''", value: '' },
+        { label: 'null', value: null },
+      ];
+
+      for (const { label, value } of falsyAnswers) {
+        for (const step of ['ask', 'prep']) {
+          it.skipIf(skipTests.timeTravelSuspended || !timeTravel)(
+            `should deliver ${label} to the suspended step when time traveling from ${step}`,
+            async () => {
+              const { workflow, runId, resumeDataSeenByAsk } = await startSuspendedRun('tt-falsy-resume-workflow');
+
+              const result = await timeTravel!(workflow, { step, runId, resumeData: value });
+
+              expect(resumeDataSeenByAsk()).toEqual([value]);
+              expect(result.status).toBe('success');
+              expect(result.result).toEqual({ answer: value });
+            },
+          );
+        }
+      }
+
+      it.skipIf(skipTests.timeTravelSuspended || !timeTravel)(
+        'should leave the step suspended when time travel omits resumeData',
+        async () => {
+          const { workflow, runId, resumeDataSeenByAsk } = await startSuspendedRun('tt-boolean-resume-workflow');
+
+          const result = await timeTravel!(workflow, { step: 'ask', runId });
+
+          expect(resumeDataSeenByAsk()).toEqual([undefined]);
+          expect(['paused', 'suspended']).toContain(result.status);
+        },
+      );
+
+      it.skipIf(skipTests.timeTravelSuspended || !timeTravel)(
+        'should not deliver a falsy value that fails the resumeSchema',
+        async () => {
+          const { workflow, runId, resumeDataSeenByAsk } = await startSuspendedRun('tt-boolean-resume-workflow');
+
+          const result = await timeTravel!(workflow, { step: 'ask', runId, resumeData: 0 });
+
+          expect(resumeDataSeenByAsk()).toEqual([undefined]);
+          expect(['paused', 'suspended']).toContain(result.status);
+        },
+      );
+    });
   });
 }

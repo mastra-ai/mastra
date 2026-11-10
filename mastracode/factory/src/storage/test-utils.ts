@@ -12,7 +12,6 @@ import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { AuditStorage } from './domains/audit/base.js';
 import { StoredBoardsStorage } from './domains/boards/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
-import { WorkItemCommentsStorage } from './domains/comments/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
@@ -127,7 +126,6 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   sandboxEnvs: SandboxEnvsStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
-  comments: WorkItemCommentsStorage;
   boards: StoredBoardsStorage;
   skillOverrides: SkillOverridesStorage;
   voiceSettings: VoiceSettingsStorage;
@@ -164,7 +162,6 @@ export async function createFactoryStorageForTests(
   const sandboxEnvs = storage.registerDomain(new SandboxEnvsStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
-  const comments = storage.registerDomain(new WorkItemCommentsStorage());
   const boards = storage.registerDomain(new StoredBoardsStorage());
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
   const voiceSettings = storage.registerDomain(new VoiceSettingsStorage());
@@ -185,7 +182,6 @@ export async function createFactoryStorageForTests(
     sandboxEnvs,
     queueHealth,
     channelIdentity,
-    comments,
     boards,
     skillOverrides,
     voiceSettings,

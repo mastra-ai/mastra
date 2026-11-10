@@ -507,6 +507,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "board",
+      "description",
       "metadata",
       "parentWorkItemId",
       "sessions",
@@ -808,6 +809,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "board",
+      "description",
       "externalSource",
       "metadata",
       "parentWorkItemId",
@@ -1256,8 +1258,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "enum": [
               "automation-failed",
               "automation-proposed",
-              "mention",
-              "activity",
               "agent-waiting"
             ]
           }
@@ -1294,8 +1294,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "enum": [
               "automation-failed",
               "automation-proposed",
-              "mention",
-              "activity",
               "agent-waiting"
             ]
           },
@@ -1344,8 +1342,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "required": [
             "automation-failed",
             "automation-proposed",
-            "mention",
-            "activity",
             "agent-waiting"
           ]
         },
@@ -5554,20 +5550,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "title": {
           "$ref": "#/$defs/__schema0"
         },
-        "board": {
+        "description": {
           "$ref": "#/$defs/__schema1"
         },
-        "parentWorkItemId": {
+        "board": {
           "$ref": "#/$defs/__schema2"
         },
-        "stages": {
+        "parentWorkItemId": {
           "$ref": "#/$defs/__schema3"
         },
+        "stages": {
+          "$ref": "#/$defs/__schema4"
+        },
         "sessions": {
-          "$ref": "#/$defs/__schema5"
+          "$ref": "#/$defs/__schema6"
         },
         "metadata": {
-          "$ref": "#/$defs/__schema6"
+          "$ref": "#/$defs/__schema7"
         }
       },
       "$defs": {
@@ -5576,11 +5575,22 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "maxLength": 500
         },
         "__schema1": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 8000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema2": {
           "type": "string",
           "minLength": 1,
           "maxLength": 128
         },
-        "__schema2": {
+        "__schema3": {
           "anyOf": [
             {
               "type": "string",
@@ -5591,20 +5601,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema3": {
+        "__schema4": {
           "minItems": 1,
           "maxItems": 16,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema4"
+            "$ref": "#/$defs/__schema5"
           }
         },
-        "__schema4": {
+        "__schema5": {
           "type": "string",
           "maxLength": 64,
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
-        "__schema5": {
+        "__schema6": {
           "type": "object",
           "propertyNames": {
             "type": "string",
@@ -5637,24 +5647,24 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ]
           }
         },
-        "__schema6": {
+        "__schema7": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema7"
+              "$ref": "#/$defs/__schema8"
             },
             {
-              "$ref": "#/$defs/__schema8"
+              "$ref": "#/$defs/__schema9"
             }
           ]
         },
-        "__schema7": {
+        "__schema8": {
           "type": "object",
           "propertyNames": {
             "type": "string"
           },
           "additionalProperties": {}
         },
-        "__schema8": {
+        "__schema9": {
           "type": "null"
         }
       }
@@ -5872,8 +5882,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "automation-failed",
             "automation-proposed",
-            "mention",
-            "activity",
             "agent-waiting"
           ]
         },
@@ -5939,8 +5947,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "automation-failed",
             "automation-proposed",
-            "mention",
-            "activity",
             "agent-waiting"
           ]
         },
@@ -6006,8 +6012,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "automation-failed",
             "automation-proposed",
-            "mention",
-            "activity",
             "agent-waiting"
           ]
         },
@@ -8396,6 +8400,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "string",
                   "maxLength": 500
                 },
+                "description": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 8000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "board": {
                   "type": "string",
                   "minLength": 1,
@@ -8570,6 +8585,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "title": {
           "type": "string",
           "maxLength": 500
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 8000
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "board": {
           "type": "string",
