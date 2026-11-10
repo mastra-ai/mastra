@@ -233,7 +233,7 @@ export const { createWorkflow, createStep } = init({
 | Method | Temporal support |
 | - | - |
 | `start()`, `startAsync()` | Starts a Temporal workflow execution |
-| `resume()`, `resumeAsync()` | Signals the Temporal execution to resume a suspended step |
+| `resume()`, `resumeAsync()` | Signals the Temporal execution to resume a suspended step. Pass `step`, or omit it when only one step is suspended. Resuming by `label` isn't supported |
 | `cancel()` | Cancels the Temporal execution |
 | `stream()`, `streamLegacy()`, `resumeStream()` | Throws. Use `start()` or `startAsync()` instead |
 | `restart()`, `timeTravel()`, `timeTravelStream()` | Throws. Time travel is tracked in [#24025](https://github.com/mastra-ai/mastra/issues/24025) |
