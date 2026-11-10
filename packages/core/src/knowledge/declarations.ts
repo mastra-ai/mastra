@@ -507,14 +507,6 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
         throw new KnowledgeDeclarationError(`Knowledge rule on "${target}" has unknown role "${rule.role}".`);
       }
       if (rule.principal === 'self') return { principal: null, role: rule.role, reach: { kind: 'self' } };
-      // There is deliberately no wildcard principal: a rule giving every run a role makes it too easy
-      // to leak a scope by accident. Grant a declared principal scope instead and have the runs that
-      // should read it hold that scope.
-      if (rule.principal === '*') {
-        throw new KnowledgeDeclarationError(
-          `Knowledge rule on "${target}" uses principal "*"; grant a declared principal scope instead.`,
-        );
-      }
       const principal = principalPattern(rule.principal, target);
       const bound = principal.params;
       const unbindable = bound.filter(param => !targetParams.includes(param) && !belongsTo?.params.includes(param));

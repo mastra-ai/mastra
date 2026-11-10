@@ -51,7 +51,7 @@ it('uses the project-scoped operation route with bearer auth', async () => {
 
 it('asks the hosted store for the scope declarations its instance supplies', async () => {
   const urls: string[] = [];
-  const declarations = { 'linear:$account:$connection': { access: [{ principal: '*', role: 'viewer' }] } };
+  const declarations = { 'linear:$account:$connection': { access: [{ principal: 'imports:all', role: 'viewer' }] } };
   vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
     urls.push(String(input));
     return new Response(JSON.stringify({ result: declarations }));

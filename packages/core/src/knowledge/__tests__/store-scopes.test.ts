@@ -201,25 +201,3 @@ describe('Knowledge scope declarations a store supplies', () => {
     ]);
   });
 });
-
-describe("a '*' principal", () => {
-  it('is refused in config, so no rule can give every run a role', () => {
-    expect(
-      () =>
-        new Knowledge({
-          storage: new InMemoryStore(),
-          scopes: { ...knowledgeMemoryScopes(), 'policy:$name': { access: [{ principal: '*', role: 'viewer' }] } },
-        }),
-    ).toThrow(/uses principal "\*"; grant a declared principal scope instead/);
-  });
-
-  it('is refused in a store declaration, which is skipped with a warning', async () => {
-    const { knowledge, call } = await setup({
-      ...LINEAR,
-      'policy:$name': { access: [{ principal: '*', role: 'viewer' }] },
-    });
-    const warn = vi.spyOn((knowledge as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
-    expect(names(await call('knowledge_search', { query: 'Roadmap' }))).toEqual(['Roadmap']);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"policy:$name"'));
-  });
-});
