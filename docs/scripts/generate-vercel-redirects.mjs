@@ -23,7 +23,7 @@ const HEADERS = [
     headers: [
       {
         key: 'Link',
-        value: '</llms.txt>; rel="llms-txt"',
+        value: '</llms.txt>; rel="llms-txt", <https://mastra.ai/.well-known/ai-catalog.json>; rel="ard"',
       },
       {
         key: 'X-Llms-Txt',
