@@ -97,9 +97,9 @@ const noTreeDrawer = () => screen.queryByRole('region', { name: 'Pages' }) === n
 describe('KnowledgePageExplorer drawers', () => {
   it('keeps the same tree when switching between the graph and the page', () => {
     renderWithProviders(<Host initial="onboarding" />);
-    const tree = within(treeDrawer()).getByRole('tree');
+    const tree = within(treeDrawer()).getByRole('tree', { name: 'Knowledge pages' });
     fireEvent.click(within(pageDrawer()).getByRole('button', { name: 'Open page' }));
-    expect(within(treeDrawer()).getByRole('tree')).toBe(tree);
+    expect(within(treeDrawer()).getByRole('tree', { name: 'Knowledge pages' })).toBe(tree);
   });
 
   it('collapses the page tree and brings it back', () => {
@@ -107,7 +107,7 @@ describe('KnowledgePageExplorer drawers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide pages' }));
     expect(noTreeDrawer()).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Show pages' }));
-    expect(within(treeDrawer()).getByRole('tree')).toBeTruthy();
+    expect(within(treeDrawer()).getByRole('tree', { name: 'Knowledge pages' })).toBeTruthy();
   });
 
   it('opens the selected page in a drawer over the graph', () => {
@@ -185,7 +185,7 @@ describe('KnowledgePageExplorer drawers', () => {
   it('keeps the tree beside the page in the page view', () => {
     renderWithProviders(<Host initial="onboarding" initialView="page" />);
     expect(screen.queryByTestId('knowledge-graph-container')).toBeNull();
-    expect(within(treeDrawer()).getByRole('tree')).toBeTruthy();
+    expect(within(treeDrawer()).getByRole('tree', { name: 'Knowledge pages' })).toBeTruthy();
     expect(noPageDrawer()).toBe(true);
   });
 });

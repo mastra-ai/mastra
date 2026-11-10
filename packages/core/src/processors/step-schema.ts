@@ -149,6 +149,9 @@ export type SerializableOutputResult = {
   usage: Record<string, unknown>;
   finishReason: string;
   steps: unknown[];
+  /**
+   * @deprecated No longer set. `MessageHistory` no longer drops failed turns it receives; check `finishReason === 'error'` to detect failed runs.
+   */
   inputAccepted?: boolean;
 };
 
@@ -606,7 +609,7 @@ const outputResultSchema = z.object({
   inputAccepted: z
     .boolean()
     .optional()
-    .describe("Whether the run accepted this turn's input before it failed. Set only when finishReason is 'error'"),
+    .describe("Deprecated. No longer set. Check finishReason === 'error' to detect failed runs"),
 });
 
 export const ProcessorOutputResultPhaseSchema = z.object({

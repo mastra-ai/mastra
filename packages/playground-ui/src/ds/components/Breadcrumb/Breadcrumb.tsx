@@ -45,6 +45,8 @@ export interface CrumbProps {
    * When the crumb doesn't navigate (current crumb, or no `to`), its hit area covers the whole crumb.
    */
   switcher?: React.ReactNode;
+  /** For a crumb that navigates in place (`as="button"`) rather than through a route. */
+  onClick?: React.MouseEventHandler;
   'data-testid'?: string;
 }
 

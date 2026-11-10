@@ -59,7 +59,7 @@ describe('PlatformFactorySandbox', () => {
   beforeEach(() => vi.stubEnv('SANDBOX_PROVIDER', 'e2b'));
   afterEach(() => vi.unstubAllEnvs());
 
-  it('is a branded FactorySandbox describing cpu, memory, docker and idle timeout', () => {
+  it('is a branded FactorySandbox describing cpu, memory, docker, idle timeout and public ports', () => {
     const sandbox = new PlatformFactorySandbox({ accessToken: 'sk_test', projectId: 'proj_1' });
     expect(isFactorySandbox(sandbox)).toBe(true);
     const description = describeFactorySandbox(sandbox);
@@ -69,6 +69,7 @@ describe('PlatformFactorySandbox', () => {
       'memoryMb',
       'docker',
       'idleTimeoutMinutes',
+      'publicPorts',
     ]);
     expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: false } });
   });
@@ -102,12 +103,14 @@ describe('PlatformFactorySandbox', () => {
       memoryMb: 1024,
       docker: false,
       idleTimeoutMinutes: 5,
+      publicPorts: false,
     });
     expect(defaults(new PlatformFactorySandbox({ defaults: { cpuCount: 4 } }))).toEqual({
       cpuCount: 4,
       memoryMb: 1024,
       docker: false,
       idleTimeoutMinutes: 5,
+      publicPorts: false,
     });
   });
 
@@ -230,6 +233,54 @@ describe('PlatformFactorySandbox', () => {
     expect(idle(hostAndDefaults, { idleTimeoutMinutes: 10 })).toBe(10);
 
     expect(idle(new PlatformFactorySandbox(client))).toBe(5);
+  });
+
+  it('keeps ports private unless the setting, provider default or host option opens them', () => {
+    const ctx = listContext();
+    const client = { accessToken: 'sk_test', projectId: 'proj_1' };
+    const open = (sandbox: PlatformFactorySandbox, settings = {}) =>
+      (sandbox.create(ctx, settings) as any)._publicPorts;
+    const advertised = (sandbox: PlatformFactorySandbox) =>
+      (describeFactorySandbox(sandbox).settingsSchema.properties?.publicPorts as { default?: unknown }).default;
+
+    const bare = new PlatformFactorySandbox(client);
+    expect(open(bare)).toBe(false);
+    expect(advertised(bare)).toBe(false);
+    expect(open(bare, { publicPorts: true })).toBe(true);
+
+    const host = new PlatformFactorySandbox({ ...client, publicPorts: true });
+    expect(open(host)).toBe(true);
+    expect(advertised(host)).toBe(true);
+    expect(open(host, { publicPorts: false })).toBe(false);
+
+    const hostAndDefaults = new PlatformFactorySandbox({
+      ...client,
+      publicPorts: true,
+      defaults: { publicPorts: false },
+    });
+    expect(open(hostAndDefaults)).toBe(false);
+    expect(advertised(hostAndDefaults)).toBe(false);
+  });
+
+  it('sends the public ports setting when the session sandbox is created', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const sandbox = new PlatformFactorySandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_1',
+      environmentId: 'env_1',
+      fetch: fetchMock,
+    });
+    const created = sandbox.create({ sessionId: 'sess_3', getRepositoryAccess: undefined }, { publicPorts: true });
+    await created._start();
+
+    const create = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!;
+    expect(JSON.parse(create[1].body as string).publicPorts).toBe(true);
   });
 
   describe('builds', () => {

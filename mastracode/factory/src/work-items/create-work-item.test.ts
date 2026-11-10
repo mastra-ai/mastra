@@ -158,6 +158,27 @@ const closingBoard = defineBoard({
   },
 });
 
+describe('createFactoryWorkItem card numbers', () => {
+  it('numbers cards filed by hand in sequence, and leaves cards from an issue to their issue number', async () => {
+    const { create } = await setup();
+    const first = await create({ title: 'First' });
+    const second = await create({ title: 'Second', metadata: { repository: 'mastra-ai/mastra' } });
+    const synced = await create({
+      title: 'From an issue',
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'issue-7' },
+      metadata: { number: 7 },
+    });
+    expect(first).toMatchObject({ status: 'created', item: { metadata: { cardNumber: 1 } } });
+    expect(second).toMatchObject({
+      status: 'created',
+      item: { metadata: { cardNumber: 2, repository: 'mastra-ai/mastra' } },
+    });
+    expect(synced.status).toBe('created');
+    if (synced.status !== 'created') return;
+    expect(synced.item.metadata?.cardNumber).toBeUndefined();
+  });
+});
+
 /**
  * The steps of a create, after its upsert, that a concurrent create for the
  * same source can land before (or, for `entered`, just after the first phase's entry).

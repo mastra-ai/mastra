@@ -37,7 +37,7 @@ if (result.status === 'suspended') {
     name: 'step',
     type: 'Step<string, any, any, TResumeSchema, any, TEngineType> | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>] | string | string[]',
     description:
-      'The step(s) to resume execution from. Can be a Step instance, array of Steps, step ID string, or array of step ID strings',
+      'The step(s) to resume execution from. Can be a Step instance, array of Steps, step ID string, or a step path (an array of step IDs, such as an entry of `result.suspended`)',
     isOptional: true,
   },
   {

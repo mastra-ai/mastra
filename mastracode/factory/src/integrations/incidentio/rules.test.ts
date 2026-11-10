@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
+import type { FactoryIncidentioRuleContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioRuleOverrides } from './default-rules.js';
@@ -40,16 +41,7 @@ async function setup(overrides?: IncidentioRuleOverrides, boards = createBoardRe
 }
 
 describe('IncidentioRules', () => {
-  it.each([
-    { name: 'the bound custom board initial phase', sourceId: 'src-1', board: 'release', stage: 'queued' },
-    { name: 'Work Intake when the source is unbound', sourceId: 'src-2', board: 'work', stage: 'intake' },
-    {
-      name: 'Work Intake when the bound board is not installed',
-      sourceId: 'src-3',
-      board: 'work',
-      stage: 'intake',
-    },
-  ])('routes an observed follow-up to $name', async ({ sourceId, board, stage }) => {
+  it('files an observed follow-up on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
       createBoardRegistry({ boards: [createTestBoard()] }),
@@ -58,11 +50,10 @@ describe('IncidentioRules', () => {
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: project.id,
-      issues: [{ ...issue, sourceId }],
-      intakeBoards: { 'src-1': 'release', 'src-3': 'hotfix' },
+      issues: [issue],
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+      { decision: { type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' } },
     ]);
   });
 
@@ -264,5 +255,46 @@ describe('IncidentioRules', () => {
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  });
+});
+
+describe('incident.io board events', () => {
+  it('reports a first sighting as created and a completed or canceled incident.io follow-up as closed for that reason', async () => {
+    const seen: Array<{ event: string; boardEvent: unknown }> = [];
+    const record = (context: FactoryIncidentioRuleContext) => {
+      seen.push({ event: context.event, boardEvent: context.boardEvent });
+    };
+    const { project, service, workItems } = await setup({ followUpObserved: record, followUpClosed: record });
+    const ingest = (stateType: string, updatedAt: string) =>
+      service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType, updatedAt }],
+      });
+    await ingest('unstarted', '2026-07-02T00:00:00Z');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'incidentio', type: 'issue', externalId: issue.id, url: issue.url },
+        title: issue.title,
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await ingest('started', '2026-07-03T00:00:00Z');
+    await ingest('completed', '2026-07-04T00:00:00Z');
+    await ingest('canceled', '2026-07-05T00:00:00Z');
+
+    expect(seen).toEqual([
+      { event: 'followUpObserved', boardEvent: { type: 'work_item.created' } },
+      // A later sighting of an open incident.io follow-up is not a status change.
+      { event: 'followUpObserved', boardEvent: undefined },
+      { event: 'followUpClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
+      { event: 'followUpClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
+    ]);
   });
 });

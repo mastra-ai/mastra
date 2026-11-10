@@ -630,7 +630,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
   if (storedGatewayKey) {
-    process.env['MASTRA_GATEWAY_API_KEY'] ??= storedGatewayKey;
+    // Through AuthStorage, so removeStoredApiKey() can undo the export later.
+    // Like before, a variable already set in the environment wins.
+    authStorage.loadStoredApiKeysIntoEnv({ [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY' });
   }
 
   if (storedGatewayUrl) {

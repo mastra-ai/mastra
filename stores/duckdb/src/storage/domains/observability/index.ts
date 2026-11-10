@@ -167,6 +167,10 @@ export interface ObservabilityDuckDBConfig {
  * Uses an append-only event-sourced model with SQL-based reconstruction for spans.
  */
 export class ObservabilityStorageDuckDB extends ObservabilityStorage {
+  override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   static override readonly retentionTables: RetentionTablesDescriptor = {
     spans: { table: 'span_events', column: 'timestamp', indexed: false },
     metrics: { table: 'metric_events', column: 'timestamp', indexed: false },
@@ -466,6 +470,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return scoreOps.getScoreById(this.db, scoreId);
+  }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return feedbackOps.getFeedbackById(this.db, feedbackId);
   }
   async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return scoreOps.getScoreAggregate(this.db, args);

@@ -1,3 +1,4 @@
+import { builtinBoardCatalog } from '../../../../../../../e2e/ui/board-catalog';
 import type { WorkItem } from '../../../../factory/services/workItems';
 import { buildFactorySessionRow, buildUserSessionRow } from '../../sessionRows';
 import type { FactorySessionRowInput, SessionListRow } from '../../sessionRows';
@@ -40,7 +41,7 @@ export function testWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-09-04T09:00:00.000Z',
     updatedAt: '2026-09-04T09:00:00.000Z',
@@ -55,7 +56,7 @@ export function factoryRow(
   return buildFactorySessionRow({
     session,
     item: undefined,
-    boards: undefined,
+    boards: builtinBoardCatalog.boards,
     threadId: undefined,
     pullRequest: undefined,
     factoryId: 'fp-1',

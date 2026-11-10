@@ -24,10 +24,6 @@ export function WorkBoardPage() {
   return <BoardLayout kind="work" />;
 }
 
-export function ReviewBoardPage() {
-  return <BoardLayout kind="review" />;
-}
-
 export function CustomBoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
   return <BoardLayout kind={boardId ?? ''} />;
@@ -66,7 +62,7 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
 function InstalledBoard({ factory, definition }: { factory: FactoryProject; definition: InstalledBoardInfo }) {
   const kind = definition.id;
   const repository = factory.repositories[0];
-  if (!repository) return <ConnectRepositoryEmptyState factoryId={factory.id} review={kind === 'review'} />;
+  if (!repository) return <ConnectRepositoryEmptyState factoryId={factory.id} />;
   return (
     <BoardContent
       key={`${factory.id}:${kind}`}
