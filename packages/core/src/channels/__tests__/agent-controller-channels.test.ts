@@ -479,6 +479,34 @@ describe('AgentControllerChannels', () => {
    * possible.
    */
   describe('session resolver', () => {
+    it('authorizes an interactive reply before resolving the mapped session', async () => {
+      const resolveSession = vi.fn();
+      const { controller, channels } = await createSetup({ resolveSession });
+      const provider: IFGAProvider = {
+        check: vi.fn().mockResolvedValue(false),
+        require: vi.fn().mockRejectedValue(new Error('denied')),
+        filterAccessible: vi.fn(),
+      };
+      controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      await expect(
+        channels.getSessionForInteractiveThread(
+          { id: 'thread-interactive', resourceId: 'channel:chan-1:t-action' },
+          requestContext,
+        ),
+      ).rejects.toThrow('denied');
+      expect(resolveSession).not.toHaveBeenCalled();
+      expect(provider.require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({
+          permission: 'agent-controller:execute',
+          context: expect.objectContaining({ resourceId: 'channel:chan-1:t-action' }),
+        }),
+      );
+    });
+
     it('requires execute permission before invoking a custom resolver', async () => {
       const resolveSession = vi.fn();
       const { adapter, controller, mastra, channels } = await createSetup({ resolveSession });

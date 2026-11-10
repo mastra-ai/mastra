@@ -41,12 +41,16 @@ import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { ModelDefaultsStorage } from '../../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { ExternalWorkItemSource, Card as FactoryCard, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type {
+  ExternalWorkItemSource,
+  Card as FactoryCard,
+  WorkItemsStorage,
+} from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
+import { slackQuestionHandlers, watchSlackQuestions } from './ask-user.js';
 import { markNewChannelSession } from './channel-session-link-processor.js';
-
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
 import { slackRunErrorCard } from './run-error-card.js';
@@ -766,14 +770,12 @@ type InternalThread = Awaited<ReturnType<typeof findInternalThread>>;
 type RunFactory = { kind: 'none' } | { kind: 'new-thread' } | { kind: 'session'; resolve: () => Promise<string> };
 
 type ExistingSessionOwnerContext =
-  | { status: 'ready'; runFactory: RunFactory }
-  | { status: 'organization-mismatch' }
-  | { status: 'access-denied' };
+  { status: 'ready'; runFactory: RunFactory } | { status: 'organization-mismatch' } | { status: 'access-denied' };
 
 async function prepareExistingSessionOwnerContext(
   thread: HandlerThread,
   deps: SlackChannelDeps,
-  ctx: ChannelHandlerContext,
+  ctx: Pick<ChannelHandlerContext, 'mastra' | 'requestContext'>,
   options: {
     expectedOrgId?: string;
     senderUserId?: string;
@@ -1160,12 +1162,10 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
         requireInternalThread: true,
         internalThread,
         addressed: thread.isDM || !!message.isMention,
-      }).catch(
-        async (error: unknown) => {
-          await reportPreDispatchError(thread, message, ctx, error);
-          return null;
-        },
-      );
+      }).catch(async (error: unknown) => {
+        await reportPreDispatchError(thread, message, ctx, error);
+        return null;
+      });
       if (!gate) return;
       const command = message.isMention ? muteCommand(message) : undefined;
       if (command && internalThread) return setThreadMuted(thread, internalThread, message, ctx, command === 'mute');
@@ -1208,7 +1208,9 @@ function typedText(message: HandlerMessage): string {
 
 /** `mute` or `unmute` when that word is all the sender typed. */
 function muteCommand(message: HandlerMessage): 'mute' | 'unmute' | undefined {
-  const rest = typedText(message).replace(/[.!]+$/, '').toLowerCase();
+  const rest = typedText(message)
+    .replace(/[.!]+$/, '')
+    .toLowerCase();
   return rest === 'mute' || rest === 'unmute' ? rest : undefined;
 }
 
@@ -1255,16 +1257,47 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
       : { adapter, ...deps.adapterOptions, formatError, streaming: deps.adapterOptions?.streaming ?? true };
 
   const startedSessions: SlackStartedSessions = new WeakMap();
+  const resolveSession = createChannelSessionResolver(deps);
+  const questions = slackQuestionHandlers(
+    adapter,
+    async (mastra, thread, ctx) => {
+      const controller = mastra.getAgentController('code');
+      const channels = controller?.getChannels();
+      if (!channels) throw new Error('Factory agent controller channels are unavailable');
+      return channels.getSessionForInteractiveThread(thread, ctx.requestContext);
+    },
+    async (thread, actorId, raw, ctx) => {
+      if (!deps.accountLinks) return true;
+      const externalTeamId = rawTeamId(raw);
+      if (!externalTeamId) return false;
+      const link = await deps.accountLinks.getAccountLink({
+        platform: 'slack',
+        externalTeamId,
+        externalUserId: actorId,
+      });
+      if (!link) return false;
+      ctx.requestContext.set('user', { id: link.userId, organizationId: link.orgId });
+      const owner = await prepareExistingSessionOwnerContext(thread as HandlerThread, deps, ctx, {
+        expectedOrgId: link.orgId,
+        senderUserId: link.userId,
+        requireInternalThread: true,
+      });
+      return owner.status === 'ready';
+    },
+  );
+  const onSessionStart = createChannelSessionStartHook(deps);
   return {
     adapters: { slack },
-    handlers: createHandlers(deps),
+    handlers: { ...createHandlers(deps), ...questions },
     // New linked+repo-backed threads belong to the Factory and are named after
     // the Factory session they start, which makes the controller session repo-backed.
     resolveResourceId: createChannelResourceIdResolver(deps, startedSessions),
     resolveThreadId: createChannelThreadIdResolver(startedSessions),
-    resolveSession: createChannelSessionResolver(deps),
-    // Those sessions are created by the channel machinery, not the web kickoff,
-    // so this is where they pick up the factory's configuration.
-    onSessionStart: createChannelSessionStartHook(deps),
+    resolveSession,
+    // Attach before dispatch so the live suspension appears in the originating Slack thread.
+    onSessionStart: async ctx => {
+      watchSlackQuestions(ctx.session, adapter);
+      await onSessionStart(ctx);
+    },
   };
 }

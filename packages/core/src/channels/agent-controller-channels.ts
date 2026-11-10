@@ -444,12 +444,14 @@ export class AgentControllerChannels extends AgentChannels {
     session.respondToToolApproval({ decision, toolCallId, requestContext });
   }
 
-  /**
-   * Get-or-create the durable controller session for a mapped channel thread
-   * and bind it to that thread. Keyed off the thread's own `resourceId` so
-   * pre-existing threads (custom resolveResourceId, or created before this
-   * feature) always pass the session's thread-ownership check.
-   */
+  /** Authorize and initialize the mapped session before an interactive channel continuation. */
+  async getSessionForInteractiveThread(
+    thread: Pick<StorageThreadType, 'id' | 'resourceId'>,
+    requestContext?: RequestContext,
+  ): Promise<Session<any>> {
+    return this.getSessionForThread(thread, requestContext);
+  }
+
   protected async getSessionForThread(
     thread: Pick<StorageThreadType, 'id' | 'resourceId'>,
     requestContext?: RequestContext,
