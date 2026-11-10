@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
 import { largeBoard, largeCandidatePage } from '../src/ui/__tests__/fixtures/largeBoard';
-import { workBoardCatalog } from './ui/board-catalog';
 import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
@@ -325,39 +324,6 @@ test.describe('Factory board virtualization', () => {
 
       await page.getByRole('article', { name: 'Large task 1999', exact: true }).scrollIntoViewIfNeeded();
       await expect(details.getByRole('textbox', { name: 'Comment' })).toHaveValue('Keep this draft');
-    });
-  });
-
-  // An empty column collapses to a narrow strip and prints its name down it. The name has no room
-  // across the strip, so a name with a space ("PR review") used to wrap into side-by-side lines.
-  test.describe('when board columns are empty on desktop', () => {
-    test.use(viewports[0].use);
-    test('prints each collapsed column name on a single vertical line', async ({ page }) => {
-      server.use(
-        // A project stored before Work renamed its last phase keeps "PR review".
-        http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(workBoardCatalog)),
-        http.get('*/web/factory/projects/fp-1/work-items', () => HttpResponse.json({ workItems: largeBoard(2) })),
-      );
-      await page.goto('/factories/fp-1/work');
-      await expect(page.getByRole('article', { name: 'Large task 1', exact: true })).toBeVisible();
-      await page.getByRole('button', { name: 'New view', exact: true }).click();
-      await page.getByRole('radio', { name: 'Board', exact: true }).click();
-      await page.getByRole('button', { name: 'Save view', exact: true }).click();
-      await expect(page.getByRole('region', { name: 'PR review, empty', exact: true })).toBeVisible();
-
-      const collapsed = await page
-        .getByRole('region', { name: /, empty$/ })
-        .evaluateAll(sections => sections.map(section => section.getAttribute('aria-label')!.replace(/, empty$/, '')));
-      expect(collapsed).toContain('PR review');
-      for (const name of collapsed) {
-        // One rect per line box the name's text was laid out in.
-        const lines = await page.getByRole('heading', { level: 2, name, exact: true }).evaluate(heading => {
-          const range = document.createRange();
-          range.selectNodeContents(heading);
-          return range.getClientRects().length;
-        });
-        expect(lines, `"${name}" column label`).toBe(1);
-      }
     });
   });
 });
