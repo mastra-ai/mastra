@@ -30,7 +30,7 @@ function renderRamp(value: Level | undefined, extra: { unavailableReason?: strin
   const cells = [...container.querySelectorAll<HTMLElement>('[data-stop]')];
   cells.forEach((cell, stop) => {
     const [left, right] = CELL_EDGES[stop] ?? [0, 0];
-    cell.getBoundingClientRect = () => ({ left, right, width: right - left }) as DOMRect;
+    cell.getBoundingClientRect = () => new DOMRect(left, 0, right - left, 32);
   });
   const track = cells[0]?.parentElement;
   if (!track) throw new Error('The ramp has no track');
@@ -126,7 +126,7 @@ describe('ThinkingLevelRamp', () => {
 
       expect(screen.getByText('Pick a model first')).toBeTruthy();
       expect(findPill()).toBeNull();
-      expect((slider as HTMLInputElement).disabled).toBe(true);
+      expect(slider).toHaveProperty('disabled', true);
 
       fireEvent.pointerDown(track, { clientX: 100, button: 0 });
       fireEvent.pointerUp(track, { clientX: 100 });

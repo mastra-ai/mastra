@@ -1,12 +1,11 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
-import { CommandGroup, CommandItem, CommandSeparator } from '@mastra/playground-ui/components/Command';
 import { ModelPicker as SharedModelPicker } from '@mastra/playground-ui/domains/llm';
 import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
-import { KeyRound, RotateCcw } from 'lucide-react';
+import { KeyRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
@@ -163,26 +162,7 @@ function ModelMenu({
             }
           : undefined
       }
-      actions={close =>
-        canReset && defaultModelId ? (
-          <>
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem
-                value="action:reset"
-                keywords={['reset', 'default', 'model']}
-                onSelect={() => {
-                  close();
-                  pickModel(defaultModelId);
-                }}
-              >
-                <RotateCcw aria-hidden />
-                <span>Reset to your default</span>
-              </CommandItem>
-            </CommandGroup>
-          </>
-        ) : undefined
-      }
+      resetLabel={canReset ? 'Reset to your default' : undefined}
       busy={locked}
       side={side}
       align={align}

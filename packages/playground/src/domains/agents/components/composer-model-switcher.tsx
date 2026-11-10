@@ -29,6 +29,10 @@ export const ComposerModelSwitcher = () => {
   }));
 
   if (!selection) return null;
+  const resolveProviderId = (providerId: string) => {
+    const cleaned = cleanProviderId(providerId);
+    return findProviderById(allProviders, cleaned)?.id || cleaned;
+  };
   // Reserve the picker footprint so the action row doesn't collapse then pop in.
   if (providersLoading) {
     // Lighter than the default `bg-muted`: the composer surface is already light, so the
@@ -41,7 +45,7 @@ export const ComposerModelSwitcher = () => {
     );
   }
 
-  const { provider: selectedProvider, model: selectedModel, setModel } = selection;
+  const { provider: selectedProvider, model: selectedModel, agentModel, setModel } = selection;
 
   // Admin locked the picker — surface a non-interactive chip instead.
   if (policy.active && policy.pickerVisible === false) {
@@ -54,14 +58,15 @@ export const ComposerModelSwitcher = () => {
   }
 
   // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
-  const currentModelProvider = cleanProviderId(selectedProvider);
-  const fullProviderId = findProviderById(allProviders, currentModelProvider)?.id || currentModelProvider;
+  const fullProviderId = resolveProviderId(selectedProvider);
 
   return (
     <ModelPicker
       providers={pickerProviders}
       value={fullProviderId ? { provider: fullProviderId, model: selectedModel } : undefined}
       onValueChange={({ provider, model }) => setModel(provider, model)}
+      defaultModel={agentModel && { provider: resolveProviderId(agentModel.provider), model: agentModel.model }}
+      resetLabel="Reset to the agent's model"
       openOnSelectedProvider
       triggerClassName="max-w-48"
     />

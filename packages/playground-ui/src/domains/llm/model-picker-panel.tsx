@@ -1,16 +1,24 @@
-import { Check, Plus } from 'lucide-react';
+import { Plus, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { modelDisplayName } from './model-display-name';
+import { ModelPickerOption } from './model-picker-option';
+import { ModelPickerProviderFilter } from './model-picker-provider-filter';
 import type {
   ModelPickerAddProvider,
   ModelPickerModel,
   ModelPickerProvider,
   ModelPickerValue,
 } from './model-picker-types';
-import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ds/components/Command';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/ds/components/Command';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/utils/cn';
 import { compareModelReleaseDates } from '@/utils/model';
@@ -33,9 +41,9 @@ export interface ModelPickerPanelProps {
   renderProviderIcon: (providerId: string) => ReactNode;
   header?: ReactNode;
   settings?: ReactNode;
-  footer?: ReactNode;
   addProvider?: ModelPickerAddProvider;
-  actions?: ReactNode;
+  /** Labels an action that picks `defaultModel`, shown while another model is picked. */
+  resetLabel?: string;
   onAddProvider: () => void;
   searchPlaceholder: string;
   emptyText: string;
@@ -56,9 +64,8 @@ export function ModelPickerPanel({
   renderProviderIcon,
   header,
   settings,
-  footer,
   addProvider,
-  actions,
+  resetLabel,
   onAddProvider,
   searchPlaceholder,
   emptyText,
@@ -126,82 +133,51 @@ export function ModelPickerPanel({
               }
             />
             {filtering ? (
-              <div
-                role="group"
-                aria-label="Filter by provider"
-                className="flex [scrollbar-width:thin] items-center gap-1 overflow-x-auto px-2 py-1.5"
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={cn('shrink-0 aria-pressed:bg-fill aria-pressed:text-foreground', sheet && 'h-11 px-4')}
-                  aria-pressed={!providerFilter}
-                  onClick={() => onProviderFilterChange(undefined)}
-                >
-                  All
-                </Button>
-                {providers.map(provider => (
-                  <Button
-                    key={provider.id}
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className={cn('relative shrink-0 aria-pressed:bg-fill', sheet && 'size-11')}
-                    aria-pressed={providerFilter === provider.id}
-                    aria-label={provider.connected === false ? `${provider.name}, not connected` : provider.name}
-                    tooltip={provider.connected === false ? `${provider.name} (not connected)` : provider.name}
-                    onClick={() => onProviderFilterChange(providerFilter === provider.id ? undefined : provider.id)}
-                  >
-                    {renderProviderIcon(provider.id)}
-                    {provider.connected === false ? (
-                      <span
-                        aria-hidden
-                        className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive-indicator"
-                      />
-                    ) : null}
-                  </Button>
-                ))}
-              </div>
+              <ModelPickerProviderFilter
+                providers={providers}
+                value={providerFilter}
+                onChange={onProviderFilterChange}
+                renderProviderIcon={renderProviderIcon}
+                sheet={sheet}
+              />
             ) : null}
           </div>
           <CommandList className="max-h-none overflow-visible">
             <CommandEmpty>{emptyText}</CommandEmpty>
             {shownProviders.map(provider => (
               <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
-                {[...provider.models].sort(byReleaseDate).map(model => {
-                  const name = modelDisplayName(model);
-                  return (
-                    <CommandItem
-                      key={model.id}
-                      value={`${provider.id}/${model.id}`}
-                      keywords={[provider.name, name, ...(model.keywords ?? [])]}
-                      title={model.id}
-                      onSelect={() => onSelect({ provider: provider.id, model: model.id })}
-                    >
-                      <span aria-hidden className="flex shrink-0">
-                        {renderProviderIcon(provider.id)}
-                      </span>
-                      <span className="truncate">{name}</span>
-                      {isSameModel(defaultModel, provider.id, model.id) ? (
-                        <Badge variant="blue" size="xs">
-                          Default
-                        </Badge>
-                      ) : null}
-                      {isSameModel(value, provider.id, model.id) ? (
-                        <Check aria-hidden className="ml-auto shrink-0" />
-                      ) : null}
-                    </CommandItem>
-                  );
-                })}
+                {provider.models.toSorted(byReleaseDate).map(model => (
+                  <ModelPickerOption
+                    key={model.id}
+                    provider={provider}
+                    model={model}
+                    selected={isSameModel(value, provider.id, model.id)}
+                    isDefault={isSameModel(defaultModel, provider.id, model.id)}
+                    onSelect={() => onSelect({ provider: provider.id, model: model.id })}
+                    renderProviderIcon={renderProviderIcon}
+                  />
+                ))}
               </CommandGroup>
             ))}
-            {actions}
+            {resetLabel && defaultModel && !isSameModel(value, defaultModel.provider, defaultModel.model) ? (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  <CommandItem
+                    value="action:reset"
+                    keywords={['reset', 'default', 'model']}
+                    onSelect={() => onSelect(defaultModel)}
+                  >
+                    <RotateCcw aria-hidden />
+                    <span>{resetLabel}</span>
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            ) : null}
           </CommandList>
         </div>
       </Command>
       {settings ? <div className={cn('p-3', sheet && 'px-4')}>{settings}</div> : null}
-      {footer}
     </>
   );
 }

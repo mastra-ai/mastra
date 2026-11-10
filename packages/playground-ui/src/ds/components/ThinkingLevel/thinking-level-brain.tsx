@@ -9,14 +9,12 @@ const HEMISPHERE =
 const BRAIN_TOP = 1.9;
 const BRAIN_BOTTOM = 13.7;
 
-function BrainShape() {
-  return (
-    <>
-      <path d={HEMISPHERE} />
-      <path d={HEMISPHERE} transform="matrix(-1 0 0 1 16 0)" />
-    </>
-  );
-}
+const brain = (
+  <>
+    <path d={HEMISPHERE} />
+    <path d={HEMISPHERE} transform="matrix(-1 0 0 1 16 0)" />
+  </>
+);
 
 /** A brain filled from the bottom: `fill` 0 is empty, 1 is full. */
 export function ThinkingLevelBrain({ fill, className }: { fill: number; className?: string }) {
@@ -32,12 +30,8 @@ export function ThinkingLevelBrain({ fill, className }: { fill: number; classNam
           style={{ transform: `translateY(${top}px)` }}
         />
       </clipPath>
-      <g opacity={0.35}>
-        <BrainShape />
-      </g>
-      <g clipPath={`url(#${clipId})`}>
-        <BrainShape />
-      </g>
+      <g opacity={0.35}>{brain}</g>
+      <g clipPath={`url(#${clipId})`}>{brain}</g>
     </svg>
   );
 }

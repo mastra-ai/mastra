@@ -3,7 +3,12 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { modelDisplayName } from './model-display-name';
 import { ModelPickerPanel } from './model-picker-panel';
-import type { ModelPickerAddProvider, ModelPickerProvider, ModelPickerValue } from './model-picker-types';
+import type {
+  ModelPickerAddProvider,
+  ModelPickerModel,
+  ModelPickerProvider,
+  ModelPickerValue,
+} from './model-picker-types';
 import { ProviderLogo } from './provider-logo';
 import { Button } from '@/ds/components/Button';
 import { DIALOG_DRAWER_BREAKPOINT_PX } from '@/ds/components/Dialog/dialog-shell';
@@ -30,12 +35,10 @@ export interface ModelPickerProps {
    * command list so sliders and other inputs keep their own arrow-key handling.
    */
   settings?: ReactNode;
-  /** Below the list and settings. */
-  footer?: ReactNode;
   /** A "+" at the end of the search field, e.g. a link to connect another provider. */
   addProvider?: ModelPickerAddProvider;
-  /** Extra command groups after the models; call `close` after acting. */
-  actions?: (close: () => void) => ReactNode;
+  /** Labels an action that picks `defaultModel`, shown while another model is picked. */
+  resetLabel?: string;
   /** Open filtered to the selected model's provider instead of "All". Suits large catalogs. */
   openOnSelectedProvider?: boolean;
   disabled?: boolean;
@@ -51,6 +54,13 @@ export interface ModelPickerProps {
 
 const defaultProviderIcon = (providerId: string) => <ProviderLogo providerId={providerId} size={14} />;
 
+/** The catalog's name for the selected model, else a readable form of its id. */
+function triggerLabel(selectedModel: ModelPickerModel | undefined, value: ModelPickerValue | undefined) {
+  if (selectedModel) return modelDisplayName(selectedModel);
+  if (value?.model) return formatModelName(value.model);
+  return 'Select model';
+}
+
 /**
  * One trigger for provider and model: a ghost button with the provider's icon and the model's name. It
  * opens a searchable list filtered by provider: a popover beside the trigger, and the design system's
@@ -65,9 +75,8 @@ export function ModelPicker({
   renderProviderIcon = defaultProviderIcon,
   header,
   settings,
-  footer,
   addProvider,
-  actions,
+  resetLabel,
   openOnSelectedProvider = false,
   disabled,
   busy,
@@ -114,13 +123,7 @@ export function ModelPicker({
         <>
           <span className="sr-only">Model: </span>
           {value?.provider ? <span className="flex shrink-0">{renderProviderIcon(value.provider)}</span> : null}
-          <span className="truncate max-sm:max-w-28">
-            {selectedModel
-              ? modelDisplayName(selectedModel)
-              : value?.model
-                ? formatModelName(value.model)
-                : 'Select model'}
-          </span>
+          <span className="truncate max-sm:max-w-28">{triggerLabel(selectedModel, value)}</span>
         </>
       )}
       <ChevronDown aria-hidden className="shrink-0" size={12} />
@@ -139,9 +142,8 @@ export function ModelPicker({
       renderProviderIcon={renderProviderIcon}
       header={header}
       settings={settings}
-      footer={footer}
       addProvider={addProvider}
-      actions={actions?.(close)}
+      resetLabel={resetLabel}
       onAddProvider={close}
       searchPlaceholder={searchPlaceholder}
       emptyText={emptyText}

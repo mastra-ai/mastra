@@ -29,7 +29,7 @@ describe('composer attachment support', () => {
 
   it('says so when a picked image cannot be read, and attaches nothing', async () => {
     vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (this: FileReader) {
-      this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
+      this.dispatchEvent(new ProgressEvent('error'));
     });
     const session = stubPreparingSession();
     const user = userEvent.setup();

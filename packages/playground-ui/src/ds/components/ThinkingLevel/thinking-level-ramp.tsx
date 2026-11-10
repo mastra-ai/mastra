@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
+import type { ChangeEvent, PointerEvent } from 'react';
 
 import { ThinkingLevelBrain } from './thinking-level-brain';
 import { useThinkingLevelStop, invisibleRangeInputClassName } from './use-thinking-level-stop';
@@ -30,6 +30,29 @@ const LEAN_PX = 6;
 
 const settle = 'ease-out-custom motion-reduce:transition-none';
 
+/** Leans the pill toward a hovered level, never when it rests on the pill itself. */
+function leanToward(hoveredStop: number | undefined, shownStop: number) {
+  if (hoveredStop === undefined || shownStop < 0 || hoveredStop === shownStop) return 0;
+  return hoveredStop > shownStop ? LEAN_PX : -LEAN_PX;
+}
+
+/** Levels already passed read brighter than the ones still ahead. */
+function cellTone({
+  stop,
+  shownStop,
+  hovered,
+  disabled,
+}: {
+  stop: number;
+  shownStop: number;
+  hovered: boolean;
+  disabled: boolean;
+}) {
+  if (disabled) return 'text-muted-foreground/45';
+  if (hovered) return 'text-foreground';
+  return stop < shownStop ? 'text-foreground/55' : 'text-muted-foreground/45';
+}
+
 /**
  * One brain per level, filled to its depth. The picked level widens into a raised pill that
  * carries its name. When it moves, the leading edge leaves first and the trailing edge follows,
@@ -56,19 +79,19 @@ export function ThinkingLevelRamp<T extends string>({
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const [hoveredStop, setHoveredStop] = useState<number>();
-  const [motion, setMotion] = useState({ stop: shownStop, forward: true });
-  if (motion.stop !== shownStop) setMotion({ stop: shownStop, forward: shownStop > motion.stop });
+  // Which way the pill last moved, so its leading edge leaves first. Set where a move starts; a
+  // value arriving from outside (a reset, a load) keeps the last direction.
+  const [forward, setForward] = useState(true);
+  const moveTo = (stop: number) => {
+    if (stop !== shownStop) setForward(stop > shownStop);
+    previewStop(stop);
+  };
 
   const disabled = value === undefined;
   const lastStop = Math.max(options.length - 1, 0);
   const picked = shownStop >= 0;
   const warning = shownOption?.emphasis === 'warning';
-  const lean =
-    hoveredStop === undefined || !picked || hoveredStop === shownStop
-      ? 0
-      : hoveredStop > shownStop
-        ? LEAN_PX
-        : -LEAN_PX;
+  const lean = leanToward(hoveredStop, shownStop);
 
   // Each plain cell is one unit, the picked one PICKED_GROW units, inside the track's 4px padding.
   const units = (cells: number) => `calc((100% - 8px) * ${cells / (lastStop + PICKED_GROW)} + 4px)`;
@@ -100,14 +123,14 @@ export function ThinkingLevelRamp<T extends string>({
     dragging.current = true;
     setHoveredStop(undefined);
     inputRef.current?.focus({ preventScroll: true });
-    previewStop(stop);
+    moveTo(stop);
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled) return;
     const stop = stopAt(event.clientX);
     if (dragging.current) {
-      if (stop !== undefined) previewStop(stop);
+      if (stop !== undefined) moveTo(stop);
     } else if (event.pointerType === 'mouse') {
       setHoveredStop(stop);
     }
@@ -165,10 +188,10 @@ export function ThinkingLevelRamp<T extends string>({
               left: `calc(${edge(shownStop)} + ${Math.min(lean, 0)}px)`,
               right: `calc(${edge(lastStop - shownStop)} - ${Math.max(lean, 0)}px)`,
               // The leading edge moves first and fast; the trailing edge waits a beat, then follows.
-              transitionDuration: motion.forward
+              transitionDuration: forward
                 ? 'var(--duration-normal), var(--duration-slow)'
                 : 'var(--duration-slow), var(--duration-normal)',
-              transitionDelay: motion.forward ? '50ms, 0ms' : '0ms, 50ms',
+              transitionDelay: forward ? '50ms, 0ms' : '0ms, 50ms',
             }}
           />
         ) : null}
@@ -185,16 +208,7 @@ export function ThinkingLevelRamp<T extends string>({
                 settle,
                 isPicked
                   ? cn('grow-[3.4]', warning ? 'text-warning-foreground' : 'text-foreground')
-                  : cn(
-                      'grow',
-                      disabled
-                        ? 'text-muted-foreground/45'
-                        : hoveredStop === stop
-                          ? 'text-foreground'
-                          : stop < shownStop
-                            ? 'text-foreground/55'
-                            : 'text-muted-foreground/45',
-                    ),
+                  : cn('grow', cellTone({ stop, shownStop, hovered: hoveredStop === stop, disabled })),
               )}
             >
               <ThinkingLevelBrain
@@ -221,6 +235,7 @@ export function ThinkingLevelRamp<T extends string>({
         })}
         <input
           {...rangeInputProps}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => moveTo(Number(event.target.value))}
           ref={inputRef}
           aria-label={label}
           aria-valuetext={shownOption?.label ?? unavailableReason}
