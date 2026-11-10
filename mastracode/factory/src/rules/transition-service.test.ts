@@ -3001,3 +3001,95 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
     });
   },
 );
+
+describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))(
+  'an agent move at a stale revision on %s',
+  backend => {
+    const ship = defineBoard({
+      id: 'ship',
+      name: 'Ship',
+      initialPhase: 'intake',
+      phases: {
+        intake: { name: 'Intake', kind: 'resting', nextPhases: ['building'] },
+        building: { name: 'Building', kind: 'working', runner: { context: 'work' }, nextPhases: ['self-review'] },
+        'self-review': {
+          name: 'Self-review',
+          kind: 'working',
+          runner: { context: 'review' },
+          nextPhases: ['review', 'building'],
+        },
+        review: { name: 'Review', kind: 'resting', nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    });
+
+    async function card() {
+      const orgId = `org-${randomUUID()}`;
+      const storage = await workItemsOn(backend);
+      const read = await createItem(storage, {
+        orgId,
+        sourceKey: orgId,
+        board: 'ship',
+        stages: ['self-review'],
+        metadata: { authorTrusted: true },
+      });
+      const service = new FactoryTransitionService({
+        configVersion: 'ship-rules',
+        storage,
+        boards: createBoardRegistry({ boards: [ship] }),
+      });
+      // Self-review opens its pull request, and attaching it to the card moves the revision on.
+      const attachPullRequest = async () =>
+        (await storage.update({
+          orgId,
+          id: read.id,
+          userId: 'factory-rule-dispatcher',
+          patch: { metadata: { openPullRequestNumber: 5 } },
+        }))!.item;
+      const moveToReview = (expectedRevision = read.revision) =>
+        service.transition({
+          ...request(read, { orgId, board: 'ship', stage: 'review', expectedRevision }),
+          actor: { type: 'agent', bindingId: 'review-binding', role: 'review' },
+          ingress: { type: 'agent', identity: `review-move-${expectedRevision}` },
+          cause: 'Self-review approved and the pull request is open.',
+        });
+      return { orgId, read, storage, attachPullRequest, moveToReview };
+    }
+
+    it('tells the agent the revision its pull request moved the card to, and moves it when the agent retries there', async () => {
+      const { orgId, read, storage, attachPullRequest, moveToReview } = await card();
+      const attached = await attachPullRequest();
+      expect(attached.revision).toBe(read.revision + 1);
+
+      await expect(moveToReview()).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'stale',
+        reason: `The card changed (now revision ${attached.revision}, in self-review). Retry with expectedRevision ${attached.revision} if the move still applies.`,
+      });
+      expect((await storage.get({ orgId, id: read.id }))?.stages).toEqual(['self-review']);
+
+      await expect(moveToReview(attached.revision)).resolves.toMatchObject({ status: 'accepted', stage: 'review' });
+      expect(await storage.get({ orgId, id: read.id })).toMatchObject({
+        stages: ['review'],
+        metadata: { openPullRequestNumber: 5 },
+      });
+    });
+
+    it('tells the agent the phase a person moved the card to while its move was out of date', async () => {
+      const { orgId, read, storage, moveToReview } = await card();
+      const sentBack = (await storage.update({
+        orgId,
+        id: read.id,
+        userId: 'user-1',
+        patch: { stages: ['building'] },
+      }))!.item;
+
+      await expect(moveToReview()).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'stale',
+        reason: `The card changed (now revision ${sentBack.revision}, in building). Retry with expectedRevision ${sentBack.revision} if the move still applies.`,
+      });
+      expect((await storage.get({ orgId, id: read.id }))?.stages).toEqual(['building']);
+    });
+  },
+);

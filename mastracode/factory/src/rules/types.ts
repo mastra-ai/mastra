@@ -332,6 +332,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     author?: string;
     factoryAuthored: boolean;
     headBranch: string;
+    /** Lowercase head commit SHA, when the delivery carries one. */
+    headSha?: string;
     baseBranch: string;
   };
   /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */

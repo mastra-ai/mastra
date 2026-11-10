@@ -667,6 +667,10 @@ describe('bundled Factory skill assets', () => {
     // The review phase takes the card only once the change request is attached: self-review retries.
     const selfReview = await read('factory-self-review');
     expect(selfReview).toContain('wait briefly (`sleep 20`)');
+    // Attaching the change request moves the revision on: a stale refusal still in self-review is retried once.
+    expect(selfReview).toContain(
+      'if the refusal shows the card still in this self-review phase, retry once with the `expectedRevision` it names',
+    );
     // A change request that never attaches is reviewed on its own card.
     expect(selfReview).toContain(
       'say it is tracked on its own card and that a person should confirm it is reviewed there',
