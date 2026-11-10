@@ -5,6 +5,7 @@ import { MastraJwtAuth } from '@mastra/auth';
 import { StaticRBACProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import type { ServerConfig, ServerMCPOAuthConfig } from '@mastra/core/server';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { MCPClient } from '@mastra/mcp';
 import { SignJWT, exportJWK, generateKeyPair } from 'jose';
@@ -82,8 +83,8 @@ export function createBuiltinMCPOAuthTestSuite(config: BuiltinMCPOAuthTestSuiteC
       vi.unstubAllEnvs();
     });
 
-    const serve = async (server: ServerConfig) => {
-      const mastra = new Mastra({ logger: false, tools: { echo }, server });
+    const serve = async (server: ServerConfig, options: { storage?: InMemoryStore } = {}) => {
+      const mastra = new Mastra({ logger: false, tools: { echo }, server, ...options });
       const started = await startServer(mastra);
       running.push(started);
       return { ...started, mastra };
@@ -237,6 +238,45 @@ export function createBuiltinMCPOAuthTestSuite(config: BuiltinMCPOAuthTestSuiteC
         const response = await fetch(`${server.url}/api/tools`, { headers: { authorization: `Bearer ${token}` } });
         expect(response.status).toBe(403);
         expect((await postMCP(server.url, token)).status).toBe(403);
+      });
+    });
+
+    // With `id = sub`, ownership filters apply to JWT users: before, they had no id and listed every record.
+    describe('ownership with an access token that carries only sub', () => {
+      let server: Running & { mastra: Mastra };
+      beforeAll(async () => {
+        const storage = new InMemoryStore();
+        server = await serve({ auth: new MastraJwtAuth({ jwksUri: jwks.jwksUri, issuer: ISSUER }) }, { storage });
+        const agents = await storage.getStore('agents');
+        for (const [id, authorId] of [
+          ['user-1-private', 'user-1'],
+          ['user-2-private', 'user-2'],
+        ] as const) {
+          await agents!.create({
+            agent: {
+              id,
+              authorId,
+              visibility: 'private',
+              name: id,
+              instructions: 'x',
+              model: { provider: 'openai', name: 'gpt-4o' },
+            },
+          });
+        }
+      });
+
+      const listIds = async (sub: string) => {
+        const response = await fetch(`${server.url}/api/stored/agents?status=draft`, {
+          headers: { authorization: `Bearer ${await jwks.sign({ sub })}` },
+        });
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { agents: { id: string }[] };
+        return body.agents.map(agent => agent.id).sort();
+      };
+
+      it("does not list another user's private record", async () => {
+        expect(await listIds('user-1')).toEqual(['user-1-private']);
+        expect(await listIds('user-2')).toEqual(['user-2-private']);
       });
     });
 
