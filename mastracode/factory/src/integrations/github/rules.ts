@@ -11,7 +11,6 @@ import {
   cardOwnsBranch,
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
-  DEFAULT_BOARD_ID,
   intakeTarget,
   rulePhaseField,
   withBoardClosure,
@@ -19,25 +18,21 @@ import {
   workItemPhaseSemantics,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { placedByIntakeRoute } from '../../boards/intake-routing.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
-import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import { cardLabels } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryPullRequestHome,
-  FactoryRuleIntakeTarget,
   FactoryRuleActor,
   FactoryRuleDecision,
   FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
-import { resolveIntakeLabelRoute } from '../../storage/domains/intake/base.js';
-import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -451,17 +446,12 @@ export interface GithubRulesOptions {
   configVersion: string;
   /** The code boards, or the per-project source so a project's stored boards run its cards. */
   boards: BoardRegistry | ProjectBoardSource;
-  /**
-   * Decides which installed board an issue lands on: a label route first, then the repository's
-   * intake source binding. Absent means the default board.
-   */
-  intake?: Pick<IntakeStorage, 'listLabelRoutes' | 'listBindings'>;
   /** Hands a push to a linked repository off for an environment build. */
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
 }
 
-/** Identity under which label-driven relocations are recorded. */
-const LABEL_ROUTE_USER_ID = 'factory-rule-dispatcher';
+/** Identity under which label and assignee syncs are recorded. */
+const CARD_SYNC_USER_ID = 'factory-rule-dispatcher';
 
 type IssueActionHandler = (
   parsed: ParsedGithubWebhook,
@@ -515,42 +505,10 @@ export class GithubRules {
   }
 
   /**
-   * Board an item lands on: the one an issue's labels select under the project's label routes,
-   * else the board the repository's intake source binding names, else the project's default board.
-   * Only installed boards count.
+   * `labeled` / `unlabeled` are not rule events: the card's label metadata is refreshed and the card
+   * stays where it is. Intake routes placed it when it arrived; a label change doesn't move it.
    */
-  async #intakeTarget(
-    project: ExternalRepositoryProjectTarget,
-    repositoryName: string,
-    labels: readonly string[],
-  ): Promise<FactoryRuleIntakeTarget | undefined> {
-    const boards = this.#boards(project);
-    const intake = this.options.intake;
-    if (!intake) return intakeTarget(boards);
-    const { orgId, factoryProjectId } = project;
-    if (labels.length > 0) {
-      const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
-      const route = resolveIntakeLabelRoute(routes, labels);
-      const board = route ? boards.get(route.board) : undefined;
-      if (board) return intakeTarget(boards, board);
-    }
-    // GitHub bindings are keyed by the internal repository id; the slug is accepted too since the
-    // bindings API stores whatever source id it is given.
-    const slug = repositoryName.toLowerCase();
-    const binding = (await intake.listBindings({ orgId, integrationId: 'github' })).find(
-      candidate =>
-        candidate.factoryProjectId === factoryProjectId &&
-        (candidate.sourceId === project.projectRepository.repositoryId || candidate.sourceId.toLowerCase() === slug),
-    );
-    return intakeTarget(boards, binding?.board ? boards.get(binding.board) : undefined);
-  }
-
-  /**
-   * `labeled` / `unlabeled` are not rule events: the labels only decide which board the card belongs
-   * on, so the card is re-routed here and its label metadata refreshed. Cards a run owns, and
-   * finished cards, stay where they are.
-   */
-  async #relocateLabeledIssue(
+  async #syncIssueLabels(
     parsed: ParsedGithubWebhook,
     repositoryId: number,
     repositoryName: string,
@@ -571,39 +529,23 @@ export class GithubRules {
     );
     if (!found || found.externalSource?.type !== 'issue') return { status: 'ignored' };
     const labels = labelNames(issue?.labels);
-    let item = found;
-    let changed = false;
-    if (!sameLabels(cardLabels(item), labels)) {
-      let updated;
-      try {
-        updated = await this.options.storage.syncCard({
-          orgId: item.orgId,
-          id: item.id,
-          userId: LABEL_ROUTE_USER_ID,
-          patch: { metadata: { labels } },
-          expectedSourceRevision: primarySource(item)?.revision,
-        });
-      } catch (error) {
-        // The card changed under us (a run wrote it, or a concurrent delivery won). The next
-        // delivery or reconcile pass carries the same labels, so drop this one instead of 5xx-ing.
-        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-        return { status: 'ignored' };
-      }
-      if (!updated) return { status: 'ignored' };
-      item = updated.item;
-      changed = true;
+    if (sameLabels(cardLabels(found), labels)) return { status: 'ignored' };
+    let updated;
+    try {
+      updated = await this.options.storage.syncCard({
+        orgId: found.orgId,
+        id: found.id,
+        userId: CARD_SYNC_USER_ID,
+        patch: { metadata: { labels } },
+        expectedSourceRevision: primarySource(found)?.revision,
+      });
+    } catch (error) {
+      // The card changed under us (a run wrote it, or a concurrent delivery won). The next
+      // delivery or reconcile pass carries the same labels, so drop this one instead of 5xx-ing.
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      return { status: 'ignored' };
     }
-    // An intake route chose this card's board when it arrived; its labels no longer move it.
-    if (placedByIntakeRoute(item)) return { status: changed ? 'committed' : 'ignored' };
-    const target = await this.#intakeTarget(project, repositoryName, labels);
-    const outcome = await moveCardToBoard({
-      workItems: this.options.storage,
-      boardRegistry: this.#boards(project),
-      userId: LABEL_ROUTE_USER_ID,
-      item,
-      targetBoard: target?.board ?? DEFAULT_BOARD_ID,
-    });
-    return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
+    return { status: updated ? 'committed' : 'ignored' };
   }
 
   /**
@@ -647,7 +589,7 @@ export class GithubRules {
       const updated = await this.options.storage.syncCard({
         orgId: item.orgId,
         id: item.id,
-        userId: LABEL_ROUTE_USER_ID,
+        userId: CARD_SYNC_USER_ID,
         patch: {
           metadata: {
             assignees,
@@ -671,7 +613,7 @@ export class GithubRules {
     switch (string(parsed.payload.action)) {
       case 'labeled':
       case 'unlabeled':
-        return (...args) => this.#relocateLabeledIssue(...args);
+        return (...args) => this.#syncIssueLabels(...args);
       case 'assigned':
       case 'unassigned':
         return (...args) => this.#syncIssueAssignees(...args);
@@ -827,7 +769,7 @@ export class GithubRules {
       )
         ? undefined
         : resolvedItem;
-    const intake = await this.#intakeTarget(project, repositoryName, issueNumber ? labelNames(issue?.labels) : []);
+    const intake = intakeTarget(this.#boards(project));
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
@@ -2087,7 +2029,6 @@ export function githubRulesOptions(
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
-    intake: context.storage.intake,
     ...(context.hooks?.onRepositoryPush ? { onRepositoryPush: context.hooks.onRepositoryPush } : {}),
   };
 }

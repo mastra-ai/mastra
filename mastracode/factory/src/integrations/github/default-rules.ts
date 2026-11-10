@@ -114,9 +114,8 @@ function githubSourceKey(
 
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue || !context.intake) return;
-  // Everything arrives on the routed board's initial phase (the project's default board when no
-  // label route or binding selects another). Trust/timing stamps remain available to custom board
-  // rules.
+  // Everything arrives on the default board's initial phase; the project's intake routes place
+  // the card from there. Trust/timing stamps remain available to custom board rules.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
@@ -170,17 +169,10 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function materializePullRequestIntake(
   context: FactoryGithubRuleContext,
-  {
-    idempotencyKey,
-    autoStartCandidate,
-    review = false,
-  }: { idempotencyKey: string; autoStartCandidate: boolean; review?: boolean },
+  { idempotencyKey, autoStartCandidate }: { idempotencyKey: string; autoStartCandidate: boolean },
 ) {
   const { intake } = context;
   if (!context.pullRequest || !intake) return;
-  // A requested review lands straight in the board's pull request review phase; a board without
-  // one files the pull request where everything else arrives.
-  const stage = review ? (intake.pullRequestReview ?? intake.initialPhase) : intake.initialPhase;
   const home = context.pullRequestHome;
   return {
     type: 'upsertLinkedWorkItem',
@@ -190,7 +182,7 @@ function materializePullRequestIntake(
     sourceKey: githubSourceKey(context, 'github-pr', context.pullRequest.number),
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage,
+    stage: intake.initialPhase,
     // A pull request for a card already on the board is filed on that card; the authoring card's
     // own evaluation moves it. For one that closes an issue on the board, the project's intake
     // routes decide whether it joins that card.
@@ -463,11 +455,10 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
     // On this path the actor is the *requester*, so the materialized
     // `authorTrusted` stamp records their trust (always true past the gate
     // above), not the PR author's: a trusted maintainer requesting a Factory
-    // review vouches for the PR.
+    // review vouches for the PR, so the project's pull request route sends it to review.
     return materializePullRequestIntake(context, {
       idempotencyKey: `${context.ingress.id}:pull-request-review-requested-intake`,
       autoStartCandidate: true,
-      review: true,
     });
   }
   // Already in review with no verdict yet: a pass is pending or running.

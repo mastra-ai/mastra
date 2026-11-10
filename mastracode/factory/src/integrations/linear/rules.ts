@@ -54,7 +54,7 @@ export interface LinearIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** Linear source the issue was read from (project or team); resolves the bound board via `intakeBoards`. */
+  /** Linear source the issue was read from (project or team). */
   sourceId?: string | null;
   projectId?: string | null;
 }
@@ -73,8 +73,6 @@ export interface LinearRulesIngress {
   userId: string;
   factoryProjectId: string;
   issues: LinearIssueIngress[];
-  /** Board id per bound Linear source id, from the project's intake bindings. */
-  intakeBoards?: Readonly<Record<string, string>>;
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
@@ -145,8 +143,6 @@ export class LinearRules {
     }
 
     const event = isClosed ? 'issueClosed' : 'issueObserved';
-    const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.#boards(input).get(boundBoardId) : undefined;
     const context: FactoryLinearRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -174,7 +170,7 @@ export class LinearRules {
             ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...withIntakeTarget(this.#boards(input), boundBoard),
+      ...withIntakeTarget(this.#boards(input)),
       event,
       issue,
     };

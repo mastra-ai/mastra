@@ -116,29 +116,18 @@ export function boardFlow(board: InstalledBoard | undefined): FactoryRuleBoardFl
 }
 
 /**
- * Where new items land on `board`, else on the project's default board when `board` is not
- * installed. Undefined when neither is.
+ * Where integrations file new items: the project's default board's initial phase, from which its
+ * intake routes place them. Undefined when the default board is not installed.
  */
-export function intakeTarget(
-  boards: Pick<BoardRegistry, 'get'>,
-  board?: InstalledBoard,
-): FactoryRuleIntakeTarget | undefined {
-  const target = board ?? boards.get(DEFAULT_BOARD_ID);
+export function intakeTarget(boards: Pick<BoardRegistry, 'get'>): FactoryRuleIntakeTarget | undefined {
+  const target = boards.get(DEFAULT_BOARD_ID);
   if (!target) return undefined;
-  const { pullRequestReview } = boardFlow(target);
-  return Object.freeze({
-    board: target.id,
-    initialPhase: target.initialPhase,
-    ...(pullRequestReview ? { pullRequestReview } : {}),
-  });
+  return Object.freeze({ board: target.id, initialPhase: target.initialPhase });
 }
 
 /** {@link intakeTarget} as a rule context field. */
-export function withIntakeTarget(
-  boards: Pick<BoardRegistry, 'get'>,
-  board?: InstalledBoard,
-): { intake?: FactoryRuleIntakeTarget } {
-  const intake = intakeTarget(boards, board);
+export function withIntakeTarget(boards: Pick<BoardRegistry, 'get'>): { intake?: FactoryRuleIntakeTarget } {
+  const intake = intakeTarget(boards);
   return intake ? { intake } : {};
 }
 

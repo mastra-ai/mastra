@@ -430,7 +430,6 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "allowWorkingPhase",
       "enabled",
       "expectedRevision",
       "name",
@@ -687,13 +686,12 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "intakeRouteCreate",
     "method": "POST",
     "path": "/web/factory/projects/:id/intake-routes",
-    "description": "Add an intake route at the end of a Factory project",
+    "description": "Add an intake route to a Factory project, after its routes; a route that places new cards goes ahead of the first route that takes every new card",
     "pathParams": [
       "id"
     ],
     "queryParams": [],
     "bodyParams": [
-      "allowWorkingPhase",
       "enabled",
       "name",
       "on",
@@ -1561,9 +1559,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest"
           ]
         },
@@ -1983,9 +1986,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest"
           ]
         },
@@ -2683,9 +2691,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   ]
                 }
               },
-              "allowWorkingPhase": {
-                "type": "boolean"
-              },
               "revision": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -2718,7 +2723,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "when",
               "target",
               "on",
-              "allowWorkingPhase",
               "revision",
               "createdBy",
               "createdAt",
@@ -2727,10 +2731,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "problems"
             ]
           }
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
-        "intakeRoutes"
+        "intakeRoutes",
+        "canEdit"
       ],
       "$defs": {
         "__schema0": {
@@ -2790,9 +2798,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest",
             "event.type",
             "event.reason",
@@ -2995,9 +3008,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               }
             },
-            "allowWorkingPhase": {
-              "type": "boolean"
-            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -3030,7 +3040,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
-            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -3101,9 +3110,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest",
             "event.type",
             "event.reason",
@@ -3762,9 +3776,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest"
           ]
         },
@@ -4163,9 +4182,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest"
           ]
         },
@@ -4733,11 +4757,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "on": {
           "$ref": "#/$defs/__schema12"
         },
-        "allowWorkingPhase": {
-          "$ref": "#/$defs/__schema14"
-        },
         "expectedRevision": {
-          "$ref": "#/$defs/__schema15"
+          "$ref": "#/$defs/__schema14"
         }
       },
       "required": [
@@ -4842,9 +4863,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest",
             "event.type",
             "event.reason",
@@ -4980,9 +5006,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema14": {
-          "type": "boolean"
-        },
-        "__schema15": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
@@ -5080,9 +5103,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               }
             },
-            "allowWorkingPhase": {
-              "type": "boolean"
-            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -5115,7 +5135,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
-            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -5186,9 +5205,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest",
             "event.type",
             "event.reason",
@@ -6102,9 +6126,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest"
           ]
         },
@@ -6503,9 +6532,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest"
           ]
         },
@@ -6939,9 +6973,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest"
           ]
         },
@@ -7277,9 +7316,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "$ref": "#/$defs/__schema8"
           }
-        },
-        "allowWorkingPhase": {
-          "type": "boolean"
         }
       },
       "required": [
@@ -7345,9 +7381,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest",
             "event.type",
             "event.reason",
@@ -7544,9 +7585,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               }
             },
-            "allowWorkingPhase": {
-              "type": "boolean"
-            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -7579,7 +7617,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
-            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -7650,9 +7687,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest",
             "event.type",
             "event.reason",
@@ -7872,9 +7914,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   ]
                 }
               },
-              "allowWorkingPhase": {
-                "type": "boolean"
-              },
               "revision": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -7907,7 +7946,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "when",
               "target",
               "on",
-              "allowWorkingPhase",
               "revision",
               "createdBy",
               "createdAt",
@@ -7916,10 +7954,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "problems"
             ]
           }
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
-        "intakeRoutes"
+        "intakeRoutes",
+        "canEdit"
       ],
       "$defs": {
         "__schema0": {
@@ -7979,9 +8021,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
             "source.integration",
+            "source.provider",
+            "source.repository",
             "item.pullRequest",
             "event.type",
             "event.reason",

@@ -3892,6 +3892,10 @@ type Shared_Type_69 = {
   deltaPolling: boolean;
   /** Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead. */
   traceQuery: boolean;
+  /** Literal substring search across any span in a trace */
+  traceQueryTextSearch: boolean;
+  /** Literal substring search within individual spans */
+  spanQueryTextSearch: boolean;
   /** `durationMs` predicates in trace and thread queries */
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
@@ -10779,6 +10783,7 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
 // Route: POST /observability/traces/query
 // ============================================================================
 export type PostObservabilityTracesQuery_Body = {
+  textSearch?: string | undefined;
   timeRange: {
     from: string;
     to: string;
@@ -11122,6 +11127,7 @@ export type PostObservabilitySpansQuery_Body = {
     to: string;
   };
   where?: InputShared_Auxiliary_231 | undefined;
+  textSearch?: string | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
     direction: 'asc' | 'desc';

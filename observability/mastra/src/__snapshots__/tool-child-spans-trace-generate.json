@@ -360,7 +360,19 @@
                         "role": "user",
                         "content": "Use child span tool to process test-data"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-child-span-1",
+                          "toolName": "childSpanTool",
+                          "args": {
+                            "input": "test-data"
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 {
@@ -768,7 +780,11 @@
                         "role": "tool",
                         "content": "[tool-result: childSpanTool]"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 generate response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

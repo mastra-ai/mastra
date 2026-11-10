@@ -14,6 +14,7 @@ import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
 import { LOCAL_MODEL_REQUEST_KEY, STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
+import { backgroundOutcomesInPrompt, snapshotBackgroundOutcomes } from '../../../../loop/shared/background-outcomes';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { agentLoopTermination, executionFailureTermination } from '../../../../loop/shared/execution-outcome';
@@ -1199,7 +1200,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 : currentModel.specificationVersion === 'v3'
                   ? messageList.get.all.aiV6.llmPrompt
                   : messageList.get.all.aiV5.llmPrompt;
+            // `skipBgTaskWait` marks an `untilIdle` inner run, the only reader of these outcomes. Taken
+            // before the prompt is built so an outcome that lands meanwhile is never counted as sent.
+            const backgroundOutcomes = typedInput.options?.skipBgTaskWait
+              ? snapshotBackgroundOutcomes(messageList)
+              : undefined;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            const builtPrompt = inputMessages;
             // Identify OM's prompt message by its source ID and position before request
             // processors run. Equal text in real user messages is not synthetic context.
             const dbMessages = messageList.get.all.db();
@@ -1354,6 +1361,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               registryEntry.runScope ??= createRunScope();
               registryEntry.runScope.set(STEP_MODEL_MESSAGES_KEY, delegationMessages);
             }
+            // A cached reply may come from a different prompt under a custom cache key, so it never
+            // counts as having answered a background result.
+            const backgroundResultTaskIds =
+              backgroundOutcomes && !cachedResponse
+                ? backgroundOutcomesInPrompt(backgroundOutcomes, builtPrompt, inputMessages)
+                : [];
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
@@ -1896,6 +1909,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     modelId: currentModel.modelId,
                     provider: currentModel.provider,
                     warnings,
+                    ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
                   });
                   if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
                     try {

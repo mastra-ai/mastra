@@ -7,14 +7,15 @@ import { describe, expect, it } from 'vitest';
 import { builtinBoardCatalog, shipBoard } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import { storedWorkBoard } from '../domains/settings/components/__tests__/fixtures/work-board';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
 
 function project(overrides: Record<string, unknown> = {}) {
-  return { id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, ...overrides };
+  return { id: FACTORY_ID, name: 'Acme Factory', ...overrides };
 }
 
 let patchBodies: unknown[];
@@ -79,84 +80,48 @@ function renderBoard(board: 'work' | 'review' | 'ship') {
 }
 
 describe('Board automation settings', () => {
-  it('edits automation in a dismissible settings popover that no longer offers plan auto-approval', async () => {
-    // A project that still has the retired switch on: every plan waits for a person anyway.
-    stubBoard({ items: [], factory: project({ autoApprovePlans: true }) });
-    const user = userEvent.setup();
-    const { client } = renderBoard('review');
-
-    const settings = await screen.findByRole('button', { name: 'Automation settings' });
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
-    await user.click(settings);
-    const autoRun = await screen.findByRole('switch', { name: 'Auto-start runs' });
-    expect(screen.queryByRole('switch', { name: 'Auto-approve plans' })).not.toBeInTheDocument();
-    await user.click(autoRun);
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
-    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeChecked();
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Automation settings' })).not.toBeInTheDocument());
-    expect(settings).toHaveFocus();
-    await user.click(settings);
-    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeChecked();
-  });
-
-  it('turns review test checks on, defaulting to off for older projects', async () => {
-    stubBoard({ items: [], factory: project() });
-    const user = userEvent.setup();
-    const { client } = renderBoard('review');
-
-    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    const testChecks = await screen.findByRole('switch', { name: 'Publish review test checks' });
-    expect(testChecks).not.toBeChecked();
-    await user.click(testChecks);
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ reviewTestChecksEnabled: true }]);
-    expect(await screen.findByRole('switch', { name: 'Publish review test checks' })).toBeChecked();
-  });
-
-  it('turns self-review on, defaulting to off, on a board that has a self-review phase', async () => {
-    stubBoard({ items: [], factory: project() });
+  it('offers no project switches, ignoring the retired ones an older project still stores', async () => {
+    // Every switch the board's phases and the review skill replaced, still on in the stored project.
+    stubBoard({
+      items: [],
+      factory: project({
+        autoRunEnabled: true,
+        selfReviewEnabled: true,
+        autoApprovePlans: true,
+        reviewTestChecksEnabled: true,
+      }),
+    });
+    // A board with a self-review phase, where the old self-review switch used to appear.
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
         HttpResponse.json({ boards: [...builtinBoardCatalog.boards, shipBoard] }),
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderBoard('ship');
+    renderBoard('ship');
 
-    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    const selfReview = await screen.findByRole('switch', { name: 'Self-review before pull requests' });
-    expect(selfReview).not.toBeChecked();
-    await user.click(selfReview);
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ selfReviewEnabled: true }]);
-    expect(await screen.findByRole('switch', { name: 'Self-review before pull requests' })).toBeChecked();
+    const settings = await screen.findByRole('button', { name: 'Automation settings' });
+    await user.click(settings);
+    expect(await screen.findByRole('link', { name: 'Edit the Work board' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Automation settings' })).not.toBeInTheDocument());
+    expect(settings).toHaveFocus();
+    expect(patchBodies).toEqual([]);
   });
 
-  it('offers no self-review switch on the default Work board, which has no self-review phase', async () => {
-    stubBoard({ items: [], factory: project({ selfReviewEnabled: true }) });
+  it('sends people to the board editor to choose which runs start on their own', async () => {
+    stubBoard({ items: [], factory: project() });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/boards/work`, () => HttpResponse.json(storedWorkBoard())),
+    );
     const user = userEvent.setup();
     renderBoard('work');
 
     await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeInTheDocument();
-    expect(screen.queryByRole('switch', { name: 'Self-review before pull requests' })).not.toBeInTheDocument();
-  });
+    await user.click(await screen.findByRole('link', { name: 'Edit the Work board' }));
 
-  it('keeps the automation switches separate', async () => {
-    stubBoard({ items: [], factory: project() });
-    const user = userEvent.setup();
-    const { client } = renderBoard('review');
-
-    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
-    await user.click(await screen.findByRole('switch', { name: 'Auto-start runs' }));
-
-    await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
-    expect(screen.getByRole('switch', { name: 'Publish review test checks' })).not.toBeChecked();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Boards' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Planning phase' })).toBeInTheDocument();
   });
 });

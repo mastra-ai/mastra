@@ -51,7 +51,6 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
       configVersion: 'factory-config-v1',
     }),
     intakeRoutes: seeded.boards,
-    isAutoRunEnabled: async () => false,
     ownerId: 'jira-rules-test',
   });
   /** Files every committed decision, as the dispatcher's poll would. */
@@ -73,16 +72,7 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
 }
 
 describe('JiraRules', () => {
-  it.each([
-    { name: 'the bound custom board initial phase', sourceId: '10001', board: 'release', stage: 'queued' },
-    { name: 'Work Intake when the source is unbound', sourceId: '10002', board: 'work', stage: 'intake' },
-    {
-      name: 'Work Intake when the bound board is not installed',
-      sourceId: '10003',
-      board: 'work',
-      stage: 'intake',
-    },
-  ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
+  it('files an observed issue on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
       createBoardRegistry({ boards: [createTestBoard()] }),
@@ -91,11 +81,10 @@ describe('JiraRules', () => {
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: project.id,
-      issues: [{ ...issue, sourceId }],
-      intakeBoards: { '10001': 'release', '10003': 'hotfix' },
+      issues: [issue],
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+      { decision: { type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' } },
     ]);
   });
 

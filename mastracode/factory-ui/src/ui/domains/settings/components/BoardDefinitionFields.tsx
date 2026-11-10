@@ -1,27 +1,23 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
-import type { RuleBuilderProps } from '@mastra/playground-ui/components/RuleBuilder';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
-import { useBoardQuery, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
-import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
-import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
-import { SettingsSubsection } from './SettingsSubsection';
+import { keyFromName, keyProblem } from '../services/boardDraft';
+import type { BoardDraft } from '../services/boardDraft';
+import { RuleEditor } from './RuleEditor';
 
-const WORK_BOARD = DEFAULT_BOARD_ID;
 const MAX_INSTRUCTIONS = 1000;
 const MAX_OBJECTIVE = 2000;
 const MAX_GOAL_RUNS = 50;
@@ -37,35 +33,20 @@ const PHASE_TOOLS: { id: PhaseTool; label: string }[] = [
   { id: 'factory_review_source', label: 'Review the source of a change request' },
 ];
 
-/** The card facts a phase rule can test (`CARD_RULE_FIELDS`), as the rule builder's field tree. */
-const CARD_FACTS: RuleBuilderProps['schema'] = {
-  type: 'object',
-  properties: {
-    item: {
-      type: 'object',
-      title: 'Card',
-      properties: {
-        labels: { type: 'string', title: 'Labels' },
-        title: { type: 'string', title: 'Title' },
-        author: { type: 'string', title: 'Author' },
-        pullRequest: { type: 'number', title: 'Open pull request' },
-      },
-    },
-    author: { type: 'object', title: 'Author', properties: { trusted: { type: 'boolean', title: 'Trusted' } } },
-    source: {
-      type: 'object',
-      title: 'Source',
-      properties: {
-        kind: { type: 'string', title: 'Kind' },
-        integration: { type: 'string', title: 'Integration' },
-      },
-    },
-  },
-};
+type PhaseKind = StoredPhaseInfo['kind'];
+const PHASE_KINDS: { kind: PhaseKind; label: string }[] = [
+  { kind: 'resting', label: 'Resting' },
+  { kind: 'working', label: 'Working' },
+  { kind: 'terminal', label: 'Terminal' },
+];
 
-interface Draft {
-  name: string;
-  phases: StoredPhaseInfo[];
+/** What stops a move or a removal: the first phase is where cards start, so it stays a resting one. */
+interface PhasePlacement {
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  canRemove: boolean;
+  /** Code phases keep their kind, and the first phase stays resting. */
+  kindLocked: boolean;
 }
 
 /** Every other phase when `nextPhases` is unset, none from a terminal phase, as the server reads it. */
@@ -74,141 +55,16 @@ function nextPhasesOf(phase: StoredPhaseInfo, phases: StoredPhaseInfo[]): string
   return phase.kind === 'terminal' ? [] : phases.filter(other => other.key !== phase.key).map(other => other.key);
 }
 
-type RuleIssue = { path: PropertyKey[]; message: string; code: string; errors?: RuleIssue[][] };
-
-/** Zod issues as `path: message`, following the closest branch of a condition-or-group union. */
-function describeIssues(issues: RuleIssue[], prefix: PropertyKey[] = []): string[] {
-  return issues.flatMap(issue => {
-    const path = [...prefix, ...issue.path];
-    if (issue.code === 'invalid_union' && issue.errors?.length) {
-      const closest = issue.errors.reduce((best, branch) => (branch.length < best.length ? branch : best));
-      return describeIssues(closest, path);
-    }
-    return [`${path.map(String).join('.') || 'rule'}: ${issue.message}`];
-  });
-}
-
-/** Why the server would refuse this rule, if it would. */
-function validateRule(value: unknown): { rule: CardRule } | { problem: string } {
-  const parsed = cardRuleGroupSchema.safeParse(value);
-  if (parsed.success) return { rule: parsed.data };
-  return { problem: describeIssues(parsed.error.issues).join('; ') };
-}
-
-function ruleProblem(rule: CardRule | null | undefined): string | undefined {
-  if (rule == null) return undefined;
-  const checked = validateRule(rule);
-  return 'problem' in checked ? checked.problem : undefined;
-}
-
-/**
- * A phase condition, edited with the rule builder or as raw JSON. Unset means "every card".
- * Reports a rule the server would refuse, so the form can hold back the save.
- */
-function RuleEditor({
-  label,
-  description,
-  rule,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  description: string;
-  rule: CardRule | null | undefined;
-  disabled: boolean;
-  onChange: (rule: CardRule | null, problem: string | undefined) => void;
-}) {
-  const [raw, setRaw] = useState<string | undefined>(undefined);
-  const [rawProblem, setRawProblem] = useState<string | undefined>(undefined);
-  const id = useId();
-  const problem = raw === undefined ? ruleProblem(rule) : rawProblem;
-
-  const editRaw = (text: string) => {
-    setRaw(text);
-    if (text.trim() === '') {
-      setRawProblem(undefined);
-      onChange(null, undefined);
-      return;
-    }
-    let value: unknown;
-    try {
-      value = JSON.parse(text);
-    } catch {
-      setRawProblem('Not valid JSON.');
-      onChange(rule ?? null, 'Not valid JSON.');
-      return;
-    }
-    const checked = validateRule(value);
-    if ('problem' in checked) {
-      setRawProblem(checked.problem);
-      onChange(rule ?? null, checked.problem);
-      return;
-    }
-    setRawProblem(undefined);
-    onChange(checked.rule, undefined);
-  };
-
-  return (
-    <Field invalid={problem !== undefined}>
-      <div className="flex items-center justify-between gap-2">
-        <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={disabled}
-          onClick={() => {
-            setRawProblem(undefined);
-            if (raw === undefined) {
-              setRaw(rule ? JSON.stringify(rule, null, 2) : '');
-              return;
-            }
-            setRaw(undefined);
-            // The builder edits the last valid rule, so JSON that never parsed no longer holds the save.
-            onChange(rule ?? null, ruleProblem(rule));
-          }}
-        >
-          {raw === undefined ? 'Edit as JSON' : 'Use rule builder'}
-        </Button>
-      </div>
-      <FieldDescription>{description}</FieldDescription>
-      {raw !== undefined ? (
-        <Textarea
-          id={id}
-          aria-label={`${label} JSON`}
-          value={raw}
-          disabled={disabled}
-          rows={6}
-          onChange={event => editRaw(event.target.value)}
-        />
-      ) : disabled ? (
-        <Txt id={id} as="p" variant="caption" tone="muted">
-          {rule ? JSON.stringify(rule) : 'Every card.'}
-        </Txt>
-      ) : (
-        <div id={id}>
-          <RuleBuilder
-            schema={CARD_FACTS}
-            // Factory's rule groups have the builder's shape; the server validates the depth.
-            ruleGroup={(rule ?? undefined) as RuleBuilderProps['ruleGroup']}
-            onChange={next => {
-              const value = (next ?? null) as CardRule | null;
-              onChange(value, ruleProblem(value));
-            }}
-          />
-        </div>
-      )}
-      {problem && <FieldError>{problem}</FieldError>}
-    </Field>
-  );
-}
-
 function PhaseEditor({
   phase,
   phases,
   code,
   skills,
   disabled,
+  placement,
   onChange,
+  onMove,
+  onRemove,
   onRuleProblem,
 }: {
   phase: StoredPhaseInfo;
@@ -216,7 +72,10 @@ function PhaseEditor({
   code: CodeBehaviour | undefined;
   skills: string[];
   disabled: boolean;
+  placement: PhasePlacement;
   onChange: (phase: StoredPhaseInfo) => void;
+  onMove: (by: -1 | 1) => void;
+  onRemove: () => void;
   onRuleProblem: (field: string, problem: string | undefined) => void;
 }) {
   const id = useId();
@@ -246,7 +105,72 @@ function PhaseEditor({
           <Txt font="mono" tone="muted" as="span" variant="caption">
             {phase.key}
           </Txt>
-          <Badge>{phase.kind}</Badge>
+          {disabled || placement.kindLocked ? (
+            <Badge>{phase.kind}</Badge>
+          ) : (
+            <Select
+              value={phase.kind}
+              onValueChange={kind => {
+                if (kind === null || kind === phase.kind) return;
+                onRuleProblem('autoStartWhen', undefined);
+                onRuleProblem('autoApproveWhen', undefined);
+                // Only a working phase has a runner, automation, an exit tool and tools.
+                onChange({
+                  key: phase.key,
+                  name: phase.name,
+                  description: phase.description,
+                  kind,
+                  nextPhases: kind === 'terminal' ? [] : next,
+                  ...(kind === 'working' ? { runner: { context: 'work' } } : {}),
+                });
+              }}
+            >
+              <SelectTrigger size="sm" className="w-32" aria-label={`${phase.name} kind`}>
+                {PHASE_KINDS.find(option => option.kind === phase.kind)?.label}
+              </SelectTrigger>
+              <SelectContent>
+                {PHASE_KINDS.map(option => (
+                  <SelectItem key={option.kind} value={option.kind}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {!disabled && (
+            <div className="ml-auto flex items-center gap-1">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                tooltip="Move up"
+                aria-label={`Move ${phase.name} up`}
+                disabled={!placement.canMoveUp}
+                onClick={() => onMove(-1)}
+              >
+                <ArrowUp />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                tooltip="Move down"
+                aria-label={`Move ${phase.name} down`}
+                disabled={!placement.canMoveDown}
+                onClick={() => onMove(1)}
+              >
+                <ArrowDown />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                tooltip="Remove phase"
+                aria-label={`Remove ${phase.name}`}
+                disabled={!placement.canRemove}
+                onClick={onRemove}
+              >
+                <Trash2 />
+              </Button>
+            </div>
+          )}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field>
@@ -376,6 +300,7 @@ function PhaseEditor({
             </Field>
             {phase.autoStart && (
               <RuleEditor
+                schema={cardRuleGroupSchema}
                 label={`${phase.name}: start only when`}
                 description="Leave empty to start every card on its own."
                 rule={phase.autoStartWhen}
@@ -429,6 +354,7 @@ function PhaseEditor({
             )}
             {exitToolId !== '' && phase.exitTool?.autoApprove && (
               <RuleEditor
+                schema={cardRuleGroupSchema}
                 label={`${phase.name}: approve only when`}
                 description="Leave empty to approve for every card."
                 rule={phase.exitTool.autoApproveWhen}
@@ -516,133 +442,8 @@ function PhaseEditor({
   );
 }
 
-function errorText(error: BoardRequestError): string {
-  return error.conflicts.length > 0 ? error.conflicts.join('\n') : error.message;
-}
-
-function BoardEditor({
-  factoryId,
-  board,
-  canEdit,
-  onReload,
-}: {
-  factoryId: string;
-  board: StoredBoardInfo;
-  canEdit: boolean;
-  onReload: () => void;
-}) {
-  const [draft, setDraft] = useState<Draft>({ name: board.name, phases: board.phases });
-  const [ruleProblems, setRuleProblems] = useState<Record<string, string>>({});
-  const save = useSaveBoardMutation(factoryId, WORK_BOARD);
-  const reset = useResetBoardMutation(factoryId, WORK_BOARD);
-  const skills = (useFactorySkillsQuery(factoryId).data?.skills ?? []).map(skill => skill.name);
-  const id = useId();
-  const readOnly = !canEdit || !board.editable;
-  const changed = JSON.stringify(draft) !== JSON.stringify({ name: board.name, phases: board.phases });
-  const blocked = Object.keys(ruleProblems).length > 0;
-  const error = save.error ?? reset.error;
-  const stale = error?.code === 'revision_mismatch';
-  const pending = save.isPending || reset.isPending;
-  // Only the read-only Review board has no revision, and it can't be saved or reset.
-  const revision = board.revision ?? 0;
-
-  const setPhase = (phase: StoredPhaseInfo) =>
-    setDraft(current => ({ ...current, phases: current.phases.map(p => (p.key === phase.key ? phase : p)) }));
-  const setRuleProblem = (key: string, field: string, problem: string | undefined) =>
-    setRuleProblems(current => {
-      const { [`${key}.${field}`]: _previous, ...rest } = current;
-      return problem ? { ...rest, [`${key}.${field}`]: problem } : rest;
-    });
-
-  return (
-    <div className="flex flex-col gap-4">
-      {readOnly && (
-        <Notice variant="info">
-          {board.editable
-            ? 'Only organization admins can edit the Work board.'
-            : 'This board is defined in code and is read-only.'}
-        </Notice>
-      )}
-      {board.problems.map(problem => (
-        <Notice key={problem} variant="warning">
-          {problem}
-        </Notice>
-      ))}
-      <div className="flex flex-wrap items-end gap-4">
-        <Field className="min-w-60 flex-1">
-          <FieldLabel htmlFor={`${id}-board-name`}>Board name</FieldLabel>
-          <Input
-            id={`${id}-board-name`}
-            value={draft.name}
-            disabled={readOnly}
-            onChange={event => setDraft(current => ({ ...current, name: event.target.value }))}
-          />
-        </Field>
-        <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
-          Revision {board.revision}
-        </Txt>
-      </div>
-      <div className="flex flex-col gap-3">
-        {draft.phases.map(phase => (
-          <PhaseEditor
-            key={phase.key}
-            phase={phase}
-            phases={draft.phases}
-            code={board.codeBehaviour?.[phase.key]}
-            skills={skills}
-            disabled={readOnly || pending}
-            onChange={setPhase}
-            onRuleProblem={(field, problem) => setRuleProblem(phase.key, field, problem)}
-          />
-        ))}
-      </div>
-      {stale && (
-        <Notice
-          variant="warning"
-          title="Someone else changed this board"
-          action={
-            <Button size="sm" onClick={onReload}>
-              Reload
-            </Button>
-          }
-        >
-          It changed since you opened it, so your edit was not saved. Reload to see the latest version, then edit it
-          again.
-        </Notice>
-      )}
-      {error && !stale && (
-        <Notice variant="destructive" role="alert" title="The board was not saved">
-          <span className="whitespace-pre-wrap">{errorText(error)}</span>
-        </Notice>
-      )}
-      {!readOnly && (
-        <div className="flex justify-end gap-2">
-          <Button
-            disabled={pending}
-            onClick={() => {
-              save.reset();
-              reset.mutate(revision);
-            }}
-          >
-            Reset to default
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!changed || blocked || pending || instructionsTooLong(draft)}
-            onClick={() => {
-              reset.reset();
-              save.mutate({ name: draft.name, phases: draft.phases, expectedRevision: revision });
-            }}
-          >
-            Save
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function instructionsTooLong(draft: Draft): boolean {
+/** A phase the server would refuse for its length, which the form holds the save back for. */
+function tooLong(draft: BoardDraft): boolean {
   return draft.phases.some(
     phase =>
       (phase.runner?.instructions?.length ?? 0) > MAX_INSTRUCTIONS ||
@@ -650,38 +451,169 @@ function instructionsTooLong(draft: Draft): boolean {
   );
 }
 
-/**
- * The project's Work board as stored: each phase's name, runner (skill, context, instructions,
- * goal), automation, exit tool, Factory tools and next phases. Organization admins edit it or reset it to Factory's default; the moves the
- * board's code makes stay checked.
- */
-export function WorkBoardSection({ factoryId }: { factoryId?: string }) {
-  const query = useBoardQuery(factoryId, WORK_BOARD);
-  const data = query.data;
+/** Whether the draft is one the server could accept; the server still has the last word. */
+export function draftIsComplete(draft: BoardDraft): boolean {
+  return draft.name.trim() !== '' && draft.phases.every(phase => phase.name.trim() !== '') && !tooLong(draft);
+}
+
+function placementOf(
+  index: number,
+  phases: StoredPhaseInfo[],
+  codeBehaviour: StoredBoardInfo['codeBehaviour'],
+): PhasePlacement {
+  const isCode = (phase: StoredPhaseInfo | undefined) =>
+    phase !== undefined && codeBehaviour?.[phase.key] !== undefined;
+  // Whoever takes the first place has to be a resting phase, and a code board keeps its own first phase.
+  const canLead = (phase: StoredPhaseInfo | undefined) => phase?.kind === 'resting' && !isCode(phases[0]);
+  const phase = phases[index];
+  return {
+    canMoveUp: index > 1 || (index === 1 && canLead(phase)),
+    canMoveDown: index < phases.length - 1 && (index > 0 || canLead(phases[1])),
+    canRemove: !isCode(phase) && phases.length > 1 && (index > 0 || phases[1]?.kind === 'resting'),
+    kindLocked: index === 0 || isCode(phase),
+  };
+}
+
+/** Adds a phase under a key that stays with it: other phases and cards refer to a phase by its key. */
+function AddPhase({ taken, onAdd }: { taken: string[]; onAdd: (phase: StoredPhaseInfo) => void }) {
+  const [name, setName] = useState('');
+  const [key, setKey] = useState<string | undefined>(undefined);
+  const id = useId();
+  const phaseKey = key ?? keyFromName(name);
+  const problem = name.trim() === '' && key === undefined ? undefined : keyProblem(phaseKey, taken);
 
   return (
-    <SettingsSubsection
-      scope="factory"
-      title="Work board"
-      description="How cards move through this Factory's Work board: when each phase starts on its own, what its agent is told, when its plan is approved without a person, and where cards go next. Changes apply to this Factory only."
-    >
-      {query.isPending && factoryId && (
-        <Txt tone="muted" as="p" variant="caption" role="status">
-          Loading the Work board…
-        </Txt>
-      )}
-      {!factoryId && <Notice variant="info">Open a Factory to edit its Work board.</Notice>}
-      {query.error && <Notice variant="destructive">{query.error.message}</Notice>}
-      {factoryId && data && (
-        <BoardEditor
-          // A new revision (saved, reset or reloaded) starts a fresh draft.
-          key={data.board.revision ?? 'code'}
-          factoryId={factoryId}
-          board={data.board}
-          canEdit={data.canEdit ?? false}
-          onReload={() => void query.refetch()}
+    <div className="flex flex-wrap items-start gap-4">
+      <Field className="min-w-40 flex-1">
+        <FieldLabel htmlFor={`${id}-name`}>New phase name</FieldLabel>
+        <Input id={`${id}-name`} value={name} onChange={event => setName(event.target.value)} />
+      </Field>
+      <Field className="min-w-40 flex-1" invalid={problem !== undefined}>
+        <FieldLabel htmlFor={`${id}-key`}>New phase key</FieldLabel>
+        <Input id={`${id}-key`} value={phaseKey} onChange={event => setKey(event.target.value)} />
+        {problem ? (
+          <FieldError>{problem}</FieldError>
+        ) : (
+          <FieldDescription>Cannot be changed once the phase is added.</FieldDescription>
+        )}
+      </Field>
+      <Button
+        className="mt-6"
+        disabled={name.trim() === '' || keyProblem(phaseKey, taken) !== undefined}
+        onClick={() => {
+          onAdd({ key: phaseKey, name: name.trim(), kind: 'resting', nextPhases: [] });
+          setName('');
+          setKey(undefined);
+        }}
+      >
+        Add phase
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The editable part of a board, shared by the editor of a stored board and the new-board form:
+ * its name, description and phases in order — each phase's kind, runner (skill, context,
+ * instructions, goal), automation, exit tool, Factory tools and next phases. The moves a built-in
+ * or app board's code makes stay checked, and its code phases keep their kind and cannot be removed.
+ */
+export function BoardDefinitionFields({
+  draft,
+  codeBehaviour,
+  skills,
+  disabled,
+  children,
+  onChange,
+  onRuleProblem,
+}: {
+  draft: BoardDraft;
+  codeBehaviour?: StoredBoardInfo['codeBehaviour'];
+  skills: string[];
+  disabled: boolean;
+  /** Shown beside the board name, such as the key of a new board or the revision of a stored one. */
+  children?: ReactNode;
+  onChange: (update: (draft: BoardDraft) => BoardDraft) => void;
+  /** Reports a phase rule the server would refuse under `phase.field`, or clears it. */
+  onRuleProblem: (key: string, problem: string | undefined) => void;
+}) {
+  const id = useId();
+  const setPhases = (update: (phases: StoredPhaseInfo[]) => StoredPhaseInfo[]) =>
+    onChange(current => ({ ...current, phases: update(current.phases) }));
+
+  return (
+    <>
+      <div className="flex flex-wrap items-start gap-4">
+        <Field className="min-w-60 flex-1">
+          <FieldLabel htmlFor={`${id}-board-name`}>Board name</FieldLabel>
+          <Input
+            id={`${id}-board-name`}
+            value={draft.name}
+            disabled={disabled}
+            onChange={event => onChange(current => ({ ...current, name: event.target.value }))}
+          />
+        </Field>
+        {children}
+      </div>
+      <Field>
+        <FieldLabel htmlFor={`${id}-board-description`}>Board description</FieldLabel>
+        <Input
+          id={`${id}-board-description`}
+          value={draft.description ?? ''}
+          disabled={disabled}
+          onChange={event => onChange(current => ({ ...current, description: event.target.value || null }))}
+        />
+      </Field>
+      <div className="flex flex-col gap-3">
+        {draft.phases.map((phase, index) => (
+          <PhaseEditor
+            key={phase.key}
+            phase={phase}
+            phases={draft.phases}
+            code={codeBehaviour?.[phase.key]}
+            skills={skills}
+            disabled={disabled}
+            placement={placementOf(index, draft.phases, codeBehaviour)}
+            onChange={next => setPhases(phases => phases.map(p => (p.key === next.key ? next : p)))}
+            onMove={by =>
+              setPhases(phases => {
+                const moved = [...phases];
+                const [taken] = moved.splice(index, 1);
+                moved.splice(index + by, 0, taken);
+                return moved;
+              })
+            }
+            onRemove={() => {
+              onRuleProblem(`${phase.key}.autoStartWhen`, undefined);
+              onRuleProblem(`${phase.key}.autoApproveWhen`, undefined);
+              // The other phases stop moving cards to it; an unset list already means "every other phase".
+              setPhases(phases =>
+                phases
+                  .filter(p => p.key !== phase.key)
+                  .map(p => (p.nextPhases ? { ...p, nextPhases: p.nextPhases.filter(key => key !== phase.key) } : p)),
+              );
+            }}
+            onRuleProblem={(field, problem) => onRuleProblem(`${phase.key}.${field}`, problem)}
+          />
+        ))}
+      </div>
+      {!disabled && (
+        <AddPhase
+          taken={draft.phases.map(phase => phase.key)}
+          onAdd={phase => setPhases(phases => [...phases, phase])}
         />
       )}
-    </SettingsSubsection>
+    </>
   );
+}
+
+/** The rules the form is holding the save back for, keyed `phase.field`. */
+export function useRuleProblems() {
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const report = (key: string, problem: string | undefined) =>
+    setProblems(current => {
+      const { [key]: _previous, ...rest } = current;
+      return problem ? { ...rest, [key]: problem } : rest;
+    });
+  return { blocked: Object.keys(problems).length > 0, report, clear: () => setProblems({}) };
 }

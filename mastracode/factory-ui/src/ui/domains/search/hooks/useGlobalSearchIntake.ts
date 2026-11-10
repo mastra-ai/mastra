@@ -1,4 +1,3 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import { useGitLabIssuesQuery, useGitLabMergeRequestsQuery } from '../../../../hooks/useGitLabData';
 import {
@@ -39,10 +38,7 @@ export function useGlobalSearchIntake(
     gitlab ? factoryProjectId : undefined,
     gitlab ? projectRepositoryId : undefined,
   );
-  const gitlabIssues = useGitLabIssuesQuery(
-    gitlab ? factoryProjectId : undefined,
-    gitlab ? DEFAULT_BOARD_ID : undefined,
-  );
+  const gitlabIssues = useGitLabIssuesQuery(gitlab ? factoryProjectId : undefined);
   const queries = gitlab ? [mergeRequests, gitlabIssues] : [pullRequests, issues];
 
   return {

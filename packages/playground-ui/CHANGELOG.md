@@ -1,5 +1,29 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.5
+
+### Patch Changes
+
+- Fixed MCP apps in chat, such as the observability dashboard widget, showing as an opaque box pressed against the surrounding messages. The app viewer now gives its frame the same color scheme as the theme it sends to the app, so the browser no longer paints a solid background behind the app and it sits on the chat background with its own spacing. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- Removed the tool-call style for the retired Factory `source_control_publish_test_check` tool. ([#29888](https://github.com/mastra-ai/mastra/pull/29888))
+
+- Fixed chart cards with a view picker blocking their own actions while the picker was open. You can now pin a widget or open its alerts without closing the view menu first. ([#29906](https://github.com/mastra-ai/mastra/pull/29906))
+
+- Fixed the KPI group on dashboards showing its drag handle and unpin button over the cards' top border at all times. On screens that can hover, the floating controls now only appear when the group is hovered or focused. On touch screens, the drag handle (while rearranging) and the unpin button (while pinned) stay visible so they can still be tapped. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- Metrics card groups of three or more now use three columns from 48rem wide instead of staying on two until 56rem, so three KPIs sit on one row on medium-width dashboards instead of wrapping 2 + 1. Groups of one or two cards keep two columns, and groups of exactly four keep their 2 + 2 layout at that width. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- `DatePicker` now fills the width of its container. Before, it kept its content width and left an empty strip inside a wider popover. Popovers that size to their content look the same. A width class passed through `className` (for example `w-fit`) still replaces the default. ([#29769](https://github.com/mastra-ai/mastra/pull/29769))
+
+  `<Input type="time">` now shows a design-system clock icon in every browser and theme, replacing Chromium's native picker icon and picker. The value is typed or stepped with the arrow keys. `DateTimePicker` and the custom range editor in `DateTimeRangePicker` no longer need to hide the native icon themselves.
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+  - @mastra/ai-sdk@1.12.0-alpha.0
+  - @mastra/client-js@1.60.0-alpha.4
+  - @mastra/react@1.15.0-alpha.4
+
 ## 69.0.0-alpha.4
 
 ### Minor Changes

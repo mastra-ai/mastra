@@ -5,11 +5,10 @@ import { boardForWorkItem, pullRequestSourceNumber, workItemPhaseSemantics } fro
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
-import { cardBoardFlow, hasRecordedVerdict, reviewedChangeRequest } from '../boards/semantics.js';
+import { hasRecordedVerdict, reviewedChangeRequest } from '../boards/semantics.js';
 import type { ReviewedChangeRequest } from '../boards/semantics.js';
 import { getFactorySessionCoordinates } from '../rules/binding-context.js';
 import { authorTrusted, SELF_REVIEW_ROUND_LIMIT } from '../rules/types.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { Card, FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import {
@@ -25,8 +24,6 @@ const STATE_ID = 'factory-work-item';
 export interface FactoryWorkItemStateProcessorOptions {
   storage: WorkItemsStorage;
   boards: BoardRegistry | ProjectBoardSource;
-  /** Reads the project's self-review setting; without it the signal leaves self-review out. */
-  projects?: FactoryProjectsStorage;
 }
 
 function escapeText(value: string): string {
@@ -117,7 +114,7 @@ function cacheKeyOf(input: unknown): string {
  * Tells the agent about the card its session works: where it sits on the board, its sources and
  * what Factory recorded about it (plan approval, self-review and review verdicts, the open change
  * request). Kickoffs only name the card; this snapshot carries the detail and re-renders when the
- * card, its sources or the project's self-review setting change. No comment threads: the agent
+ * card or its sources change. No comment threads: the agent
  * fetches those with the source's tool.
  */
 export class FactoryWorkItemStateProcessor implements Processor<'factory-work-item'> {
@@ -138,22 +135,18 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
     if (!item) return;
     const boards = await this.#boards.load(binding);
     if (!workItemPhaseSemantics(boards, item)) return;
-    // The setting means nothing to a card whose board has no self-review phase.
-    const selfReview =
-      cardBoardFlow(boards, item).selfReview === undefined ? undefined : await this.#selfReviewEnabled(binding);
     const cacheKey = cacheKeyOf([
       item.id,
       item.revision,
       item.workItem.revision,
       (item.workItem.sources ?? []).map(source => [source.id, source.revision]),
       binding.id,
-      selfReview ?? null,
     ]);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
 
-    const contents = renderWorkItem({ item, binding, boards, selfReview });
+    const contents = renderWorkItem({ item, binding, boards });
     const stage = item.stages[0]!;
     return {
       id: STATE_ID,
@@ -166,23 +159,10 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
       metadata: { value: { workItem: { id: item.id, revision: item.revision, stage } } },
     };
   }
-
-  async #selfReviewEnabled(binding: FactoryRunBindingRecord): Promise<boolean | undefined> {
-    const projects = this.options.projects;
-    if (!projects) return undefined;
-    await projects.ensureReady();
-    const project = await projects.get({ orgId: binding.orgId, id: binding.factoryProjectId });
-    return project?.selfReviewEnabled;
-  }
 }
 
-function renderWorkItem(input: {
-  item: Card;
-  binding: FactoryRunBindingRecord;
-  boards: BoardRegistry;
-  selfReview: boolean | undefined;
-}): string {
-  const { item, binding, boards, selfReview } = input;
+function renderWorkItem(input: { item: Card; binding: FactoryRunBindingRecord; boards: BoardRegistry }): string {
+  const { item, binding, boards } = input;
   const metadata = item.metadata ?? {};
   const boardId = boardForWorkItem(item);
   const board = boards.get(boardId);
@@ -214,7 +194,6 @@ function renderWorkItem(input: {
   const state: string[] = [];
   const planApprovedAt = text(metadata.planApprovedAt);
   state.push(`Plan approved: ${planApprovedAt ? `yes, ${planApprovedAt}` : 'no'}`);
-  if (selfReview !== undefined) state.push(`Self-review: ${selfReview ? 'on' : 'off'}`);
   const rounds = count(metadata.selfReviewRounds) ?? 0;
   const selfReviewVerdict = text(metadata.selfReviewVerdict);
   if (selfReviewVerdict || rounds > 0) {

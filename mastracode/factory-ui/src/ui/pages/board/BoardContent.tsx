@@ -13,6 +13,8 @@ import type { BoardCandidate } from '../../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
+import { EditBoardButton } from '../../domains/factory/components/EditBoardButton';
+import { useCanEditBoards } from '../../../hooks/useIntakeRoutes';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
@@ -87,6 +89,7 @@ export function BoardContent({
   // A board with a pull request loop runs Factory's automation; the default board keeps its own column icons.
   const loop = boardLoop(definition);
   const runsLoop = loop !== undefined;
+  const canEditBoard = useCanEditBoards(factoryProjectId);
   // A board that reviews pull requests but builds nothing (the retired Review board a project still
   // uses) takes no new cards: its cards come from pull requests.
   const pullRequestsOnly = loop?.pullRequestReview !== undefined && loop.build === undefined;
@@ -423,14 +426,11 @@ export function BoardContent({
             availableLabels={availableLabels}
             currentUserId={currentUserId}
             aside={
-              runsLoop && (
-                <BoardAutomationSettings
-                  factoryProjectId={factoryProjectId}
-                  autoRunEnabled={factory.autoRunEnabled ?? false}
-                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
-                  selfReviewEnabled={factory.selfReviewEnabled ?? false}
-                  offersSelfReview={boardLoop(definition)?.selfReview !== undefined}
-                />
+              (canEditBoard || runsLoop) && (
+                <div className="flex items-center gap-2">
+                  <EditBoardButton factoryProjectId={factoryProjectId} boardId={definition.id} />
+                  {runsLoop && <BoardAutomationSettings factoryProjectId={factoryProjectId} />}
+                </div>
               )
             }
           />
