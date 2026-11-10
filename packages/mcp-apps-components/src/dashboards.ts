@@ -14,11 +14,14 @@ export {
   createObservabilityDraftSchemas,
   createObservabilityWidgetInputSchema,
   observabilityWidgetInputSchema,
+  toObservabilityDashboard,
   toObservabilityWidget,
 } from './observability-dashboard';
 export type {
   ObservabilityCatalog,
   ObservabilityDashboardDraft,
+  ObservabilityDashboardInput,
+  ObservabilityDashboardOpened,
   ObservabilityDraftOptions,
   ObservabilityDraftSchemas,
   ObservabilityWidgetDraft,

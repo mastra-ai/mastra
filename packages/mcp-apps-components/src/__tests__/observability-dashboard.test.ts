@@ -11,19 +11,23 @@ import {
 } from '@mastra/schema-compat';
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { strictDashboardDefinitionSchema, strictDashboardWidgetSchema } from '../dashboards';
+// Imported from the entry Node services use, so a name it's documented to export but doesn't fails here.
 import {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
-  createObservabilityDashboardInputSchema,
   createObservabilityDraftSchemas,
   createObservabilityWidgetInputSchema,
-  observabilityDashboardInputSchema,
-  observabilityDashboardOutputSchema,
   observabilityWidgetInputSchema,
+  strictDashboardDefinitionSchema,
+  strictDashboardWidgetSchema,
   toObservabilityDashboard,
   toObservabilityWidget,
+} from '../dashboards';
+import type { ObservabilityDashboardInput, ObservabilityWidgetDraft } from '../dashboards';
+import {
+  createObservabilityDashboardInputSchema,
+  observabilityDashboardInputSchema,
+  observabilityDashboardOutputSchema,
 } from '../observability-dashboard';
-import type { ObservabilityDashboardInput, ObservabilityWidgetDraft } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
 import { agentRunsChart, agentRunsKpi, draftOf, observabilityServer } from './observability-server';
 

@@ -999,9 +999,10 @@ export function toObservabilityDashboard(input: ObservabilityDashboardInput): Ob
 /**
  * The stored widget for `draft`, converted as in `toObservabilityDashboard`: its reads gathered into
  * each view's queries, its `id` kept or a fresh UUID when it has none, and the full width when it has
- * no span. Throws when `draft` doesn't pass `observabilityWidgetInputSchema`, or the widget doesn't
- * validate; the error's `cause` is the `ZodError`, whose issue paths point into the draft (e.g.
- * `timeseries.series.1.value`). It checks against the default schemas, so it allows every kind and
+ * no span. Throws when `draft` doesn't pass `observabilityWidgetInputSchema`; the error's `cause` is
+ * the `ZodError`, whose issue paths point into the draft (e.g. `timeseries.series.1.value`). The
+ * converted widget is checked against core's schema too, as a backstop the draft's checks should
+ * make unreachable; that error's `cause` has paths into the stored widget. It checks against the default schemas, so it allows every kind and
  * metric name: a tool whose input schema came from `createObservabilityDraftSchemas` with a catalog
  * or `kinds` has already applied them, but elsewhere check `draft` against your own schemas first.
  * Check the widget's place in a dashboard (unique ids, the widget count) with the whole definition.
