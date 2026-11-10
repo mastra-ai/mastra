@@ -1,9 +1,11 @@
 import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { createRunAbortController } from '../durable/run-abort';
 import type { AgentSuspendedEventData } from '../durable/types';
+import type { MessageList } from '../message-list';
 import { whenRunStepsSettle } from '../run-lease-fence';
 import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
@@ -11,6 +13,7 @@ import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
 import type { AgentRunRecordTarget } from './run-records';
 import { deleteAgentRunRecord, readAgentRunRecord, writeAgentRunRecord } from './run-records';
+import { toStreamFinish, toStreamStepFinish, toStreamStepStart } from './wire';
 
 /**
  * Publishes a run's chunks on its stream topic as the loop produces them, so
@@ -28,8 +31,11 @@ export interface AgentStreamPublisher {
   readonly abortSignal: AbortSignal;
   /** Abort the run in this process. */
   abort(reason?: unknown): void;
-  /** Queue a chunk the loop emitted to its caller. */
-  publish(chunk: ChunkType<any>): void;
+  /**
+   * Queue a chunk the loop emitted to its caller. `messageList` is the run's
+   * message list, which a `step-finish` event takes the step's content from.
+   */
+  publish(chunk: ChunkType<any>, messageList?: MessageList): void;
   /**
    * The loop closed its stream. Publishes the terminal event readers wait for
    * when the loop didn't end with `finish`: `suspended` when the run paused,
@@ -62,9 +68,10 @@ export interface CreateAgentStreamPublisherOptions {
  * Map the default loop's chunks onto the agent stream events DurableAgent
  * publishes, so one reader handles runs from either engine.
  *
- * - `step-start` → `step-start`
- * - `finish` → `finish` (readers rebuild the `abort` chunk from its reason, so
- *   the loop's own `abort` chunk is not published)
+ * - `step-start` → `step-start`, `step-finish` → `chunk`, and `finish` →
+ *   `finish`, each reduced to what readers need (see `wire.ts`); readers
+ *   rebuild the `abort` chunk from the finish reason, so the loop's own
+ *   `abort` chunk is not published
  * - `tool-call-approval` / `tool-call-suspended` → `chunk`, then `suspended`
  *   once the run's snapshot is persisted (when the loop closes)
  * - anything else → `chunk`, with errors serialized so they survive JSON transports
@@ -136,6 +143,8 @@ export function createAgentStreamPublisher({
   // The record goes first, so a reader that sees any event can authorize.
   let queue: Promise<void> = writeRecord('running')();
   let finished = false;
+  /** Tool calls of the step in progress, which the run's messages need to tell its content apart. */
+  let stepToolCallIds: string[] = [];
   let suspended: AgentSuspendedEventData | undefined;
   let lastError: unknown;
 
@@ -200,20 +209,32 @@ export function createAgentStreamPublisher({
     runId,
     abortSignal: controller.signal,
     abort,
-    publish(chunk) {
+    publish(chunk, messageList) {
       if (ended) return;
       switch (chunk.type) {
         case 'abort':
           return;
         case 'step-start': {
-          const payload = chunk.payload;
-          void enqueue(() => emitStepStartEvent(pubsub, runId, payload));
+          const data = toStreamStepStart(chunk.payload);
+          void enqueue(() => emitStepStartEvent(pubsub, runId, data));
+          return;
+        }
+        case 'tool-call':
+          stepToolCallIds.push(chunk.payload.toolCallId);
+          break;
+        case 'step-finish': {
+          // The same content the caller's output reports for this step, read now, while the
+          // run's messages still end with it.
+          const content = messageList?.get.response.aiV5.modelContent(-1, stepToolCallIds);
+          stepToolCallIds = [];
+          const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content));
+          void enqueue(() => emitChunkEvent(pubsub, runId, published));
           return;
         }
         case 'finish': {
           finished = true;
-          const { output, stepResult, messages } = chunk.payload as any;
-          void enqueue(() => emitFinishEvent(pubsub, runId, { output, stepResult, ...(messages ? { messages } : {}) }));
+          const data = toStreamFinish(chunk.payload);
+          void enqueue(() => emitFinishEvent(pubsub, runId, data));
           return;
         }
         case 'tool-call-approval':
@@ -246,6 +267,14 @@ export function createAgentStreamPublisher({
       return end(() => reason);
     },
   };
+}
+
+/** A copy of `chunk` with another payload, keeping when the chunk was produced. */
+function withPayload(chunk: ChunkType<any>, payload: unknown): ChunkType<any> {
+  const copy = { ...chunk, payload } as ChunkType<any>;
+  const producedAt = getChunkProducedAt(chunk);
+  if (producedAt !== undefined) stampChunkProducedAt(copy, producedAt);
+  return copy;
 }
 
 function serializeIfError(error: unknown) {

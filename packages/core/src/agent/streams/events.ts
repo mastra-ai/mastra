@@ -2,6 +2,7 @@ import { MastraError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { currentRunGeneration } from '../../storage/run-fencing';
 import { getChunkProducedAt } from '../../stream/base/produced-at';
+import { slimProgressChunk } from '../../stream/strip-model-snapshots';
 import { ChunkFrom } from '../../stream/types';
 import type { ChunkType, DataChunkType, StepStartPayload } from '../../stream/types';
 // TODO: move these event payload types into streams/types once their durable
@@ -26,7 +27,10 @@ function generationTag(runId: string, generation?: number): { generation?: numbe
 }
 
 /**
- * Helper to emit a chunk event to pubsub
+ * Helper to emit a chunk event to pubsub. A delegated agent's chunks arrive
+ * wrapped in `tool-output` / `workflow-step-output` chunks with their own
+ * prompts and steps; those are left out, as the run's own step events leave
+ * them out.
  */
 export async function emitChunkEvent<OUTPUT = undefined>(
   pubsub: PubSub,
@@ -38,7 +42,7 @@ export async function emitChunkEvent<OUTPUT = undefined>(
   await pubsub.publish(topic, {
     type: AgentStreamEventTypes.CHUNK,
     runId,
-    data: chunk,
+    data: slimProgressChunk(chunk),
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
     ...(outputProcessed ? { outputProcessed } : {}),
