@@ -2939,7 +2939,7 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
 );
 
 describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))(
-  'an agent whose revision went stale on %s',
+  'an agent move at a stale revision on %s',
   backend => {
     const ship = defineBoard({
       id: 'ship',
@@ -2982,33 +2982,36 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
           userId: 'factory-rule-dispatcher',
           patch: { metadata: { openPullRequestNumber: 5 } },
         }))!.item;
-      const moveToReview = (role: string) =>
+      const moveToReview = (expectedRevision = read.revision) =>
         service.transition({
-          ...request(read, { orgId, board: 'ship', stage: 'review' }),
-          actor: { type: 'agent', bindingId: `${role}-binding`, role },
-          ingress: { type: 'agent', identity: `${role}-move` },
+          ...request(read, { orgId, board: 'ship', stage: 'review', expectedRevision }),
+          actor: { type: 'agent', bindingId: 'review-binding', role: 'review' },
+          ingress: { type: 'agent', identity: `review-move-${expectedRevision}` },
           cause: 'Self-review approved and the pull request is open.',
         });
       return { orgId, read, storage, attachPullRequest, moveToReview };
     }
 
-    it('moves the card when only an unrelated write, such as attaching its pull request, moved the revision', async () => {
+    it('tells the agent the revision its pull request moved the card to, and moves it when the agent retries there', async () => {
       const { orgId, read, storage, attachPullRequest, moveToReview } = await card();
       const attached = await attachPullRequest();
       expect(attached.revision).toBe(read.revision + 1);
 
-      await expect(moveToReview('review')).resolves.toMatchObject({
-        status: 'accepted',
-        stage: 'review',
-        revision: attached.revision + 1,
+      await expect(moveToReview()).resolves.toMatchObject({
+        status: 'rejected',
+        code: 'stale',
+        reason: `The card changed (now revision ${attached.revision}, in self-review). Retry with expectedRevision ${attached.revision} if the move still applies.`,
       });
+      expect((await storage.get({ orgId, id: read.id }))?.stages).toEqual(['self-review']);
+
+      await expect(moveToReview(attached.revision)).resolves.toMatchObject({ status: 'accepted', stage: 'review' });
       expect(await storage.get({ orgId, id: read.id })).toMatchObject({
         stages: ['review'],
         metadata: { openPullRequestNumber: 5 },
       });
     });
 
-    it("tells the agent the card's revision and phase instead of moving a card that left its phase", async () => {
+    it('tells the agent the phase a person moved the card to while its move was out of date', async () => {
       const { orgId, read, storage, moveToReview } = await card();
       const sentBack = (await storage.update({
         orgId,
@@ -3017,23 +3020,12 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
         patch: { stages: ['building'] },
       }))!.item;
 
-      await expect(moveToReview('review')).resolves.toMatchObject({
+      await expect(moveToReview()).resolves.toMatchObject({
         status: 'rejected',
         code: 'stale',
         reason: `The card changed (now revision ${sentBack.revision}, in building). Retry with expectedRevision ${sentBack.revision} if the move still applies.`,
       });
       expect((await storage.get({ orgId, id: read.id }))?.stages).toEqual(['building']);
-    });
-
-    it("tells a session's own agent the current revision rather than moving the card for it", async () => {
-      const { attachPullRequest, moveToReview } = await card();
-      const attached = await attachPullRequest();
-
-      await expect(moveToReview('session')).resolves.toMatchObject({
-        status: 'rejected',
-        code: 'stale',
-        reason: `The card changed (now revision ${attached.revision}, in self-review). Retry with expectedRevision ${attached.revision} if the move still applies.`,
-      });
     });
   },
 );
