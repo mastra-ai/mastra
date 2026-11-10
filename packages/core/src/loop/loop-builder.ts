@@ -9,6 +9,7 @@ import type { createEventedWorkflow } from '../workflows/create';
 import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowStateTracingContext } from '../workflows/types';
+import { markFrameworkCondition } from '../workflows/utils';
 import type { Workflow } from '../workflows/workflow';
 import { createStep } from '../workflows/workflow';
 import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
@@ -761,7 +762,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         validateInputs: false,
       },
     })
-      .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
+      .dowhile(this.buildIterationWorkflow(), markFrameworkCondition(this.buildContinuationPredicate()))
       .commit();
     workflow.__setResumeTracingContext(resumeTracingContext);
     return workflow;

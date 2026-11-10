@@ -449,6 +449,31 @@ export function createLoopsWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should fail the run when the loop condition throws
+  {
+    const step = createStep({
+      id: 'charge',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+      execute: async ({ inputData }) => ({ count: inputData.count + 1 }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'loops-throwing-condition',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+      options: { validateInputs: false },
+    });
+
+    workflow
+      .dowhile(step, async () => {
+        throw new Error('condition boom');
+      })
+      .commit();
+
+    workflows['loops-throwing-condition'] = { workflow, mocks: {} };
+  }
+
   return workflows;
 }
 
@@ -547,6 +572,24 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(result.result?.count).toBe(3);
       // @ts-expect-error - result type
       expect(result.result?.items).toEqual(['item-1', 'item-2', 'item-3']);
+    });
+
+    // The default engine rejected run.start() and left the run recorded as running.
+    it('should fail the run when the loop condition throws', async () => {
+      const { workflow } = registry!['loops-throwing-condition']!;
+      const runId = `loops-throwing-condition-${Date.now()}`;
+
+      const result = await execute(workflow, { count: 0 }, { runId });
+
+      expect(result.status).toBe('failed');
+      // @ts-expect-error - result type
+      expect(result.error?.message).toBe('condition boom');
+      expect(result.steps.charge).toMatchObject({ status: 'failed', error: { message: 'condition boom' } });
+      const workflowsStore = await ctx.getStorage?.()?.getStore('workflows');
+      if (workflowsStore) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId });
+        expect(snapshot?.status).toBe('failed');
+      }
     });
   });
 }

@@ -17,8 +17,9 @@ import { calculateObservedUsage, isUsageIncomplete } from '../../../observabilit
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
-import { markFrameworkCondition, markNonRedeliverable } from '../../../workflows/evented/helpers';
+import { markNonRedeliverable } from '../../../workflows/evented/helpers';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
+import { markFrameworkCondition } from '../../../workflows/utils';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';

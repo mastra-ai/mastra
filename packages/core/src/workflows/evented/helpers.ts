@@ -29,7 +29,6 @@ export function restoreLiveRequestContext(
 }
 
 const NON_REDELIVERABLE = Symbol.for('mastra.evented.nonRedeliverable');
-const FRAMEWORK_CONDITION = Symbol.for('mastra.evented.frameworkCondition');
 
 /**
  * Marks an error as deterministic (for example a throwing user callback), so the
@@ -57,19 +56,6 @@ export class RunFailure extends Error {
     super(error.message, { cause: error });
     this.name = 'RunFailure';
   }
-}
-
-/**
- * Marks a loop condition built by the framework. It does its own storage and pubsub
- * I/O, so its errors keep the redelivery budget unless it marks them non-redeliverable.
- */
-export function markFrameworkCondition<T extends object>(condition: T): T {
-  Object.defineProperty(condition, FRAMEWORK_CONDITION, { value: true });
-  return condition;
-}
-
-export function isFrameworkCondition(condition: unknown): boolean {
-  return typeof condition === 'function' && (condition as any)[FRAMEWORK_CONDITION] === true;
 }
 
 /**

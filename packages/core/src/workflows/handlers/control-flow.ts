@@ -35,6 +35,7 @@ import {
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
+  isFrameworkCondition,
   omitPriorCompletionFields,
   resolveForeachConcurrency,
 } from '../utils';
@@ -952,7 +953,11 @@ export async function executeLoop(
         operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.error`,
         errorOptions: { ...termination, error: errorInstance },
       });
-      throw error;
+      if (isFrameworkCondition(condition)) throw error;
+      // End the loop step as failed, like a failed body: a throw would reject run.start()
+      // and leave the run recorded as running.
+      const { output: _output, ...bodyResult } = result as Extract<typeof result, { status: 'success' }>;
+      return { ...bodyResult, status: 'failed', error: errorInstance, endedAt: Date.now() };
     }
     await engine.endChildSpan({
       span: evalSpan,

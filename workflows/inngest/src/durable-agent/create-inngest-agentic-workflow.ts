@@ -41,6 +41,7 @@ import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
 import type { RunFence } from '@mastra/core/storage';
 import { ChunkFrom } from '@mastra/core/stream';
+import { markFrameworkCondition } from '@mastra/core/workflows';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
@@ -453,104 +454,107 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         { id: 'init-iteration-state' },
       )
       // Run the agentic loop with dowhile
-      .dowhile(singleIterationWorkflow, async params => {
-        const { inputData, engine, mastra } = params;
-        const state = inputData as IterationState;
-        const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
-        const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-        const { step } = engine as { step: BaseContext<Inngest>['step'] };
+      .dowhile(
+        singleIterationWorkflow,
+        markFrameworkCondition(async params => {
+          const { inputData, engine, mastra } = params;
+          const state = inputData as IterationState;
+          const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
+          const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+          const { step } = engine as { step: BaseContext<Inngest>['step'] };
 
-        const emitStepFinish = async (isContinued: boolean) => {
-          if (state.lastStepResult) {
-            state.lastStepResult.isContinued = isContinued;
-          }
-          const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
-          state.deferredStepFinishChunk = undefined;
-          if (deferredChunk && pubsub) {
-            // Carry the step's response messages so `onStepFinish(event).response.messages` and
-            // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
-            try {
-              const list = new MessageList({}).deserialize(state.messageListState);
-              deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
-            } catch (error) {
-              mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+          const emitStepFinish = async (isContinued: boolean) => {
+            if (state.lastStepResult) {
+              state.lastStepResult.isContinued = isContinued;
             }
-            await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
-              await emitChunkEvent(pubsub, state.runId, deferredChunk);
-            });
-          }
-        };
+            const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
+            state.deferredStepFinishChunk = undefined;
+            if (deferredChunk && pubsub) {
+              // Carry the step's response messages so `onStepFinish(event).response.messages` and
+              // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
+              try {
+                const list = new MessageList({}).deserialize(state.messageListState);
+                deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+              } catch (error) {
+                mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+              }
+              await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
+                await emitChunkEvent(pubsub, state.runId, deferredChunk);
+              });
+            }
+          };
 
-        // bail() from a delegation hook is a hard stop. The flag travels on
-        // serialized iteration state (set by the tool-call step, aggregated by
-        // llm-mapping), so it survives the wire to this cross-process predicate.
-        // The stop cause travels on the state, so the final step classifies the run on a worker
-        // that never held this registry entry. The registry copy is the final step's fallback.
-        const recordStopCause = (cause: NonNullable<IterationState['tracingStopCause']>) => {
-          state.tracingStopCause = cause;
-          if (tracingRegistry) tracingRegistry.tracingStopCause = cause;
-        };
+          // bail() from a delegation hook is a hard stop. The flag travels on
+          // serialized iteration state (set by the tool-call step, aggregated by
+          // llm-mapping), so it survives the wire to this cross-process predicate.
+          // The stop cause travels on the state, so the final step classifies the run on a worker
+          // that never held this registry entry. The registry copy is the final step's fallback.
+          const recordStopCause = (cause: NonNullable<IterationState['tracingStopCause']>) => {
+            state.tracingStopCause = cause;
+            if (tracingRegistry) tracingRegistry.tracingStopCause = cause;
+          };
 
-        if (state.delegationBailed) {
-          recordStopCause(state.lastStepResult?.isContinued ? 'delegation' : 'model_finished');
-          await emitStepFinish(false);
-          return false;
-        }
-
-        // Check if we should continue
-        const shouldContinue = state.lastStepResult?.isContinued === true;
-        // Use maxSteps from options (per-request), falling back to workflow-level default
-        const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
-        const underMaxSteps = state.iterationCount < effectiveMaxSteps;
-
-        if (!shouldContinue || !underMaxSteps) {
-          recordStopCause(shouldContinue ? 'max_steps' : 'model_finished');
-          await emitStepFinish(false);
-          return false;
-        }
-
-        // stopWhen is a closure parked on the in-process run registry; on a
-        // cross-worker resume the entry is absent and we fall back to maxSteps.
-        // The lookup happens inside a memoized step so Inngest replays reuse the
-        // recorded decision (even on a worker without the registry entry) instead
-        // of re-invoking (possibly stateful) user predicates. The `stop-when-`
-        // prefix is also the serve transport's failure classifier because Inngest
-        // StepError serialization drops the MastraError id/details; keep it in sync
-        // with durableAgentWorkflowError in workflow.ts.
-        const stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
-          const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
-          if (!stopWhen || state.accumulatedSteps.length === 0) {
+          if (state.delegationBailed) {
+            recordStopCause(state.lastStepResult?.isContinued ? 'delegation' : 'model_finished');
+            await emitStepFinish(false);
             return false;
           }
-          // Hand stopWhen the full step content stream.steps reports, not the
-          // compacted snapshot records (tool-result outputs restored).
-          const steps = expandDurableSteps(state.accumulatedSteps) as any;
-          const conditions = await Promise.all(
-            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
-              try {
-                return await condition({ steps });
-              } catch (error) {
-                const originalError = getErrorFromUnknown(error);
-                throw new MastraError(
-                  {
-                    id: DURABLE_STOP_WHEN_ERROR_ID,
-                    domain: ErrorDomain.AGENT,
-                    category: ErrorCategory.USER,
-                    text: originalError.message,
-                    details: { name: originalError.name, message: originalError.message },
-                  },
-                  originalError,
-                );
-              }
-            }),
-          );
-          return conditions.some(Boolean);
-        });
 
-        if (stopped) recordStopCause('stop_condition');
-        await emitStepFinish(!stopped);
-        return !stopped;
-      })
+          // Check if we should continue
+          const shouldContinue = state.lastStepResult?.isContinued === true;
+          // Use maxSteps from options (per-request), falling back to workflow-level default
+          const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
+          const underMaxSteps = state.iterationCount < effectiveMaxSteps;
+
+          if (!shouldContinue || !underMaxSteps) {
+            recordStopCause(shouldContinue ? 'max_steps' : 'model_finished');
+            await emitStepFinish(false);
+            return false;
+          }
+
+          // stopWhen is a closure parked on the in-process run registry; on a
+          // cross-worker resume the entry is absent and we fall back to maxSteps.
+          // The lookup happens inside a memoized step so Inngest replays reuse the
+          // recorded decision (even on a worker without the registry entry) instead
+          // of re-invoking (possibly stateful) user predicates. The `stop-when-`
+          // prefix is also the serve transport's failure classifier because Inngest
+          // StepError serialization drops the MastraError id/details; keep it in sync
+          // with durableAgentWorkflowError in workflow.ts.
+          const stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
+            const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
+            if (!stopWhen || state.accumulatedSteps.length === 0) {
+              return false;
+            }
+            // Hand stopWhen the full step content stream.steps reports, not the
+            // compacted snapshot records (tool-result outputs restored).
+            const steps = expandDurableSteps(state.accumulatedSteps) as any;
+            const conditions = await Promise.all(
+              (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
+                try {
+                  return await condition({ steps });
+                } catch (error) {
+                  const originalError = getErrorFromUnknown(error);
+                  throw new MastraError(
+                    {
+                      id: DURABLE_STOP_WHEN_ERROR_ID,
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.USER,
+                      text: originalError.message,
+                      details: { name: originalError.name, message: originalError.message },
+                    },
+                    originalError,
+                  );
+                }
+              }),
+            );
+            return conditions.some(Boolean);
+          });
+
+          if (stopped) recordStopCause('stop_condition');
+          await emitStepFinish(!stopped);
+          return !stopped;
+        }),
+      )
       // Map final state to output format, close agent span, and emit finish event
       .map(
         async params => {

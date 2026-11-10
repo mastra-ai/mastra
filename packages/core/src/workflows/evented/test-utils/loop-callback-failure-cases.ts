@@ -10,7 +10,7 @@ import { Mastra } from '../../../mastra';
 import type { MastraStorage } from '../../../storage';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import { createStep, createWorkflow } from '..';
-import { markFrameworkCondition } from '../helpers';
+import { markFrameworkCondition } from '../../utils';
 import { RedeliveryDriver } from './redelivery-driver';
 
 const schema = z.object({ n: z.number() });
