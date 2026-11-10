@@ -39,6 +39,8 @@ import {
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
+import { readReviewBoardInUse } from './legacy-review.js';
+import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
   WorkItemDbRecord,
@@ -850,6 +852,15 @@ export class WorkItemUpdateConflictError extends Error {
   }
 }
 
+/** The source a caller tried to attach already belongs to another work item in the project. */
+export class WorkItemSourceConflictError extends Error {
+  readonly code = 'work_item_source_conflict';
+
+  constructor(readonly ownerWorkItemId: string) {
+    super(`The source already belongs to work item ${ownerWorkItemId}.`);
+  }
+}
+
 export function validateParentRelation(
   projectItems: Card[],
   itemId: string | undefined,
@@ -1345,6 +1356,31 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#split.pending;
   }
 
+  /** Projects found not to use the Review board; once redundant it stays so, with no card left to reopen on it. */
+  readonly #reviewRedundant = new Set<string>();
+
+  /** {@link reviewBoardInUse} through `ops`, so a caller inside a transaction reads within it. */
+  readonly #reviewInUse: ReviewBoardInUse = async (ops, scope) => {
+    const key = `${scope.orgId}\0${scope.factoryProjectId}`;
+    if (this.#reviewRedundant.has(key)) return false;
+    const inUse = await readReviewBoardInUse(ops, scope, {
+      split: !this.#legacyMode,
+      // Legacy cards not copied yet still count.
+      legacy: this.#legacyMode || this.#split.pending,
+    });
+    if (!inUse) this.#reviewRedundant.add(key);
+    return inUse;
+  };
+
+  /**
+   * Whether the project still uses the retired Review board: it holds a card stored on Review
+   * that isn't Done or Canceled. Such a project keeps the board and its cards stay on it; in any
+   * other project Review is redundant and its cards read as Work.
+   */
+  reviewBoardInUse(scope: ReviewBoardScope): Promise<boolean> {
+    return this.#reviewInUse(this.#db, scope);
+  }
+
   constructor() {
     super('work-items');
   }
@@ -1516,21 +1552,26 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * LibSQL), else in a transaction of its own.
    */
   #cards(ops: FactoryStorageOps, { transaction }: { transaction: boolean }): Cards {
-    if (this.#legacyMode || !this.#split.pending) return new Cards(ops, this.#legacyMode);
-    return new Cards(ops, false, {
-      copy: async rows => {
-        if (transaction) {
-          await copyLegacyRows(ops, rows);
-          return;
-        }
-        try {
-          await this.#withTransaction(tx => copyLegacyRows(tx, rows));
-        } catch (error) {
-          // A concurrent first copy won (its retry lost again); the re-read finds its rows.
-          if (!(error instanceof UniqueViolationError)) throw error;
-        }
+    if (this.#legacyMode || !this.#split.pending) return new Cards(ops, this.#legacyMode, undefined, this.#reviewInUse);
+    return new Cards(
+      ops,
+      false,
+      {
+        copy: async rows => {
+          if (transaction) {
+            await copyLegacyRows(ops, rows);
+            return;
+          }
+          try {
+            await this.#withTransaction(tx => copyLegacyRows(tx, rows));
+          } catch (error) {
+            // A concurrent first copy won (its retry lost again); the re-read finds its rows.
+            if (!(error instanceof UniqueViolationError)) throw error;
+          }
+        },
       },
-    });
+      this.#reviewInUse,
+    );
   }
 
   /** Validation reads the split tables only, so a parent still in legacy is copied first. */
@@ -1599,6 +1640,65 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
+  }
+
+  /**
+   * File one more external record on an existing card: a pull request on the
+   * issue card it fixes. The card's primary source stays first, so the card keeps
+   * reading as the issue. Attaching a source the card already holds is a no-op
+   * (`attached: false`); one another card holds throws
+   * {@link WorkItemSourceConflictError}. Later state for the attached record goes
+   * through {@link syncWorkItemSource}, never {@link syncCard}, which writes the
+   * primary source.
+   */
+  async attachSource({
+    orgId,
+    id,
+    source,
+    metadata,
+    expectedRevision,
+  }: {
+    orgId: string;
+    id: string;
+    source: ExternalWorkItemSource;
+    metadata: Record<string, unknown> | null;
+    expectedRevision?: number;
+  }): Promise<{ item: Card; attached: boolean } | null> {
+    let result: Awaited<ReturnType<Cards['attachSource']>>;
+    try {
+      result = await this.#withTransaction(async ops => {
+        const cards = new Cards(ops, this.#legacyMode, undefined, this.#reviewInUse);
+        const attached = await cards.attachSource(
+          { org_id: orgId, id },
+          { external_source: source, metadata, now: new Date() },
+          expectedRevision,
+        );
+        if (attached?.ownerWorkItemId) throw new WorkItemSourceConflictError(attached.ownerWorkItemId);
+        if (attached?.revisionConflict) throw new WorkItemUpdateConflictError('revision');
+        return attached;
+      });
+    } catch (error) {
+      // A concurrent attach or upsert of the same record won the unique index.
+      if (error instanceof UniqueViolationError && error.collection === FACTORY_WORK_ITEM_SOURCES_SCHEMA.name) {
+        // Sources are unique per project, so another project's copy of the record is no owner here.
+        const card = await new Cards(this.#db, this.#legacyMode, undefined, this.#reviewInUse).findOne({
+          org_id: orgId,
+          id,
+        });
+        const owner = card
+          ? await this.#db.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {
+              org_id: orgId,
+              factory_project_id: card.factory_project_id,
+              source_key: externalSourceKey(source),
+            })
+          : null;
+        if (owner && card && owner.work_item_id === card.work_item?.id)
+          return { item: toWorkItem(card), attached: false };
+        throw new WorkItemSourceConflictError(owner?.work_item_id ?? 'unknown');
+      }
+      throw error;
+    }
+    return result ? { item: toWorkItem(result.row), attached: result.attached } : null;
   }
 
   /** Apply source facts and their process stamps in one transaction. */

@@ -114,7 +114,10 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   /** Refuses a target that isn't an installed board and phase, or, for a route placing new cards, one they can't land in. */
   async #checkTarget(
     scope: Resolved,
-    route: { target: { boardKey: string; phaseKey?: string | null }; on: readonly StatusEvent[] },
+    route: {
+      target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
+      on: readonly StatusEvent[];
+    },
   ) {
     const problem = intakeTargetProblem(await this.#registry(scope), route);
     if (problem) throw new Refusal(422, { error: problem.code, message: problem.message });

@@ -1,7 +1,8 @@
 import { FACTORY_ROLE_STAGES, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
-import { itemSessionSpec, metadataLabels, pullRequestStatusForItem } from './boardItems';
+import { itemSessionSpec, metadataLabels, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
+import { attachedPullRequestSource, cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
@@ -43,21 +44,24 @@ const PREPARE_APPROVAL: CardMove = {
   stage: 'triage',
   awaitsHumanDecision: true,
 };
-/** A pull request's own card is reviewed in Work's PR review, or in Reviewing on the Review board it was filed on. */
-function reviewMoves(item: MovableCard): { review: CardMove; reReview: CardMove } {
-  // Pull request cards with no board predate persisted boards and sit on Review.
-  const stage = (item.board ?? 'review') === 'review' ? 'review' : 'pr-review';
-  return {
-    review: { label: 'Review', role: 'review', stage },
-    reReview: { label: 'Re-review', role: 'review', stage },
-  };
-}
+/** A card's pull request is reviewed in Work's PR review. */
+const REVIEW_MOVE: CardMove = { label: 'Review', role: 'review', stage: 'pr-review' };
+const RE_REVIEW_MOVE: CardMove = { label: 'Re-review', role: 'review', stage: 'pr-review' };
+/** A card its project keeps on the retired Review board is reviewed in that board's Reviewing. */
+const KEPT_REVIEW_MOVE: CardMove = { label: 'Review', role: 'review', stage: 'review' };
+const KEPT_RE_REVIEW_MOVE: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
-  if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
-  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [reviewMoves(item).reReview] : [];
-  if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
+  if (item.board === 'review') {
+    if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [KEPT_RE_REVIEW_MOVE] : [];
+    return [KEPT_REVIEW_MOVE];
+  }
+  if (item.board != null && item.board !== 'work') return [];
+  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW_MOVE] : [];
+  // A card carrying a pull request, its own or one attached to its issue, sends it to PR review.
+  if ((columnStage === 'pr-review' || columnStage === 'review') && cardHasPullRequest(item)) return [REVIEW_MOVE];
+  if (columnStage === 'review') return [];
   if (item.source === 'github-issue') {
     return needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } })
       ? [PREPARE_APPROVAL]
@@ -71,15 +75,17 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   ) {
     return issueMoves(columnStage);
   }
-  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [reviewMoves(item).review] : [];
+  return isPullRequestSource(item.source) ? [REVIEW_MOVE] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
-  return (
-    columnStage === 'done' &&
-    (item.source === 'github-pr' || item.source === 'gitlab-pr') &&
-    ['open', 'draft'].includes(pullRequestStatusForItem({ ...item, stages: item.stages ?? [] }))
-  );
+  if (columnStage !== 'done' || !cardHasPullRequest(item)) return false;
+  // An issue card's pull request state lives on the pull request's source, not the issue's.
+  const attached = attachedPullRequestSource(item);
+  const status = attached
+    ? pullRequestStatusForSource(attached)
+    : pullRequestStatusForItem({ ...item, stages: item.stages ?? [] });
+  return status === 'open' || status === 'draft';
 }
 
 // PR review carries a pull request card's reviewer, after the builder's lanes.
@@ -93,7 +99,7 @@ const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROL
 export function resumeStage(
   columnStage: BoardStageId,
   item: {
-    /** The card's resolved board (`itemBoard`): a legacy pull request card with no board sits on Review. */
+    /** The card's resolved board (`itemBoard`). */
     board: string;
     sessions: Record<string, WorkItemSessionRef>;
     stageHistory?: readonly { stage: string }[];
@@ -103,7 +109,7 @@ export function resumeStage(
   const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
   const lane = WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
   // On Work, Intake leads to neither Building nor its self-review: a card that got that far
-  // resumes in Planning. The Review board has no Planning, and its Intake leads back to Reviewing.
+  // resumes in Planning.
   return item.board === 'work' && (lane === 'execute' || lane === 'review') ? 'planning' : lane;
 }
 

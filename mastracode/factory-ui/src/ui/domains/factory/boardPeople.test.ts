@@ -31,7 +31,7 @@ const item: WorkItem = {
   parentWorkItemId: null,
   title: 'Ship relevance filters',
   url: 'https://github.com/acme/app/pull/12',
-  stages: ['review'],
+  stages: ['pr-review'],
   stageHistory: [],
   sessions: {
     review: {
@@ -74,7 +74,7 @@ const activityPage: AuditEventPage = {
 
 const asIs = boardPersonIdentity(undefined, undefined);
 
-function picks(entries: Array<[string, string]>, kind: BoardKind = 'review') {
+function picks(entries: Array<[string, string]>, kind: BoardKind = 'work') {
   return boardFiltersFromParams(new URLSearchParams(entries), kind);
 }
 
@@ -206,7 +206,6 @@ describe('board person filters', () => {
     expect(workItemMatchesPeople(item, activityPage, custom, asIs)).toBe(true);
     // Pull requests are reviewed on Work, so Work filters by requested reviewer.
     expect(picks(params, 'work').reviewer).toEqual(new Set(['github:monalisa']));
-    expect(picks(params, 'review').reviewer).toEqual(new Set(['github:monalisa']));
   });
 
   it('filters intake candidates by GitHub, GitLab, Linear, Jira, and incident.io provider metadata', () => {

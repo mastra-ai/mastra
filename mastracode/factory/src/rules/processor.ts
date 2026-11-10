@@ -426,7 +426,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     };
     const value: ActivePhaseSnapshotValue = reviewsPullRequest({
       board,
-      item: { source: workItemSource(item.externalSource) },
+      item: { source: workItemSource(item.externalSource), workItem: item.workItem },
     })
       ? {
           ...baseValue,

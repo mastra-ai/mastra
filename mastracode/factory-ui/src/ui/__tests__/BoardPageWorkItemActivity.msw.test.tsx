@@ -89,7 +89,7 @@ const reviewItem = {
   id: 'review-item-1',
   createdBy: 'factory-rule-dispatcher',
   title: 'Review retry fix',
-  stages: ['review'],
+  stages: ['pr-review'],
   sessions: {
     review: {
       sessionId: 'session-review',
@@ -153,8 +153,8 @@ const relevanceReviewItems = [
 }));
 
 const pullRequestStatusItems = [
-  { id: 'draft', title: 'Draft PR', stages: ['review'], metadata: { state: 'open', draft: true, merged: false } },
-  { id: 'open', title: 'Open PR', stages: ['review'], metadata: { state: 'open', draft: false, merged: false } },
+  { id: 'draft', title: 'Draft PR', stages: ['pr-review'], metadata: { state: 'open', draft: true, merged: false } },
+  { id: 'open', title: 'Open PR', stages: ['pr-review'], metadata: { state: 'open', draft: false, merged: false } },
   {
     id: 'closed',
     title: 'Closed PR',
@@ -279,7 +279,7 @@ function stubBoardEndpoints() {
   );
 }
 
-function renderBoard(board: 'work' | 'review', search = '') {
+function renderBoard(board: 'work', search = '') {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [`/factories/${FACTORY_ID}/${board}${search}`],
   });
@@ -477,7 +477,7 @@ describe('Board work-item activity', () => {
 
   it('shows the latest human worker, initial fallback, and synthetic created event on review cards', async () => {
     stubBoardEndpoints();
-    renderBoard('review');
+    renderBoard('work', '?source=pull-request');
 
     const createdAt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
       new Date(reviewItem.createdAt),
@@ -504,7 +504,7 @@ describe('Board work-item activity', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    const { client } = renderBoard('work', '?source=pull-request');
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
@@ -531,7 +531,7 @@ describe('Board work-item activity', () => {
     expect(screen.queryByText('Requested PR')).not.toBeInTheDocument();
   });
 
-  it('shows a filter-specific review empty state', async () => {
+  it('shows a filter-specific empty state on Work filtered to pull requests', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -539,11 +539,11 @@ describe('Board work-item activity', () => {
       ),
     );
 
-    const { client } = renderBoard('review', '?teammate=github%3Anobody');
+    const { client } = renderBoard('work', '?source=pull-request&teammate=github%3Anobody');
     await waitForMutationsIdle(client);
 
     expect(
-      await within(screen.getByTestId('board-column-review')).findByText('No change requests match filters'),
+      await within(screen.getByTestId('board-column-intake')).findByText('No work items match filters'),
     ).toBeInTheDocument();
   });
 
@@ -554,7 +554,7 @@ describe('Board work-item activity', () => {
         HttpResponse.json({ workItems: pullRequestStatusItems }),
       ),
     );
-    renderBoard('review');
+    renderBoard('work', '?source=pull-request');
 
     expect(await screen.findByLabelText('Draft pull request')).toBeInTheDocument();
     expect(screen.getByLabelText('Open pull request')).toBeInTheDocument();
@@ -573,7 +573,7 @@ describe('Board work-item activity', () => {
         }),
       ),
     );
-    renderBoard('review');
+    renderBoard('work', '?source=pull-request');
 
     const row = await screen.findByRole('article', { name: reviewItem.title });
     expect(within(row).getByText('Changes requested')).toBeVisible();
@@ -586,15 +586,18 @@ describe('Board work-item activity', () => {
         HttpResponse.json({
           workItems: [
             {
-              ...reviewItem,
+              ...workItem,
+              id: 'self-reviewed',
+              title: reviewItem.title,
+              stages: ['review'],
               sessions: {},
-              metadata: { ...reviewItem.metadata, selfReviewVerdict: 'approve', selfReviewRounds: 1 },
+              metadata: { ...workItem.metadata, selfReviewVerdict: 'approve', selfReviewRounds: 1 },
             },
           ],
         }),
       ),
     );
-    renderBoard('review');
+    renderBoard('work');
 
     const row = await screen.findByRole('article', { name: reviewItem.title });
     expect(within(row).getByTitle('Self-review: approved (round 1)')).toHaveTextContent(

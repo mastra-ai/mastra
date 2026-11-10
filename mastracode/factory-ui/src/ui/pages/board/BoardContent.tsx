@@ -82,6 +82,7 @@ export function BoardContent({
   definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
+  // A project that still has open cards on the retired Review board keeps it, laid out as before.
   const review = kind === 'review';
   const builtin = kind === 'work' || review;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
@@ -243,6 +244,7 @@ export function BoardContent({
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
+    // No card is created by hand on the retired Review board: its cards come from pull requests.
     const canCreate =
       !review && !items.isPending && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
     const canConnectSource = isInitialPhase && !hasIntakeSource;
@@ -280,7 +282,6 @@ export function BoardContent({
           stage={stage}
           isInitialPhase={isInitialPhase}
           layout={layout}
-          kind={kind}
           loading={loading}
           taskCount={taskCount}
           feed={columnFeed}

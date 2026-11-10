@@ -36,17 +36,7 @@ export const builtinBoardCatalog: BoardCatalogResponse = {
         { id: 'planning', title: 'Planning', kind: 'working', role: 'plan', transitions: [] },
         { id: 'execute', title: 'Building', kind: 'working', role: 'build', transitions: [] },
         { id: 'review', title: 'Review', kind: 'resting', transitions: [] },
-        { id: 'done', title: 'Done', kind: 'terminal', transitions: [] },
-        { id: 'canceled', title: 'Canceled', kind: 'terminal', transitions: [] },
-      ],
-    },
-    {
-      id: 'review',
-      title: 'Review',
-      initialPhase: 'intake',
-      phases: [
-        { id: 'intake', title: 'Intake', kind: 'resting', transitions: [] },
-        { id: 'review', title: 'Reviewing', kind: 'working', role: 'review', transitions: [] },
+        { id: 'pr-review', title: 'PR review', kind: 'working', role: 'review', transitions: [] },
         { id: 'done', title: 'Done', kind: 'terminal', transitions: [] },
         { id: 'canceled', title: 'Canceled', kind: 'terminal', transitions: [] },
       ],
@@ -110,5 +100,37 @@ export const workBoard: InstalledBoardInfo = {
 };
 
 export const workBoardCatalog: BoardCatalogResponse = {
-  boards: [workBoard, builtinBoardCatalog.boards[1]],
+  boards: [workBoard],
+};
+
+/** The retired Review board, which the server still serves to a project with open cards on it. */
+export const keptReviewBoard: InstalledBoardInfo = {
+  id: 'review',
+  title: 'Review',
+  initialPhase: 'intake',
+  phases: [
+    {
+      id: 'intake',
+      title: 'Intake',
+      kind: 'resting',
+      transitions: [
+        { outcome: null, to: 'review' },
+        { outcome: null, to: 'done' },
+        { outcome: null, to: 'canceled' },
+      ],
+    },
+    {
+      id: 'review',
+      title: 'Reviewing',
+      kind: 'working',
+      role: 'review',
+      transitions: [
+        { outcome: null, to: 'intake' },
+        { outcome: null, to: 'done' },
+        { outcome: null, to: 'canceled' },
+      ],
+    },
+    { id: 'done', title: 'Done', kind: 'terminal', transitions: [{ outcome: null, to: 'review' }] },
+    { id: 'canceled', title: 'Canceled', kind: 'terminal', transitions: [{ outcome: null, to: 'review' }] },
+  ],
 };

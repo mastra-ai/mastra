@@ -4,6 +4,7 @@ import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -524,7 +525,7 @@ describe('FactoryPhaseStateProcessor', () => {
       }
     });
 
-    it('gives Review and custom boards none of Work’s submit_plan behaviour', async () => {
+    it('gives PR review and custom boards none of Work’s submit_plan behaviour', async () => {
       const release = defineBoard({
         id: 'release',
         title: 'Release',
@@ -536,7 +537,7 @@ describe('FactoryPhaseStateProcessor', () => {
         },
       });
       for (const board of [
-        { id: 'review', stage: 'review', source: 'pull-request' as const },
+        { id: 'work', stage: 'pr-review', source: 'pull-request' as const },
         { id: 'release', stage: 'planning', source: 'issue' as const },
       ]) {
         const storage = (await createFactoryStorageForTests()).workItems;
@@ -1112,7 +1113,8 @@ describe('FactoryPhaseStateProcessor', () => {
   it('re-emits phase state when either review runtime field changes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'review', 'pull-request', { id: 'review', stage: 'review' });
-    const boards = createBoardRegistry();
+    // The card keeps its project on the retired Review board.
+    const boards = createBoardRegistry({ boards: [reviewBoard] });
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
     const first = await processor.computeStateSignal(stateArgs(requestContext()));
     const priorState = {
@@ -1171,7 +1173,8 @@ describe('FactoryPhaseStateProcessor', () => {
   it('rejects review phase state without a selected model', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'review', 'pull-request', { id: 'review', stage: 'review' });
-    const boards = createBoardRegistry();
+    // The card keeps its project on the retired Review board.
+    const boards = createBoardRegistry({ boards: [reviewBoard] });
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
 
     await expect(processor.computeStateSignal(stateArgs(requestContext({ modelId: '' })))).rejects.toThrow(
