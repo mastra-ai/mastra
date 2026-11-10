@@ -9,15 +9,21 @@ import './composer-header.css';
 export interface ComposerHeaderProps extends ComponentPropsWithoutRef<'div'> {
   /** Animate visibility while retaining content through the closing transition. */
   open?: boolean;
+  /**
+   * `stacked` takes space above the composer. `overlay` floats over the content above it so
+   * opening the header never moves the transcript; the parent must be positioned.
+   */
+  placement?: 'stacked' | 'overlay';
 }
 
 /** Optional context above ComposerRing or ComposerBox. Empty rendered content occupies no space. */
 export const ComposerHeader = forwardRef<HTMLDivElement, ComposerHeaderProps>(
-  ({ className, children, open = true, ...props }, ref) => (
+  ({ className, children, open = true, placement = 'stacked', ...props }, ref) => (
     <Collapsible.Root
       ref={ref}
       open={open}
       data-slot="composer-header"
+      data-placement={placement}
       className={cn('composer-header relative isolate mx-auto w-full max-w-3xl', className)}
       {...props}
     >
