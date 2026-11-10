@@ -86,6 +86,8 @@ function createContext({
       if (key === 'requestContext') return requestContext;
       return undefined;
     },
+    json: (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }),
   };
 }
 
@@ -161,6 +163,37 @@ describe('chatRoute resumable streams', () => {
       'POST /fixed-chat',
       'GET /fixed-chat/:chatId/stream',
     ]);
+  });
+
+  it('rejects body-only resource scope for resumable chats', async () => {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Help the user.',
+      model: new MockLanguageModelV2(),
+    });
+    const route = chatRoute({ path: '/chat/:agentId', resumable: true });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { [agent.id]: agent },
+      server: { apiRoutes: [route] },
+    });
+
+    const response = await invoke(
+      getRoute(mastra, 'POST'),
+      createContext({
+        mastra,
+        method: 'POST',
+        runId: 'body-resource-run',
+        memory: { resource: 'body-resource' },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        'Resumable chat resource IDs must be set by authentication middleware or route request context, not in the request body.',
+    });
   });
 
   it.each(['v5', 'v6', 'v7'] as const)(

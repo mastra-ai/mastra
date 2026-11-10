@@ -936,9 +936,22 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
       }
 
       const effectiveAgentVersion = resolveAgentVersionFromQuery(name => c.req.query(name), agentVersion);
-      const resumableResourceId = (effectiveRequestContext as RequestContext | undefined)?.get<string>(
+      const trustedRequestContext = (contextRequestContext || defaultOptions?.requestContext) as
+        RequestContext | undefined;
+      const resumableResourceId = trustedRequestContext?.get<string>(MASTRA_RESOURCE_ID_KEY);
+      const bodyResourceId = typeof params.memory === 'object' ? params.memory?.resource : undefined;
+      const bodyRequestContextResourceId = (params.requestContext as RequestContext | undefined)?.get<string>(
         MASTRA_RESOURCE_ID_KEY,
       );
+      if (resumable && (bodyResourceId || bodyRequestContextResourceId) && !resumableResourceId) {
+        return c.json(
+          {
+            error:
+              'Resumable chat resource IDs must be set by authentication middleware or route request context, not in the request body.',
+          },
+          400,
+        );
+      }
 
       const handlerOptions = {
         mastra,
