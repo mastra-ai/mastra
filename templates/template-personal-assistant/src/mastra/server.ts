@@ -5,6 +5,25 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { z } from 'zod';
 import type { AssistantConfig } from './config';
 
+const executionOptions = new Set([
+  'model',
+  'structuredOutput',
+  'memory',
+  'memoryConfig',
+  'inputProcessors',
+  'outputProcessors',
+  'maxSteps',
+  'hooks',
+  'toolCallConcurrency',
+  'eagerToolExecution',
+  'streamOptions',
+  'ifIdle',
+  'autoResumeSuspendedTools',
+  'toolsets',
+  'clientTools',
+  'resumeData',
+]);
+
 /** Inspect option objects without interpreting message contents. */
 function asObject(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -151,24 +170,6 @@ export function createAssistantServer(
           }
         }
         if (c.req.method === 'POST' && c.req.path.includes('/agents/')) {
-          const executionOptions = new Set([
-            'model',
-            'structuredOutput',
-            'memory',
-            'memoryConfig',
-            'inputProcessors',
-            'outputProcessors',
-            'maxSteps',
-            'hooks',
-            'toolCallConcurrency',
-            'eagerToolExecution',
-            'streamOptions',
-            'ifIdle',
-            'autoResumeSuspendedTools',
-            'toolsets',
-            'clientTools',
-            'resumeData',
-          ]);
           if (Object.keys(c.req.queries()).some(key => executionOptions.has(key.split(/[.\[\]]/)[0]!)))
             return c.json({ error: 'Supply execution options in the validated request body, never the query.' }, 400);
           let value: unknown;
@@ -179,24 +180,7 @@ export function createAssistantServer(
               const form = await request.formData();
               const fields: Record<string, unknown> = {};
               // Native Hono JSON-decodes form fields and uses the last duplicate value.
-              for (const key of [
-                'model',
-                'structuredOutput',
-                'memory',
-                'memoryConfig',
-                'inputProcessors',
-                'outputProcessors',
-                'maxSteps',
-                'hooks',
-                'toolCallConcurrency',
-                'eagerToolExecution',
-                'streamOptions',
-                'ifIdle',
-                'autoResumeSuspendedTools',
-                'toolsets',
-                'clientTools',
-                'resumeData',
-              ]) {
+              for (const key of executionOptions) {
                 const field = form.getAll(key).at(-1);
                 if (field === undefined) continue;
                 fields[key] = field;
