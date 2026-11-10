@@ -16,11 +16,15 @@ export const RESPONSE_MESSAGES_FULL_LIST_INTERVAL = 8;
  * a retried attempt is rolled back), so this is not just the new messages.
  */
 export interface ResponseMessagesDiff {
-  /** Identifies the publisher; each producer (e.g. each resumed segment of a run) numbers its own diffs. */
+  /** Identifies the publisher, e.g. one execution of a run; each producer numbers its own diffs. */
   producer: string;
   /** Increases by one per published step-finish of the producer. */
   seq: number;
   from: number;
+  /** Identifies the list this diff applies to (absent when `from` is 0). */
+  base?: string;
+  /** Identifies the list that applying this diff gives. */
+  hash: string;
   messages: ResponseMessage[];
 }
 
@@ -40,21 +44,32 @@ export function diffResponseMessages(
   cursor: ResponseMessagesCursor | { producer: string },
   messages: ResponseMessage[],
 ): { diff: ResponseMessagesDiff; cursor: ResponseMessagesCursor } {
-  const fingerprints = messages.map(fingerprint);
+  const fingerprints = messages.map(message => hashString(JSON.stringify(message) ?? ''));
   const seq = 'seq' in cursor ? cursor.seq + 1 : 0;
+  const hash = listHash(fingerprints);
+  const { producer } = cursor;
   let from = 0;
   if ('seq' in cursor && seq % RESPONSE_MESSAGES_FULL_LIST_INTERVAL !== 0) {
     const sent = cursor.fingerprints;
     while (from < sent.length && from < fingerprints.length && sent[from] === fingerprints[from]) from++;
   }
-  const { producer } = cursor;
-  return { diff: { producer, seq, from, messages: messages.slice(from) }, cursor: { producer, seq, fingerprints } };
+  const diff: ResponseMessagesDiff = {
+    producer,
+    seq,
+    from,
+    ...(from > 0 ? { base: listHash((cursor as ResponseMessagesCursor).fingerprints) } : {}),
+    hash,
+    messages: messages.slice(from),
+  };
+  return { diff, cursor: { producer, seq, fingerprints } };
 }
 
 /** The response messages a reader rebuilt from the diffs it applied. */
 export interface ResponseMessagesReplay {
   messages: ResponseMessage[];
-  /** Producer and `seq` of the last diff applied; unset when the next diff must hold the whole list. */
+  /** Hash of `messages` as its producer computed it; unset when unknown. */
+  hash?: string;
+  /** Producer and `seq` of the last diff applied, to tell late copies apart. */
   producer?: string;
   seq?: number;
 }
@@ -62,11 +77,12 @@ export interface ResponseMessagesReplay {
 /**
  * Apply a step-finish payload's response messages to what a reader holds.
  * Returns the step's full list, or undefined when the payload can't be applied:
- * the reader missed an earlier diff (no history, a lost or reordered delivery)
- * or got a late copy of one it already applied. A reader that missed a diff
- * waits for the producer's next whole list instead of guessing. Payloads from
- * producers that publish the whole list (`_durableResponseMessages`) replace
- * what the reader holds.
+ * the reader doesn't hold the exact list the diff was made against (it missed
+ * a diff, or a step was published twice with different content), or the diff
+ * is a late copy of one it is already past. Such a reader reports nothing
+ * until a diff fits its list or the producer's next whole list arrives,
+ * instead of guessing. Payloads from producers that publish the whole list
+ * (`_durableResponseMessages`) replace what the reader holds.
  */
 export function applyResponseMessages(
   replay: ResponseMessagesReplay,
@@ -75,35 +91,43 @@ export function applyResponseMessages(
   const diff = payload._durableResponseMessagesDiff;
   if (!diff) {
     if (!Array.isArray(payload._durableResponseMessages)) return undefined;
-    Object.assign(replay, { messages: payload._durableResponseMessages, producer: undefined, seq: undefined });
+    Object.assign(replay, {
+      messages: payload._durableResponseMessages,
+      hash: undefined,
+      producer: undefined,
+      seq: undefined,
+    });
     return replay.messages;
   }
-  const sameProducer = replay.producer === diff.producer && replay.seq !== undefined;
-  // A late or repeated delivery of a diff this reader is already past.
-  if (sameProducer && diff.seq <= replay.seq!) return undefined;
-  if (diff.from === 0) {
-    Object.assign(replay, { messages: [...diff.messages], producer: diff.producer, seq: diff.seq });
-    return replay.messages;
+  if (replay.producer === diff.producer && replay.seq !== undefined && diff.seq <= replay.seq) {
+    // A step-finish delivered twice still reports its list; anything older says nothing new.
+    return diff.seq === replay.seq && diff.hash === replay.hash ? replay.messages : undefined;
   }
-  // A diff of a producer whose whole list this reader hasn't seen (e.g. the previous segment's
-  // publisher, delivered late) says nothing about the list it holds.
-  if (replay.producer !== diff.producer) return undefined;
-  if (!sameProducer || diff.seq !== replay.seq! + 1 || diff.from > replay.messages.length) {
-    replay.seq = undefined;
-    return undefined;
-  }
-  replay.messages = [...replay.messages.slice(0, diff.from), ...diff.messages];
-  replay.seq = diff.seq;
+  if (diff.from !== 0 && (replay.hash === undefined || diff.base !== replay.hash)) return undefined;
+  Object.assign(replay, {
+    messages: [...replay.messages.slice(0, diff.from), ...diff.messages],
+    hash: diff.hash,
+    producer: diff.producer,
+    seq: diff.seq,
+  });
   return replay.messages;
 }
 
 /**
  * Fold the step-finish events of a run log, in order, into a reader's starting
- * state. It doesn't filter by claim generation: plain Agent logs carry none.
+ * state. Like a reader, it drops events of an execution that a newer claim
+ * generation already superseded.
  */
-export function replayResponseMessages(events: { type?: string; data?: unknown }[]): ResponseMessagesReplay {
+export function replayResponseMessages(
+  events: { type?: string; data?: unknown; generation?: number }[],
+): ResponseMessagesReplay {
   const replay: ResponseMessagesReplay = { messages: [] };
+  let floor: number | undefined;
   for (const event of events) {
+    if (typeof event.generation === 'number') {
+      if (floor !== undefined && event.generation < floor) continue;
+      floor = event.generation;
+    }
     const chunk = event.data as { type?: string; payload?: Parameters<typeof applyResponseMessages>[1] } | undefined;
     if (event.type === 'chunk' && chunk?.type === 'step-finish' && chunk.payload) {
       applyResponseMessages(replay, chunk.payload);
@@ -112,9 +136,12 @@ export function replayResponseMessages(events: { type?: string; data?: unknown }
   return replay;
 }
 
-/** 53-bit string hash (cyrb53) with the length, to tell messages apart without keeping them. */
-function fingerprint(message: ResponseMessage): string {
-  const text = JSON.stringify(message) ?? '';
+function listHash(fingerprints: string[]): string {
+  return hashString(fingerprints.join(','));
+}
+
+/** 53-bit string hash (cyrb53) with the length, to tell values apart without keeping them. */
+function hashString(text: string): string {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
   for (let i = 0; i < text.length; i++) {

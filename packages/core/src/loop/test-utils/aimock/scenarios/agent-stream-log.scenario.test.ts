@@ -25,7 +25,8 @@ import { SCENARIO_MODEL_ID } from '../types';
 
 const PROMPT_MARKER = 'PROMPT-MARKER-7f3c';
 const WRITER_MARKER = 'WRITER-INSTRUCTIONS-91ad';
-const TOOL_STEPS = 5;
+/** More steps than RESPONSE_MESSAGES_FULL_LIST_INTERVAL, so runs include a periodic whole list. */
+const TOOL_STEPS = 9;
 
 /** A bus that, like Redis, only ever hands readers JSON copies of what was published. */
 class JsonPubSub extends EventEmitterPubSub {
@@ -106,7 +107,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
     scriptToolLoop(llm);
     const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup } });
     const run: any = await agent.stream(`${PROMPT_MARKER} ${'Look this up carefully. '.repeat(200)}`, {
-      maxSteps: 10,
+      maxSteps: 12,
     });
     try {
       const output = run.output ?? run;
@@ -126,11 +127,15 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
 
   // Technical: every step-finish carried the run's response messages so far, so the first tool's
   // output was stored once per later step. Step-finish events now send only what changed.
-  it('stores an early tool result as often as the last one', async () => {
+  it('stores an early tool result about as often as the last one', async () => {
     const llm = getMock();
     scriptToolLoop(llm);
-    const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup } });
-    const run: any = await agent.stream('Look it all up.', { maxSteps: 10 });
+    const { agent, mastra } = await createSharedAgent(llm, {
+      engine,
+      tools: { lookup },
+      ...(engine === 'inngest' ? {} : { pubsub: new JsonPubSub(), cache: new JsonCache() }),
+    });
+    const run: any = await agent.stream('Look it all up.', { maxSteps: 12 });
     try {
       await (run.output ?? run).consumeStream();
       const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
@@ -138,9 +143,10 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
       const last = occurrences(log, `RESULT-${TOOL_STEPS - 1}`);
       if (isDurableEngineVariant(engine)) {
         // Known gap: DurableAgent and EventedAgent still send the whole list on every step.
-        expect(first).toBeGreaterThan(last);
+        expect(first).toBeGreaterThan(last + 1);
       } else {
-        expect(first).toBe(last);
+        // Once more for the whole list resent every RESPONSE_MESSAGES_FULL_LIST_INTERVAL steps.
+        expect(first).toBe(last + 1);
       }
     } finally {
       run.cleanup?.();
@@ -205,7 +211,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
     });
     const live: any[] = [];
     const run: any = await agent.stream('Look it all up.', {
-      maxSteps: 10,
+      maxSteps: 12,
       onStepFinish: (step: any) => {
         live.push(step);
       },
@@ -296,7 +302,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
       });
       const live: any[] = [];
       const run: any = await agent.stream('Look it all up.', {
-        maxSteps: 10,
+        maxSteps: 12,
         onStepFinish: (step: any) => {
           live.push(step);
         },

@@ -58,14 +58,34 @@ describe('response message diffs', () => {
     expect(fullLists).toEqual([0, RESPONSE_MESSAGES_FULL_LIST_INTERVAL, RESPONSE_MESSAGES_FULL_LIST_INTERVAL * 2]);
   });
 
-  it('ignores a step-finish delivered twice or late', () => {
+  it('reports a step-finish delivered twice and ignores a late one', () => {
     const [first, second, third] = publish(steps);
     const replay: ResponseMessagesReplay = { messages: [] };
     read(replay, first!);
     read(replay, second!);
-    expect(read(replay, second!)).toBeUndefined();
+    expect(read(replay, second!)).toEqual(steps[1]);
     expect(read(replay, first!)).toBeUndefined();
     expect(read(replay, third!)).toEqual(steps[2]);
+  });
+
+  it('never applies a diff made against a list the reader does not hold', () => {
+    // A step published twice with different content (the predicate ran again after a crash):
+    // later diffs are made against the second version.
+    let cursor: ResponseMessagesCursor | { producer: string } = { producer: 'execution-1' };
+    const first = diffResponseMessages(cursor, steps[0]!);
+    cursor = first.cursor;
+    const stepTwo = diffResponseMessages(cursor, steps[1]!);
+    const retried = [assistant('a1'), tool('t1'), assistant('other')];
+    const stepTwoAgain = diffResponseMessages(cursor, retried);
+    const stepThree = diffResponseMessages(stepTwoAgain.cursor, [...retried, assistant('x')]);
+    expect(stepThree.diff.from).toBe(3);
+
+    const replay: ResponseMessagesReplay = { messages: [] };
+    read(replay, first.diff);
+    read(replay, stepTwo.diff);
+    expect(read(replay, stepTwoAgain.diff)).toBeUndefined();
+    expect(read(replay, stepThree.diff)).toBeUndefined();
+    expect(replay.messages).toEqual(steps[1]);
   });
 
   it('reports nothing after a missed diff until the next whole list', () => {

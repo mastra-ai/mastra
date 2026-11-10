@@ -388,8 +388,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /**
    * With a numeric `offset`, first rebuild the run's response messages from the
-   * events before it. Needed for producers whose step-finish events carry only
-   * the messages that changed (the plain Agent's publisher).
+   * events before it, since step-finish events carry only the messages that
+   * changed. Costs one read of the run's log.
    */
   replayResponseMessagesBeforeOffset?: boolean;
   /**
@@ -643,14 +643,20 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   if (replayResponseMessagesBeforeOffset && typeof offset === 'number' && offset > 0 && pubsub.supportsOffsets) {
     const topic = AGENT_STREAM_TOPIC(runId);
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
     skippedEventsReplayed = Promise.race([
       pubsub.getHistory(topic, 0).then(history => {
+        // Past the timeout, events are already being read without it.
+        if (timedOut) return;
         responseMessagesReplay = replayResponseMessages(
           history.filter(event => typeof event.index === 'number' && event.index < offset),
         );
       }),
       new Promise<void>(resolve => {
-        timer = setTimeout(resolve, LOGGED_EVENT_DELIVERY_TIMEOUT_MS);
+        timer = setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, LOGGED_EVENT_DELIVERY_TIMEOUT_MS);
         timer.unref?.();
       }),
     ])
@@ -659,6 +665,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       })
       .finally(() => {
         clearTimeout(timer);
+        timedOut = true;
         skippedEventsReplayed = undefined;
       });
   }
@@ -753,11 +760,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             if (typeof metadata?.timestamp === 'string') {
               payload.metadata = { ...metadata, timestamp: new Date(metadata.timestamp) };
             }
-            // Rebuild the run's response messages so far; when this reader missed an earlier part,
-            // fall back to the messages it has (a durable caller's live list) rather than guess.
+            // Rebuild the run's response messages so far. A reader that can't (it missed an earlier
+            // part) reports none for this step rather than a list that may not match it.
             const responseMessages = applyResponseMessages(responseMessagesReplay, published);
             if (_durableResponseMessagesDiff || responseMessages) {
-              payload._durableResponseMessages = responseMessages ?? messageList.get.response.aiV5.model();
+              payload._durableResponseMessages = responseMessages ?? [];
             }
             (chunk as { payload: unknown }).payload = payload;
           }
