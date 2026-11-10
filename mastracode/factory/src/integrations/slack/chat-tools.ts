@@ -66,11 +66,14 @@ export function createSlackChatTools({
   chat,
   sessionThreadId,
   settings,
+  isLinked = async () => false,
 }: {
   chat: Chat;
   /** The session's own chat thread id, e.g. `slack:C123:1700000000.000100`. */
   sessionThreadId: string;
   settings: SlackToolSettings;
+  /** Whether a Slack user is linked to the Factory, for `directMessages: 'linked'`. */
+  isLinked?: (userId: string) => Promise<boolean>;
 }): IntegrationTools {
   const all = settings.channels === 'all';
   const allowed = new Set([
@@ -251,7 +254,7 @@ export function createSlackChatTools({
       },
     }),
     // The Chat SDK's own sendDirectMessage asks for approval; this one doesn't.
-    ...(settings.directMessages === 'anyone'
+    ...(settings.directMessages !== 'none'
       ? {
           sendDirectMessage: createTool({
             id: 'sendDirectMessage',
@@ -261,6 +264,9 @@ export function createSlackChatTools({
               text: z.string().min(1).describe('The message, in markdown'),
             }),
             execute: async ({ userId, text }) => {
+              if (settings.directMessages === 'linked' && !(await isLinked(userId))) {
+                throw new Error(`Cannot message ${userId}: only people linked to this Factory can be messaged.`);
+              }
               const dm = await chat.openDM(userId);
               const sent = await dm.post({ markdown: text });
               return { messageId: sent.id, threadId: sent.threadId };

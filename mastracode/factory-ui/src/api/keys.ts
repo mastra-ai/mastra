@@ -101,6 +101,8 @@ export const queryKeys = {
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
+  slackToolSettings: (factoryProjectId: string | undefined) =>
+    ['slack', 'tool-settings', factoryProjectId ?? null] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
