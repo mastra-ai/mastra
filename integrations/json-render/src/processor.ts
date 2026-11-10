@@ -12,6 +12,7 @@ import {
 } from '@json-render/core';
 import type { Catalog, PropResolutionContext, Spec, SpecDataPart } from '@json-render/core';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { REPROCESS_PART_KEY } from '@mastra/core/processors';
 import type {
   ProcessLLMRequestArgs,
   ProcessLLMRequestResult,
@@ -25,8 +26,6 @@ import type { z } from 'zod';
 
 const FENCE_OPEN = '```spec';
 const FENCE_CLOSE = '```';
-/** The state key core's ProcessorRunner reads to send a second part after the one returned (`stream-reprocess.ts`). */
-const REPROCESS_PART_KEY = '__mastraReprocessPart';
 
 export interface JsonRenderProcessorOptions {
   /** The catalog the model composes interfaces from. */
