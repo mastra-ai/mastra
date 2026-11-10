@@ -1,0 +1,229 @@
+---
+title: 'json-render | Agentic UI'
+description: 'Integrate Mastra with json-render so agents compose interfaces from your component catalog that stream to the client, stay in memory, and can be edited in later turns.'
+packages:
+  - '@mastra/core'
+  - '@mastra/json-render'
+---
+
+# json-render
+
+[json-render](https://json-render.dev) lets a model compose interfaces from a catalog of components you define. The model writes a spec as JSON Patch lines, and json-render renders it with your own components as it streams.
+
+`@mastra/json-render` adds a processor to a Mastra agent that turns the spec blocks the model writes into `data-spec` message parts. With it:
+
+- The interface streams to the client while the reply's text keeps only the prose.
+- The interface is saved with the message, so it renders again after a reload.
+- Later turns can edit the latest interface with a few patches instead of writing it again, and keep what the user set in it, such as ticked checkboxes or selected filters.
+- Specs that don't match the catalog are sent back to the model to fix before they're saved.
+
+## Before you begin
+
+- Node.js `v22.13.0` or later.
+- A Mastra agent with [memory](/docs/memory/overview), so earlier interfaces are available to edit.
+- A React app that chats with the agent through [`@mastra/react`](/docs/server/mastra-client), wrapped in `MastraReactProvider`.
+
+## Install packages
+
+```bash npm2yarn
+npm install @mastra/json-render@latest @json-render/core @json-render/react
+```
+
+## Define the catalog
+
+The catalog lists the components and actions the model can use. Keep it free of React so the server can read it for the prompt and for validation:
+
+```typescript title="src/catalog.ts"
+import { defineCatalog } from '@json-render/core'
+import { schema } from '@json-render/react/schema'
+import { z } from 'zod'
+
+export const catalog = defineCatalog(schema, {
+  components: {
+    Card: { description: 'A card with a title', props: z.object({ title: z.string() }) },
+    Text: { description: 'A line of text', props: z.object({ text: z.string() }) },
+    Button: { description: 'A button', props: z.object({ label: z.string() }) },
+  },
+  actions: {
+    ask: {
+      description: 'Send a follow-up prompt to the agent',
+      params: z.object({ prompt: z.string() }),
+    },
+  },
+})
+```
+
+## Configure the agent
+
+Generate the instructions with `catalog.prompt()` in `inline` mode, so the model answers conversationally and writes a spec only when it shows an interface. `editModes: ['patch']` tells it how to edit an existing interface. Register the processor as both an input and an output processor:
+
+```typescript title="src/mastra/agents/ui-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { JsonRenderProcessor } from '@mastra/json-render'
+import { Memory } from '@mastra/memory'
+import { catalog } from '../../catalog'
+
+const ui = new JsonRenderProcessor({ catalog })
+
+export const uiAgent = new Agent({
+  id: 'ui-agent',
+  name: 'UI Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  instructions: catalog.prompt({
+    mode: 'inline',
+    editModes: ['patch'],
+    system: 'You are a helpful assistant inside an app that renders the interfaces you write.',
+  }),
+  inputProcessors: [ui],
+  outputProcessors: [ui],
+  maxProcessorRetries: 2,
+  memory: new Memory(),
+})
+```
+
+The output processor validates each spec against the catalog. When a spec is invalid, it asks the model to write it again, up to `maxProcessorRetries` times. The input processor shows the model the latest interface in the thread, so it can edit it in a later turn.
+
+## Render interfaces in React
+
+`useJsonRenderMessage()` rebuilds the spec from a message's `data-spec` parts. Render it with json-render's `Renderer` next to the message's text:
+
+```tsx title="src/chat.tsx"
+import { createStateStore } from '@json-render/core'
+import type { Spec } from '@json-render/core'
+import { JSONUIProvider, Renderer, defineRegistry, useJsonRenderMessage } from '@json-render/react'
+import type { DataPart } from '@json-render/react'
+import { RequestContext } from '@mastra/core/request-context'
+import { JSON_RENDER_STATE } from '@mastra/json-render'
+import { useChat } from '@mastra/react'
+import type { MastraDBMessage } from '@mastra/react'
+import { MessageFactory } from '@mastra/react/ui'
+import { useMemo, useState } from 'react'
+import { catalog } from './catalog'
+
+type Ask = (prompt: string, state?: Record<string, unknown>) => void
+
+export function Chat({ threadId }: { threadId: string }) {
+  const { messages, sendMessage } = useChat({ agentId: 'ui-agent', resourceId: 'user-1', threadId })
+
+  const ask: Ask = (message, state) => {
+    const requestContext = new RequestContext()
+    if (state) requestContext.set(JSON_RENDER_STATE, state)
+    void sendMessage({ message, threadId, requestContext })
+  }
+
+  return messages.map(message => (
+    <MessageFactory
+      key={message.id}
+      message={message}
+      Text={part => <p>{part.text}</p>}
+      roles={{
+        Assistant: ({ message, children }) => (
+          <Reply message={message} ask={ask}>
+            {children}
+          </Reply>
+        ),
+      }}
+    />
+  ))
+}
+
+function Reply({
+  message,
+  ask,
+  children,
+}: {
+  message: MastraDBMessage
+  ask: Ask
+  children: React.ReactNode
+}) {
+  // json-render 0.22 changes the parts it rebuilds from, so give it a copy
+  const parts = useMemo(
+    () => structuredClone(message.content.parts) as DataPart[],
+    [message.content.parts],
+  )
+  const { spec } = useJsonRenderMessage(parts)
+  return (
+    <article>
+      {children}
+      {spec && <Interface spec={spec} ask={ask} />}
+    </article>
+  )
+}
+
+function Interface({ spec, ask }: { spec: Spec; ask: Ask }) {
+  const [store] = useState(() => createStateStore(spec.state ?? {}))
+  const { registry, handlers } = useMemo(
+    () =>
+      defineRegistry(catalog, {
+        components: {
+          Card: ({ props, children }) => (
+            <section>
+              <h2>{props.title}</h2>
+              {children}
+            </section>
+          ),
+          Text: ({ props }) => <p>{props.text}</p>,
+          Button: ({ props, emit }) => <button onClick={() => emit('press')}>{props.label}</button>,
+        },
+        actions: { ask: async (params, _, state) => ask(params!.prompt, state) },
+      }),
+    [ask],
+  )
+  return (
+    <JSONUIProvider
+      registry={registry}
+      store={store}
+      handlers={handlers(() => undefined, store.getSnapshot)}
+    >
+      <Renderer spec={spec} registry={registry} />
+    </JSONUIProvider>
+  )
+}
+```
+
+Send the interface's state under the `JSON_RENDER_STATE` request context key. The model then sees what the user set, and an edit keeps it.
+
+## Write interfaces from tools
+
+A tool can show its own interface by writing `data-spec` parts, one RFC 6902 patch at a time. The client renders them with the same catalog, and later turns can edit them like any other interface:
+
+```typescript title="src/mastra/tools/show-weather.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const showWeather = createTool({
+  id: 'show-weather',
+  description: 'Show the weather for a city.',
+  inputSchema: z.object({ city: z.string() }),
+  execute: async ({ city }, context) => {
+    const patches = [
+      { op: 'add', path: '/root', value: 'card' },
+      {
+        op: 'add',
+        path: '/elements/card',
+        value: { type: 'Card', props: { title: city }, children: [] },
+      },
+    ]
+    for (const patch of patches) {
+      await context?.writer?.custom({ type: 'data-spec', data: { type: 'patch', patch } })
+    }
+    return { shown: true }
+  },
+})
+```
+
+## Test the integration
+
+Start your app and ask the agent for something visual, such as "Show me the weather in Paris". The reply renders a card from your catalog. Then ask "Rename the card to Lyon": the card updates in the new reply, and reloading the page renders both replies again from memory.
+
+## Limitations
+
+- Only the latest interface in the thread is shown to the model, so a turn can edit that one and not earlier ones.
+- An interface that fails validation may already have streamed to the client before the model writes it again.
+- json-render `0.22` `buildSpecFromParts()` changes the parts it applies, which repeats list items when the same parts are rebuilt. Pass `useJsonRenderMessage()` a copy, as in the example above.
+
+## Next steps
+
+- [json-render documentation](https://json-render.dev)
+- [Processors](/docs/agents/processors)
+- [Memory](/docs/memory/overview)

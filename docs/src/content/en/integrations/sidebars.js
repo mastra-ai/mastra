@@ -280,6 +280,15 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agentic-ui/json-render',
+          label: 'json-render',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'agentic-ui/openui',
           label: 'OpenUI',
           customProps: { icon: '/img/integrations/openui.svg', customCSS: 'dark:invert' },
