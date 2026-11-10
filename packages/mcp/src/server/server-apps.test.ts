@@ -103,18 +103,45 @@ describe('MCP Apps gated on the client declaring the UI extension', () => {
     }
   });
 
-  it('serves no apps to 2025-era stateless requests, which carry no declaration after initialize', async () => {
+  it('serves apps to a 2025-era client that declared the extension at initialize', async () => {
     const client = new Client(
       { name: 'legacy', version: '1.0.0' },
       { ...declaresUi, versionNegotiation: { mode: 'legacy' } },
     );
-    await client.connect(new StreamableHTTPClientTransport(served.url));
+    const transport = new StreamableHTTPClientTransport(served.url);
+    await client.connect(transport);
     try {
-      // `initialize` itself carries the declaration.
       expect(client.getServerCapabilities()?.extensions).toEqual({ [UI]: {} });
+      // Stateless HTTP keeps nothing between requests; the session id the client echoes carries the declaration.
+      expect(transport.sessionId).toMatch(/^mcp-apps\./);
+
+      const { tools } = await client.listTools();
+      expect(tools.map(t => t.name)).toEqual(['show', 'page', 'plain']);
+      expect(tools[0]?._meta).toMatchObject({ ui: { resourceUri: 'ui://viewer' } });
+      expect((await client.callTool({ name: 'show', arguments: {} }))._meta).toMatchObject({
+        ui: { resourceUri: 'ui://viewer' },
+      });
+      expect(await client.callTool({ name: 'page', arguments: {} })).toMatchObject({
+        content: [{ type: 'text', text: 'next page' }],
+      });
+      const viewer = await client.readResource({ uri: 'ui://viewer' });
+      expect(viewer.contents[0]).toMatchObject({ text: '<h1>viewer</h1>' });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('keeps a 2025-era client without the extension sessionless and without apps', async () => {
+    const client = new Client({ name: 'legacy', version: '1.0.0' }, { versionNegotiation: { mode: 'legacy' } });
+    const transport = new StreamableHTTPClientTransport(served.url);
+    await client.connect(transport);
+    try {
+      expect(transport.sessionId).toBeUndefined();
+      expect(client.getServerCapabilities()?.extensions).toBeUndefined();
       const { tools } = await client.listTools();
       expect(tools.map(t => t.name)).toEqual(['show', 'plain']);
       expect(tools.every(t => t._meta === undefined)).toBe(true);
+      await expect(client.callTool({ name: 'page', arguments: {} })).rejects.toThrow('Unknown tool: page');
     } finally {
       await client.close();
     }

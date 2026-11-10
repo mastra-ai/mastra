@@ -47,6 +47,7 @@ import {
   createRequestStateCodec,
   inputRequired,
   inputResponse,
+  isInitializeRequest,
   specTypeSchemas,
 } from '@modelcontextprotocol/server';
 import type {
@@ -140,6 +141,31 @@ import { matchesUriTemplate } from './uri-template';
 
 const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
 
+/**
+ * Prefix of the `Mcp-Session-Id` handed to a 2025-era client that declared the UI extension at
+ * `initialize`. Stateless HTTP keeps nothing between requests, so the id itself carries the
+ * declaration back on every later request. It only selects whether app links are shown, never access.
+ */
+const APPS_SESSION_PREFIX = 'mcp-apps.';
+
+function declaresUiExtension(capabilities: ClientCapabilities | undefined): boolean {
+  const entry = capabilities?.extensions?.[UI_EXTENSION_ID];
+  return typeof entry === 'object' && entry !== null && !Array.isArray(entry);
+}
+
+/** Whether the request is a 2025-era `initialize` whose client declares the UI extension. */
+async function initializesWithUi(request: Request, parsedBody: unknown): Promise<boolean> {
+  // 2026-07-28 requests name their method in a header and never initialize.
+  if (request.method !== 'POST' || request.headers.has('mcp-method')) return false;
+  const body =
+    parsedBody ??
+    (await request
+      .clone()
+      .json()
+      .catch(() => undefined));
+  return isInitializeRequest(body) && declaresUiExtension(body.params.capabilities);
+}
+
 export interface MCPServerConfig extends CoreMCPServerConfig {
   resources?: MCPServerResources;
   prompts?: MCPServerPrompts;
@@ -148,7 +174,9 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
   /**
    * Serve MCP Apps only to clients that declare the `io.modelcontextprotocol/ui` extension. Other
    * clients get no `ui://` resources, no tool app links, no app-only tools and no UI capability.
-   * The declaration is read per request, so on 2025-era stateless HTTP only `initialize` carries one.
+   * 2026-07-28 clients declare it on every request. A 2025-era client declares it at `initialize`;
+   * on stateless HTTP the answer then carries an `Mcp-Session-Id` that brings the declaration back
+   * on the client's later requests.
    */
   appsRequireClientSupport?: boolean;
   /** Custom JSON Schema validator, for runtimes where the SDK default is unavailable. */
@@ -298,6 +326,8 @@ export class MCPServer extends MCPServerBase {
   private readonly appResourceList: Resource[] = [];
   private readonly appResourceHtml = new Map<string, string>();
   private readonly appsRequireClientSupport: boolean;
+  /** 2025-era instances serving a request that carries an apps session id (see `withAppsSession`). */
+  private readonly legacyAppClients = new WeakSet<Server>();
   private readonly jsonSchemaValidator?: jsonSchemaValidator;
   private readonly cacheHints?: MCPServerCacheHints;
   private readonly mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
@@ -654,14 +684,14 @@ export class MCPServer extends MCPServerBase {
   /**
    * Whether this request may see MCP Apps. Unless `appsRequireClientSupport` is set, every client may;
    * otherwise the client must declare the UI extension, in the request's envelope or at `initialize`.
+   * A 2025-era client's later requests carry that declaration in their apps session id.
    */
   private servesApps(server: Server, ctx?: ServerContext): boolean {
-    if (!this.appsRequireClientSupport) return true;
+    if (!this.appsRequireClientSupport || this.legacyAppClients.has(server)) return true;
     const envelope = ctx?.mcpReq.envelope as Record<string, unknown> | undefined;
-    const declared =
-      (envelope?.[CLIENT_CAPABILITIES_META_KEY] as ClientCapabilities | undefined) ?? server.getClientCapabilities();
-    const entry = declared?.extensions?.[UI_EXTENSION_ID];
-    return typeof entry === 'object' && entry !== null && !Array.isArray(entry);
+    return declaresUiExtension(
+      (envelope?.[CLIENT_CAPABILITIES_META_KEY] as ClientCapabilities | undefined) ?? server.getClientCapabilities(),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -710,7 +740,7 @@ export class MCPServer extends MCPServerBase {
     return {};
   }
 
-  private createServerInstance(era: 'legacy' | 'modern' = 'modern'): Server {
+  private createServerInstance(era: 'legacy' | 'modern' = 'modern', request?: Request): Server {
     const server = new Server(
       {
         name: this.name,
@@ -734,6 +764,9 @@ export class MCPServer extends MCPServerBase {
     // still send it because `logging` is advertised, so legacy (stateless) instances keep it.
     if (era === 'modern') server.removeRequestHandler('logging/setLevel');
     if (this.appsRequireClientSupport) {
+      if (era === 'legacy' && request?.headers.get('mcp-session-id')?.startsWith(APPS_SESSION_PREFIX)) {
+        this.legacyAppClients.add(server);
+      }
       // `initialize` and `server/discover` both answer with getCapabilities(), after the client's declaration is known.
       const capabilities = server.getCapabilities.bind(server);
       server.getCapabilities = () =>
@@ -2258,15 +2291,35 @@ export class MCPServer extends MCPServerBase {
 
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
-      this.httpHandler = createMcpHandler(({ era }) => this.createServerInstance(era), {
+      const handler = createMcpHandler(({ era, requestInfo }) => this.createServerInstance(era, requestInfo), {
         legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
+      this.httpHandler =
+        this.appsRequireClientSupport && this.legacy === 'stateless' ? this.withAppsSession(handler) : handler;
       this.nodeHandler = toNodeHandler(this.httpHandler, {
         onerror: error => this.logger.error('MCP Node handler adapter error', { error: error.toString() }),
       });
     }
     return this.nodeHandler;
+  }
+
+  /**
+   * 2025-era stateless HTTP only sees the client's capabilities on `initialize`. When they declare the
+   * UI extension, the answer gets an apps session id, which the client sends on every later request.
+   */
+  private withAppsSession(handler: McpHttpHandler): McpHttpHandler {
+    return {
+      ...handler,
+      fetch: async (request, options) => {
+        const declaresUi = await initializesWithUi(request, options?.parsedBody);
+        const response = await handler.fetch(request, options);
+        if (!declaresUi || !response.ok || response.headers.has('mcp-session-id')) return response;
+        const headers = new Headers(response.headers);
+        headers.set('mcp-session-id', `${APPS_SESSION_PREFIX}${crypto.randomUUID()}`);
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+      },
+    };
   }
 
   /** Serves the current process's stdio. Legacy openings are rejected. */
