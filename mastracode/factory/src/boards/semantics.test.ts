@@ -5,6 +5,8 @@ import { workItemBranch } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
 import {
+  awaitsAcceptance,
+  boardFlow,
   boardForWorkItem,
   cardOwnsBranch,
   isTerminalWorkItem,
@@ -94,6 +96,54 @@ describe('workItemPhaseSemantics', () => {
     expect(
       workItemPhaseSemantics(boards, { board: 'work', externalSource: null, stages: ['review', 'done'] }),
     ).toBeUndefined();
+  });
+});
+
+describe('boardFlow', () => {
+  it('never takes a second pull request review phase for self-review', () => {
+    const board = defineBoard({
+      id: 'ship',
+      name: 'Ship',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['make'] },
+        make: { name: 'Make', kind: 'working', runner: { context: 'work' }, nextPhases: ['pr'] },
+        pr: {
+          name: 'PR',
+          kind: 'working',
+          runner: { context: 'review' },
+          tools: ['factory_record_review_verdict', 'factory_review_source'],
+          nextPhases: ['recheck', 'shipped'],
+        },
+        recheck: {
+          name: 'Recheck',
+          kind: 'working',
+          runner: { context: 'review' },
+          tools: ['factory_record_review_verdict', 'factory_review_source'],
+          nextPhases: ['shipped'],
+        },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    expect(boardFlow(board)).toMatchObject({ pullRequestReview: 'pr', build: 'make' });
+    expect(boardFlow(board).selfReview).toBeUndefined();
+  });
+
+  it('marks no triage phase on a board that builds nothing', () => {
+    const board = defineBoard({
+      id: 'post',
+      name: 'Post',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['draft'] },
+        draft: { name: 'Draft', kind: 'working', runner: { context: 'work' }, nextPhases: ['publish'] },
+        publish: { name: 'Publish', kind: 'working', runner: { context: 'publish' }, nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    });
+    expect(boardFlow(board).triage).toBeUndefined();
+    expect(awaitsAcceptance(board, 'draft')).toBe(false);
+    expect(awaitsAcceptance(board, 'inbox')).toBe(true);
   });
 });
 

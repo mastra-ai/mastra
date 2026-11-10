@@ -7922,6 +7922,63 @@ describe('review status comment lifecycle', () => {
     expect(first.writes.created).toBe(1);
   });
 
+  it("keeps no status for a custom board's self-review, whatever skill it runs", async () => {
+    const ship = defineBoard({
+      id: 'ship',
+      name: 'Ship',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['make'] },
+        make: { name: 'Make', kind: 'working', runner: { context: 'work' }, nextPhases: ['check', 'pr'] },
+        check: {
+          name: 'Check',
+          kind: 'working',
+          runner: { context: 'review', skill: 'ship-check' },
+          tools: ['factory_record_review_verdict'],
+          nextPhases: ['make', 'pr'],
+        },
+        pr: {
+          name: 'PR',
+          kind: 'working',
+          runner: { context: 'review', skill: 'factory-review' },
+          tools: ['factory_record_review_verdict', 'factory_review_source'],
+          nextPhases: ['shipped'],
+        },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const run = async (skillName: string, stage: string) => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const queued = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'review',
+        skillName,
+        idempotencyKey: `review-status-ship-${skillName}`,
+      });
+      await bindReviewRun(storage, queued.item.id);
+      await storage.update({
+        orgId: 'org-1',
+        id: queued.item.id,
+        userId: 'user-1',
+        patch: { board: 'ship', stages: [stage] },
+      });
+      const reportReviewStatus = vi.fn(async () => {});
+      await new FactoryDecisionDispatcher({
+        controller: createSession(undefined, { agentEndReason: 'complete' }).controller as never,
+        transitionService: queued.transitionService,
+        storage,
+        boards: createBoardRegistry({ boards: [ship] }),
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        reportReviewStatus,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+      return reportReviewStatus;
+    };
+
+    expect(await run('ship-check', 'check')).not.toHaveBeenCalled();
+    expect(await run('factory-review', 'pr')).toHaveBeenCalled();
+  });
+
   it('leaves non-review runs alone and never lets a status failure fail the review', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

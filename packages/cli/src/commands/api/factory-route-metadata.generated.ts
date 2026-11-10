@@ -8464,12 +8464,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "role": {
           "type": "string",
-          "enum": [
-            "triage",
-            "plan",
-            "work",
-            "review"
-          ]
+          "minLength": 1,
+          "maxLength": 32
         },
         "skillName": {
           "type": "string",

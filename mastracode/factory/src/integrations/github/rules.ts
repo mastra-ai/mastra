@@ -5,17 +5,23 @@ import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
+  cardBoardFlow,
   eventBoardId,
   isTerminalWorkItem,
   cardOwnsBranch,
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
+  DEFAULT_BOARD_ID,
+  intakeTarget,
   rulePhaseField,
   withBoardClosure,
+  withBoardFlow,
   workItemPhaseSemantics,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { placedByIntakeRoute } from '../../boards/intake-routing.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
@@ -23,11 +29,13 @@ import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryPullRequestHome,
+  FactoryRuleIntakeTarget,
   FactoryRuleActor,
   FactoryRuleDecision,
   FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import { resolveIntakeLabelRoute } from '../../storage/domains/intake/base.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
@@ -441,10 +449,11 @@ export interface GithubRulesOptions {
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
   configVersion: string;
-  boards: BoardRegistry;
+  /** The code boards, or the per-project source so a project's stored boards run its cards. */
+  boards: BoardRegistry | ProjectBoardSource;
   /**
    * Decides which installed board an issue lands on: a label route first, then the repository's
-   * intake source binding. Absent means Work.
+   * intake source binding. Absent means the default board.
    */
   intake?: Pick<IntakeStorage, 'listLabelRoutes' | 'listBindings'>;
   /** Hands a push to a linked repository off for an environment build. */
@@ -478,6 +487,16 @@ export function isFactoryGithubLogin(
 export class GithubRules {
   constructor(private readonly options: GithubRulesOptions) {}
 
+  /** Brings the project's boards up to date, so the sync reads below see its stored boards. */
+  async loadBoards(scope: StoredBoardScope): Promise<void> {
+    await toBoardSource(this.options.boards).load(scope);
+  }
+
+  /** The project's loaded boards; {@link loadBoards} runs before an event is handled. */
+  #boards(scope: StoredBoardScope): BoardRegistry {
+    return toBoardSource(this.options.boards).forProject(scope);
+  }
+
   /**
    * Whether a login is Factory itself. Prefers the resolved identity, which is
    * observed from Factory's own writes, and falls back to the configured slug.
@@ -496,23 +515,24 @@ export class GithubRules {
   }
 
   /**
-   * Board an issue lands on: the one its labels select under the project's label routes, else the
-   * board the repository's intake source binding names. Only installed boards count. Undefined
-   * leaves built-in routing (Work) in charge.
+   * Board an item lands on: the one an issue's labels select under the project's label routes,
+   * else the board the repository's intake source binding names, else the project's default board.
+   * Only installed boards count.
    */
   async #intakeTarget(
     project: ExternalRepositoryProjectTarget,
     repositoryName: string,
     labels: readonly string[],
-  ): Promise<{ board: string; initialPhase: string } | undefined> {
+  ): Promise<FactoryRuleIntakeTarget | undefined> {
+    const boards = this.#boards(project);
     const intake = this.options.intake;
-    if (!intake) return undefined;
+    if (!intake) return intakeTarget(boards);
     const { orgId, factoryProjectId } = project;
     if (labels.length > 0) {
       const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
       const route = resolveIntakeLabelRoute(routes, labels);
-      const board = route ? this.options.boards.get(route.board) : undefined;
-      if (board) return { board: board.id, initialPhase: board.initialPhase };
+      const board = route ? boards.get(route.board) : undefined;
+      if (board) return intakeTarget(boards, board);
     }
     // GitHub bindings are keyed by the internal repository id; the slug is accepted too since the
     // bindings API stores whatever source id it is given.
@@ -522,8 +542,7 @@ export class GithubRules {
         candidate.factoryProjectId === factoryProjectId &&
         (candidate.sourceId === project.projectRepository.repositoryId || candidate.sourceId.toLowerCase() === slug),
     );
-    const board = binding?.board ? this.options.boards.get(binding.board) : undefined;
-    return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
+    return intakeTarget(boards, binding?.board ? boards.get(binding.board) : undefined);
   }
 
   /**
@@ -579,10 +598,10 @@ export class GithubRules {
     const target = await this.#intakeTarget(project, repositoryName, labels);
     const outcome = await moveCardToBoard({
       workItems: this.options.storage,
-      boardRegistry: this.options.boards,
+      boardRegistry: this.#boards(project),
       userId: LABEL_ROUTE_USER_ID,
       item,
-      targetBoard: target?.board ?? 'work',
+      targetBoard: target?.board ?? DEFAULT_BOARD_ID,
     });
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
@@ -689,6 +708,7 @@ export class GithubRules {
     if (projects.length === 0) return { status: 'ignored' };
     const results = [];
     for (const project of projects) {
+      await this.loadBoards(project);
       results.push(await handle(project));
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
@@ -807,9 +827,7 @@ export class GithubRules {
       )
         ? undefined
         : resolvedItem;
-    const intake = issueNumber
-      ? await this.#intakeTarget(project, repositoryName, labelNames(issue?.labels))
-      : undefined;
+    const intake = await this.#intakeTarget(project, repositoryName, issueNumber ? labelNames(issue?.labels) : []);
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
@@ -887,8 +905,9 @@ export class GithubRules {
               },
               board: boardForWorkItem(item),
               itemRevision: item.revision,
-              ...withBoardClosure(this.options.boards, item),
-              ...rulePhaseField(this.options.boards, item),
+              ...withBoardClosure(this.#boards(project), item),
+              ...rulePhaseField(this.#boards(project), item),
+              ...withBoardFlow(this.#boards(project), item),
             }
           : {}),
         ...(intake ? { intake } : {}),
@@ -986,12 +1005,12 @@ export class GithubRules {
 
       const ownedByDeployment = deploymentOwnsEvent(
         this.options.github.rules,
-        boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
+        boardEventHandlers(this.#boards(project), eventBoardId(context), 'github'),
         event,
       );
       const rule = selectEventRule(
         this.options.github.rules,
-        boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
+        boardEventHandlers(this.#boards(project), eventBoardId(context), 'github'),
         event,
       );
       let decision: FactoryRuleDecision | void = undefined;
@@ -1003,7 +1022,7 @@ export class GithubRules {
           outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
         } else if (decision) {
           decisions = validateFactoryRuleDecisions([decision]).map(entry => {
-            assertFactoryDecisionTarget(entry, this.options.boards, item ? boardForWorkItem(item) : undefined);
+            assertFactoryDecisionTarget(entry, this.#boards(project), item ? boardForWorkItem(item) : undefined);
             return { ...entry };
           });
         }
@@ -1324,7 +1343,7 @@ export class GithubRules {
   /**
    * The existing card a pull request opened for the first time belongs with, or undefined when it
    * gets a card of its own. The card must be open, in this repository, and not a pull request's
-   * own card. In order: the card that authored it (on Work), by provenance or session branch,
+   * own card. In order: the card that authored it (on a board that reviews pull requests), by provenance or session branch,
    * when the pull request is Factory-authored or its author is trusted; it is filed there. Then,
    * for a trusted author only, the card of the first issue its description says it closes; an
    * intake route decides whether it joins that one. An untrusted author's pull request never
@@ -1355,9 +1374,13 @@ export class GithubRules {
     if (filed) return undefined;
     const eligible = (card: Card) =>
       card.externalSource?.type !== 'pull-request' &&
-      !isTerminalWorkItem(this.options.boards, card) &&
+      !isTerminalWorkItem(this.#boards(input), card) &&
       cardBelongsToRepository(card, input.repositoryId, input.repositoryName);
-    if (input.matchedItem && eligible(input.matchedItem) && boardForWorkItem(input.matchedItem) === 'work') {
+    if (
+      input.matchedItem &&
+      eligible(input.matchedItem) &&
+      cardBoardFlow(this.#boards(input), input.matchedItem).pullRequestReview !== undefined
+    ) {
       return { card: input.matchedItem, reason: 'authored' };
     }
     if (!input.authorTrusted) return undefined;
@@ -1887,6 +1910,7 @@ export function createGithubPullRequestReconciler(
         attachedOpen = new Set<number>();
         unanswered = [];
         for (const project of projects) {
+          await rules.loadBoards(project);
           const items = await options.storage.list({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
@@ -1894,7 +1918,7 @@ export function createGithubPullRequestReconciler(
           for (const item of items) {
             const unansweredAuthor = authorAwaitingTrust(item, repository);
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
-            if (item.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(options.boards, item)) {
+            if (item.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(toBoardSource(options.boards).forProject(item), item)) {
               for (const source of pullRequestSources(item)) {
                 const number = attachedPullRequestNumber(source, repository);
                 if (number !== undefined && !['closed', 'merged'].includes(source.state ?? '')) attachedOpen.add(number);
@@ -1906,7 +1930,7 @@ export function createGithubPullRequestReconciler(
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             const reconciledOutcome = reconciledPullRequestOutcome(metadata);
             if (
-              workItemPhaseSemantics(options.boards, item)?.kind === 'terminal' &&
+              workItemPhaseSemantics(toBoardSource(options.boards).forProject(item), item)?.kind === 'terminal' &&
               reconciledOutcome !== undefined &&
               reconciliation === reconciledOutcome
             ) {
@@ -1987,7 +2011,7 @@ export function createGithubPullRequestReconciler(
           if (state.state !== 'closed') continue;
           const cleanupFailures = new Set<string>();
           for (const card of cards) {
-            if (workItemPhaseSemantics(options.boards, card)?.kind !== 'terminal') continue;
+            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(card), card)?.kind !== 'terminal') continue;
             try {
               await options.storage.supersedeDecisionsForWorkItem({
                 orgId: card.orgId,

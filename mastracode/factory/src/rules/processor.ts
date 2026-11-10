@@ -11,7 +11,13 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
-import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardFlow,
+  boardForWorkItem,
+  resolveBoardToolRule,
+  reviewsPullRequest,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { workStageCarries } from '../boards/legacy-plan-role.js';
 import { exitToolSucceeded, PHASE_EXIT_METADATA_KEY } from '../boards/phase-automation.js';
@@ -489,8 +495,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       role: binding.role,
       configVersion: this.options.configVersion,
     };
+    const flow = boardFlow(boards.get(board));
     const value: ActivePhaseSnapshotValue = reviewsPullRequest({
-      board,
+      flow,
       item: { source: workItemSource(item.externalSource), workItem: item.workItem },
     })
       ? {
@@ -529,6 +536,22 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
               : `Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.`
           }\n`
         : '';
+    // Skills name phases by role in the pull request loop, never by key: this line maps them.
+    const flowPhase = (key: string | undefined) =>
+      key ? `${escapeText(definition?.phases[key]?.name ?? key)} (${escapeText(key)})` : undefined;
+    const terminals = definition ? Object.keys(definition.phases).filter(key => definition.isTerminal(key)) : [];
+    const completed = definition?.sourceClosed?.completed ?? terminals[0];
+    const canceled = definition?.sourceClosed?.canceled ?? terminals.find(key => key !== completed);
+    const flowParts = [
+      definition ? `rest: ${flowPhase(definition.initialPhase)}` : undefined,
+      flow.triage ? `triage: ${flowPhase(flow.triage)}` : undefined,
+      flow.build ? `build: ${flowPhase(flow.build)}` : undefined,
+      flow.selfReview ? `self-review: ${flowPhase(flow.selfReview)}` : undefined,
+      flow.pullRequestReview ? `pull request review: ${flowPhase(flow.pullRequestReview)}` : undefined,
+      completed ? `completed: ${flowPhase(completed)}` : undefined,
+      canceled ? `canceled: ${flowPhase(canceled)}` : undefined,
+    ].filter(part => part !== undefined);
+    const flowText = flowParts.length ? `Board phases by part: ${flowParts.join('; ')}\n` : '';
     // The card moved to a phase another context works; this session's tools for it are gone.
     const handedOnText =
       phase?.kind === 'working' &&
@@ -546,10 +569,11 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       (runtime
         ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
-      ((board === 'work' || board === 'review') && stage === 'intake'
-        ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
+      (phase?.kind === 'resting'
+        ? `This card rests in ${escapeText(phaseLabel)}: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n`
         : '') +
       nextText +
+      flowText +
       exitText +
       handedOnText +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;

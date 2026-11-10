@@ -8,7 +8,6 @@ import {
 import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { BoardDefinitionError, compileBoardDefinition, defineBoard, isDefinedBoard } from './define-board.js';
 import { workBoard } from './work.js';
-import { allowsBuiltInBoardTransition } from './index.js';
 
 describe('defineBoard', () => {
   it.each([
@@ -274,17 +273,7 @@ describe('defineBoard', () => {
     expect(workBoard.isTerminal('canceled')).toBe(true);
   });
 
-  it('keeps the built-in declarations in agreement with the static stage and role constants', () => {
-    // rules/types.ts cannot import boards without a cycle, so this pins the two against each other.
-    for (const stage of FACTORY_RULE_STAGES) {
-      expect(workBoard.isTerminal(stage), `${stage} terminal`).toBe(isTerminalFactoryRuleStage([stage]));
-      expect(workBoard.isWorking(stage), `${stage} working`).toBe(isWorkingFactoryRuleStage(stage));
-    }
-    // Each role's lane is a working phase. Planning runs in the `work` context; `plan` stays
-    // as the old role name for Planning's lane, so its phase reports the `work` context.
-    for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
-      expect(workBoard.isWorking(stage), `lane for ${role}`).toBe(true);
-    }
+  it('declares a working lane for each Work role, and Planning in the work context', () => {
     expect(['triage', 'planning', 'execute', 'review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
       'triage',
       'work',
@@ -293,10 +282,10 @@ describe('defineBoard', () => {
     ]);
   });
 
-  it('rejects inherited property names as Work phases', () => {
-    expect(() => allowsBuiltInBoardTransition('work', 'toString', 'done')).not.toThrow();
-    expect(allowsBuiltInBoardTransition('work', 'toString', 'done')).toBe(false);
-    expect(allowsBuiltInBoardTransition('work', 'intake', 'constructor')).toBe(false);
+  it('rejects inherited property names as phases', () => {
+    expect(() => workBoard.allowsTransition('toString', 'done')).not.toThrow();
+    expect(workBoard.allowsTransition('toString', 'done')).toBe(false);
+    expect(workBoard.allowsTransition('intake', 'constructor')).toBe(false);
   });
 });
 

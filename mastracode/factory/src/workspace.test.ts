@@ -536,7 +536,7 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
     expect(triage).toContain(
-      'use `Route: Await approval` and request `stage: "intake"`. The card rests in Intake until a maintainer moves it on',
+      'use `Route: Await approval` and request the `rest` phase (`intake` on the default board). The card rests there until a maintainer moves it on',
     );
     expect(triage).toContain('never pass a `triageType` argument');
     expect(triage).toContain('approval_required');
@@ -596,12 +596,25 @@ describe('bundled Factory skill assets', () => {
     // the project's self-review setting.
     const build = await read('factory-build');
     expect(build).toContain('only with `ask_user`');
-    expect(build).toContain('**Self-review on:** do not open a pull or merge request. Move the card to Review');
-    expect(build).toContain('**Self-review off:** open the change request');
-    expect(build).toContain('Then move the card to PR review (`stage: "pr-review"`)');
-    expect(build).toContain('**Before moving to Done:**');
-    // A push to an open change request sends the card back to PR review so it is reviewed again.
-    expect(build).toContain('push to that branch, then move the card to PR review');
+    expect(build).toContain('do not open a pull or merge request. Move the card to its `self-review` phase');
+    // The phase's own moves pick the hand-off: without a move to pull request review, no change request is opened.
+    expect(build).toContain(
+      '- **The `pull request review` phase is not in `Next phases`, but a `self-review` phase is:** take the self-review path whatever the setting says',
+    );
+    // A push to an open change request with no move to pull request review asks a person; self-review stops on an open one.
+    expect(build).toContain(
+      'If the `pull request review` phase is not in `Next phases`, move nothing and ask the person with `ask_user`',
+    );
+    // With no review move at all, the builder asks a person, which parks the run as Waiting.
+    expect(build).toContain(
+      '- **Neither review phase is in `Next phases`:** open no change request and move nothing. Ask the person with `ask_user`',
+    );
+    expect(build).toContain('Then move the card to its `pull request review` phase');
+    expect(build).toContain('`Board phases by part:` line names each phase');
+    expect(build).not.toMatch(/stage: "(review|pr-review|planning)"/);
+    expect(build).toContain('**Before moving to the completed phase:**');
+    // A push to an open change request sends the card back to its review phase so it is reviewed again.
+    expect(build).toContain('Otherwise move the card to its `pull request review` phase so it is reviewed again.');
     // Both hand-offs that leave the card in Building say it the way Building's goal counts as done.
     expect(
       build.match(
@@ -612,7 +625,11 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain('belongs to someone else: never push to it');
     // A manual card's change request is not under Sources: look it up by branch first.
     expect(build).toContain('look for a change request already open from your branch');
-    // PR review takes the card only once the change request is attached: self-review retries.
+    // A change request is opened only where the phase may then move the card to pull request review.
+    expect(build).toContain(
+      '- **The `pull request review` phase is in `Next phases`, and the path above does not apply:** open the change request',
+    );
+    // The review phase takes the card only once the change request is attached: self-review retries.
     const selfReview = await read('factory-self-review');
     expect(selfReview).toContain('wait briefly (`sleep 20`)');
     // A change request that never attaches is reviewed on its own card.

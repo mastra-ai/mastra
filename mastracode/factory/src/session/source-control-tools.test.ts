@@ -6,6 +6,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/registry.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
@@ -303,7 +304,12 @@ describe('createSourceControlTools', () => {
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
         selfReviewApprovedHead: () =>
-          selfReviewApprovedHead({ requestContext: context, workItems: seeded.workItems, projects: seeded.projects }),
+          selfReviewApprovedHead({
+            requestContext: context,
+            workItems: seeded.workItems,
+            projects: seeded.projects,
+            boards: createBoardRegistry(),
+          }),
       });
       return { setup, run: () => (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' }) };
     };

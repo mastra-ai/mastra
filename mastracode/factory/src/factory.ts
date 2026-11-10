@@ -55,9 +55,15 @@ import {
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
-import { boardForWorkItem, boundChangeRequestNumber, createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
+import {
+  boardForWorkItem,
+  boundChangeRequestNumber,
+  createBoardRegistry,
+  isTerminalWorkItem,
+  REVIEW_CONTEXT,
+} from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
-import { ProjectBoardCache } from './boards/project-boards.js';
+import { ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
@@ -1732,7 +1738,7 @@ export class MastraFactory {
                 const state = context.getState();
                 if (
                   state.factoryProjectId !== recovered.binding.factoryProjectId ||
-                  (recovered.binding.role === 'review' && state.untrustedCheckout !== true)
+                  (recovered.binding.role === REVIEW_CONTEXT && state.untrustedCheckout !== true)
                 ) {
                   throw new Error(
                     'Factory review session security state could not be restored before prompt creation.',
@@ -1852,6 +1858,7 @@ export class MastraFactory {
                           requestContext,
                           workItems: workItemsStorage,
                           projects: factoryProjectsStorage,
+                          boards,
                         }),
                       boundChangeRequestId: async () => {
                         const resolution = await resolveFactorySessionAddress({
@@ -1861,9 +1868,11 @@ export class MastraFactory {
                         if (!resolution) return undefined;
                         const binding =
                           resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                        if (binding?.role !== 'review') return undefined;
+                        if (binding?.role !== REVIEW_CONTEXT) return undefined;
                         const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                        return item ? boundChangeRequestNumber(item) : undefined;
+                        return item
+                          ? boundChangeRequestNumber(await toBoardSource(boards).load(binding), item)
+                          : undefined;
                       },
                     }
                   : {}),
@@ -2344,7 +2353,7 @@ export class MastraFactory {
           sourceControlStorage,
           integrations: integrationRegistrations,
           configVersion,
-          boardRegistry: this.#boards,
+          boardRegistry: this.#projectBoards ?? this.#boards,
           factoryReady,
           domains,
           feed: commentsDomain,
@@ -2381,7 +2390,7 @@ export class MastraFactory {
           sourceControlStorage,
           integrations: integrationRegistrations,
           configVersion,
-          boardRegistry: this.#boards,
+          boardRegistry: this.#projectBoards ?? this.#boards,
           factoryReady,
           domains,
           feed: commentsDomain,
@@ -2415,7 +2424,7 @@ export class MastraFactory {
               sourceControlStorage,
               integrations: integrationRegistrations,
               configVersion,
-              boardRegistry: this.#boards,
+              boardRegistry: this.#projectBoards ?? this.#boards,
               factoryReady,
               domains,
               feed: commentsDomain,

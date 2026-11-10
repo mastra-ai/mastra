@@ -484,11 +484,11 @@ Work declares `intake` resting; `triage`, `planning`, `execute`, `review`, and `
 
 The agent that finishes a card's work cleans up the source issue's status labels (removes `status: needs triage`, `status: auto-triaged` and `status: needs approval`, adds `status: pending-close` and posts a done comment) before it moves the card to Done; a merged pull request that closes the issue moves the card there through the intake routes. Done itself starts nothing: earlier releases ran that cleanup on every entry into Done, so an issue card a merge or a person moves to Done now keeps its labels and gets no comment. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
-A new pull request or merge request that belongs to a card already on Work is attached to that card (see below). One with no such card gets its own card in Work Intake or PR review, as the intake routes decide. The card's Review action moves it into Work's PR review phase (`pr-review`), where an independent reviewer runs `factory-review` in the card's `review` session; the skill follows the GitLab or re-review procedure the `factory-work-item` signal names for the card. Work's Review phase is the builder's self-review of its own work, so a pull request's own card never enters it. A pull request's own card only enters Intake, PR review, Done, and Canceled; merging moves it to Done and closing it unmerged to Canceled.
+A new pull request or merge request that belongs to a card already on a board that reviews pull requests (Work, or any board with a [pull request loop](#the-pull-request-loop-on-any-board)) is attached to that card (see below). One with no such card gets its own card in Work Intake or PR review, as the intake routes decide. The card's Review action moves it into Work's PR review phase (`pr-review`), where an independent reviewer runs `factory-review` in the card's `review` session; the skill follows the GitLab or re-review procedure the `factory-work-item` signal names for the card. Work's Review phase is the builder's self-review of its own work, so a pull request's own card never enters it. A pull request's own card only enters Intake, PR review, Done, and Canceled; merging moves it to Done and closing it unmerged to Canceled.
 
 #### One card for an issue and its pull requests
 
-When Factory first sees a pull request (GitHub `pull_request.opened`) or merge request (GitLab `open`), it looks for a home card in the same Factory project and repository. The home card must be on Work, not in Done or Canceled, and not a pull request's own card. Factory checks, in order:
+When Factory first sees a pull request (GitHub `pull_request.opened`) or merge request (GitLab `open`), it looks for a home card in the same Factory project and repository. The home card must be on a board that reviews pull requests, not in one of its terminal phases, and not a pull request's own card. Factory checks, in order:
 
 1. **A pull request Factory opened for one of its cards** goes to that card, found by provenance or by the head branch matching the card's session branch. On GitHub that card must be a GitHub issue card from the same repository; on GitLab, any card with an issue of its own (GitLab, Linear, Jira or incident.io). A manual card never takes one, since the pull request would become its only source; its pull request gets a separate card. A card still in Building moves to PR review (self-review, which opens the pull request itself, has been skipped). A review request or `@<app> review` still sends it there.
 2. **A pull request that closes an issue** can join that issue's card if a project [intake route](#intake-routes) with a `joinClosedIssue` target says so. Factory reads closing keywords from the pull request body or merge request description: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves`, `resolved`, and on GitLab also `implement`, `implements`, `implemented`, `implementing`. The target is `#N`, or `owner/repo#N` (`group/project#N`) naming the same repository. References to other repositories, links, and code spans don't count. If the pull request names several issues, the first one with an eligible card is the one routes see. The default route joins a trusted author's pull request to a card still waiting in Intake with no pull request yet, and moves that card to PR review. Once the card has moved on (Triage, Planning, Building, Review, or PR review), or already carries a pull request, someone else's pull request gets its own card in PR review and is reviewed right away. Done and Canceled cards are finished, so a pull request for them gets its own card too.
@@ -528,7 +528,21 @@ phases: {
 }
 ```
 
-**Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
+**Remaining limitations:** `factory-ui` still renders the built-in stage and role pipeline.
+
+#### The pull request loop on any board
+
+Nothing in Factory's runtime reads Work's board key or phase keys. Each part of the issue → build → self-review → pull request → review → merge loop is found by what a board's phases declare, so a board you create in the UI, through the API or in code runs the same loop under its own key and phase names:
+
+| Part                 | The phase that plays it                                                                                                                                                                                                                                                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pull request review  | The first working phase in the `review` context that grants `factory_review_source`. A pull request's own card is reviewed there, a pull request attached to an issue card is reviewed there, `factory_record_review_verdict` records verdicts on pull requests there, and a push, a review request or `@<app> review` re-enters it.               |
+| Self-review          | The first other working phase in the `review` context that grants `factory_record_review_verdict`. It reviews the builder's pushed branch before any pull request: request changes sends the card back to the build phase (every third round parks it in the board's initial phase), and the pull request may only open from the head it approved. |
+| Build                | The last other working phase that can move into the self-review phase (else the pull request review phase). Its context is the seat pull request feedback (`changes_requested` reviews, comments) wakes, and a pull request the card's session opens moves it from here into review.                                                               |
+| Triage               | On a board with a build phase, the first working phase that neither builds nor reviews. A `status: needs approval` label holds a card only in a resting phase or here.                                                                                                                                                                             |
+| Completed / canceled | The board's `sourceClosed` phases, else its first and second terminal phases. A merge moves the card to the completed phase; a pull request card closed unmerged goes to the canceled one, and an issue card in review with no open pull request left goes back to the initial phase. Completion metrics count entries into the completed phase.   |
+
+A board with no `factory_review_source` phase has no pull request loop: a pull request is never attached to its cards and verdicts are refused there. The `factory-phase` signal names each part's phase on the card's own board (`Board phases by part: rest: …; build: …; self-review: …; pull request review: …`), and the bundled skills move cards by those names, never by Work's keys.
 
 ### Phase runners, automatic starts and exit tools
 
@@ -831,7 +845,7 @@ A card a route placed records the route's id in its `intakeRouteId` metadata and
 - a child card a board's own rule files;
 - a board named when the card is created. The board's **New card** button always names its board, so routes never place cards made there.
 
-Not covered: a pull request routed to a board other than Work no longer gets Factory review, because review requests and pushes only act on pull request cards on those boards.
+A pull request routed to a board with a [pull request loop](#the-pull-request-loop-on-any-board) is reviewed there; on a board without one, review requests and pushes do nothing to its card.
 
 #### Status events move existing cards
 
