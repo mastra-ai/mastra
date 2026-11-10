@@ -1,3 +1,4 @@
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -117,15 +118,21 @@ function runningSessions(sessionIds: string[]) {
   );
 }
 
-function renderSection() {
+function renderSection({
+  path = `/factories/${factoryId}`,
+  sidebar = 'default',
+}: { path?: string; sidebar?: 'default' | 'collapsed' } = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${factoryId}`]}>
-      <ChatSessionContext.Provider value={testChatSession(factoryId, projectRepositoryId, LIVE_SESSION)}>
-        <Routes>
-          <Route path="/factories/:factoryId" element={<SessionsSection />} />
-        </Routes>
-      </ChatSessionContext.Provider>
-    </MemoryRouter>,
+    <Sidebar.Provider defaultState={sidebar} collapsedWidth={0} storageKey="card-contexts-test">
+      <MemoryRouter initialEntries={[path]}>
+        <ChatSessionContext.Provider value={testChatSession(factoryId, projectRepositoryId, LIVE_SESSION)}>
+          <Routes>
+            <Route path="/factories/:factoryId" element={<SessionsSection />} />
+            <Route path="/factories/:factoryId/sessions/:sessionId" element={<SessionsSection />} />
+          </Routes>
+        </ChatSessionContext.Provider>
+      </MemoryRouter>
+    </Sidebar.Provider>,
   );
 }
 
@@ -206,6 +213,18 @@ describe('Sessions sidebar view options', () => {
     first.unmount();
     renderSection();
     expect(await screen.findByRole('link', { name: /^Review.*: Review fix login$/ })).toBeInTheDocument();
+  });
+
+  it('folds the card back into one row while the sidebar is collapsed, highlighting it for an open child session', async () => {
+    const user = userEvent.setup();
+    const expanded = renderSection();
+    await screen.findByRole('link', { name: 'Build fix login' });
+    await toggleSessionView(user, 'Reveal child sessions');
+    expanded.unmount();
+
+    renderSection({ path: `/factories/${factoryId}/sessions/review-session`, sidebar: 'collapsed' });
+
+    expect(await screen.findByRole('link', { name: 'Build fix login' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('shows when a session last moved under its name once compact view is off', async () => {
