@@ -70,7 +70,7 @@ import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, ServerConfigInput, StudioConfig } from '../server/types';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
@@ -127,6 +127,14 @@ import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, normalizeConcurrency, runWithConcurrency } from './run-with-concurrency';
 import type { VersionOverrides, VersionSelector } from './types';
+
+function normalizeApiRoutes(routes: NonNullable<ServerConfigInput['apiRoutes']>): ApiRoute[] {
+  return routes.flatMap(route => (Array.isArray(route) ? route : [route]));
+}
+
+function normalizeServerConfig({ apiRoutes, ...server }: ServerConfigInput): ServerConfig {
+  return apiRoutes ? { ...server, apiRoutes: normalizeApiRoutes(apiRoutes) } : server;
+}
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -419,7 +427,7 @@ export interface Config<
   /**
    * Server configuration for HTTP endpoints and middleware.
    */
-  server?: ServerConfig;
+  server?: ServerConfigInput;
 
   /**
    * Studio-specific authentication and authorization configuration.
@@ -1517,8 +1525,8 @@ export class Mastra<
    * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
    * ```
    */
-  public setServer(server: ServerConfig): void {
-    this.#server = server;
+  public setServer(server: ServerConfigInput): void {
+    this.#server = normalizeServerConfig(server);
   }
 
   /**
@@ -2001,7 +2009,7 @@ export class Mastra<
     }
 
     if (config?.server) {
-      this.#server = config.server;
+      this.#server = normalizeServerConfig(config.server);
       this.#serverExplicit = true;
     }
 

@@ -57,6 +57,12 @@ export interface DurableFinishSideEffectsOptions {
 export interface DurableFinishSideEffectsResult {
   messageListState: SerializedMessageListState;
   outputText: string;
+  /**
+   * True when processOutputResult changed `outputText`, including emptying it. Only then should
+   * callers apply `outputText` to the run's last step: otherwise the step's own text stands,
+   * e.g. the narration of a final tool step whose last message has no text.
+   */
+  outputTextChanged: boolean;
   titleGeneration?: Promise<void>;
   /**
    * Set when this stream() run should emit a `data-thread-title` chunk (`generateTitle.emitEvent`).
@@ -286,6 +292,8 @@ export async function runDurableFinishSideEffects({
     },
   };
 
+  const outputTextBeforeProcessing = resolveOutputText(messageList);
+
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
@@ -330,9 +338,11 @@ export async function runDurableFinishSideEffects({
           logger: effectiveLogger,
           runId,
         });
+        const outputText = resolveOutputText(messageList);
         return {
           messageListState: messageList.serialize(),
-          outputText: resolveOutputText(messageList),
+          outputText,
+          outputTextChanged: outputText !== outputTextBeforeProcessing,
           outputResultChunks,
           tripwire: {
             reason: error.message,
@@ -352,6 +362,7 @@ export async function runDurableFinishSideEffects({
   // SaveQueueManager may reclassify flushed response messages as persisted
   // memory, so resolve the final response text before persistence runs.
   const outputText = resolveOutputText(messageList);
+  const outputTextChanged = outputText !== outputTextBeforeProcessing;
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
   const memory = registryEntry?.memory ?? rebuiltMemory;
@@ -459,6 +470,7 @@ export async function runDurableFinishSideEffects({
   return {
     messageListState: messageList.serialize(),
     outputText,
+    outputTextChanged,
     titleGeneration,
     titleForStream,
     structuredOutputChunks,

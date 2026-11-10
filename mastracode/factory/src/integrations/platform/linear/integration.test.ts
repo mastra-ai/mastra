@@ -1348,14 +1348,13 @@ describe('PlatformLinearIntegration', () => {
       orgId: 'org-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
     });
-    // Board reads only ingest sources explicitly routed to a board of the project.
+    // Board reads only ingest sources explicitly bound to the project.
     await seed.intake.setBinding({
       orgId: 'org-1',
       userId: 'user-1',
       integrationId: 'linear',
       sourceId: project1SourceId,
       factoryProjectId: projectRecord.id,
-      board: 'work',
     });
     const context = {
       auth: fakeAuth(),

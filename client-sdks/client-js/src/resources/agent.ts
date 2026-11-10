@@ -1265,13 +1265,12 @@ export class Agent extends BaseResource {
   async generateLegacy(
     params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
-  // Use `any` in overload return types to avoid "Type instantiation is excessively deep" errors
   async generateLegacy<Output extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, any, any>>;
+  ): Promise<GenerateReturn<any, Output, undefined>>;
   async generateLegacy<StructuredOutput extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, any, any>>;
+  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodSchema | undefined = undefined,
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,

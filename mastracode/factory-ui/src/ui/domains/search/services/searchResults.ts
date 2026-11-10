@@ -1,3 +1,5 @@
+import { boardOf } from '../../factory/boardFlow';
+import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import type { BoardCandidate } from '../../factory/boardCandidates';
 import { isPersistedCandidate, persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
@@ -154,10 +156,10 @@ export function createSessionSearchGroups(input: {
   };
 }
 
-function createWorkItemResult(factoryId: string, item: WorkItem): WorkItemSearchResult {
+function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
-  const stage = currentItemStageLabel(item);
+  const stage = currentItemStageLabel(item, board);
 
   return {
     id: item.id,
@@ -193,6 +195,8 @@ export function createWorkItemSearchResults(input: {
   factoryId: string;
   workItems: WorkItem[];
   candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
+  /** The project's boards, once loaded, so each card's phase reads by its own board's name. */
+  boards?: readonly BoardInfo[];
 }): WorkItemSearchResult[] {
   const filed = persistedSourceKeys(input.workItems);
   const candidates = input.candidates.filter(({ candidate }) => !isPersistedCandidate(filed, candidate));
@@ -200,7 +204,7 @@ export function createWorkItemSearchResults(input: {
   return [
     ...input.workItems
       .filter(item => Object.keys(item.sessions).length === 0)
-      .map(item => createWorkItemResult(input.factoryId, item)),
+      .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item))),
     ...candidates.map(({ candidate, updatedAt }) => createCandidateResult(input.factoryId, candidate, updatedAt)),
   ].sort(newestFirst);
 }
