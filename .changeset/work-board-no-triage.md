@@ -14,10 +14,31 @@ A project without a Work board still files every integration arrival (GitHub, Gi
 // Before
 const factory = new MastraFactory({ storage, includeDefaultBoards: false, boards: [ourWorkBoard] });
 
-// After
+// After: the board as a stored definition (plain data), under the `work` key
+import type { StoredBoardInput } from '@mastra/factory';
+
+const ourWorkBoard: StoredBoardInput = {
+  key: 'work',
+  name: 'Work',
+  phases: [
+    { key: 'intake', name: 'Intake', kind: 'resting', nextPhases: ['build', 'canceled'] },
+    {
+      key: 'build',
+      name: 'Building',
+      kind: 'working',
+      runner: { skill: 'factory-build', context: 'work' },
+      nextPhases: ['done', 'canceled'],
+    },
+    { key: 'done', name: 'Done', kind: 'terminal' },
+    { key: 'canceled', name: 'Canceled', kind: 'terminal' },
+  ],
+};
+
 const factory = new MastraFactory({ storage });
 await factory.prepare();
-await factory.upsertBoard(ourWorkBoardDefinition, { projects: 'all' });
+await factory.upsertBoard(ourWorkBoard, { projects: 'all' });
 ```
+
+`upsertBoard` takes the stored shape (`key` plus a `phases` array, first phase first), not a `defineBoard()` board; the README's "Stored boards" section lists every phase field.
 
 Passing a board of your own with the `work` ID in `boards` now throws, since Work is always installed: apps that set `includeDefaultBoards: false` and passed their own `work` board must move it to `upsertBoard` as shown above.

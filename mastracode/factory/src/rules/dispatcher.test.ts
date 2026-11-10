@@ -2346,14 +2346,13 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        boards: autoStartingBoards(),
+        boards: autoStartingBoards(createTriageWorkRegistry()),
         transitionService: new FactoryTransitionService({
           storage,
           configVersion: 'rules-v1',
           boards: createTriageWorkRegistry(),
         }),
         storage,
-        boards: createTriageWorkRegistry(),
         intakeRoutes: seed.boards,
         ownerId: 'worker-1',
       });
@@ -5472,11 +5471,10 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      boards: autoStartingBoards(),
+      boards: autoStartingBoards(boards),
       transitionService: recoveringTransition,
       storage,
       ownerId: 'worker-1',
-      boards: boards,
     });
     const first = new Date('2030-01-01T00:00:00Z');
 
@@ -5876,11 +5874,10 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      boards: autoStartingBoards(),
+      boards: autoStartingBoards(boards),
       transitionService,
       storage,
       ownerId: 'worker-1',
-      boards: boards,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));

@@ -202,9 +202,16 @@ async function harness(
     // The project's Work row as Factory stored it back then: its row is its board from then on.
     await seeded.boards.insertIfMissing(scope, workSeedWithSelfReview(), 'factory');
   }
-  // Ship runs with Factory's own registry, as production does; the Work loops walk Work as stored.
-  const codeRegistry = loop.board === 'ship' ? createBoardRegistry() : createTriageWorkRegistry();
+  // Factory's own registry, as production runs; the stored-with-self-review loop walks that old row,
+  // Triage included.
+  const codeRegistry = loop.storedWithSelfReview ? createTriageWorkRegistry() : createBoardRegistry();
   const boards = new ProjectBoardCache({ codeRegistry, storage: seeded.boards, recheckMs: 0 });
+  if (loop.board === 'work' && !loop.storedWithSelfReview) {
+    // A project created now: the create route stores today's Work, which has no Triage.
+    await boards.seedNewProject(scope);
+    const work = await seeded.boards.get(scope, 'work');
+    expect(work!.phases.map(phase => phase.key)).not.toContain('triage');
+  }
   if (loop.board === 'ship') {
     // An admin adds Ship to a project that already stored Factory's boards: the board API
     // stores them before a project's first board of its own, so Work sits beside Ship.

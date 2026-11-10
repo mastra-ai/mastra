@@ -1121,7 +1121,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             storage: workItems,
             boards,
             intakeRoutes: replica.boards,
-            isAutoRunEnabled: async () => false,
             ownerId: 'work-less-arrivals',
           });
           let tick = 0;

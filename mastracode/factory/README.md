@@ -232,7 +232,7 @@ Admins can make the same edits in the Factory UI under **Settings → Boards**, 
 [Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Write board definitions into projects with factory.upsertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.
 ```
 
-`includeDefaultBoards` is deprecated and ignored, with a warning logged once: every project with no boards gets Factory's Work, and a project that has any keeps what it has. To run your own Work board, write it under the `work` key with `factory.upsertBoard(board, { projects: 'all' })` at startup (see below).
+`includeDefaultBoards` is deprecated and ignored, with a warning logged once: Factory adds its Work to a project only on the first load that finds it with no boards, and a project that has any keeps what it has. Two cases get no Work from Factory: a project an app's `upsertBoard(board, { projects: 'all' })` reached first (it gets the app's boards instead), and a project Factory already stored Work in once: Factory never adds it a second time (Work itself can't be deleted, only reset). To run your own Work board, write it under the `work` key with `factory.upsertBoard(board, { projects: 'all' })` at startup (see below).
 
 Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no policies or rules, can move off code: write its definition under a new key into projects with `factory.upsertBoard()`, move its cards, then stop passing the code board. Keep passing a board while it needs code behaviors.
 
