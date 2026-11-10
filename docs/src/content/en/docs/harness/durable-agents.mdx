@@ -443,7 +443,7 @@ To reduce writes and keep crash recovery:
 
 Each `PostgresStore` opens up to `max` connections, 20 by default, per process. A `pool`, `writePool`, or separate `readPool` you pass in uses its own limit. Add up the limits of every pool that connects to the server, across all replicas and processes, and keep the total below the server's `max_connections` with room for other clients. If you put a transaction-mode pooler such as PgBouncer in front, budget its server-side connections the same way. See [PostgreSQL](/integrations/databases/postgresql).
 
-Every checkpoint upsert leaves a dead row version, and Mastra deletes a finished run's rows, so `mastra_workflow_snapshot` collects dead rows fast. Suspended runs keep their rows. Deletion is best-effort: if it fails, Mastra logs a `Failed to delete workflow snapshot rows` warning and the rows stay until you delete it or [prune](/reference/storage/retention) it. Make autovacuum more aggressive for this table. Replace `public` with your `schemaName` if you set one:
+Every checkpoint upsert leaves a dead row version, and Mastra deletes a finished run's rows, so `mastra_workflow_snapshot` collects dead rows fast. Suspended runs keep their rows. Deletion is best-effort: if it fails, Mastra logs a `Failed to delete workflow snapshot rows` warning and the rows stay until you delete it or [prune](/reference/storage/retention) it. Pruning removes snapshots by inactivity, including suspended runs, so set `workflowSnapshot.maxAge` longer than your longest expected suspension. Make autovacuum more aggressive for this table. Replace `public` with your `schemaName` if you set one:
 
 ```sql
 ALTER TABLE public.mastra_workflow_snapshot SET (
@@ -455,7 +455,7 @@ ALTER TABLE public.mastra_workflow_snapshot SET (
 To decide whether to add capacity or tune the workload, watch:
 
 - `n_dead_tup` and `last_autovacuum` for `mastra_workflow_snapshot` in `pg_stat_user_tables`, and for its TOAST table in `pg_stat_all_tables`, where large snapshots are stored
-- The snapshot upsert's share of total time in `pg_stat_statements`
+- The snapshot upsert's share of `total_exec_time` and `wal_bytes` in `pg_stat_statements`. This requires `pg_stat_statements` in `shared_preload_libraries` (a server restart) and `CREATE EXTENSION pg_stat_statements`
 - WAL bytes per second (`pg_stat_wal`)
 - Active connections compared with the pool `max`
 
