@@ -24,7 +24,6 @@ import { workSeedWithTriage } from './work-seeds.js';
 import { workBoard } from './work.js';
 
 const DEFAULT_RECHECK_MS = 1000;
-/** A row under the retired Review board's key is never served: the key is the Review board's alone. */
 const PRELOAD_CONCURRENCY = 8;
 /** The phases every release seeded the Review board with; only runners and tools changed between them. */
 const REVIEW_SEED_PHASES = boardDefinitionOf(reviewBoard).phases.map(({ key, name, kind }) => ({ key, name, kind }));
