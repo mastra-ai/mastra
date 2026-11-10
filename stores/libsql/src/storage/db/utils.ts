@@ -161,18 +161,27 @@ export function isTransientNetworkError(error: unknown): boolean {
   return false;
 }
 
+/**
+ * Builds a write executor that retries on SQLite lock errors with exponential backoff.
+ *
+ * The logger is resolved on every log call so a logger set later (for example
+ * `logger: false` on Mastra) is honored. Logs carry only bounded fields (error
+ * name/code and retry counters) — never the raw error, its message, cause chain,
+ * stack, or the operation description — because those can include SQL, table
+ * names, file paths, or data. The original error is always rethrown unchanged.
+ */
 export function createExecuteWriteOperationWithRetry({
-  logger,
+  getLogger,
   maxRetries,
   initialBackoffMs,
 }: {
-  logger: IMastraLogger;
+  getLogger: () => IMastraLogger;
   maxRetries: number;
   initialBackoffMs: number;
 }) {
   return async function executeWriteOperationWithRetry<T>(
     operationFn: () => Promise<T>,
-    operationDescription: string,
+    _operationDescription: string,
   ): Promise<T> {
     let attempts = 0;
     let backoff = initialBackoffMs;
@@ -183,10 +192,11 @@ export function createExecuteWriteOperationWithRetry({
       } catch (error: any) {
         // A superseded run's write: expected after a takeover, and never retryable.
         if (isRunFenceConflictError(error)) throw error;
-        logger.debug(`LibSQLStore: Error caught in retry loop for ${operationDescription}`, {
-          errorType: error.constructor.name,
-          errorCode: error.code,
-          errorMessage: error.message,
+        const errorName = typeof error?.name === 'string' ? error.name : undefined;
+        const errorCode = typeof error?.code === 'string' || typeof error?.code === 'number' ? error.code : undefined;
+        getLogger().debug('LibSQLStore: Error caught in write retry loop', {
+          errorName,
+          errorCode,
           attempts,
           maxRetries,
         });
@@ -194,27 +204,32 @@ export function createExecuteWriteOperationWithRetry({
         if (isLockError(error)) {
           attempts++;
           if (attempts >= maxRetries) {
-            logger.error(
-              `LibSQLStore: Operation failed after ${maxRetries} attempts due to database lock: ${error.message}`,
-              { error, attempts, maxRetries },
-            );
+            getLogger().error(`LibSQLStore: Write operation failed after ${maxRetries} attempts due to database lock`, {
+              errorName,
+              errorCode,
+              attempts,
+              maxRetries,
+            });
             throw error;
           }
-          logger.warn(
-            `LibSQLStore: Attempt ${attempts} failed due to database lock during ${operationDescription}. Retrying in ${backoff}ms...`,
-            { errorMessage: error.message, attempts, backoff, maxRetries },
+          getLogger().warn(
+            `LibSQLStore: Write attempt ${attempts} failed due to database lock. Retrying in ${backoff}ms...`,
+            { errorName, errorCode, attempts, backoff, maxRetries },
           );
           await new Promise(resolve => setTimeout(resolve, backoff));
           backoff *= 2;
         } else {
-          logger.error(`LibSQLStore: Non-lock error during ${operationDescription}, not retrying`, { error });
+          getLogger().error('LibSQLStore: Non-lock error during write operation, not retrying', {
+            errorName,
+            errorCode,
+          });
           throw error;
         }
       }
     }
     // TypeScript requires a return/throw here for type safety, but this is unreachable
     // because the loop always exits via return (success) or throw (error)
-    throw new Error(`LibSQLStore: Unexpected exit from retry loop for ${operationDescription}`);
+    throw new Error('LibSQLStore: Unexpected exit from write retry loop');
   };
 }
 

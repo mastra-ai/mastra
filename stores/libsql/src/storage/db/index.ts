@@ -173,7 +173,7 @@ export class LibSQLDB extends MastraBase {
     this.initialBackoffMs = initialBackoffMs ?? 100;
 
     this.executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
-      logger: this.logger,
+      getLogger: () => this.logger,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
     });

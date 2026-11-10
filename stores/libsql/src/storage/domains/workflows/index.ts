@@ -336,7 +336,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     this.#client = client;
     this.#db = new LibSQLDB({ client, maxRetries, initialBackoffMs });
     this.executeWithRetry = createExecuteWriteOperationWithRetry({
-      logger: this.logger,
+      getLogger: () => this.logger,
       maxRetries,
       initialBackoffMs,
     });
