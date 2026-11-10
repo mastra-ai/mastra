@@ -806,62 +806,68 @@ describe('Workflow (Evented Engine Specific)', () => {
       }
     });
 
-    it("does not revert a sibling's write when a nested branch resumes without writing", async () => {
-      const id = 'nested-parallel-state-resume-no-write';
-      const earlier = makeStateStep(`${id}-earlier`, 80, { first: 1 });
-      const suspendingStep = createStep({
-        id: `${id}-suspend`,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        resumeSchema: z.object({}),
-        stateSchema,
-        execute: async ({ suspend, resumeData }) => {
-          if (resumeData) return {};
-          await new Promise(resolve => setTimeout(resolve, 30));
-          return suspend({});
-        },
-      });
-      const later = createWorkflow({
-        id: `${id}-later`,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        stateSchema,
-        steps: [suspendingStep],
-      })
-        .then(suspendingStep)
-        .commit();
-
-      const workflow = createWorkflow({
-        id,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        stateSchema,
-        steps: [earlier, later],
-      });
-      workflow.parallel([earlier, later]).commit();
-
-      const mastra = new Mastra({
-        workflows: { [id]: workflow },
-        storage: testStorage,
-        pubsub: new EventEmitterPubSub(),
-      });
-      await mastra.startWorkers();
-      try {
-        const run = await workflow.createRun();
-        const started = await run.start({ inputData: {}, initialState: { first: 0 } });
-        expect(started.status).toBe('suspended');
-
-        const result = await run.resume({
-          step: [later.id, suspendingStep.id],
-          resumeData: {},
-          outputOptions: { includeState: true },
+    it.for([
+      ['sibling-writes-before-suspend', 5],
+      ['sibling-writes-after-suspend', 80],
+    ] as const)(
+      "does not revert a sibling's write when a nested branch resumes without writing (%s)",
+      async ([name, siblingDelay]) => {
+        const id = `nested-parallel-state-resume-no-write-${name}`;
+        const earlier = makeStateStep(`${id}-earlier`, siblingDelay, { first: 1 });
+        const suspendingStep = createStep({
+          id: `${id}-suspend`,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          resumeSchema: z.object({}),
+          stateSchema,
+          execute: async ({ suspend, resumeData }) => {
+            if (resumeData) return {};
+            await new Promise(resolve => setTimeout(resolve, 30));
+            return suspend({});
+          },
         });
-        expect(result.status).toBe('success');
-        expect((result as any).state).toEqual({ first: 1 });
-      } finally {
-        await mastra.stopWorkers();
-      }
-    });
+        const later = createWorkflow({
+          id: `${id}-later`,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema,
+          steps: [suspendingStep],
+        })
+          .then(suspendingStep)
+          .commit();
+
+        const workflow = createWorkflow({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema,
+          steps: [earlier, later],
+        });
+        workflow.parallel([earlier, later]).commit();
+
+        const mastra = new Mastra({
+          workflows: { [id]: workflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
+        await mastra.startWorkers();
+        try {
+          const run = await workflow.createRun();
+          const started = await run.start({ inputData: {}, initialState: { first: 0 } });
+          expect(started.status).toBe('suspended');
+
+          const result = await run.resume({
+            step: [later.id, suspendingStep.id],
+            resumeData: {},
+            outputOptions: { includeState: true },
+          });
+          expect(result.status).toBe('success');
+          expect((result as any).state).toEqual({ first: 1 });
+        } finally {
+          await mastra.stopWorkers();
+        }
+      },
+    );
   });
 
   describe('terminal snapshot cleanup (issue #22209)', () => {
