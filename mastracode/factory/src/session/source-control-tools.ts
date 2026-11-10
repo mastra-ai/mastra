@@ -4,7 +4,12 @@ import { createTool } from '@mastra/core/tools';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.js';
+import {
+  FACTORY_INTERACTIVE_KEY,
+  getFactoryAuthOrgId,
+  getFactoryAuthUserFromContext,
+  getFactoryAuthUserId,
+} from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import {
@@ -325,6 +330,12 @@ export async function createSourceControlTools({
     }
     if (match.item.externalSource?.type === 'pull-request') {
       throw new Error(`Work item ${reference} is a pull-request review card; its branch is local to its session.`);
+    }
+    // Any turn can follow a card, so only a person may push to an item the session is not running.
+    if (match.item.id !== binding?.workItemId && requestContext.get(FACTORY_INTERACTIVE_KEY) !== true) {
+      throw new Error(
+        `Only a person can push to work item ${reference}'s branch: this session follows it but is not running it, and nobody signed in started this turn.`,
+      );
     }
     return { id: match.item.id, branch: workItemBranch(match.branchInput) };
   };

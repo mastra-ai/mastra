@@ -6,6 +6,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { FACTORY_INTERACTIVE_KEY } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
@@ -1281,7 +1282,7 @@ describe('source_control_push_branch to a followed work item branch', { timeout:
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
   });
 
-  async function followedItem({ follow = true, pushBranch = true } = {}) {
+  async function followedItem({ follow = true, pushBranch = true, interactive = true, bound = false } = {}) {
     const seeded = await createFactoryStorageForTests();
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
     const { item } = await seeded.workItems.prepareRunStart({
@@ -1299,7 +1300,9 @@ describe('source_control_push_branch to a followed work item branch', { timeout:
         },
       },
       role: 'work',
-      session: { sessionId: 'session-2', branch: 'factory/issue-7', threadId: 'thread-2' },
+      session: bound
+        ? { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' }
+        : { sessionId: 'session-2', branch: 'factory/issue-7', threadId: 'thread-2' },
       resourceId: 'project-1',
       kickoffKey: 'kickoff-1',
       kickoffMessage: null,
@@ -1350,6 +1353,7 @@ describe('source_control_push_branch to a followed work item branch', { timeout:
       authorization: { scheme: 'bearer', token: 'test-token', username: 'test' },
     });
     const context = requestContext();
+    if (interactive) context.set(FACTORY_INTERACTIVE_KEY, true);
     const controller = context.get('controller') as AgentControllerRequestContext;
     context.set('controller', {
       ...controller,
@@ -1467,6 +1471,25 @@ describe('source_control_push_branch to a followed work item branch', { timeout:
 
     await expect(push('#7')).rejects.toThrow('matches more than one followed work item');
     expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(base);
+    await expect(push(pullRequest.id)).rejects.toThrow('pull-request review card');
     await expect(push(item.id)).resolves.toMatchObject({ pushed: true, branch });
+  });
+
+  it('refuses a followed but unrun work item on a turn nobody signed in started', async () => {
+    const { item, branch, base, commit, push, remote } = await followedItem({ interactive: false });
+    commit('fix');
+    await expect(push(item.id)).rejects.toThrow('Only a person can push');
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(base);
+  });
+
+  it('lets a session push to the work item it runs on a turn nobody signed in started', async () => {
+    const { item, branch, remote, commit, push } = await followedItem({
+      interactive: false,
+      follow: false,
+      bound: true,
+    });
+    const head = commit('fix');
+    await expect(push(item.id)).resolves.toMatchObject({ pushed: true, branch });
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(head);
   });
 });
