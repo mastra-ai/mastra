@@ -953,12 +953,16 @@ export const observabilityDashboardInputSchema = inputSchemaOf(draftSchemas.dash
  * The stored widget for `draft`: each value's reads gathered into its view's queries, its `id` kept,
  * or a fresh UUID when it has none. Throws the `ZodError` from checking `draft` against
  * `createObservabilityDraftSchemas().widget`, whose issue paths point into the draft (e.g.
- * `timeseries.series.1.value`). Check the widget's place in a dashboard (unique ids, the widget
- * count) with the whole definition.
+ * `timeseries.series.1.value`). It checks against the default schemas, so it allows every kind and
+ * metric name: a tool whose input schema came from `createObservabilityDraftSchemas` with a catalog
+ * or `kinds` has already applied them, but elsewhere check `draft` against your own schemas first.
+ * Check the widget's place in a dashboard (unique ids, the widget count) with the whole definition.
  */
 export function toObservabilityWidget(draft: ObservabilityWidgetDraft): DashboardWidget {
   draftSchemas.widget.parse(draft);
-  // Converted as given rather than as parsed, so defaults the definition fills on read aren't written in.
+  // Converted as given, so a draft passed as written gets no defaults written in. A tool's `execute` gets
+  // the parsed draft, with core's read defaults (e.g. a trace read's `groupBy: []`) already filled; core
+  // fills the same ones on read, so the stored widget means the same either way.
   return toWidget(draft);
 }
 
@@ -975,11 +979,14 @@ export type ObservabilityDashboardOpened = { dashboard: DashboardDefinition; dat
  * widget without an id given a fresh UUID, so the host can pin each widget by an id that stays the
  * same whenever the result is shown. Throws when `input` doesn't pass
  * `observabilityDashboardInputSchema`, or the definition doesn't validate (e.g. over the size limit).
+ * Like `toObservabilityWidget`, it checks against the default schemas, not a catalog or options.
  */
 export function toObservabilityDashboard(input: ObservabilityDashboardInput): ObservabilityDashboardOpened {
   const checked = observabilityDashboardInputSchema.safeParse(input);
   if (!checked.success) throw new Error(`The dashboard is invalid: ${z.prettifyError(checked.error)}`);
-  // Converted as given rather than as parsed, so defaults the definition fills on read aren't written in.
+  // Converted as given, so a draft passed as written gets no defaults written in. A tool's `execute` gets
+  // the parsed draft, with core's read defaults (e.g. a trace read's `groupBy: []`) already filled; core
+  // fills the same ones on read, so the stored widget means the same either way.
   const { dashboard, datePreset } = input;
   const definition: DashboardDefinition = {
     ...dashboard,
