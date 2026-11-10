@@ -6025,7 +6025,10 @@ export class Session<TState = unknown> {
     const address = this.suspensions.resolveAddress({ toolCallId, runId });
     if (!address) return { accepted: false, reason: 'no_pending_suspension' };
     const claimKey = getSuspensionAddressKey(address);
-    if (!this.claimToolResponse(claimKey)) return { accepted: false, reason: 'not_pending' };
+    // An answer already being applied would make the claimant's own answer a silent no-op.
+    if (this.#answeringSuspensions.has(claimKey) || !this.claimToolResponse(claimKey)) {
+      return { accepted: false, reason: 'not_pending' };
+    }
     return { accepted: true, toolCallId: address.toolCallId, address, claimKey };
   }
 

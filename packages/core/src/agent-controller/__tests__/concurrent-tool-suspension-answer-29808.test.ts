@@ -143,6 +143,8 @@ describe('concurrent answers to one parked tool call', () => {
 
     const answered = env.session.respondToToolSuspension({ resumeData: { ok: true } });
     expect(env.session.isAnsweringToolCall('call-1')).toBe(true);
+    // A second answerer (the HTTP route, say) is turned away rather than accepted and then ignored.
+    expect(env.session.claimToolSuspension('call-1')).toEqual({ accepted: false, reason: 'not_pending' });
     await answered;
 
     await vi.waitFor(() => expect(runEnds(env.events)).toContain('complete'), { timeout: 10_000 });
