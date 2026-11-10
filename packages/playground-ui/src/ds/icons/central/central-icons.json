@@ -1,0 +1,17 @@
+{
+  "package": "@central-icons-react/round-outlined-radius-2-stroke-2",
+  "version": "1.2.34",
+  "icons": [
+    "IconBell",
+    "IconCheckmark1",
+    "IconChevronBottom",
+    "IconCrossMedium",
+    "IconFolder1",
+    "IconMagnifyingGlass",
+    "IconPlay",
+    "IconPlusLarge",
+    "IconSettingsGear1",
+    "IconSquareBehindSquare1",
+    "IconTrashCan"
+  ]
+}

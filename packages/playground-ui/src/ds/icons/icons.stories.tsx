@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Bell, Check, ChevronDown, Copy, Folder, Play, Plus, Search, Settings, Trash2, X } from 'lucide-react';
+import * as centralIconModules from './central';
 import { Icon } from './Icon';
 import type { IconSize } from './Icon';
 import {
@@ -84,6 +85,23 @@ const meta: Meta<typeof Icon> = {
 
 export default meta;
 type Story = StoryObj<typeof Icon>;
+
+const centralIcons = Object.entries(centralIconModules);
+
+export const CentralIcons: Story = {
+  render: () => (
+    <div className="grid w-200 grid-cols-6 gap-4">
+      {centralIcons.map(([name, CentralIcon]) => (
+        <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+          <Icon size="lg" className="text-foreground">
+            <CentralIcon />
+          </Icon>
+          <span className="text-caption text-muted-foreground">{name}</span>
+        </div>
+      ))}
+    </div>
+  ),
+};
 
 const icons = [
   { name: 'AgentIcon', component: AgentIcon },
@@ -340,6 +358,13 @@ export const Stroke: Story = {
               ))}
             </div>
           ))}
+          <div className="flex items-center gap-3 text-foreground">
+            {centralIcons.map(([name, CentralIcon]) => (
+              <Icon key={name} size={size}>
+                <CentralIcon />
+              </Icon>
+            ))}
+          </div>
         </div>
       ))}
       <div className="flex items-center gap-3">

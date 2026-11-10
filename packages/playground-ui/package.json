@@ -12,7 +12,8 @@
     "components.css",
     "sources.css",
     "theme",
-    "oxlint"
+    "oxlint",
+    "CENTRAL-ICONS-LICENSE.md"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
@@ -163,6 +164,7 @@
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
+    "icons:central": "node scripts/central-icons.mjs",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix .",
     "build:publish": "pnpm build && yalc push",
