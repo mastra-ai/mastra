@@ -350,13 +350,13 @@ export class GraphRAG {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
     }
-    if (topK < 1) {
-      throw new Error('TopK must be greater than 0');
+    if (!Number.isInteger(topK) || topK < 1) {
+      throw new Error('TopK must be a positive integer');
     }
-    if (randomWalkSteps < 1) {
-      throw new Error('Random walk steps must be greater than 0');
+    if (!Number.isInteger(randomWalkSteps) || randomWalkSteps < 1) {
+      throw new Error('Random walk steps must be a positive integer');
     }
-    if (restartProb <= 0 || restartProb >= 1) {
+    if (!Number.isFinite(restartProb) || restartProb <= 0 || restartProb >= 1) {
       throw new Error('Restart probability must be between 0 and 1');
     }
 
