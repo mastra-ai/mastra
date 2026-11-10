@@ -18,6 +18,9 @@ const CARD_FACT_PROPERTIES = {
       labels: { type: 'string', title: 'Labels' },
       title: { type: 'string', title: 'Title' },
       author: { type: 'string', title: 'Author' },
+      key: { type: 'string', title: 'Key' },
+      state: { type: 'string', title: 'State' },
+      assignees: { type: 'string', title: 'Assignees' },
       pullRequest: { type: 'number', title: 'Open pull request' },
     },
   },
@@ -28,6 +31,9 @@ const CARD_FACT_PROPERTIES = {
     properties: {
       kind: { type: 'string', title: 'Kind' },
       integration: { type: 'string', title: 'Integration' },
+      provider: { type: 'string', title: 'Provider' },
+      // A GitHub repository or GitLab project path, a Linear team key, a Jira project key.
+      repository: { type: 'string', title: 'Repository, team or project' },
     },
   },
 } satisfies Facts['properties'];

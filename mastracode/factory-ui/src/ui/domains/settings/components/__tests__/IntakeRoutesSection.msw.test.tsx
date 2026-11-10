@@ -123,6 +123,13 @@ const routeNames = () =>
     .getAllByRole('listitem')
     .map(item => item.querySelector('.truncate')?.textContent);
 
+/** The rule builder's field selects have no label; they show what they are asking for. */
+const ruleSelect = (prompt: string) => {
+  const select = screen.getAllByRole('combobox').find(combobox => combobox.textContent?.includes(prompt));
+  if (!select) throw new Error(`No rule select showing "${prompt}"`);
+  return select;
+};
+
 const renderSection = () => renderWithProviders(<IntakeRoutesSection factoryId="fp-1" />);
 
 describe('IntakeRoutesSection', () => {
@@ -208,6 +215,32 @@ describe('IntakeRoutesSection', () => {
       },
     ]);
     expect(routeNames().slice(-2)).toEqual(['Releases go to Ship', 'Everything else goes to Work › Intake']);
+  });
+
+  it('sends one repository to another board, picking the repository from the fields a route can test', async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    await user.type(screen.getByLabelText('Route name'), 'acme/app goes to Ship');
+    await user.click(screen.getByRole('button', { name: /Add conditional rule/ }));
+    await user.click(ruleSelect('Select field'));
+    await user.click(await screen.findByRole('option', { name: /Source/ }));
+    await user.click(ruleSelect('Select property'));
+    expect(await screen.findByRole('option', { name: /Provider/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Repository, team or project/ }));
+    await user.type(screen.getByPlaceholderText('Enter value'), 'acme/app');
+    await user.click(screen.getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(screen.getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(routeNames()).toContain('acme/app goes to Ship'));
+    expect(state.requests[0]?.body).toMatchObject({
+      name: 'acme/app goes to Ship',
+      when: { operator: 'AND', conditions: [{ field: 'source.repository', operator: 'equals', value: 'acme/app' }] },
+      target: { boardKey: 'ship', phaseKey: 'inbox' },
+    });
   });
 
   it("won't save a new-card route that tests the event, which new cards don't have", async () => {

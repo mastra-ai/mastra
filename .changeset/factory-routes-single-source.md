@@ -18,7 +18,20 @@ curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$EVERYTH
 
 **Edit routes in Settings.** Settings › Work Intake › Intake routes lists the project's routes in the order they are tried. Admins can turn routes on and off, reorder, edit, add and delete them, and use **Send new cards to** to make another board the default landing, which also copies the close, reopen and pull request routes onto that board. Everyone else sees them read-only. `GET /web/factory/projects/:id/intake-routes` now also returns `canEdit`.
 
-**Removed: label routes and binding boards.** Use an intake route instead.
+**Route on any fact of the work item.** Routes and phase rules can now test where an item lives and what the provider says about it: `source.repository` (GitHub repository or GitLab project path, Linear team key, Jira project key), `source.provider`, `item.key` (`acme/app#42`, `ENG-12`), `item.state` and `item.assignees`. Strings compare case-insensitively.
+
+```bash
+# Send one repository's issues and pull requests to the Docs board.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+  "name": "acme/docs goes to Docs",
+  "when": { "operator": "AND", "conditions": [
+    { "field": "source.repository", "operator": "equals", "value": "acme/docs" }
+  ] },
+  "target": { "boardKey": "docs" }
+}'
+```
+
+**Removed: label routes and binding boards.** Use an intake route with any condition on the work item instead, such as `item.labels contains release` or `source.repository equals acme/app`.
 
 ```bash
 # Before: send GitHub issues labelled "release" to the Release board
@@ -45,4 +58,4 @@ curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'cont
 - The board and stage an integration rule names no longer place a new card: every integration files new cards in the default board's first phase and the project's routes place them. A host override of `issueOpened` (or any intake rule) that picked a board or a phase such as `stage: 'pr-review'` is now routed like any other card. Add an intake route to get the same placement. `skipRules: true` still files a card exactly where the decision says.
 - A pull request a maintainer asks Factory to review reaches Work › Review through the default `Pull requests go to Review` route. If you disabled that route, it now lands in Work › Intake.
 - A Linear, Jira or incident.io source bound to a project without a board now feeds that project. Previously it was skipped until a board was picked. Unbind it if it should not feed the project.
-- Routes can't tell sources of the same integration apart, so sending one repository's or one Linear project's cards to its own board is no longer possible.
+- A binding's board used to send one source's cards to its own board. Add an intake route with a `source.repository` condition instead: GitHub and GitLab repositories, Linear teams and Jira projects can each be matched. incident.io sources can't be told apart yet.

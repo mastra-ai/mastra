@@ -268,27 +268,34 @@ function SendNewCardsTo({
   const [boardKey, setBoardKey] = useState<string>();
   const board = boards.find(candidate => candidate.id === boardKey);
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Txt as="span" variant="body-sm">
-        Send new cards to
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <Txt as="span" variant="body-sm">
+          Send new cards to
+        </Txt>
+        <Select value={boardKey ?? ''} disabled={saving} onValueChange={setBoardKey}>
+          <SelectTrigger size="sm" aria-label="Board for new cards" className="w-fit min-w-40">
+            <Txt as="span" variant="caption">
+              {board ? boardName(board) : 'Choose a board'}
+            </Txt>
+          </SelectTrigger>
+          <SelectContent>
+            {boards.map(candidate => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {boardName(candidate)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" disabled={saving || !board} onClick={() => board && onSend(board.id)}>
+          Apply
+        </Button>
+      </div>
+      <Txt as="p" variant="caption" tone="muted">
+        To send only one repository, team or project there, add a route that applies when Source › Repository, team or
+        project is, for example, <code>acme/app</code> (a GitHub or GitLab repository), <code>ENG</code> (a Linear team)
+        or <code>OPS</code> (a Jira project).
       </Txt>
-      <Select value={boardKey ?? ''} disabled={saving} onValueChange={setBoardKey}>
-        <SelectTrigger size="sm" aria-label="Board for new cards" className="w-fit min-w-40">
-          <Txt as="span" variant="caption">
-            {board ? boardName(board) : 'Choose a board'}
-          </Txt>
-        </SelectTrigger>
-        <SelectContent>
-          {boards.map(candidate => (
-            <SelectItem key={candidate.id} value={candidate.id}>
-              {boardName(candidate)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button size="sm" disabled={saving || !board} onClick={() => board && onSend(board.id)}>
-        Apply
-      </Button>
     </div>
   );
 }

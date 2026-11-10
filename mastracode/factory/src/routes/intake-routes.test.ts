@@ -515,6 +515,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(await list(replicaA.send, base)).toEqual([]);
   });
 
+  it('saves a route sending a repository, team or project to a board, by any fact of the work item', async () => {
+    const { projectPath, base, replicaA } = await setup();
+    expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+    const when = {
+      operator: 'OR',
+      conditions: [
+        { field: 'source.repository', operator: 'equals', value: 'acme/app' },
+        {
+          operator: 'AND',
+          conditions: [
+            { field: 'source.provider', operator: 'equals', value: 'linear' },
+            { field: 'item.key', operator: 'contains', value: 'ENG-' },
+            { field: 'item.state', operator: 'not_equals', value: 'Backlog' },
+            { field: 'item.assignees', operator: 'contains', value: 'ada' },
+          ],
+        },
+      ],
+    };
+    const created = await replicaA.send('POST', base, { name: 'App and ENG', when, target: { boardKey: 'docs' } });
+
+    expect(created.status).toBe(201);
+    expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ name: 'App and ENG', when })]);
+  });
+
   it('accepts a stored board as a target and reports the route once that board is gone', async () => {
     const { projectPath, base, replicaA } = await setup();
     expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);

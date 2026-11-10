@@ -700,6 +700,135 @@ describe('intake routes placing linked cards', () => {
 const CLOSED_AS = (reason: 'completed' | 'canceled') =>
   ({ operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: reason }] }) as const;
 
+/** A route condition testing one fact. */
+const when = (field: string, operator: 'equals' | 'contains' | 'in', value: string | string[]) =>
+  ({ operator: 'AND', conditions: [{ field, operator, value }] }) as const;
+
+describe('intake routes sending a repository, team or project to its own board', () => {
+  // Each arrival carries what that integration's default rule files a new item with.
+  const githubIssue = (repository: string, number: number) => ({
+    sourceKey: `github:${repository}:issue:${number}`,
+    source: 'github-issue' as const,
+    url: `https://github.com/${repository}/issues/${number}`,
+    metadata: { githubRepositoryId: 7, githubIssueNumber: number, state: 'open', assignees: ['octocat'], labels: [] },
+  });
+  const githubPullRequest = (repository: string, number: number) => ({
+    sourceKey: `github:${repository}:pull-request:${number}`,
+    source: 'github-pr' as const,
+    url: `https://github.com/${repository}/pull/${number}`,
+    metadata: { githubRepositoryId: 7, githubPullRequestNumber: number, authorTrusted: true, labels: [] },
+  });
+  const gitlabIssue = (project: string, number: number) => ({
+    sourceKey: `gitlab:${project}:issue:${number}`,
+    source: 'gitlab-issue' as const,
+    url: `https://gitlab.com/${project}/-/issues/${number}`,
+    metadata: { gitlabProjectId: 9, gitlabIssueIid: number, identifier: `${project}#${number}`, labels: [] },
+  });
+  const linearIssue = (team: string, number: number, state = 'Todo') => ({
+    sourceKey: `linear:${team}-${number}`,
+    source: 'linear-issue' as const,
+    url: `https://linear.app/acme/issue/${team}-${number}`,
+    metadata: {
+      linearIssueId: `issue-${team}-${number}`,
+      identifier: `${team}-${number}`,
+      linearState: state,
+      linearTeam: team,
+      linearAssignee: 'Ada',
+      assignee: 'Ada',
+      labels: [],
+    },
+  });
+  const jiraIssue = (project: string, number: number) => ({
+    sourceKey: `jira-${project}-${number}`,
+    source: 'jira-issue' as const,
+    url: `https://acme.atlassian.net/browse/${project}-${number}`,
+    metadata: {
+      identifier: `${project}-${number}`,
+      state: 'To Do',
+      project,
+      site: 'acme',
+      assignees: ['Grace'],
+      labels: [],
+    },
+  });
+
+  it("sends one GitHub repository's issues and pull requests to a stored board, whatever the case", async () => {
+    const { boards, scope, route, deliver } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    await route({
+      name: 'App to Docs',
+      when: when('source.repository', 'equals', 'Acme/App'),
+      target: { boardKey: 'docs' },
+    });
+
+    expect(placed(await deliver(githubIssue('acme/app', 12)))).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(placed(await deliver(githubPullRequest('acme/app', 13)))).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(placed(await deliver(githubIssue('acme/site', 14)))).toEqual({ board: 'work', stages: ['intake'] });
+  });
+
+  it("sends one GitLab project's issues to a stored board, by its full group path", async () => {
+    const { boards, scope, route, deliver } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    await route({
+      name: 'Platform to Docs',
+      when: when('source.repository', 'equals', 'acme/platform/api'),
+      target: { boardKey: 'docs' },
+    });
+
+    expect(placed(await deliver(gitlabIssue('acme/platform/api', 3)))).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(placed(await deliver(gitlabIssue('acme/platform/web', 4)))).toEqual({ board: 'work', stages: ['intake'] });
+  });
+
+  it("sends one Linear team's issues to a stored board, by the team key", async () => {
+    const { boards, scope, route, deliver } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    await route({
+      name: 'ENG to Docs',
+      when: when('source.repository', 'equals', 'eng'),
+      target: { boardKey: 'docs' },
+    });
+
+    expect(placed(await deliver(linearIssue('ENG', 12)))).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(placed(await deliver(linearIssue('OPS', 12)))).toEqual({ board: 'work', stages: ['intake'] });
+  });
+
+  it("sends one Jira project's issues to a stored board, by the project key", async () => {
+    const { boards, scope, route, deliver } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    await route({
+      name: 'OPS to Docs',
+      when: when('source.repository', 'in', ['OPS', 'SRE']),
+      target: { boardKey: 'docs' },
+    });
+
+    expect(placed(await deliver(jiraIssue('OPS', 3)))).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(placed(await deliver(jiraIssue('ENG', 3)))).toEqual({ board: 'work', stages: ['intake'] });
+  });
+
+  it('places by the item key, state, provider and assignees every provider reports', async () => {
+    const { boards, scope, route, deliver } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    await route({ name: 'Key', when: when('item.key', 'equals', 'acme/app#21'), target: { boardKey: 'docs' } });
+    await route({
+      name: 'State',
+      when: when('item.state', 'equals', 'in review'),
+      target: { boardKey: 'work', phaseKey: 'planning' },
+    });
+    await route({
+      name: 'Assignee',
+      when: when('item.assignees', 'contains', 'grace'),
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
+    await route({ name: 'Provider', when: when('source.provider', 'equals', 'linear'), target: { boardKey: 'docs' } });
+
+    expect(placed(await deliver(githubIssue('acme/app', 21)))).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(placed(await deliver(githubIssue('acme/app', 22)))).toEqual({ board: 'work', stages: ['intake'] });
+    expect(placed(await deliver(linearIssue('ENG', 5, 'In Review')))).toEqual({ board: 'work', stages: ['planning'] });
+    expect(placed(await deliver(jiraIssue('OPS', 6)))).toEqual({ board: 'work', stages: ['triage'] });
+    expect(placed(await deliver(linearIssue('ENG', 7)))).toEqual({ board: 'docs', stages: ['inbox'] });
+  });
+});
+
 describe('intake routes moving existing cards on status events', () => {
   it("moves a closed issue to the phase its route names for the close reason, recorded as the route's move", async () => {
     const { route, deliver, deliverEvent, stageAudits } = await setup();

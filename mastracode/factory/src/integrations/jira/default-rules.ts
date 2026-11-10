@@ -11,8 +11,7 @@ function jiraIssueObserved(context: FactoryJiraRuleContext) {
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-triage`,
-    // A source bound to a custom board lands on that board's initial phase;
-    // otherwise it waits on the project's default board.
+    // Filed on the default board's first phase; the project's intake routes place it from there.
     board: context.intake.board,
     source: 'jira-issue',
     sourceKey: context.issue.id,
