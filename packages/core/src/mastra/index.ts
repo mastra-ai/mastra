@@ -2821,8 +2821,9 @@ export class Mastra<
    *
    * This method allows dynamic registration of agents after the Mastra instance
    * has been created. The agent will be initialized with the current logger.
+   * Re-registering the same instance under the same key is a no-op.
    *
-   * @throws {MastraError} When an agent with the same key already exists
+   * @throws {MastraError} When a different agent with the same key already exists
    *
    * @example
    * ```typescript
@@ -2857,12 +2858,19 @@ export class Mastra<
       const underlyingAgent = durableAgent.agent;
       const agentKey = key || durableAgent.id;
 
-      // Check if already registered
+      // Only re-registering the same wrapper is idempotent.
       const agents = this.#agents as Record<string, Agent<any>>;
       if (agents[agentKey]) {
-        const logger = this.getLogger();
-        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
-        return;
+        if (Object.is(agents[agentKey], durableAgent)) {
+          return;
+        }
+        throw new MastraError({
+          id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Agent with key ${agentKey} already exists`,
+          details: { status: 409, key: agentKey },
+        });
       }
 
       // Set the Mastra instance on the durable agent for observability
@@ -3009,7 +3017,16 @@ export class Mastra<
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      return;
+      if (agents[agentKey] === mastraAgent) {
+        return;
+      }
+      throw new MastraError({
+        id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with key ${agentKey} already exists`,
+        details: { status: 409, key: agentKey },
+      });
     }
 
     // Initialize the agent
