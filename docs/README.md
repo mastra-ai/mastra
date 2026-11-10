@@ -61,6 +61,6 @@ Vale is a syntax-aware linter for prose that can help enforce style and grammar 
 - **Input:** `query` (string, required, at most 500 characters) and `limit` (integer, 1 to 20, default 5).
 - **Result:** `{ results: [{ title, heading, url, excerpt }] }`, where `url` is absolute and anchored and `excerpt` is plain text of at most 1,000 characters. Failures come back as `{ error: { code, message } }` with the code `invalid_input` or `search_failed`.
 - It searches the same Algolia index as the search bar, using the `@mastra/docusaurus-plugin-algolia` credentials. Without those credentials (for example, local builds without `ALGOLIA_*` env vars) the tool isn't registered.
-- Browsers without `document.modelContext` (or the older `navigator.modelContext`) skip it entirely. The tool and the Algolia client load only when the API exists and the tool is first called.
+- Browsers without `document.modelContext` (or the older `navigator.modelContext`) skip it entirely. The tool code loads on mount when the API and the Algolia credentials exist; the search code and the Algolia client load on the first call.
 
 To try it, build with the `ALGOLIA_APP_ID` and `ALGOLIA_SEARCH_API_KEY` env vars set, run `pnpm serve`, and open a page in a browser with WebMCP enabled. In tests, inject a `document.modelContext` stub before the page loads (for example with Playwright's `page.addInitScript`) and call the registered tool's `execute`.

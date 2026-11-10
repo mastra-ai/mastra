@@ -44,7 +44,8 @@ export const inputSchema = {
       pattern: '\\S',
     },
     limit: {
-      type: 'integer',
+      // null is accepted and means the default; agents often send it for optional parameters.
+      type: ['integer', 'null'],
       description: 'Maximum number of results.',
       minimum: 1,
       maximum: LIMITS.maxLimit,
@@ -53,7 +54,7 @@ export const inputSchema = {
   },
 } as const
 
-/** Agents can send anything, so check the input even though the schema describes it. */
+/** WebMCP hosts are not required to enforce `inputSchema`, so check the input here too. */
 export function validateInput(input: unknown): SearchInput | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
   const record = input as Record<string, unknown>

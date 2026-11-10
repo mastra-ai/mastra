@@ -110,7 +110,7 @@ describe('registration', () => {
       required: ['query'],
       properties: {
         query: { type: 'string', maxLength: 500 },
-        limit: { type: 'integer', minimum: 1, maximum: 20, default: 5 },
+        limit: { type: ['integer', 'null'], minimum: 1, maximum: 20, default: 5 },
       },
     })
     // Registering must not create the Algolia client.
