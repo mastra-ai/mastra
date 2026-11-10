@@ -24,8 +24,8 @@ let jsonRenderChat: Promise<JsonRenderChat> | undefined;
 
 /**
  * `@json-render/chat` is an optional peer dependency, loaded only when an
- * adapter opts into `generativeUI`. The specifier stays literal so bundlers
- * include it when it is installed.
+ * adapter opts into `generativeUI`. It resolves at runtime, so `mastra build`
+ * needs it listed in `bundler.dynamicPackages`.
  */
 function loadJsonRenderChat(): Promise<JsonRenderChat> {
   jsonRenderChat ??= import(/* @vite-ignore */ /* webpackIgnore: true */ '@json-render/chat').then(

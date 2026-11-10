@@ -444,6 +444,15 @@ npm install @json-render/chat
 
 `@json-render/chat` requires zod 4, so projects still on zod 3 can't enable `generativeUI` yet.
 
+`@mastra/core` loads `@json-render/chat` at runtime, so `mastra build` and `mastra deploy` don't pick it up on their own. Add it to [`bundler.dynamicPackages`](/reference/core/mastra-class) so it's included in the build output:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  bundler: { dynamicPackages: ['@json-render/chat'] },
+})
+```
+
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
