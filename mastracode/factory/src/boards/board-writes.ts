@@ -275,8 +275,9 @@ export class BoardWrites {
     }
     await boards.describe(scope);
     const row = await this.existing(scope, key);
-    // Work resets to the Work the project was stored with: today's for a project Factory created
-    // with it, Work with Triage for every other.
+    // A board the app upserts for every project resets to the app's. Factory's Work resets to the
+    // Work the project was stored with: today's for a project Factory created with it, Work with
+    // Triage for every other.
     const definition = boards.seedFor(key, row) ?? seed;
     await this.#checkPhasesFree(scope, row, definition.phases);
     const reset = await stored(() => storage.resetTo(scope, key, definition, { expectedRevision, actor: writer.id }));

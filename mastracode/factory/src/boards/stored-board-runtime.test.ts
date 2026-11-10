@@ -33,7 +33,9 @@ import { compileBoardDefinition } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
 import type { InstalledBoard } from './registry.js';
+import { boardDefinitionOf } from './stored-board.js';
 import { workSeedWithTriage } from './work-seeds.js';
+import { workBoard } from './work.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -126,14 +128,19 @@ function stubModel(decide: (input: string) => ToolCall | undefined = () => undef
 
 /** A board an admin added to a project; it lives only in that project's database. */
 /**
- * The `ourWorkBoard` definition a document shows for replacing Work, evaluated as written. The tests
- * run it so the documented migration keeps passing `upsertBoard`'s checks.
+ * The `ourWorkBoard` a document shows for replacing Work, run as written (its one type annotation
+ * dropped), so the documented migration keeps passing `upsertBoard`'s checks.
  */
 function documentedWorkBoard(path: string): StoredBoardInput {
   const text = readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
-  const literal = /const ourWorkBoard: StoredBoardInput = (\{[\s\S]*?\n\});\n/.exec(text)?.[1];
-  if (!literal) throw new Error(`${path} shows no ourWorkBoard definition.`);
-  return new Function(`return (${literal});`)() as StoredBoardInput;
+  const code = /\nconst work = boardDefinitionOf\(workBoard\);\n[\s\S]*?\n\};\n/.exec(text)?.[0];
+  if (!code) throw new Error(`${path} shows no ourWorkBoard built from boardDefinitionOf(workBoard).`);
+  const run = new Function(
+    'boardDefinitionOf',
+    'workBoard',
+    `${code.replace('const ourWorkBoard: StoredBoardInput =', 'const ourWorkBoard =')}\nreturn ourWorkBoard;`,
+  );
+  return run(boardDefinitionOf, workBoard) as StoredBoardInput;
 }
 
 const bugsBoard: StoredBoardInput = {
@@ -1024,7 +1031,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ['the changeset', '../../../../.changeset/work-board-no-triage.md'],
           ['the README', '../../README.md'],
         ])(
-          "stores the Work board %s shows for replacing Work in every project, over edits, until a reset restores Factory's",
+          'stores the Work board %s shows for replacing Work in every project, over edits, and keeps it through a reset',
           async (_, path) => {
             stubModel();
             const ourWorkBoard = documentedWorkBoard(path);
@@ -1059,14 +1066,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
               (await replica.boards.get({ orgId, factoryProjectId: later }, 'work'))!.phases.map(p => p.key),
             ).toEqual(ourWorkBoard.phases.map(phase => phase.key));
 
-            // Reset restores Factory's built-in Work, as Factory first stored it, not the app's board.
+            // Reset restores the app's board, not Factory's Work.
             const row = (await replica.boards.get(olderScope, 'work'))!;
             const reset = await replica.send('POST', `/web/factory/projects/${older}/boards/work/reset`, {
               expectedRevision: row.revision,
             });
             expect(reset.status).toBe(200);
             const restored = (await replica.boards.get(olderScope, 'work'))!.phases.map(phase => phase.key);
-            expect(restored).toEqual(workSeedWithTriage().phases.map(phase => phase.key));
+            expect(restored).toEqual(ourWorkBoard.phases.map(phase => phase.key));
           },
           60_000,
         );
@@ -1099,6 +1106,49 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           expect((await catalog(restarted, projectId)).map(board => board.id)).toEqual(['work', 'bugs']);
           expect((await restarted.boards.get(scope, 'work'))!).toMatchObject({ name: 'Ship work', revision: 1 });
           expect(await restarted.boards.readVersion(scope)).toBe(version);
+        }, 60_000);
+
+        it("resets an app's Work in a project created after the upsert to the app's board, not Factory's", async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const replica = await boot(await isolatedDatabase(), orgId);
+          const appWork = { ...workSeedWithTriage(), name: 'Ship work' };
+          await replica.factory.upsertBoard(appWork, { projects: 'all' });
+          const projectId = await createProject(replica, 'Onboarded');
+          const scope = { orgId, factoryProjectId: projectId };
+          const row = (await replica.boards.get(scope, 'work'))!;
+
+          const reset = await replica.send('POST', `/web/factory/projects/${projectId}/boards/work/reset`, {
+            expectedRevision: row.revision,
+          });
+
+          expect(reset.status, JSON.stringify(reset.json)).toBe(200);
+          const after = (await replica.boards.get(scope, 'work'))!;
+          expect(after.name).toBe('Ship work');
+          expect(after.phases.map(phase => phase.key)).toContain('triage');
+        }, 60_000);
+
+        it("never runs Factory's one-board Work migrations on a Work the app upserts for every project", async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const replica = await boot(await isolatedDatabase(), orgId);
+          // Planning's runner as releases before phase runners stored it: the Work migration would add its skill.
+          const seed = workSeedWithTriage();
+          const appWork = {
+            ...seed,
+            name: 'Ship work',
+            phases: seed.phases.map(phase =>
+              phase.key === 'planning' ? { ...phase, runner: { context: 'work' } } : phase,
+            ),
+          };
+          await replica.factory.upsertBoard(appWork, { projects: 'all' });
+
+          const projectId = await createProject(replica, 'Onboarded');
+
+          const scope = { orgId, factoryProjectId: projectId };
+          expect((await catalog(replica, projectId)).map(board => board.id)).toEqual(['work']);
+          const planning = (await replica.boards.get(scope, 'work'))!.phases.find(phase => phase.key === 'planning')!;
+          expect(planning.runner).toEqual({ context: 'work' });
         }, 60_000);
 
         it("gives a project the app's board alone when the app upserts only another key", async () => {

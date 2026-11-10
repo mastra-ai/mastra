@@ -25,6 +25,7 @@ export type {
   WorkBoardPhase,
 } from './boards/index.js';
 export { BoardWriteError } from './boards/board-writes.js';
+export { boardDefinitionOf } from './boards/stored-board.js';
 export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from './storage/domains/boards/base.js';
 export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';

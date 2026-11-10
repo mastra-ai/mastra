@@ -232,11 +232,14 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   /**
-   * Factory's definition for `key`, which reset restores; undefined when Factory has none. Work's
+   * The definition reset restores for `key`; undefined when there is none. A board the app upserted
+   * for every project comes first, so reset never swaps an app's Work for Factory's. Factory's Work
    * is today's Work for a project Factory created with it (`row` created by
    * {@link NEW_PROJECT_SEED_ACTOR}), and Work with Triage for every other project.
    */
   seedFor(key: string, row?: Pick<StoredBoardRecord, 'createdBy'>): StoredBoardInput | undefined {
+    const app = this.#appBoards.get(key);
+    if (app) return app;
     const seed = this.#seeds.get(key);
     if (!seed || !this.#isFactoryWork(key) || row?.createdBy === NEW_PROJECT_SEED_ACTOR) return seed;
     return workSeedWithTriage();
@@ -405,14 +408,15 @@ export class ProjectBoardCache implements ProjectBoardSource {
   async #migrate(scope: StoredBoardScope, seededBefore: readonly string[] | null): Promise<void> {
     // A migration of one board rewrites Factory's own board; an app board under the same key keeps
     // its settings. One that carries a project setting into every board rewrites them all. A board
-    // Factory never stored in the project (an app wrote the row first) is an app's: its one-board
-    // migrations are recorded as applied without running.
+    // Factory never stored in the project (an app wrote the row first), or one the app upserts for
+    // every project, is an app's: its one-board migrations are recorded as applied without running.
     const migrations = BOARD_MIGRATIONS.filter(migration => {
       if (migration.boardKey === null) return true;
       const code = this.codeRegistry.get(migration.boardKey);
       return code !== undefined && defaultBoards.includes(code);
     }).map(migration =>
-      migration.boardKey !== null && seededBefore !== null && !seededBefore.includes(migration.boardKey)
+      migration.boardKey !== null &&
+      (this.#appBoards.has(migration.boardKey) || (seededBefore !== null && !seededBefore.includes(migration.boardKey)))
         ? { ...migration, migrate: () => undefined }
         : migration,
     );
