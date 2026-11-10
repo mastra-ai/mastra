@@ -1,6 +1,7 @@
 import { execFileSync } from 'child_process'
 import fs from 'fs/promises'
 import path from 'path'
+import { isDirectRun } from './is-direct-run'
 
 /**
  * Validates that sidebar entries tagged as "new" were introduced recently.
@@ -10,7 +11,7 @@ import path from 'path'
  *   pnpm validate:sidebar-new-tags --days=14
  */
 
-interface NewTagEntry {
+export interface NewTagEntry {
   lineNo: number
   label: string
   id?: string
@@ -21,7 +22,7 @@ interface BlameInfo {
   authorTime: number
 }
 
-interface StaleNewTag extends NewTagEntry {
+export interface StaleNewTag extends NewTagEntry {
   file: string
   date: string
   ageDays: number
@@ -35,7 +36,7 @@ const SIDEBAR_FILES = [
   'src/content/en/models/sidebars.js',
 ]
 
-const DEFAULT_DAYS = 30
+export const DEFAULT_SIDEBAR_NEW_TAG_DAYS = 30
 const DAY_MS = 86_400_000
 const TAGS_START_RE = /tags:\s*\[/
 const NEW_TAG_RE = /tags:\s*\[[^\]]*['"]new['"][^\]]*\]/
@@ -45,7 +46,7 @@ const ID_RE = /id:\s*['"]([^'"]+)['"]/
 
 function parseDaysArg(): number {
   const daysArg = process.argv.find(arg => arg.startsWith('--days='))
-  if (!daysArg) return DEFAULT_DAYS
+  if (!daysArg) return DEFAULT_SIDEBAR_NEW_TAG_DAYS
 
   const days = Number(daysArg.slice('--days='.length))
   if (!Number.isInteger(days) || days <= 0) {
@@ -55,7 +56,7 @@ function parseDaysArg(): number {
   return days
 }
 
-function findNewTagEntries(text: string): NewTagEntry[] {
+export function findNewTagEntries(text: string): NewTagEntry[] {
   const lines = text.split('\n')
   const entries: NewTagEntry[] = []
 
@@ -112,9 +113,10 @@ function findNewTagEntries(text: string): NewTagEntry[] {
   return entries
 }
 
-function blameFile(relPath: string): Map<number, BlameInfo> {
+function blameFile(relPath: string, rootDir: string): Map<number, BlameInfo> {
   const output = execFileSync('git', ['blame', '-w', '--line-porcelain', '--', relPath], {
-    cwd: process.cwd(),
+    cwd: rootDir,
+    stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf-8',
   })
   const blameByLine = new Map<number, BlameInfo>()
@@ -154,21 +156,24 @@ function formatDate(timestampMs: number): string {
   return new Date(timestampMs).toISOString().slice(0, 10)
 }
 
-async function main(): Promise<void> {
-  const days = parseDaysArg()
+/** Finds sidebar `new` tags whose line was last authored more than `days` days ago (uses git blame). */
+export async function findStaleNewTags(
+  days: number,
+  rootDir = process.cwd(),
+): Promise<{ stale: StaleNewTag[]; totalNewTags: number }> {
   const thresholdMs = Date.now() - days * DAY_MS
   const stale: StaleNewTag[] = []
   let totalNewTags = 0
 
   for (const sidebarFile of SIDEBAR_FILES) {
-    const fullPath = path.join(process.cwd(), sidebarFile)
+    const fullPath = path.join(rootDir, sidebarFile)
     const text = await fs.readFile(fullPath, 'utf-8')
     const entries = findNewTagEntries(text)
     totalNewTags += entries.length
 
     if (entries.length === 0) continue
 
-    const blameByLine = blameFile(sidebarFile)
+    const blameByLine = blameFile(sidebarFile, rootDir)
 
     for (const entry of entries) {
       const blame = blameByLine.get(entry.lineNo)
@@ -188,6 +193,13 @@ async function main(): Promise<void> {
       }
     }
   }
+
+  return { stale, totalNewTags }
+}
+
+async function main(): Promise<void> {
+  const days = parseDaysArg()
+  const { stale, totalNewTags } = await findStaleNewTags(days)
 
   if (stale.length > 0) {
     console.log(`Found ${stale.length} sidebar "new" tag(s) older than ${days} days:\n`)
@@ -211,7 +223,9 @@ async function main(): Promise<void> {
   console.log("No 'new' tags found in any sidebar.")
 }
 
-main().catch(error => {
-  console.error('Failed to validate sidebar new tags:', error instanceof Error ? error.message : error)
-  process.exit(1)
-})
+if (isDirectRun(import.meta.url)) {
+  main().catch(error => {
+    console.error('Failed to validate sidebar new tags:', error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}

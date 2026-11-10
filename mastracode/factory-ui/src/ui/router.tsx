@@ -16,8 +16,10 @@ import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
-import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
+import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 
+import { useBoardCatalog } from '../hooks/useBoardCatalog';
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
@@ -102,6 +104,23 @@ function RootLanding() {
   if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
+}
+
+/**
+ * The retired Review board's links (`/review?item=…`) open that board while the project still has open
+ * cards on it, and otherwise Work filtered to pull requests alone, keeping the rest of their query.
+ */
+function RetiredReviewBoardRedirect() {
+  const { search } = useLocation();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const catalog = useBoardCatalog(factoryId);
+  if (catalog.isPending) return null;
+  if (catalog.data?.some(board => board.id === 'review'))
+    return <Navigate to={`../boards/review${search}`} relative="path" replace />;
+  const params = new URLSearchParams(search);
+  // Picked sources widen the filter, so any other source would show cards the Review board never held.
+  params.set('source', PULL_REQUEST_SOURCE_FILTER);
+  return <Navigate to={`../work?${params}`} relative="path" replace />;
 }
 
 function FactoryHomeRedirect() {
@@ -207,7 +226,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
                         { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
-                        { path: 'review', element: <ReviewBoardPage />, ...loadOnEntry(prefetchBoard) },
+                        // The Review board was retired: new pull requests live on Work.
+                        { path: 'review', element: <RetiredReviewBoardRedirect />, ...loadOnEntry(prefetchBoard) },
                         { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },

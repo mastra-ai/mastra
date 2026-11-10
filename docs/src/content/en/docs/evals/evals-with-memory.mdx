@@ -10,7 +10,7 @@ packages:
 
 Agents that use memory in `thread` scope, including observational memory, require a thread ID at run time. When an eval invokes the agent without one, you'll see:
 
-```
+```text
 ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList.
 ```
 

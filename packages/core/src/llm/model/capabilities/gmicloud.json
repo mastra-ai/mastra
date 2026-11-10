@@ -41,6 +41,12 @@
         "values": ["high", "max"]
       }
     ],
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
     "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
@@ -70,12 +76,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "Qwen/Qwen3.8-Max": [

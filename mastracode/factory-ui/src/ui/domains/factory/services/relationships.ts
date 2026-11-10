@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { githubNumberForItem, sourceMetadata, workItemKey } from '../boardItems';
 import { rememberedBoardPath } from './boardViews';
 import type { WorkItem } from './workItems';
@@ -92,16 +93,14 @@ export function inferredParentWorkItemId(
   )?.id;
 }
 
-/**
- * Pull requests are filed on Work now, so an unfiled one opens Work; a filed one opens the
- * board that holds it, which is Review for cards filed before the move.
- */
+/** A pull request opens the board that holds its card; an unfiled one, or one with no board, opens the default board. */
 export function relationshipPath(
   item: Pick<WorkItem, 'source'> & { readonly board?: string | null },
   factoryId: string,
 ): string {
-  if (!isPullRequestSource(item.source) || item.board === undefined) return rememberedBoardPath(factoryId, 'work');
-  return rememberedBoardPath(factoryId, item.board ?? 'review');
+  if (!isPullRequestSource(item.source) || item.board === undefined)
+    return rememberedBoardPath(factoryId, DEFAULT_BOARD_ID);
+  return rememberedBoardPath(factoryId, item.board ?? DEFAULT_BOARD_ID);
 }
 
 export function relationshipLabel(item: WorkItem): string {

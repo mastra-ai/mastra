@@ -359,7 +359,19 @@
                         "role": "user",
                         "content": "Use metadata tool to process some data"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-metadata-1",
+                          "toolName": "metadataTool",
+                          "args": {
+                            "input": "some data"
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 {
@@ -746,7 +758,11 @@
                         "role": "tool",
                         "content": "[tool-result: metadataTool]"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 generate response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {
