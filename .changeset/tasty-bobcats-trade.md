@@ -9,7 +9,7 @@ Removed the per-project `reviewTestChecksEnabled` setting. `source_control_publi
 **Before**
 
 ```ts
-await projects.update({ orgId, id, input: { reviewTestChecksEnabled: true } });
+await projects.update({ orgId, id, input: { autoRunEnabled: true, reviewTestChecksEnabled: true } });
 if (project.reviewTestChecksEnabled) {
   // ...
 }
@@ -17,8 +17,8 @@ if (project.reviewTestChecksEnabled) {
 
 **After**
 
-Drop the field. To stop or start publishing checks, change the review skill: it publishes when it calls `source_control_publish_test_check`.
+Drop the field, and drop the call when it set nothing else. To stop or start publishing checks, change the review skill: it publishes when it calls `source_control_publish_test_check`.
 
 ```ts
-await projects.update({ orgId, id, input: { name: 'Platform' } });
+await projects.update({ orgId, id, input: { autoRunEnabled: true } });
 ```
