@@ -1,5 +1,32 @@
 # @mastra/code-sdk
 
+## 1.19.0-alpha.6
+
+### Minor Changes
+
+- Added a `textExtensions` option to `SandboxFilesystem`, so agents working in a remote sandbox can make `grep` search file types it skips by default. It works like the `LocalFilesystem` option: values extend the built-in set and are normalized, so `'sas'`, `'.sas'` and `'.SAS'` are equivalent. Fixes #28365. ([#29417](https://github.com/mastra-ai/mastra/pull/29417))
+
+  ```ts
+  const filesystem = new SandboxFilesystem({
+    sandbox,
+    workdir: '/workspace/repo',
+    textExtensions: ['.sasx'],
+  });
+  ```
+
+### Patch Changes
+
+- Build and plan modes now default to `openai/gpt-5.6-sol` instead of `openai/gpt-5.5`. ChatGPT (Codex OAuth) accounts reject `gpt-5.5`, so sessions with no chosen default that were connected only through Codex failed every message with "model not supported". ([#29940](https://github.com/mastra-ai/mastra/pull/29940))
+
+- Fixed web search and web extract results that could contain a broken character after being shortened. Some providers rejected those requests, which ended the run. A character cut in half is now replaced with `�`. ([#29473](https://github.com/mastra-ai/mastra/pull/29473))
+
+- Updated dependencies [[`749c09c`](https://github.com/mastra-ai/mastra/commit/749c09cf9120ff36cfa965444e2f0472b37c00ee), [`931c2bb`](https://github.com/mastra-ai/mastra/commit/931c2bb605a2a924844a4b75b2b8319673cc911b), [`22b24cc`](https://github.com/mastra-ai/mastra/commit/22b24cc40ad2923b22e11cfa2b5264b4ae0f1ffc), [`5810337`](https://github.com/mastra-ai/mastra/commit/5810337c710fdba9f3e1c3fe982eec8907f2f444), [`ec60314`](https://github.com/mastra-ai/mastra/commit/ec603149745f7592d3d559447f69c65277580c31), [`08e677f`](https://github.com/mastra-ai/mastra/commit/08e677fdbe36c10118c54c0494c8412019d61955), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`df4b70b`](https://github.com/mastra-ai/mastra/commit/df4b70bd4185ce7c56699aac76321e64e59d7cdd), [`6ef0741`](https://github.com/mastra-ai/mastra/commit/6ef07410a40f69ebe316db2bd3190cd43177a46a), [`c3ef10e`](https://github.com/mastra-ai/mastra/commit/c3ef10ee3094f9d30d2aca6d59ef224b0340d6ba), [`01b2b95`](https://github.com/mastra-ai/mastra/commit/01b2b958af4a2a609e20ae2e39c0201383631760), [`e344f15`](https://github.com/mastra-ai/mastra/commit/e344f157171c02d43c41bd6f4a4487e0215726af), [`5de12fc`](https://github.com/mastra-ai/mastra/commit/5de12fce63626abb87fcb09d7628951e7ad96b4a), [`6b8f215`](https://github.com/mastra-ai/mastra/commit/6b8f215e1fadcba2d0e3ad6a1a9222f8f2c6da79), [`04803ea`](https://github.com/mastra-ai/mastra/commit/04803ea00e168759ed3e28ce8a65977df7355df9), [`ab4c3fa`](https://github.com/mastra-ai/mastra/commit/ab4c3fafdbd5ff84dde97fa936e1e55d70ef3e4b), [`223204c`](https://github.com/mastra-ai/mastra/commit/223204cd3eb1b9e54a7be0130d2bf2e6c957b9cf), [`e349d05`](https://github.com/mastra-ai/mastra/commit/e349d05edd35a1889a4122f296693a15a8125a27)]:
+  - @mastra/core@1.83.0-alpha.6
+  - @mastra/memory@1.41.1-alpha.3
+  - @mastra/mcp@2.9.0-alpha.3
+  - @mastra/schema-compat@1.3.18-alpha.0
+  - @mastra/client-js@1.60.0-alpha.6
+
 ## 1.19.0-alpha.5
 
 ### Patch Changes
