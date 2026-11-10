@@ -54,6 +54,22 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     }
   });
 
+  it('keeps consumeStream working after the destructured fullStream is fully read', async () => {
+    const { llm, result, output } = await streamHello();
+    const { fullStream, consumeStream, text } = output;
+
+    try {
+      for await (const _chunk of fullStream as AsyncIterable<unknown>) {
+        // drain
+      }
+      await expect(consumeStream()).resolves.toBeUndefined();
+      expect(await text).toBe('Hello there!');
+      expect(llm.getRequests()).toHaveLength(1);
+    } finally {
+      result.cleanup?.();
+    }
+  });
+
   it('exposes the provider request after destructuring', async () => {
     const { result, output } = await streamHello();
     const { request } = output;
