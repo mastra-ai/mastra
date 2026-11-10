@@ -52,7 +52,6 @@
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/view": "^6.43.15",
     "@dagrejs/dagre": "^1.1.8",
-    "@fontsource-variable/inter": "5.3.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
     "@lukeed/uuid": "^2.0.1",

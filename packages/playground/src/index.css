@@ -10,6 +10,7 @@
     --color-track: transparent;
   }
   html {
+    font-feature-settings: 'ss06' on;
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }

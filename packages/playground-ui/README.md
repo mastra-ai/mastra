@@ -511,12 +511,12 @@ Product code never writes the `font-mono` class, and lint rejects it outside the
 
 `--font-mono` defaults to the system monospace stack. Override it in an unlayered rule in your own CSS to use a product face, and every mono value follows.
 
-At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `0.546` is Inter. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
+At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `0.508` is Mona Sans. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
 
 ```css
 :root {
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
-  --font-mono-size-adjust: ex-height 0.546;
+  --font-mono-size-adjust: ex-height 0.508;
 }
 ```
 

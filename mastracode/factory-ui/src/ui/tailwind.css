@@ -2,9 +2,8 @@
 @import '@mastra/playground-ui/components.css';
 @import '@mastra/playground-ui/sources.css';
 
-/* Inter and Commit Mono, same as Studio. Inter comes from
- * @fontsource-variable/inter (with its optical-size axis), imported in
- * main.tsx. Commit Mono is bundled
+/* Mona Sans and Commit Mono, same as Studio. Mona Sans comes from
+ * @fontsource-variable/mona-sans, imported in main.tsx. Commit Mono is bundled
  * like Studio's (packages/playground/src/fonts.css): SIL OFL, see
  * assets/fonts/OFL-CommitMono.txt. */
 @font-face {
@@ -30,12 +29,12 @@
 @layer base {
   :root {
     --font-display:
-      'Inter Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-      'Noto Color Emoji';
+      'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+      'Segoe UI Symbol', 'Noto Color Emoji';
     --font-body: var(--font-display);
     --font-mono:
       'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
-    --font-mono-size-adjust: ex-height 0.546;
+    --font-mono-size-adjust: ex-height 0.508;
   }
 }
 

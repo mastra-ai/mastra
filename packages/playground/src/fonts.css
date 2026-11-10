@@ -1,14 +1,20 @@
 /*
  * Local Mastra Studio fonts. Bundled into the public `mastra` CLI build.
- * Inter (display + body) and Commit Mono (code) are both SIL OFL — safe to
- * redistribute in the open-source package (see OFL-Inter.txt and
- * OFL-CommitMono.txt). Inter loads with its
- * optical-size axis, so large text gets the tighter Display cut automatically.
- * Non-OFL product fonts stay outside this package.
+ * Mona Sans (display + body) and Commit Mono (code) are both SIL OFL — safe to
+ * redistribute in the open-source package (see OFL-MonaSans.txt and
+ * OFL-CommitMono.txt). Non-OFL product fonts stay outside this package.
  */
 
-@import '@fontsource-variable/inter/opsz.css';
-@import '@fontsource-variable/inter/opsz-italic.css';
+@font-face {
+  font-family: 'Mona Sans';
+  src:
+    local('Mona Sans'),
+    url('./assets/fonts/MonaSans-VariableFont_wdth-wght.ttf') format('truetype');
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  font-style: normal;
+  font-display: swap;
+}
 
 @font-face {
   font-family: CommitMono;
@@ -38,12 +44,12 @@
  */
 :root {
   --font-display:
-    'Inter Variable', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
     'Noto Color Emoji';
   --font-body:
-    'Inter Variable', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
     'Noto Color Emoji';
   --font-mono:
     'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
-  --font-mono-size-adjust: ex-height 0.546;
+  --font-mono-size-adjust: ex-height 0.508;
 }

@@ -147,7 +147,7 @@ export const TypographyFoundations: Story = {
     >
       <FoundationSection
         label="Typeface"
-        description="Three roles, three tokens. The package defaults them to system stacks so it carries no font licence; a product overrides the tokens in its own CSS and every text role follows — Studio points display and body at Inter and mono at Commit Mono, which is what renders below. There is no serif family: display is a role, not a typeface."
+        description="Three roles, three tokens. The package defaults them to system stacks so it carries no font licence; a product overrides the tokens in its own CSS and every text role follows — Studio points display and body at Mona Sans and mono at Commit Mono, which is what renders below. There is no serif family: display is a role, not a typeface."
       >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {families.map(family => (
