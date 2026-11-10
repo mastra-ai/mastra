@@ -426,6 +426,47 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     20_000,
   );
 
+  it('waits for a tool winding down after the abort before freeing its thread', async () => {
+    const threadId = `shutdown-winding-${engine}`;
+    const key = [RESOURCE, threadId].join('\u0000');
+    llm.on({ userMessage: 'wind down' }, { toolCalls: [{ id: 'call_winding', name: 'winding', arguments: {} }] });
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    const winding = { started: false, finished: false };
+    const windingTool = createTool({
+      id: 'winding',
+      description: 'Takes a moment to stop once aborted',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        winding.started = true;
+        await new Promise<void>(resolve =>
+          context?.abortSignal?.addEventListener('abort', () => setTimeout(resolve, 150), { once: true }),
+        );
+        winding.finished = true;
+        return 'stopped';
+      },
+    });
+    const running = replica(shared, events, memory, { winding: windingTool });
+    const observer = replica(shared, events, memory, {});
+    const follower = await follow(observer.agent, threadId);
+
+    await startStream(running.agent, 'wind down', threadId, {});
+    await vi.waitFor(() => expect(winding.started).toBe(true), { timeout: 5_000 });
+    expect(shared.owner(key)).toBeDefined();
+
+    await running.mastra.shutdown({ drainTimeout: 0 });
+    // The thread is handed over only once the aborted tool has stopped, not while it winds down.
+    expect(winding.finished).toBe(true);
+    expect(shared.owner(key)).toBeUndefined();
+    expect(follower.errors.filter(error => error.includes(LEASE_LOST))).toEqual([]);
+
+    follower.unsubscribe();
+    running.pubsub.dead = true;
+    await observer.mastra.shutdown({ drainTimeout: 200 });
+  }, 20_000);
+
   it('announces a run parked on an approval as suspended and frees its thread (5)', async () => {
     const threadId = `shutdown-parked-${engine}`;
     const key = [RESOURCE, threadId].join('\u0000');

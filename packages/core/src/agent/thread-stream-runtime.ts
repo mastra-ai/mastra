@@ -1339,9 +1339,12 @@ export class AgentThreadStreamRuntime {
       // still parked on its sibling suspensions while its resumed segment executes, and a step raising a suspension
       // can end its segment while a sibling tool call of that step still executes: both are aborted like any executing
       // run. Neither its suspension bookkeeping nor the output a resumed segment reuses says whether it still executes.
+      // A durable run's steps register under its registry entry instead; abandoning the run already aborted them.
       const preparedRun = state.preparedRunsById.get(runId);
       const controller = preparedRun?.abortController ?? record.segmentAbortController;
-      const executing = (!!preparedRun && record.lifecycle !== 'suspended') || hasRunningRunStep(controller?.signal);
+      const stepOwners = [controller?.signal, record.stepOwner?.()].filter(owner => owner !== undefined);
+      const executing =
+        (!!preparedRun && record.lifecycle !== 'suspended') || stepOwners.some(owner => hasRunningRunStep(owner));
       const abortController = executing ? controller : undefined;
       if (!state.leaseRenewalTimers.has(runId) || record.registeredElsewhere || record.lateRetakeHandoff) {
         // Another execution has the thread; it ends the run and releases the thread.
@@ -1369,12 +1372,12 @@ export class AgentThreadStreamRuntime {
             abortGraceMs,
             false,
           ),
-        abortController
+        executing
           ? this.#withinGrace(
               Promise.allSettled([
                 preparedRun && (record.currentSegmentOutput ?? record.output)._waitUntilFinished(),
                 preparedRun && record.broadcastFinished,
-                new Promise<void>(resolve => whenRunStepsSettle(abortController.signal, resolve)),
+                ...stepOwners.map(owner => new Promise<void>(resolve => whenRunStepsSettle(owner, resolve))),
               ]).then(() => true),
               abortGraceMs,
               false,
