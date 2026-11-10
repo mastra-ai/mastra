@@ -2206,11 +2206,14 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Whether a run is in flight on `binding`: live here, or live on another dispatcher. An open-run
-   * entry with nothing live behind it is an orphan of a dead process and does not count.
+   * Whether a run is in flight on `binding`'s thread: live here, or live on another dispatcher. A run
+   * started under the seat this binding rotated from counts too. An open-run entry with nothing live
+   * behind it is an orphan of a dead process and does not count.
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
-    const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+    const open = (await listSessionOpenRuns(session)).filter(
+      entry => entry.bindingId === binding.id || entry.threadId === binding.threadId,
+    );
     if (open.length === 0) return false;
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);

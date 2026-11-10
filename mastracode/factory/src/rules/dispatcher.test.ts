@@ -2316,7 +2316,7 @@ describe('FactoryDecisionDispatcher', () => {
   );
 
   describe('an intake route moving a card with a run in flight', () => {
-    async function runningCard(phaseKey: string) {
+    async function runningCard(phaseKey: string, ledgerBindingId?: string) {
       const seed = await createFactoryStorageForTests();
       const storage = seed.workItems;
       const item = await createItem(storage);
@@ -2339,7 +2339,7 @@ describe('FactoryDecisionDispatcher', () => {
         value: [
           {
             kickoffId: 'running-kickoff',
-            bindingId: binding.id,
+            bindingId: ledgerBindingId ?? binding.id,
             role: binding.role,
             startedBy: 'factory-rule-dispatcher',
             orgId: binding.orgId,
@@ -2387,29 +2387,37 @@ describe('FactoryDecisionDispatcher', () => {
       return { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount };
     }
 
-    it("waits for the card's run to end before moving it into a working phase, without holding a dispatch slot", async () => {
-      const { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount } =
-        await runningCard('triage');
-      const routeMove = async () =>
-        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(entry => entry.decision.type === 'routeEvent');
+    it.each([
+      { name: "the card's run", ledgerBindingId: undefined },
+      { name: "a run started under the card's previous seat on the same thread", ledgerBindingId: 'previous-seat' },
+    ])(
+      'waits for $name to end before moving it into a working phase, without holding a dispatch slot',
+      async ({ ledgerBindingId }) => {
+        const { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount } =
+          await runningCard('triage', ledgerBindingId);
+        const routeMove = async () =>
+          (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(
+            entry => entry.decision.type === 'routeEvent',
+          );
 
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-      // Handed back to the queue rather than waiting inline: nothing listens for the run's end,
-      // and the claim did not count as an attempt.
-      expect(getAgentEndListenerCount()).toBe(1);
-      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
-      expect(await routeMove()).toMatchObject({ status: 'pending', attempts: 0, lastError: null });
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+        // Handed back to the queue rather than waiting inline: nothing listens for the run's end,
+        // and the claim did not count as an attempt.
+        expect(getAgentEndListenerCount()).toBe(1);
+        expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
+        expect(await routeMove()).toMatchObject({ status: 'pending', attempts: 0, lastError: null });
 
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:20Z'));
-      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:20Z'));
+        expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
 
-      controller.listActiveThreadRuns.mockReturnValue([]);
-      emitAgentEnd('complete');
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:40Z'));
+        controller.listActiveThreadRuns.mockReturnValue([]);
+        emitAgentEnd('complete');
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:40Z'));
 
-      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['triage'] });
-      expect(await routeMove()).toMatchObject({ status: 'succeeded' });
-    });
+        expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['triage'] });
+        expect(await routeMove()).toMatchObject({ status: 'succeeded' });
+      },
+    );
 
     it('moves it into a terminal phase at once, so terminal cleanup stops the run as a close always has', async () => {
       const { storage, item, dispatcher, getAgentEndListenerCount } = await runningCard('done');
