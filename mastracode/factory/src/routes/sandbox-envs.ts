@@ -2,7 +2,6 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { forgetSandboxEnvRevision } from '../sandbox/sandbox-env.js';
 import type { AuditEmitter, EmitAuditInput } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SandboxEnvMetadata, SandboxEnvStore } from '../storage/domains/sandbox-envs/base.js';
@@ -137,7 +136,6 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
           { name: name.name, value: parsed.data.value, appliesTo: parsed.data.appliesTo },
           scope.userId,
         );
-        forgetSandboxEnvRevision(this.deps.sandboxEnvs, scope);
         await this.#audit(context, scope, {
           action: 'factory.sandbox_env.set',
           targets: [{ type: 'sandbox_env', id: env.name, name: env.name }],
@@ -163,7 +161,6 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
           scope.userId,
         );
         if (!env) return context.json({ error: 'Variable not found', message: 'Variable not found.' }, 404);
-        forgetSandboxEnvRevision(this.deps.sandboxEnvs, scope);
         await this.#audit(context, scope, {
           action: 'factory.sandbox_env.updated',
           targets: [{ type: 'sandbox_env', id: env.name, name: env.name }],
@@ -178,7 +175,6 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
         if (!(await this.deps.sandboxEnvs.delete(scope.orgId, scope.projectId, name.name))) {
           return context.json({ error: 'Variable not found', message: 'Variable not found.' }, 404);
         }
-        forgetSandboxEnvRevision(this.deps.sandboxEnvs, scope);
         await this.#audit(context, scope, {
           action: 'factory.sandbox_env.deleted',
           targets: [{ type: 'sandbox_env', id: name.name, name: name.name }],

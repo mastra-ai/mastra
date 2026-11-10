@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
-import { cachedSandboxEnvRevision } from '../sandbox/sandbox-env.js';
+import { CachedSandboxEnvs } from '../sandbox/sandbox-env-cache.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { SandboxEnvRoutes } from './sandbox-envs.js';
@@ -11,6 +11,8 @@ const SENTINEL = 'sentinel-value-7f3a';
 
 async function setup(options: { writable?: boolean; audit?: AuditEmitter; enabled?: boolean } = {}) {
   const seed = await createFactoryStorageForTests();
+  // As in factory.ts; a frozen clock means only writes, never age, refresh it.
+  const sandboxEnvs = new CachedSandboxEnvs(seed.sandboxEnvs, { now: () => 0 });
   const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
   const other = await seed.projects.create({ orgId: 'org-2', userId: 'user-2', input: { name: 'Other' } });
   const app = new Hono();
@@ -23,7 +25,7 @@ async function setup(options: { writable?: boolean; audit?: AuditEmitter; enable
     new SandboxEnvRoutes({
       auth: fakeRouteAuth({ enabled: options.enabled ?? true }),
       projects: seed.projects,
-      sandboxEnvs: seed.sandboxEnvs,
+      sandboxEnvs,
       writable: options.writable ?? true,
       ...(options.audit ? { audit: options.audit } : {}),
     }).routes(),
@@ -34,7 +36,7 @@ async function setup(options: { writable?: boolean; audit?: AuditEmitter; enable
       method,
       ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
     });
-  return { seed, project, other, app, base, send };
+  return { seed, sandboxEnvs, project, other, app, base, send };
 }
 
 describe('SandboxEnvRoutes', () => {
@@ -142,17 +144,16 @@ describe('SandboxEnvRoutes', () => {
     expect((await send('PUT', '/GH_TOKENS', { value: 'x', appliesTo: 'runtime' })).status).toBe(200);
   });
 
-  it('clears the cached revision on every write, so the next command in this process reloads', async () => {
-    const { seed, project, send } = await setup();
-    const scope = { orgId: 'org-1', projectId: project.id };
-    const seen = [await cachedSandboxEnvRevision(seed.sandboxEnvs, scope)];
+  it('drops the cached revision on every write, so the next command in this process reloads', async () => {
+    const { sandboxEnvs, project, send } = await setup();
+    const read = async () => (await sandboxEnvs.revisions('org-1', project.id))?.revision;
+    const seen = [await read()];
     expect((await send('PUT', '/A', { value: 'x', appliesTo: 'runtime' })).status).toBe(200);
-    seen.push(await cachedSandboxEnvRevision(seed.sandboxEnvs, scope));
+    seen.push(await read());
     expect((await send('PATCH', '/A', { appliesTo: 'both' })).status).toBe(200);
-    seen.push(await cachedSandboxEnvRevision(seed.sandboxEnvs, scope));
+    seen.push(await read());
     expect((await send('DELETE', '/A')).status).toBe(204);
-    seen.push(await cachedSandboxEnvRevision(seed.sandboxEnvs, scope));
-    // All four reads land well inside the one-second cache window.
+    seen.push(await read());
     expect(new Set(seen).size).toBe(4);
   });
 
