@@ -119,6 +119,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
+ * - `span-query-text-search`: literal substring search in `querySpans`
+ * - `trace-query-text-search`: literal substring search across any span in `queryTraces`
  * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
  * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
  * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
@@ -157,6 +159,8 @@ export type ObservabilityStorageFeature =
   | 'metric-discovery'
   | 'span-query'
   | 'span-query-context-fields'
+  | 'span-query-text-search'
+  | 'trace-query-text-search'
   | 'span-query-model-fields'
   | 'span-aggregate'
   | 'span-aggregate-model-dimensions'
