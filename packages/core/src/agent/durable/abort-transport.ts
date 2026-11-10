@@ -13,7 +13,7 @@
  * event is ever published, leaving stream consumers hanging forever.
  */
 import type { PubSub } from '../../events';
-import { MastraTimeoutError } from '../../loop/timeout';
+import { isMastraTimeoutError, MastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { subscribeToAbortRequests } from '../streams/abort-transport';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
@@ -56,11 +56,7 @@ export async function ensureRemoteAbortListener(
   // The owner process already has a controller wired to its `abort()`. A worker
   // rebuilding state from storage has none, so give it one — flipping it is
   // what actually stops the model call.
-  if (!entry.abortController) {
-    const controller = new AbortController();
-    entry.abortController = controller;
-    entry.abortSignal = controller.signal;
-  }
+  if (!entry.abortController) giveWorkerController(entry);
 
   // The deadline's abort request is published once, live. A worker that subscribes after it went
   // out never hears it, so the run's deadline also travels with the run and is armed here. It is
@@ -103,6 +99,29 @@ export async function ensureRemoteAbortListener(
   };
 }
 
+/** Controllers this module created for a worker that had none, as opposed to an owner's controller wired to its `abort()`. */
+const workerControllers = new WeakSet<AbortController>();
+
+function giveWorkerController(entry: RunRegistryEntry): void {
+  const controller = new AbortController();
+  workerControllers.add(controller);
+  entry.abortController = controller;
+  entry.abortSignal = controller.signal;
+}
+
+/**
+ * A new segment is starting on a warm worker. If the previous segment's total deadline already
+ * stopped the worker's own controller (e.g. it passed while the run was suspended), the resumed
+ * segment gets a fresh one instead of inheriting that abort. Any other abort is kept.
+ */
+function replaceTimedOutWorkerController(entry: RunRegistryEntry): void {
+  const controller = entry.abortController;
+  if (!controller || !workerControllers.has(controller) || !controller.signal.aborted) return;
+  const reason: unknown = controller.signal.reason;
+  if (!isMastraTimeoutError(reason) || reason.timeoutType !== 'total') return;
+  giveWorkerController(entry);
+}
+
 /** The deadline each entry currently has armed, and the controller it stops, so a later segment can replace it. */
 const armedDeadlines = new WeakMap<
   RunRegistryEntry,
@@ -112,6 +131,7 @@ const armedDeadlines = new WeakMap<
 /** Arm the entry's deadline, replacing a timer armed for a different deadline. */
 function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefined): void {
   const armed = armedDeadlines.get(entry);
+  if (armed && armed.at !== deadline?.at) replaceTimedOutWorkerController(entry);
   if (!deadline) {
     // A segment without a deadline (e.g. resumed without totalMs) must not inherit the last one's.
     if (armed) {

@@ -2,7 +2,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { isMastraTimeoutError } from '../../../loop/timeout';
+import { isMastraTimeoutError, MastraTimeoutError } from '../../../loop/timeout';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
@@ -268,6 +268,56 @@ describe('DurableAgent cross-process abort', () => {
       entry.cleanup?.();
       globalRunRegistry.delete(runId);
       vi.useRealTimers();
+      await pubsub.close();
+    }
+  });
+
+  it("gives a warm worker's resumed segment a fresh controller when the previous deadline passed while suspended", async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const runId = 'deadline-passed-while-suspended-run';
+    const pubsub = new EventEmitterPubSub();
+    const entry = { isPlaceholder: true } as RunRegistryEntry;
+    globalRunRegistry.set(runId, entry);
+
+    try {
+      // The worker has no owner controller, so it gets its own. The run suspends and the first
+      // segment's deadline passes while it waits, stopping that controller.
+      await ensureRemoteAbortListener(pubsub, runId, undefined, { at: Date.now() + 200, timeoutMs: 200 });
+      const first = entry.abortController!;
+      await vi.advanceTimersByTimeAsync(300);
+      expect(first.signal.aborted).toBe(true);
+
+      // The resumed segment must not start already stopped by the previous deadline.
+      await ensureRemoteAbortListener(pubsub, runId, undefined, { at: Date.now() + 1000, timeoutMs: 1000 });
+      expect(entry.abortController).not.toBe(first);
+      expect(entry.abortSignal!.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(entry.abortSignal!.aborted).toBe(true);
+      expect(isMastraTimeoutError(entry.abortSignal!.reason)).toBe(true);
+    } finally {
+      entry.cleanup?.();
+      globalRunRegistry.delete(runId);
+      vi.useRealTimers();
+      await pubsub.close();
+    }
+  });
+
+  it('keeps an abort the current segment received when the same segment starts another step', async () => {
+    const runId = 'abort-kept-within-segment-run';
+    const pubsub = new EventEmitterPubSub();
+    const entry = { isPlaceholder: true } as RunRegistryEntry;
+    globalRunRegistry.set(runId, entry);
+    const deadline = { at: Date.now() + 60_000, timeoutMs: 60_000 };
+
+    try {
+      await ensureRemoteAbortListener(pubsub, runId, undefined, deadline);
+      entry.abortController!.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 60_000 }));
+      await ensureRemoteAbortListener(pubsub, runId, undefined, deadline);
+      expect(entry.abortSignal!.aborted).toBe(true);
+    } finally {
+      entry.cleanup?.();
+      globalRunRegistry.delete(runId);
       await pubsub.close();
     }
   });
