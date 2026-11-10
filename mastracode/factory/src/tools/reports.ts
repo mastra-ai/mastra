@@ -229,7 +229,7 @@ export async function workItemReportAttributes(
 export type FactoryRunOutcome =
   | { status: 'done' }
   | { status: 'failed'; reason: string; failureCode?: string }
-  | { status: 'blocked'; toolName?: string; approval?: boolean };
+  | { status: 'blocked'; toolName?: string; toolCallId?: string; approval?: boolean };
 
 /** `waiting`: the session is waiting for an answer, so a later run owes the final report. */
 export interface FactoryRunEndResult {
@@ -272,7 +272,11 @@ export async function sendRunEndReport(
         ? `${subject} failed${outcome.failureCode ? ` (${outcome.failureCode})` : ''}: ${outcome.reason}`
         : outcome.approval
           ? `${subject} is waiting for someone to approve ${outcome.toolName ?? 'a tool call'} in that session.`
-          : `${subject} is waiting${outcome.toolName ? ` on ${outcome.toolName}` : ''} and needs an answer.`;
+          : `${subject} is waiting${outcome.toolName ? ` on ${outcome.toolName}` : ''} and needs an answer.${
+              outcome.toolName === 'submit_plan' && outcome.toolCallId
+                ? ` Answer it with factory_answer_approval (toolCallId ${outcome.toolCallId}).`
+                : ''
+            }`;
   const notification = reportNotification({
     sender,
     status: outcome.status,
@@ -282,6 +286,7 @@ export async function sendRunEndReport(
       backstop: 'true',
       ...(outcome.status === 'failed' && outcome.failureCode ? { 'failure-code': outcome.failureCode } : {}),
       ...(outcome.status === 'blocked' && outcome.toolName ? { 'parked-tool': outcome.toolName } : {}),
+      ...(outcome.status === 'blocked' && outcome.toolCallId ? { 'tool-call-id': outcome.toolCallId } : {}),
       ...(outcome.status === 'blocked' && outcome.approval ? { 'waiting-for': 'approval' } : {}),
     },
   });

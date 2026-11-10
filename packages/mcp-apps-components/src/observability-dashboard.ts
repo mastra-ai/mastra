@@ -541,7 +541,7 @@ const FULL_WIDTH = 12;
 const SPAN_DESCRIPTION =
   'Columns of a 12-column row, one of 1, 2, 3, 4, 6 or 12: 12 is the full width, 6 half, 4 a third, 3 a quarter. Left out, the full width.';
 
-const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
+const buildWidgetDraftSchema = (catalog: ObservabilityCatalog): z.ZodType<ObservabilityWidgetDraft> => {
   const metricNames = [...new Set(catalog.metricNames)].sort();
   const listed = metricNames.length > 0 && metricNames.length <= OBSERVABILITY_CATALOG_MAX_METRIC_NAMES;
   const reads = readSchemas(listed ? (metricNames as [string, ...string[]]) : undefined);
@@ -701,7 +701,7 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
 
   const views = { kpis, timeseries, table, scores } satisfies Record<WidgetKind, z.ZodObject>;
   const { span, title, description: widgetDescription } = dashboardWidgetSchema.shape;
-  const widget = oneKeyOf<ObservabilityWidgetDraft>(
+  return oneKeyOf<ObservabilityWidgetDraft>(
     WIDGET_KINDS,
     'A widget',
     z.strictObject({
@@ -724,8 +724,10 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
       ),
     }),
   ).describe(`Exactly one of ${keysList(WIDGET_KINDS)} names the widget's kind and holds its view.`);
+};
 
-  return z
+const dashboardDraftSchemaOf = (widget: z.ZodType<ObservabilityWidgetDraft>) =>
+  z
     .strictObject({
       schemaVersion: z.literal(DASHBOARD_SCHEMA_VERSION).optional(),
       defaults: dashboardDefaultsSchema.optional(),
@@ -743,7 +745,6 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
         seen.add(id);
       }
     });
-};
 
 // Written out rather than inferred from the schemas: inferred, the published declarations would
 // spell out every read and option type once per use.
@@ -849,6 +850,32 @@ export type ObservabilityDashboardInput = {
 };
 
 /**
+ * The input schema of one widget, as written in a dashboard's `rows[].widgets[]`, for a tool that
+ * adds a single widget. Metric names are limited to `catalog.metricNames` as in
+ * `createObservabilityDashboardInputSchema`. Build it again when the catalog changes: the schema is a
+ * snapshot.
+ */
+export function createObservabilityWidgetInputSchema(
+  catalog: ObservabilityCatalog = {},
+): z.ZodType<ObservabilityWidgetDraft> {
+  return buildWidgetDraftSchema(catalog);
+}
+
+/** One widget's input schema, with free metric names; `createObservabilityWidgetInputSchema` lists the project's. */
+export const observabilityWidgetInputSchema = createObservabilityWidgetInputSchema();
+
+const dashboardInputSchemaOf = (widget: z.ZodType<ObservabilityWidgetDraft>) =>
+  z.object({
+    dashboard: dashboardDraftSchemaOf(widget),
+    datePreset: z
+      .enum(OBSERVABILITY_DATE_PRESETS)
+      .optional()
+      .describe(
+        "The range drawn. Left out, the dashboard's `defaults.datePreset` when it is one of these, else `24h`.",
+      ),
+  }) as z.ZodType<ObservabilityDashboardInput>;
+
+/**
  * The opening tool's input schema, with metric names limited to `catalog.metricNames`, so the
  * model can only name metrics that have data. With no names, or more than
  * `OBSERVABILITY_CATALOG_MAX_METRIC_NAMES`, metric names stay free strings. Build it again when the
@@ -857,15 +884,7 @@ export type ObservabilityDashboardInput = {
 export function createObservabilityDashboardInputSchema(
   catalog: ObservabilityCatalog = {},
 ): z.ZodType<ObservabilityDashboardInput> {
-  return z.object({
-    dashboard: buildDashboardDraftSchema(catalog),
-    datePreset: z
-      .enum(OBSERVABILITY_DATE_PRESETS)
-      .optional()
-      .describe(
-        "The range drawn. Left out, the dashboard's `defaults.datePreset` when it is one of these, else `24h`.",
-      ),
-  }) as z.ZodType<ObservabilityDashboardInput>;
+  return dashboardInputSchemaOf(createObservabilityWidgetInputSchema(catalog));
 }
 
 /**
@@ -873,7 +892,7 @@ export function createObservabilityDashboardInputSchema(
  * the widget's renderer does, so a model writing the dashboard sees them and gets actionable errors.
  * Metric names are free strings; `createObservabilityDashboardInputSchema` lists the project's.
  */
-export const observabilityDashboardInputSchema = createObservabilityDashboardInputSchema();
+export const observabilityDashboardInputSchema = dashboardInputSchemaOf(observabilityWidgetInputSchema);
 
 /** The opening tool's output schema, which the app reads as `structuredContent`. */
 export const observabilityDashboardOutputSchema: z.ZodType<ObservabilityDashboardOpened> = z.object({
@@ -902,4 +921,18 @@ export function toObservabilityDashboard(input: ObservabilityDashboardInput): Ob
   const parsed = dashboardDefinitionSchema.safeParse(definition);
   if (!parsed.success) throw new Error(`The dashboard is invalid: ${z.prettifyError(parsed.error)}`);
   return { dashboard: definition, ...(datePreset ? { datePreset } : {}) };
+}
+
+/**
+ * The stored widget for `draft`, converted as in `toObservabilityDashboard`: its reads gathered into
+ * each view's queries, a fresh UUID when it has no id, and the full width when it has no span.
+ * Throws when `draft` doesn't pass `observabilityWidgetInputSchema`, or the widget doesn't validate.
+ */
+export function toObservabilityWidget(draft: ObservabilityWidgetDraft): DashboardWidget {
+  const checked = observabilityWidgetInputSchema.safeParse(draft);
+  if (!checked.success) throw new Error(`The widget is invalid: ${z.prettifyError(checked.error)}`);
+  const widget = toWidget(draft);
+  const parsed = dashboardWidgetSchema.safeParse(widget);
+  if (!parsed.success) throw new Error(`The widget is invalid: ${z.prettifyError(parsed.error)}`);
+  return widget;
 }

@@ -2041,7 +2041,9 @@ With hooks disabled, your application is responsible for closing MCP connections
 
 For HTTP servers, you can provide a custom `fetch` function to handle runtime-defined authentication or request interception. It can also handle other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
-The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
+The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` for requests that no tool call sends, such as `listTools()` and the connection handshake it opens. When a tool call opens the connection, either because a tool rebuilt with `toolsFromDefinitions()` or `toolFromDefinition()` connects on its first execution or because the call reconnects, the handshake receives that call's `requestContext`. Streams the connection keeps open afterward, such as the server-to-client event stream, keep using that same `requestContext`, and so do the client's replies to server requests on them, such as an answer to an input request. A request your own code starts from a server log or notification on those streams gets `null`.
+
+A server that authenticates every request therefore needs a credential for discovery as well as for tool calls. The following example forwards the user's cookie when a tool call provides a `requestContext`, and sends the app's own token when there's none, as in `listTools()`. Any request without a `requestContext` gets that token, so have the server limit it to discovery, for example listing tools but not calling them.
 
 When `fetch` is provided, `requestInit` and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
 
@@ -2052,10 +2054,15 @@ const mcpClient = new MCPClient({
       url: new URL('https://api.example.com/mcp'),
       fetch: async (url, init, requestContext) => {
         const headers = new Headers(init?.headers)
-        // Forward auth cookie from the incoming request
-        const cookie = requestContext?.get('cookie')
-        if (cookie) {
-          headers.set('cookie', cookie)
+        if (requestContext) {
+          // A tool call: forward the auth cookie from the incoming request
+          const cookie = requestContext.get('cookie')
+          if (cookie) {
+            headers.set('cookie', cookie)
+          }
+        } else {
+          // No requestContext, as in listTools(): a token the server only accepts for discovery
+          headers.set('authorization', `Bearer ${process.env.MCP_DISCOVERY_TOKEN}`)
         }
         return fetch(url, { ...init, headers })
       },
@@ -2077,9 +2084,11 @@ await agent.generate('Hello!', {
 })
 ```
 
+If the server accepts only per-user credentials, skip `listTools()` at startup. Build the catalog with [`listToolDefinitions()`](#listtooldefinitions) from a client that has a credential of its own, for example in a build step with a static `requestInit` header, and store it. At runtime, rebuild the tools with [`toolsFromDefinitions()`](#toolsfromdefinitions). Each rebuilt tool opens the connection on its first call, so the handshake carries that call's `requestContext`.
+
 ## Handling auth failures inside custom fetch
 
-A custom `fetch` shouldn't `throw` when authentication is unavailable. Every MCP request is a `POST`, and the SDK surfaces a non-2xx response as an error to the caller of `listTools()`, `tools/call` and so on, which is the behavior you want. A thrown `fetch` is reported the same way but loses the server's status and body. The only long-lived request is the `subscriptions/listen` `POST` the client opens for `resources.subscribe()`, and it's retried after a failure, so an unauthenticated stream can loop. Wait for the token, then forward the request:
+A custom `fetch` shouldn't `throw` when authentication is unavailable. JSON-RPC requests such as `tools/call` are `POST`s, and the SDK surfaces a non-2xx response as an error to the caller of `listTools()`, `tools/call` and so on, which is the behavior you want. A thrown `fetch` is reported the same way but loses the server's status and body. On a 2025-11-25 server, the client also sends a `GET` with no body after the handshake to open the server-to-client event stream, so check `init.method` rather than assuming a `POST` body. Long-lived streams are reopened after a failure: the `subscriptions/listen` `POST` the client opens for `resources.subscribe()` and the `GET` event stream if it drops. An unauthenticated `subscriptions/listen` stream can loop. Wait for the token, then forward the request:
 
 ```typescript
 async function waitForToken(timeoutMs = 5000): Promise<string | null> {

@@ -142,7 +142,7 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
     await runtime.waitForScreenText(/Expected reply watchdog completed/i, terminal, 30_000);
     await expect(
       terminal.getByText(
-        /▐send▌.*✗|Cannot send: peer is not saved|Cannot send: saved peer is not currently advertised/i,
+        /▐send▌.*✗|Cannot send: no saved peer has id|Cannot send: saved peer is not currently advertised/i,
         {
           full: true,
           strict: false,

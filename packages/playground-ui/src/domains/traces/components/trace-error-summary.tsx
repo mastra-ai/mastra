@@ -13,7 +13,7 @@ export function TraceErrorSummary({ name, message, notice }: TraceErrorSummaryPr
   return (
     <>
       <div className="flex items-center justify-between gap-2 border-b border-border py-1 pr-1.5 pl-3">
-        <Txt as="span" variant="caption" className="truncate font-medium text-destructive-foreground">
+        <Txt as="span" variant="column" className="truncate text-destructive-foreground">
           {name}
         </Txt>
         <CopyButton content={message} tooltip="Copy error" />

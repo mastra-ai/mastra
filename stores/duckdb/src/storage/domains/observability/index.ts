@@ -167,6 +167,10 @@ export interface ObservabilityDuckDBConfig {
  * Uses an append-only event-sourced model with SQL-based reconstruction for spans.
  */
 export class ObservabilityStorageDuckDB extends ObservabilityStorage {
+  override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   static override readonly retentionTables: RetentionTablesDescriptor = {
     spans: { table: 'span_events', column: 'timestamp', indexed: false },
     metrics: { table: 'metric_events', column: 'timestamp', indexed: false },

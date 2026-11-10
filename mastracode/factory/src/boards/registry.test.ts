@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
-import { reviewBoard } from './review.js';
 import { createTestBoard } from './test-utils.js';
 import { workBoard } from './work.js';
 
@@ -11,7 +10,7 @@ describe('createBoardRegistry', () => {
   it('installs the built-in boards and custom boards by default', () => {
     const registry = createBoardRegistry({ boards: [customBoard] });
 
-    expect([...registry.keys()]).toEqual(['work', 'review', 'release']);
+    expect([...registry.keys()]).toEqual(['work', 'release']);
     expect(registry.get('release')).toBe(customBoard);
     expect(Object.isFrozen(registry)).toBe(true);
   });
@@ -55,11 +54,10 @@ describe('createBoardRegistry', () => {
   });
 
   it('allows reinstalling the exported built-in boards when defaults are disabled', () => {
-    const registry = createBoardRegistry({ boards: [workBoard, reviewBoard], includeDefaultBoards: false });
+    const registry = createBoardRegistry({ boards: [workBoard], includeDefaultBoards: false });
 
-    expect([...registry.keys()]).toEqual(['work', 'review']);
+    expect([...registry.keys()]).toEqual(['work']);
     expect(registry.get('work')).toBe(workBoard);
-    expect(registry.get('review')).toBe(reviewBoard);
   });
 
   it('rejects duplicate replacement ids when default boards are disabled', () => {

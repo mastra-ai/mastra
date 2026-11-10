@@ -33,13 +33,16 @@ const STARTED_BY_THE_PAGE = [
   /^GET \/web\/config\/models\b/,
   // The board's issue and pull request lists: keyed by its repositories and intake settings.
   /^GET \/web\/github\/projects\/[^/]+\/(issues|prs)\b/,
-  // GitHub label routes: read for GitHub repositories outside Review.
-  /^GET \/web\/intake\/label-routes\b/,
   // The board's recent activity: keyed by the people on its cards.
   /^GET \/web\/factory\/projects\/[^/]+\/audit\b/,
 ];
 // Settings sections load their own data once they render; only their code starts early.
 const SETTINGS_SECTION_DATA = [/^GET \/api\/agent-controller\/code\/sessions\/factory-1$/];
+const REREAD_ONCE_THE_FEED_CONNECTS = [
+  /^GET \/web\/factory\/projects\/[^/]+\/work-items$/,
+  /^GET \/web\/factory\/projects\/[^/]+\/decisions\b/,
+  /^GET \/api\/agent-controller\/code\/active-runs$/,
+];
 
 function renderApp(
   path: string,
@@ -111,7 +114,8 @@ function returnToTab() {
 describe('Opening Factory', () => {
   it.each([
     { page: 'Work', path: '/factories/factory-1/work' },
-    { page: 'Review', path: '/factories/factory-1/review' },
+    // The retired Review board's links open Work, so they load what Work needs.
+    { page: 'Work from a Review board link', path: '/factories/factory-1/review' },
     { page: 'a custom board', path: '/factories/factory-1/boards/release' },
     { page: 'Rules', path: '/factories/factory-1/rules?group=failed' },
     { page: 'a new session', path: '/factories/factory-1/new' },
@@ -150,11 +154,12 @@ describe('Opening Factory', () => {
       .filter(url => !STARTED_BY_THE_PAGE.some(pattern => pattern.test(url)))
       .filter(url => !(settings && SETTINGS_SECTION_DATA.some(pattern => pattern.test(url))));
     expect(late, 'requests that waited for the sign-in check').toEqual([]);
-    // The page settles well before the first poll (2 s), so any repeat is a second fetch.
+    // The page settles well before the first poll (5 s), so any other repeat is a second fetch.
     const sent = requests.map(({ url }) => url);
+    const timesNeeded = (url: string) => (REREAD_ONCE_THE_FEED_CONNECTS.some(pattern => pattern.test(url)) ? 2 : 1);
     expect(
-      sent.filter((url, index) => sent.indexOf(url) !== index),
-      'requests sent twice',
+      [...new Set(sent)].filter(url => sent.filter(other => other === url).length > timesNeeded(url)),
+      'requests sent more often than the page needs',
     ).toEqual([]);
     const unread = prefetched.filter(query => query.getObserversCount() === 0).map(query => query.queryHash);
     expect(unread, 'queries started for the page but never read by it').toEqual([]);

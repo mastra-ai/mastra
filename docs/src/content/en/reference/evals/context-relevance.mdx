@@ -133,7 +133,7 @@ Context Relevance uses a advanced scoring algorithm that considers:
 
 ### Scoring Formula
 
-```
+```text
 Base Score = Σ(relevance_weights) / (num_contexts × 1.0)
 Usage Penalty = count(unused_high_relevance) × unusedHighRelevanceContext
 Missing Penalty = min(count(missing_context) × missingContextPerItem, maxMissingContextPenalty)

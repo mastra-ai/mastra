@@ -298,7 +298,11 @@
                         "role": "user",
                         "content": "Hello"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 stream response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

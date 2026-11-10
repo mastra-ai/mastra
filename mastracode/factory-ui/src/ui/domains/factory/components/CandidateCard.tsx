@@ -10,6 +10,7 @@ import type { BoardCandidate } from '../boardCandidates';
 import { boardCardState } from '../boardCardState';
 import { candidatePayload, setDragPayload } from '../boardDrag';
 import { externalLinkLabel } from '../boardItems';
+import type { BoardInfo } from '../boardFlow';
 import type { BoardLayout } from '../boardLayout';
 import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
 import { cardMoves } from '../cardPrimaryAction';
@@ -36,7 +37,7 @@ export function CandidateCard({
   /** Factory project id resolving Linear descriptions in the detail panel. */
   factoryProjectId: string;
   /** Board the candidate is filed on. */
-  board?: string;
+  board?: BoardInfo;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
   layout: BoardLayout;
@@ -44,7 +45,7 @@ export function CandidateCard({
   const detailsTitleId = useId();
   const morph = useCardMorph();
 
-  const moves = cardMoves(board === undefined ? candidate : { ...candidate, board }, candidate.column);
+  const moves = cardMoves({ ...candidate, board: board?.id }, candidate.column, board);
   const [defaultMove] = moves;
   const { status } = boardCardState({});
 
