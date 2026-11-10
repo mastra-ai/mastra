@@ -329,6 +329,45 @@ describe('Board configuration', () => {
     expect(within(alert).getByText(/must stay terminal/)).toBeInTheDocument();
   });
 
+  it("keeps a phase's unfinished JSON rule to that phase while moving between phases", async () => {
+    stubFactory();
+    const bugs: NonNullable<StoredPhaseInfo['autoStartWhen']> = {
+      operator: 'AND',
+      conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }],
+    };
+    const work = storedWorkBoard();
+    serveBoard(
+      storedWorkBoard({
+        phases: work.board.phases.map(phase =>
+          phase.key === 'triage' ? { ...phase, autoStart: true, autoStartWhen: bugs } : phase,
+        ),
+      }),
+    );
+    renderAt(`/factories/${FACTORY_ID}/work/config`);
+    const unfinished = '{"operator":"AND","conditions":[{"field":"item.colour"';
+
+    const user = await openPhase('Planning');
+    await user.click(screen.getByRole('switch', { name: 'Planning: start on its own' }));
+    await user.click(screen.getAllByRole('button', { name: 'Edit as JSON' })[0]);
+    await user.click(screen.getByLabelText('Planning: start only when JSON'));
+    await user.paste(unfinished);
+    expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
+
+    // Triage starts on its own too, and still shows its own rule, not Planning's text or its error.
+    await user.click(configNav().getByRole('link', { name: 'Triage' }));
+    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
+    expect(screen.queryByLabelText('Triage: start only when JSON')).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Edit as JSON' })[0]);
+    expect(screen.getByLabelText('Triage: start only when JSON')).toHaveValue(JSON.stringify(bugs, null, 2));
+    await user.click(screen.getByRole('button', { name: 'Use rule builder' }));
+
+    // Back on Planning, the unfinished text is still there and still holds the save.
+    await user.click(configNav().getByRole('link', { name: 'Planning' }));
+    expect(await screen.findByLabelText('Planning: start only when JSON')).toHaveValue(unfinished);
+    expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
   it('asks before leaving the board with unsaved changes', async () => {
     stubFactory();
     serveBoard(storedWorkBoard());
@@ -458,6 +497,28 @@ describe('Board configuration', () => {
     expect(await screen.findByText('Edited')).toBeInTheDocument();
     // Skill edits save on their own, so the board has nothing to save.
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  it("closes a phase's skill editor when going back to another phase", async () => {
+    stubFactory();
+    serveBoard(storedWorkBoard());
+    const plan: FactorySkillInfo = { name: 'factory-plan', description: 'Plans the work', content: '', builtIn: true };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/skills`, () =>
+        HttpResponse.json({ skills: [plan], canEdit: true } satisfies FactorySkillsResponse),
+      ),
+    );
+    const { router } = renderAt(`/factories/${FACTORY_ID}/work/config/triage`);
+    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
+
+    const user = await openPhase('Planning');
+    await user.click(await screen.findByRole('button', { name: 'Edit factory-plan' }));
+    expect(await screen.findByRole('dialog', { name: 'Edit skill' })).toBeInTheDocument();
+
+    // The browser's Back button leaves the phase without closing the dialog first.
+    await router.navigate(-1);
+    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
+    expect(screen.queryByRole('dialog', { name: 'Edit skill' })).not.toBeInTheDocument();
   });
 
   describe('a custom board', () => {
