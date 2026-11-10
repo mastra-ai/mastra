@@ -24,7 +24,7 @@ import { ModelCredentialSummary } from './ModelCredentialSummary';
 import { ModelProviderMark } from './ModelProviderMark';
 import { useOrganizationScopedFactory } from './useOrganizationScopedFactory';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
-import { SessionThinkingBars } from './SessionThinkingBars';
+import { SessionThinkingIcon } from './SessionThinkingIcon';
 import { SessionThinkingSettings } from './SessionThinkingSettings';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
@@ -272,7 +272,7 @@ export function ModelPicker() {
         <Metadata.Item>{label}</Metadata.Item>
         {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
       </Metadata>
-      <SessionThinkingBars modelId={activeModelId} switchingModel={busy} />
+      <SessionThinkingIcon modelId={activeModelId} switchingModel={busy} />
     </ModelMenu>
   );
 }
