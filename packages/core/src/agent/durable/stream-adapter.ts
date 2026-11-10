@@ -158,6 +158,10 @@ function mergeCallbackToolChunks<T extends ToolCallChunk | ToolResultChunk>(stor
   return [...chunks.values()];
 }
 
+function pickDefined(source: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  return Object.fromEntries(keys.filter(key => source[key] !== undefined).map(key => [key, source[key]]));
+}
+
 /**
  * Map workflow usage (which may use legacy promptTokens/completionTokens) to
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
@@ -195,6 +199,8 @@ async function withBufferedStepResponses(
       ...stored,
       ...(match?.response !== undefined ? { response: match.response } : {}),
       ...(match?.content !== undefined ? { content: match.content } : {}),
+      // Reasoning, sources and files as the run's own output reported them.
+      ...(match ? pickDefined(match, ['reasoning', 'reasoningText', 'sources', 'files']) : {}),
       ...(runId
         ? {
             toolCalls: mergeCallbackToolChunks(
