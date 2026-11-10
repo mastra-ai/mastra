@@ -1272,6 +1272,14 @@ pnpm --filter ./mastracode/factory build:lib
 pnpm --filter ./mastracode/factory smoke:dist
 ```
 
+The full `test` suite takes several minutes. For quick verification, run only the colocated test files for the code you changed:
+
+```bash
+pnpm --filter ./mastracode/factory exec vitest run <test-files> --reporter=dot --bail 1
+```
+
+Broad runs, like the full suite, whole `src/integrations` or `src/rules` directories, `vitest related`, or `vitest run --changed`, can fan out to most of the suite because many modules are shared. Run them in the background or leave them to CI.
+
 Tests are colocated with source as `*.test.ts`. Use `smoke:dist` after building to verify that the published entry point can be imported successfully.
 
 ## Changelog
