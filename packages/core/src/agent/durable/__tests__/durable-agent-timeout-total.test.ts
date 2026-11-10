@@ -684,6 +684,72 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
+  it('keeps a tool result that returned in time but is still in the output processors at the total deadline', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
+          { type: 'tool-call' as const, toolCallId: 'tc-fast', toolName: 'fast', input: '{}' },
+          { type: 'tool-call' as const, toolCallId: 'tc-stuck', toolName: 'stuck', input: '{}' },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-slow-stream',
+        name: 'Timeout slow stream',
+        instructions: 'Call both tools.',
+        memory,
+        model,
+        outputProcessors: [
+          {
+            id: 'slow-stream',
+            processOutputStream: async ({ part }: any) => {
+              if (part.type === 'tool-result' && part.payload.toolCallId === 'tc-fast') {
+                // Past the deadline, but inside the grace window the deadline save waits for.
+                await new Promise(resolve => setTimeout(resolve, 600));
+              }
+              return part;
+            },
+          },
+        ],
+        tools: {
+          fast: createTool({
+            id: 'fast',
+            description: 'Returns right away',
+            inputSchema: z.object({}),
+            execute: async () => 'FAST-RESULT',
+          }),
+          stuck: createTool({ id: 'stuck', description: 'Runs on the client', inputSchema: z.object({}) }),
+        },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const result = await agent.stream('hello', {
+      memory: { thread: 'timeout-slow-stream-thread', resource: 'timeout-resource' },
+      modelSettings: { timeout: { totalMs: 300 } },
+    });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'timeout-slow-stream-thread' });
+        const saved = JSON.stringify(messages);
+        expect(saved).toContain('FAST-RESULT');
+        expect(saved).toContain(TOOL_ABORT_NOTICE);
+      });
+    } finally {
+      result.cleanup();
+    }
+  });
+
   it('saves a resumed run at its total deadline', async () => {
     const storage = new InMemoryStore();
     const memory = new MockMemory({ storage });

@@ -2037,6 +2037,10 @@ export function createDurableToolCallStep() {
       const settleRunTool = startRunStep(registryEntry);
       let outcomeRecorded!: () => void;
       const outcomeRecordedPromise = new Promise<void>(resolve => (outcomeRecorded = resolve));
+      // An outcome that settles in time is recorded for the deadline save only after mapping and the output
+      // processors, below. The run step stays open until then, so a deadline in between waits for it.
+      let recordedAtStepEnd = false;
+      let stepEnded = false;
       try {
         try {
           ownership?.throwIfLost();
@@ -2058,7 +2062,10 @@ export function createDurableToolCallStep() {
           // Run-activity tracking brackets live execution (durable-only bookkeeping).
           acquireExecution: () => markRunActive(runId),
           // Settles once the tool body has settled and its outcome below is recorded where needed, which the deadline save waits for.
-          onToolSettled: () => void outcomeRecordedPromise.then(settleRunTool),
+          onToolSettled: () =>
+            void outcomeRecordedPromise.then(() => {
+              if (!recordedAtStepEnd || stepEnded) settleRunTool();
+            }),
           logger: logger as any,
         })
           .then(async settled => {
@@ -2157,6 +2164,8 @@ export function createDurableToolCallStep() {
                 outcome: lateOutcome,
                 providerMetadata: lateProviderMetadata,
               });
+            } else if (registryEntry?.timeoutTotalMs) {
+              recordedAtStepEnd = true;
             }
             return settled;
           })
@@ -2473,6 +2482,9 @@ export function createDurableToolCallStep() {
           // A hook may bail on a FAILED delegation too (success: false).
           ...consumeDelegationBailSignal(),
         };
+      } finally {
+        stepEnded = true;
+        if (recordedAtStepEnd) settleRunTool();
       }
     },
   });
