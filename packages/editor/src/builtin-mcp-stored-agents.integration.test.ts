@@ -11,7 +11,7 @@ import { MastraServer } from '@mastra/hono';
 import { LibSQLStore } from '@mastra/libsql';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MastraEditor } from './index';
 
@@ -49,6 +49,8 @@ describe('built-in MCP stored_agents toolset', () => {
   const clients: MCPClient[] = [];
 
   beforeAll(async () => {
+    // list_available_models lists only providers with a key in the environment; nothing here calls a provider.
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
     dir = await mkdtemp(join(tmpdir(), 'mcp-stored-agents-'));
     const storage = new LibSQLStore({ id: 'mcp-stored-agents', url: `file:${join(dir, 'mastra.db')}` });
     const mastra = new Mastra({
@@ -82,6 +84,7 @@ describe('built-in MCP stored_agents toolset', () => {
     await Promise.all(clients.map(client => client.disconnect()));
     await close?.();
     await rm(dir, { recursive: true, force: true });
+    vi.unstubAllEnvs();
   });
 
   const tools = async (token: string) => {
