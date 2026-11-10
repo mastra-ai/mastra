@@ -1799,6 +1799,8 @@ export class DurableAgent<
       cleanup: () => {},
     };
     this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController, executionFence);
+    // The recovered run's deadline saves the turn from its persisted input, as stream() and resume() do.
+    this.#runInputs.set(executionFence, workflowInput);
 
     return {
       requestContext,
@@ -2762,12 +2764,14 @@ export class DurableAgent<
             new Promise<void>(resolve => whenRunStepsSettle(runInputEntry, resolve)),
             TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_MS,
           );
+          const deadlineSpan = runInputEntry.resumeAgentSpan ?? runInputEntry.agentSpan;
           await runDurableDeadlineOutputPass({
             runId,
             initData: runInput,
             ...deadlineMessageListState(runInputEntry, runInput.messageListState),
             entry: runInputEntry,
             mastra: this.#mastra,
+            tracingContext: deadlineSpan ? { currentSpan: deadlineSpan } : undefined,
             logger: this.logger,
           });
         })().catch(saveError => {

@@ -674,6 +674,99 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
+  // The resumed run input persists recalled messages as refs; the deadline save must not read them unhydrated.
+  it('saves a cold-resumed run with recalled history at its total deadline', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const threadId = 'timeout-cold-resume-thread';
+    const resourceId = 'timeout-resource';
+    await memory.createThread({ threadId, resourceId });
+    await memory.saveMessages({
+      messages: [
+        {
+          id: 'history-user',
+          role: 'user',
+          threadId,
+          resourceId,
+          createdAt: new Date(1),
+          content: { format: 2, parts: [{ type: 'text', text: 'EARLIER-QUESTION' }] },
+        },
+        {
+          id: 'history-assistant',
+          role: 'assistant',
+          threadId,
+          resourceId,
+          createdAt: new Date(2),
+          content: { format: 2, parts: [{ type: 'text', text: 'EARLIER-ANSWER' }] },
+        },
+      ] as any,
+    });
+    const outputPasses = vi.fn();
+    const build = () => {
+      const agent = createDurableAgent({
+        agent: new Agent({
+          id: 'timeout-cold-resumed',
+          name: 'Timeout cold resumed',
+          instructions: 'Use the tool.',
+          memory,
+          model: toolCallingModel('approve'),
+          outputProcessors: [
+            {
+              id: 'count-output-passes',
+              processOutputResult: ({ messages }: { messages: unknown[] }) => {
+                outputPasses();
+                return messages;
+              },
+            } as any,
+          ],
+          tools: {
+            approve: createTool({
+              id: 'approve',
+              description: 'Needs approval',
+              inputSchema: z.object({ city: z.string() }),
+              requireApproval: true,
+              execute: () => new Promise<never>(() => {}),
+            }),
+          },
+        }),
+        pubsub,
+      });
+      new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+      return agent;
+    };
+    let suspended = false;
+    const first = build();
+    const initial = await first.stream('hello', {
+      memory: { thread: threadId, resource: resourceId },
+      modelSettings: { timeout: { totalMs: 800 } },
+      onSuspended: () => {
+        suspended = true;
+      },
+    });
+    await vi.waitFor(() => expect(suspended).toBe(true));
+    initial.cleanup();
+    globalRunRegistry.clear();
+    __resetExecutionFencesForTests();
+    await pubsub.close();
+    pubsub = new EventEmitterPubSub();
+    outputPasses.mockClear();
+
+    const second = build();
+    const resumed = await second.resume(initial.runId, { approved: true });
+    try {
+      const chunks = await drain(resumed.fullStream);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(() => expect(outputPasses).toHaveBeenCalledTimes(1));
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId, resourceId });
+        expect(messages.map(message => message.id).slice(0, 2)).toEqual(['history-user', 'history-assistant']);
+        expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
+      });
+    } finally {
+      resumed.cleanup();
+    }
+  });
+
   it.each([
     [false, false],
     [true, false],
@@ -781,11 +874,13 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
       await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
       if (withMemory) {
+        // The recovered run's deadline saves the turn, including the step completed before the crash.
         await vi.waitFor(async () => {
           const { messages } = await memory.recall({ threadId: 'timeout-thread', resourceId: 'timeout-resource' });
-          expect(
-            messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('tc-1')),
-          ).toBe(false);
+          expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+          const saved = JSON.stringify(messages);
+          expect(saved).toContain('tc-1');
+          expect(saved).toContain('Found NYC');
         });
       }
       recovered.cleanup();

@@ -33,6 +33,7 @@ import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../
 import { getRunRegistryEntry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
+import { hydrateMessageListState } from './shared/message-list-state';
 
 type GenerateThreadTitleArgs = Parameters<NonNullable<RunRegistryEntry['generateThreadTitle']>>[0];
 type AnyAgent = Agent<any, any, any, any>;
@@ -489,6 +490,7 @@ export function deadlineMessageListState(
         toolCallId: result.toolCallId,
         toolName: result.toolName,
         toolArgs: result.args,
+        providerMetadata: result.providerMetadata,
       });
     }
     // A sibling call still running past the grace window is saved as aborted, so the results
@@ -524,17 +526,20 @@ export async function runDurableDeadlineOutputPass({
   cutOffText,
   entry,
   mastra,
+  tracingContext,
   logger,
 }: {
   runId: string;
   initData: Pick<
     DurableAgenticWorkflowInput,
-    'agentId' | 'agentName' | 'messageId' | 'state' | 'options' | 'requestContextEntries'
+    'runId' | 'agentId' | 'agentName' | 'messageId' | 'state' | 'options' | 'requestContextEntries'
   >;
   messageListState: SerializedMessageListState;
   cutOffText?: string;
   entry: RunRegistryEntry;
   mastra?: Mastra;
+  /** The run's agent span, so the deadline pass shows in the run's trace as the finish pass does. */
+  tracingContext?: TracingContext;
   logger: IMastraLogger;
 }): Promise<void> {
   const durableState = initData.state;
@@ -584,7 +589,13 @@ export async function runDurableDeadlineOutputPass({
   const messageList = new MessageList({
     threadId: durableState?.threadId,
     resourceId: durableState?.resourceId,
-  }).deserialize(messageListState);
+  }).deserialize(
+    // A recovered or resumed run's persisted input keeps messages memory already stores as refs.
+    await hydrateMessageListState(
+      { state: undefined, getInitData: () => initData, mastra, requestContext },
+      messageListState,
+    ),
+  );
   // Untargeted processor data lands on the reply, as at finish; resolved before the cut-off text is added.
   const replyMessageId = resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? initData.messageId;
   let inFlightMessageId: string | undefined;
@@ -645,7 +656,7 @@ export async function runDurableDeadlineOutputPass({
           stepNumber: 0,
           finishReason: 'error',
           text: cutOffText,
-          ...createObservabilityContext(),
+          ...createObservabilityContext(tracingContext),
           requestContext,
           writer,
         });
@@ -672,12 +683,19 @@ export async function runDurableDeadlineOutputPass({
       heldDataChunks = undefined;
     }
     try {
-      await runner.runOutputProcessors(messageList, createObservabilityContext(), requestContext, 0, writer, {
-        text: resolveOutputText(messageList),
-        usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
-        finishReason: 'error',
-        steps: [],
-      });
+      await runner.runOutputProcessors(
+        messageList,
+        createObservabilityContext(tracingContext),
+        requestContext,
+        0,
+        writer,
+        {
+          text: resolveOutputText(messageList),
+          usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+          finishReason: 'error',
+          steps: [],
+        },
+      );
     } catch (processorError) {
       // A tripwire rejects the turn, as it does at finish: remove response messages already saved.
       if (processorError instanceof TripWire) {

@@ -738,6 +738,73 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
+  // A tool's transcript transform applies to its saved result, also when the deadline save writes it.
+  itDeadline.each(['in time', 'just after the deadline'] as const)(
+    'total-timeout saves the transcript-transformed result of a call that finished %s alongside one cut off',
+    async when => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-transcript-${when.length}-${engine}`;
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Run both tools.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            secretive: createTool({
+              id: 'secretive',
+              description: 'Reads the vault.',
+              inputSchema: z.object({}),
+              execute: async () => {
+                if (when !== 'in time') await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 150));
+                return { secret: 'RAW-VAULT-SECRET' };
+              },
+              transform: { transcript: { output: () => ({ secret: 'REDACTED-FOR-TRANSCRIPT' }) } },
+            }),
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              {
+                toolCalls: [
+                  { id: 'call_secret', name: 'secretive', arguments: {} },
+                  { id: 'call_hang', name: 'hanging', arguments: {} },
+                ],
+              },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const saved = JSON.stringify(messages);
+          expect(saved).toContain('REDACTED-FOR-TRANSCRIPT');
+          // Only the hanging call carries the abort notice.
+          expect(saved.split(TOOL_ABORT_NOTICE)).toHaveLength(2);
+        });
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(JSON.stringify(messages)).not.toContain('RAW-VAULT-SECRET');
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     'provider-error after a completed tool step',
     async () => {

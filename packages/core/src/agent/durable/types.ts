@@ -820,7 +820,14 @@ export interface RunRegistryEntry {
    * Tool calls of the step in flight that settled, kept for runs with a total deadline: when the deadline ends
    * the run before the step merges its results, the deadline save records them.
    */
-  settledToolResults?: Array<{ toolCallId: string; toolName: string; args: unknown; outcome: ToolResultCommitOutcome }>;
+  settledToolResults?: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    outcome: ToolResultCommitOutcome;
+    /** Includes the tool payload transform metadata, so transcript transforms apply on recall. */
+    providerMetadata?: Record<string, any>;
+  }>;
   /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /**

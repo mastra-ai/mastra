@@ -15,6 +15,7 @@ import {
 } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
+import type { ToolResultCommitOutcome } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
@@ -2059,7 +2060,7 @@ export function createDurableToolCallStep() {
           onToolSettled: () => void outcomeRecordedPromise.then(settleRunTool),
           logger: logger as any,
         })
-          .then(settled => {
+          .then(async settled => {
             // The total deadline ended the run while this call ran, so the call's own commit is rejected
             // below. Leave the result where the deadline save looks for it, before the call reads as settled.
             // A call that failed in time is left there too: its step merges only once every sibling settles.
@@ -2074,20 +2075,64 @@ export function createDurableToolCallStep() {
                   ? processor.__processToolResult !== false
                   : typeof processor.processToolResult === 'function',
               );
+              let lateOutcome: ToolResultCommitOutcome =
+                settled.status === 'error'
+                  ? {
+                      kind: 'error',
+                      errorText: settled.error instanceof Error ? settled.error.message : String(settled.error),
+                    }
+                  : {
+                      kind: 'result',
+                      result: settled.status === 'aborted' || resultProcessed ? TOOL_ABORT_NOTICE : settled.result,
+                    };
+              // The transform metadata makes transcript transforms apply to the saved result on recall.
+              // When it cannot be computed, save only the abort notice so the raw value never reaches memory.
+              let lateTransformMetadata: DurableToolCallOutput['transformMetadata'];
+              try {
+                const chunk = await applyToolPayloadTransformToChunk(
+                  settled.status === 'error'
+                    ? {
+                        type: 'tool-error' as const,
+                        runId,
+                        from: ChunkFrom.AGENT,
+                        payload: { toolCallId, toolName, args, error: serializeError(settled.error) },
+                      }
+                    : {
+                        type: 'tool-result' as const,
+                        runId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId,
+                          toolName,
+                          args,
+                          result: lateOutcome.result,
+                          providerMetadata: typedInput.providerMetadata,
+                          providerExecuted,
+                        },
+                      },
+                  {
+                    transformInput: { args, providerMetadata: typedInput.providerMetadata },
+                    policy: toolPayloadTransform,
+                    toolTransform: (tool as { transform?: any })?.transform,
+                    tools: toolsForTransform,
+                    logger: logger as any,
+                  },
+                );
+                lateTransformMetadata = (chunk as { metadata?: Record<string, any> })
+                  .metadata as DurableToolCallOutput['transformMetadata'];
+              } catch (transformError) {
+                logger?.warn?.(`[DurableAgent] Failed to transform the late result of ${toolName}: ${transformError}`);
+                lateOutcome = { kind: 'result', result: TOOL_ABORT_NOTICE };
+              }
               (registryEntry.settledToolResults ??= []).push({
                 toolCallId,
                 toolName,
                 args: cleanedArgs,
-                outcome:
-                  settled.status === 'error'
-                    ? {
-                        kind: 'error',
-                        errorText: settled.error instanceof Error ? settled.error.message : String(settled.error),
-                      }
-                    : {
-                        kind: 'result',
-                        result: settled.status === 'aborted' || resultProcessed ? TOOL_ABORT_NOTICE : settled.result,
-                      },
+                outcome: lateOutcome,
+                providerMetadata: withToolPayloadTransformProviderMetadata(
+                  typedInput.providerMetadata as Record<string, any> | undefined,
+                  lateTransformMetadata,
+                ),
               });
             }
             return settled;
@@ -2315,6 +2360,10 @@ export function createDurableToolCallStep() {
             toolName,
             args: cleanedArgs,
             outcome: { kind: 'result', result },
+            providerMetadata: withToolPayloadTransformProviderMetadata(
+              providerMetadata as Record<string, any> | undefined,
+              transformMetadata,
+            ),
           });
         }
 
