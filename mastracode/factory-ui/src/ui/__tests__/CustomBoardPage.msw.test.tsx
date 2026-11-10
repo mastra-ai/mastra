@@ -12,15 +12,17 @@ import type { BoardCatalogResponse, IntakeRouteListResponse } from '../../api/ty
 import { createAppRoutes } from '../router';
 import { saveKanbanView, stageToggle } from './boardLayoutQueries';
 
-function intakeRouteTo(boardKey: string, enabled = true): IntakeRouteListResponse['intakeRoutes'][number] {
+type IntakeRoute = IntakeRouteListResponse['intakeRoutes'][number];
+
+function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): IntakeRoute {
   return {
     id: `route-${boardKey}`,
     name: `File onto ${boardKey}`,
-    enabled,
+    enabled: true,
     position: 0,
     when: null,
     target: { boardKey, phaseKey: null, joinClosedIssue: false },
-    on: [],
+    on: ['work_item.created'],
     allowWorkingPhase: false,
     revision: 1,
     createdBy: 'user-1',
@@ -28,6 +30,7 @@ function intakeRouteTo(boardKey: string, enabled = true): IntakeRouteListRespons
     updatedBy: 'user-1',
     updatedAt: '2026-11-01T00:00:00.000Z',
     problems: [],
+    ...overrides,
   };
 }
 
@@ -37,7 +40,7 @@ function renderBoard(
   boards = [releaseBoard],
   githubSourceIds: string[] = ['acme/app'],
   linear: { sourceIds: string[]; bindings: unknown[] } | null = null,
-  intakeRoutes = [intakeRouteTo('release')],
+  intakeRoutes: IntakeRoute[] | (() => Response) = [intakeRouteTo('release')],
 ) {
   const intakeRequest = vi.fn(() => HttpResponse.json({ issues: [], pullRequests: [] }));
   server.use(
@@ -57,8 +60,11 @@ function renderBoard(
         ],
       }),
     ),
-    http.get('*/web/factory/projects/:id/intake-routes', () =>
-      HttpResponse.json({ intakeRoutes } satisfies IntakeRouteListResponse),
+    http.get(
+      '*/web/factory/projects/:id/intake-routes',
+      typeof intakeRoutes === 'function'
+        ? intakeRoutes
+        : () => HttpResponse.json({ intakeRoutes } satisfies IntakeRouteListResponse),
     ),
     http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
     http.get('*/web/intake/config', () =>
@@ -125,11 +131,16 @@ describe('custom-only board routing', () => {
     },
   );
 
-  // A connected source files onto the default board unless a route sends it elsewhere, so a
-  // board no enabled route targets never receives a card.
+  // A connected source files onto the default board unless a route places its new cards
+  // elsewhere, so a board no enabled arrival route targets never receives a card.
   it.each([
     ['no route targets it', [intakeRouteTo('work')]],
-    ['its only route is off', [intakeRouteTo('release', false)]],
+    ['its only route is off', [intakeRouteTo('release', { enabled: false })]],
+    ['its only route moves existing cards on a later event', [intakeRouteTo('release', { on: ['work_item.closed'] })]],
+    [
+      'its only route joins pull requests to existing cards',
+      [intakeRouteTo('release', { target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true } })],
+    ],
   ])('offers intake setup while a source is connected but %s', async (_case, intakeRoutes) => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, intakeRoutes);
     await waitForMutationsIdle(client);
@@ -141,6 +152,28 @@ describe('custom-only board routing', () => {
       'href',
       '/factories/fp-1/settings/intake',
     );
+  });
+
+  // Without the routes the board can't tell whether anything files onto it, so it neither
+  // promises issues nor asks to connect a source: it says the lookup failed and offers a retry.
+  it('reports a failed intake route lookup with a retry instead of an empty state', async () => {
+    let fail = true;
+    const { client } = renderBoard(undefined, undefined, undefined, undefined, null, () =>
+      fail
+        ? HttpResponse.json({ error: 'Intake routes are unavailable' }, { status: 500 })
+        : HttpResponse.json({ intakeRoutes: [intakeRouteTo('release')] } satisfies IntakeRouteListResponse),
+    );
+    await waitForMutationsIdle(client);
+
+    const queued = await screen.findByTestId('board-column-queued');
+    expect(await within(queued).findByRole('alert')).toHaveTextContent('Intake routes are unavailable');
+    expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
+    expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
+
+    fail = false;
+    await userEvent.setup().click(within(queued).getByRole('button', { name: 'Retry' }));
+    expect(await within(queued).findByText('Intake is clear')).toBeVisible();
+    expect(within(queued).queryByRole('alert')).not.toBeInTheDocument();
   });
 
   // Selected sources are shared across factories; a source bound only to another project's board
