@@ -112,12 +112,13 @@ export async function releaseLegacyReviewCards(
   }
   let rewritten = 0;
   for (const { collection, rows } of found) {
-    for (const row of rows) {
-      rewritten += await ops.updateMany(
-        collection,
-        { id: row.id, board: LEGACY_REVIEW_BOARD },
-        normalizeLegacyReviewColumns({ ...row, stages: row.stages ?? [] }, {}),
-      );
+    for (const { id } of rows) {
+      // The card can have moved since it was read, so its placement comes from the row as it is now.
+      const released = await ops.updateAtomic<ReviewRow>(collection, { id, board: LEGACY_REVIEW_BOARD }, current => {
+        if (open === 'refuse' && openOnReview(current)) throw new ReviewBoardInUseError(1);
+        return normalizeLegacyReviewColumns({ ...current, stages: current.stages ?? [] }, {});
+      });
+      if (released) rewritten += 1;
     }
   }
   return rewritten;
