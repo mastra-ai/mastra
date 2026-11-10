@@ -34,7 +34,7 @@ import type { IntegrationContext } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GitLabEventRules } from './default-rules.js';
-import { encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
+import { decodeIssueReference, encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -163,6 +163,20 @@ function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefi
   if (action === 'merge') return 'mergeRequestMerged';
   if (action === 'close') return 'mergeRequestClosed';
   return 'mergeRequestUpdated';
+}
+
+/**
+ * A card filed for an issue in a different GitLab project than `projectId` on `host`. Branch
+ * names repeat across projects, so a card attributed elsewhere never owns this project's branch.
+ * A card with no GitLab issue of its own can't be attributed, and isn't.
+ */
+function cardInOtherGitLabProject(item: Card, host: string, projectId: number): boolean {
+  if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'issue') return false;
+  const reference = decodeIssueReference(item.externalSource.externalId);
+  if (!reference) return false;
+  return (
+    reference.projectId !== String(projectId) || (reference.host !== undefined && normalizeHost(reference.host) !== host)
+  );
 }
 
 function normalizeHost(host: string): string {
@@ -368,13 +382,12 @@ export class GitLabRules {
     const attachedItem =
       mergeRequestKey && !reviewItem ? items.find(item => carriesAttachedMergeRequest(item, mergeRequestKey)) : undefined;
     const headBranch = string(mergeRequest?.source_branch) ?? '';
-    const authoringItem = headBranch
-      ? items.find(
-          item =>
-            item.externalSource?.type !== 'pull-request' &&
-            Object.values(item.sessions).some(session => session.branch === headBranch),
-        )
-      : undefined;
+    // A card whose session builds on the merge request's branch, in this project.
+    const buildsOnBranch = (item: Card) =>
+      item.externalSource?.type !== 'pull-request' &&
+      !cardInOtherGitLabProject(item, host, projectId) &&
+      Object.values(item.sessions).some(session => session.branch === headBranch);
+    const authoringItem = headBranch ? items.find(buildsOnBranch) : undefined;
     const actorTrusted = await this.#trusted(connectionIds, String(projectId), username);
     const eventUserId = number(object(parsed.payload.user)?.id) ?? number(parsed.payload.user_id);
     const resolveAuthor = async (
@@ -583,13 +596,7 @@ export class GitLabRules {
     // Work transition policy keeps an agent from closing the work while it is
     // open. Sessions carry no repository, so a branch shared by two Work cards
     // is ambiguous and records nothing.
-    const branchOwners = headBranch
-      ? items.filter(
-          item =>
-            item.externalSource?.type !== 'pull-request' &&
-            Object.values(item.sessions).some(session => session.branch === headBranch),
-        )
-      : [];
+    const branchOwners = headBranch ? items.filter(buildsOnBranch) : [];
     // A merge request filed on its issue's card is tracked there the same way.
     const trackedItem = attachedItem ?? (branchOwners.length === 1 ? authoringItem : undefined);
     if (trackedItem && mergeRequestIid) {

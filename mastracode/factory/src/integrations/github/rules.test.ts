@@ -6292,6 +6292,51 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(sourceTypes(cards.find(card => card.id === other.id)!)).toEqual(['issue']);
     });
 
+    it("keeps an issue card in PR review when another repository's pull request with the same number closes", async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'intake');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      expect((await h.cards()).find(entry => entry.id === issue.id)).toMatchObject({ stages: ['pr-review'] });
+      // The card records #17 as the pull request it has out, as it does for one its session wrote.
+      await h.workItems.update({
+        orgId: 'org-1',
+        id: issue.id,
+        userId: 'user-1',
+        patch: { metadata: { openPullRequestNumber: 17 } },
+      });
+      // A second repository on the project, where a session on this card opened its own #17.
+      const installation = await h.sourceControl.installations.findByExternalId({ orgId: 'org-1', externalId: '7' });
+      const other = await h.sourceControl.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation!.id, externalId: '20', slug: 'acme/other', defaultBranch: 'main' },
+      });
+      await h.sourceControl.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: h.projectRepository.connectionId,
+        repositoryId: other.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace',
+      });
+      await h.integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:20:17',
+        threadId: 'thread-other',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: h.project.id, workItemId: issue.id },
+      });
+      const closed = openedPullRequest(17, null, 'delivery-other-close-17', 'closed');
+      closed.payload.repository = { id: 20, full_name: 'acme/other' };
+      closed.payload.pull_request.html_url = 'https://github.com/acme/other/pull/17';
+
+      await h.ingest(closed);
+
+      const card = (await h.cards()).find(entry => entry.id === issue.id)!;
+      expect(card.stages).toEqual(['pr-review']);
+      expect(card.metadata?.openPullRequestNumber).toBe(17);
+      expect(card.workItem.sources.find(source => source.sourceType === 'pull-request')).toMatchObject({ state: 'open' });
+    });
+
     it('gives a pull request its own card when the issue it fixes is already Done', async () => {
       const h = await harness('write');
       const issue = await h.issueCard(42, 'done');

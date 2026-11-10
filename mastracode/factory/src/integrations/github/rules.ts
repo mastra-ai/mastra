@@ -50,6 +50,7 @@ import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import { isRepositoryPullRequest } from './pull-request-source.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
@@ -321,14 +322,9 @@ export function attachedPullRequestSource(
   pullRequestNumber: number,
 ): WorkItemSourceRow | undefined {
   if (item.externalSource?.type === 'pull-request') return undefined;
-  const ids = [canonicalSourceKey('pull-request', pullRequestNumber), legacySourceKey(repositoryId, 'pull-request', pullRequestNumber)].map(
-    key => `pull-request:${key}`,
+  return pullRequestSources(item).find(source =>
+    isRepositoryPullRequest(source, repositoryId, repositoryFullName, pullRequestNumber),
   );
-  return pullRequestSources(item).find(source => {
-    if (source.integrationId !== 'github' || !ids.includes(source.externalId)) return false;
-    const match = source.url ? /^https?:\/\/[^/]+\/(.+)\/pull\/\d+(?:[/?#]|$)/.exec(source.url) : null;
-    return match ? match[1] === repositoryFullName : source.metadata?.githubRepositoryId === repositoryId;
-  });
 }
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
@@ -1225,6 +1221,8 @@ export class GithubRules {
               },
             });
           }
+          // Numbers repeat across repositories: a card carrying pull requests settles only for one of its own.
+          if (!attached && pullRequestSources(card).length > 0) continue;
           // A merge settles the review, so the authoring Work item's mirrored
           // "request changes" no longer stops it from being closed.
           // Only the pull request the card has out settles it; an older one

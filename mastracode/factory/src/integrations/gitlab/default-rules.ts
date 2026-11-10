@@ -3,13 +3,14 @@ import {
   newestOpenPullRequestNumber,
   PULL_REQUEST_REVIEW_PHASE,
   pullRequestReviewPhase,
-  pullRequestSourceNumber,
   pullRequestSources,
-  reviewedChangeRequest,
+  reviewedPullRequest,
   reviewsPullRequest,
+  sourceExternalId,
 } from '../../boards/index.js';
 import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
+import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
 
 export type GitLabRuleOverrides = Partial<
   Record<FactoryGitLabEventName, FactoryRuleHandler<FactoryGitLabRuleContext> | null | undefined>
@@ -33,7 +34,6 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
   return Number.isFinite(sourceCreatedAt) && Number.isFinite(projectCreatedAt) && sourceCreatedAt > projectCreatedAt;
 }
 
-/** The Work card whose session authored the merge request, as opposed to the merge request's own card. */
 /** The board holding the merge request's own card: Work, or Review for a card a project still keeps there. */
 function mergeRequestCardBoard(context: FactoryGitLabRuleContext): 'work' | 'review' {
   return context.board === 'review' ? 'review' : 'work';
@@ -43,6 +43,7 @@ function mergeRequestCardNoun(context: FactoryGitLabRuleContext): string {
   return context.board === 'review' ? 'Review card' : 'merge request card';
 }
 
+/** The Work card whose session authored the merge request, as opposed to the merge request's own card. */
 function authoringCard(context: FactoryGitLabRuleContext): boolean {
   return context.board === 'work' && context.item !== undefined && !isPullRequestCard(context.item);
 }
@@ -51,9 +52,25 @@ function authoringCard(context: FactoryGitLabRuleContext): boolean {
 function attachedMergeRequest(context: FactoryGitLabRuleContext): boolean {
   const { item, mergeRequest } = context;
   if (!item || !mergeRequest || isPullRequestCard(item)) return false;
-  return pullRequestSources(item).some(
-    source => source.integrationId === 'gitlab' && pullRequestSourceNumber(source) === mergeRequest.number,
+  return pullRequestSources(item).some(source => isEventMergeRequest(context, source));
+}
+
+/**
+ * Whether a source row is the event's merge request. Iids repeat across GitLab projects, so
+ * the row's full key (host, project and iid) has to match, not the iid alone.
+ */
+function isEventMergeRequest(context: FactoryGitLabRuleContext, source: WorkItemSourceRow): boolean {
+  return (
+    context.mergeRequest !== undefined &&
+    source.integrationId === 'gitlab' &&
+    sourceExternalId(source) === context.mergeRequest.sourceKey
   );
+}
+
+/** Whether the merge request the card's PR review covers is the event's merge request. */
+function reviewsThisMergeRequest(context: FactoryGitLabRuleContext): boolean {
+  const reviewed = context.item ? reviewedPullRequest(context.item) : undefined;
+  return reviewed !== undefined && isEventMergeRequest(context, reviewed);
 }
 
 function issueOpened(context: FactoryGitLabRuleContext) {
@@ -157,7 +174,7 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
     !(
       attachedMergeRequest(context) &&
       context.item.stages[0] === PULL_REQUEST_REVIEW_PHASE &&
-      reviewedChangeRequest(context.item)?.number === context.mergeRequest.number
+      reviewsThisMergeRequest(context)
     )
   )
     return;

@@ -45,3 +45,5 @@ new MastraFactory({ storage, includeDefaultBoards: false, boards: [workBoard] })
 Pull requests filed before this change keep their own cards.
 
 The review-status comment on a GitHub pull request also appears when the pull request is reviewed on the issue card it belongs to. A builder checking its own work posts no status comment.
+
+A pull or merge request on a card is matched by its repository as well as its number, so another linked repository's #17 (or another GitLab project's !17) never moves a card that carries its own. A GitLab merge request is filed on a card by its branch only when the card belongs to the same GitLab project.

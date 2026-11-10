@@ -127,7 +127,7 @@ async function setup(
     input: { name: 'Project 1' },
   });
 
-  async function link(externalId: string) {
+  async function link(externalId: string, repositoryExternalId = PROJECT_ID, slug = PROJECT_PATH) {
     const installation = await sourceControl.installations.upsert({
       orgId: 'org-1',
       connectedByUserId: 'user-1',
@@ -138,8 +138,8 @@ async function setup(
       orgId: 'org-1',
       input: {
         installationId: installation.id,
-        externalId: PROJECT_ID,
-        slug: PROJECT_PATH,
+        externalId: repositoryExternalId,
+        slug,
         defaultBranch: 'main',
       },
     });
@@ -198,7 +198,7 @@ async function setup(
     configVersion: 'gitlab-test-v1',
     boards: options.boards ?? createBoardRegistry(),
   });
-  return { seeded, project, gitlab, service };
+  return { seeded, project, gitlab, service, link };
 }
 
 describe('GitLabRules', () => {
@@ -1579,6 +1579,137 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(cards).toHaveLength(2);
       expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
       expect(sourceTypes(cards.find(card => card.id !== issue.id)!)).toEqual(['pull-request']);
+    });
+
+    it.each([
+      ['closes', 'close', ['pr-review']],
+      ['merges', 'merge', ['pr-review']],
+    ] as const)(
+      "keeps an issue card where it is when another project's merge request with the same iid and branch %s",
+      async (_label, action, stages) => {
+        const h = await harness();
+        const branch = 'factory/eng-7';
+        // A Linear card names no GitLab project, so only the merge request's own key can tell the two !17s apart.
+        const issue = (
+          await h.seeded.workItems.upsert({
+            orgId: 'org-1',
+            userId: 'user-1',
+            factoryProjectId: h.project.id,
+            input: {
+              board: 'work',
+              externalSource: { integrationId: 'linear', type: 'issue', externalId: 'ENG-7' },
+              title: 'ENG-7',
+              stages: ['intake'],
+              sessions: {},
+              metadata: { authorTrusted: true },
+            },
+          })
+        ).item;
+        await h.seeded.workItems.update({
+          orgId: 'org-1',
+          factoryProjectId: h.project.id,
+          userId: 'user-1',
+          id: issue.id,
+          patch: {
+            sessions: { work: { sessionId: 'sess-work', threadId: 'thread-work', branch, startedBy: 'user-1' } },
+          },
+        });
+        await h.ingest(mergeRequest(17, 'Implements the fix.', { sourceBranch: branch }));
+        const joined = (await h.cards()).find(card => card.id === issue.id)!;
+        expect(joined.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
+        await h.seeded.workItems.update({
+          orgId: 'org-1',
+          factoryProjectId: h.project.id,
+          userId: 'user-1',
+          id: issue.id,
+          patch: { stages: ['pr-review'] },
+        });
+        // A second GitLab project on the same Factory project, whose own !17 is pushed from a branch of the same name.
+        const otherSource = encodeSourceId({ host: 'gitlab.example.com', projectId: '202' });
+        await h.link('other-connection', '202', 'acme/other');
+        await h.seeded.intake.saveConfig({
+          orgId: 'org-1',
+          config: { gitlab: { enabled: true, sourceIds: [SOURCE_ID, otherSource] } },
+        });
+        await h.seeded.intake.setBinding({
+          orgId: 'org-1',
+          integrationId: 'gitlab',
+          sourceId: otherSource,
+          factoryProjectId: h.project.id,
+          board: 'work',
+          userId: 'user-1',
+        });
+        const delivery = mergeRequest(17, 'Other work', { deliveryId: `d-other-${action}`, action, sourceBranch: branch });
+        const other = {
+          ...delivery,
+          payload: {
+            ...delivery.payload,
+            project: { id: 202, path_with_namespace: 'acme/other', web_url: 'https://gitlab.example.com/acme/other' },
+            object_attributes: {
+              ...delivery.payload.object_attributes,
+              source_project_id: 202,
+              url: 'https://gitlab.example.com/acme/other/-/merge_requests/17',
+            },
+          },
+        };
+
+        await h.ingest(other as never);
+
+        const card = (await h.cards()).find(entry => entry.id === issue.id)!;
+        expect(card.stages).toEqual(stages);
+        expect(card.workItem.sources.find(source => source.sourceType === 'pull-request')).toMatchObject({
+          state: 'open',
+        });
+      },
+    );
+
+    it("never files another project's merge request on a card whose session builds on a branch of the same name", async () => {
+      const h = await harness();
+      const branch = 'factory/gitlab-issue-42';
+      const issue = await h.issueCard('execute');
+      await h.seeded.workItems.update({
+        orgId: 'org-1',
+        factoryProjectId: h.project.id,
+        userId: 'user-1',
+        id: issue.id,
+        patch: {
+          sessions: { work: { sessionId: 'sess-work', threadId: 'thread-work', branch, startedBy: 'user-1' } },
+        },
+      });
+      const otherSource = encodeSourceId({ host: 'gitlab.example.com', projectId: '202' });
+      await h.link('other-connection', '202', 'acme/other');
+      await h.seeded.intake.saveConfig({
+        orgId: 'org-1',
+        config: { gitlab: { enabled: true, sourceIds: [SOURCE_ID, otherSource] } },
+      });
+      await h.seeded.intake.setBinding({
+        orgId: 'org-1',
+        integrationId: 'gitlab',
+        sourceId: otherSource,
+        factoryProjectId: h.project.id,
+        board: 'work',
+        userId: 'user-1',
+      });
+      const delivery = mergeRequest(5, 'Copies the branch name.', { sourceBranch: branch });
+      await h.ingest({
+        ...delivery,
+        payload: {
+          ...delivery.payload,
+          project: { id: 202, path_with_namespace: 'acme/other', web_url: 'https://gitlab.example.com/acme/other' },
+          object_attributes: {
+            ...delivery.payload.object_attributes,
+            source_project_id: 202,
+            url: 'https://gitlab.example.com/acme/other/-/merge_requests/5',
+          },
+        },
+      } as never);
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      const card = cards.find(entry => entry.id === issue.id)!;
+      expect(sourceTypes(card)).toEqual(['issue']);
+      expect(card.metadata?.openPullRequestNumber).toBeUndefined();
+      expect(sourceTypes(cards.find(entry => entry.id !== issue.id)!)).toEqual(['pull-request']);
     });
 
     it('files a merge request from the branch a card builds on that card', async () => {

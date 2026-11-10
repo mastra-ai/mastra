@@ -5,13 +5,15 @@ import {
   pullRequestReviewPhase,
   pullRequestSourceNumber,
   pullRequestSources,
-  reviewedChangeRequest,
+  reviewedPullRequest,
   reviewsPullRequest,
 } from '../../boards/index.js';
 import { hasRecordedVerdict } from '../../boards/pull-request-review.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
+import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
+import { isRepositoryPullRequest } from './pull-request-source.js';
 import { isFactoryApproveVerdict } from './stale-reviews.js';
 
 export type GithubRuleOverrides = Partial<
@@ -47,13 +49,23 @@ function pullRequestCardNoun(context: FactoryGithubRuleContext): string {
 function attachedPullRequest(context: FactoryGithubRuleContext): boolean {
   const { item, pullRequest } = context;
   if (!item || !pullRequest || isPullRequestCard(item)) return false;
-  return pullRequestSources(item).some(source => pullRequestSourceNumber(source) === pullRequest.number);
+  return pullRequestSources(item).some(source => isEventPullRequest(context, source));
+}
+
+/** Whether a source row is the event's pull request: the same number in the same repository. */
+function isEventPullRequest(context: FactoryGithubRuleContext, source: WorkItemSourceRow): boolean {
+  return (
+    context.pullRequest !== undefined &&
+    isRepositoryPullRequest(source, context.repository.id, context.repository.fullName, context.pullRequest.number)
+  );
 }
 
 /** Whether the card's PR review covers the event's pull request: its own, or the attached one it reviews. */
 function reviewsThisPullRequest(context: FactoryGithubRuleContext): boolean {
   if (!context.item || !context.pullRequest || !reviewsPullRequest(context)) return false;
-  return isPullRequestCard(context.item) || reviewedChangeRequest(context.item)?.number === context.pullRequest.number;
+  if (isPullRequestCard(context.item)) return true;
+  const reviewed = reviewedPullRequest(context.item);
+  return reviewed !== undefined && isEventPullRequest(context, reviewed);
 }
 
 function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: string): boolean {
