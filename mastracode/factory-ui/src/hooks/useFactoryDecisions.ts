@@ -10,16 +10,12 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import { actOnFactoryDecision, fetchFactoryDecisions } from '../ui/domains/factory/services/decisions';
 import type {
   FactoryDecisionAction,
   FactoryDecisionPage,
   FactoryDecisionStatus,
 } from '../ui/domains/factory/services/decisions';
-
-const STATUS_FALLBACK_POLL_MS = 2_000;
-const HISTORY_FALLBACK_POLL_MS = 5_000;
 
 export function factoryDecisionStatusQueryOptions(
   baseUrl: string,
@@ -37,8 +33,7 @@ export function factoryDecisionStatusQueryOptions(
 
 export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
   const { baseUrl } = useApiConfig();
-  const refetchInterval = useFeedPollInterval(STATUS_FALLBACK_POLL_MS);
-  return useQuery({ ...factoryDecisionStatusQueryOptions(baseUrl, githubProjectId, statuses), refetchInterval });
+  return useQuery(factoryDecisionStatusQueryOptions(baseUrl, githubProjectId, statuses));
 }
 
 /** Release, turn down, or requeue one queued effect. */
@@ -84,9 +79,5 @@ export function useFactoryDecisionHistory(
   statuses: FactoryDecisionStatus[] | undefined,
 ) {
   const { baseUrl } = useApiConfig();
-  const refetchInterval = useFeedPollInterval(HISTORY_FALLBACK_POLL_MS);
-  return useInfiniteQuery({
-    ...factoryDecisionHistoryQueryOptions(baseUrl, githubProjectId, statusKey, statuses),
-    refetchInterval,
-  });
+  return useInfiniteQuery(factoryDecisionHistoryQueryOptions(baseUrl, githubProjectId, statusKey, statuses));
 }

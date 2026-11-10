@@ -68,8 +68,38 @@ interface BoardRequests {
   runs: number;
 }
 
-function oneMoreOfEach(requests: BoardRequests): BoardRequests {
-  return { cards: requests.cards + 1, decisions: requests.decisions + 1, runs: requests.runs + 1 };
+/** Runs keep a poll of their own, so only cards and decisions count the board's refreshes. */
+function refreshes({ cards, decisions }: BoardRequests) {
+  return { cards, decisions };
+}
+
+function oneMoreRefresh(requests: BoardRequests) {
+  return { cards: requests.cards + 1, decisions: requests.decisions + 1 };
+}
+
+/** A card move the server holds until the test settles it; the board only reads `review` once it has. */
+function heldCardMove(board: { stage: string }) {
+  let settle = () => {};
+  const settled = new Promise<void>(resolve => {
+    settle = resolve;
+  });
+  server.use(
+    http.post(`${BOARD_URL}/item-1/transition`, async () => {
+      await settled;
+      board.stage = 'review';
+      return HttpResponse.json({
+        result: {
+          status: 'accepted',
+          transitionId: 'transition-1',
+          itemId: 'item-1',
+          revision: 2,
+          stage: 'review',
+          decisions: [],
+        },
+      });
+    }),
+  );
+  return settle;
 }
 
 function boardEndpoints() {
@@ -132,7 +162,8 @@ describe('FeedEventsProvider, on the board', () => {
     stream.push();
     await advance(rendered.client, WITHIN_A_SECOND_MS);
 
-    await waitFor(() => expect(requests).toEqual(oneMoreOfEach(before)));
+    await waitFor(() => expect(refreshes(requests)).toEqual(oneMoreRefresh(before)));
+    expect(requests.runs).toBeGreaterThan(before.runs);
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -146,9 +177,9 @@ describe('FeedEventsProvider, on the board', () => {
     for (let frame = 0; frame < 5; frame += 1) stream.push();
     await advance(rendered.client, WITHIN_A_SECOND_MS);
 
-    await waitFor(() => expect(requests).toEqual(oneMoreOfEach(before)));
+    await waitFor(() => expect(refreshes(requests)).toEqual(oneMoreRefresh(before)));
     await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
-    expect(requests).toEqual(oneMoreOfEach(before));
+    expect(refreshes(requests)).toEqual(oneMoreRefresh(before));
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -165,7 +196,7 @@ describe('FeedEventsProvider, on the board', () => {
     }
     await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
 
-    expect(requests).toEqual({ cards: before.cards + 3, decisions: before.decisions + 3, runs: before.runs + 3 });
+    expect(refreshes(requests)).toEqual({ cards: before.cards + 3, decisions: before.decisions + 3 });
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -188,7 +219,7 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
-  it('polls nothing while the stream is up, then polls again once it drops', async () => {
+  it('polls only runs while the stream is up, then cards and decisions too once it drops', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
@@ -196,7 +227,9 @@ describe('FeedEventsProvider, on the board', () => {
     const connected = { ...requests };
 
     await advance(rendered.client, PAST_ONE_FALLBACK_POLL_MS);
-    expect(requests).toEqual(connected);
+    expect(refreshes(requests)).toEqual(refreshes(connected));
+    // A run can leave the registry without a frame, so its marker never waits on one.
+    expect(requests.runs).toBeGreaterThan(connected.runs);
 
     server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 503 })));
     stream.close();
@@ -248,26 +281,7 @@ describe('FeedEventsProvider, on the board', () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests, board } = boardEndpoints();
-    let settleMove = () => {};
-    const moveSettled = new Promise<void>(resolve => {
-      settleMove = resolve;
-    });
-    server.use(
-      http.post(`${BOARD_URL}/item-1/transition`, async () => {
-        await moveSettled;
-        board.stage = 'review';
-        return HttpResponse.json({
-          result: {
-            status: 'accepted',
-            transitionId: 'transition-1',
-            itemId: 'item-1',
-            revision: 2,
-            stage: 'review',
-            decisions: [],
-          },
-        });
-      }),
-    );
+    const settleMove = heldCardMove(board);
     const rendered = await renderQuietBoard();
     const shownStages = () => rendered.result.current.cards.data?.[0]?.stages;
     const [item] = rendered.result.current.cards.data ?? [];
@@ -283,7 +297,29 @@ describe('FeedEventsProvider, on the board', () => {
     settleMove();
     await waitFor(() => expect(rendered.result.current.move.isSuccess).toBe(true));
     await advance(rendered.client, WITHIN_A_SECOND_MS);
-    await waitFor(() => expect(requests.runs).toBe(moving.runs + 1));
+    await waitFor(() => expect(requests.runs).toBeGreaterThan(moving.runs));
+    expect(shownStages()).toEqual(['review']);
+    await waitForMutationsIdle(rendered.client);
+  });
+
+  it('keeps a card in the column it is moving to when a poll comes round before the move settles', async () => {
+    server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 404 })));
+    const { board } = boardEndpoints();
+    const settleMove = heldCardMove(board);
+    const rendered = renderHookWithProviders(watchBoard, { inner });
+    await waitFor(() => expect(rendered.result.current.cards.isSuccess).toBe(true));
+    const shownStages = () => rendered.result.current.cards.data?.[0]?.stages;
+    const [item] = rendered.result.current.cards.data ?? [];
+    if (!item) throw new Error('the board never loaded its card');
+
+    act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+    await waitFor(() => expect(shownStages()).toEqual(['review']));
+    await advance(rendered.client, PAST_ONE_FALLBACK_POLL_MS);
+    expect(shownStages()).toEqual(['review']);
+
+    settleMove();
+    await waitFor(() => expect(rendered.result.current.move.isSuccess).toBe(true));
+    await advance(rendered.client, PAST_ONE_FALLBACK_POLL_MS);
     expect(shownStages()).toEqual(['review']);
     await waitForMutationsIdle(rendered.client);
   });

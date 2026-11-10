@@ -155,7 +155,7 @@ describe('Opening Factory', () => {
       .filter(url => !STARTED_BY_THE_PAGE.some(pattern => pattern.test(url)))
       .filter(url => !(settings && SETTINGS_SECTION_DATA.some(pattern => pattern.test(url))));
     expect(late, 'requests that waited for the sign-in check').toEqual([]);
-    // The page settles well before the first poll (2 s), so any other repeat is a second fetch.
+    // The page settles well before the first poll (5 s), so any other repeat is a second fetch.
     const sent = requests.map(({ url }) => url);
     const timesNeeded = (url: string) => (REREAD_ONCE_THE_FEED_CONNECTS.some(pattern => pattern.test(url)) ? 2 : 1);
     expect(

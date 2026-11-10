@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { BOARD_FALLBACK_POLL_MS, useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import type { BoardSnapshot, WorkItem } from '../ui/domains/factory/services/workItems';
 import { boardQueryOptions } from './useWorkItems';
 
@@ -32,10 +31,8 @@ export function useThreadWorkItem(
   sessionId?: string,
 ) {
   const { baseUrl } = useApiConfig();
-  const refetchInterval = useFeedPollInterval(BOARD_FALLBACK_POLL_MS);
   return useQuery({
     ...boardQueryOptions(baseUrl, factoryProjectId),
-    refetchInterval,
     select: (board: BoardSnapshot) => findThreadWorkItem(board.workItems, threadId, sessionId),
   });
 }

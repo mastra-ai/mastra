@@ -11,7 +11,6 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { cardMoveMutationKey, queryKeys } from '../api/keys';
-import { BOARD_FALLBACK_POLL_MS, useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import {
   createWorkItem,
   deleteWorkItem,
@@ -58,11 +57,12 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
 const NO_SESSIONS: ReadonlySet<string> = new Set();
+
 export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
-    // A hidden tab holds no stream and polls nothing, so refresh immediately on return.
+    // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
   });
 }
@@ -70,19 +70,13 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
 /** The org's persisted work items (kanban cards) for a project. */
 export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  const refetchInterval = useFeedPollInterval(BOARD_FALLBACK_POLL_MS);
-  return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), refetchInterval, select: selectCards });
+  return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
 }
 
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
 export function useParkedSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
-  const refetchInterval = useFeedPollInterval(BOARD_FALLBACK_POLL_MS);
-  const { data } = useQuery({
-    ...boardQueryOptions(baseUrl, factoryProjectId),
-    refetchInterval,
-    select: selectParkedSessions,
-  });
+  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectParkedSessions });
   return data ?? NO_SESSIONS;
 }
 

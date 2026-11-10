@@ -13,7 +13,7 @@ const RETRY_MS = 3_000;
 /** Frames this close together refresh the board once. */
 const BOARD_REFRESH_SETTLE_MS = 300;
 /** Cards move on their own (rules, runs, ingestion, other tabs): without the stream only this poll shows it, and frames refresh a busy board no faster. */
-export const BOARD_FALLBACK_POLL_MS = 5_000;
+const BOARD_FALLBACK_POLL_MS = 5_000;
 /** While frames refresh the board, a poll only bounds how long a write that never announced itself stays hidden. */
 const FEED_SAFETY_POLL_MS = 60_000;
 
@@ -22,11 +22,6 @@ const FeedEventsContext = createContext(false);
 /** No provider means no stream, so consumers fall back to polling. */
 export function useFeedEventsConnected(): boolean {
   return useContext(FeedEventsContext);
-}
-
-/** How often a board query polls: rarely while the stream refreshes it, at `fallbackMs` without one. */
-export function useFeedPollInterval(fallbackMs: number): number {
-  return useFeedEventsConnected() ? FEED_SAFETY_POLL_MS : fallbackMs;
 }
 
 /**
@@ -51,6 +46,11 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     let settling: ReturnType<typeof setTimeout> | undefined;
     let refreshing: Promise<unknown> = Promise.resolve();
     let lastRefreshAt = Number.NEGATIVE_INFINITY;
+    let streaming = false;
+    const setStreaming = (open: boolean) => {
+      streaming = open;
+      setConnected(open);
+    };
     const boardKeys = [
       queryKeys.workItems(factoryProjectId),
       queryKeys.factoryDecisionsRoot(factoryProjectId),
@@ -81,6 +81,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         });
       }, wait);
     };
+    // The only poll for cards and decisions: it takes a frame's path, so no read lands while a card is moving.
+    const poll = setInterval(() => {
+      if (!streaming || Date.now() - lastRefreshAt >= FEED_SAFETY_POLL_MS) refreshBoard();
+    }, BOARD_FALLBACK_POLL_MS);
 
     const connect = () => {
       streamFeedEvents(
@@ -94,7 +98,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
             }
           },
           onConnected: () => {
-            setConnected(true);
+            setStreaming(true);
             // Whatever landed while this tab held no stream was never announced.
             refreshBoard();
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
@@ -106,7 +110,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         .catch((error: unknown) => error instanceof RequestError && error.status >= 400 && error.status < 500)
         .then(fatal => {
           if (abort.signal.aborted) return;
-          setConnected(false);
+          setStreaming(false);
           // An expired session or a deleted project never heals by retrying;
           // the fallback poll carries the feed from here.
           if (!fatal) retry = setTimeout(connect, RETRY_MS);
@@ -118,6 +122,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       abort.abort();
       clearTimeout(retry);
       clearTimeout(settling);
+      clearInterval(poll);
       setConnected(false);
     };
   }, [baseUrl, factoryProjectId, queryClient, visible]);
