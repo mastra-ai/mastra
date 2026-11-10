@@ -244,16 +244,42 @@ function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', i
 }
 
 /**
- * The work item a pull request's head branch belongs to. Branches are per item, so a match is
- * unambiguous: a session of the item checked it out, or it is the item's own branch name, which
- * covers pull requests opened from a session that only follows the card (no session on the card
- * holds the branch, and no provenance was recorded).
+ * The head branch of a pull request pushed to the repository itself. A fork's branch lives in
+ * another repository, so its name says nothing about which card wrote it — anyone could name a
+ * fork branch after a card. A payload without `head.repo` (rebuilt from polled state) is the
+ * base repository's own record and keeps its branch.
  */
-function branchAuthoringItem(items: Card[], headBranch: string | undefined): Card | undefined {
+function sameRepositoryHeadBranch(pullRequest: Record<string, unknown> | undefined, repositoryId: number) {
+  const head = object(pullRequest?.head);
+  if (head && 'repo' in head && number(object(head.repo)?.id) !== repositoryId) return undefined;
+  return string(head?.ref);
+}
+
+/** A card attributed to a different repository than the pull request's. */
+function cardInOtherRepository(item: Card, repositoryId: number, repositoryFullName: string): boolean {
+  const attributed =
+    /^https?:\/\/[^/]+\/.+\/(?:issues|pull)\/\d+(?:[/?#]|$)/.test(item.externalSource?.url ?? '') ||
+    typeof item.workItem.metadata?.githubRepositoryId === 'number';
+  return attributed && !cardBelongsToRepository(item, repositoryId, repositoryFullName);
+}
+
+/**
+ * The work item a pull request's head branch belongs to: a session of the item checked it out,
+ * or it is the item's own branch name, which covers pull requests opened from a session that
+ * only follows the card (no session on the card holds the branch, and no provenance was
+ * recorded). Only a single match counts; two cards claiming one branch name neither.
+ */
+function branchAuthoringItem(
+  items: Card[],
+  headBranch: string | undefined,
+  repositoryId: number,
+  repositoryFullName: string,
+): Card | undefined {
   if (!headBranch) return undefined;
-  return items.find(
+  const matches = items.filter(
     item =>
       item.externalSource?.type !== 'pull-request' &&
+      !cardInOtherRepository(item, repositoryId, repositoryFullName) &&
       (Object.values(item.sessions).some(session => session.branch === headBranch) ||
         workItemBranch({
           id: item.id,
@@ -261,6 +287,7 @@ function branchAuthoringItem(items: Card[], headBranch: string | undefined): Car
           metadata: item.workItem.metadata,
         }) === headBranch),
   );
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 /** Every source a card for this issue or pull request may be filed under. */
@@ -740,7 +767,7 @@ export class GithubRules {
       repositoryName,
       issueNumber,
       pullRequestNumber,
-      string(object(pullRequest?.head)?.ref),
+      sameRepositoryHeadBranch(pullRequest, repositoryId),
       reReviewEvent ? null : provenance,
       senderIsResponder && !reviewEntryRequested,
     );
@@ -1037,7 +1064,19 @@ export class GithubRules {
             repositoryName,
             pullRequestNumber,
             relatedItem,
-            string(object(pullRequest?.head)?.ref),
+            // Only a trusted author's (or Factory's) pull request may finish a card by its branch name.
+            // The lookup is needed only when an unlinked Review card leaves the branch to decide.
+            relatedItem.externalSource?.type === 'pull-request' &&
+              !relatedItem.parentWorkItemId &&
+              (pullRequestFactoryAuthored ||
+                (pullRequestAuthor !== undefined &&
+                  (await trustedCollaborator(this.options.github, {
+                    installationId,
+                    repository: repositoryName,
+                    login: pullRequestAuthor,
+                  }))))
+              ? sameRepositoryHeadBranch(pullRequest, repositoryId)
+              : undefined,
           )
         : undefined;
     // Moving the card to Done does not touch its pull request fields, so without
@@ -1167,7 +1206,7 @@ export class GithubRules {
           // its head branch, so the merge still finishes the authoring item.
           resolved.parentWorkItemId
           ? await this.#parentItem(orgId, projectId, items, resolved)
-          : branchAuthoringItem(items, headBranch)
+          : branchAuthoringItem(items, headBranch, repositoryId, repositoryFullName)
         : // Bound to the work item (provenance): find the Review card this pull
           // request opened, and only when it names this item as its parent — a
           // card for the same number in another repository is not this one's.
@@ -1269,7 +1308,7 @@ export class GithubRules {
         // recorded (session predating state seeding, or the PR was opened
         // outside the tracked tool call). Session branches are per-item
         // (`factory/issue-N`), so a head-branch match is unambiguous.
-        branchAuthoringItem(items, pullRequestHeadBranch)
+        branchAuthoringItem(items, pullRequestHeadBranch, repositoryId, repositoryFullName)
       );
     }
     return undefined;
