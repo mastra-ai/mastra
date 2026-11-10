@@ -15,9 +15,8 @@ import { embedInSubprocess } from './fastembed-subprocess.js';
 import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /**
- * `fastembed.small`, run in a short-lived child process per call (see `embedInSubprocess`) so ONNX
- * Runtime never loads into the agent process. `MASTRACODE_EMBED_IN_PROCESS=1` loads it here instead, on
- * the first embedding.
+ * `fastembed.small`, run in a reusable child process (see `FastembedWorker`) so ONNX Runtime and the model
+ * never load into the agent process.
  */
 const lazyFastembedSmall: typeof fastembed.small = {
   specificationVersion: 'v3',
@@ -25,13 +24,7 @@ const lazyFastembedSmall: typeof fastembed.small = {
   modelId: 'bge-small-en-v1.5',
   maxEmbeddingsPerCall: 256,
   supportsParallelCalls: true,
-  async doEmbed(options) {
-    if (process.env.MASTRACODE_EMBED_IN_PROCESS === '1') {
-      const { fastembed } = await import('@mastra/fastembed');
-      return fastembed.small.doEmbed(options);
-    }
-    return embedInSubprocess(options);
-  },
+  doEmbed: options => embedInSubprocess(options),
 };
 
 /** Route-backed OM fallback entry. */

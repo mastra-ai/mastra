@@ -166,22 +166,15 @@ describe('getDynamicMemory', () => {
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
   });
 
-  it('embeds observations in a worker process unless MASTRACODE_EMBED_IN_PROCESS=1', async () => {
+  it('embeds observations in the worker process, never in this one', async () => {
     embedInSubprocessMock.mockReset().mockResolvedValue({ embeddings: [[1]], warnings: [] });
-    fastembedDoEmbedMock.mockReset().mockResolvedValue({ embeddings: [[2]], warnings: [] });
+    fastembedDoEmbedMock.mockReset();
     const { config } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
     const embedder = config.embedder as { doEmbed: (options: { values: string[] }) => Promise<unknown> };
 
-    // Default: the worker embeds, so fastembed never loads into this process.
     await expect(embedder.doEmbed({ values: ['a'] })).resolves.toEqual({ embeddings: [[1]], warnings: [] });
     expect(embedInSubprocessMock).toHaveBeenCalledWith({ values: ['a'] });
     expect(fastembedDoEmbedMock).not.toHaveBeenCalled();
-
-    // Opt-out: fastembed runs in this process, and no worker starts.
-    vi.stubEnv('MASTRACODE_EMBED_IN_PROCESS', '1');
-    await expect(embedder.doEmbed({ values: ['b'] })).resolves.toEqual({ embeddings: [[2]], warnings: [] });
-    expect(fastembedDoEmbedMock).toHaveBeenCalledWith({ values: ['b'] });
-    expect(embedInSubprocessMock).toHaveBeenCalledTimes(1);
   });
 
   it('wires Mastra Code observational memory activation defaults into core memory', async () => {
