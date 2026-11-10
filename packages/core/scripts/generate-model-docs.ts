@@ -1257,7 +1257,7 @@ function generateProvidersIndexPage(grouped: GroupedProviders): string {
 
   return `---
 title: "Providers"
-description: "Direct access to AI model providers."
+description: "Direct access to AI model providers through their AI SDK provider packages."
 ---
 
 ${getGeneratedComment()}
@@ -1328,7 +1328,7 @@ For detailed provider-specific documentation, see the [AI SDK ${provider.name} p
 
   return `---
 title: "${provider.name}"
-description: "Use ${provider.name} models via the AI SDK."
+description: "Use ${provider.name} models in Mastra through the AI SDK provider package."
 ---
 
 ${getGeneratedComment()}
