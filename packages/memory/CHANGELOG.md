@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.41.1-alpha.2
+
+### Patch Changes
+
+- Fixed Markdown working memory going stale when observational memory manages it. The observer must now always write the working memory section, or `UNCHANGED` when nothing changed, and a missing section is recorded as an extraction failure. Fixes #25350. ([#26203](https://github.com/mastra-ai/mastra/pull/26203))
+
+- Fixed concurrent vNext working memory updates (`__experimental_updateWorkingMemoryVNext`) from different threads overwriting each other when working memory uses the default resource scope. The lock is held per `Memory` instance, so separate instances that share storage can still overwrite each other. ([#29477](https://github.com/mastra-ai/mastra/pull/29477))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+
 ## 1.41.1-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @mastra/server-adapters-test-suite
 
+## 0.3.0-alpha.2
+
+### Patch Changes
+
+- Added conformance tests for custom route auth: auth and FGA checks must follow the route that handles the request, including its path params, for overlapping routes, `HEAD` requests, letter case and percent-encoded paths. ([#29325](https://github.com/mastra-ai/mastra/pull/29325))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`ce76df9`](https://github.com/mastra-ai/mastra/commit/ce76df95d5d942940de7d5453fcbd38b7df5ea83), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd), [`92f9771`](https://github.com/mastra-ai/mastra/commit/92f9771a0fefaf6e23541ac702850da63bfe4ef9)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/server@1.83.0-alpha.5
+  - @mastra/mcp@2.9.0-alpha.2
+
 ## 0.3.0-alpha.1
 
 ### Minor Changes

@@ -1,5 +1,15 @@
 # @mastra/nestjs
 
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- Fixed the NestJS adapter ignoring per-route body size limits on JSON requests. Routes like the observability query endpoints now return 413 for bodies over their limit, the same as the other adapters. ([#29476](https://github.com/mastra-ai/mastra/pull/29476))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`ce76df9`](https://github.com/mastra-ai/mastra/commit/ce76df95d5d942940de7d5453fcbd38b7df5ea83), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/server@1.83.0-alpha.5
+
 ## 0.3.0-alpha.4
 
 ### Patch Changes

@@ -464,6 +464,18 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
   });
 
+  it('formats Linear triage comments in Linear markdown instead of HTML', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
+    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
+    const phase5 = triage.slice(triage.indexOf('## Phase 5'));
+
+    // Linear shows raw HTML as text, so neither the marker nor <details> may reach it.
+    expect(phase1).toContain('post the pending summary with `linear_create_comment`, leaving out the');
+    expect(triage).toContain('a `+++ Details` line opens it and a lone `+++` line closes it');
+    expect(phase5).toContain('in the Linear form the output contract describes');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
@@ -867,10 +879,13 @@ describe('bundled Factory skill assets', () => {
     expect(security).toContain('do not run them');
     expect(security).toContain('a suggested fix is a finding to evaluate, not a commit to make on your branch');
     const phase3 = section('## Phase 3: Quality Gate', '## Phase 4');
-    expect(phase3).toContain('Report red, missing, and still-running CI as advisory findings');
+    expect(phase3).toContain('Report red, missing, and still-running CI as non-blocking findings');
     expect(phase3).toContain('CI status alone cannot block approval or create a requested change');
     expect(phase3).toContain(
-      'only a defect you confirm or a failed verification you run yourself can block the verdict',
+      'only a defect you confirm in the code or a failed verification you run yourself can block the verdict',
+    );
+    expect(phase3).toContain(
+      'checks on PR metadata or process (issue reference, title format, labels, required reviews, DCO, and similar) are never verdict inputs',
     );
     expect(phase3).toContain('After the pre-execution inspection from the security section clears the diff');
     expect(phase3).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm --filter <pkg> test');
@@ -1092,10 +1107,13 @@ describe('bundled Factory skill assets', () => {
     );
 
     const qualityGate = section('## Phase 4: Quality Gate', '## Phase 5');
-    expect(qualityGate).toContain('Report red, missing, and still-running CI as advisory findings');
+    expect(qualityGate).toContain('Report red, missing, and still-running CI as non-blocking findings');
     expect(qualityGate).toContain('CI status alone cannot block approval or create a requested change');
     expect(qualityGate).toContain(
-      'only a defect you confirm or a failed verification you run yourself can block the verdict',
+      'only a defect you confirm in the code or a failed verification you run yourself can block the verdict',
+    );
+    expect(qualityGate).toContain(
+      'checks on PR metadata or process (issue reference, title format, labels, required reviews, DCO, and similar) are never verdict inputs',
     );
     expect(qualityGate).toContain('Model-provider behavior requires integration-level verification');
     expect(qualityGate).toContain('unit tests with mocked SDK responses are not enough');

@@ -1,5 +1,51 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.6
+
+### Minor Changes
+
+- Added `closeOnEscape` to `Sidebar.NavStack.View` so a sidebar view that accompanies a full page can stay open when Escape is pressed. The sidebar now also follows a `minWidth` that changes at runtime: it widens to the new minimum and returns to the user's saved width when the minimum drops, without overwriting that saved width, including when the page first loads with the raised minimum. ([#29881](https://github.com/mastra-ai/mastra/pull/29881))
+
+  ```tsx
+  <Sidebar.Provider minWidth={configuring ? 288 : 200} collapseBelow={200}>
+    <Sidebar.NavStack value={view} onValueChange={setView}>
+      <Sidebar.NavStack.Root>{/* main navigation */}</Sidebar.NavStack.Root>
+      <Sidebar.NavStack.View value="board-config" title="Work" backLabel="Back to board" closeOnEscape={false}>
+        {/* board settings */}
+      </Sidebar.NavStack.View>
+    </Sidebar.NavStack>
+  </Sidebar.Provider>
+  ```
+
+- Added `@mastra/playground-ui/fonts.css`, which loads Mastra's product fonts, Mona Sans for text and Commit Mono for code, and points the font tokens at them. Import it next to the package's other stylesheets instead of bundling font files in each app: ([#29915](https://github.com/mastra-ai/mastra/pull/29915))
+
+  ```css
+  @import '@mastra/playground-ui/fonts.css';
+  ```
+
+  The font files ship inside the package as woff2, split by script, so a page only downloads the characters it renders and an app needs no font dependencies or files of its own.
+
+- Improved text readability with heavier weights. Body copy, table cells and captions now render at weight 465 instead of 400, which read thin on dark surfaces, and menus move from 450 to 465. Labels and headings move from 500 to 515 so they keep standing out, and bold text in markdown from 500 to 550. ([#29743](https://github.com/mastra-ai/mastra/pull/29743))
+
+  Text roles now draw from two weight tokens, `--font-weight-normal` (465) and `--font-weight-medium` (515). Card title roles keep their own 550 and 600 weights. The `font-normal` and `font-medium` utilities resolve to the same tokens, so emphasis stays on one scale. The default body weight is now 465 instead of the browser's 400.
+
+### Patch Changes
+
+- Improved the Switch thumb: it is now a round circle that slides on toggle and stretches slightly on hover, with a more compact track and instant color changes. ([#29902](https://github.com/mastra-ai/mastra/pull/29902))
+
+- Sidebar items now highlight the same area on hover and when selected, and no longer flash a darker pressed state when clicked. Clicking an item goes straight from its hover highlight to the selected highlight. ([#29919](https://github.com/mastra-ai/mastra/pull/29919))
+
+- Improved read-only skill forms: `SkillSimpleForm` shows a locked name (`nameReadOnly`), and the name and description in `readOnly` mode, as plain text under their labels instead of disabled inputs, so a value that can't change no longer looks like a field you can fill in. ([#29881](https://github.com/mastra-ai/mastra/pull/29881))
+
+- Fixed KPI and metrics card groups staying on two columns on wide dashboards in apps that load their own Tailwind CSS after this package's styles. Three cards now share one row from 48rem and four from 56rem there too, as they already did in Studio. ([#29920](https://github.com/mastra-ai/mastra/pull/29920))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`1ac251b`](https://github.com/mastra-ai/mastra/commit/1ac251ba65b5417507d811f18f32c26868e30bb8), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`ec8d9b8`](https://github.com/mastra-ai/mastra/commit/ec8d9b8e7b8c259d96e1f1b2f7be4082cf13fb57), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`6644a82`](https://github.com/mastra-ai/mastra/commit/6644a8274880f217ed7930d2e115e68056a565d6), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/client-js@1.60.0-alpha.5
+  - @mastra/memory@1.41.1-alpha.2
+  - @mastra/react@1.15.0-alpha.5
+  - @mastra/ai-sdk@1.12.0-alpha.0
+
 ## 69.0.0-alpha.5
 
 ### Patch Changes

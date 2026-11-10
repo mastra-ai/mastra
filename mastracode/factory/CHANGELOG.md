@@ -1,5 +1,35 @@
 # @mastra/factory
 
+## 0.28.0-alpha.5
+
+### Minor Changes
+
+- Added one-click Mastra Gateway setup to Factory. When Factory signs users in with their Mastra account, onboarding, factory creation, and Settings > Models offer **Mastra Gateway** first. One click creates a gateway key on the user's Mastra organization and stores it with their model credentials, so Mastra Gateway models run on the organization's Mastra credits without provider keys. ([#29183](https://github.com/mastra-ai/mastra/pull/29183))
+
+  - The Mastra Gateway option says it is billed to the organization's Mastra credits and shows the balance left, before the user connects it.
+  - When the organization runs out of credits, the **No gateway credits left** warning and the failed run both offer **Add credits**, which opens the organization's add-credits page on Mastra in a new tab. The balance updates when the user comes back to Factory.
+  - Members who are not admins of the Mastra organization are told to ask an admin, since only admins can buy credits.
+  - New gateway setups start on Claude Opus 5.5.
+  - Factory creates no key while the user's Mastra session is on a different organization than the Factory, and asks them to sign in again with the Factory's organization.
+  - With other auth providers, Factory lists Mastra Gateway as a regular API-key provider.
+
+### Patch Changes
+
+- Factory review, re-review, test report, triage, and self-review comments are now shorter and lead with what matters. Reviews open with the verdict as a heading, then a one-sentence summary, a ranked findings table (blocking first, with a type for each finding), and the required changes. Supporting notes sit in one collapsed block, and the detailed run record stays in the Factory session instead of the PR. ([#29880](https://github.com/mastra-ai/mastra/pull/29880))
+
+- Factory now tells open boards when something changes, so they no longer have to poll for it. ([#29777](https://github.com/mastra-ai/mastra/pull/29777))
+
+  - Moving or editing a card, a decision being proposed, picked up, approved, retried, failed or finished, and a session starting, parking, finishing or being torn down mid-run each send a live update to every open board of the project. This includes sessions picked back up after a server restart.
+  - The live connection sends its first keepalive as soon as it opens, so a proxy that holds a response until its first byte no longer delays it.
+
+- Fixed removing a saved API key in local mode. The provider used to stay connected until the server restarted, because the key stayed in the server's environment. It now disconnects right away, or goes back to the key the server was started with if there was one. ([#29432](https://github.com/mastra-ai/mastra/pull/29432))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`b3801a7`](https://github.com/mastra-ai/mastra/commit/b3801a79d35090231cc6e57752739f0e238d5a01), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`b3801a7`](https://github.com/mastra-ai/mastra/commit/b3801a79d35090231cc6e57752739f0e238d5a01), [`92f9771`](https://github.com/mastra-ai/mastra/commit/92f9771a0fefaf6e23541ac702850da63bfe4ef9)]:
+  - @mastra/core@1.83.0-alpha.5
+  - @mastra/code-sdk@1.19.0-alpha.5
+  - @mastra/auth-studio@1.4.0-alpha.1
+  - @mastra/mcp@2.9.0-alpha.2
+
 ## 0.28.0-alpha.4
 
 ### Minor Changes

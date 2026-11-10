@@ -1,4 +1,5 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
 import { updatePinnedSessions } from '../hooks/usePinnedSessions';
@@ -14,13 +15,22 @@ export function SessionListItem({
   row,
   disabled,
   merged,
+  level,
+  compact,
   onDelete,
+  subItems,
 }: {
   factoryId: string;
   row: SessionListRow;
+  /** 1 for a card's child session, listed under the card's row. */
+  level?: number;
+  /** Single-line row; otherwise a second line shows when it last moved and its change request. */
+  compact: boolean;
   disabled: boolean;
   merged: boolean | undefined;
   onDelete: (row: SessionListRow) => void;
+  /** The card's child sessions, nested under its row. */
+  subItems?: ReactNode;
 }) {
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
@@ -39,7 +49,8 @@ export function SessionListItem({
   return (
     <SessionNavRow
       name={row.name}
-      label={row.contextLabel}
+      label={row.phaseLabel}
+      level={level}
       url={row.openPath}
       externalLinks={row.externalLinks}
       from={row.origin === 'factory' ? location : undefined}
@@ -61,6 +72,10 @@ export function SessionListItem({
         ownUserSession && !row.session.branch.startsWith('slack/') ? handleVisibilityChange : undefined
       }
       changingVisibility={changing}
+      pullRequest={row.pullRequest}
+      updatedAt={row.updatedAt}
+      compact={compact}
+      subItems={subItems}
     />
   );
 }

@@ -221,6 +221,34 @@ Set `closeOnFinish: false` when you want to keep the socket open across follow-u
 
 Do not send overlapping follow-up requests with `previous_response_id` on the same WebSocket transport. Mastra rejects overlapping continuation requests because Azure only keeps one in-flight response per connection. Wait for the active stream to finish before continuing the response chain.
 
+### Strict structured output
+
+The gateway sends [structured output](/docs/agents/structured-output) schemas and tool schemas without strict mode by default. Without strict mode the model can leave out keys, and Mastra then fails validation when a required key is missing.
+
+Set `providerOptions.azure.strictJsonSchema: true` to have Azure enforce your schema:
+
+```typescript
+import { z } from "zod";
+
+const response = await agent.generate("Summarize the ticket.", {
+  structuredOutput: {
+    schema: z.object({
+      summary: z.string(),
+      priority: z.enum(["low", "medium", "high"]).optional(),
+    }),
+  },
+  providerOptions: {
+    azure: { strictJsonSchema: true },
+  },
+});
+```
+
+With strict mode on, Mastra prepares the schemas before sending them so Azure accepts them. Every key is listed as required, optional keys accept `null` and come back as `undefined`, and validation keywords such as `uniqueItems`, `pattern`, and `minimum` move into the field description. Mastra still validates the result against your original schema.
+
+The setting covers the output schema and every tool in the request, because the gateway's AI SDK 5 Azure provider uses one flag for both. Azure strict mode can't express objects with free-form keys, such as `z.record()`, so keep strict mode off for agents whose output or tool schemas use them.
+
+The `azure` key applies when `useResponsesAPI` is `true`. On the chat completions route, set `providerOptions.openai.strictJsonSchema` instead.
+
 ## Configuration Reference
 
 | Option | Type | Required | Description |

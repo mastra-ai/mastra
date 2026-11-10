@@ -562,4 +562,19 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
       result.cleanup?.();
     }
   });
+
+  it('keeps consumeStream working after the whole stream was already read', async () => {
+    const { result, output } = await streamHello();
+    const { fullStream, consumeStream } = output;
+
+    try {
+      for await (const _chunk of fullStream as AsyncIterable<unknown>) {
+        // drain
+      }
+      await expect(consumeStream()).resolves.toBeUndefined();
+      expect(await output.text).toBe('Hello there!');
+    } finally {
+      result.cleanup?.();
+    }
+  });
 });
