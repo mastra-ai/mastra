@@ -9,7 +9,7 @@ import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { StandardSchemaWithJSON } from '../../schema';
 import { standardSchemaToJSONSchema } from '../../schema';
 import { ChunkFrom } from '../../stream';
@@ -337,7 +337,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       });
     }
 
-    // Fallback: use the bare internal structuring agent (no conversation context)
+    // Fallback: use the bare internal structuring agent (no conversation context).
+    // Drop the run-identity keys: they would bind the structurer to the parent run's thread and
+    // make it wait for that still-running turn.
+    structuringRequestContext?.delete(MASTRA_THREAD_ID_KEY);
+    structuringRequestContext?.delete(MASTRA_RESOURCE_ID_KEY);
+    structuringRequestContext?.delete(MASTRA_SCOPES_KEY);
     return this.structuringAgent.stream(
       `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
       {

@@ -8,7 +8,7 @@ import { TripWire } from '../../agent/trip-wire';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { InternalSpans } from '../../observability';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { ProcessOutputStepArgs } from '../index';
@@ -102,7 +102,7 @@ describe('StructuredOutputProcessor', () => {
       });
     });
 
-    it('forwards a copy of the request context to the internal structuring agent', async () => {
+    it('forwards a copy of the request context without the run identity to the internal structuring agent', async () => {
       const resultChunk: ChunkType = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
@@ -114,6 +114,9 @@ describe('StructuredOutputProcessor', () => {
         .mockResolvedValue({ fullStream: convertArrayToReadableStream([resultChunk]) } as any);
       const requestContext = new RequestContext();
       requestContext.set('userId', 'user-1');
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-1');
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-1');
+      requestContext.set(MASTRA_SCOPES_KEY, ['thread:thread-1']);
       const { controller } = createMockController();
 
       await processor.processOutputStream({
@@ -139,6 +142,10 @@ describe('StructuredOutputProcessor', () => {
       expect(forwarded).toBeInstanceOf(RequestContext);
       expect(forwarded).not.toBe(requestContext);
       expect(forwarded?.get('userId')).toBe('user-1');
+      expect(forwarded?.has(MASTRA_THREAD_ID_KEY)).toBe(false);
+      expect(forwarded?.has(MASTRA_RESOURCE_ID_KEY)).toBe(false);
+      expect(forwarded?.has(MASTRA_SCOPES_KEY)).toBe(false);
+      expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe('thread-1');
     });
   });
 
