@@ -43,6 +43,7 @@ export function createExecutionBudget(config: AssistantConfig) {
         typeof options.maxOutputTokens === 'number' ? options.maxOutputTokens : maxOutputTokens,
         maxOutputTokens,
       ),
+      /** Release the concurrency slot once while retaining the spent hourly reservation. */
       release() {
         if (released) return;
         released = true;
@@ -53,10 +54,12 @@ export function createExecutionBudget(config: AssistantConfig) {
 
   /** Preserve Mastra routing while checking every native model attempt before dispatch. */
   class BudgetedModel extends ModelRouterLanguageModel {
+    /** Preserve native generate dispatch while applying the shared reservation guard. */
     override async doGenerate(options: Parameters<ModelRouterLanguageModel['doStream']>[0]) {
       return this.guarded(options, request => super.doGenerate(request));
     }
 
+    /** Preserve native streaming dispatch while applying the shared reservation guard. */
     override async doStream(options: Parameters<ModelRouterLanguageModel['doStream']>[0]) {
       return this.guarded(options, request => super.doStream(request));
     }
@@ -75,6 +78,7 @@ export function createExecutionBudget(config: AssistantConfig) {
         return {
           ...response,
           stream: new ReadableStream({
+            /** Forward native model chunks and release capacity when the stream ends or fails. */
             async pull(controller) {
               try {
                 const chunk = await reader.read();

@@ -19,6 +19,7 @@ export type FixtureReply = {
   status?: number;
 };
 
+/** Serve model and provider wire fixtures while leaving native tools, approvals and persistence intact. */
 export async function connectedFixture(
   respond?: (body: Record<string, unknown>, judge: boolean) => FixtureReply | Promise<FixtureReply>,
 ) {

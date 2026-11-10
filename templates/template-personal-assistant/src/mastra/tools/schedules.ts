@@ -181,6 +181,7 @@ const schema = z
 
 /** Manage identified owner schedules and prepare approval-preserving native dispatches. */
 export function createScheduleOperations(config: AssistantConfig, getAgent: () => Agent) {
+  /** Require the native runtime before reading schedules or invoking scheduler operations. */
   const mastra = () => {
     const instance = getAgent().getMastraInstance();
     if (!instance) throw new Error('Schedules require the assistant runtime.');
@@ -260,6 +261,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
   }
   let mutation = Promise.resolve();
   const hooks: ScheduleHooks<Mastra> = {
+    /** Prepare owned, approval-safe schedule work and preserve distinct cadence and dependency failures. */
     async prepare({ schedule, agentId, trigger }) {
       if (agentId !== getAgent().id) return null;
       try {
@@ -305,6 +307,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
     id: 'schedule',
     description: `Manage native schedules for owner conversations: create, list, inspect, update, pause, resume, cancel, run-now. Use a stable requestId for an identified creation request and an explicit IANA timezone. Resolve natural language before calling. One-time dates require seconds and an explicit matching UTC offset. Cancel only on explicit owner request or confirmed responsibility completion. Run-now publishes immediately and preserves cadence; the native active/discard rule can discard it during this very tool call. ${detail}`,
     inputSchema: schema,
+    /** Serialize owner schedule changes, preserve identified replay and enforce capacity before new scheduling. */
     execute: async (input, context) => {
       const previous = mutation;
       let release!: () => void;

@@ -46,6 +46,7 @@ function operational(value?: object) {
 }
 const minimize: SpanOutputProcessor = {
   name: 'assistant-operational-traces',
+  /** Remove source content and raw failures from spans while retaining safe operation references. */
   process(span?: AnySpan) {
     if (!span) return;
     span.input = operational(span.input);

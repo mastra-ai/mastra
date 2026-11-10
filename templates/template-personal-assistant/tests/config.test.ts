@@ -234,6 +234,7 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
 
 test('email metadata normalization preserves selected bounded source headers', async () => {
   const { normalizeMail } = await import('../src/mastra/processors/connected-content');
+  /** Build full-message metadata inputs while allowing deliberate malformed envelope variants. */
   const mail = (headers?: unknown, extra: Record<string, unknown> = {}) => ({
     id: 'metadata-message',
     threadId: 'provider-thread',

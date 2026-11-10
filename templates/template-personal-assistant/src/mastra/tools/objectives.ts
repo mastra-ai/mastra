@@ -58,6 +58,7 @@ export function createObjectiveTool(config: AssistantConfig, getAgent: () => Age
       })
       .strict()
       .pipe(actions),
+    /** Apply explicit owner objective actions while preserving unfinished state and prior evaluation usage. */
     execute: async (input, context) => {
       const agent = getAgent();
       const target = await ownedThread(agent, config.ownerId, context?.agent?.threadId, context?.agent?.resourceId);
@@ -123,6 +124,7 @@ export function createProgressProtection(config: AssistantConfig, getAgent: () =
   const taskTools = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
   const processor = {
     id: 'owner-progress',
+    /** Bind progress operations to a stored owner conversation and reject ambiguous identity. */
     async computeStateSignal({ threadId, resourceId, requestContext, abort }) {
       if (!threadId && !resourceId) return;
       if (!requestContext) return abort('Task state requires the assistant runtime.');
@@ -133,6 +135,7 @@ export function createProgressProtection(config: AssistantConfig, getAgent: () =
         return abort('Task state requires a stored conversation belonging to this owner.');
       }
     },
+    /** Persist unfinished-work notices and park active tasks when execution stops without a confirmed outcome. */
     async processOutputResult({ result, messageList, requestContext, sendStateSignal, sendSignal, writer }) {
       if (result.finishReason === 'suspended') return messageList;
       const last = result.steps.at(-1);
@@ -287,6 +290,7 @@ export function createProgressProtection(config: AssistantConfig, getAgent: () =
     },
   } satisfies Processor;
   const hooks: NonNullable<AgentConfig['hooks']> = {
+    /** Validate native task replacement against the latest stored unfinished tasks immediately before mutation. */
     async beforeToolCall({ toolName, input, context }) {
       if (!taskTools.has(toolName)) return;
       const requestContext = (context as Pick<ToolExecutionContext, 'requestContext'>)?.requestContext;

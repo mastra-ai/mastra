@@ -93,12 +93,14 @@ test('direct tool execution routes cannot bypass native approval', { timeout: 12
       const before = await readState(dataDir);
       const modelCalls = fixture.models.length;
       const scheduleState = await json(await app.request('/schedules', 'GET', undefined, headers));
+      /** Exercise direct execution through real HTTP with the current owner credentials. */
       const send = (path: string, body: BodyInit, contentType?: string) =>
         fetch(`${app!.url}/api${path}`, {
           method: 'POST',
           headers: { ...headers, ...(contentType ? { 'content-type': contentType } : {}) },
           body,
         });
+      /** Construct multipart fields in their native duplicate-field order for route protection probes. */
       const form = (fields: [string, string][]) => {
         const value = new FormData();
         value.set('data', JSON.stringify(directBody.data));

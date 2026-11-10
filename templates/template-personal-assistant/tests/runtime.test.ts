@@ -12,6 +12,7 @@ import { isolatedEnv, json } from './helpers';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
+/** Reserve and release a loopback port for an isolated CLI runtime instance. */
 async function availablePort() {
   const server = createServer();
   server.listen(0, '127.0.0.1');
@@ -41,6 +42,7 @@ async function run(directory: string, command: string, env: NodeJS.ProcessEnv) {
     child,
     exited,
     output: () => output,
+    /** Stop the isolated CLI process group and escalate only if its graceful shutdown stalls. */
     async stop() {
       if (child.exitCode !== null || child.signalCode !== null) return;
       process.kill(-child.pid!, 'SIGTERM');
@@ -58,6 +60,7 @@ async function run(directory: string, command: string, env: NodeJS.ProcessEnv) {
   };
 }
 
+/** Wait for an authenticated CLI server using the token persisted by that runtime. */
 async function waitForServer(url: string, process: Awaited<ReturnType<typeof run>>, directory: string) {
   for (let attempt = 0; attempt < 240; attempt++) {
     if (process.child.exitCode !== null) throw new Error(`Runtime exited before startup: ${process.output()}`);

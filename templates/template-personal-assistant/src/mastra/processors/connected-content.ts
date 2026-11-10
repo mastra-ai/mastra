@@ -19,6 +19,7 @@ export function normalizeMail(value: unknown) {
     truncated: false,
     issues: [] as string[],
   };
+  /** Record each metadata omission once without echoing malformed provider values. */
   const metadataIssue = (issue: string) => {
     if (!result.issues.includes(issue)) result.issues.push(issue);
   };
@@ -139,6 +140,7 @@ export function normalizeMail(value: unknown) {
 /** Normalize successful Gmail envelopes while preserving native cancellation notices. */
 export const connectedContentProcessor = {
   id: 'connected-content',
+  /** Replace successful Gmail envelopes in model context and persisted history; preserve cancellation notices. */
   processToolResult({ toolName, toolCallId, args, result, messageList }) {
     // Native cancellation notices are strings, not provider message envelopes.
     if (toolName !== 'google_mail_get_message' || typeof result === 'string') return;

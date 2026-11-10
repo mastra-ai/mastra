@@ -18,6 +18,7 @@ export async function nativeSchedule<T = unknown>(
       app.child.off('message', listener);
       reject(new Error(`Native ${operation} timed out.`));
     }, 10000);
+    /** Resolve only the matching native scheduler IPC response and propagate its actual error. */
     const listener = (message: { requestId?: string; result: T; error?: string }) => {
       if (message.requestId !== requestId) return;
       clearTimeout(timeout);
@@ -29,6 +30,7 @@ export async function nativeSchedule<T = unknown>(
     app.child.send({ requestId, operation, input });
   });
 }
+/** Poll an observable native effect with a bounded deadline and report the last observed value. */
 export async function eventually<T>(read: () => Promise<T>, matches: (value: T) => boolean): Promise<T> {
   let result: T;
   for (let attempt = 0; attempt < 300; attempt++) {

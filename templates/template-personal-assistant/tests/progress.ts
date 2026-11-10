@@ -123,6 +123,7 @@ export async function progressFixture() {
   return { ...fixture, providerState: fixture.state, judges, state };
 }
 
+/** Read native objective usage and task state from the physical database without dispatching work. */
 export async function progressState(dataDir: string, threadId: string) {
   const storage = new LibSQLStore({
     id: 'progress-reader',

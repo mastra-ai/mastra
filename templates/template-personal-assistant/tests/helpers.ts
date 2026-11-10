@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
+/** Inherit OS basics while excluding developer credentials, live endpoints and telemetry configuration. */
 export function isolatedEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   // Inherit OS basics only, never developer credentials, provider URLs, or telemetry exporters.
@@ -32,6 +33,7 @@ export function isolatedEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return { ...env, MASTRA_TELEMETRY_DISABLED: '1', ...extra };
 }
 
+/** Reject provider-invalid tool root schemas at the synthetic model boundary. */
 export function modelToolSchemaError(body: Record<string, unknown>) {
   const tools = body.tools as
     | { type?: string; function?: { name?: string; parameters?: { type?: string } } }[]
@@ -42,6 +44,7 @@ export function modelToolSchemaError(body: Record<string, unknown>) {
     : undefined;
 }
 
+/** Serve deterministic model responses and record the exact prompts received over HTTP. */
 export async function modelFixture(defaultText = 'Preference missing.') {
   const requests: Record<string, unknown>[] = [];
   const server = createServer(async (req, res) => {
@@ -118,6 +121,7 @@ export async function modelFixture(defaultText = 'Preference missing.') {
   };
 }
 
+/** Launch the native assistant in a fresh process with isolated credentials and a local model endpoint. */
 export async function startAssistant(dataDir: string, modelUrl: string, extraEnv: NodeJS.ProcessEnv = {}) {
   const child = fork(fileURLToPath(new URL('./server.ts', import.meta.url)), [], {
     execArgv: ['--import', 'tsx'],
@@ -172,6 +176,7 @@ export async function startAssistant(dataDir: string, modelUrl: string, extraEnv
       return output;
     },
     url: `http://127.0.0.1:${port}`,
+    /** Send an owner API request and retain native server diagnostics when an unexpected failure occurs. */
     async request(path: string, method = 'GET', body?: unknown, headers: Record<string, string> = headersForOwner) {
       const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
         method,
@@ -207,6 +212,7 @@ export async function json(response: Response, expectedStatus = 200) {
   return JSON.parse(body);
 }
 
+/** Read persistent owner and foreign memory through real storage for boundary assertions. */
 export async function readState(dataDir: string) {
   const storage = new LibSQLStore({
     id: 'test-state-reader',
@@ -238,6 +244,7 @@ export async function readState(dataDir: string) {
   }
 }
 
+/** Wait for a persisted native pending approval and expose its original call arguments. */
 export async function pending(app: Awaited<ReturnType<typeof startAssistant>>, threadId: string) {
   for (let attempt = 0; attempt < 200; attempt++) {
     const result = await json(
