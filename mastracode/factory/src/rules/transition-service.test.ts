@@ -2602,6 +2602,18 @@ describe('pull request cards on the Work board', () => {
     });
   });
 
+  it('tells an agent moving a Review card with an open PR to PR review why it stays in Review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'work', stages: ['review'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition(request(item, { stage: 'pr-review' }));
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason).toMatch(
+      /^PR review holds only pull request cards.*stays in Review while its pull request is open, and the merge moves it to Done\.$/,
+    );
+  });
+
   it('keeps PR review for pull request cards: an issue card cannot enter it, nor a PR card self-review', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const issue = await createItem(storage, { board: 'work', stages: ['intake'] });
