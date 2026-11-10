@@ -46,7 +46,7 @@ const useServers = ({
   return { onDescriptorRequest };
 };
 
-const renderPage = (options: { apiPrefix?: string } = {}) =>
+const renderPage = (options: { apiPrefix?: string; baseUrl?: string } = {}) =>
   renderWithProviders(
     <TestLinkProvider>
       <Routes>
@@ -198,6 +198,16 @@ describe('MCP servers page — built-in Mastra server', () => {
       expect(await snippetFor('Claude Code')).toBe(
         `claude mcp add --transport http mastra ${TEST_BASE_URL}/mastra/tools-mcp`,
       );
+    });
+  });
+
+  describe('when the Studio server URL is configured with a trailing slash', () => {
+    it('joins the endpoint and snippets with a single slash', async () => {
+      useServers({ builtin: openDevServer });
+      renderPage({ baseUrl: `${TEST_BASE_URL}/` });
+
+      expect(await within(await findCard()).findByText(`${TEST_BASE_URL}/api/mcp`)).not.toBeNull();
+      expect(await snippetFor('Claude Code')).toBe(`claude mcp add --transport http mastra ${TEST_BASE_URL}/api/mcp`);
     });
   });
 

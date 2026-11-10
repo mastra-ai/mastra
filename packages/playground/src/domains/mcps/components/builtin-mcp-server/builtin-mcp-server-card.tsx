@@ -121,7 +121,8 @@ function MissingPackageContent() {
 
 function EnabledContent({ descriptor }: { descriptor: EnabledDescriptor }) {
   const client = useMastraClient();
-  const origin = client.options.baseUrl || window.location.origin;
+  // The client drops a trailing slash from baseUrl for its own requests; do the same for the copied URL.
+  const origin = (client.options.baseUrl || window.location.origin).replace(/\/$/, '');
   const url = `${origin}${descriptor.path}`;
   const snippets = buildConnectSnippets(url, { protectedServer: descriptor.auth.type === 'protected' });
   const [active, setActive] = useState(snippets[0].value);
