@@ -2243,7 +2243,12 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions: args.outputOptions,
           },
         });
-      } catch {
+      } catch (publishError) {
+        this.mastra.getLogger()?.error('Failed to publish the failed loop step; failing the loop run directly', {
+          workflowId: args.workflowId,
+          runId: args.runId,
+          error: publishError,
+        });
         const { workflow: _workflow, ...run } = args;
         // handle() then fails the loop's run directly. Only a guarded store keeps the failed step record.
         throw markNonRedeliverable(
