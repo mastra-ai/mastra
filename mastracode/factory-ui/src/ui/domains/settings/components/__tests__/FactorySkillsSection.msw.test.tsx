@@ -160,9 +160,7 @@ describe('FactorySkillsSection', () => {
     expect(within(release).queryByText(/factory-/)).not.toBeInTheDocument();
 
     // Built-ins come first regardless of registry order.
-    const expected = ['Work board', 'Release Preview board'].map(name =>
-      screen.getByRole('region', { name }),
-    );
+    const expected = ['Work board', 'Release Preview board'].map(name => screen.getByRole('region', { name }));
     expect(screen.getAllByRole('region', { name: / board$/ })).toEqual(expected);
   });
 
