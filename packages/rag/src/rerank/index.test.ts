@@ -182,6 +182,62 @@ describe('rerank', () => {
     expect(span.end).not.toHaveBeenCalled();
   });
 
+  describe('weight validation', () => {
+    const results = [
+      { id: 'a', score: 0.25 },
+      { id: 'b', score: 0.75 },
+    ];
+    const scorer = { getRelevanceScore: async () => 1 };
+
+    it.each([
+      { name: 'negative vector weight', weights: { semantic: 2, vector: -1, position: 0 } },
+      { name: 'vector weight above one', weights: { semantic: -1, vector: 2, position: 0 } },
+      { name: 'NaN weight', weights: { semantic: NaN, vector: 0.4, position: 0.2 } },
+      { name: 'infinite weight', weights: { semantic: Infinity, vector: 0.4, position: 0.2 } },
+      { name: 'negative infinite weight', weights: { semantic: -Infinity, vector: 0.4, position: 0.2 } },
+    ])('rejects $name through both public APIs', async ({ weights }) => {
+      await expect(rerankWithScorer({ results, query: 'test', scorer, options: { weights } })).rejects.toThrow(
+        'Weights must be finite numbers between 0 and 1',
+      );
+      await expect(rerank(results, 'test', cohere('rerank-v3.5'), { weights })).rejects.toThrow(
+        'Weights must be finite numbers between 0 and 1',
+      );
+    });
+
+    it('accepts zero and one weights and partial overrides', async () => {
+      const ranked = await rerankWithScorer({
+        results,
+        query: 'test',
+        scorer,
+        options: { weights: { semantic: 0, vector: 1, position: 0 } },
+      });
+      expect(ranked.map(item => item.result.id)).toEqual(['b', 'a']);
+
+      const partial = await rerankWithScorer({ results, query: 'test', scorer, options: { weights: { vector: 0.4 } } });
+      expect(partial).toHaveLength(2);
+    });
+
+    it('marks the rerank span as errored for invalid weights', async () => {
+      const span = { end: vi.fn(), error: vi.fn() };
+      const currentSpan = { createChildSpan: vi.fn(() => span) };
+
+      await expect(
+        rerankWithScorer({
+          results,
+          query: 'test',
+          scorer,
+          options: {
+            weights: { semantic: 2, vector: -1, position: 0 },
+            observabilityContext: { tracingContext: { currentSpan } } as any,
+          },
+        }),
+      ).rejects.toThrow('Weights must be finite numbers between 0 and 1');
+
+      expect(span.error).toHaveBeenCalledWith({ error: expect.any(Error), endSpan: true });
+      expect(span.end).not.toHaveBeenCalled();
+    });
+  });
+
   describe('topK validation', () => {
     const results = [
       { id: '1', metadata: { text: 'Test result 1' }, score: 0.5 },
