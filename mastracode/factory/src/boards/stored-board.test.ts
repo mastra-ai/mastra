@@ -592,6 +592,15 @@ describe('serving a stored row that fell out of step with code', () => {
     expect(triage?.type === 'invokeSkill' && triage.arguments).toContain('Shipyard: check the changelog.');
   });
 
+  it('serves a stored Work row without a transition policy, since Work no longer declares one (#29815)', () => {
+    const row = boardDefinitionOf(workBoard);
+
+    expect(declarationOf(workBoard)!.transitionPolicy).toBeUndefined();
+    expect(workBoard.transitionPolicy).toBeUndefined();
+    expect(mergeCodeBehaviour(row, workBoard).board.transitionPolicy).toBeUndefined();
+    expect(compileStoredBoard(row, workBoard).transitionPolicy).toBeUndefined();
+  });
+
   it("serves a row missing a phase newer code declares, keeping the tool rules that hold Planning's approval", async () => {
     const declaration = declarationOf(workBoard)!;
     const newer = defineBoard({
