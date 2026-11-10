@@ -42,6 +42,7 @@ import {
 import { isWorkflowRunCanceled } from './entry';
 import { getForeachProgress, omitForeachProgress } from './foreach-progress';
 import type { ForeachProgress } from './foreach-progress';
+import { emitStepResultEvents } from './step';
 import type { ExecuteStepParams } from './step';
 
 /**
@@ -956,8 +957,24 @@ export async function executeLoop(
       if (isFrameworkCondition(condition)) throw error;
       // End the loop step as failed, like a failed body: a throw would reject run.start()
       // and leave the run recorded as running.
-      const { output: _output, ...bodyResult } = result as Extract<typeof result, { status: 'success' }>;
-      return { ...bodyResult, status: 'failed', error: errorInstance, endedAt: Date.now() };
+      const body = result as Extract<typeof result, { status: 'success' }>;
+      const failed: StepResult<any, any, any, any> = {
+        status: 'failed',
+        error: errorInstance,
+        payload: body.payload,
+        startedAt: body.startedAt,
+        endedAt: Date.now(),
+        nonRetryable: true,
+        metadata: body.metadata,
+      };
+      // The body already reported this iteration as a success.
+      if (engine.options.emitStepEvents !== false) {
+        await engine.wrapDurableOperation(
+          `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.emit_failure`,
+          () => emitStepResultEvents({ stepId, execResults: failed, pubsub, runId }),
+        );
+      }
+      return failed;
     }
     await engine.endChildSpan({
       span: evalSpan,
@@ -1073,10 +1090,23 @@ export async function executeForeach(
   const { step, opts } = entry;
   const stepId = getEntryId(step);
   const results: any[] = [];
-  const concurrency = resolveForeachConcurrency(opts, {
-    inputData: prevOutput,
-    getInitData: () => stepResults?.input,
-  });
+  let concurrency: number;
+  try {
+    concurrency = resolveForeachConcurrency(opts, {
+      inputData: prevOutput,
+      getInitData: () => stepResults?.input,
+    });
+  } catch (error) {
+    // Fail the foreach step: a throw would reject run.start() and leave the run recorded as running.
+    return {
+      status: 'failed',
+      error: getErrorFromUnknown(error, { serializeStack: false }),
+      payload: prevOutput,
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+      nonRetryable: true,
+    };
+  }
   const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 

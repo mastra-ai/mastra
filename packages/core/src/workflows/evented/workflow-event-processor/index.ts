@@ -1530,11 +1530,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         ...finishArgs,
         workflow: undefined,
         state: finalState,
-        finishPendingCleanup: deleteSnapshotAfterEnd === true,
+        finishPendingCleanup: deleteSnapshotAfterEnd === true && !loopFailure,
       },
     });
 
     await this.assertCurrentRunFence(runId);
+    // A loop failure still to report keeps the snapshot, accepting that a declined one can outlive the run.
     if (deleteSnapshotAfterEnd === true && !loopFailure) {
       // Declined terminal snapshots must not outlive completed runs (#22209),
       // but remain recoverable until parent/loop and finish publications succeed.
@@ -2222,6 +2223,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       // loop's run: with a nested-workflow body the event being handled is the child's
       // workflow.end, and the child itself succeeded.
       const conditionError = error as Error;
+      const failed = failedLoopStep(result, conditionError);
       try {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
@@ -2233,7 +2235,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: args.executionPath,
             resumeSteps: args.resumeSteps,
             stepResults: args.stepResults,
-            prevResult: failedLoopStep(result, conditionError),
+            prevResult: failed,
             activeStepsPath: args.activeStepsPath,
             requestContext: args.requestContext,
             actor: args.actor,
@@ -2244,7 +2246,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch {
         const { workflow: _workflow, ...run } = args;
         // handle() then fails the loop's run directly. Only a guarded store keeps the failed step record.
-        throw markNonRedeliverable(new RunFailure(conditionError, run));
+        throw markNonRedeliverable(
+          new RunFailure(conditionError, {
+            ...run,
+            stepResults: { ...run.stepResults, [getEntryId(step.step)]: failed },
+          }),
+        );
       }
     }
   }

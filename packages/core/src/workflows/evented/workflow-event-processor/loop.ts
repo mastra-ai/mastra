@@ -41,8 +41,18 @@ export async function evaluateLoopCondition(
   return evaluation.catch(error => {
     if (isFrameworkCondition(step.condition)) throw error;
     // Redelivery would run the user condition again, and a step body before it.
-    throw markNonRedeliverable(getErrorFromUnknown(error, { serializeStack: false }));
+    throw userCallbackError(error);
   });
+}
+
+/** A user callback's error, marked so its delivery is not retried. */
+function userCallbackError(error: unknown): Error {
+  // A frozen error cannot take the marker, so wrap it.
+  const markable =
+    typeof error === 'object' && error !== null && !Object.isExtensible(error)
+      ? new Error(String((error as { message?: unknown }).message ?? error), { cause: error })
+      : error;
+  return markNonRedeliverable(getErrorFromUnknown(markable, { serializeStack: false }));
 }
 
 /** The loop step's result when its condition throws. */
@@ -222,7 +232,7 @@ export async function processWorkflowForEach(
         getInitData: () => (stepResults as any)?.input,
       });
     } catch (error) {
-      throw markNonRedeliverable(getErrorFromUnknown(error, { serializeStack: false }));
+      throw userCallbackError(error);
     }
   };
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[

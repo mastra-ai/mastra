@@ -225,7 +225,7 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
 
       expect(result.status).toBe('success');
       expect(conditionCalls).toBe(2);
-      // The retry is a redelivery of the event that ran the step body.
+      // At-least-once delivery: the retry redelivers the event that ran the step body.
       expect(body.calls).toBe(2);
     });
   });

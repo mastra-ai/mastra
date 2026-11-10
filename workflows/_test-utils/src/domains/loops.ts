@@ -574,7 +574,7 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(result.result?.items).toEqual(['item-1', 'item-2', 'item-3']);
     });
 
-    // The default engine rejected run.start() and left the run recorded as running.
+    // The run settles as failed: no rejected run.start(), no run left recorded as running.
     it('should fail the run when the loop condition throws', async () => {
       const { workflow } = registry!['loops-throwing-condition']!;
       const runId = `loops-throwing-condition-${Date.now()}`;
@@ -590,6 +590,21 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId });
         expect(snapshot?.status).toBe('failed');
       }
+    });
+
+    it('should stream the failed loop step when the loop condition throws', async () => {
+      const { workflow } = registry!['loops-throwing-condition']!;
+      const { stream } = ctx;
+      if (!stream) return;
+
+      const { events } = await stream(workflow, { count: 0 });
+
+      const stepResults = events.filter(
+        (event: any) => event.type === 'workflow-step-result' && event.payload?.id === 'charge',
+      );
+      expect(stepResults.at(-1)).toMatchObject({
+        payload: { status: 'failed', error: { message: 'condition boom' } },
+      });
     });
   });
 }
