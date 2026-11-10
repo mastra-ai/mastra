@@ -192,6 +192,13 @@ describe('AgentChannels', () => {
       expect(channels.getInputProcessors().map(p => p.id)).toEqual(['chat-channel-generative-ui']);
     });
 
+    it('ignores generativeUI on adapters other than Slack', () => {
+      const channels = new AgentChannels({
+        adapters: { discord: { adapter: createMockAdapter('discord'), generativeUI: true } },
+      });
+      expect(channels.getInputProcessors().map(p => p.id)).not.toContain('chat-channel-generative-ui');
+    });
+
     it('leaves out the generative UI processor by default', () => {
       expect(agentChannels.getInputProcessors().map(p => p.id)).not.toContain('chat-channel-generative-ui');
     });

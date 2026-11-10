@@ -42,21 +42,19 @@ function loadJsonRenderChat(): Promise<JsonRenderChat> {
 }
 
 /**
- * Platform caps checked before posting, so an oversized card comes back to the
- * agent as fixable issues instead of a platform API error.
+ * Slack caps checked before posting, so an oversized card comes back to the
+ * agent as fixable issues instead of a degraded or rejected message.
  */
-const PLATFORM_LIMITS: Record<string, Record<string, number>> = {
-  slack: {
-    tables: 1,
-    tableRows: 100,
-    tableColumns: 20,
-    fields: 10,
-    charts: 2,
-    chartTitle: 50,
-    chartLabel: 20,
-    chartSeries: 12,
-    chartPoints: 20,
-  },
+const SLACK_LIMITS = {
+  tables: 1,
+  tableRows: 100,
+  tableColumns: 20,
+  fields: 10,
+  charts: 2,
+  chartTitle: 50,
+  chartLabel: 20,
+  chartSeries: 12,
+  chartPoints: 20,
 };
 
 type ChartProps =
@@ -112,36 +110,18 @@ const renderCardInput = z.object({
     .describe('The card as a flat map of elements'),
 });
 
-const RENDER_CARD_DESCRIPTION = `Post a card to the current chat thread, shown as native UI (Block Kit on Slack).
-Use it for structured content that reads better as a card than as text: status summaries, key/value facts, tables, charts, links. Don't use it for ordinary conversational replies.
+const RENDER_CARD_DESCRIPTION = `Post a Slack Block Kit card to the thread. Use it for structured content (status, facts, tables, charts, links), not ordinary replies.
 
-The spec is a flat element map: { "root": "card", "elements": { "card": { "type": "Card", "props": { "title": "..." }, "children": ["facts"] }, "facts": { ... } } }. The root must be a Card. "children" lists child element ids.
+Spec: { "root": "card", "elements": { "card": { "type": "Card", "props": { "title": "..." }, "children": ["t"] }, "t": { "type": "Text", "props": { "content": "..." } } } }
 
-Components (use only these, with only these props):
-- Card { title?, subtitle?, imageUrl? }: the root; holds any children. title is plain text, at most 150 chars.
-- Section {}: groups children.
-- Text { content (markdown), style?: "plain" | "bold" | "muted" }
-- Fields {}: a grid of Field children.
-- Field { label, value: string | number }
-- Table { headers: string[], rows: (string | number)[][], align?: ("left" | "center" | "right")[], caption? }: one cell per header; right-align numbers.
-- Chart { title, chart: { type: "pie", segments: [{ label, value > 0 }] } | { type: "bar" | "line" | "area", categories: string[], series: [{ name, values: number[] }], xLabel?, yLabel? } }
-- Divider {}
-- Image { url (https), alt }
-- Actions {}: a row of LinkButton children.
-- LinkButton { label, url }
+Components: Card { title?, subtitle?, imageUrl? }, Section, Text { content, style?: plain|bold|muted }, Fields, Field { label, value }, Table { headers, rows, align?, caption? }, Chart { title, chart: { type: pie, segments: [{ label, value }] } | { type: bar|line|area, categories, series: [{ name, values }] } }, Divider, Image { url, alt }, Actions, LinkButton { label, url }. Only Card, Section, Fields and Actions have children.
 
-Rules that keep the card valid Block Kit (Slack rejects the whole message otherwise):
-- Every element id in "children" must exist in "elements", and every element except the root must be someone's child. Only Card, Section, Fields and Actions take children.
-- No empty strings: Text content, Field label/value, Table headers and cells, Chart title and labels, Image alt and LinkButton label all need text. Use "-" for a blank cell.
-- Text content uses Slack mrkdwn: **bold**, _italic_, \`code\`, links as <https://example.com|label>, "- " bullets. No headings (#), markdown tables, [label](url) links or images in text; use Card title, Table, LinkButton and Image instead. Keep each Text under 3000 chars.
-- Fields: at most 10 per Fields group; keep each label + value under 2000 chars.
-- Table: at most one per card, 100 rows (header included), 20 columns, about 10,000 chars across all cells. Split bigger data or summarize it.
-- Chart: at most 2 per card; title 1-50 chars; xLabel/yLabel at most 50 chars; labels, category names and series names 1-20 chars and unique; up to 12 series or pie segments and 20 categories (points); every series has one value per category. Fit the data before calling: downsample long ranges (e.g. 31 days to weekly or the last 20 days) and shorten names ("Factory", not "Factory (mastra-platform[bot])"). Charts that break these come back as issues instead of posting.
-- Image and Card imageUrl: a public https URL that points directly at a PNG, JPG or GIF. Slack fetches it, so never use private, localhost, auth-gated or made-up URLs.
-- LinkButton: absolute http(s) URL, label at most 75 chars, at most 25 per Actions row, and no two buttons with the same URL in one card.
-- Keep the whole card under 50 blocks; prefer a few focused elements over many.
+Rules:
+- No empty strings. Text is Slack mrkdwn: links as <url|label>, no # headings or markdown tables.
+- 1 Table (100 rows, 20 columns), 10 Fields per group, 2 Charts (20 points, 12 series, title up to 50 chars, names up to 20 chars and unique). Downsample or summarize larger data.
+- Image URLs must be public https images. LinkButton URLs must be absolute and unique.
 
-If the result has "issues", fix the spec and call again. If it has "error" (for example invalid_blocks), Slack rejected the card: simplify it (drop images, shorten text, remove the element most likely at fault) and retry once, or fall back to a plain text reply.`;
+If the result has "issues", fix them and call again. If it has "error", simplify the card or reply in text.`;
 
 /**
  * Gives the agent a `render_card` tool on runs whose adapter opted into
@@ -149,7 +129,7 @@ If the result has "issues", fix the spec and call again. If it has "error" (for 
  * posts it to the run's thread; invalid specs come back as issues the model
  * can fix. Runs on other adapters, or not on a channel at all, are untouched.
  *
- * Added automatically by `AgentChannels` when any adapter sets `generativeUI`.
+ * Added automatically by `AgentChannels` when the Slack adapter sets `generativeUI`.
  */
 export class ChatChannelGenerativeUIProcessor {
   readonly id = GENERATIVE_UI_PROCESSOR_ID;
@@ -199,7 +179,7 @@ function createRenderCardTool(render: ChatChannelRenderContext) {
 
       let card: unknown;
       try {
-        card = toCard({ root: spec.root, elements }, { components, limits: PLATFORM_LIMITS[render.platform] });
+        card = toCard({ root: spec.root, elements }, { components, limits: SLACK_LIMITS });
       } catch (err) {
         const issues = (err as { issues?: unknown }).issues;
         if (Array.isArray(issues)) return { ok: false as const, issues: issues.map(String) };
@@ -207,7 +187,7 @@ function createRenderCardTool(render: ChatChannelRenderContext) {
       }
 
       // The Slack adapter silently swaps a chart or table it can't render natively for a text block.
-      const fallbacks = render.platform === 'slack' ? slackFallbackIssues(elements) : [];
+      const fallbacks = slackFallbackIssues(elements);
       if (fallbacks.length) return { ok: false as const, issues: fallbacks };
 
       try {

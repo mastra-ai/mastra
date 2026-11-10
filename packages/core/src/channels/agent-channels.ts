@@ -1170,9 +1170,9 @@ export class AgentChannels {
     return processors;
   }
 
-  /** Whether any adapter opted into `generativeUI`. */
+  /** Whether the Slack adapter opted into `generativeUI` (the only platform it supports). */
   private get generativeUIEnabled(): boolean {
-    return Object.values(this.adapterConfigs).some(config => config?.generativeUI === true);
+    return this.adapterConfigs.slack?.generativeUI === true;
   }
 
   /**
@@ -2122,7 +2122,7 @@ export class AgentChannels {
       formatError: adapterConfig?.formatError,
       textFormat: adapterConfig?.textFormat,
       textDisplay: adapterConfig?.textDisplay,
-      generativeUI: adapterConfig?.generativeUI,
+      generativeUI: platform === 'slack' && adapterConfig?.generativeUI === true,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };

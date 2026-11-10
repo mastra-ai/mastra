@@ -1,8 +1,8 @@
 ---
-title: "Reference: Channels | Agents"
-description: "Channels connect agents to messaging platforms. Configure them via the channels property on the Agent constructor."
+title: 'Reference: Channels | Agents'
+description: 'Channels connect agents to messaging platforms. Configure them via the channels property on the Agent constructor.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Channels
@@ -234,7 +234,7 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: 'false',
     description:
-      '**Experimental.** Gives runs on this adapter a `render_card` tool. The agent calls it with a [json-render](https://json-render.dev) spec and the card is posted to the thread as native platform UI (Block Kit on Slack). Invalid specs return a list of issues to the agent instead of posting. Requires the optional `@json-render/chat` package. See [Generative UI cards](#generative-ui-cards).',
+      '**Experimental. Slack only; ignored on other adapters.** Gives runs on the Slack adapter a `render_card` tool. The agent calls it with a [json-render](https://json-render.dev) spec and the card is posted to the thread as Block Kit. Invalid specs return a list of issues to the agent instead of posting. Requires the optional `@json-render/chat` package. See [Generative UI cards](#generative-ui-cards).',
   },
   {
     name: 'textFormat',
@@ -436,7 +436,7 @@ const agent = new Agent({
 `generativeUI` is experimental and may change in a minor release.
 :::
 
-Set `generativeUI: true` on an adapter to let the agent post structured cards (status summaries, key/value fields, tables, charts, images, and link buttons) instead of long markdown replies. Install the optional peer first:
+Set `generativeUI: true` on the Slack adapter to let the agent post structured cards (status summaries, key/value fields, tables, charts, images, and link buttons) instead of long markdown replies. Install the optional peer first:
 
 ```bash npm2yarn
 npm install @json-render/chat

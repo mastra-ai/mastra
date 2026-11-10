@@ -91,13 +91,14 @@ export interface ChannelAdapterBaseConfig {
   textDisplay?: 'show' | 'hidden';
 
   /**
-   * **Experimental.** Let the agent post generative UI cards on this adapter.
+   * **Experimental. Slack only; ignored on other adapters.** Let the agent post
+   * Block Kit cards.
    *
-   * When `true`, runs on this adapter get a `render_card` tool. The agent calls
-   * it with a [json-render](https://json-render.dev) spec (cards, fields,
+   * When `true`, runs on the Slack adapter get a `render_card` tool. The agent
+   * calls it with a [json-render](https://json-render.dev) spec (cards, fields,
    * tables, charts, images, link buttons) and the card is posted to the thread
-   * as the platform's native UI (Block Kit on Slack). Invalid specs come back
-   * to the agent as a list of issues so it can fix them and retry.
+   * as Block Kit. Invalid specs come back to the agent as a list of issues so it
+   * can fix them and retry.
    *
    * Requires the optional `@json-render/chat` package to be installed.
    *
