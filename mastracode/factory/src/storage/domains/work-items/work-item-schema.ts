@@ -48,6 +48,8 @@ export const FACTORY_WORK_ITEM_SOURCES_SCHEMA: CollectionSchema = {
     labels: { type: 'json' },
     author: { type: 'text', nullable: true },
     metadata: { type: 'json', nullable: true },
+    /** `origin` for the record the work item was created from, `attached` for one added later. Null (rows written before this column) reads as `origin`. */
+    role: { type: 'text', nullable: true },
     revision: { type: 'integer', default: 1 },
     synced_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
@@ -133,11 +135,14 @@ export interface WorkItemSourceDbRecord extends Record<string, unknown> {
   labels: string[];
   author: string | null;
   metadata: Record<string, unknown> | null;
+  role?: WorkItemSourceRole | null;
   revision: number;
   synced_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
+
+export type WorkItemSourceRole = 'origin' | 'attached';
 
 export interface WorkItemSourceRow {
   id: string;
@@ -287,5 +292,21 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
       name: 'work_items_source_key_idx',
       columns: ['source_key'],
     },
+    {
+      // Finds the newest legacy write without a scan, so a finished split can be confirmed at boot.
+      name: 'work_items_updated_at_id_idx',
+      columns: ['updated_at', 'id'],
+    },
   ],
+};
+
+/** Records the newest legacy row a finished split pass covered; later boots skip unchanged legacy tables. */
+export const FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA: CollectionSchema = {
+  name: 'factory_work_item_split_state',
+  columns: {
+    id: { type: 'text', primaryKey: true },
+    legacy_updated_at: { type: 'timestamp', nullable: true },
+    legacy_id: { type: 'text', nullable: true },
+    completed_at: { type: 'timestamp' },
+  },
 };

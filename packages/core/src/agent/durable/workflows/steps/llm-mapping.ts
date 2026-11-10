@@ -8,7 +8,7 @@ import {
 } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
-import type { SpanType, ExportedSpan } from '../../../../observability';
+import type { SpanType, ExportedSpan, SpanTermination } from '../../../../observability';
 import { extractUsageMetrics } from '../../../../observability/usage';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
@@ -60,6 +60,8 @@ const durableLLMMappingOutputSchema = z.object({
   }),
   state: z.any(),
   delegationBailed: z.boolean().optional(),
+  tracingDelegationFailure: z.custom<SpanTermination>().optional(),
+  tracingTermination: z.custom<SpanTermination>().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   releasedToolResultIds: z.array(z.string()).optional(),
@@ -110,13 +112,61 @@ export function createDurableLLMMappingStep() {
       // MastraModelOutput, which reads it for scoringData — keep seeing state
       // updates. A fresh instance here would orphan those references.
       const registryEntry = getRunRegistryEntry(_runId, mastra as Mastra | undefined);
+      const terminalBackgroundParts = new Map<string, { restore: (list: MessageList) => void; taskId: string }>();
+      const captureTerminalBackgroundParts = () => {
+        for (const message of registryEntry?.messageList?.get.all.db() ?? []) {
+          for (const part of message.content.parts) {
+            if (part.type !== 'tool-invocation') continue;
+            const backgroundTask = part.providerMetadata?.mastra?.backgroundTask;
+            if (
+              backgroundTask &&
+              typeof backgroundTask === 'object' &&
+              'taskId' in backgroundTask &&
+              (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') &&
+              toolResults.some(
+                result =>
+                  result.toolCallId === part.toolInvocation.toolCallId &&
+                  (
+                    result.providerMetadata as
+                      | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
+                      | undefined
+                  )?.mastra?.backgroundTask?.taskId === backgroundTask.taskId &&
+                  (result.providerMetadata as { mastra?: { backgroundTask?: { status?: string } } } | undefined)?.mastra
+                    ?.backgroundTask?.status === 'running',
+              )
+            ) {
+              const toolCallId = part.toolInvocation.toolCallId;
+              const backgroundTaskEntry = (
+                message.content.metadata?.backgroundTasks as Record<string, unknown> | undefined
+              )?.[toolCallId];
+              terminalBackgroundParts.set(toolCallId, {
+                restore: list => {
+                  list.updateToolInvocation(part, {
+                    mode: 'stream',
+                    ...(backgroundTaskEntry ? { backgroundTasks: { [toolCallId]: backgroundTaskEntry } } : {}),
+                  });
+                },
+                taskId: backgroundTask.taskId as string,
+              });
+            }
+          }
+        }
+      };
+      captureTerminalBackgroundParts();
+      const snapshot = await readMessageListState(params, llmOutput);
+      // Hydration may yield while a background task completes. Capture the live
+      // terminal part again before deserializing the older workflow snapshot.
+      captureTerminalBackgroundParts();
       const messageList = (
         registryEntry?.messageList ??
         new MessageList({
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(await readMessageListState(params, llmOutput));
+      ).deserialize(snapshot);
+      for (const { restore } of terminalBackgroundParts.values()) {
+        restore(messageList);
+      }
 
       if (llmOutput.stepResult.signalPreempted) {
         return {
@@ -181,6 +231,17 @@ export function createDurableLLMMappingStep() {
 
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
+          const backgroundTask = (
+            toolResult.providerMetadata as
+              | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
+              | undefined
+          )?.mastra?.backgroundTask;
+          captureTerminalBackgroundParts();
+          const terminalPart = terminalBackgroundParts.get(toolResult.toolCallId);
+          if (backgroundTask?.status === 'running' && terminalPart && terminalPart.taskId === backgroundTask.taskId) {
+            terminalPart.restore(messageList);
+            continue;
+          }
           if (toolResult.mappingError) {
             const mappingError = new Error(toolResult.mappingError.message);
             mappingError.name = toolResult.mappingError.name;
@@ -280,6 +341,14 @@ export function createDurableLLMMappingStep() {
             ) as Record<string, unknown> | undefined;
           }
 
+          // A mapper may have yielded while a background result settled.
+          captureTerminalBackgroundParts();
+          const settledPart = terminalBackgroundParts.get(toolResult.toolCallId);
+          if (backgroundTask?.status === 'running' && settledPart && settledPart.taskId === backgroundTask.taskId) {
+            settledPart.restore(messageList);
+            continue;
+          }
+
           // A tool error must be recorded as `output-error` with the message in
           // `errorText` so the transcript/adapters read it as a failure rather than
           // a normal result. Successful results keep `state: 'result'` + `result`.
@@ -361,6 +430,8 @@ export function createDurableLLMMappingStep() {
         delegationBailed = true;
         requestContext.set('__mastra_delegationBailed', false);
       }
+      // Keep the first failure, so a later bail with no failure can't hide it.
+      const tracingDelegationFailure = toolResults.find(r => r?.tracingDelegationFailure)?.tracingDelegationFailure;
 
       // 4. Carry the deferred step-finish after tool-result chunks have been
       // emitted. The loop predicate adds step content and emits it after resolving
@@ -415,6 +486,8 @@ export function createDurableLLMMappingStep() {
         processorRetryFeedback: llmOutput.processorRetryFeedback,
         releasedToolResultIds: llmOutput.releasedToolResultIds,
         delegationBailed,
+        tracingDelegationFailure,
+        tracingTermination: llmOutput.tracingTermination,
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
         timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,

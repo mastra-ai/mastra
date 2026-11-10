@@ -390,6 +390,12 @@ describe('factory_update_work_item', () => {
     expect(schema.safeParse({ workItem: item.id, sessions: {} }).success).toBe(false);
     expect(schema.safeParse({ workItem: item.id, title: 'ok' }).success).toBe(true);
   });
+
+  it("does not offer plan pre-approval it can't perform", async () => {
+    const { tools } = await setup();
+
+    expect(tools.factory_update_work_item.description).not.toMatch(/pre-?approv/i);
+  });
 });
 
 describe('approval', () => {

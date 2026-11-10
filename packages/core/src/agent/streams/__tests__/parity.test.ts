@@ -1,6 +1,6 @@
 /**
- * Pins the `agent.stream.<runId>` events a run publishes, on the default
- * durable engine and the evented engine, through a real provider pointed at
+ * Pins the `agent.stream.<runId>` events a run publishes, from a plain Agent
+ * and from DurableAgent on the default and evented engines, through a real provider pointed at
  * AIMock. Resumable-stream readers (observe, reconnect, server routes) depend
  * on this sequence, so moving the stream layer must not change it.
  */
@@ -57,7 +57,7 @@ function describeEvents(events: Published[]): string[] {
   return labels.filter((label, i) => label !== labels[i - 1]);
 }
 
-type Engine = 'durable' | 'evented';
+type Engine = 'plain' | 'durable' | 'evented';
 
 type Scenario = Pick<RunLoopScenarioOptions, 'prompt' | 'fixtures' | 'requireToolApproval'> & {
   tools?: (abort: AbortController) => RunLoopScenarioOptions['tools'];
@@ -90,6 +90,10 @@ async function recordRun(getMock: () => any, engine: Engine, scenario: Scenario)
   for (const event of events) {
     expect(event.runId).toBe(output.runId);
     if (event.type === AgentStreamEventTypes.CHUNK) expect(typeof event.producedAt).toBe('number');
+    if (event.type === AgentStreamEventTypes.FINISH) {
+      expect((event.data as any).output).toBeDefined();
+      expect((event.data as any).stepResult).toBeDefined();
+    }
   }
   // Only this run's stream topic is published to.
   expect([...pubsub.published.keys()]).toEqual([topic]);
@@ -102,6 +106,10 @@ async function recordBothEngines(getMock: () => any, scenario: Scenario) {
   const durable = await recordRun(getMock, 'durable', scenario);
   const evented = await recordRun(getMock, 'evented', scenario);
   expect(evented).toEqual(durable);
+  // The default loop reports iterations through `onIterationComplete` only;
+  // everything else a plain Agent publishes matches DurableAgent.
+  const plain = await recordRun(getMock, 'plain', scenario);
+  expect(plain).toEqual(durable.filter(label => label !== AgentStreamEventTypes.ITERATION_COMPLETE));
   return durable;
 }
 
@@ -114,7 +122,7 @@ const lookup = () =>
     execute: async () => ({ value: 'FOUND' }),
   });
 
-describe('agent stream events: default vs evented engine parity', () => {
+describe('agent stream events: plain Agent vs default and evented engine parity', () => {
   const getMock = useLoopScenarioAimock();
 
   it('text response', async () => {

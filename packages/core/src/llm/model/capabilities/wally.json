@@ -21,10 +21,10 @@
     "minimax-m3"
   ],
   "reasoning": {
-    "glm-5.3-fast": [
+    "deepseek-v4-pro-fast": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high", "max"]
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -33,22 +33,16 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-v4-pro-fast": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash-fast": [
@@ -61,6 +55,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "glm-5.3-fast": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

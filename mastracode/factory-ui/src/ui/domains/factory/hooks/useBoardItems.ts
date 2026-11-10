@@ -1,3 +1,4 @@
+import { boardLoop, boardOf } from '../boardFlow';
 import { useMemo, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -87,10 +88,10 @@ export function useBoardItems({
     // Held in a ref, not in mutation state: two clicks can land in the same render
     // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
-    const boardId = itemBoard(item);
-    if (!pullRequestMayEnter(boardId, item.source, toStage)) return;
-    if (boardId !== 'work' && boardId !== 'review') {
-      const definition = catalog.data?.find(board => board.id === boardId);
+    const definition = boardOf(catalog.data, item);
+    if (!pullRequestMayEnter(definition, item, toStage)) return;
+    // Only a board without a pull request loop is held to its declared moves here; the server judges the rest.
+    if (boardLoop(definition) === undefined) {
       const phase = definition?.phases.find(candidate => item.stages.includes(candidate.id));
       if (!phase || (phase.id !== toStage && !phase.transitions.some(target => target.to === toStage))) return;
     }
@@ -147,7 +148,7 @@ export function useBoardItems({
       if (customPrompt) {
         await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
       }
-      if (!item.stages.includes(toStage) && pullRequestMayEnter(kind, source, toStage)) {
+      if (!item.stages.includes(toStage) && pullRequestMayEnter(boardOf(catalog.data, item), item, toStage)) {
         requestTransition(item, toStage, { cause });
       }
     })().catch(error => {

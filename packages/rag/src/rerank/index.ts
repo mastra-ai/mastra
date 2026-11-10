@@ -123,6 +123,12 @@ async function executeRerank({
     throw err;
   }
 
+  if (!Number.isInteger(topK) || topK < 0) {
+    const err = new Error(`topK must be a nonnegative integer. Got ${topK}`);
+    rerankSpan?.error({ error: err, endSpan: true });
+    throw err;
+  }
+
   const resultLength = results.length;
 
   const queryAnalysis = queryEmbedding ? analyzeQueryEmbedding(queryEmbedding) : null;

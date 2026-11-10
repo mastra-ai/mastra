@@ -21,22 +21,6 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "ornith-ai/Ornith-1.5-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
     "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
@@ -49,10 +33,14 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-27B": [
+    "ornith-ai/Ornith-1.5-35B-A3B": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
@@ -64,6 +52,18 @@
     "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
+      }
+    ],
+    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

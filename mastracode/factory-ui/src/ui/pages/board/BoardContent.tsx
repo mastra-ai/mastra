@@ -1,3 +1,5 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
@@ -11,6 +13,8 @@ import type { BoardCandidate } from '../../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
+import { EditBoardButton } from '../../domains/factory/components/EditBoardButton';
+import { useCanEditBoards } from '../../../hooks/useIntakeRoutes';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
@@ -82,14 +86,20 @@ export function BoardContent({
   definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
-  const review = kind === 'review';
-  const builtin = kind === 'work' || review;
+  // A board with a pull request loop runs Factory's automation; the default board keeps its own column icons.
+  const loop = boardLoop(definition);
+  const runsLoop = loop !== undefined;
+  const canEditBoard = useCanEditBoards(factoryProjectId);
+  // A board that reviews pull requests but builds nothing (the retired Review board a project still
+  // uses) takes no new cards: its cards come from pull requests.
+  const pullRequestsOnly = loop?.pullRequestReview !== undefined && loop.build === undefined;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
   const auth = useFactoryAuth();
   const currentUserId = auth.data?.user?.userId;
   const githubStatus = useGithubStatusQuery();
   const personId = boardPersonIdentity(currentUserId, githubStatus.data?.userGithubUsername);
-  const view = useBoardView({ factoryProjectId, kind, currentUserId, personId });
+  const reviewsPullRequests = boardLoop(definition)?.pullRequestReview !== undefined;
+  const view = useBoardView({ factoryProjectId, kind, reviewsPullRequests, currentUserId, personId });
   const { searchParams, filters, sort, layout } = view;
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
@@ -190,6 +200,7 @@ export function BoardContent({
   const boardWorkItems = [...workItemsByStage.values()].flat();
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
   const loadingStages = boardLoadingStages({
+    board: definition,
     stages,
     itemsPending: items.isPending,
     intakePending: intake.isPending,
@@ -232,7 +243,7 @@ export function BoardContent({
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
   const anyFilterActive = boardFiltersActive(filters) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
-  const hasIntakeSource = intake.available.length > 0;
+  const hasIntakeSource = intake.fed;
 
   const stageViews = stages.map(stage => {
     const isInitialPhase = stage.id === definition.initialPhase;
@@ -243,12 +254,16 @@ export function BoardContent({
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
+    // No card is created by hand on the retired Review board: its cards come from pull requests.
     const canCreate =
-      !review && !items.isPending && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
+      !pullRequestsOnly &&
+      !items.isPending &&
+      stage.kind !== 'terminal' &&
+      (composer.stage === undefined || composerOpen);
     const canConnectSource = isInitialPhase && !hasIntakeSource;
     const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
-      builtin &&
+      runsLoop &&
       !isInitialPhase &&
       !loading &&
       !composerOpen &&
@@ -257,7 +272,8 @@ export function BoardContent({
       taskCount === 0;
     return {
       stage,
-      phaseKind: builtin ? undefined : stage.kind,
+      phaseKind: definition.id === DEFAULT_BOARD_ID ? undefined : stage.kind,
+      exitTool: stage.exitTool,
       loading,
       taskCount,
       collapsed,
@@ -279,7 +295,6 @@ export function BoardContent({
           stage={stage}
           isInitialPhase={isInitialPhase}
           layout={layout}
-          kind={kind}
           loading={loading}
           taskCount={taskCount}
           feed={columnFeed}
@@ -360,7 +375,7 @@ export function BoardContent({
               cardProjectRepositoryId(factory.repositories, candidate, repository.projectRepositoryId)
             }
             factoryProjectId={factoryProjectId}
-            board={builtin ? kind : undefined}
+            board={definition}
             onRun={(candidate, move, prompt) =>
               dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
             }
@@ -405,19 +420,17 @@ export function BoardContent({
         onDrop={dropWithRepository}
         toolbar={
           <BoardViewControls
-            kind={kind}
+            reviewsPullRequests={reviewsPullRequests}
             view={view}
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
             aside={
-              builtin && (
-                <BoardAutomationSettings
-                  factoryProjectId={factoryProjectId}
-                  autoRunEnabled={factory.autoRunEnabled ?? false}
-                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
-                  selfReviewEnabled={factory.selfReviewEnabled ?? false}
-                />
+              (canEditBoard || runsLoop) && (
+                <div className="flex items-center gap-2">
+                  <EditBoardButton factoryProjectId={factoryProjectId} boardId={definition.id} />
+                  {runsLoop && <BoardAutomationSettings factoryProjectId={factoryProjectId} />}
+                </div>
               )
             }
           />

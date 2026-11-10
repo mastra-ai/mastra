@@ -47,8 +47,9 @@ function reviewCard(session: FactoryUserSession, pullRequestNumber: number, merg
       externalId: `pr-${pullRequestNumber}`,
     },
     parentWorkItemId: null,
+    board: 'work',
     title: `Review #${pullRequestNumber}`,
-    stages: ['review'],
+    stages: ['pr-review'],
     stageHistory: [],
     sessions: {
       review: {
@@ -108,8 +109,8 @@ function renderSection(openSessionId?: string) {
 
 async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
   await waitForMutationsIdle(client);
-  const group = await screen.findByRole('region', { name: 'Review sessions' });
-  const rows = await within(group).findAllByRole('link', { name: /^factory\/pr-\d+$/ });
+  const group = await screen.findByRole('region', { name: 'Work sessions' });
+  const rows = await within(group).findAllByRole('link', { name: /^Review: factory\/pr-\d+$/ });
   return rows.map(row => row.getAttribute('aria-label'));
 }
 
@@ -132,7 +133,11 @@ describe('Sessions sidebar order', () => {
 
     const { client } = renderSection();
 
-    expect(await reviewRowLabels(client)).toEqual(['factory/pr-102', 'factory/pr-101', 'factory/pr-103']);
+    expect(await reviewRowLabels(client)).toEqual([
+      'Review: factory/pr-102',
+      'Review: factory/pr-101',
+      'Review: factory/pr-103',
+    ]);
   });
 
   it('keeps a merged session up top while its agent is still running', async () => {
@@ -147,7 +152,7 @@ describe('Sessions sidebar order', () => {
 
     const { client } = renderSection();
 
-    expect(await reviewRowLabels(client)).toEqual(['factory/pr-302', 'factory/pr-301']);
+    expect(await reviewRowLabels(client)).toEqual(['Review: factory/pr-302', 'Review: factory/pr-301']);
   });
 
   it('keeps a merged session up top while its agent waits on an answer', async () => {
@@ -163,7 +168,7 @@ describe('Sessions sidebar order', () => {
 
     const { client } = renderSection();
 
-    expect(await reviewRowLabels(client)).toEqual(['factory/pr-402', 'factory/pr-401']);
+    expect(await reviewRowLabels(client)).toEqual(['Review: factory/pr-402', 'Review: factory/pr-401']);
     expect(screen.getByRole('status', { name: /^factory\/pr-402 waiting on you$/i })).toBeInTheDocument();
   });
 
@@ -176,7 +181,11 @@ describe('Sessions sidebar order', () => {
     stubSidebar([oldest, middle, newest], cards);
     const { client } = renderSection(oldest.sessionId);
 
-    expect(await reviewRowLabels(client)).toEqual(['factory/pr-403', 'factory/pr-402', 'factory/pr-401']);
+    expect(await reviewRowLabels(client)).toEqual([
+      'Review: factory/pr-403',
+      'Review: factory/pr-402',
+      'Review: factory/pr-401',
+    ]);
   });
 
   it('keeps the open session visible when creation order puts it past the collapsed rows', async () => {
@@ -192,12 +201,12 @@ describe('Sessions sidebar order', () => {
     const { client } = renderSection(oldest.sessionId);
 
     expect(await reviewRowLabels(client)).toEqual([
-      'factory/pr-507',
-      'factory/pr-506',
-      'factory/pr-505',
-      'factory/pr-504',
-      'factory/pr-503',
-      'factory/pr-501',
+      'Review: factory/pr-507',
+      'Review: factory/pr-506',
+      'Review: factory/pr-505',
+      'Review: factory/pr-504',
+      'Review: factory/pr-503',
+      'Review: factory/pr-501',
     ]);
   });
 
@@ -235,15 +244,20 @@ describe('Sessions sidebar order', () => {
 
     const rendered = renderSection();
     expect(await reviewRowLabels(rendered.client)).toEqual([
-      'factory/pr-601',
-      'factory/pr-604',
-      'factory/pr-602',
-      'factory/pr-603',
+      'Review: factory/pr-601',
+      'Review: factory/pr-604',
+      'Review: factory/pr-602',
+      'Review: factory/pr-603',
     ]);
 
     await pickSessionProperty(user, 'Sort', 'Last updated');
 
-    const byLastUpdate = ['factory/pr-601', 'factory/pr-603', 'factory/pr-604', 'factory/pr-602'];
+    const byLastUpdate = [
+      'Review: factory/pr-601',
+      'Review: factory/pr-603',
+      'Review: factory/pr-604',
+      'Review: factory/pr-602',
+    ];
     expect(await reviewRowLabels(rendered.client)).toEqual(byLastUpdate);
     rendered.unmount();
 

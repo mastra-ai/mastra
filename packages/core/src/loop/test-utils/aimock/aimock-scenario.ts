@@ -694,10 +694,18 @@ export async function runApprovalScenario({
   observability,
   tracingOptions,
   afterStream,
+  agentOutputProcessors,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
-  const { agent } = await buildScenarioAgent({ llm, tools, instructions, engine, observability });
+  const { agent } = await buildScenarioAgent({
+    llm,
+    tools,
+    instructions,
+    engine,
+    observability,
+    agentOutputProcessors,
+  });
   const isDurable = isDurableEngineVariant(engine);
 
   const chunks: ChunkType[] = [];

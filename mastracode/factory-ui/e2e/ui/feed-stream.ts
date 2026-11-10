@@ -4,7 +4,8 @@ import { TEST_BASE_URL } from './render';
 
 /**
  * A pushable feed stream, overriding the ambient silent one. `push` writes a
- * `feed` frame; `close` ends the stream so the provider takes its retry path.
+ * `feed` frame; `ping` writes the server's keepalive; `close` ends the stream
+ * so the provider takes its retry path.
  */
 export function pushableFeedStream(factoryProjectId: string) {
   const encoder = new TextEncoder();
@@ -34,6 +35,9 @@ export function pushableFeedStream(factoryProjectId: string) {
     push(workItemId?: string) {
       const data = JSON.stringify(workItemId ? { workItemId } : {});
       controller?.enqueue(encoder.encode(`event: feed\ndata: ${data}\n\n`));
+    },
+    ping() {
+      controller?.enqueue(encoder.encode(': ping\n\n'));
     },
     close() {
       controller?.close();

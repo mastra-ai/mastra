@@ -140,7 +140,7 @@ beforeAll(() => {
   };
 });
 
-const tree = () => within(screen.getByRole('tree'));
+const tree = () => within(screen.getByRole('tree', { name: 'Knowledge pages' }));
 const row = (name: string) => tree().getByRole('treeitem', { name: new RegExp(`^${name}`) });
 
 describe('KnowledgePageExplorer tree with child counts', () => {
@@ -300,7 +300,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
         </div>,
       );
       // As in the app, the tree sets overflow-y itself but is as tall as its rows, so it does not scroll.
-      const treeElement = screen.getByRole('tree');
+      const treeElement = screen.getByRole('tree', { name: 'Knowledge pages' });
       treeElement.style.overflowY = 'auto';
       const heights = (element: HTMLElement, scrollHeight: number, clientHeight: number) => {
         Object.defineProperty(element, 'scrollHeight', { configurable: true, value: scrollHeight });
@@ -327,7 +327,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
         fireEvent.click(row('Articles'));
         fireEvent.click(row('Second article'));
         const first = selectedScrolls();
-        act(screen.getByRole('tree'));
+        act(screen.getByRole('tree', { name: 'Knowledge pages' }));
         fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
         expect(selectedScrolls()).toBe(first);
         restore();
@@ -368,7 +368,9 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(row('Pricing').getAttribute('aria-selected')).toBe('true');
       fireEvent.click(row('Pricing'));
       expect(screen.getByTestId('view').textContent).toBe('page');
-      expect(within(screen.getByRole('region', { name: 'Selected page' })).getByText('Pricing')).toBeTruthy();
+      expect(
+        within(screen.getByRole('region', { name: 'Selected page' })).getByRole('heading', { name: 'Pricing' }),
+      ).toBeTruthy();
     });
 
     it('focuses a different page instead of opening when the second click lands elsewhere', () => {
@@ -441,7 +443,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
     it('counts the children it still does not draw on the "+N more" circle, not in a line that shifts the layout', () => {
       const { container } = renderWithProviders(<Host requested={[]} siteChildCount={5} />);
       fireEvent.click(row('site:mastra'));
-      expect(document.querySelector('.react-flow__node [data-page-id="rest:site"]')?.getAttribute('title')).toBe(
+      expect(document.querySelector('.react-flow__node [data-page-id="rest:site"]')?.getAttribute('aria-label')).toBe(
         'Show 3 more of 3',
       );
       expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
@@ -462,7 +464,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
         const { container } = renderWithProviders(<Host requested={[]} extraSiblings={60} siteChildCount={62} />);
         fireEvent.click(row('site:mastra'));
         expect(restNode()?.textContent).toContain('+14 more');
-        expect(restNode()?.getAttribute('title')).toBe('Show 12 more of 14');
+        expect(restNode()?.getAttribute('aria-label')).toBe('Show 12 more of 14');
         expect(restNode()?.className).toContain('cursor-pointer');
         const before = drawnChildren(container);
         clickRest();
@@ -496,12 +498,12 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(back().disabled).toBe(false);
     });
 
-    it('floats Back over the graph, with a solid background and a pointer cursor', () => {
+    it('floats Back over the graph with the other graph options', () => {
       renderWithProviders(<Host requested={[]} />);
       expect(screen.getByTestId('knowledge-graph-container').contains(back())).toBe(true);
-      expect(back().className).toMatch(/\bbg-card\b/);
-      expect(back().className).toMatch(/\bcursor-pointer\b/);
-      expect(back().className).toMatch(/\bhover:bg-fill-subtle\b/);
+      expect(within(screen.getByRole('group', { name: 'Graph options' })).getByRole('button', { name: 'Back' })).toBe(
+        back(),
+      );
     });
 
     it('goes back one focus at a time through the walk', () => {

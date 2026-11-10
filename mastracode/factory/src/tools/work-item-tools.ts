@@ -264,7 +264,7 @@ export function createFactoryWorkItemTools(
     factory_update_work_item: createTool({
       id: 'factory_update_work_item',
       description:
-        "Edit a work item's fields as the person you are working with: its title, the repository its runs use, its parent item, or pre-approving its plans. Move stages with factory_transition_work_item and start roles with factory_start_session; post to the card's feed for anything else.",
+        "Edit a work item's fields as the person you are working with: its title, the repository its runs use, or its parent item. Move stages with factory_transition_work_item and start roles with factory_start_session; post to the card's feed for anything else.",
       inputSchema: z
         .object({
           workItem: workItemRefSchema,

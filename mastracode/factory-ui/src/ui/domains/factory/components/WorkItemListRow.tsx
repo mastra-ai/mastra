@@ -3,7 +3,9 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { BoardCardStatus } from '../boardCardState';
+import { boardOf } from '../boardFlow';
 import type { DragPayload } from '../boardDrag';
 import { sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
@@ -23,7 +25,8 @@ import {
 } from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { WorkItemActivity } from './WorkItemActivity';
-import { columnReviewVerdict, ReviewVerdictBadge } from './WorkItemCardRows';
+import type { ReworkReason } from '../reworkReason';
+import { columnReviewVerdict, ReviewVerdictBadge, ReworkLine } from './WorkItemCardRows';
 
 export function WorkItemListRow({
   item,
@@ -41,6 +44,7 @@ export function WorkItemListRow({
   status,
   actions,
   menu,
+  rework,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -57,8 +61,10 @@ export function WorkItemListRow({
   status: BoardCardStatus;
   actions: CardAction[];
   menu: ReactNode;
+  rework?: ReworkReason;
 }) {
-  const verdict = columnReviewVerdict(item, columnStage);
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
+  const verdict = columnReviewVerdict(item, columnStage, board);
   return (
     <BoardListRow
       testId="work-item-card"
@@ -99,14 +105,15 @@ export function WorkItemListRow({
             <MetadataLabels metadata={sourceMetadata(item)} />
           </span>
         ),
-        status: (status.kind !== 'idle' || verdict) && (
+        status: (status.kind !== 'idle' || verdict || rework) && (
           <span className="flex min-w-0 items-center gap-2">
             <CardStatus status={status} compact />
             {verdict && <ReviewVerdictBadge verdict={verdict} />}
+            {rework && <ReworkLine rework={rework} />}
           </span>
         ),
         action: <CardActions actions={actions} />,
-        activity: <WorkItemActivity activity={activity} actors={actors} showName={false} />,
+        activity: <WorkItemActivity activity={activity} actors={actors} board={board} showName={false} />,
       }}
     />
   );

@@ -12,6 +12,7 @@ import type {
 } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
+import { validateStorageMetadataFilter } from '@mastra/core/storage';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
 // resolution at runtime goes through mastra.getAgentController?.(), never a
@@ -68,6 +69,14 @@ const RESERVED_THREAD_METADATA_KEYS = {
 
 function isReservedThreadMetadataKey(key: string): boolean {
   return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
+}
+
+function storageTagFilter(tags: Record<string, string>) {
+  try {
+    return validateStorageMetadataFilter(tags);
+  } catch {
+    return undefined;
+  }
 }
 
 function getRequestMessageAuthor(requestContext?: RequestContext): { id: string } | undefined {
@@ -737,6 +746,10 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
           });
 
           const abortCleanup = () => cleanup(controller);
+          if (abortSignal?.aborted) {
+            abortCleanup();
+            return;
+          }
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
           scheduleHeartbeat();
         },
@@ -1208,12 +1221,16 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const resourceId = await resolveSessionResourceId(controller, sessionId);
+      const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       // Read-only route: query storage directly instead of constructing a
       // Session. `createSession` triggers workspace/sandbox initialization
       // (5–17s stall, cost per provisioned sandbox) as a side effect — reads
       // shouldn't pay that. Session creation happens on the write path.
       // `queryThreads` lazily initializes storage (not workspace) on its own.
-      const threads = await controller.queryThreads({ resourceId });
+      const threads = await controller.queryThreads({
+        resourceId,
+        metadata: storageTagFilter(Object.fromEntries(tagEntries)),
+      });
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -1234,7 +1251,6 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       // never shows worktree B's threads. Mirrors the controller's tag-aware
       // selection and the TUI's worktree-strict listing. Reserved internal keys
       // are ignored as filter tags so callers can't match on session bookkeeping.
-      const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       const scoped =
         tagEntries.length > 0
           ? threads.filter(t => {

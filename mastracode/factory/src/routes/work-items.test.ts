@@ -189,7 +189,7 @@ describe('installed board catalog', () => {
     expect(response.status).toBe(200);
     const { boards } = await response.json();
     expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
-      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+      includeDefaultBoards ? ['work', 'release'] : ['release'],
     );
     // Deprecated `title`/`role` stay beside their replacements for older clients.
     expect(boards.at(-1)).toEqual({
@@ -197,6 +197,8 @@ describe('installed board catalog', () => {
       name: 'Release Preview',
       title: 'Release Preview',
       initialPhase: 'queued',
+      // No phase reviews or builds, so the board has no pull request loop: only its terminal phase finishes cards.
+      flow: { completed: 'shipped', canceled: 'shipped' },
       phases: [
         {
           id: 'queued',
@@ -220,6 +222,25 @@ describe('installed board catalog', () => {
         { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },
       ],
     });
+  });
+
+  it("names the phase playing each part of each board's pull request loop", async () => {
+    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry());
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    expect(body.boards[0]).toMatchObject({
+      id: 'work',
+      flow: {
+        triage: 'triage',
+        build: 'execute',
+        pullRequestReview: 'pr-review',
+        completed: 'done',
+        canceled: 'canceled',
+      },
+    });
+    // Which board is the default is DEFAULT_BOARD_ID, and the build context is the build phase's own.
+    expect(body.boards[0]).not.toHaveProperty('default');
+    expect(body.boards[0].flow).not.toHaveProperty('buildContext');
   });
 
   it('sends the conditions a phase starts and approves its exit tool under', async () => {
@@ -347,6 +368,20 @@ describe('auth and scoping', () => {
 
 // ── Create / upsert ──────────────────────────────────────────────────────
 describe('POST /web/factory/projects/:id/work-items', () => {
+  it('refuses a card filed onto the retired Review board, and files nothing', async () => {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        board: 'review',
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:7' },
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: 'invalid_board' });
+    expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId: PROJECT_ID })).toEqual([]);
+  });
+
   it('creates a work item with server-stamped history', async () => {
     const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     expect(res.status).toBe(200);
@@ -1776,184 +1811,6 @@ describe('GET /web/factory/projects/:id/attention', () => {
       items: [{ decisionId: newer.id, occurredAt: newerFailureAt.toISOString() }],
       hasMore: false,
     });
-  });
-
-  it('repairs only legacy decisions whose canonical work is finished', async () => {
-    const terminalResponse = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ title: 'Terminal repair target' }),
-    );
-    const terminalItem = (await terminalResponse.json()).workItem;
-    const now = new Date('2030-01-01T00:00:00.000Z');
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: terminalItem.id,
-      ingress: { identity: 'legacy-repair-terminal', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: terminalItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'transition',
-          board: 'work',
-          stage: 'done',
-          idempotencyKey: 'legacy-transition-accepted',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'work',
-          skillName: 'factory-plan',
-          idempotencyKey: 'legacy-terminal-skill',
-        },
-        {
-          type: 'sendMessage',
-          role: 'work',
-          message: 'Obsolete message.',
-          idempotencyKey: 'legacy-terminal-message',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'review',
-          skillName: 'factory-review',
-          idempotencyKey: 'legacy-terminal-proposal',
-        },
-      ],
-      causalChain: [],
-      now,
-    });
-    const terminalDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    const byKey = new Map(terminalDecisions.map(decision => [decision.idempotencyKey, decision]));
-    const transition = byKey.get('legacy-transition-accepted');
-    const failedSkill = byKey.get('legacy-terminal-skill');
-    const failedMessage = byKey.get('legacy-terminal-message');
-    const proposal = byKey.get('legacy-terminal-proposal');
-    if (!transition || !failedSkill || !failedMessage || !proposal) {
-      throw new Error('Expected legacy repair decisions');
-    }
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: { in: [transition.id, failedSkill.id, failedMessage.id] } },
-      { status: 'failed', last_error: 'Legacy failure.', completed_at: now, updated_at: now },
-    );
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: proposal.id },
-      { status: 'proposed', updated_at: now },
-    );
-    await seed.workItems.setAttentionReceipt({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      userId: 'u1',
-      identity: { kind: 'automation-failed', sourceId: failedSkill.id, occurrence: 0 },
-      action: 'archive',
-      now,
-    });
-    await seed.storage.ops.insertOne('factory_rule_ingress', {
-      org_id: 'org1',
-      factory_project_id: PROJECT_ID,
-      identity: 'decision:legacy-transition-accepted',
-      trigger_type: 'rule',
-      transition_id: crypto.randomUUID(),
-      result: { status: 'accepted', stage: 'done' },
-      created_at: now,
-    });
-    await seed.workItems.update({
-      orgId: 'org1',
-      id: terminalItem.id,
-      userId: 'user-1',
-      patch: { stages: ['done'] },
-    });
-
-    const activeResponse = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({
-        title: 'Active repair target',
-        externalSource: {
-          integrationId: 'github',
-          type: 'issue',
-          externalId: '43',
-          url: 'https://github.com/acme/app/issues/43',
-        },
-        metadata: { number: 43 },
-      }),
-    );
-    const activeItem = (await activeResponse.json()).workItem;
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: activeItem.id,
-      ingress: { identity: 'legacy-repair-active', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: activeItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'invokeSkill',
-          role: 'work',
-          skillName: 'factory-plan',
-          idempotencyKey: 'legacy-active-skill',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'review',
-          skillName: 'factory-review',
-          idempotencyKey: 'legacy-multistage-proposal',
-        },
-      ],
-      causalChain: [],
-      now,
-    });
-    const activeDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    const activeDecision = activeDecisions.find(decision => decision.idempotencyKey === 'legacy-active-skill');
-    const multistageProposal = activeDecisions.find(
-      decision => decision.idempotencyKey === 'legacy-multistage-proposal',
-    );
-    if (!activeDecision || !multistageProposal) throw new Error('Expected active legacy decisions');
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: activeDecision.id },
-      { status: 'failed', last_error: 'Still unresolved.', completed_at: now, updated_at: now },
-    );
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: multistageProposal.id },
-      { status: 'proposed', updated_at: now },
-    );
-    await seed.workItems.update({
-      orgId: 'org1',
-      id: activeItem.id,
-      userId: 'user-1',
-      patch: { stages: ['review', 'done'] },
-    });
-
-    await seed.workItems.repairLegacyAttentionState();
-
-    const repaired = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    expect(repaired.find(decision => decision.id === transition.id)?.status).toBe('succeeded');
-    expect(repaired.find(decision => decision.id === failedSkill.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === proposal.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === failedMessage.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === activeDecision.id)?.status).toBe('failed');
-    expect(repaired.find(decision => decision.id === multistageProposal.id)?.status).toBe('proposed');
-    await expect(
-      seed.workItems.listAttentionReceipts({
-        orgId: 'org1',
-        factoryProjectId: PROJECT_ID,
-        userId: 'u1',
-        identities: [
-          {
-            kind: 'automation-failed',
-            sourceId: failedSkill.id,
-            occurrence: 0,
-          },
-        ],
-      }),
-    ).resolves.toEqual([]);
   });
 
   it('rejects malformed structured receipt rows', async () => {

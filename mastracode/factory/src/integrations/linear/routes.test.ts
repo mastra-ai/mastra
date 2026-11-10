@@ -266,7 +266,7 @@ describe('issues route', () => {
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
   });
 
-  it('ingests fetched issues for the active Factory project onto the routed board', async () => {
+  it('ingests fetched issues for the active Factory project onto Work', async () => {
     await connect();
     const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
@@ -276,7 +276,6 @@ describe('issues route', () => {
       integrationId: 'linear',
       sourceId: 'proj-1',
       factoryProjectId,
-      board: 'work',
     });
     const res = await buildApp(org1(), { ingestFactoryIssues }).request(
       `/web/linear/issues?factoryProjectId=${factoryProjectId}`,
@@ -287,14 +286,13 @@ describe('issues route', () => {
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId,
-      intakeBoards: { 'proj-1': 'work' },
       issues: expect.arrayContaining([
         expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42', assignee: 'ada', creator: 'grace' }),
       ]),
     });
   });
 
-  it('ingests a projectless team-sourced issue onto the team board', async () => {
+  it('ingests a projectless team-sourced issue onto Work', async () => {
     await connect();
     const teamSourceId = 'linear-team:team-1';
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
@@ -309,7 +307,6 @@ describe('issues route', () => {
       integrationId: 'linear',
       sourceId: teamSourceId,
       factoryProjectId,
-      board: 'work',
     });
     // The team listing returns a projectless issue; stamp reflects the team source.
     vi.spyOn(linear, 'listActiveIssues').mockResolvedValue({
@@ -345,7 +342,6 @@ describe('issues route', () => {
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId,
-      intakeBoards: { [teamSourceId]: 'work' },
       issues: expect.arrayContaining([
         expect.objectContaining({ id: 'issue-9', identifier: 'ENG-99', sourceId: teamSourceId }),
       ]),
@@ -362,8 +358,8 @@ describe('issues route', () => {
       }
     };
 
-    const bind = (sourceId: string, factoryProjectId: string, board?: string) =>
-      seed.intake.setBinding({ orgId: 'org1', integrationId: 'linear', sourceId, factoryProjectId, board });
+    const bind = (sourceId: string, factoryProjectId: string) =>
+      seed.intake.setBinding({ orgId: 'org1', integrationId: 'linear', sourceId, factoryProjectId });
 
     beforeEach(async () => {
       await connect();
@@ -375,8 +371,8 @@ describe('issues route', () => {
 
     it('resolves attribution across all sources before ingesting the requested project', async () => {
       await seedProjects(2);
-      await bind('proj-1', projectA, 'work');
-      await bind('proj-2', projectB, 'work');
+      await bind('proj-1', projectA);
+      await bind('proj-2', projectB);
       const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
 
       const res = await buildApp(org1(), { ingestFactoryIssues }).request(
@@ -396,8 +392,8 @@ describe('issues route', () => {
         userId: 'u1',
         config: { linear: { enabled: true, sourceIds: ['proj-1', teamSourceId] } },
       });
-      await bind('proj-1', projectA, 'work');
-      await bind(teamSourceId, projectB, 'work');
+      await bind('proj-1', projectA);
+      await bind(teamSourceId, projectB);
       const projectIssue = {
         id: 'issue-1',
         identifier: 'ENG-42',
@@ -445,31 +441,13 @@ describe('issues route', () => {
       expect(ingestFactoryIssues).toHaveBeenCalledWith(
         expect.objectContaining({
           factoryProjectId: projectB,
-          intakeBoards: { [teamSourceId]: 'work' },
           issues: [expect.objectContaining({ id: 'issue-2', sourceId: teamSourceId })],
         }),
       );
     });
-    it('tells the ingest which bound sources target a board', async () => {
-      await seedProjects(2);
-      await bind('proj-1', projectA, 'release');
-      await bind('proj-2', projectB, 'hotfix');
-      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
-
-      await buildApp(org1(), { ingestFactoryIssues }).request(`/web/linear/issues?factoryProjectId=${projectA}`);
-
-      expect(ingestFactoryIssues).toHaveBeenCalledWith(
-        expect.objectContaining({
-          factoryProjectId: projectA,
-          intakeBoards: { 'proj-1': 'release' },
-          issues: [expect.objectContaining({ id: 'issue-1', sourceId: 'proj-1' })],
-        }),
-      );
-    });
-
     it('does not ingest another project sources when its board is viewed', async () => {
       await seedProjects(2);
-      await bind('proj-1', projectA, 'work');
+      await bind('proj-1', projectA);
       const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
 
       const res = await buildApp(org1(), { ingestFactoryIssues }).request(
@@ -495,23 +473,9 @@ describe('issues route', () => {
       expect(ingestFactoryIssues).not.toHaveBeenCalled();
     });
 
-    it('ingests nothing for a source routed to the project but not to a board', async () => {
-      await seedProjects(1);
-      await bind('proj-1', projectA);
-      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
-
-      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-        `/web/linear/issues?factoryProjectId=${projectA}`,
-      );
-
-      expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-      expect(listActiveLinearIssues).not.toHaveBeenCalled();
-      expect(ingestFactoryIssues).not.toHaveBeenCalled();
-    });
-
     it('lists every selected source when no Factory project is in play', async () => {
       await seedProjects(2);
-      await bind('proj-1', projectA, 'work');
+      await bind('proj-1', projectA);
 
       await buildApp(org1()).request('/web/linear/issues');
 
@@ -682,7 +646,6 @@ describe('issue detail route', () => {
       integrationId: 'linear',
       sourceId: 'proj-1',
       factoryProjectId: projectA,
-      board: 'work',
     });
     fetchIssueDetail = vi.fn(async () => issueDetail);
     vi.spyOn(linear, 'fetchIssueDetail').mockImplementation(fetchIssueDetail as never);
@@ -724,7 +687,6 @@ describe('issue detail route', () => {
       integrationId: 'linear',
       sourceId: 'proj-2',
       factoryProjectId: projectA,
-      board: 'work',
     });
     fetchIssueDetail.mockImplementation(async (_token: string, issueReference: string) =>
       issueReference === 'issue-2'
@@ -759,7 +721,6 @@ describe('issue detail route', () => {
       integrationId: 'linear',
       sourceId: teamSourceId,
       factoryProjectId: projectB,
-      board: 'work',
     });
     fetchIssueDetail.mockResolvedValue({ ...issueDetail, teamId: 'team-1' });
 
@@ -782,7 +743,6 @@ describe('issue detail route', () => {
       integrationId: 'linear',
       sourceId: teamSourceId,
       factoryProjectId: projectB,
-      board: 'work',
     });
     // Ingested on B while the team was the winning source; the project is now selected and wins.
     await seed.workItems.upsert({
@@ -825,7 +785,6 @@ describe('issue detail route', () => {
       integrationId: 'linear',
       sourceId: teamSourceId,
       factoryProjectId: projectB,
-      board: 'work',
     });
     await seed.workItems.upsert({
       orgId: 'org1',
@@ -862,7 +821,6 @@ describe('issue detail route', () => {
       integrationId: 'linear',
       sourceId: teamSourceId,
       factoryProjectId: projectB,
-      board: 'work',
     });
     await seed.workItems.upsert({
       orgId: 'org1',
@@ -897,7 +855,6 @@ describe('issue detail route', () => {
       integrationId: 'linear',
       sourceId: teamSourceId,
       factoryProjectId: projectB,
-      board: 'work',
     });
     // Both filed under identifiers the issue has since left; only the older card is live.
     for (const [identifier, stage, createdAt] of [

@@ -75,6 +75,9 @@ type ConsumedDuringPreparation =
   | '_detachObserverOnCancel'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
+  // Caller-local step-owner object for plain runs; durable registers its steps
+  // under the registry entry instead, so this is never serialized or read here
+  | 'stepOwner'
   // Toolsets and clientTools are resolved into the `tools` record during
   // getToolsForExecution() in preparation
   | 'toolsets'
