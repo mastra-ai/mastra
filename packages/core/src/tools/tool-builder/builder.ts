@@ -36,6 +36,7 @@ import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema 
 import type { StandardSchemaWithJSON } from '../../schema';
 import {
   getNeedsApprovalFn,
+  isMastraTool,
   isVercelTool,
   isProviderDefinedTool,
   markBuiltBeforeApproval,
@@ -44,7 +45,6 @@ import type { ToolOptions } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
-import { markBuilderValidatedInput } from '../builder-validation-context';
 import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
 import type {
@@ -59,6 +59,7 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
+import { getExecuteValidated } from '../validated-execute';
 import {
   createStandardSchemaIssuesError,
   getValidationIssuePaths,
@@ -711,6 +712,7 @@ export class CoreToolBuilder extends MastraBase {
       execOptions: MastraToolInvocationOptions,
       toolSpan?: AnySpan,
       inputValidated = false,
+      rawArgs: unknown = args,
     ) => {
       // Without a tool span (skipToolSpan), nested work attaches to the caller's span instead.
       const contextSpan = toolSpan ?? (execOptions?.tracingContext || options.tracingContext)?.currentSpan;
@@ -752,17 +754,18 @@ export class CoreToolBuilder extends MastraBase {
             : options.mastra;
 
           const resumeSchema = this.getResumeSchema();
-          let executionArgs = args;
-          if (this.isResumableTool && args && typeof args === 'object' && !Array.isArray(args)) {
+          const withRunId = (input: unknown) => {
+            if (!this.isResumableTool || !input || typeof input !== 'object' || Array.isArray(input)) return input;
             const {
               suspendedToolCallId: _modelAuthoredToolCallId,
               suspendedToolRunId: _modelAuthoredRunId,
               ...cleanedArgs
-            } = args as Record<string, unknown>;
-            executionArgs = execOptions.suspendedToolRunId
+            } = input as Record<string, unknown>;
+            return execOptions.suspendedToolRunId
               ? { ...cleanedArgs, suspendedToolRunId: execOptions.suspendedToolRunId }
               : cleanedArgs;
-          }
+          };
+          const executionArgs = withRunId(args);
 
           // Pass sanitized args as first parameter, context as second
           // Properly structure context based on execution source
@@ -903,14 +906,20 @@ export class CoreToolBuilder extends MastraBase {
           result = await executeWithContext({
             span: contextSpan,
             fn: async () => {
-              if (inputValidated || inputValidationSchema || this.injectedInputSchema) {
-                // Skip the second validation in `Tool.execute` once this builder
-                // has validated the args (they are now the schema's output) or a
-                // builder-local schema applies. A transforming schema (e.g.
-                // string -> URL) rejects its own output (#27259), and the user's
-                // original schema would strip the builder-injected keys (breaking
-                // sub-agent/workflow resume via `suspendedToolRunId`).
-                markBuilderValidatedInput(toolContext);
+              const executeValidated = getExecuteValidated(tool);
+              if (executeValidated && (inputValidated || inputValidationSchema || this.injectedInputSchema)) {
+                // Run the tool with the args this builder validated (they are the
+                // schema's output) without validating them again. A transforming
+                // schema (e.g. string -> URL) rejects its own output (#27259), and
+                // the user's original schema would strip the builder-injected keys
+                // (breaking sub-agent/workflow resume via `suspendedToolRunId`).
+                return executeValidated(executionArgs, toolContext);
+              }
+              if (inputValidated && isMastraTool(tool)) {
+                // A `Tool` from another copy of `@mastra/core`, or one whose
+                // `execute` was replaced, validates its input in `execute`, so give
+                // it the model's args rather than already-decoded ones.
+                return tool?.execute?.(withRunId(rawArgs), toolContext);
               }
               return tool?.execute?.(executionArgs, toolContext);
             },
@@ -1050,6 +1059,7 @@ export class CoreToolBuilder extends MastraBase {
         const isResuming = execOptions?.resumeData != null;
 
         const parameters = inputValidationSchema ?? this.getParameters();
+        const rawArgs = args;
         let inputValidated = false;
         if (!isResuming || this.injectedInputSchema) {
           const { data, error } = validateToolInput(
@@ -1078,7 +1088,7 @@ export class CoreToolBuilder extends MastraBase {
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions!, toolSpan, inputValidated);
+              const result = await execFunction(args, execOptions!, toolSpan, inputValidated, rawArgs);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -1226,7 +1236,7 @@ export class CoreToolBuilder extends MastraBase {
                       error: createStandardSchemaIssuesError(r.issues),
                     };
                   }
-                  return { success: true as const, value: (r as { value: unknown }).value };
+                  return { success: true as const, value };
                 });
               }
               // standard-schema returns { value } on success or { issues } on failure,
@@ -1237,7 +1247,11 @@ export class CoreToolBuilder extends MastraBase {
                   error: createStandardSchemaIssuesError(result.issues),
                 };
               }
-              return { success: true as const, value: (result as { value: unknown }).value };
+              // Hand back the model's args, not the schema output: `createExecute`
+              // validates and decodes them once before running the tool. Returning a
+              // decoded value (e.g. a `URL`) here would decode it twice and break the
+              // legacy (AI SDK v4) path, which clones tool-call args.
+              return { success: true as const, value };
             },
           },
         );

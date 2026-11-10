@@ -8,7 +8,7 @@ import { runBeforeApprovalChecks } from '../../loop/workflows/agentic-execution/
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
-import { createTool } from '../../tools';
+import { createTool, Tool } from '../../tools';
 import { isProviderDefinedTool, isVercelTool } from '../toolchecks';
 import { CoreToolBuilder } from './builder';
 
@@ -1264,6 +1264,122 @@ describe('CoreToolBuilder skipToolSpan', () => {
     expect(result).toEqual({ value: 'x' });
     expect(mockRequestSpan.createChildSpan).not.toHaveBeenCalled();
     expect(receivedSpan).toBe(mockRequestSpan);
+  });
+});
+
+describe('CoreToolBuilder input validation runs once (#29905)', () => {
+  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+
+  function urlTool(id: string, decode: (s: string) => URL, received: unknown[]) {
+    return createTool({
+      id,
+      description: 'Fetches a page',
+      inputSchema: z.object({ url: z.string().transform(decode) }),
+      execute: async ({ url }) => {
+        received.push(url);
+        return { host: url.host };
+      },
+    });
+  }
+
+  it('decodes agent tool-call input once and runs the handler with the decoded value', async () => {
+    const decode = vi.fn((s: string) => new URL(s));
+    const received: unknown[] = [];
+    const builtTool = new CoreToolBuilder({
+      originalTool: urlTool('fetch_page', decode, received),
+      options: { name: 'fetch_page', logger: logger as any },
+    }).build();
+
+    const result = await builtTool.execute!({ url: 'https://example.com' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(result).toEqual({ host: 'example.com' });
+    expect(received[0]).toBeInstanceOf(URL);
+    expect(decode).toHaveBeenCalledTimes(1);
+  });
+
+  it('still validates an inner tool that a wrapper tool calls with the forwarded context', async () => {
+    const innerExecute = vi.fn(async () => ({ ok: true }));
+    const inner = createTool({
+      id: 'inner',
+      description: 'Inner',
+      inputSchema: z.object({ count: z.number() }),
+      execute: innerExecute,
+    });
+    // A plain tool object that forwards its context to a Mastra Tool.
+    const outer = {
+      id: 'outer',
+      description: 'Outer',
+      inputSchema: z.object({ label: z.string() }),
+      execute: async (input: { label: string }, context: any) => inner.execute!({ count: input.label } as any, context),
+    };
+    const builtTool = new CoreToolBuilder({
+      originalTool: outer,
+      options: { name: 'outer', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!({ label: 'not a number' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(result.error).toBe(true);
+    expect(result.message).toContain('inner');
+    expect(innerExecute).not.toHaveBeenCalled();
+  });
+
+  it('hands raw model args to a Tool from another @mastra/core copy so it validates them itself', async () => {
+    // A fresh module graph stands in for a second installed copy of @mastra/core.
+    vi.resetModules();
+    const { createTool: foreignCreateTool } = await import('../tool');
+    const received: unknown[] = [];
+    const foreignTool = foreignCreateTool({
+      id: 'fetch_page',
+      description: 'Fetches a page',
+      inputSchema: z.object({ url: z.string().transform(s => new URL(s)) }),
+      execute: async ({ url }) => {
+        received.push(url);
+        return { host: url.host };
+      },
+    });
+    expect(foreignTool).not.toBeInstanceOf(Tool);
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: foreignTool,
+      options: { name: 'fetch_page', logger: logger as any },
+    }).build();
+
+    const result = await builtTool.execute!({ url: 'https://example.com' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(result).toEqual({ host: 'example.com' });
+    expect(received[0]).toBeInstanceOf(URL);
+  });
+
+  it('goes through a replaced tool.execute and decodes the input once', async () => {
+    const decode = vi.fn((s: string) => new URL(s));
+    const received: unknown[] = [];
+    const tool = urlTool('fetch_page', decode, received);
+    const executeSpy = vi.spyOn(tool, 'execute' as any);
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'fetch_page', logger: logger as any },
+    }).build();
+
+    const result = await builtTool.execute!({ url: 'https://example.com' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(result).toEqual({ host: 'example.com' });
+    expect(executeSpy).toHaveBeenCalledWith({ url: 'https://example.com' }, expect.anything());
+    expect(received[0]).toBeInstanceOf(URL);
+  });
+
+  it('keeps validating and decoding on direct tool.execute calls', async () => {
+    const decode = vi.fn((s: string) => new URL(s));
+    const received: unknown[] = [];
+    const tool = urlTool('fetch_page', decode, received);
+
+    await expect(tool.execute!({ url: 'https://example.com' } as any, {})).resolves.toEqual({ host: 'example.com' });
+    expect(received[0]).toBeInstanceOf(URL);
+    expect(decode).toHaveBeenCalledTimes(1);
+
+    const invalid: any = await tool.execute!({ url: 42 } as any, {});
+    expect(invalid.error).toBe(true);
   });
 });
 

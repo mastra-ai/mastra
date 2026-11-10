@@ -6,7 +6,6 @@ import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../r
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import { consumeBuilderValidatedInput } from './builder-validation-context';
 import { createToolObserve } from './observe';
 import type {
   McpMetadata,
@@ -18,6 +17,8 @@ import type {
   ToolExecutionContext,
   ToolPayloadTransform,
 } from './types';
+import { EXECUTE_VALIDATED } from './validated-execute';
+import type { ExecuteValidatedEntry } from './validated-execute';
 import {
   getValidationIssuePaths,
   validateToolInput,
@@ -450,14 +451,15 @@ export class Tool<
     }
     const originalExecute = opts.renderOnly ? async () => ({ acknowledged: true }) : opts.execute;
     if (originalExecute) {
-      this.execute = async (inputData: TSchemaIn, context?: any) => {
+      const runExecute = async (inputData: TSchemaIn, context: any, inputValidated: boolean) => {
         // When a tool is being resumed (resumeData present in context), skip input
         // validation. The original args were already validated during the initial
         // execution, and during resume the tool's execute function checks resumeData
         // and returns early without using the input args.
         const isResuming = (context?.resumeData ?? context?.agent?.resumeData ?? context?.workflow?.resumeData) != null;
-        const wasBuilderValidated = consumeBuilderValidatedInput(context);
-        const skipInputValidation = isResuming || wasBuilderValidated;
+        // `inputValidated` is set only by the agent tool builder, which already
+        // validated the args (they are the schema's output) before calling in.
+        const skipInputValidation = isResuming || inputValidated;
 
         let data: any = inputData;
         if (!skipInputValidation) {
@@ -655,6 +657,12 @@ export class Tool<
 
         return outputValidation.data;
       };
+      this.execute = async (inputData: TSchemaIn, context?: any) => runExecute(inputData, context, false);
+      const entry: ExecuteValidatedEntry = {
+        execute: this.execute,
+        run: async (inputData, context) => runExecute(inputData as TSchemaIn, context, true),
+      };
+      (this as any)[EXECUTE_VALIDATED] = entry;
     }
   }
 }

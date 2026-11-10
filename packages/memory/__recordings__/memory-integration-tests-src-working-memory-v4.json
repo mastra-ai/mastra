@@ -6374,7 +6374,7 @@
       }
     },
     {
-      "hash": "d5c3028355155954",
+      "hash": "464de8d286d4590f",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -6403,7 +6403,7 @@
                   "type": "function",
                   "function": {
                     "name": "updateWorkingMemory",
-                    "arguments": "{\"memory\":{\"name\":\"Jane Smith\",\"city\":\"Portland\"}}"
+                    "arguments": "{\"memory\":{\"name\":\"Jane Smith\",\"age\":null,\"city\":\"Portland\",\"preferences\":null}}"
                   }
                 }
               ]
@@ -6693,7 +6693,7 @@
       }
     },
     {
-      "hash": "9901b46e1c380c6c",
+      "hash": "1276969728ec5510",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -6722,7 +6722,7 @@
                   "type": "function",
                   "function": {
                     "name": "updateWorkingMemory",
-                    "arguments": "{\"memory\":{\"name\":\"Alex\",\"city\":\"Miami\"}}"
+                    "arguments": "{\"memory\":{\"name\":\"Alex\",\"age\":null,\"city\":\"Miami\",\"preferences\":null}}"
                   }
                 }
               ]
@@ -7020,7 +7020,7 @@
       }
     },
     {
-      "hash": "4606dcda918f2669",
+      "hash": "ea068aa995e8d53b",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -7057,7 +7057,7 @@
                   "type": "function",
                   "function": {
                     "name": "updateWorkingMemory",
-                    "arguments": "{\"memory\":{\"name\":\"Alex\",\"age\":25,\"city\":\"Miami\"}}"
+                    "arguments": "{\"memory\":{\"name\":\"Alex\",\"age\":25,\"city\":\"Miami\",\"preferences\":null}}"
                   }
                 }
               ]
@@ -7347,7 +7347,7 @@
       }
     },
     {
-      "hash": "3e870b0e97376bfc",
+      "hash": "b2d1c6a95e151b1d",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -7376,7 +7376,7 @@
                   "type": "function",
                   "function": {
                     "name": "updateWorkingMemory",
-                    "arguments": "{\"memory\":{\"name\":\"Sarah Wilson\",\"age\":28,\"city\":\"Seattle\"}}"
+                    "arguments": "{\"memory\":{\"name\":\"Sarah Wilson\",\"age\":28,\"city\":\"Seattle\",\"preferences\":null}}"
                   }
                 }
               ]
@@ -9689,7 +9689,7 @@
       }
     },
     {
-      "hash": "1986abb58a3e7ff5",
+      "hash": "f3c0d6de323e96f7",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -9726,7 +9726,7 @@
                   "type": "function",
                   "function": {
                     "name": "updateWorkingMemory",
-                    "arguments": "{\"memory\":{\"work\":{\"company\":\"TechCorp\",\"role\":\"senior engineer\"}}}"
+                    "arguments": "{\"work\":{\"company\":\"TechCorp\",\"role\":\"senior engineer\"}}"
                   }
                 }
               ]
@@ -9752,42 +9752,42 @@
                       "type": "object",
                       "properties": {
                         "about": {
+                          "description": "Basic information about the user",
                           "type": "object",
                           "properties": {
                             "name": {
-                              "type": "string",
-                              "description": "The user's name"
+                              "description": "The user's name",
+                              "type": "string"
                             },
                             "location": {
-                              "type": "string",
-                              "description": "The user's city"
+                              "description": "The user's city",
+                              "type": "string"
                             },
                             "timezone": {
-                              "type": "string",
-                              "description": "The user's timezone"
+                              "description": "The user's timezone",
+                              "type": "string"
                             }
                           },
-                          "additionalProperties": false,
-                          "description": "Basic information about the user"
+                          "additionalProperties": false
                         },
                         "work": {
+                          "description": "Work-related information",
                           "type": "object",
                           "properties": {
                             "company": {
-                              "type": "string",
-                              "description": "Company name"
+                              "description": "Company name",
+                              "type": "string"
                             },
                             "role": {
-                              "type": "string",
-                              "description": "Job title or role"
+                              "description": "Job title or role",
+                              "type": "string"
                             },
                             "stage": {
-                              "type": "string",
-                              "description": "Company stage like Series A, B, etc"
+                              "description": "Company stage like Series A, B, etc",
+                              "type": "string"
                             }
                           },
-                          "additionalProperties": false,
-                          "description": "Work-related information"
+                          "additionalProperties": false
                         }
                       },
                       "additionalProperties": false
@@ -12439,7 +12439,7 @@
       }
     },
     {
-      "hash": "b17079edf25ec3cc",
+      "hash": "458b1dd0fe5fd6a0",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -12492,7 +12492,7 @@
                   "type": "function",
                   "function": {
                     "name": "updateWorkingMemory",
-                    "arguments": "{\"memory\":{\"work\":{\"projects\":[{\"name\":\"Project Phoenix\",\"goal\":\"Launch new serverless platform by Q2\",\"nextMilestone\":\"Beta release\"}]}}}"
+                    "arguments": "{\"work\":{\"projects\":[{\"name\":\"Project Phoenix\",\"goal\":\"Launch new serverless platform by Q2\",\"nextMilestone\":\"Beta release\"}]}}"
                   }
                 }
               ]
@@ -12743,6 +12743,9 @@
                         },
                         "extra": {
                           "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
                           "additionalProperties": {}
                         }
                       },
@@ -13210,7 +13213,7 @@
       }
     },
     {
-      "hash": "2c2dd9f9347c426e",
+      "hash": "b5f831c4a9fc4bc1",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -13271,7 +13274,7 @@
                   "type": "function",
                   "function": {
                     "name": "updateWorkingMemory",
-                    "arguments": "{\"memory\":{\"focus\":{\"today\":[\"investor pitch\"],\"week\":[\"hiring\",\"closing the Series C\"]}}}"
+                    "arguments": "{\"focus\":{\"today\":[\"investor pitch\"],\"week\":[\"hiring\",\"closing the Series C\"]}}"
                   }
                 }
               ]
@@ -13522,6 +13525,9 @@
                         },
                         "extra": {
                           "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
                           "additionalProperties": {}
                         }
                       },
@@ -13997,7 +14003,7 @@
       }
     },
     {
-      "hash": "9c8aa33d9444f6df",
+      "hash": "a79428c63c44b21c",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -14066,7 +14072,7 @@
                   "type": "function",
                   "function": {
                     "name": "updateWorkingMemory",
-                    "arguments": "{\"memory\":{\"comms\":{\"channels\":[\"Slack\",\"email\"],\"workHours\":{\"start\":\"9am\",\"end\":\"6pm\"},\"meetingLengthMins\":30}}}"
+                    "arguments": "{\"comms\":{\"channels\":[\"Slack\",\"email\"],\"workHours\":{\"start\":\"9am\",\"end\":\"6pm\"},\"meetingLengthMins\":30}}"
                   }
                 }
               ]
@@ -14317,6 +14323,9 @@
                         },
                         "extra": {
                           "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
                           "additionalProperties": {}
                         }
                       },
