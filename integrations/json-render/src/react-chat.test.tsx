@@ -14,19 +14,21 @@ import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraReactProvider, useChat } from '@mastra/react';
 import { MessageFactory } from '@mastra/react/ui';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { catalog, chat, createAgent, modelSaw, modelWriting, specBlock, weatherCard } from './test-utils';
+import { catalog, chat, createAgent, modelSaw, modelWriting, specBlock, weatherCard } from './__tests__/test-utils';
 import { JSON_RENDER_STATE } from './index';
 
 const BASE_URL = 'http://localhost:4111';
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-afterEach(() => {
+afterEach(async () => {
+  // A run keeps going after its reply shows (end of stream, memory save); let it finish before teardown.
+  await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   cleanup();
   server.resetHandlers();
 });
@@ -79,7 +81,12 @@ type Send = (message: string, state?: Record<string, unknown>) => void;
 
 /** An app's chat: prose through MessageFactory, the interface through json-render's own renderer. */
 function Chat({ initialMessages }: { initialMessages?: MastraDBMessage[] }) {
-  const { messages, sendMessage } = useChat({ agentId: 'ui', resourceId: 'r1', threadId: 't1', initialMessages });
+  const { messages, sendMessage, isRunning } = useChat({
+    agentId: 'ui',
+    resourceId: 'r1',
+    threadId: 't1',
+    initialMessages,
+  });
   const send: Send = (message, state) =>
     void sendMessage({
       message,
@@ -89,6 +96,7 @@ function Chat({ initialMessages }: { initialMessages?: MastraDBMessage[] }) {
   return (
     <>
       <button onClick={() => send('Weather in Paris?')}>Send</button>
+      {isRunning && <p role="status">Running</p>}
       {messages.map(message => (
         <MessageFactory
           key={message.id}

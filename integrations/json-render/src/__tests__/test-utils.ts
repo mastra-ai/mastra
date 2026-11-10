@@ -7,7 +7,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
-import { JSON_RENDER_STATE, JsonRenderProcessor } from './index';
+import { JSON_RENDER_STATE, JsonRenderProcessor } from '../index';
 
 export const catalog = defineCatalog(schema, {
   components: {
