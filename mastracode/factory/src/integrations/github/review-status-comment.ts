@@ -110,7 +110,7 @@ export function parseReviewStatusState(body: string | null | undefined): ReviewS
 
 /** An http(s) URL that is safe inside a markdown link target. */
 export function isSessionUrl(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^https?:\/\/[^\s()<>"'`\]]+$/.test(value)) return false;
+  if (typeof value !== 'string' || !/^https?:\/\/[^\s()<>"'`]+$/.test(value)) return false;
   try {
     new URL(value);
     return true;

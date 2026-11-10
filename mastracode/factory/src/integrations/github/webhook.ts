@@ -494,7 +494,8 @@ function announceMerged(
   url: string | undefined,
 ): void {
   if (!subscription.threadId) return;
-  const target = url ?? `https://github.com/${subscription.data.repositorySlug}/pull/${subscription.data.changeRequestId}`;
+  const target =
+    url ?? `https://github.com/${subscription.data.repositorySlug}/pull/${subscription.data.changeRequestId}`;
   void announcePullRequest(dependencies.controller.getChannels?.(), subscription.threadId, 'merged', target).catch(
     error => console.warn('[GitHub Webhook] merged announcement failed', { subscriptionId: subscription.id, error }),
   );

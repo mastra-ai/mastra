@@ -229,6 +229,7 @@ describe('session link', () => {
     expect(bad('https://x.test/a) [evil](https://y.test')).toEqual(state());
     expect(bad('https://x.test/--><script>')).toEqual(state());
     expect(bad(SESSION)).toEqual(state({ session: SESSION }));
+    expect(bad('http://[::1]:4111/factories/fp-1')).toEqual(state({ session: 'http://[::1]:4111/factories/fp-1' }));
   });
 });
 

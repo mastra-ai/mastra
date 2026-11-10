@@ -566,14 +566,18 @@ describe('GitHub subscription entry points', () => {
     try {
       const footer =
         '<!-- mastra-factory-session -->\n<sub>[Factory session](https://factory.example.test/factories/resource-1/workspaces/session-1/threads/thread-1)</sub>\n';
-      await upsertFactoryTriageComment(
-        authenticatedRequestContext(),
-        { issueNumber: 7, body: `<!-- mastra-factory-triage -->\nFinal\n\n${footer}` },
-        githubStub,
-      );
-      expect(mocks.upsertTriageComment).toHaveBeenCalledWith(
-        expect.objectContaining({ body: `<!-- mastra-factory-triage -->\nFinal\n\n${footer}` }),
-      );
+      const stale = '<!-- mastra-factory-session -->\n<sub>[Factory session](https://old.example.test/x)</sub>\n';
+      for (const body of [
+        '<!-- mastra-factory-triage -->\nFinal',
+        `<!-- mastra-factory-triage -->\nFinal\n\n${stale}`,
+        `<!-- mastra-factory-triage -->\nFinal\n\n${footer}`,
+      ]) {
+        mocks.upsertTriageComment.mockClear();
+        await upsertFactoryTriageComment(authenticatedRequestContext(), { issueNumber: 7, body }, githubStub);
+        expect(mocks.upsertTriageComment).toHaveBeenCalledWith(
+          expect.objectContaining({ body: `<!-- mastra-factory-triage -->\nFinal\n\n${footer}` }),
+        );
+      }
     } finally {
       vi.unstubAllEnvs();
     }
