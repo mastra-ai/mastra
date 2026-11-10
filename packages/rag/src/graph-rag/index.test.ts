@@ -28,6 +28,40 @@ describe('GraphRAG', () => {
       expect(() => graph.addNode(node)).toThrow('Embedding dimension must be 2');
     });
 
+    it.each([NaN, Infinity, -Infinity])('rejects a node embedding containing %s (#29609)', component => {
+      const graph = new GraphRAG(2);
+      expect(() => graph.addNode({ id: '1', content: 'Node 1', embedding: [component, 1] })).toThrow(
+        'Embedding must contain only finite numbers',
+      );
+      expect(graph.getNodes()).toEqual([]);
+    });
+
+    it('rejects an embedding with a missing component (#29609)', () => {
+      const graph = new GraphRAG(2);
+      expect(() => graph.addNode({ id: '1', content: 'Node 1', embedding: [, 1] })).toThrow(
+        'Embedding must contain only finite numbers',
+      );
+      expect(graph.getNodes()).toEqual([]);
+    });
+
+    it('keeps a valid embedding after the caller mutates the added node (#29609)', () => {
+      const graph = new GraphRAG(2);
+      const node = { id: '1', content: 'Node 1', embedding: [1, 0] };
+      graph.addNode(node);
+      node.embedding[0] = NaN;
+      node.embedding = [NaN, 0];
+      expect(graph.query({ query: [1, 0] })[0]).toMatchObject({ id: '1', score: 1 });
+    });
+
+    it('keeps a valid embedding after a caller mutates getNodes results (#29609)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: '1', content: 'Node 1', embedding: [1, 0] });
+      const node = graph.getNodes()[0]!;
+      node.embedding![0] = NaN;
+      node.embedding = [NaN, 0];
+      expect(graph.query({ query: [1, 0] })[0]).toMatchObject({ id: '1', score: 1 });
+    });
+
     it('should add a node to the graph', () => {
       const graph = new GraphRAG(3);
       const node = {
@@ -162,6 +196,22 @@ describe('GraphRAG', () => {
       const edges = graph.getEdges();
       expect(edges.length).toBe(6);
     });
+
+    it('rejects nonfinite embeddings when creating a graph (#29609)', () => {
+      const graph = new GraphRAG(2);
+      expect(() => graph.createGraph([{ text: 'Chunk 1', metadata: {} }], [{ vector: [1, Infinity] }])).toThrow(
+        'Embedding must contain only finite numbers',
+      );
+      expect(graph.getNodes()).toEqual([]);
+    });
+
+    it('keeps a valid embedding after the caller mutates createGraph input (#29609)', () => {
+      const graph = new GraphRAG(2);
+      const embeddings = [{ vector: [1, 0] }];
+      graph.createGraph([{ text: 'Chunk 1', metadata: {} }], embeddings);
+      embeddings[0]!.vector[0] = NaN;
+      expect(graph.query({ query: [1, 0] })[0]).toMatchObject({ id: '0', score: 1 });
+    });
   });
 
   describe('query', () => {
@@ -171,6 +221,19 @@ describe('GraphRAG', () => {
       expect(() => graph.query({ query: queryEmbedding, topK: 2, randomWalkSteps: 3, restartProb: 0.1 })).toThrowError(
         `Query embedding must have dimension 3`,
       );
+    });
+
+    it.each([NaN, Infinity, -Infinity])('rejects a query embedding containing %s (#29609)', component => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: '1', content: 'Node 1', embedding: [1, 0] });
+      expect(() => graph.query({ query: [component, 0] })).toThrow('Query embedding must contain only finite numbers');
+      expect(graph.query({ query: [1, 0] })[0]).toMatchObject({ id: '1', score: 1 });
+    });
+
+    it('rejects a sparse query embedding (#29609)', () => {
+      const graph = new GraphRAG(2);
+      graph.addNode({ id: '1', content: 'Node 1', embedding: [1, 0] });
+      expect(() => graph.query({ query: [, 1] })).toThrow('Query embedding must contain only finite numbers');
     });
 
     it('topK must be a positive integer', () => {
@@ -501,6 +564,12 @@ describe('GraphRAG', () => {
       const snapshot = buildGraph().serialize();
       delete snapshot.nodes[0]!.embedding;
       expect(() => GraphRAG.deserialize(snapshot)).toThrowError('Node must have an embedding');
+    });
+
+    it('rejects a snapshot containing a nonfinite embedding (#29609)', () => {
+      const snapshot = buildGraph().serialize();
+      snapshot.nodes[0]!.embedding![0] = -Infinity;
+      expect(() => GraphRAG.deserialize(snapshot)).toThrow('Embedding must contain only finite numbers');
     });
 
     it('should reject duplicate snapshot node IDs instead of replacing the original node (#29689)', () => {

@@ -71,7 +71,12 @@ export class GraphRAG {
     if (node.embedding.length !== this.dimension) {
       throw new Error(`Embedding dimension must be ${this.dimension}`);
     }
-    this.nodes.set(node.id, node);
+    for (const component of node.embedding) {
+      if (!Number.isFinite(component)) {
+        throw new Error('Embedding must contain only finite numbers');
+      }
+    }
+    this.nodes.set(node.id, { ...node, embedding: [...node.embedding] });
   }
 
   // Add an edge between two nodes
@@ -93,7 +98,10 @@ export class GraphRAG {
 
   // Helper method to get all nodes
   getNodes(): GraphNode[] {
-    return Array.from(this.nodes.values());
+    return Array.from(this.nodes.values(), node => ({
+      ...node,
+      ...(node.embedding ? { embedding: [...node.embedding] } : {}),
+    }));
   }
 
   // Helper method to get all edges
@@ -132,7 +140,8 @@ export class GraphRAG {
    * Rebuild a GraphRAG instance from a snapshot produced by `serialize()`.
    *
    * @throws if the snapshot version is unsupported, a node ID is duplicated,
-   * a node embedding does not match the snapshot dimension, or an edge references an unknown node.
+   * a node embedding does not match the snapshot dimension or contains nonfinite values,
+   * or an edge references an unknown node.
    */
   static deserialize(snapshot: GraphRAGSnapshot): GraphRAG {
     if (snapshot?.version !== GRAPH_RAG_SNAPSHOT_VERSION) {
@@ -145,7 +154,7 @@ export class GraphRAG {
       if (graph.nodes.has(node.id)) {
         throw new Error(`Duplicate node id in snapshot: ${node.id}`);
       }
-      // Route through addNode so embedding presence and dimension are validated
+      // Route through addNode so embedding presence, dimension, and finite values are validated
       // at load time rather than failing later inside query().
       graph.addNode({
         ...node,
@@ -243,7 +252,6 @@ export class GraphRAG {
         metadata: { ...chunk.metadata },
       };
       this.addNode(node);
-      this.nodes.set(node.id, node);
     });
 
     // Create edges based on cosine similarity
@@ -354,6 +362,11 @@ export class GraphRAG {
   }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
+    }
+    for (const component of query) {
+      if (!Number.isFinite(component)) {
+        throw new Error('Query embedding must contain only finite numbers');
+      }
     }
     if (!Number.isInteger(topK) || topK < 1) {
       throw new Error('TopK must be a positive integer');
