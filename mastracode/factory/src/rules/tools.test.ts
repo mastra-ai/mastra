@@ -840,6 +840,54 @@ describe('factory_transition_work_item', () => {
       ).rejects.toThrow('Only a card in Reviewing records a verdict');
     });
 
+    it("is offered to the self-review run that follows the builder's on the same thread", async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const work = await prepareBoundItem(storage, 'github-issue', 'work');
+      const transitionService = { transition: vi.fn() } as never;
+      const builderTools = await createFactoryTransitionTools({
+        requestContext: requestContext(),
+        storage,
+        transitionService,
+      });
+      expect(builderTools).not.toHaveProperty('factory_record_review_verdict');
+
+      // Self-review rotates the builder's seat to review in place: same session, same thread.
+      const review = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: work.item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Factory item',
+            stages: ['review'],
+            sessions: {},
+            metadata: { authorTrusted: true },
+          },
+        },
+        role: 'review',
+        session: { sessionId: 'resource-1', branch: 'factory/item', threadId: 'thread-1' },
+        resourceId: 'resource-1',
+        kickoffKey: 'kickoff-review',
+        kickoffMessage: null,
+      });
+      expect(review.binding.threadId).toBe(work.binding.threadId);
+      await storage.update({
+        orgId: 'org-1',
+        id: work.item.id,
+        userId: 'user-1',
+        patch: { stages: ['review'], metadata: { authorTrusted: true } },
+      });
+
+      const reviewTools = await createFactoryTransitionTools({
+        requestContext: requestContext(),
+        storage,
+        transitionService,
+      });
+      expect(reviewTools).toHaveProperty('factory_record_review_verdict');
+    });
+
     it('is offered only to review bindings and bounds its input', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       await prepareBoundItem(storage, 'github-issue');

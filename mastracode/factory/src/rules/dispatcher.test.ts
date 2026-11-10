@@ -2206,87 +2206,114 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
-  it('waits for the previous role run on the same thread before kicking off a rotated seat', async () => {
-    // Self-review rotates the builder's binding to `review` on the same thread.
-    // The builder's run, still live after its transition, was built with work-role
-    // tools; a review kickoff delivered into it has no factory_record_review_verdict.
-    const seed = await createFactoryStorageForTests();
-    const storage = seed.workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'review',
-      skillName: 'factory-self-review',
-      idempotencyKey: 'wait-for-previous-role-run',
-    });
-    const workBinding = await bindWorkRun(storage, item.id);
-    const reviewStart = await storage.prepareRunStart({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      workItem: {
-        id: item.id,
-        input: {
-          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
-          title: 'Fix issue',
-          stages: ['execute'],
-          sessions: {},
-          metadata: {},
-        },
-      },
-      role: 'review',
-      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
-      resourceId: PROJECT_ID,
-      kickoffKey: `kickoff-review-${item.id}`,
-      kickoffMessage: null,
-    });
-    await storage.markPendingStart(reviewStart.binding.id, 'sent');
-    expect(reviewStart.binding.id).not.toBe(workBinding.id);
-    expect(reviewStart.binding.threadId).toBe(workBinding.threadId);
-    const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
-      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
-      emitAgentEndDuringSignal: true,
-      agentEndReason: 'complete',
-      streamActive: true,
-    });
-    await session.thread.setSetting({
-      key: FACTORY_OPEN_RUNS_SETTING,
-      value: [
-        {
-          kickoffId: 'builder-kickoff',
-          bindingId: workBinding.id,
-          role: workBinding.role,
-          startedBy: 'factory-rule-dispatcher',
-          orgId: workBinding.orgId,
-          factoryProjectId: workBinding.factoryProjectId,
-          workItemId: workBinding.workItemId,
-          sessionId: workBinding.sessionId,
-          threadId: workBinding.threadId,
-          branch: workBinding.branch,
-        },
-      ],
-    });
-    controller.listActiveThreadRuns.mockReturnValue([{ runId: 'builder-run', threadId: workBinding.threadId }]);
-    observeSessionRunEnd(session, { audit: seed.audit });
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      isAutoRunEnabled: async () => true,
-      transitionService,
-      storage,
-      audit: seed.audit,
-      ownerId: 'worker-1',
-    });
+  it.each([
+    {
+      name: "a self-review after the builder's own move",
+      from: 'work',
+      decision: { type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' },
+      ownerId: undefined,
+    },
+    {
+      // factory_start_session records its runs under the tools' owner id, not the dispatcher's.
+      name: 'a self-review after a builder run started from a Factory tool',
+      from: 'work',
+      decision: { type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' },
+      ownerId: 'factory-tools:other',
+    },
+    {
+      name: "a build after the planner's own move",
+      from: 'plan',
+      decision: { type: 'invokeSkill', role: 'work', prompt: 'Implement the plan.', startsAfterOwnMove: true },
+      ownerId: undefined,
+    },
+  ] as const)(
+    "waits for the previous role's live run on the same thread before $name",
+    async ({ from, decision, ownerId }) => {
+      // A rotated seat shares the thread with the run before it. That run was built
+      // with the earlier role's tools (a builder has no factory_record_review_verdict),
+      // so the kickoff waits for it to end and starts a fresh run.
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        ...decision,
+        idempotencyKey: `wait-for-previous-role-run-${decision.role}`,
+      });
+      const bind = async (role: 'plan' | 'work' | 'review') => {
+        const prepared = await storage.prepareRunStart({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: PROJECT_ID,
+          workItem: {
+            id: item.id,
+            input: {
+              externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+              title: 'Fix issue',
+              stages: ['execute'],
+              sessions: {},
+              metadata: {},
+            },
+          },
+          role,
+          session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+          resourceId: PROJECT_ID,
+          kickoffKey: `kickoff-${role}-${item.id}`,
+          kickoffMessage: null,
+        });
+        await storage.markPendingStart(prepared.binding.id, 'sent');
+        return prepared.binding;
+      };
+      const previous = await bind(from);
+      const next = await bind(decision.role);
+      expect(next.id).not.toBe(previous.id);
+      expect(next.threadId).toBe(previous.threadId);
+      const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+        streamActive: true,
+      });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [
+          {
+            kickoffId: 'previous-kickoff',
+            bindingId: previous.id,
+            role: previous.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: previous.orgId,
+            factoryProjectId: previous.factoryProjectId,
+            workItemId: previous.workItemId,
+            sessionId: previous.sessionId,
+            threadId: previous.threadId,
+            branch: previous.branch,
+            ...(ownerId ? { ownerId, heartbeatAt: Date.now() } : {}),
+          },
+        ],
+      });
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'previous-run', threadId: previous.threadId }]);
+      observeSessionRunEnd(session, { audit: seed.audit });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        audit: seed.audit,
+        ownerId: 'worker-1',
+      });
 
-    const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(2));
-    expect(session.sendSignal).not.toHaveBeenCalled();
+      const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(2));
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'leased' });
 
-    controller.listActiveThreadRuns.mockReturnValue([]);
-    emitAgentEnd('complete');
-    await dispatch;
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatch;
 
-    expect(session.sendSignal).toHaveBeenCalledTimes(1);
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
-  });
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    },
+  );
 
   describe('an intake route moving a card with a run in flight', () => {
     async function runningCard(phaseKey: string) {

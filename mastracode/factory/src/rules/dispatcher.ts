@@ -2220,7 +2220,7 @@ export class FactoryDecisionDispatcher {
   async #waitForOpenRun(session: BoundDispatcherSession, binding: FactoryRunBindingRecord, label: string) {
     const runStillActive = () =>
       this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
-    // Only a *live* run on this binding can be duplicated by a second
+    // Only a *live* run on this thread can be duplicated by a second
     // kickoff, so that is the only thing worth waiting on. The open-run
     // ledger is shared by every replica, but the run registry is local, so
     // an entry with nothing live here is one of two things:
@@ -2245,13 +2245,17 @@ export class FactoryDecisionDispatcher {
           entry => entry.bindingId === binding.id || entry.threadId === binding.threadId,
         );
         if (open.length === 0) break;
-        if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
-          throw new FactoryDispatchError(
-            'session_unavailable',
-            `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
-          );
+        // A run live in this process is waited on whoever started it: one
+        // started from a Factory tool carries that tool's owner id, not ours.
+        if (!runStillActive()) {
+          if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
+            throw new FactoryDispatchError(
+              'session_unavailable',
+              `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
+            );
+          }
+          break;
         }
-        if (!runStillActive()) break;
         if (!(await openRun.wait())) break;
       } finally {
         openRun.close();
