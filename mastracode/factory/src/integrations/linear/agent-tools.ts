@@ -146,10 +146,7 @@ function createLinearListIssuesTool(linear: LinearIntegration, orgId: string) {
       'List the open issues (triage, backlog, todo and in progress; completed and canceled are left out) in one Linear project or team, most recently updated first. Get the source id from linear_list_projects, and read an issue in full with linear_get_issue. Pass nextCursor back as cursor for the next page.',
     inputSchema: z.object({
       source: z.string().min(1).describe('The project or team source id returned by linear_list_projects.'),
-      labels: z
-        .array(z.string().trim().min(1))
-        .optional()
-        .describe('Only return issues carrying one of these label names.'),
+      labels: z.array(z.string().trim().min(1)).optional().describe('Only return issues carrying one of these label names.'),
       cursor: z.string().optional().describe('The nextCursor from a previous call, to fetch the next page.'),
     }),
     execute: async ({ source, labels, cursor }: { source: string; labels?: string[]; cursor?: string }) => {
