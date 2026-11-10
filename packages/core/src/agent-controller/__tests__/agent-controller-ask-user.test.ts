@@ -177,6 +177,7 @@ describe('AgentController: ask_user native suspension', () => {
       accepted: false,
       reason: 'no_pending_suspension',
     });
+    expect(session.suspensions.has({ toolCallId: 'cold-call', runId: 'cold-run' })).toBe(false);
 
     const claim = await session.claimPersistedToolSuspension('cold-call', 'cold-run');
     expect(claim).toMatchObject({
