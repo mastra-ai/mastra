@@ -2,6 +2,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { forgetSandboxEnvRevision } from '../sandbox/sandbox-env.js';
 import type { AuditEmitter, EmitAuditInput } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SandboxEnvMetadata, SandboxEnvStore } from '../storage/domains/sandbox-envs/base.js';
@@ -136,6 +137,7 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
           { name: name.name, value: parsed.data.value, appliesTo: parsed.data.appliesTo },
           scope.userId,
         );
+        forgetSandboxEnvRevision(this.deps.sandboxEnvs, scope);
         await this.#audit(context, scope, {
           action: 'factory.sandbox_env.set',
           targets: [{ type: 'sandbox_env', id: env.name, name: env.name }],
@@ -150,7 +152,9 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
         const body = await this.#body(context);
         if ('response' in body) return body.response;
         const parsed = contracts.projectSandboxEnvUpdate.bodySchema.safeParse(body.body);
-        if (!parsed.success) return context.json({ error: 'invalid_sandbox_env' }, 400);
+        if (!parsed.success) {
+          return context.json({ error: 'invalid_sandbox_env', message: parsed.error.issues[0]?.message }, 400);
+        }
         const env = await this.deps.sandboxEnvs.updateAppliesTo(
           scope.orgId,
           scope.projectId,
@@ -158,7 +162,8 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
           parsed.data.appliesTo,
           scope.userId,
         );
-        if (!env) return context.json({ error: 'Variable not found' }, 404);
+        if (!env) return context.json({ error: 'Variable not found', message: 'Variable not found.' }, 404);
+        forgetSandboxEnvRevision(this.deps.sandboxEnvs, scope);
         await this.#audit(context, scope, {
           action: 'factory.sandbox_env.updated',
           targets: [{ type: 'sandbox_env', id: env.name, name: env.name }],
@@ -171,8 +176,9 @@ export class SandboxEnvRoutes extends Route<SandboxEnvRoutesDeps> {
         if ('response' in name) return name.response;
         // Deleting stays allowed without encryption, so a plaintext value can always be removed.
         if (!(await this.deps.sandboxEnvs.delete(scope.orgId, scope.projectId, name.name))) {
-          return context.json({ error: 'Variable not found' }, 404);
+          return context.json({ error: 'Variable not found', message: 'Variable not found.' }, 404);
         }
+        forgetSandboxEnvRevision(this.deps.sandboxEnvs, scope);
         await this.#audit(context, scope, {
           action: 'factory.sandbox_env.deleted',
           targets: [{ type: 'sandbox_env', id: name.name, name: name.name }],

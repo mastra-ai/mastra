@@ -11,7 +11,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type { FactorySandbox, FactorySandboxContext } from '@mastra/core/workspace';
 import type { VersionControl } from '../capabilities/version-control.js';
-import { resolveSandboxEnv, sandboxBuildContext } from '../sandbox/sandbox-env.js';
+import { maskSandboxEnvValues, resolveSandboxEnv, sandboxBuildContext } from '../sandbox/sandbox-env.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SandboxEnvStore } from '../storage/domains/sandbox-envs/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -243,8 +243,8 @@ export async function runEnvironmentBuild(
   let resolved = false;
   const release = (changes: Parameters<EnvironmentBuildDeps['projects']['releaseBuildStart']>[0]['changes'] = {}) =>
     deps.projects.releaseBuildStart({ id: initial.id, token, changes, resolved, now: now() });
-  const failed = async (error: unknown, changes: Parameters<typeof release>[0]) => {
-    const reason = errorReason(error);
+  const failed = async (error: unknown, changes: Parameters<typeof release>[0], buildEnv?: Record<string, string>) => {
+    const reason = maskSandboxEnvValues(errorReason(error), buildEnv);
     await release(changes);
     deps.logger?.info('environment build failed', { factoryProjectId: initial.id, trigger: input.trigger, reason });
     return { outcome: 'failed', reason } satisfies EnvironmentBuildOutcome;
@@ -359,7 +359,11 @@ export async function runEnvironmentBuild(
     } catch (error) {
       // Only a failed start clears the last build: the previous one no longer
       // describes the template this project wants.
-      return await failed(error, { lastBuildId: null, lastBuildHeads: null, lastBuildInputs: null, ...attempted });
+      return await failed(
+        error,
+        { lastBuildId: null, lastBuildHeads: null, lastBuildInputs: null, ...attempted },
+        ctx.buildEnv,
+      );
     }
 
     // The provider has started the build: from here on, no error clears it.

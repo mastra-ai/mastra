@@ -239,6 +239,34 @@ describe('factory-environment-build workflow', () => {
     expect(logged.join('\n')).not.toMatch(/secret-1|ghs_secret2/);
   });
 
+  it('masks Build variable values in a failed build before returning or logging it', async () => {
+    const project = await seedProject(seed);
+    await seed.sandboxEnvs.set(
+      'org-1',
+      project.id,
+      { name: 'NPM_TOKEN', value: 'npm-sentinel-77', appliesTo: 'build' },
+      'u',
+    );
+    const sandbox = new BuildingSandbox();
+    sandbox.statuses = ['failed'];
+    sandbox.failedError = 'setup failed: auth failed for npm-sentinel-77';
+    const logged: string[] = [];
+    const logger = { info: (msg: string, meta?: Record<string, unknown>) => logged.push(msg + JSON.stringify(meta)) };
+    let mastra: Mastra | undefined;
+    const runner = new EnvironmentBuildRunner(
+      { ...depsFor(seed, sandbox), sandboxEnvs: seed.sandboxEnvs, logger },
+      { getMastra: () => mastra, logger },
+    );
+    mastra = bootMastra(runner);
+
+    const run = await mastra.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID).createRun();
+    const result = await run.start({ inputData: { projectId: project.id, trigger: 'manual' } });
+
+    expect(result.status === 'success' && result.result.reason).toBe('setup failed: auth failed for ***');
+    expect(logged.some(line => line.includes('environment build did not complete'))).toBe(true);
+    expect(logged.join('\n')).not.toContain('npm-sentinel-77');
+  });
+
   it('gives up with unknown once the wait runs out', async () => {
     const project = await seedProject(seed);
     const sandbox = new BuildingSandbox();

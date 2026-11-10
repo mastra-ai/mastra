@@ -9,6 +9,7 @@
 
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
 import { resolveProjectEnvironment } from '../workspace.js';
 import {
   ENVIRONMENT_BUILD_TRIGGERS,
@@ -119,12 +120,12 @@ export function createEnvironmentBuildWorkflow(
               factoryProjectId: project.id,
               buildId: result.buildId,
               status: build.status,
-              ...(build.error ? { reason: redactCredentials(build.error) } : {}),
+              ...(build.error ? { reason: maskSandboxEnvValues(redactCredentials(build.error), ctx.buildEnv) } : {}),
             });
             return {
               ...result,
               status: build.status,
-              ...(build.error ? { reason: redactCredentials(build.error) } : {}),
+              ...(build.error ? { reason: maskSandboxEnvValues(redactCredentials(build.error), ctx.buildEnv) } : {}),
             };
           }
           if (now().getTime() - startedAt >= maxWaitMs) {
@@ -133,7 +134,7 @@ export function createEnvironmentBuildWorkflow(
           await sleep(pollMs);
         }
       } catch (error) {
-        const reason = errorReason(error);
+        const reason = maskSandboxEnvValues(errorReason(error), ctx.buildEnv);
         deps.logger?.info('environment build status read failed', { factoryProjectId: project.id, reason });
         return { ...result, status: 'unknown', reason };
       }

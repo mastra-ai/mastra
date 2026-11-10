@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
+import { cachedSandboxEnvRevision } from '../sandbox/sandbox-env.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { SandboxEnvRoutes } from './sandbox-envs.js';
@@ -70,8 +71,13 @@ describe('SandboxEnvRoutes', () => {
     const del = await send('DELETE', '/NPM_TOKEN');
     expect(del.status).toBe(204);
     expect(await seed.sandboxEnvs.list('org-1', project.id)).toEqual([]);
-    expect((await send('DELETE', '/NPM_TOKEN')).status).toBe(404);
-    expect((await send('PATCH', '/NPM_TOKEN', { appliesTo: 'build' })).status).toBe(404);
+    for (const missing of [
+      await send('DELETE', '/NPM_TOKEN'),
+      await send('PATCH', '/NPM_TOKEN', { appliesTo: 'build' }),
+    ]) {
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ error: 'Variable not found', message: 'Variable not found.' });
+    }
 
     expect(audit.emit.mock.calls.map(([args]) => args.input)).toEqual([
       {
@@ -131,11 +137,28 @@ describe('SandboxEnvRoutes', () => {
     expect((await send('PUT', '/GH_TOKENS', { value: 'x', appliesTo: 'runtime' })).status).toBe(200);
   });
 
+  it('clears the cached revision on every write, so the next command in this process reloads', async () => {
+    const { seed, project, send } = await setup();
+    const scope = { orgId: 'org-1', projectId: project.id };
+    const seen = [await cachedSandboxEnvRevision(seed.sandboxEnvs, scope)];
+    expect((await send('PUT', '/A', { value: 'x', appliesTo: 'runtime' })).status).toBe(200);
+    seen.push(await cachedSandboxEnvRevision(seed.sandboxEnvs, scope));
+    expect((await send('PATCH', '/A', { appliesTo: 'both' })).status).toBe(200);
+    seen.push(await cachedSandboxEnvRevision(seed.sandboxEnvs, scope));
+    expect((await send('DELETE', '/A')).status).toBe(204);
+    seen.push(await cachedSandboxEnvRevision(seed.sandboxEnvs, scope));
+    // All four reads land well inside the one-second cache window.
+    expect(new Set(seen).size).toBe(4);
+  });
+
   it('rejects oversized values, bad applies-to and non-JSON bodies', async () => {
     const { send, base, app } = await setup();
     expect((await send('PUT', '/BIG', { value: 'x'.repeat(32 * 1024 + 1), appliesTo: 'runtime' })).status).toBe(400);
     expect((await send('PUT', '/BIG', { value: 'x'.repeat(32 * 1024), appliesTo: 'runtime' })).status).toBe(200);
     expect((await send('PUT', '/A', { value: 'x', appliesTo: 'always' })).status).toBe(400);
+    const badPatch = await send('PATCH', '/BIG', { appliesTo: 'always' });
+    expect(badPatch.status).toBe(400);
+    expect(await badPatch.json()).toMatchObject({ error: 'invalid_sandbox_env', message: expect.any(String) });
     expect((await send('PUT', '/A', { appliesTo: 'runtime' })).status).toBe(400);
     const nul = await send('PUT', '/A', { value: 'x\0y', appliesTo: 'runtime' });
     expect(nul.status).toBe(400);

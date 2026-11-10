@@ -67,8 +67,30 @@ export function sandboxBuildContext(
   return { buildEnv: env.build, buildEnvRevision: env.buildRevision };
 }
 
+/**
+ * Replace every Build value that appears in provider or command output with
+ * `***`. Longest first, so a value that contains another is masked whole.
+ */
+export function maskSandboxEnvValues(text: string, env: Record<string, string> | undefined): string {
+  if (!env) return text;
+  let masked = text;
+  for (const value of Object.values(env).sort((a, b) => b.length - a.length)) {
+    if (value) masked = masked.replaceAll(value, '***');
+  }
+  return masked;
+}
+
 const REVISION_CACHE_MS = 1000;
 const revisionCaches = new WeakMap<object, Map<string, { at: number; revision: Promise<string> }>>();
+
+/**
+ * Drop the cached revision after a write in this process, so the next command
+ * in any of the Factory's sandboxes here reads the new one. Writes from
+ * another process are seen once the cached read is a second old.
+ */
+export function forgetSandboxEnvRevision(store: object, scope: { orgId: string; projectId: string }): void {
+  revisionCaches.get(store)?.delete(`${scope.orgId}\u0000${scope.projectId}`);
+}
 
 /**
  * The Factory's current revision, read at most once a second per Factory so a

@@ -18,6 +18,7 @@
 import type { RepositoryAccess } from '../../capabilities/version-control.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import { maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
 
@@ -1164,13 +1165,8 @@ async function runLifecycleCommand(
   });
   if (result.exitCode !== 0) {
     // The message is stored as build status and shown in the UI, so mask any
-    // Build value the command printed. Longest first, so a value containing
-    // another is masked whole.
-    let detail = result.stderr.trim() || result.stdout.trim();
-    for (const value of Object.values(options.env ?? {}).sort((a, b) => b.length - a.length)) {
-      if (value) detail = detail.replaceAll(value, '***');
-    }
-    detail = detail.slice(-1800);
+    // Build value the command printed.
+    const detail = maskSandboxEnvValues(result.stderr.trim() || result.stdout.trim(), options.env).slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,
