@@ -395,7 +395,11 @@
                                 "role": "user",
                                 "content": "Validate:   Hello! How are you?  "
                               }
-                            ]
+                            ],
+                            "output": {
+                              "text": "Mock V2 generate response",
+                              "toolCalls": []
+                            }
                           }
                         },
                         {
@@ -691,7 +695,11 @@
                         "role": "user",
                         "content": "  Hello! How are you?  "
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Mock V2 generate response",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {
@@ -1068,7 +1076,11 @@
                                 "role": "user",
                                 "content": "Summarize: Mock V2 generate response"
                               }
-                            ]
+                            ],
+                            "output": {
+                              "text": "Mock V2 generate response",
+                              "toolCalls": []
+                            }
                           }
                         },
                         {
