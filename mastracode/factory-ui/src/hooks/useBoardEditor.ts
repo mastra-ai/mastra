@@ -1,5 +1,5 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -74,6 +74,15 @@ export function storedBoardQueryOptions(
   });
 }
 
+function boardWriteKey(factoryProjectId: string | undefined, boardKey: string) {
+  return ['board-write', factoryProjectId, boardKey];
+}
+
+/** Whether a save, reset or delete of the board is on its way, wherever on the page it was started. */
+export function useBoardWritePending(factoryProjectId: string | undefined, boardKey: string) {
+  return useIsMutating({ mutationKey: boardWriteKey(factoryProjectId, boardKey) }) > 0;
+}
+
 function useBoardWrite<Input>(
   factoryProjectId: string | undefined,
   boardKey: string,
@@ -82,6 +91,7 @@ function useBoardWrite<Input>(
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation<StoredBoardResponse, BoardRequestError, Input>({
+    mutationKey: boardWriteKey(factoryProjectId, boardKey),
     mutationFn: input => {
       const { method, suffix, body } = request(input);
       return sendBoardRequest(baseUrl, `${boardPath(factoryProjectId!, boardKey)}${suffix}`, { method, body });
@@ -134,6 +144,7 @@ export function useDeleteBoardMutation(factoryProjectId: string | undefined, boa
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation<void, BoardRequestError, number>({
+    mutationKey: boardWriteKey(factoryProjectId, boardKey),
     mutationFn: async expectedRevision => {
       const res = await fetch(
         `${baseUrl}${boardPath(factoryProjectId!, boardKey)}?expectedRevision=${expectedRevision}`,

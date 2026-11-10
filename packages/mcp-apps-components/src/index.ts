@@ -10,6 +10,7 @@ export type { ObservabilityDatePreset, ObservabilityReadAction } from './apps/ob
 export {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
   createObservabilityDashboardInputSchema,
+  createObservabilityDraftSchemas,
   createObservabilityWidgetInputSchema,
   observabilityDashboardInputSchema,
   observabilityDashboardOutputSchema,
@@ -22,6 +23,8 @@ export type {
   ObservabilityDashboardDraft,
   ObservabilityDashboardInput,
   ObservabilityDashboardOpened,
+  ObservabilityDraftOptions,
+  ObservabilityDraftSchemas,
   ObservabilityWidgetDraft,
 } from './observability-dashboard';
 
