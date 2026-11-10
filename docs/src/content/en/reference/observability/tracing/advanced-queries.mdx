@@ -55,34 +55,10 @@ The configured observability store must support each API. Call `getObservability
 | `traceQueryRootEntityId` | `trace-query-root-entity-id` | Trace-scope `entityId` predicates, dimensions, and `countDistinct` measures |
 | `traceQueryOutcomeFields` | `trace-query-outcome-fields` | `outcome` and `stopReason` in trace and `spans.some` / `spans.none` predicates, trace dimensions, and value discovery, plus the root span's outcome fields on trace results |
 | `spanQueryOutcomeFields` | `span-query-outcome-fields` | `outcome` and `stopReason` in `querySpans()` and `aggregateSpans()` predicates, dimensions, and `countDistinct` measures, plus the outcome fields on span results |
-| `traceQueryTextSearch` | `trace-query-text-search` | Literal substring search across any indexed span in a trace |
-| `spanQueryTextSearch` | `span-query-text-search` | Literal substring search within individual indexed spans |
 | `traceQueryDiscovery` | `trace-query-discovery` | [Field and value discovery](#discover-fields-and-values) |
 | `traceQueryTenantScope` | `trace-query-tenant-scope` | [Trusted tenant scope](#trusted-tenant-scope) |
 
 A missing `traceAggregate` value means the server doesn't support aggregation. Servers without the aggregate route return `404`, and stores without the feature return `501 TRACE_AGGREGATE_UNSUPPORTED`. A missing `spanAggregate` value means the same for span aggregation, and stores without the feature return `501 SPAN_AGGREGATE_UNSUPPORTED`. Against a store without a sub-feature, a request that uses a gated field returns `501` before storage runs. Unsupported root span `name`, `spanType`, and `entityId`, and span predicates requiring `spanQueryContextFields`, return `422` with a `field_not_allowed` issue instead. A store without `spanQuery` returns `501 SPAN_QUERY_UNSUPPORTED`.
-
-## Text search
-
-`querySpans()` and `queryTraces()` accept an optional `textSearch` field when the server advertises `spanQueryTextSearch` or `traceQueryTextSearch`, respectively. These contracts don't enable search in OSS stores by themselves. A store without the corresponding feature returns `501` for a search request.
-
-```typescript
-const result = await client.queryTraces({
-  timeRange: {
-    from: '2026-08-01T00:00:00.000Z',
-    to: '2026-08-08T00:00:00.000Z',
-  },
-  textSearch: 'connection timeout',
-})
-```
-
-Search is a case-insensitive literal substring match. Input is trimmed and must contain 3–1,024 Unicode characters after lowercasing. Empty or whitespace-only input is invalid; omit `textSearch` to clear a search. Internal whitespace, punctuation, `%`, `_`, and backslashes are literal, not query operators or wildcards.
-
-`querySpans()` matches individual spans. `queryTraces()` matches text in any indexed span of a trace, including nested spans, and returns the normal selected trace root. Search and existing filters both apply before pagination and counts. Existing sorting remains unchanged; results aren't ranked by relevance. Changing the normalized search text invalidates a cursor. Case changes and outer whitespace don't.
-
-The store defines which content is indexed and the available ingestion coverage. Search can match any indexed copy of a span; a rare older copy can match even when the displayed current copy no longer contains that text. Results contain unique span or trace identities. Search doesn't imply a fallback scan of unindexed history.
-
-Text search isn't supported in delta mode. A new matching child span might not produce a root update. This field doesn't apply to `queryThreads()`, `aggregateSpans()`, or `aggregateTraces()`.
 
 ## Select traces
 

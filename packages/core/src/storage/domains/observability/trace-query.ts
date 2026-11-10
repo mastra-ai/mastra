@@ -860,7 +860,6 @@ export interface TraceQueryTenantScope {
 
 export interface TrustedTraceQueryBasePlan {
   timeRange: { from: string; to: string };
-  /** Literal substring search; a trace matches any indexed span, including nested spans. */
   textSearch?: string;
   where?: TrustedTraceQueryPredicate;
   scope?: TraceQueryTenantScope;

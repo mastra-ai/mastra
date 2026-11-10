@@ -4,7 +4,6 @@
  * Initial visibility: completed records only, consistent with insert-only ClickHouse.
  * Current-record selection precedes mutable predicates and pagination. A store must
  * define its version rule; endedAt alone is not a general-purpose revision number.
- * Text search may match any indexed copy, even if the selected copy no longer matches.
  */
 import { z } from 'zod/v4';
 import { observabilityTextSearchSchema } from './text-search';
@@ -231,7 +230,6 @@ export interface TrustedSpanQueryPlan {
   result: 'spans';
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryScalarPredicate;
-  /** Literal substring search; matches any indexed copy of this span. */
   textSearch?: string;
   scope?: TraceQueryPlanOptions['scope'];
   orderBy: NormalizedSpanQueryRequest['orderBy'][number];

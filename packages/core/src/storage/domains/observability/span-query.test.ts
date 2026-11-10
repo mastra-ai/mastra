@@ -513,11 +513,11 @@ describe('span text search', () => {
     });
   });
 
-  it.each(['', '   ', 'ab', '😀😀', 'x'.repeat(1025), null, 123])('rejects invalid search input: %j', textSearch => {
+  it.each(['', '   ', 'ab', '😀😀', 'x'.repeat(257), null, 123])('rejects invalid search input: %j', textSearch => {
     expect(() => parseSpanQueryRequest({ timeRange, textSearch })).toThrow();
   });
 
-  it.each(['abc', '😀😀😀', 'x'.repeat(1024)])('accepts bounded search input', textSearch => {
+  it.each(['abc', '😀😀😀', 'x'.repeat(256)])('accepts bounded search input', textSearch => {
     expect(parseSpanQueryRequest({ timeRange, textSearch }).textSearch).toBe(textSearch);
   });
 

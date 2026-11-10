@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 
-export const OBSERVABILITY_TEXT_SEARCH_MAX_LENGTH = 1024;
+export const OBSERVABILITY_TEXT_SEARCH_MAX_LENGTH = 256;
 
 /**
  * Case-insensitive literal substring search. Omit the field to disable search;

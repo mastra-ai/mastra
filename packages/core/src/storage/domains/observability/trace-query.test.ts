@@ -2253,7 +2253,7 @@ describe('trace-query responses and storage capability', () => {
 });
 
 describe('trace text search', () => {
-  it.each(['', '   ', 'ab', '😀😀', 'x'.repeat(1025), null, 123])('rejects invalid search input: %j', textSearch => {
+  it.each(['', '   ', 'ab', '😀😀', 'x'.repeat(257), null, 123])('rejects invalid search input: %j', textSearch => {
     expect(() => parsed({ ...baseRequest, textSearch })).toThrow(TraceQueryValidationError);
   });
 
