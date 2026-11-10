@@ -349,18 +349,25 @@ test('encoded provider content preserves evidence and cannot elevate permissions
       }),
     );
     assert.equal(fixture.providerCalls.length, 1);
-    fixture.state.message = {
-      id: 'unsupported-source',
-      payload: { mimeType: 'text/html', body: { data: 'PGh0bWw-' } },
-    };
-    const unsupported = await json(
-      await app.request(`/agents/${agent}/generate`, 'POST', {
-        messages: [{ role: 'user', content: 'case:read retrieve an HTML-only source' }],
-        memory: { thread: 'unsupported-thread' },
-      }),
-    );
-    assert.match(unsupported.text, /unsupported-source/);
-    assert.match(unsupported.text, /No supported full plain-text/);
+    for (const [kind, payload] of [
+      ['html', { mimeType: 'text/html', body: { data: 'PGh0bWw-' } }],
+      ['attachment', { mimeType: 'text/plain', filename: 'attachment.txt', body: { data: 'dGV4dA' } }],
+      ['malformed', { mimeType: 'text/plain', body: { data: '***' } }],
+    ] as const) {
+      fixture.state.message = { id: 'unsupported-source', payload };
+      const unsupported = await json(
+        await app.request(`/agents/${agent}/generate`, 'POST', {
+          messages: [{ role: 'user', content: `case:read retrieve a ${kind}-only source` }],
+          memory: { thread: `unsupported-${kind}-thread` },
+        }),
+      );
+      assert.match(unsupported.text, /unsupported-source/);
+      assert.match(unsupported.text, /No supported full plain-text/);
+      const messages = fixture.models.at(-1)!.messages as { role: string; content: string }[];
+      const evidence = JSON.parse(messages.findLast(message => message.role === 'tool')!.content);
+      assert.equal(evidence.text, '');
+      assert.equal(evidence.status, 'unsupported', `${kind}-only content cannot claim partial decoded text.`);
+    }
   } finally {
     await app?.stop();
     await fixture.close();

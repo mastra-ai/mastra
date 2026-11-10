@@ -122,11 +122,11 @@ export function normalizeMail(value: unknown) {
   result.text = texts.join('\n\n');
   result.status = result.truncated
     ? 'truncated'
-    : result.issues.length
-      ? 'partial'
-      : texts.length
-        ? 'complete'
-        : 'unsupported';
+    : !texts.length
+      ? 'unsupported'
+      : result.issues.length
+        ? 'partial'
+        : 'complete';
   if (!texts.length)
     result.issues.push('No supported full plain-text body is available. A snippet is insufficient for a full review.');
   return result;

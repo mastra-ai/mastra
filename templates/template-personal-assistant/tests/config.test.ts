@@ -166,11 +166,13 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
     const result = normalizeMail(message(data));
     assert.equal(result.sourceMessageId, 'source-id');
     assert.equal(result.text, '');
+    assert.equal(result.status, 'unsupported');
     assert.match(JSON.stringify(result.issues), /Malformed/);
   }
   assert.equal(normalizeMail(message('dA==')).text, 't');
   const large = normalizeMail(message(Buffer.alloc(65537, 97).toString('base64url')));
   assert.equal(large.truncated, true);
+  assert.equal(large.status, 'truncated');
   assert.equal(large.text, '');
   assert.match(JSON.stringify(large.issues), /limit/);
   for (const source of [
@@ -184,8 +186,19 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
     const result = normalizeMail(source);
     assert.equal(result.sourceMessageId, 'source-id');
     assert.equal(result.text, '');
+    assert.equal(result.status, 'unsupported');
     assert.match(JSON.stringify(result.issues), /No supported full/);
   }
+  const partial = normalizeMail({
+    id: 'source-id',
+    payload: {
+      mimeType: 'multipart/mixed',
+      parts: [message('dGV4dA').payload, message('***').payload],
+    },
+  });
+  assert.equal(partial.text, 'text');
+  assert.equal(partial.status, 'partial');
+  assert.match(JSON.stringify(partial.issues), /Malformed/);
   const nested = {
     id: 'source-id',
     payload: { mimeType: 'multipart/mixed', parts: Array.from({ length: 65 }, () => ({})) },

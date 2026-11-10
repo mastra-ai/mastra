@@ -1,6 +1,6 @@
 # Contributing
 
-This template is maintained in the [Mastra monorepo](https://github.com/mastra-ai/mastra), under `templates/template-personal-assistant`. This local candidate has not been published as a standalone synchronized repository.
+This template is maintained in the [Mastra monorepo](https://github.com/mastra-ai/mastra), under `templates/template-personal-assistant`.
 
 Keep changes scoped to the template and follow the monorepo contribution process when preparing a contribution for publication. Use npm and Node 24 for local template development. Do not install or build the entire monorepo for a template-only change.
 

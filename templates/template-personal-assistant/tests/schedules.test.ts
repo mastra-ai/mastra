@@ -372,7 +372,10 @@ test('a later empty or misleading answer cannot hide an unresolved tool failure'
 });
 
 // TODO: Restore this regression when upstream @mastra/libsql sanitizes retry diagnostics.
+// Upstream: https://github.com/mastra-ai/mastra/issues/29885
 // Version 1.29.0 logs raw SQLite errors through a captured default logger.
+// Re-enable only after installing a published fix and passing the unchanged privacy assertions.
+// A version change alone does not establish that the logging gap is fixed.
 // The complete regression is preserved below but is not executed while this is pending.
 test.todo('schedule infrastructure failures remain distinguishable from intentional skips');
 
