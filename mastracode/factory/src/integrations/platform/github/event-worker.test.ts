@@ -726,6 +726,77 @@ describe('PlatformGithubEventWorker', () => {
       await worker.stop();
     });
 
+    it('stops querying while no repository is linked and polls as soon as one is', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const configured: Array<{ installationId: number; repositoryId: number; slug: string }> = [];
+      const listConfiguredExternalKeys = vi.fn(async () =>
+        configured.map(row => ({
+          installationExternalId: String(row.installationId),
+          repositoryExternalId: String(row.repositoryId),
+        })),
+      );
+      const worker = new PlatformGithubEventWorker({
+        client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+        controller: {} as never,
+        github: createGithub(),
+        storage: settings.storage,
+        intervalMs: 1_000,
+        sourceControl: {
+          projectRepositories: {
+            listConfiguredExternalKeys,
+            listByExternalRepository: async () => [{ orgId: 'org-1', factoryProjectId: 'proj-1' } as never],
+          },
+          repositories: {
+            findByExternalId: async args => {
+              const match = configured.find(row => String(row.repositoryId) === args.externalId);
+              return match ? ({ orgId: args.orgId, slug: match.slug } as never) : null;
+            },
+          },
+        },
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(listConfiguredExternalKeys).toHaveBeenCalledTimes(1);
+
+      // Far past the 60s database autosuspend, with nothing linked: no queries.
+      await vi.advanceTimersByTimeAsync(30 * 60_000);
+      expect(listConfiguredExternalKeys).toHaveBeenCalledTimes(1);
+
+      configured.push({ installationId: 7, repositoryId: 101, slug: 'acme/repo' });
+      worker.wake();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(listConfiguredExternalKeys).toHaveBeenCalledTimes(2);
+      expect(pathsFrom(fetchImpl).filter(path => path.endsWith('/events'))).toEqual([
+        '/v1/server/github-app/repositories/101/events',
+      ]);
+
+      await worker.stop();
+    });
+
+    it('rechecks for linked repositories hourly when a wake is lost', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const configured: Array<{ installationId: number; repositoryId: number; slug?: string }> = [];
+      const worker = createWorker({ fetchImpl, storage: settings.storage, configured });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      configured.push({ installationId: 7, repositoryId: 101, slug: 'acme/repo' });
+
+      await vi.advanceTimersByTimeAsync(60 * 60_000 - 1);
+      expect(pathsFrom(fetchImpl).filter(path => path.endsWith('/events'))).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(pathsFrom(fetchImpl).filter(path => path.endsWith('/events'))).toEqual([
+        '/v1/server/github-app/repositories/101/events',
+      ]);
+
+      await worker.stop();
+    });
+
     it('skips configured keys with non-positive or non-numeric external IDs', async () => {
       const settings = createSettingsStorage();
       const fetchImpl = eventsOnlyFetch();

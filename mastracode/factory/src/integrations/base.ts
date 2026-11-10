@@ -275,6 +275,12 @@ export interface FactoryIntegration {
    */
   workers?(ctx: IntegrationContext): MastraWorker[];
   /**
+   * A project linked a repository. Workers that sleep while there is nothing
+   * to poll resume now instead of waiting out their idle recheck. Called on
+   * every replica.
+   */
+  wakeWorkers?(): void;
+  /**
    * Chat-platform channels this integration contributes (Slack, Discord, …).
    * Called once at boot for READY integrations only; the factory constructs an
    * `AgentControllerChannels` from the returned config and attaches it to the

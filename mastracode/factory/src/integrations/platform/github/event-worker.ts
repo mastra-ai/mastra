@@ -24,6 +24,10 @@ const DEFAULT_POLL_INTERVAL_MS = 20_000;
 // Event polling is the primary sync; the sweeps only catch drift (missed
 // events, cards ingested before polling was linked), so they run hourly.
 const DEFAULT_RECONCILE_INTERVAL_MS = 60 * 60_000;
+// With no linked repositories there is nothing to poll. Linking one wakes the
+// worker; this recheck only covers a wake lost in transit. It must stay well
+// above the database autosuspend (60s) so an idle Factory's database sleeps.
+const IDLE_RECHECK_MS = 60 * 60_000;
 const EVENT_PAGE_SIZE = 500;
 const MIN_LEASE_TTL_MS = 30_000;
 const CURSOR_ORG_ID = '__platform_github_event_worker__';
@@ -109,6 +113,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #github: PlatformGithubEventDispatchIntegration;
   readonly #storage: PlatformGithubEventStorage;
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
+  #wakeRequested = false;
   readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssuesFactoryState: GithubIssueReconciler | undefined;
   readonly #pollEventsEnabled: boolean;
@@ -197,6 +202,21 @@ export class PlatformGithubEventWorker extends MastraWorker {
     }
   }
 
+  /**
+   * A repository was linked: poll now instead of waiting out an idle recheck.
+   * A wake during a running cycle polls again as soon as it ends.
+   */
+  wake(): void {
+    if (!this.#running) return;
+    if (this.#inFlight) {
+      this.#wakeRequested = true;
+      return;
+    }
+    if (this.#timer) clearTimeout(this.#timer);
+    this.#timer = undefined;
+    this.#schedule(0);
+  }
+
   get isRunning(): boolean {
     return this.#running;
   }
@@ -226,7 +246,9 @@ export class PlatformGithubEventWorker extends MastraWorker {
         retryInMs: nextDelay,
       });
     } finally {
-      this.#schedule(nextDelay);
+      const woken = this.#wakeRequested;
+      this.#wakeRequested = false;
+      this.#schedule(woken ? 0 : nextDelay);
     }
   }
 
@@ -270,6 +292,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
   async #poll(): Promise<number> {
     const repositories = await this.#discoverRepositories();
+    if (repositories.length === 0) return IDLE_RECHECK_MS;
     let retryInMs = this.#pollEventsEnabled ? this.#intervalMs : this.#reconcileCadence();
 
     if (this.#pollEventsEnabled) {
