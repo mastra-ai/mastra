@@ -23,19 +23,21 @@ describe('Studio Link', () => {
     Reflect.deleteProperty(document, 'startViewTransition');
   });
 
-  it('opens another page without a view transition', async () => {
-    const router = createMemoryRouter(
-      [
-        { path: '/prompts', element: <Link href="/agents">Agents</Link> },
-        { path: '/agents', element: <h1>Agents page</h1> },
-      ],
-      { initialEntries: ['/prompts'] },
-    );
-    render(<RouterProvider router={router} />);
+  describe('when a link to another page is clicked', () => {
+    it('opens another page without a view transition', async () => {
+      const router = createMemoryRouter(
+        [
+          { path: '/prompts', element: <Link href="/agents">Agents</Link> },
+          { path: '/agents', element: <h1>Agents page</h1> },
+        ],
+        { initialEntries: ['/prompts'] },
+      );
+      render(<RouterProvider router={router} />);
 
-    fireEvent.click(screen.getByRole('link', { name: 'Agents' }));
+      fireEvent.click(screen.getByRole('link', { name: 'Agents' }));
 
-    expect(await screen.findByRole('heading', { name: 'Agents page' })).toBeTruthy();
-    expect(startViewTransition).not.toHaveBeenCalled();
+      expect(await screen.findByRole('heading', { name: 'Agents page' })).toBeTruthy();
+      expect(startViewTransition).not.toHaveBeenCalled();
+    });
   });
 });
