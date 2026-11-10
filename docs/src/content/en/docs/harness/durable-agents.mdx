@@ -429,11 +429,11 @@ Every replica can start with `recovery.durableAgents: 'auto'`. Replicas that boo
 
 Mastra doesn't publish a benchmarked hardware reference for durable agents, so size your database from your own workload. This section covers what drives the load and what to watch.
 
-Each checkpoint upserts the whole run snapshot as one JSONB row in `mastra_workflow_snapshot`. The snapshot holds the conversation and every tool result so far, so it grows during a run, and the total bytes a run writes grow faster than its step count. Write load depends on:
+Each checkpoint upserts the run's full snapshot as JSONB in `mastra_workflow_snapshot`, with one row for the agent workflow and one for its nested execution workflow. The snapshot holds the conversation and every tool result so far, so it grows during a run, and the total bytes a run writes grow faster than its step count. Write load depends on:
 
 - **Checkpoint frequency**: A `createDurableAgent()` agent with `recovery.durableAgents` set to `'off'` (the default) writes few checkpoints. With `'auto'`, it writes a `running` checkpoint at every step. A `createEventedAgent()` agent always writes at every step. See [snapshot persistence](#snapshot-persistence).
 - **Steps per run and payload size**: Every byte a tool returns is written again in each later checkpoint of the run.
-- **Concurrent runs**: Load scales roughly linearly with the number of runs in progress.
+- **Concurrent runs**: Load grows with the number of runs in progress.
 
 To reduce writes and keep crash recovery:
 
@@ -443,7 +443,7 @@ To reduce writes and keep crash recovery:
 
 Each `PostgresStore` opens up to `max` connections, 20 by default, per process. A `pool`, `writePool`, or separate `readPool` you pass in uses its own limit. Add up the limits of every pool that connects to the server, across all replicas and processes, and keep the total below the server's `max_connections` with room for other clients. If you put a transaction-mode pooler such as PgBouncer in front, budget its server-side connections the same way. See [PostgreSQL](/integrations/databases/postgresql).
 
-Mastra deletes a run's snapshot rows when the run finishes, so `mastra_workflow_snapshot` collects dead rows quickly. Deletion is best-effort: if it fails, Mastra logs a `Failed to delete workflow snapshot rows` warning and the row stays until you delete it or [prune](/reference/storage/retention) it. Make autovacuum more aggressive for this table. Replace `public` with your `schemaName` if you set one:
+Every checkpoint upsert leaves a dead row version, and Mastra deletes a finished run's rows, so `mastra_workflow_snapshot` collects dead rows fast. Suspended runs keep their rows. Deletion is best-effort: if it fails, Mastra logs a `Failed to delete workflow snapshot rows` warning and the rows stay until you delete it or [prune](/reference/storage/retention) it. Make autovacuum more aggressive for this table. Replace `public` with your `schemaName` if you set one:
 
 ```sql
 ALTER TABLE public.mastra_workflow_snapshot SET (
