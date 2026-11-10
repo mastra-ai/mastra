@@ -1,0 +1,179 @@
+---
+title: "Reference: dispatchRoute() | Server"
+description: "Use dispatchRoute() to run any Mastra server route in-process with the authorization, validation, and error responses an HTTP request to it would get."
+packages:
+  - "@mastra/server"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# dispatchRoute()
+
+The `dispatchRoute()` function runs a server route in-process as the calling user. It expects a request context that Mastra server auth already authenticated, then applies what a server adapter applies to an HTTP request for that route: your auth provider's `authorize`, `authorizeUser`, and `rules`, schema validation, RBAC permission, and fine-grained authorization (FGA). It never allows a call the HTTP request would reject.
+
+Use it to build another transport on top of the built-in routes, including streaming routes. For JSON routes called from a tool, [`invokeRoute()`](/reference/server/invoke-route) is the smaller API.
+
+## Usage example
+
+```typescript title="src/server/run-tool.ts"
+import type { Mastra } from '@mastra/core/mastra'
+import type { RequestContext } from '@mastra/core/request-context'
+import { SERVER_ROUTES, dispatchRoute } from '@mastra/server/server-adapter'
+
+const executeTool = SERVER_ROUTES.find(
+  route => route.method === 'POST' && route.path === '/tools/:toolId/execute',
+)!
+
+export async function runWeatherTool(
+  mastra: Mastra,
+  requestContext: RequestContext,
+  request: Request,
+) {
+  const outcome = await dispatchRoute(
+    executeTool,
+    { pathParams: { toolId: 'weather' }, body: { data: { city: 'Paris' } } },
+    { mastra, requestContext, abortSignal: request.signal, request },
+  )
+  if (!outcome.ok) throw new Error(`Tool route failed with status ${outcome.status}`)
+  return outcome.result
+}
+```
+
+## Import
+
+```typescript
+import { dispatchRoute } from '@mastra/server/server-adapter'
+```
+
+## Signature
+
+```typescript
+function dispatchRoute(
+  route: ServerRoute,
+  input: DispatchRouteInput,
+  context: ServerContext,
+): Promise<DispatchRouteResult>
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'route',
+    type: 'ServerRoute',
+    description:
+      'The route to run, such as one from `SERVER_ROUTES`, exported from `@mastra/server/handlers/*`, or created with [`createRoute()`](/reference/server/create-route).',
+    isOptional: false,
+  },
+  {
+    name: 'input.pathParams',
+    type: 'Record<string, unknown>',
+    description:
+      "Path parameters, validated against the route's `pathParamSchema`. Every `:param` in the route path needs a non-empty string that isn't `.` or `..`.",
+    isOptional: true,
+  },
+  {
+    name: 'input.query',
+    type: 'Record<string, unknown>',
+    description: "Query parameters, validated against the route's `queryParamSchema`.",
+    isOptional: true,
+  },
+  {
+    name: 'input.body',
+    type: 'unknown',
+    description: "Request body, validated against the route's `bodySchema`.",
+    isOptional: true,
+  },
+  {
+    name: 'context.mastra',
+    type: 'Mastra',
+    description: 'The Mastra instance the route runs against.',
+    isOptional: false,
+  },
+  {
+    name: 'context.requestContext',
+    type: 'RequestContext',
+    description:
+      "The caller's request context, already authenticated by Mastra server auth. Its user, permissions, and auth mode decide what the caller may do.",
+    isOptional: false,
+  },
+  {
+    name: 'context.abortSignal',
+    type: 'AbortSignal',
+    description: 'Cancels the route handler.',
+    isOptional: false,
+  },
+  {
+    name: 'context.request',
+    type: 'Request',
+    description:
+      "The caller's HTTP request. Its headers are passed to `authorizeUser`, and it's handed to route handlers that read the request.",
+    isOptional: true,
+  },
+  {
+    name: 'context.routePrefix',
+    type: 'string',
+    description:
+      'The prefix of the server adapter whose paths apply, such as `/api`. Required when more than one adapter, or none, serves the Mastra instance.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+A `DispatchRouteResult`, which is one of two shapes:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'ok',
+    type: 'boolean',
+    description: '`true` when the handler ran, `false` when a check failed or the handler threw.',
+  },
+  {
+    name: 'result',
+    type: 'unknown',
+    description:
+      "When `ok` is `true`: the handler's raw return value. Streaming routes return their stream unconverted.",
+  },
+  {
+    name: 'status',
+    type: 'number',
+    description:
+      'When `ok` is `false`: the HTTP status an adapter would have answered with, such as `400`, `401`, or `403`.',
+  },
+  {
+    name: 'body',
+    type: 'unknown',
+    description: 'When `ok` is `false`: the JSON error body an adapter would have sent.',
+  },
+]}
+/>
+
+## Behavior
+
+- **Authentication isn't re-run.** When server or Studio auth is configured, the request context must already carry the user Mastra server auth resolved. Otherwise `dispatchRoute()` returns `401`, unless the route's path is public.
+- **Authorization hooks see the HTTP path.** `authorize()`, `authorizeUser()`, and `rules` receive the route's method and the path it's served under: the adapter's prefix plus the route path with path parameters filled in.
+- **The adapter's prefix must be known.** With one server adapter created for the Mastra instance, its prefix is used. With more than one, set `context.routePrefix`. If the prefix can't be told, or no adapter serves `routePrefix`, `dispatchRoute()` returns `401` for a caller without a user and throws otherwise.
+- **Path parameters are checked like a URL.** A missing, empty, non-string, `.`, or `..` value returns `400`. An optional `:param?` can be left out.
+- **Path parameters win.** A body or query field with the same name as a path parameter is overridden, so authorization and the handler act on the resource named in the path.
+- **Protected patterns don't open other paths.** With auth configured, a route needs a user unless its path is declared public, even when it's outside your `protected` patterns.
+- **Adapter overrides apply.** A `checkRoutePermission()` override on the serving `MastraServer` subclass also runs for dispatched routes.
+
+## Custom adapters
+
+Adapters that extend `MastraServer` tell `dispatchRoute()` where they serve routes. An adapter that doesn't must register itself:
+
+```typescript
+import { registerDispatchAdapter } from '@mastra/server/server-adapter'
+
+registerDispatchAdapter(mastra, { prefix: '/api' })
+```
+
+## Related
+
+- [`invokeRoute()`](/reference/server/invoke-route)
+- [`createRoute()`](/reference/server/create-route)
+- [Server routes](/reference/server/routes)
