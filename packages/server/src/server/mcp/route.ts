@@ -13,8 +13,16 @@ import {
   warnOnReservedMCPServerId,
 } from './config';
 
-// Signs `input_required` continuation state; per process, like MCPServer's own default, without its per-instance warning.
-const requestStateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
+let requestStateKey: Uint8Array | undefined;
+
+/**
+ * Signs `input_required` continuation state. No built-in tool suspends, so the key is never used to resume a
+ * request; passing one keeps MCPServer from warning about its per-process default on every request.
+ * Created on first use: Cloudflare Workers refuses to start a Worker that generates random values in global scope.
+ */
+function getRequestStateKey(): Uint8Array {
+  return (requestStateKey ??= globalThis.crypto.getRandomValues(new Uint8Array(32)));
+}
 
 const MISSING_MCP_MESSAGE = 'Built-in MCP server needs @mastra/mcp: npm install @mastra/mcp';
 const reportedMissingMCP = new WeakSet<Mastra>();
@@ -122,7 +130,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       instructions: serverInfo.instructions,
       tools,
       legacy: 'stateless',
-      requestState: { key: requestStateKey },
+      requestState: { key: getRequestStateKey() },
     });
     server.__setLogger(mastra.getLogger());
     return {

@@ -91,3 +91,34 @@ describe('built-in MCP route without @mastra/mcp installed', () => {
     expect(result.server.id).toBe('mastra');
   });
 });
+
+describe('built-in MCP route module load', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Cloudflare Workers refuses to start a Worker that generates random values in global scope, and every
+  // server adapter imports this route.
+  it('generates no random values until a request is served', async () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    vi.resetModules();
+    const getRandomValues = vi.spyOn(globalThis.crypto, 'getRandomValues');
+    const { BUILTIN_MCP_HTTP_ROUTE } = await import('./route');
+    await import('../server-adapter');
+    expect(getRandomValues).not.toHaveBeenCalled();
+
+    const mastra = new Mastra({ logger: false });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const serve = () =>
+      BUILTIN_MCP_HTTP_ROUTE.handler({
+        mastra,
+        requestContext: new RequestContext(),
+        request: new Request('http://localhost/api/mcp', { method: 'POST' }),
+      } as any);
+    await serve();
+    await serve();
+    // One signing key for the process, and MCPServer's "no requestState.key" warning stays quiet.
+    expect(getRandomValues).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('requestState.key'));
+  });
+});
