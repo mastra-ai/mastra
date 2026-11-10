@@ -162,7 +162,11 @@ function ModelMenu({
             }
           : undefined
       }
-      resetLabel={canReset ? 'Reset to your default' : undefined}
+      reset={
+        canReset && defaultModelId
+          ? { label: 'Reset to your default', onClick: () => pickModel(defaultModelId) }
+          : undefined
+      }
       busy={locked}
       side={side}
       align={align}

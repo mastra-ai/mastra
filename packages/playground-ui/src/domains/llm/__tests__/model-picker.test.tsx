@@ -18,15 +18,21 @@ const openai: ModelPickerProvider = { id: 'openai', name: 'OpenAI', models: [{ i
 
 function openPicker(
   providers: ModelPickerProvider[],
-  { defaultModel, openOnSelectedProvider }: Pick<ModelPickerProps, 'defaultModel' | 'openOnSelectedProvider'> = {},
+  {
+    defaultModel,
+    openOnSelectedProvider,
+    reset,
+    onValueChange = () => {},
+  }: Partial<Pick<ModelPickerProps, 'defaultModel' | 'openOnSelectedProvider' | 'reset' | 'onValueChange'>> = {},
 ) {
   render(
     <ModelPicker
       providers={providers}
       defaultModel={defaultModel}
       openOnSelectedProvider={openOnSelectedProvider}
+      reset={reset}
       value={{ provider: 'anthropic', model: 'claude-sonnet-4-6' }}
-      onValueChange={() => {}}
+      onValueChange={onValueChange}
       renderProviderIcon={id => <span data-testid={`icon-${id}`} />}
       addProvider={{ label: 'Connect a provider', render: <a href="#connect" /> }}
     />,
@@ -90,6 +96,33 @@ describe('ModelPicker', () => {
 
     expect(optionNames(list)).toEqual(['GPT-5']);
     expect(within(list).queryByText('OpenAI')).toBeNull();
+  });
+
+  it('given a provider pill, Enter on it leaves the highlighted model unpicked', () => {
+    const onValueChange = vi.fn();
+    openPicker([anthropic, openai], { onValueChange });
+
+    const filter = screen.getByRole('group', { name: 'Filter by provider' });
+    fireEvent.keyDown(within(filter).getByRole('button', { name: 'OpenAI' }), { key: 'Enter' });
+
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('listbox')).toBeTruthy();
+  });
+
+  it('given a reset, offers it and closes the picker once it runs', () => {
+    const onClick = vi.fn();
+    const list = openPicker([anthropic], { reset: { label: 'Reset to your default', onClick } });
+
+    fireEvent.click(within(list).getByRole('option', { name: 'Reset to your default' }));
+
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('given no reset, offers none even when another model than the default is picked', () => {
+    const list = openPicker([anthropic], { defaultModel: { provider: 'anthropic', model: 'claude-opus-4-7' } });
+
+    expect(within(list).queryByRole('option', { name: /Reset/ })).toBeNull();
   });
 
   it('given raw catalog ids, shows formatted names newest first and marks the default model', () => {

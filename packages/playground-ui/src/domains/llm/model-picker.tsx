@@ -31,8 +31,8 @@ export interface ModelPickerProps {
   settings?: ReactNode;
   /** A "+" at the end of the search field, e.g. a link to connect another provider. */
   addProvider?: ModelPickerAddProvider;
-  /** Labels an action that picks `defaultModel`, shown while another model is picked. */
-  resetLabel?: string;
+  /** An action at the end of the list that goes back to the default, e.g. clearing an override. Pass it only while there is something to reset. */
+  reset?: { label: string; onClick: () => void };
   /** Open filtered to the selected model's provider instead of "All". Suits large catalogs. */
   openOnSelectedProvider?: boolean;
   busy?: boolean;
@@ -59,7 +59,7 @@ export function ModelPicker({
   header,
   settings,
   addProvider,
-  resetLabel,
+  reset,
   openOnSelectedProvider = false,
   busy,
   side = 'top',
@@ -109,7 +109,15 @@ export function ModelPicker({
       header={header}
       settings={settings}
       addProvider={addProvider}
-      resetLabel={resetLabel}
+      reset={
+        reset && {
+          label: reset.label,
+          onClick: () => {
+            close();
+            reset.onClick();
+          },
+        }
+      }
       onAddProvider={close}
       sheet={sheet}
     />

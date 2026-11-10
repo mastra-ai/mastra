@@ -45,7 +45,7 @@ export const ComposerModelSwitcher = () => {
     );
   }
 
-  const { provider: selectedProvider, model: selectedModel, agentModel, setModel } = selection;
+  const { provider: selectedProvider, model: selectedModel, agentModel, resetModel, setModel } = selection;
 
   // Admin locked the picker — surface a non-interactive chip instead.
   if (policy.active && policy.pickerVisible === false) {
@@ -66,7 +66,7 @@ export const ComposerModelSwitcher = () => {
       value={fullProviderId ? { provider: fullProviderId, model: selectedModel } : undefined}
       onValueChange={({ provider, model }) => setModel(provider, model)}
       defaultModel={agentModel && { provider: resolveProviderId(agentModel.provider), model: agentModel.model }}
-      resetLabel="Reset to the agent's model"
+      reset={resetModel && { label: "Reset to the agent's model", onClick: resetModel }}
       openOnSelectedProvider
       triggerClassName="max-w-48"
     />

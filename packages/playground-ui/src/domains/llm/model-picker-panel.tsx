@@ -1,6 +1,6 @@
 import { Plus, RotateCcw } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { ModelPickerOption } from './model-picker-option';
 import { ModelPickerProviderFilter } from './model-picker-provider-filter';
 import { ModelPickerProviderOption } from './model-picker-provider-option';
@@ -68,12 +68,20 @@ export interface ModelPickerPanelProps {
   header?: ReactNode;
   settings?: ReactNode;
   addProvider?: ModelPickerAddProvider;
-  /** Labels an action that picks `defaultModel`, shown while another model is picked. */
-  resetLabel?: string;
+  reset?: { label: string; onClick: () => void };
   onAddProvider: () => void;
   /** Bottom-sheet layout: 44px touch targets and a taller list. */
   sheet: boolean;
 }
+
+/**
+ * The filter pills and the "+" link sit inside the command root, which takes Enter and the arrow keys for the list.
+ * Their keys stop here so Enter presses the focused control instead of picking the highlighted model. Escape and Tab
+ * still reach the popover and its focus handling.
+ */
+const keepKeysFromList = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' && event.key !== 'Tab') event.stopPropagation();
+};
 
 /** Search, provider filters, the model list and the selected model's settings. */
 export function ModelPickerPanel({
@@ -86,7 +94,7 @@ export function ModelPickerPanel({
   header,
   settings,
   addProvider,
-  resetLabel,
+  reset,
   onAddProvider,
   sheet,
 }: ModelPickerPanelProps) {
@@ -164,6 +172,7 @@ export function ModelPickerPanel({
               rightSlot={
                 addProvider ? (
                   <Button
+                    onKeyDown={keepKeysFromList}
                     variant="ghost"
                     size="icon-sm"
                     className={cn('shrink-0', sheet && 'size-11')}
@@ -178,19 +187,21 @@ export function ModelPickerPanel({
               }
             />
             {filtering ? (
-              <ModelPickerProviderFilter
-                providers={usable}
-                value={providerFilter}
-                onChange={filterTo}
-                moreCount={others.length}
-                browsingMore={browsingMore}
-                onBrowseMore={() => {
-                  setProviderFilter(undefined);
-                  setBrowsingMore(true);
-                }}
-                renderProviderIcon={renderProviderIcon}
-                sheet={sheet}
-              />
+              <div onKeyDown={keepKeysFromList}>
+                <ModelPickerProviderFilter
+                  providers={usable}
+                  value={providerFilter}
+                  onChange={filterTo}
+                  moreCount={others.length}
+                  browsingMore={browsingMore}
+                  onBrowseMore={() => {
+                    setProviderFilter(undefined);
+                    setBrowsingMore(true);
+                  }}
+                  renderProviderIcon={renderProviderIcon}
+                  sheet={sheet}
+                />
+              </div>
             ) : null}
           </div>
           <CommandList className="max-h-none overflow-visible">
@@ -222,21 +233,13 @@ export function ModelPickerPanel({
                 </CommandGroup>
               ))
             )}
-            {!deferredQuery &&
-            !browsingMore &&
-            resetLabel &&
-            defaultModel &&
-            !isSameModel(value, defaultModel.provider, defaultModel.model) ? (
+            {reset && !deferredQuery && !browsingMore ? (
               <>
                 <CommandSeparator />
                 <CommandGroup>
-                  <CommandItem
-                    value="action:reset"
-                    keywords={['reset', 'default', 'model']}
-                    onSelect={() => onSelect(defaultModel)}
-                  >
+                  <CommandItem value="action:reset" keywords={['reset', 'default', 'model']} onSelect={reset.onClick}>
                     <RotateCcw aria-hidden />
-                    <span>{resetLabel}</span>
+                    <span>{reset.label}</span>
                   </CommandItem>
                 </CommandGroup>
               </>
