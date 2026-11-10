@@ -6,11 +6,10 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playgroun
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { History } from 'lucide-react';
-import { useParams } from 'react-router';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
+import type { BoardInfo } from '../boardFlow';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
@@ -62,12 +61,10 @@ function agentRationale(event: AuditEvent): string | undefined {
   return metadataString(event, 'cause');
 }
 
-/** "Move to Review rejected: <reason>", naming the phase from the board catalog when it is loaded. */
-function RejectedMove({ event }: { event: AuditEvent }) {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const boards = useBoardCatalog(factoryId).data;
+/** "Move to Review rejected: <reason>", naming the phase from the card's own board: phase ids repeat across boards. */
+function RejectedMove({ event, board }: { event: AuditEvent; board: BoardInfo | undefined }) {
   const to = metadataString(event, 'to');
-  const phase = to === undefined ? undefined : boards?.flatMap(board => board.phases).find(phase => phase.id === to);
+  const phase = to === undefined ? undefined : board?.phases.find(phase => phase.id === to);
   const reason = metadataString(event, 'reason') ?? metadataString(event, 'code');
   const text = `Move to ${phase?.name ?? phase?.title ?? to ?? 'another phase'} rejected${reason ? `: ${reason}` : ''}`;
   const rationale = agentRationale(event);
@@ -89,10 +86,13 @@ function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>
 export function ActivityEvent({
   event,
   actors,
+  board,
   className,
 }: {
   event: AuditEvent;
   actors: Record<string, AuditActorProfile>;
+  /** The card's board, which names the phases its events mention. */
+  board: BoardInfo | undefined;
   className?: string;
 }) {
   const actor = eventActor(event, actors);
@@ -122,7 +122,7 @@ export function ActivityEvent({
                 Created at: {timestampFormatter.format(new Date(event.occurredAt))}
               </time>
             ) : event.action === 'factory.work_item.transition_rejected' ? (
-              <RejectedMove event={event} />
+              <RejectedMove event={event} board={board} />
             ) : (
               actionLabel(event.action)
             )}
@@ -141,10 +141,12 @@ export function ActivityEvent({
 export function WorkItemActivity({
   activity,
   actors,
+  board,
   showName = true,
 }: {
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
+  board: BoardInfo | undefined;
   showName?: boolean;
 }) {
   const worker = activity.lastWorker;
@@ -202,7 +204,7 @@ export function WorkItemActivity({
             <ol className="flex flex-col gap-2.5">
               {timeline.map(event => (
                 <li key={event.id}>
-                  <ActivityEvent event={event} actors={mergedActors} />
+                  <ActivityEvent event={event} actors={mergedActors} board={board} />
                 </li>
               ))}
             </ol>
