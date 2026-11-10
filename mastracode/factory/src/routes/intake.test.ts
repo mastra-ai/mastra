@@ -180,7 +180,12 @@ describe('intake configuration', () => {
         },
       });
 
-      const response = await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id });
+      const response = await put({
+        integrationId: 'linear',
+        sourceId: 'team-1',
+        factoryProjectId: project.id,
+        board: 'release',
+      });
 
       expect(response.status).toBe(200);
       const body = await response.json();

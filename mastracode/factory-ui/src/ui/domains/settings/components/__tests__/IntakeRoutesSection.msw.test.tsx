@@ -71,8 +71,12 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       const catchAll = last?.createdBy === 'factory' && last.when === null && last.enabled;
       // Moving the catch-all down a slot is a write to it, so its revision goes up, as in storage.
       state.routes = catchAll
-        ? [...state.routes.slice(0, -1), route, { ...last, revision: last.revision + 1 }]
-        : [...state.routes, route];
+        ? [
+            ...state.routes.slice(0, -1),
+            { ...route, position: last.position },
+            { ...last, position: last.position + 1, revision: last.revision + 1 },
+          ]
+        : [...state.routes, { ...route, position: state.routes.length }];
       return HttpResponse.json({ intakeRoute: route }, { status: 201 });
     }),
     http.patch<{ id: string }>(`${ROUTES_URL}/:id`, async ({ params, request }) => {
@@ -103,7 +107,11 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
     http.post(`${ROUTES_URL}/reorder`, async ({ request }) => {
       const body = (await request.json()) as { ids: string[] };
       state.requests.push({ method: 'POST', path: 'reorder', body });
-      state.routes = body.ids.map(id => find(id)!);
+      // Every route whose position changes is written, so its revision goes up, as in storage.
+      state.routes = body.ids.map((id, position) => {
+        const route = find(id)!;
+        return route.position === position ? route : { ...route, position, revision: route.revision + 1 };
+      });
       return HttpResponse.json({ intakeRoutes: state.routes });
     }),
   );
@@ -202,6 +210,44 @@ describe('IntakeRoutesSection', () => {
     expect(routeNames().slice(-2)).toEqual(['Releases go to Ship', 'Everything else goes to Work › Intake']);
   });
 
+  it("won't save a new-card route that tests the event, which new cards don't have", async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Add route' }));
+    await user.type(screen.getByLabelText('Route name'), 'Completed');
+    await user.click(screen.getByRole('button', { name: 'Edit as JSON' }));
+    await user.click(screen.getByLabelText('Applies when JSON'));
+    await user.paste(
+      JSON.stringify({
+        operator: 'AND',
+        conditions: [{ field: 'event.reason', operator: 'equals', value: 'completed' }],
+      }),
+    );
+
+    expect(
+      await screen.findByText(/only apply to routes that handle an event besides work_item\.created/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add route' })).toBeDisabled();
+    expect(state.requests).toEqual([]);
+  });
+
+  it('sends new cards elsewhere by changing the first route that takes them all, the one that applies', async () => {
+    const routes = seededRoutes();
+    const mine: IntakeRouteInfo = { ...routes.at(-1)!, id: 'mine', name: 'Everything else, mine', createdBy: 'admin' };
+    const state = serveRoutes({ routes: [...routes.slice(0, -1), mine, routes.at(-1)!] });
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByLabelText('Board for new cards'));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await waitFor(() => expect(state.routes.find(route => route.id === 'mine')?.target.boardKey).toBe('ship'));
+    expect(state.routes.find(route => route.id === 'everything-else')?.target.boardKey).toBe('work');
+  });
+
   it('reorders, disables, and deletes routes with the revision each one was read at', async () => {
     const state = serveRoutes();
     const user = userEvent.setup();
@@ -216,6 +262,8 @@ describe('IntakeRoutesSection', () => {
     await waitFor(() => expect(state.routes.find(route => route.id === 'outside-authors')?.enabled).toBe(false));
 
     await user.click(screen.getByRole('button', { name: 'Delete Requested reviews go to Review' }));
+    expect(state.requests).toHaveLength(2);
+    await user.click(await screen.findByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(routeNames()).not.toContain('Requested reviews go to Review'));
 
     expect(state.requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
@@ -223,7 +271,8 @@ describe('IntakeRoutesSection', () => {
       'PATCH outside-authors',
       'DELETE pull-request-review-requested',
     ]);
-    expect(state.requests[1]?.body).toEqual({ enabled: false, expectedRevision: 1 });
+    // The reorder swapped it with the route moved up, so storage wrote it.
+    expect(state.requests[1]?.body).toEqual({ enabled: false, expectedRevision: 2 });
     expect(state.requests[2]?.body).toBe(1);
   });
 

@@ -39,30 +39,39 @@ export const CARD_FACTS: Facts = { type: 'object', properties: CARD_FACT_PROPERT
  * The facts an intake route can test (`INTAKE_ROUTE_RULE_FIELDS`): the card's, the status event a
  * route moves cards on, and the issue a pull request closes.
  */
-export const INTAKE_ROUTE_FACTS: Facts = {
-  type: 'object',
-  properties: {
-    ...CARD_FACT_PROPERTIES,
-    event: {
-      type: 'object',
-      title: 'Event',
-      properties: { type: { type: 'string', title: 'Type' }, reason: { type: 'string', title: 'Reason' } },
-    },
-    pullRequest: {
-      type: 'object',
-      title: 'Pull request',
-      properties: { closesIssue: { type: 'boolean', title: 'Closes an issue' } },
-    },
-    closedIssue: {
-      type: 'object',
-      title: 'Closed issue',
-      properties: {
-        phase: { type: 'string', title: 'Phase' },
-        hasPullRequest: { type: 'boolean', title: 'Has a pull request' },
-      },
+const ROUTE_FACT_PROPERTIES = {
+  ...CARD_FACT_PROPERTIES,
+  pullRequest: {
+    type: 'object',
+    title: 'Pull request',
+    properties: { closesIssue: { type: 'boolean', title: 'Closes an issue' } },
+  },
+  closedIssue: {
+    type: 'object',
+    title: 'Closed issue',
+    properties: {
+      phase: { type: 'string', title: 'Phase' },
+      hasPullRequest: { type: 'boolean', title: 'Has a pull request' },
     },
   },
-};
+} as const;
+
+/**
+ * The facts an intake route handling `on` can test. As the route API requires, event facts
+ * apply only to a route handling an event besides `work_item.created`, and `event.reason` only
+ * to one handling `work_item.closed`, the one event that carries a reason.
+ */
+export function intakeRouteFacts(on: readonly string[]): Facts {
+  if (on.every(type => type === 'work_item.created')) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
+  const event = {
+    type: { type: 'string', title: 'Type' },
+    ...(on.includes('work_item.closed') ? { reason: { type: 'string', title: 'Reason' } } : {}),
+  };
+  return {
+    type: 'object',
+    properties: { ...ROUTE_FACT_PROPERTIES, event: { type: 'object', title: 'Event', properties: event } },
+  };
+}
 
 type RuleIssue = { path: PropertyKey[]; message: string; code: string; errors?: RuleIssue[][] };
 

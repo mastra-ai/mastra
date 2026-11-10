@@ -109,7 +109,8 @@ export function sendNewCardsTo(
 ): IntakeRouteWrite[] {
   const to = boards.find(board => board.id === boardKey);
   if (!to) return [];
-  const catchAll = routes.findLast(catchesEveryArrival);
+  // Routes apply in order, so the first route that takes every new card is the one that places them.
+  const catchAll = routes.find(catchesEveryArrival);
   const fromKey = catchAll?.target.boardKey;
   const from = boards.find(board => board.id === fromKey);
   const landing = phaseName(to, to.initialPhase) ?? to.initialPhase;

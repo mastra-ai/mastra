@@ -1,5 +1,6 @@
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
-import { INTAKE_ROUTE_RULE_FIELDS } from '@mastra/factory/boards/board-events';
+import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem } from '@mastra/factory/boards/board-events';
 import { ruleGroupSchema } from '@mastra/factory/rules/rule-group';
 import type { RuleGroup } from '@mastra/factory/rules/rule-group';
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -17,7 +18,7 @@ import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types'
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
 import { boardName, describeEvents, describeTarget, describeWhen, phaseName, sendNewCardsTo } from './intakeRoutes';
-import { INTAKE_ROUTE_FACTS, RuleEditor } from './RuleEditor';
+import { intakeRouteFacts, RuleEditor } from './RuleEditor';
 import { SettingsSubsection } from './SettingsSubsection';
 
 const ROUTE_WHEN_SCHEMA = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
@@ -38,7 +39,7 @@ function targetPhases(board: InstalledBoardInfo | undefined, placesNewCards: boo
 function RouteForm({
   initial,
   boards,
-  placesNewCards,
+  on,
   saving,
   submitLabel,
   onSave,
@@ -46,7 +47,7 @@ function RouteForm({
 }: {
   initial: RouteDraft;
   boards: InstalledBoardInfo[];
-  placesNewCards: boolean;
+  on: readonly string[];
   saving: boolean;
   submitLabel: string;
   onSave: (draft: RouteDraft) => void;
@@ -56,7 +57,12 @@ function RouteForm({
   const [ruleProblem, setRuleProblem] = useState<string>();
   const id = useId();
   const board = boards.find(candidate => candidate.id === draft.boardKey);
-  const phases = targetPhases(board, placesNewCards);
+  const phases = targetPhases(board, on.includes('work_item.created'));
+  // A condition pasted as JSON can name event facts the builder doesn't offer this route.
+  const schema = ROUTE_WHEN_SCHEMA.superRefine((when, ctx) => {
+    const problem = routeEventsProblem(on, when);
+    if (problem) ctx.addIssue({ code: 'custom', message: problem });
+  });
   const ready = draft.name.trim() !== '' && board !== undefined && draft.phaseKey !== '' && ruleProblem === undefined;
 
   return (
@@ -75,8 +81,8 @@ function RouteForm({
         label="Applies when"
         description="Leave empty to take every card that reaches this route."
         rule={draft.when}
-        facts={INTAKE_ROUTE_FACTS}
-        schema={ROUTE_WHEN_SCHEMA}
+        facts={intakeRouteFacts(on)}
+        schema={schema}
         disabled={saving}
         onChange={(when, problem) => {
           setDraft(current => ({ ...current, when }));
@@ -204,15 +210,29 @@ function RouteRow({
             <Button size="icon-sm" variant="ghost" aria-label={`Edit ${route.name}`} disabled={saving} onClick={onEdit}>
               <Pencil />
             </Button>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label={`Delete ${route.name}`}
-              disabled={saving}
-              onClick={onDelete}
-            >
-              <Trash2 />
-            </Button>
+            <AlertDialog>
+              <AlertDialog.Trigger
+                render={
+                  <Button size="icon-sm" variant="ghost" aria-label={`Delete ${route.name}`} disabled={saving}>
+                    <Trash2 />
+                  </Button>
+                }
+              />
+              <AlertDialog.Content>
+                <AlertDialog.Header>
+                  <AlertDialog.Title>Delete {route.name}?</AlertDialog.Title>
+                  <AlertDialog.Description>
+                    {route.createdBy === 'factory'
+                      ? 'Factory added this route and won’t add it back. You can recreate it yourself.'
+                      : 'This can’t be undone.'}
+                  </AlertDialog.Description>
+                </AlertDialog.Header>
+                <AlertDialog.Footer>
+                  <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+                  <AlertDialog.Action onClick={onDelete}>Delete</AlertDialog.Action>
+                </AlertDialog.Footer>
+              </AlertDialog.Content>
+            </AlertDialog>
           </div>
         )}
       </div>
@@ -363,7 +383,7 @@ export function IntakeRoutesSection({ factoryId }: { factoryId?: string }) {
                         '',
                     }}
                     boards={boards}
-                    placesNewCards={route.on.includes('work_item.created')}
+                    on={route.on}
                     saving={saving}
                     submitLabel="Save"
                     onCancel={() => setEditing(undefined)}
@@ -418,7 +438,7 @@ export function IntakeRoutesSection({ factoryId }: { factoryId?: string }) {
                   phaseKey: defaultBoard?.initialPhase ?? '',
                 }}
                 boards={boards}
-                placesNewCards
+                on={['work_item.created']}
                 saving={saving}
                 submitLabel="Add route"
                 onCancel={() => setEditing(undefined)}
