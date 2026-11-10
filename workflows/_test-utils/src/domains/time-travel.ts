@@ -850,13 +850,17 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
-  // Test: time travel to a failed loop iteration continues the loop's iterationCount
-  for (const [loopType, position] of [
-    ['dountil', 'first'],
-    ['dowhile', 'first'],
-    ['dountil', 'after-step'],
-    ['dowhile', 'after-step'],
-  ] as const) {
+  // Test: time travel to a failed or suspended loop iteration continues the loop's iterationCount
+  for (const [interrupt, loopType, position] of (['fail', 'suspend'] as const).flatMap(interrupt =>
+    (
+      [
+        ['dountil', 'first'],
+        ['dowhile', 'first'],
+        ['dountil', 'after-step'],
+        ['dowhile', 'after-step'],
+      ] as const
+    ).map(([loopType, position]) => [interrupt, loopType, position] as const),
+  )) {
     const inputs: number[] = [];
     const counts: number[] = [];
     let failures = 0;
@@ -865,9 +869,13 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       id: 'call',
       inputSchema: z.object({ n: z.number() }),
       outputSchema: z.object({ n: z.number() }),
-      execute: async ({ inputData }) => {
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
         inputs.push(inputData.n);
-        if (inputData.n === 1 && failures++ === 0) {
+        if (interrupt === 'suspend' && inputData.n === 1 && !resumeData) {
+          return suspend({});
+        }
+        if (interrupt === 'fail' && inputData.n === 1 && failures++ === 0) {
           throw new Error('transient failure');
         }
         return { n: inputData.n + 1 };
@@ -881,7 +889,10 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       execute: async ({ inputData }) => inputData,
     });
 
-    const id = `timetravel-loop-iteration-${loopType}-${position}-workflow`;
+    const id =
+      interrupt === 'fail'
+        ? `timetravel-loop-iteration-${loopType}-${position}-workflow`
+        : `timetravel-loop-suspend-${loopType}-${position}-workflow`;
     const workflow = createWorkflow({
       id,
       inputSchema: z.object({ n: z.number() }),
@@ -1576,6 +1587,30 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
 
         expect(recovered.status).toBe('success');
         expect(recovered.result).toEqual({ n: 3 });
+        expect(entry.getInputs()).toEqual([0, 1, 1, 2]);
+        expect(entry.getCounts()).toEqual([1, 2, 3]);
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelLoopIterationCount || !timeTravel).each([
+      ['dountil', 'first'],
+      ['dowhile', 'first'],
+      ['dountil', 'after-step'],
+      ['dowhile', 'after-step'],
+    ] as const)(
+      'should continue a %s loop (%s) iterationCount when time travelling to a suspended iteration with resumeData',
+      async (loopType, position) => {
+        const entry = registry![`timetravel-loop-suspend-${loopType}-${position}-workflow`]!;
+        entry.resetMocks?.();
+        const runId = randomUUID();
+
+        const suspended = await execute(entry.workflow, { n: 0 }, { runId });
+        expect(suspended.status).toBe('suspended');
+
+        const resumed = await timeTravel!(entry.workflow, { step: 'call', runId, resumeData: { approved: true } });
+
+        expect(resumed.status).toBe('success');
+        expect(resumed.result).toEqual({ n: 3 });
         expect(entry.getInputs()).toEqual([0, 1, 1, 2]);
         expect(entry.getCounts()).toEqual([1, 2, 3]);
       },

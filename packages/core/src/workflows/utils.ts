@@ -534,13 +534,13 @@ export const createTimeTravelExecutionParams = (params: {
       // restarting at 1. A body recorded as finished replays the whole loop.
       const iterationCount =
         context?.[stepId]?.metadata?.iterationCount ??
-        (['failed', 'canceled'].includes(snapshotContext[stepId]?.status)
+        (['failed', 'canceled', 'suspended'].includes(snapshotContext[stepId]?.status)
           ? snapshotContext[stepId]?.metadata?.iterationCount
           : undefined);
       // The previous step's output is only the loop's first input, so a loop continuing mid-way must
       // resume with the recorded iteration's input unless the caller supplied a new one.
       const resumesRecordedIteration =
-        iterationCount !== undefined && steps.includes(stepId) && !callerOverridesStepPayload;
+        entry.type === 'loop' && iterationCount !== undefined && steps.includes(stepId) && !callerOverridesStepPayload;
       result = {
         status,
         payload:
