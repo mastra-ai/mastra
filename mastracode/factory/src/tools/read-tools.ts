@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem } from '../boards/index.js';
+import { boardForWorkItem, isTerminalWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -11,7 +11,9 @@ import { parkedRunLabel } from '../routes/attention-parked.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import { needsApproval } from '../rules/types.js';
+import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
+import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
@@ -20,6 +22,7 @@ import type {
   Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
+import { CARD_NUMBER_METADATA_KEY } from '../work-items/create-work-item.js';
 import { sessionActivity } from './deliver.js';
 import type { FactorySessionActivity } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
@@ -48,6 +51,8 @@ export interface FactoryReadToolDependencies {
   boards: BoardRegistry | ProjectBoardSource;
   /** The live controller, for whether a session is mid-run and when it last moved; absent before the mount is up. */
   messaging?: () => Promise<Pick<FactoryMessaging, 'controller'> | null>;
+  /** Finds the caller session's source-control provider, to tell which cards can't pick a repository. */
+  sessions?: Pick<SourceControlSessionLookup, 'getSourceControlBySessionId'>;
   /** Which live sessions are parked on a tool prompt; absent before the mount is up. */
   liveSessions?: () => Pick<LiveSessions, 'parked' | 'parkedIn'> | undefined;
 }
@@ -62,12 +67,13 @@ function iso(value: Date | string | null | undefined): string | null {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
-/** The number a person sees on the card: the issue or PR number the item was filed from. */
-export function workItemNumber(item: Pick<Card, 'workItem'>): number | null {
+/** The number a person sees on the card: the issue or PR number the item was filed from, or the project's own number for a card filed by hand. */
+export function workItemNumber(item: Pick<Card, 'workItem' | 'metadata'>): number | null {
   const number =
     item.workItem.metadata?.number ??
     item.workItem.metadata?.githubIssueNumber ??
-    item.workItem.metadata?.githubPullRequestNumber;
+    item.workItem.metadata?.githubPullRequestNumber ??
+    item.metadata?.[CARD_NUMBER_METADATA_KEY];
   return typeof number === 'number' ? number : null;
 }
 
@@ -97,7 +103,13 @@ export async function findWorkItem(
   const items = await workItems.listShared(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
   // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
-  const match = matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0];
+  const workCards = matches.filter(item => item.externalSource?.type !== 'pull-request');
+  // Hand-filed card numbers and issue numbers from several repositories can repeat; refuse to guess.
+  if (workCards.length > 1) {
+    const candidates = workCards.map(item => `${item.id} (${item.title})`).join(', ');
+    throw new Error(`#${number} matches more than one work item; use its id instead: ${candidates}.`);
+  }
+  const match = workCards[0] ?? matches[0];
   return match ? structuredClone(match) : null;
 }
 
@@ -191,6 +203,25 @@ const listInputSchema = z
 
 export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryReadToolDependencies): IntegrationTools {
   const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
+  /**
+   * Of `cards` filed by hand, those that name no repository while the Factory
+   * links several, so a run on them refuses to start until someone picks one.
+   */
+  const cardsWithoutRepository = async (cards: Card[]): Promise<{ items: Card[]; candidates: string[] }> => {
+    const unnamed = cards.filter(card => typeof card.metadata?.repository !== 'string');
+    if (unnamed.length === 0 || !deps.sessions) return { items: [], candidates: [] };
+    const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
+    if (!sourceControl) return { items: [], candidates: [] };
+    // A card filed by hand has no source repository, so one that names none resolves like an empty card.
+    const resolution = await resolveWorkItemRepository({
+      sourceControl,
+      ...project,
+      item: { metadata: null, workItem: { metadata: null } },
+    });
+    return resolution.status === 'ambiguous'
+      ? { items: unnamed, candidates: resolution.candidates }
+      : { items: [], candidates: [] };
+  };
 
   return {
     factory_list_work_items: createTool({
@@ -335,7 +366,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_list_attention: createTool({
       id: 'factory_list_attention',
       description:
-        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, runs parked on a tool prompt (a plan to review, a question to answer) while still in flight, and Work cards triage left in Intake for a person to move on.',
+        'What in this Factory needs a person: failed decisions grouped by failure code and error (one incident per group), proposals waiting for approval, runs parked on a tool prompt (a plan to review, a question to answer) while still in flight, Work cards triage left in Intake for a person to move on, and open cards filed by hand that need a repository set (factory_update_work_item) before a run can start.',
       inputSchema: z.object({ limit: z.number().int().min(1).max(MAX_LIST).optional() }).strict(),
       execute: async ({ limit = DEFAULT_LIST }) => {
         const [decisions, items] = await Promise.all([
@@ -371,14 +402,19 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           .slice(0, limit)
           .map(group => ({ ...group, shown: group.decisions.slice(0, limit) }));
         // Check exactly the decisions this call returns, so every canRetry is real.
+        const boards = await toBoardSource(deps.boards).load(project);
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          await toBoardSource(deps.boards).load(project),
+          boards,
           project,
           incidents.flatMap(group => group.shown),
         );
         const proposals = decisions.filter(decision => decision.status === 'proposed');
         const held = items.filter(isHeld);
+        const unplaced = await cardsWithoutRepository(
+          items.filter(item => !item.externalSource && !isTerminalWorkItem(boards, item)),
+        );
+        const needsRepository = unplaced.items;
         const waiting = (deps.liveSessions?.()?.parkedIn(scope.factoryProjectId) ?? []).sort(
           (a, b) => a.run.suspendedAt - b.run.suspendedAt,
         );
@@ -408,12 +444,18 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             ...ref(item.id),
             stage: workItemStage(item),
           })),
+          needsRepository: needsRepository.slice(0, limit).map(item => ({
+            ...ref(item.id),
+            stage: workItemStage(item),
+          })),
+          ...(needsRepository.length > 0 ? { linkedRepositories: unplaced.candidates } : {}),
           truncated:
             allIncidents.length > limit ||
             incidents.some(group => group.shown.length < group.decisions.length) ||
             proposals.length > limit ||
             waiting.length > limit ||
-            held.length > limit,
+            held.length > limit ||
+            needsRepository.length > limit,
         };
       },
     }),
