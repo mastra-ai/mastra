@@ -192,12 +192,12 @@ Configure your identity provider to issue tokens with that audience, for example
 | [`MastraJwtAuth`](/reference/auth/jwt) | `issuer` option | Yes |
 | [Auth0](/reference/auth/auth0) | `https://<domain>/` | Yes |
 | [Okta](/reference/auth/okta) | `issuer` option | No. Okta checks the token against its own `audience` option, so set that to the `resource` URL. |
-| [Clerk](/reference/auth/clerk) | Frontend API URL from the publishable key. Your OAuth application must issue JWT access tokens (the default for applications created since January 2026); opaque tokens are rejected. | No |
+| [Clerk](/reference/auth/clerk) | Frontend API URL from the publishable key. Your OAuth application must issue JWT access tokens (the default for applications created since January 2026). Opaque tokens are rejected. | No |
 | [Supabase](/reference/auth/supabase) | `<url>/auth/v1` | No |
 | [`CompositeAuth`](/docs/auth/composite-auth) | All inner providers' servers | Delegated to the provider that authenticated the token |
 | WorkOS, Google, Neon, Firebase, Better Auth, custom providers | Set `authorizationServers` | No |
 
-When `resource` is set and a provider can't check the audience, Mastra logs a warning at startup that the token audience is NOT enforced for that provider. Custom providers opt in by implementing `verifyAudience()` and `getOAuthMetadata()`, see [custom auth providers](/docs/auth/custom-auth-provider).
+When `resource` is set and a provider can't check the audience, Mastra logs a warning at startup that the token audience isn't enforced for that provider. Custom providers opt in by implementing `verifyAudience()` and `getOAuthMetadata()`, see [custom auth providers](/docs/auth/custom-auth-provider).
 
 ### Connect an OAuth client
 
