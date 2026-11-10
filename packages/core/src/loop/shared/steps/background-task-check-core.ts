@@ -48,9 +48,11 @@ export async function checkBackgroundTasks(deps: {
     return { status: 'pass-through' };
   }
 
+  // A dispatched task stays `pending` until a worker picks it up off the bus, so
+  // on a bus with delivery latency it is outstanding before it is `running`.
   const runningResult = await bgManager.listTasks({
     agentId: deps.agentId,
-    status: 'running',
+    status: ['pending', 'running'],
     threadId: deps.threadId,
     resourceId: deps.resourceId,
   });

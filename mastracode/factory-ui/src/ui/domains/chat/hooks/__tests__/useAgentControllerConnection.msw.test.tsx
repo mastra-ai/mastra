@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,8 @@ import { queryKeys } from '../../../../../api/keys';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
+import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
+import { HIDDEN_STREAM_GRACE_MS } from '../../../../lib/hooks/useDocumentVisible';
 
 const controllerId = 'code';
 // A Factory session: addressed by its own id, running under its Factory's shared resource.
@@ -550,9 +552,10 @@ describe('useAgentControllerConnection', () => {
     expect(observedStatuses).not.toContain('reconnecting');
   });
 
-  it('given an active stream, when the tab is hidden, then the stream is released and reconnects once visible', async () => {
+  it('given an active stream, when the tab is hidden briefly, then the stream stays open; when hidden past the grace period, then it is released and reconnects once visible', async () => {
     const onStream = vi.fn();
     const onEvent = vi.fn();
+    const observedStatuses: string[] = [];
 
     const setDocumentVisibility = (state: 'visible' | 'hidden') => {
       Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
@@ -581,19 +584,35 @@ describe('useAgentControllerConnection', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+    const { result } = renderHookWithProviders(() => {
+      const connection = useAgentControllerConnection({ ...hookArgs, onEvent });
+      observedStatuses.push(connection.status);
+      return connection;
+    });
     await waitFor(() => expect(result.current.status).toBe('ready'));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
 
     try {
-      setDocumentVisibility('hidden');
-      // The stream is torn down and nothing reconnects while hidden.
+      // A quick tab switch keeps the stream and never reports a reconnect.
+      observedStatuses.length = 0;
+      act(() => setDocumentVisibility('hidden'));
+      act(() => vi.advanceTimersByTime(HIDDEN_STREAM_GRACE_MS - 1_000));
+      act(() => setDocumentVisibility('visible'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onStream).toHaveBeenCalledTimes(1);
+      expect(observedStatuses).not.toContain('reconnecting');
+
+      // A tab left hidden releases the stream and nothing reconnects while hidden.
+      act(() => setDocumentVisibility('hidden'));
+      act(() => vi.advanceTimersByTime(HIDDEN_STREAM_GRACE_MS));
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(onStream).toHaveBeenCalledTimes(1);
 
-      setDocumentVisibility('visible');
+      act(() => setDocumentVisibility('visible'));
       await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(result.current.status).toBe('ready'));
     } finally {
+      vi.useRealTimers();
       setDocumentVisibility('visible');
     }
   });
@@ -776,5 +795,46 @@ describe('useAgentControllerConnection', () => {
 
     await waitFor(() => expect(result.current.state?.running).toBe(false));
     await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
+  });
+
+  it('reports the thread a switch bound the session to, not the thread its state is read for', async () => {
+    let activeThreadId = 'primary-thread';
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: activeThreadId }),
+      ),
+      http.get(sessionUrl, ({ request }) =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          threadId: new URL(request.url).searchParams.get('threadId') ?? activeThreadId,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.post(`${sessionUrl}/thread`, async ({ request }) => {
+        activeThreadId = ((await request.json()) as { threadId: string }).threadId;
+        return HttpResponse.json({ ok: true });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => ({
+      connection: useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'primary-thread', onEvent: vi.fn() }),
+      switchThread: useSwitchAgentControllerThreadMutation(hookArgs),
+    }));
+    await waitFor(() => expect(result.current.connection.status).toBe('ready'), { timeout: 2000 });
+    expect(result.current.connection.threadId).toBe('primary-thread');
+
+    await result.current.switchThread.mutateAsync('secondary-thread');
+    await waitFor(() => expect(result.current.connection.threadId).toBe('secondary-thread'));
+
+    await result.current.switchThread.mutateAsync('primary-thread');
+    await waitFor(() => expect(result.current.connection.threadId).toBe('primary-thread'));
   });
 });

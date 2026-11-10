@@ -9,12 +9,15 @@ import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspa
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { buildFactorySessionRow, buildUserSessionRow } from '../services/sessionRows';
-import type { SessionListRow } from '../services/sessionRows';
+import { buildFactorySessionRow, buildUserSessionRow, oneRowPerCard } from '../services/sessionRows';
+import type { OneRowPerCardOptions, SessionListRow } from '../services/sessionRows';
 import { sessionWorkItemIndex } from '../services/sessionWorkItems';
 import { usePinnedSessions } from './usePinnedSessions';
 
-export function useSessionListRows(factoryId: string | undefined): {
+export function useSessionListRows(
+  factoryId: string | undefined,
+  options: OneRowPerCardOptions = {},
+): {
   rows: SessionListRow[];
   hasRepositories: boolean;
   loaded: boolean;
@@ -60,6 +63,7 @@ export function useSessionListRows(factoryId: string | undefined): {
         session,
         item: workItem?.item,
         boards: catalog.data,
+        context: workItem?.context,
         threadId: workItem?.threadId,
         pullRequest: workItem?.pullRequest,
         factoryId,
@@ -71,17 +75,19 @@ export function useSessionListRows(factoryId: string | undefined): {
       }),
     ];
   });
-  const userRows = (query.data?.userSessions ?? []).map(session =>
-    buildUserSessionRow({
+  const userRows = (query.data?.userSessions ?? []).map(session => {
+    const workItem = workItemBySessionId.get(session.sessionId);
+    return buildUserSessionRow({
       session,
-      item: workItemBySessionId.get(session.sessionId)?.item,
+      item: workItem?.item,
+      pullRequest: workItem?.pullRequest,
       factoryId,
       pathname,
       running: runningById[session.sessionId] === true,
       pinned: pinnedSessions.has(session.sessionId),
       viewer,
-    }),
-  );
+    });
+  });
 
-  return { rows: [...factoryRows, ...userRows], ...loadState };
+  return { rows: [...oneRowPerCard(factoryRows, catalog.data, options), ...userRows], ...loadState };
 }

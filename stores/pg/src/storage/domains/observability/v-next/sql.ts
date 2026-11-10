@@ -7,8 +7,12 @@
  */
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import type { DbClient } from '../../../client';
 import { toPgJson } from '../../../db/sanitize-json';
-import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
+import { qualifiedTable, SIGNAL_TIME_COLUMN, TABLE_SPAN_EVENTS } from './ddl';
+import type { SignalTable } from './ddl';
+import { ensureDayPartitions, isMissingPartitionError, resolveMode, withinPartitionWindow } from './partitioning';
+import type { PartitioningOptions } from './partitioning';
 import {
   buildNamedSelectColumns,
   buildSelectColumns,
@@ -100,6 +104,69 @@ VALUES ${rowPlaceholders.join(', ')}
 ${onConflict}`;
 
   return { text, values };
+}
+
+/**
+ * Insert into a signal table. In native partition mode, a row whose day is
+ * inside the partition window but has no partition yet gets one created, then
+ * the insert runs once more. TimescaleDB and pg_partman own their partitions,
+ * so in those modes the original error propagates untouched. The mode is the
+ * one the store resolved; a store that never ran init() (`disableInit`)
+ * detects it here, after the failed insert, so the hot path stays one query.
+ */
+export async function insertRows(
+  client: DbClient,
+  schema: string,
+  table: SignalTable,
+  records: Record<string, unknown>[],
+  partitioning: PartitioningOptions,
+  onConflict?: string,
+): Promise<void> {
+  const insert = buildInsert(schema, table, records, onConflict);
+  if (!insert) return;
+  try {
+    await client.query(insert.text, insert.values);
+  } catch (error) {
+    if (!isMissingPartitionError(error) || (await resolveMode(client, partitioning)) !== 'native') throw error;
+    const days = withinPartitionWindow(recordDays(records, SIGNAL_TIME_COLUMN[table]), partitioning);
+    if (days.length === 0) throw error;
+    // One day at a time, so a failure names the day that could not be
+    // created rather than every day in the batch.
+    for (const day of days) {
+      await ensureDayPartitions(client, schema, table, [day]).catch((cause: unknown) => {
+        if (!isInsufficientPrivilegeError(cause)) throw cause;
+        throw new Error(partitionCreateFailure({ table, day, cause }), { cause });
+      });
+    }
+    await client.query(insert.text, insert.values);
+  }
+}
+
+/** `42501`: the role may not create the child, or does not own the parent it must attach to. */
+function isInsufficientPrivilegeError(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === '42501';
+}
+
+function partitionCreateFailure({ table, day, cause }: { table: SignalTable; day: Date; cause: unknown }) {
+  const reason = cause instanceof Error ? cause.message : String(cause);
+  return (
+    `Could not create the ${table} partition for ${day.toISOString().slice(0, 10)} (UTC): ${reason}. ` +
+    'Create the partitions with a role that can create tables in the schema and owns the observability ' +
+    'tables, for example by calling ensurePartitions() on a schedule.'
+  );
+}
+
+function recordDays(records: Record<string, unknown>[], timeColumn: string): Date[] {
+  const days = new Map<string, Date>();
+  for (const record of records) {
+    const value = record[timeColumn];
+    if (value == null) continue;
+    const d = new Date(value as string | number | Date);
+    if (isNaN(d.getTime())) continue;
+    const day = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    days.set(day.toISOString(), day);
+  }
+  return [...days.values()];
 }
 
 /** Primary key of the span table; also the conflict target for span upserts. */

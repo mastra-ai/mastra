@@ -468,3 +468,102 @@ export interface MCPServerEventsInspector {
   /** Emits a test occurrence; its `eventId` is prefixed with `mastra-test-`. */
   emit(name: string, data: Record<string, unknown>): Promise<MCPServerEventOccurrenceInfo>;
 }
+
+/**
+ * Status of an MCP task (SEP-2663 Tasks extension).
+ * @experimental
+ */
+export type MCPServerTaskStatus = 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * A tool, workflow or agent this server can run as an MCP task, as shown in Studio.
+ * @experimental
+ */
+export interface MCPServerTaskSurfaceInfo {
+  /** The exposed name, e.g. a tool name, `run_<workflow>` or `ask_<agent>`. */
+  name: string;
+  type: 'tool' | 'workflow' | 'agent';
+  /** `always`: every call runs as a task. `auto`: only when the client asks for one. */
+  mode: 'auto' | 'always';
+  /** Whether an interrupted task is run again after a restart. */
+  recover: boolean;
+  /** Clients that don't declare the tasks extension are refused for this surface. */
+  required: boolean;
+  /** How long a task is kept from creation; `null` until the server closes. */
+  ttlMs: number | null;
+}
+
+/**
+ * How a server runs MCP tasks, as shown in Studio.
+ * @experimental
+ */
+export interface MCPServerTasksInfo {
+  enabled: boolean;
+  /** Whether the task store can list tasks for {@link MCPServerTasksInspector}. */
+  listable: boolean;
+  surfaces: MCPServerTaskSurfaceInfo[];
+}
+
+/**
+ * A task as shown in Studio. Never carries the task id or the principal: task ids are
+ * bearer tokens and principals can identify users, so only their SHA-256 hashes appear.
+ * @experimental
+ */
+export interface MCPServerTaskSummary {
+  /** SHA-256 hash of the task id. Cannot be used on the MCP protocol. */
+  taskKey: string;
+  /** The exposed name of the tool, workflow or agent the task runs. */
+  surface: string;
+  status: MCPServerTaskStatus;
+  statusMessage?: string;
+  createdAt: string;
+  lastUpdatedAt: string;
+  /** When the task and its result are deleted, if it has a TTL. */
+  expiresAt?: string;
+  /** SHA-256 hash of the principal that created the task. */
+  principalKey: string;
+  /**
+   * Who sent the task, readable for operators: the client id with the token subject or user id,
+   * or with a short prefix of the token's hash. Never a credential. Missing for older tasks.
+   */
+  clientLabel?: string;
+  /** Open input requests, keyed as on the wire. Only while `input_required`. */
+  inputRequests?: Record<string, { method: string; params?: Record<string, unknown> }>;
+  /** The `CallToolResult` of a completed task. */
+  result?: Record<string, unknown>;
+  /** The JSON-RPC error of a failed task. */
+  error?: Record<string, unknown>;
+}
+
+/**
+ * Filters and paging for {@link MCPServerTasksInspector.list}. Every filter narrows the result.
+ * @experimental
+ */
+export interface MCPServerTasksListParams {
+  limit?: number;
+  /** `nextCursor` from the previous page. */
+  cursor?: string;
+  status?: MCPServerTaskStatus;
+  surface?: string;
+  /** Only tasks created by this principal, as its {@link MCPServerTaskSummary.principalKey}. */
+  principalKey?: string;
+  /** Only the task with this {@link MCPServerTaskSummary.taskKey}. */
+  taskKey?: string;
+}
+
+/**
+ * Lists, cancels and answers a server's MCP tasks in-process, for Studio. Cancel and answer
+ * run through the same task-store code as `tasks/cancel` and `tasks/update`.
+ * There is no MCP protocol equivalent of `list`.
+ * @experimental
+ */
+export interface MCPServerTasksInspector {
+  /** Most recently created first. `nextCursor` is set when more tasks match. */
+  list(params?: MCPServerTasksListParams): Promise<{ tasks: MCPServerTaskSummary[]; nextCursor?: string }>;
+  /** Finds a task by its MCP task id, which is hashed before the lookup and never kept. */
+  find(taskId: string): Promise<MCPServerTaskSummary | undefined>;
+  /** Resolves `false` for an unknown, expired or already finished task. */
+  cancel(taskKey: string): Promise<boolean>;
+  /** Resolves `false` for an unknown or expired task, or one not waiting for these inputs. */
+  answer(taskKey: string, inputResponses: Record<string, Record<string, unknown>>): Promise<boolean>;
+}

@@ -18,7 +18,7 @@ import type {
   LinearProject,
   LinearStatus,
 } from '../../ui/domains/factory/services/linear';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../useIntakeConfig';
+import { useIntakeConfigQuery, useSaveIntakeSelectionMutation } from '../useIntakeConfig';
 import {
   useLinearIssueDetail,
   useLinearIssuesQuery,
@@ -170,7 +170,7 @@ describe('useLinearProjectsQuery', () => {
   });
 });
 
-describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
+describe('useIntakeConfigQuery / useSaveIntakeSelectionMutation', () => {
   const config: IntakeConfig = {
     github: { enabled: true, sourceIds: null },
     gitlab: { enabled: false, sourceIds: null },
@@ -188,7 +188,7 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
     expect(result.current.data).toEqual(config);
   });
 
-  it('given a save, when it succeeds, then the config cache updates and linear issues invalidate', async () => {
+  it('given a Linear save, when it succeeds, then only Linear is sent and the cache takes the server config', async () => {
     const updated: IntakeConfig = {
       github: { enabled: false, sourceIds: null },
       gitlab: { enabled: false, sourceIds: null },
@@ -207,23 +207,23 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
 
     const { result } = renderHookWithProviders(() => ({
       query: useIntakeConfigQuery(),
-      save: useSaveIntakeConfigMutation(),
+      save: useSaveIntakeSelectionMutation('linear'),
     }));
 
     await waitFor(() => expect(result.current.query.data).toBeDefined());
 
-    result.current.save.mutate(updated);
+    result.current.save.mutate(updated.linear);
 
     await waitFor(() => expect(result.current.query.data).toEqual(updated));
-    expect(putBody).toEqual(updated);
+    expect(putBody).toEqual({ linear: updated.linear });
   });
 
   it('given the save fails, when it settles, then the mutation surfaces the server message', async () => {
     server.use(http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })));
 
-    const { result } = renderHookWithProviders(() => useSaveIntakeConfigMutation());
+    const { result } = renderHookWithProviders(() => useSaveIntakeSelectionMutation('linear'));
 
-    result.current.mutate(config);
+    result.current.mutate(config.linear);
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as Error).message).toBe('invalid_config');

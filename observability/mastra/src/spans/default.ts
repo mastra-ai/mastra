@@ -10,6 +10,13 @@ import type {
 import { BaseSpan } from './base';
 import { deepClean } from './serialization';
 
+/**
+ * @internal End options with an explicit end time, for spans whose work finished
+ * before the data they report on was available (MODEL_INFERENCE ends at the
+ * provider finish but takes its output from the processed step).
+ */
+export type EndSpanOptionsWithTime<TType extends SpanType> = EndSpanOptions<TType> & { endTime?: Date };
+
 /** Every AI SDK `APICallError` (v4, v5 and v6) carries this shared marker symbol. */
 const API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
 
@@ -125,11 +132,14 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
     if (options?.endTree) {
-      // Close open descendants first (bare, without these options) so
+      // Close affected descendants first so
       // exporters that wait for the root still see it end last.
-      this.endOpenDescendants();
+      this.endOpenDescendants(options);
     }
-    this.endTime = new Date();
+    if (options) this.applyOutcome(options);
+    if (this.outcome === null) this.outcome = 'unknown';
+    const endTime = (options as EndSpanOptionsWithTime<TType> | undefined)?.endTime;
+    this.endTime = endTime instanceof Date && endTime >= this.startTime ? endTime : new Date();
     this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).
     if (options?.metadata) {
@@ -155,11 +165,12 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   }
 
   error(options: ErrorSpanOptions<TType>): void {
-    if (this.isEvent) {
+    if (this.isEvent || this.endTime) {
       return;
     }
 
     const { error, endSpan = true, endTree, attributes, metadata } = options;
+    this.applyOutcome(options);
 
     if (metadata) {
       this.metadata = {
@@ -216,6 +227,8 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
 
+    this.applyOutcome(options);
+
     if (options.name !== undefined) {
       this.name = options.name;
     }
@@ -263,7 +276,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 /**
  * Generate OpenTelemetry-compatible span ID (64-bit, 16 hex chars)
  */
-function fillRandomBytes(bytes: Uint8Array): void {
+function fillRandomBytes(bytes: Uint8Array<ArrayBuffer>): void {
   try {
     // Use Web Crypto API with proper this binding
     const webCrypto = globalThis.crypto;
@@ -312,11 +325,10 @@ function getOrCreateTraceId(options: CreateSpanOptions<SpanType>): string {
   if (options.traceId) {
     if (isValidTraceId(options.traceId)) {
       return options.traceId;
-    } else {
-      console.error(
-        `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
-      );
     }
+    console.error(
+      `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
+    );
   }
   return generateTraceId();
 }

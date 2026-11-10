@@ -71,7 +71,13 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
   );
   // Downstream handlers echo the body the way the Mastra server adapter reads
   // it (`request.raw.clone()` in getParams), proving the guard left it unread.
-  const adapterBody = async (c: Context) => JSON.parse(await c.req.raw.clone().text());
+  const adapterBody = async (c: Context) => {
+    const request = c.req.raw.clone();
+    if (c.req.header('content-type')?.includes('multipart/form-data')) {
+      return Object.fromEntries(await request.formData());
+    }
+    return JSON.parse(await request.text());
+  };
   app.post('/api/agent-controller/:controllerId/sessions', async c =>
     c.json({ reached: true, body: await adapterBody(c) }),
   );
@@ -104,6 +110,17 @@ const outsider = buildApp({ workosId: 'outsider', organizationId: 'org-2' });
 
 const post = (app: Hono, path: string, body: unknown) =>
   app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const put = (app: Hono, path: string, body: unknown) =>
+  app.request(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+/** A form body: the server adapter JSON-parses each field that parses, so structured values travel as JSON text. */
+const multipart = (app: Hono, method: 'POST' | 'PUT', path: string, fields: Record<string, unknown>) => {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) {
+    form.set(name, typeof value === 'string' ? value : JSON.stringify(value));
+  }
+  return app.request(path, { method, body: form });
+};
 
 describe('canViewSourceControlSession', () => {
   it('lets the owner and same-org teammates see org sessions, and only the owner see private ones', () => {
@@ -151,8 +168,40 @@ describe('createSessionAccessGuard', () => {
     expect((await owner.request(sessionPath('owner-side-thread', 'threads'))).status).toBe(200);
   });
 
+  it("403s a teammate changing a shared session's model or thinking level, while they still steer it", async () => {
+    const switchModel = { modelId: 'openai/gpt-5-mini' };
+    expect((await post(teammate, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(403);
+    const refused = await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } });
+    expect(refused.status).toBe(403);
+    await expect(refused.json()).resolves.toEqual({ error: 'Only the session’s owner can change its model' });
+    expect((await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: null } })).status).toBe(403);
+
+    expect(
+      (await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { factoryProjectId: FACTORY_ID } })).status,
+    ).toBe(200);
+    expect((await post(teammate, sessionPath(SHARED_ID, 'messages'), { content: 'Ship it' })).status).toBe(200);
+    expect((await post(owner, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(200);
+    expect((await put(owner, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status).toBe(200);
+    expect((await post(teammate, sessionPath('teammate-scratch', 'model'), switchModel)).status).toBe(200);
+  });
+
   it('passes through a session on its own id that no Factory session row claims', async () => {
     expect((await teammate.request(sessionPath('teammate-scratch', 'stream'))).status).toBe(200);
+  });
+
+  it('reads a multipart body the way the server adapter does, so form fields cannot slip past the checks', async () => {
+    const state = sessionPath(SHARED_ID, 'state');
+    expect((await multipart(teammate, 'PUT', state, { state: { thinkingLevel: 'high' } })).status).toBe(403);
+    expect((await multipart(owner, 'PUT', state, { state: { thinkingLevel: 'high' } })).status).toBe(200);
+
+    const create = '/api/agent-controller/code/sessions';
+    expect((await multipart(teammate, 'POST', create, { sessionId: 'new-session', resourceId: 'owner' })).status).toBe(
+      404,
+    );
+    const rekey = sessionPath('teammate-scratch', 'resource');
+    expect((await multipart(teammate, 'POST', rekey, { newResourceId: 'owner' })).status).toBe(404);
+    const allowed = await multipart(teammate, 'POST', rekey, { newResourceId: FACTORY_ID });
+    await expect(allowed.json()).resolves.toEqual({ reached: true, body: { newResourceId: FACTORY_ID } });
   });
 
   it('guards get-or-create by the session and resource it names, leaving the body readable', async () => {

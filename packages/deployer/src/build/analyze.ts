@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { transformAsync, transformSync } from '@babel/core';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { IMastraLogger } from '@mastra/core/logger';
+import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
+import type { IMastraLogger } from '@internal/core/logger';
 import type { OutputAsset, OutputChunk } from 'rollup';
 import * as stackTraceParser from 'stacktrace-parser';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
@@ -14,7 +14,7 @@ import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE } from './analyze/constants';
 import { normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
-import { detectPinoTransports } from './babel/detect-pino-transports';
+import { detectPinoTransports, mayContainPinoTransport } from './babel/detect-pino-transports';
 import { getPackageMetadata } from './package-info';
 import type { DependencyMetadata, ExternalDependencyInfo, InternalBundlerOptions } from './types';
 import {
@@ -454,14 +454,17 @@ export async function analyzeBundle(
       platform,
     });
 
-    // Detect pino transports in the bundled output
-    transformSync(analyzeResult.output.code, {
-      filename: 'pino-detection.js',
-      plugins: [() => detectPinoTransports(detectedPinoTransports)],
-      configFile: false,
-      babelrc: false,
-      code: false,
-    });
+    // The output includes the bundled server code (often several MB), so skip the Babel parse
+    // when the text has no possible transport call.
+    if (mayContainPinoTransport(analyzeResult.output.code)) {
+      transformSync(analyzeResult.output.code, {
+        filename: 'pino-detection.js',
+        plugins: [() => detectPinoTransports(detectedPinoTransports)],
+        configFile: false,
+        babelrc: false,
+        code: false,
+      });
+    }
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
     await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);

@@ -1,6 +1,7 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
+import { agentThreadStreamTopic } from '../agent/thread-stream-topic';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -252,6 +253,21 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
     this.#mastra = mastra;
   }
 
+  /**
+   * Delete a thread's live event stream from the registered Mastra pubsub.
+   * Call after the thread itself is deleted: nothing else ever clears an
+   * open-ended thread topic, so without this it lingers until the pubsub's
+   * idle TTL (or forever, if the pubsub has none). Best-effort; no-op when
+   * no Mastra instance is registered.
+   */
+  protected async clearThreadStream(threadId: string, resourceId?: string): Promise<void> {
+    try {
+      await this.#mastra?.pubsub?.clearTopic(agentThreadStreamTopic(resourceId, threadId));
+    } catch (error) {
+      this.logger.warn('Failed to clear thread event stream after deleting thread', { threadId, error });
+    }
+  }
+
   protected _hasOwnStorage = false;
   get hasOwnStorage() {
     return this._hasOwnStorage;
@@ -366,6 +382,17 @@ https://mastra.ai/en/docs/memory/overview`,
    */
   protected get isSelfEmbedding(): boolean {
     return !this.embedder && this.vector?.isSelfEmbedding === true;
+  }
+
+  /**
+   * `semanticRecall.maxChunkChars` from this instance's own options. Per-request memory options
+   * can't change it: they arrive from API callers, and a tiny value would cost one embedding and
+   * one vector row per character. Chunk boundaries also decide row ids, so they must stay fixed
+   * for an index.
+   */
+  protected get configuredMaxChunkChars(): number | undefined {
+    const semanticRecall = this.threadConfig.semanticRecall;
+    return typeof semanticRecall === 'object' ? semanticRecall.maxChunkChars : undefined;
   }
 
   protected getEmbeddingIndexName(dimensions?: number): string {
@@ -530,6 +557,15 @@ https://mastra.ai/en/docs/memory/overview`,
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     observabilityContext?: Partial<ObservabilityContext>;
+    /**
+     * The run's record of messages already written to the semantic recall index, from
+     * `MessageList.getEmbeddedMessages()`. Messages recorded with the same text are not embedded
+     * again, and newly embedded ones are added. Agent runs pass it through the save queue;
+     * direct callers omit it.
+     *
+     * @internal
+     */
+    embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
@@ -859,10 +895,11 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
-            readOnly:
-              effectiveConfig.readOnly ||
-              (typeof effectiveConfig.workingMemory === 'object' &&
-                effectiveConfig.workingMemory.agentManaged === false),
+            readOnly: effectiveConfig.readOnly,
+            agentManaged:
+              typeof effectiveConfig.workingMemory === 'object'
+                ? effectiveConfig.workingMemory.agentManaged
+                : undefined,
           }),
         );
       }
@@ -948,6 +985,7 @@ https://mastra.ai/en/docs/memory/overview`,
             embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }
@@ -1091,6 +1129,7 @@ https://mastra.ai/en/docs/memory/overview`,
             embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticRecallConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }

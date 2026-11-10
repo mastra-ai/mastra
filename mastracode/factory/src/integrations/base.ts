@@ -18,7 +18,8 @@
  */
 
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
-import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
+import type { AgentChannels, AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
+import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -26,6 +27,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
@@ -36,12 +38,14 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
@@ -147,6 +151,10 @@ export interface IntegrationContext {
      * right user's credentials.
      */
     channelIdentity: ChannelIdentityStorage;
+    /** Tenant model credentials, so a channel can transcribe a voice clip with the sender's STT key. */
+    modelCredentials: ModelCredentialsStorage;
+    /** Per-user and per-Factory speech-to-text model choice (Settings → Models → Voice input). */
+    voiceSettings: VoiceSettingsStorage;
   };
   /**
    * Factory runtime available when the work-item domain is ready.
@@ -157,8 +165,11 @@ export interface IntegrationContext {
     /** Operator-maintained provenance label stamped on audit rows. */
     configVersion: string;
     workItems: WorkItemsStorage;
-    /** Installed boards, so integrations read phase semantics instead of matching names. */
-    boards: BoardRegistry;
+    /**
+     * Installed boards, so integrations read phase semantics instead of matching names. The
+     * per-project source serves each project its stored boards.
+     */
+    boards: BoardRegistry | ProjectBoardSource;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -220,6 +231,8 @@ export interface FactoryIntegration {
     /** Cross-integration intake selection/binding domain, for per-request authorization. */
     intake: IntakeStorage;
     sourceControl?: SourceControlStorageHandle;
+    /** The controller's chat channels, once it has mounted. */
+    channels?: () => AgentChannels | null | undefined;
   }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
@@ -238,6 +251,13 @@ export interface FactoryIntegration {
    * capability, resolved synchronously per request.
    */
   sessionTools?(args: { requestContext: RequestContext }): IntegrationTools;
+  /**
+   * Processors the integration adds to every session run. Input processors
+   * run before Factory's own state processors and output processors before
+   * the credential stamp, in the order integrations are configured. Each
+   * processor decides per run whether it applies.
+   */
+  processors?: { input?: InputProcessor[]; output?: OutputProcessor[] };
   /**
    * Optional provider-owned observer for successful or failed tool calls.
    * The factory invokes every configured observer independently so one

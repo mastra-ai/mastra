@@ -59,6 +59,11 @@ export class AgentsMSSQL extends AgentsStorage {
     }
     await this.db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
     await this.db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: AGENT_VERSIONS_SCHEMA });
+    await this.db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: AGENT_VERSIONS_SCHEMA,
+      ifNotExists: ['modelList'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -173,6 +178,7 @@ export class AgentsMSSQL extends AgentsStorage {
         row.instructions as string | null | undefined,
       ) as AgentVersion['instructions'],
       model: this.parseJson(row.model, 'model') as AgentVersion['model'],
+      modelList: this.parseJson(row.modelList, 'modelList') as AgentVersion['modelList'],
       tools: this.parseJson(row.tools, 'tools') as AgentVersion['tools'],
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions') as AgentVersion['defaultOptions'],
       workflows: this.parseJson(row.workflows, 'workflows') as AgentVersion['workflows'],
@@ -445,8 +451,9 @@ export class AgentsMSSQL extends AgentsStorage {
           versionNumber: input.versionNumber,
           name: input.name ?? null,
           description: input.description ?? null,
-          instructions: this.serializeInstructions(input.instructions as string | string[] | undefined) ?? null,
-          model: input.model,
+          instructions: this.serializeInstructions(input.instructions as string | string[] | undefined) ?? '',
+          model: input.model ?? {},
+          modelList: input.modelList ?? null,
           tools: input.tools ?? null,
           defaultOptions: input.defaultOptions ?? null,
           workflows: input.workflows ?? null,

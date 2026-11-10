@@ -43,6 +43,10 @@ export const dailyReport = createWorkflow({
 
 A separate "register schedule" call won't happen. The scheduler reads `schedule` straight off the workflow when `Mastra` boots.
 
+## Delivery guarantees
+
+Scheduled workflow publication is best-effort. Each occurrence is claimed before its start event is published, with up to three publication attempts. Exhausted attempts or a publisher crash can skip that occurrence. Skipped occurrences aren't automatically replayed, but later recurring fires can continue. A schedule marked `completed` has exhausted its cadence, which doesn't confirm execution. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
+
 ## Execution engine
 
 Declaring `schedule` doesn't change how the workflow runs. Scheduled fires run in-process on the host that runs the scheduler, the same way `workflow.start()` or an HTTP-triggered run does. A workflow that declares `schedule` needs no extra storage or worker setup to run directly.
@@ -58,6 +62,8 @@ Only the environment variable triggers the switch, because `createWorkflow` runs
 Pass an object to `schedule` for a workflow that fires on one cadence:
 
 ```typescript title="src/mastra/workflows/daily-report.ts"
+import { createWorkflow } from '@mastra/core/workflows'
+
 const dailyReport = createWorkflow({
   id: 'daily-report',
   schedule: {
@@ -83,6 +89,8 @@ Fields:
 Pass an array to fire the same workflow on multiple cadences. Each entry needs a unique stable `id`:
 
 ```typescript title="src/mastra/workflows/status-check.ts"
+import { createWorkflow } from '@mastra/core/workflows'
+
 const statusCheck = createWorkflow({
   id: 'status-check',
   schedule: [
@@ -111,13 +119,13 @@ A workflow's header includes a **Schedules** action when the workflow has at lea
 
 ### Trigger history
 
-Every fire records a trigger row with the run id, scheduled time, actual fire time, and publish status. The schedule detail page joins each trigger to the corresponding workflow run and shows:
+The scheduler attempts to record a trigger row with the run ID, scheduled time, actual fire time, and publish status. A publisher crash after claiming an occurrence or after publication is accepted can leave no trigger row. The schedule detail page joins recorded triggers to the corresponding workflow runs and shows:
 
 - The run's status (`running`, `success`, `failed`, `suspended`, `canceled`) as a badge.
 - The run's start time and duration.
 - A link to the run's full graph view at `/workflows/:workflowId/graph/:runId`.
 - A `pending` badge for triggers whose run record hasn't been written yet, due to a race between trigger publish and run snapshot.
-- A `publish failed` badge with the publish error when the scheduler couldn't enqueue the run at all.
+- A `publish failed` badge with the final publish error after all three attempts fail. The outcome is unknown: the transport may have accepted the event before returning the error.
 
 Triggers in a non-terminal state cause the panel to poll every five seconds until they reach a terminal state. The list paginates, so long-running schedules don't load thousands of rows up front.
 

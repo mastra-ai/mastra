@@ -16,7 +16,6 @@ import { DataListReorderContext } from './data-list-reorder-context';
 import type { DataListReorderContextValue } from './data-list-reorder-context';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
-import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 import { cn } from '@/lib/utils';
@@ -112,9 +111,9 @@ const dataListGridStyles = [
   '[&_.data-list-top]:bg-(--data-list-background)',
   '[&_.data-list-row>.data-list-sticky-start]:bg-background',
   // A sticky cell must stay opaque over horizontally scrolled cells, so it
-  // cannot show the fluid highlight through; it takes the opaque twin of a fill
+  // cannot show the hover layer through; it takes the opaque twin of a fill
   // rung over the row well instead, the same level a selected row rests on.
-  '[&_.data-list-row[data-fluid-hover-active]>.data-list-sticky-start]:bg-surface-panel',
+  '[&_.data-list-row-interactive:not(:disabled):hover>.data-list-sticky-start]:bg-surface-panel',
   '[&_.data-list-row>.data-list-sticky-start]:after:right-0',
   '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
 ] as const;
@@ -248,24 +247,16 @@ function DataListBase({
         .join('\n')
     : null;
 
-  // One hover surface travels between rows (same primitive as menus/selects).
-  // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
-  const menu = useFluidMenu({ gapClick: false });
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
-      // It is also the offsetParent rows are measured against and the highlight is positioned in.
-      className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit], menu.containerClassName)}
+      // `isolate` keeps each row's negative-z surface and hover layers above the list's own background.
+      className={cn('relative isolate grid content-start', ...dataListGridStyles, dataListFitClasses[fit])}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
-      {...menu.getContainerProps({})}
     >
       {orderRules && <style>{orderRules}</style>}
-      {/* The highlight is the old row hover color. It sits between each row's
-          `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
-      <FluidMenuItems menu={menu} className="rounded-(--fluid-hover-item-radius) bg-fill-subtle">
-        {children}
-      </FluidMenuItems>
+      {children}
     </div>
   );
 

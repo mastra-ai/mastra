@@ -160,7 +160,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
           expand();
           setWidth(maxWidth);
           commit();
-          return;
+          break;
         }
       }
     },
@@ -267,6 +267,10 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
           'transition-opacity duration-200 motion-reduce:transition-none',
           // Inset on every side, like the mobile drawer's container, so the header and footer never touch an edge.
           'p-2',
+          // Collapsed, lay the rail out at its final width from the first frame: `--sidebar-width` is
+          // already the rail width while the panel still animates down to it, so items that center
+          // themselves (the credits meter, an avatar) don't start mid-panel and slide across
+          isCollapsed && !isHidden && 'w-(--sidebar-width)',
           isHidden && 'pointer-events-none p-0 opacity-0',
         )}
       >
@@ -294,7 +298,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
       >
         <ResizeHandleIndicator
           className={cn(
-            'via-foreground/30 group-hover:opacity-100',
+            'via-foreground/30 transition-none group-hover:opacity-100',
             'group-focus-visible:via-border-focus group-focus-visible:opacity-100',
             'in-data-[sidebar-gesture=active]:via-foreground/45 in-data-[sidebar-gesture=active]:opacity-100',
           )}

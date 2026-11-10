@@ -97,21 +97,14 @@ Extra tools are merged with the dynamic tool set and are available to the agent 
 
 ## Custom subagents
 
-Override the default Explore/Plan/Execute subagents. Each subagent receives its own set of tools, scoping what it can do:
+Mastra Code registers no subagents by default. Pass the subagents you want with `subagents`. Spread `builtinSubagents` to keep the built-in Explore, Plan and Execute subagents alongside your own. Each subagent receives its own set of tools, scoping what it can do:
 
 ```typescript title="src/custom-subagents.ts"
-import { createMastraCode } from 'mastracode'
-import { createTool } from '@mastra/core/tools'
+import { builtinSubagents, createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
   subagents: [
-    {
-      id: 'explore',
-      name: 'Explore',
-      description: 'Read-only codebase exploration',
-      instructions:
-        'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
-    },
+    ...builtinSubagents,
     {
       id: 'test-writer',
       name: 'Test Writer',
@@ -220,7 +213,7 @@ const { controller } = await createMastraCode({
 | Field | Type | Default | Description |
 | - | - | - | - |
 | `yolo` | `boolean` | `true` | Auto-approve all tool calls |
-| `thinkingLevel` | `string` | `"off"` | Extended thinking depth for Anthropic models |
+| `thinkingLevel` | `string` | — | Session override for model reasoning effort. When unset, Mastra Code uses a host-provided default (such as a Factory default) if one exists, then the per-mode setting, then the global preference |
 | `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |
 | `notifications` | `"bell" \| "system" \| "both" \| "off"` | `"off"` | Alert when the TUI needs attention |
 | `permissionRules` | `object` | Default policies | Per-category and per-tool approval policies |

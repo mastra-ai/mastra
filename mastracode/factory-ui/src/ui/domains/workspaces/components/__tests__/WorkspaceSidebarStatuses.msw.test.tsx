@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -11,6 +12,7 @@ import type { PullRequestSubscription } from '../../../factory/services/githubSu
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
+import { closeSessionProperties, openSessionProperties } from './fixtures/sessionProperties';
 import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';
 
 const factoryProjectId = 'factory-project-1';
@@ -286,7 +288,7 @@ describe('Workspace sidebar statuses', () => {
     const { client } = renderSection();
     await waitForMutationsIdle(client);
 
-    const row = (await screen.findByRole('button', { name: 'Implement loader' })).closest('li');
+    const row = (await screen.findByRole('link', { name: 'Implement loader' })).closest('li');
     expect(row).not.toBeNull();
     expect(row?.querySelector('[role="status"]')).toBeNull();
   });
@@ -323,7 +325,11 @@ describe('Workspace sidebar statuses', () => {
       await waitForMutationsIdle(client);
 
       const workMergedIcon = screen.queryByRole('img', { name: 'Pull request merged for Implement loader' });
-      const reviewMergedIcon = screen.queryByRole('img', { name: 'Pull request merged for Review loader' });
+      // The review card is the pull request, so its leading icon carries the state and the link describes it.
+      const reviewMergedIcon = screen.queryByRole('link', {
+        name: 'Review loader',
+        description: /^Merged pull request/,
+      });
       if (expectedMerged) {
         expect(workMergedIcon).toBeInTheDocument();
         expect(reviewMergedIcon).toBeInTheDocument();
@@ -377,4 +383,25 @@ describe('Workspace sidebar statuses', () => {
       else expect(mergedIcon).not.toBeInTheDocument();
     },
   );
+
+  it("names an issue card's linked pull request on its second line once compact view is off", async () => {
+    const user = userEvent.setup();
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {
+        'work-thread:work-session': [pullRequestSubscription(202, 'open')],
+        'review-thread:review-session': [pullRequestSubscription(202, 'open')],
+      },
+    });
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    await openSessionProperties(user);
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Compact view' }));
+    await closeSessionProperties(user);
+
+    const row = screen.getByRole('link', { name: 'Implement loader', description: 'Open pull request #202' });
+    expect(within(row).getByText('#202')).toBeInTheDocument();
+  });
 });

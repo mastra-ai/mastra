@@ -1,13 +1,13 @@
 ---
 title: "Reference: Mastra.getAgent() | Core"
-description: "The .getAgent() method is used to retrieve an agent. The method accepts a single string parameter for the agent's name."
+description: "The .getAgent() method is used to retrieve an agent. The method accepts the agent's name and an optional version selector."
 packages:
   - "@mastra/core"
 ---
 
 # Mastra.getAgent()
 
-The `.getAgent()` method is used to retrieve an agent. The method accepts a single `string` parameter for the agent's name.
+The `.getAgent()` method is used to retrieve an agent. The method accepts the agent's name and an optional version selector. Passing a version selector returns a promise.
 
 ## Usage example
 
@@ -25,6 +25,12 @@ mastra.getAgent('testAgent')
     description:
       'The name of the agent to retrieve. Must be a valid agent name that exists in the Mastra configuration.',
   },
+  {
+    name: 'version',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    isOptional: true,
+    description: 'Selects a stored version of the agent. When provided, the method returns a promise.',
+  },
 ]}
 />
 
@@ -34,8 +40,9 @@ mastra.getAgent('testAgent')
   content={[
   {
     name: 'agent',
-    type: 'TAgents[TAgentName]',
-    description: 'The agent instance with the specified name. Throws an error if the agent is not found.',
+    type: 'TAgents[TAgentName] | Promise<TAgents[TAgentName]>',
+    description:
+      'The agent instance with the specified name, or a promise that resolves to it when `version` is provided. Throws an error if the agent is not found.',
   },
 ]}
 />

@@ -37,7 +37,7 @@ import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabEventRules, GitLabRuleOverrides } from './default-rules.js';
 import { attachGitLabReconciler } from './reconciler.js';
 import { gitlabReconciliationEnabled, gitlabReconciliationInterval } from './reconciliation-config.js';
-import { buildGitLabRoutes } from './routes.js';
+import { buildGitLabRoutes, ingestLinkedGitLabRepositoryBacklog } from './routes.js';
 import { attachGitLabRules } from './rules.js';
 import {
   createGitLabSubscriptionTools,
@@ -113,6 +113,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   #sourceControl: SourceControlStorageHandle | undefined;
   #integrationStorage: GitLabSubscriptionStorage | undefined;
   #auth: RouteAuth | undefined;
+  #ingestFactoryEvent: ReturnType<typeof attachGitLabRules>;
   readonly #orgIdByResourceId = new Map<string, string | null>();
   readonly rules: GitLabEventRules;
 
@@ -354,6 +355,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   }
   routes(ctx: IntegrationContext): ApiRoute[] {
     const ingestFactoryEvent = attachGitLabRules(this, ctx);
+    this.#ingestFactoryEvent = ingestFactoryEvent;
     return buildGitLabRoutes({
       gitlab: this,
       auth: ctx.auth,
@@ -364,6 +366,10 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       ingestFactoryEvent,
       ...(ctx.controller ? { controller: ctx.controller } : {}),
     });
+  }
+
+  async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
+    await ingestLinkedGitLabRepositoryBacklog({ gitlab: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
   }
 
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {

@@ -50,7 +50,7 @@ const threadTopic = (resourceId: string, threadId: string) =>
   `agent.thread-stream.${encodeURIComponent(threadKey(resourceId, threadId))}`;
 
 const RESOURCE_ID = 'resource-1';
-const fakeAgent = { id: 'ttl-test-agent' } as unknown as Agent<any, any, any, any>;
+const fakeAgent = { id: 'ttl-test-agent', abortRunStream: () => true } as unknown as Agent<any, any, any, any>;
 
 /**
  * Minimal stand-in for the run output `registerRun` consumes: a run id, a live
@@ -803,6 +803,40 @@ describe('suspended run in-memory TTL', () => {
         expect(stream).not.toHaveBeenCalled();
       } finally {
         subscription.unsubscribe();
+      }
+    });
+  });
+
+  describe('a run whose lease renewal is refused', () => {
+    // The abort runs in a detached renewal callback, so a throw there is an unhandled rejection that
+    // fails the whole test process, not just the run.
+    it.each([
+      ['has no abortRunStream', {}],
+      [
+        'throws from abortRunStream',
+        {
+          abortRunStream: () => {
+            throw new Error('abort failed');
+          },
+        },
+      ],
+    ])('stays quiet when the agent %s', async (_name, abilities) => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        renewLease.mockResolvedValue(false);
+        const agent = { id: 'lease-lost-agent', ...abilities } as unknown as Agent<any, any, any, any>;
+        const run = createFakeRun('run-1');
+        await runtime.registerRun(agent, run.output, { memory: { thread: 'thread-1', resource: RESOURCE_ID } }, pubsub);
+
+        await vi.waitFor(() => expect(renewLease).toHaveBeenCalled());
+        await new Promise(resolve => setTimeout(resolve, LEASE_RENEW_INTERVAL_MS * 5));
+
+        expect(unhandled).toEqual([]);
+        run.settle('success');
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
       }
     });
   });

@@ -112,7 +112,7 @@ describe('TraceSignalSettingsButton', () => {
     expect(screen.queryByText('Current project')).toBeNull();
     expect(screen.queryByText('Built-in signals')).toBeNull();
     expect(screen.queryByText('Read only')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close panel' }));
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Trace signal settings' })).toBeNull());
   });
 

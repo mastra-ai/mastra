@@ -12,6 +12,7 @@ import { Braces } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
+import { codeFoldGutter } from './fold-gutter-extension';
 import { syntaxHighlighter } from './highlight';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
@@ -162,6 +163,7 @@ const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTh
 
 type CodeEditorContentAttributes = {
   'aria-label': string;
+  class: string;
   id?: string;
   'aria-labelledby'?: string;
   'aria-describedby'?: string;
@@ -190,6 +192,8 @@ export type CodeEditorProps = {
   lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
+  /** Extra CodeMirror extensions, added after the built-in ones. Memoize them to avoid reconfiguring on every render. */
+  extensions?: Extension[];
 } & VariantProps<typeof codeEditorVariants> &
   Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
@@ -211,6 +215,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       lineNumbers = true,
       lineWrapping = true,
       editable,
+      extensions: extraExtensions,
       variant,
       id,
       'aria-label': ariaLabelProp,
@@ -240,13 +245,17 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     };
 
     const extensions = useMemo(() => {
-      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
+      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel, class: 'zoom-safe-text' };
       if (controlId) contentAttributes.id = controlId;
       if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
       if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
 
-      const exts: Extension[] = [...editorFocusExtensions, EditorView.contentAttributes.of(contentAttributes)];
+      const exts: Extension[] = [
+        ...editorFocusExtensions,
+        EditorView.contentAttributes.of(contentAttributes),
+        codeFoldGutter,
+      ];
 
       if (lineWrapping) {
         exts.push(EditorView.lineWrapping);
@@ -270,8 +279,13 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         exts.push(EditorState.readOnly.of(true));
       }
 
+      if (extraExtensions) {
+        exts.push(...extraExtensions);
+      }
+
       return exts;
     }, [
+      extraExtensions,
       language,
       highlightVariables,
       schema,
@@ -289,7 +303,13 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         {(showCopyButton || canFormat) && (
           <div className="absolute top-2 right-2 z-20 flex gap-1">
             {canFormat && (
-              <Button type="button" size="sm" tooltip="Format JSON" aria-label="Format JSON" onClick={handleFormat}>
+              <Button
+                type="button"
+                size="icon-sm"
+                tooltip="Format JSON"
+                aria-label="Format JSON"
+                onClick={handleFormat}
+              >
                 <Braces />
               </Button>
             )}
@@ -308,7 +328,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
           height="100%"
           style={{ height: '100%' }}
           autoFocus={autoFocus}
-          basicSetup={{ lineNumbers }}
+          basicSetup={{ lineNumbers, foldGutter: false }}
         />
       </div>
     );

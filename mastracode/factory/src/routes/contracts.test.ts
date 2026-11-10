@@ -14,6 +14,7 @@ import {
 } from '../../scripts/generate-api-cli-route-metadata.js';
 import { buildAttentionRoutes } from './attention.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
+import { BoardRoutes } from './boards.js';
 import {
   attentionQuerySchema,
   createProjectBodySchema,
@@ -23,7 +24,9 @@ import {
   transitionBodySchema,
   updateProjectBodySchema,
 } from './contracts.js';
+import { IntakeRouteRoutes } from './intake-routes.js';
 import { ProjectRoutes } from './projects.js';
+import { SkillRoutes } from './skills.js';
 import { WorkItemRoutes } from './work-items.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
@@ -61,7 +64,23 @@ function registeredFactoryRoutes() {
     workItems,
     configVersion: 'test',
   } as never);
-  return [...projects, ...work, ...attention, ...automationRuns];
+  const boards = new BoardRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    workItems,
+    storage: {},
+    boards: {},
+  } as never).routes();
+  const skills = new SkillRoutes({ auth: {}, controllerId: 'code', controller: {}, overrides: {} } as never).routes();
+  const intakeRoutes = new IntakeRouteRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    storage: {},
+    boards: {},
+  } as never).routes();
+  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes];
 }
 
 describe('Factory route contracts', () => {
@@ -78,9 +97,9 @@ describe('Factory route contracts', () => {
       description: null,
     });
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
-    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', autoRunEnabled: true })).toEqual({
+    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', reviewTestChecksEnabled: true })).toEqual({
       defaultModelId: null,
-      autoRunEnabled: true,
+      reviewTestChecksEnabled: true,
     });
     expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
     expect(updateProjectBodySchema.safeParse({ modelScope: 'org' }).success).toBe(false);
@@ -89,6 +108,27 @@ describe('Factory route contracts', () => {
       stages: ['intake'],
     });
     expect(createWorkItemBodySchema.safeParse({ title: 'Card', stages: ['intake', 'intake'] }).success).toBe(false);
+  });
+
+  it('accepts legacy card envelopes while validating normalized facts when present', () => {
+    const legacy = {
+      id: projectId,
+      title: 'Existing card',
+      externalSource: null,
+      stages: ['planning'],
+      metadata: { labels: ['docs'] },
+      revision: 7,
+      acceptedAt: '2026-10-01T01:00:00.000Z',
+      autonomyArmedAt: null,
+      plansPreapprovedAt: null,
+    };
+    const list = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema;
+    const single = FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema;
+    const listed = { workItems: [legacy], runningSessionIds: [], parkedSessionIds: [] };
+    expect(list.parse(listed)).toEqual(listed);
+    expect(single.parse({ workItem: legacy })).toEqual({ workItem: legacy });
+    expect(single.safeParse({ workItem: { ...legacy, workItem: { provider: 'github' } } }).success).toBe(false);
+    expect(single.safeParse({ workItem: { ...legacy, workItem: null } }).success).toBe(false);
   });
 
   it('accepts custom transition identifiers and rejects malformed identifiers', () => {
@@ -187,11 +227,26 @@ describe('Factory route contracts', () => {
   it('accepts representative successful response envelopes', () => {
     const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'mention', 'activity', 'agent-waiting'];
     expect(
-      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId }] }).success,
+      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId, repositories: [] }] })
+        .success,
     ).toBe(true);
     expect(
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({
-        workItems: [{ id: projectId }],
+        workItems: [
+          {
+            id: projectId,
+            workItem: {
+              provider: 'github',
+              kind: 'issue',
+              key: 'acme/app#42',
+              url: 'https://github.com/acme/app/issues/42',
+              title: 'Fix login',
+              state: 'open',
+              labels: ['bug'],
+              author: 'reporter',
+            },
+          },
+        ],
         runningSessionIds: ['session-1'],
         parkedSessionIds: ['session-2'],
       }).success,

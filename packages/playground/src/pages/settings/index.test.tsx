@@ -59,7 +59,7 @@ describe('StudioSettingsPage', () => {
       await renderSettingsPage();
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '/custom-api' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
 
       expect(JSON.parse(localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY) ?? '{}')).toMatchObject({
         baseUrl: BASE_URL,

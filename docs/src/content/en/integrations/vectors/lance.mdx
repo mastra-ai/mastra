@@ -1,0 +1,553 @@
+---
+title: "Lance | Vector Stores"
+description: "Store embeddings in LanceDB through Mastra's LanceVectorStore with embedded similarity search for local, S3, and managed cloud deployments."
+packages:
+  - "@mastra/lance"
+---
+
+# Lance vector store
+
+The LanceVectorStore class provides vector search using [LanceDB](https://lancedb.github.io/lancedb/), an embedded vector database built on the Lance columnar format. It offers efficient storage and fast similarity search for both local development and production deployments.
+
+## Factory method
+
+The LanceVectorStore uses a factory pattern for creation. You should use the static `create()` method rather than the constructor directly.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'Path to LanceDB database or URI for cloud deployments',
+  },
+  {
+    name: 'options',
+    type: 'ConnectionOptions & { id?: string }',
+    description:
+      'Additional connection options for LanceDB. Pass `id` to name the store; otherwise a random UUID is used.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Constructor examples
+
+You can create a `LanceVectorStore` instance using the static create method:
+
+```ts
+import { LanceVectorStore } from '@mastra/lance'
+
+// Connect to a local database
+const vectorStore = await LanceVectorStore.create('/path/to/db')
+
+// Connect to a LanceDB cloud database
+const cloudStore = await LanceVectorStore.create('db://host:port')
+
+// Connect to a cloud database with options
+const s3Store = await LanceVectorStore.create('s3://bucket/db', {
+  storageOptions: { timeout: '60s' },
+})
+```
+
+## Methods
+
+### `createIndex()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to create index in',
+  },
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index (column name) to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search',
+  },
+  {
+    name: 'indexConfig',
+    type: 'LanceIndexConfig',
+    isOptional: true,
+    defaultValue: "{ type: 'hnsw' }",
+    description: 'Index configuration',
+  },
+]}
+/>
+
+#### `LanceIndexConfig`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: "'ivfflat' | 'ivfpq' | 'hnsw'",
+    description: 'Index type',
+    defaultValue: 'hnsw',
+    properties: [
+      {
+        type: 'string',
+        parameters: [
+          {
+            name: 'ivfflat',
+            type: 'ivfflat',
+            description:
+              'Clusters vectors into partitions and stores full vectors. Searches compute exact distances only within the probed partitions, so closer vectors in other partitions can be missed.',
+          },
+          {
+            name: 'ivfpq',
+            type: 'ivfpq',
+            description: 'IVF index with product quantization. Uses less memory than `ivfflat` with lower recall.',
+          },
+          {
+            name: 'hnsw',
+            type: 'hnsw',
+            description: 'Graph-based index offering fast search times and high recall.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'numPartitions',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '128',
+    description: 'Number of partitions for IVF indexes',
+  },
+  {
+    name: 'numSubVectors',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '16',
+    description: 'Number of sub-vectors for product quantization. Only applies to `ivfpq`',
+  },
+  {
+    name: 'hnsw',
+    type: 'HNSWConfig',
+    isOptional: true,
+    description: 'HNSW configuration',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'm',
+            type: 'number',
+            description: 'Maximum number of connections per node (default: 16)',
+            isOptional: true,
+          },
+          {
+            name: 'efConstruction',
+            type: 'number',
+            description: 'Build-time complexity (default: 100)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### `createTable()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to create',
+  },
+  {
+    name: 'data',
+    type: 'Record<string, unknown>[] | TableLike',
+    description: 'Initial data for the table',
+  },
+  {
+    name: 'options',
+    type: 'Partial<CreateTableOptions>',
+    isOptional: true,
+    description: 'Additional table creation options',
+  },
+]}
+/>
+
+### `upsert()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to upsert vectors into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
+]}
+/>
+
+### `query()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to query',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include the vector in the result',
+  },
+  {
+    name: 'columns',
+    type: 'string[]',
+    isOptional: true,
+    defaultValue: '[]',
+    description: 'Specific columns to include in the result',
+  },
+  {
+    name: 'includeAllColumns',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include all columns in the result',
+  },
+]}
+/>
+
+### `listTables()`
+
+Returns an array of table names as strings.
+
+```typescript
+const tables = await vectorStore.listTables()
+// ['my_vectors', 'embeddings', 'documents']
+```
+
+### `getTableSchema()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to describe',
+  },
+]}
+/>
+
+Returns the schema of the specified table.
+
+### `deleteTable()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    description: 'Name of the table to delete',
+  },
+]}
+/>
+
+### `deleteAllTables()`
+
+Deletes all tables in the database.
+
+### `listIndexes()`
+
+Returns an array of index names as strings.
+
+### `describeIndex()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to describe',
+  },
+]}
+/>
+
+Returns information about the index:
+
+```typescript
+interface IndexStats {
+  dimension: number
+  count: number
+  metric: 'cosine' | 'euclidean' | 'dotproduct'
+}
+```
+
+### `getIndexCoverage()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    isOptional: true,
+    description: 'Table to inspect. Defaults to `indexName` when omitted.',
+  },
+  {
+    name: 'indexName',
+    type: 'string',
+    isOptional: true,
+    description: 'Used as the table name when `tableName` is omitted, matching `upsert()` and `query()`.',
+  },
+]}
+/>
+
+Returns one entry per index on the table:
+
+```typescript
+interface LanceIndexCoverage {
+  indexName: string
+  indexType: string
+  columns: string[]
+  numIndexedRows: number
+  numUnindexedRows: number
+}
+```
+
+### `optimize()`
+
+Runs LanceDB table maintenance. It compacts data files, adds rows written since the index was built to the existing index, and removes old table versions. Mastra never calls it automatically. Concurrent calls for the same table in one process share a single run.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    isOptional: true,
+    description: 'Table to optimize. Defaults to `indexName` when omitted.',
+  },
+  {
+    name: 'indexName',
+    type: 'string',
+    isOptional: true,
+    description: 'Used as the table name when `tableName` is omitted.',
+  },
+  {
+    name: 'cleanupOlderThan',
+    type: 'Date',
+    isOptional: true,
+    description:
+      'Remove table versions older than this date. When omitted, LanceDB keeps versions from the last 7 days.',
+  },
+  {
+    name: 'deleteUnverified',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Also delete unverified files newer than 7 days. Only set this when no other process writes to the table, or the table can be corrupted.',
+  },
+]}
+/>
+
+Returns LanceDB `OptimizeStats` (compaction and pruning counts).
+
+#### When to optimize
+
+`upsert()` writes rows outside the existing vector index. `query()` still returns those rows by scanning them without the index, so results stay complete, but queries get slower as unindexed rows grow. LanceDB's `fastSearch()` skips unindexed rows entirely.
+
+`optimize()` adds new rows to the existing index without retraining it. If your data distribution has changed a lot, rebuild the index with `deleteIndex()` and `createIndex()` instead.
+
+LanceDB suggests optimizing after roughly 100,000 modified rows or 20 write operations. Use `getIndexCoverage()` to build your own policy:
+
+```typescript
+const [coverage] = await store.getIndexCoverage({ indexName: 'docs' })
+const total = coverage.numIndexedRows + coverage.numUnindexedRows
+
+if (coverage.numUnindexedRows >= 1_000 && coverage.numUnindexedRows / total >= 0.1) {
+  await store.optimize({ indexName: 'docs' })
+}
+```
+
+Managed LanceDB Cloud and Enterprise maintain tables automatically, so you don't need to call `optimize()` there.
+
+### `deleteIndex()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to delete',
+  },
+]}
+/>
+
+### `updateVector()`
+
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the vector to update (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
+  },
+  {
+    name: 'update',
+    type: '{ vector?: number[]; metadata?: Record<string, any>; }',
+    description: 'Object containing the vector and/or metadata to update',
+  },
+]}
+/>
+
+### `deleteVector()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector to delete',
+  },
+]}
+/>
+
+### `deleteVectors()`
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vectors to delete',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+  },
+]}
+/>
+
+### `close()`
+
+Closes the database connection.
+
+## Response types
+
+Query results are returned in this format:
+
+```typescript
+interface QueryResult {
+  id: string
+  score: number
+  metadata: Record<string, any>
+  vector?: number[] // Only included if includeVector is true
+  document?: string // Document text if available
+}
+```
+
+## Error handling
+
+The store throws typed errors that can be caught:
+
+```typescript
+try {
+  await store.query({
+    tableName: 'my_vectors',
+    queryVector: queryVector,
+  })
+} catch (error) {
+  if (error instanceof Error) {
+    console.log(error.message)
+  }
+}
+```
+
+## Best practices
+
+- Use the appropriate index type for your use case:
+  - HNSW for better recall and performance when memory isn't constrained
+  - IVF for better memory efficiency with large datasets
+- For optimal performance with large datasets, consider adjusting `numPartitions` and `numSubVectors` values
+- Use `close()` method to properly close connections when done with the database
+- Store metadata with a consistent schema to simplify filtering operations
+
+## Related
+
+- [Metadata Filters](/reference/rag/metadata-filters)

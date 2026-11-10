@@ -131,7 +131,7 @@ describe('custom API routes with FGA', () => {
             await next();
           },
         ],
-        apiRoutes: [{ method: 'POST', path: '/funds/:id/upload', handler, ...(useResolver ? {} : { fga: config }) }],
+        apiRoutes: [{ method: 'POST', path: '/funds/upload', handler, ...(useResolver ? {} : { fga: config }) }],
       },
     });
     const app = new Hono();
@@ -139,7 +139,7 @@ describe('custom API routes with FGA', () => {
     const body = new FormData();
     body.set('id', 'body-id');
     body.set('file', new File(['upload contents'], 'upload.txt'));
-    const response = await app.request('http://localhost/funds/path-id/upload?id=query-id', { method: 'POST', body });
+    const response = await app.request('http://localhost/funds/upload?id=query-id', { method: 'POST', body });
     expect(response.status).toBe(allowed ? 200 : 403);
     expect(check).toHaveBeenCalledWith(
       { id: 'user-1' },

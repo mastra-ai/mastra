@@ -409,7 +409,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
           return;
         case 'span_ended':
           this.annotateAndFinishSpan(span);
-          return;
+          break;
       }
     } catch (error) {
       this.logger.error('Datadog bridge error', {

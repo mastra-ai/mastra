@@ -1,14 +1,22 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { hashKey, useQueryClient } from '@tanstack/react-query';
+import type { QueryKey } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
-import { queryKeys } from '../../../../api/keys';
-import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
+import { cardMoveMutationKey, queryKeys } from '../../../../api/keys';
+import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { streamFeedEvents } from '../services/feedEvents';
 import { RequestError } from '../services/request';
 
 const RETRY_MS = 3_000;
+/** Frames this close together refresh the board once. */
+const BOARD_REFRESH_SETTLE_MS = 300;
+/** Cards move on their own (rules, runs, ingestion, other tabs): without the stream only this poll shows it, and frames refresh a busy board no faster. */
+const BOARD_FALLBACK_POLL_MS = 5_000;
+/** While frames refresh the board, a poll only bounds how long a write that never announced itself stays hidden. */
+const FEED_SAFETY_POLL_MS = 60_000;
 
 const FeedEventsContext = createContext(false);
 
@@ -27,7 +35,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   const queryClient = useQueryClient();
   // A hidden tab must not hold a stream: browsers cap HTTP/1.1 at 6 connections
   // per host, so a few background tabs starve every other request to the app.
-  const visible = useDocumentVisible();
+  // A quick tab switch keeps the stream; only a tab left hidden releases it.
+  const visible = useRecentlyVisible();
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -35,9 +44,53 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
 
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
-
-    const refreshAttention = () =>
-      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
+    let settling: ReturnType<typeof setTimeout> | undefined;
+    let lastRefreshAt = Number.NEGATIVE_INFINITY;
+    let streaming = false;
+    const setStreaming = (open: boolean) => {
+      streaming = open;
+      setConnected(open);
+    };
+    const cardsKey = queryKeys.workItems(factoryProjectId);
+    const boardKeys = [
+      cardsKey,
+      queryKeys.factoryDecisionsRoot(factoryProjectId),
+      queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
+    ];
+    // One read per query at a time, with at most one more queued behind it: a frame cancelling a slow
+    // read for the next would starve a busy board, and a read that never ends holds up only its own query.
+    const reading = new Map<string, { again: boolean }>();
+    const reread = (queryKey: QueryKey) => {
+      // A card read taken mid-move puts the card back in the column it is leaving; the move re-reads the cards when it lands.
+      if (queryKey === cardsKey && queryClient.isMutating({ mutationKey: cardMoveMutationKey(factoryProjectId) }) > 0) {
+        return;
+      }
+      const hash = hashKey(queryKey);
+      const inFlight = reading.get(hash);
+      if (inFlight) {
+        inFlight.again = true;
+        return;
+      }
+      const read = { again: false };
+      reading.set(hash, read);
+      void queryClient.invalidateQueries({ queryKey }).finally(() => {
+        reading.delete(hash);
+        if (read.again && !abort.signal.aborted) reread(queryKey);
+      });
+    };
+    const refreshBoard = () => {
+      if (settling) return;
+      const wait = Math.max(BOARD_REFRESH_SETTLE_MS, lastRefreshAt + BOARD_FALLBACK_POLL_MS - Date.now());
+      settling = setTimeout(() => {
+        settling = undefined;
+        lastRefreshAt = Date.now();
+        for (const queryKey of boardKeys) reread(queryKey);
+      }, wait);
+    };
+    // The only poll for cards and decisions: it takes a frame's path, so it never reads cards mid-move either.
+    const poll = setInterval(() => {
+      if (!streaming || Date.now() - lastRefreshAt >= FEED_SAFETY_POLL_MS) refreshBoard();
+    }, BOARD_FALLBACK_POLL_MS);
 
     const connect = () => {
       streamFeedEvents(
@@ -45,18 +98,16 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         factoryProjectId,
         {
           onEvent: ({ workItemId }) => {
-            // Card counts stay on the board's own 5s poll: a fetch per event
-            // would double its load to save under 5s of badge latency.
+            refreshBoard();
             if (workItemId) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             }
-            refreshAttention();
           },
           onConnected: () => {
-            setConnected(true);
+            setStreaming(true);
             // Whatever landed while this tab held no stream was never announced.
+            refreshBoard();
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
-            refreshAttention();
           },
         },
         abort.signal,
@@ -65,7 +116,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         .catch((error: unknown) => error instanceof RequestError && error.status >= 400 && error.status < 500)
         .then(fatal => {
           if (abort.signal.aborted) return;
-          setConnected(false);
+          setStreaming(false);
           // An expired session or a deleted project never heals by retrying;
           // the fallback poll carries the feed from here.
           if (!fatal) retry = setTimeout(connect, RETRY_MS);
@@ -75,7 +126,9 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
 
     return () => {
       abort.abort();
-      if (retry) clearTimeout(retry);
+      clearTimeout(retry);
+      clearTimeout(settling);
+      clearInterval(poll);
       setConnected(false);
     };
   }, [baseUrl, factoryProjectId, queryClient, visible]);

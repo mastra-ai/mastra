@@ -1,13 +1,30 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpDown, Funnel, LayersPlus } from 'lucide-react';
+import {
+  ArrowDownWideNarrow,
+  ArrowUpDown,
+  ArrowUpNarrowWide,
+  Funnel,
+  History,
+  LayersPlus,
+  UserRoundPen,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { boardFiltersActive, withBoardFilterValues } from '../boardFilters';
+import type { BoardSort } from '../boardOrder';
 import { BOARD_SORT_LABELS, boardSortOptions, DEFAULT_BOARD_SORT } from '../boardSort';
 import type { BoardView } from '../hooks/useBoardView';
 import { BoardFilterSubmenu } from './BoardFilterSubmenu';
 import { boardFilterSummary } from './boardFilterFields';
 import type { BoardFilterField } from './boardFilterFields';
+
+const SORT_ICONS: Record<BoardSort, LucideIcon> = {
+  recent: History,
+  'recent-mine': UserRoundPen,
+  'created-newest': ArrowDownWideNarrow,
+  'created-oldest': ArrowUpNarrowWide,
+};
 
 export function BoardPropertiesMenu({
   view,
@@ -38,7 +55,10 @@ export function BoardPropertiesMenu({
       <DropdownMenu.RadioSub
         label="Sort"
         icon={<ArrowUpDown aria-hidden />}
-        options={boardSortOptions(currentUserId)}
+        options={boardSortOptions(currentUserId).map(option => {
+          const Icon = SORT_ICONS[option.value];
+          return { ...option, icon: <Icon aria-hidden /> };
+        })}
         value={view.sort}
         onValueChange={view.setSort}
       />

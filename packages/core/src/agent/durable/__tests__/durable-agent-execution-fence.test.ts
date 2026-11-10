@@ -21,6 +21,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
+import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
@@ -51,6 +52,7 @@ import {
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
+import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -444,7 +446,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         model: model.model as LanguageModelV2,
         memory,
       });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
+      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {
@@ -660,9 +663,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The original caller keeps reading: it follows the run across the takeover.
         const startedStream = collect(started.fullStream);
         const events: Array<{ type: string; generation?: number }> = [];
-        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+        // A frame reaches the transport only after it is in the run log, so a reader
+        // that attaches after stream() started reads the log (which is what replay
+        // from an offset does) instead of racing the live publish of frame 0.
+        await (agentA.pubsub as unknown as CachingPubSub).subscribeWithReplay(AGENT_STREAM_TOPIC(runId), event => {
           events.push({
-            type: event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type,
+            type: event.type === 'chunk' ? `chunk:${(event.data as any)?.type}` : event.type,
             generation: event.generation,
           });
         });
@@ -672,7 +678,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
         expect(originalGeneration).toEqual(expect.any(Number));
         // The original execution's events so far carry its claim.
-        expect(events.length).toBeGreaterThan(0);
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
         expect(events.every(event => event.generation === originalGeneration)).toBe(true);
 
         // ---- This process forgets it drives the run, as a restarted process would, and takes it over.
@@ -802,15 +808,10 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const next = gatedModel('recovered answer');
       next.release();
       const agentB = buildAgent({ model: next.model, storage, memory });
-      if (backend === 'lease') {
-        // A pubsub lease leaves no record of the released run, so its thread
-        // lease marks it live until that lapses once the process exits.
-        const refusal = await agentB.recover(runId).catch(error => error);
-        const refusedBy = Date.now();
-        expect(refusal).toMatchObject({ id: RUN_ACTIVE_ERROR_ID, details: { runId, liveBy: 'thread-lease' } });
-        expect(refusal.details.retryAt).toBeLessThanOrEqual(refusedBy + agentThreadStreamRuntime.threadLeaseTtlMs);
-        vi.spyOn(agentThreadStreamRuntime, 'isRunHoldingThreadLease').mockResolvedValue(false);
-      }
+      // Shutdown released the run's thread lease too, so it no longer marks the run live.
+      expect(await agentThreadStreamRuntime.isRunHoldingThreadLease(durableAgent.pubsub, runId, THREAD, RESOURCE)).toBe(
+        false,
+      );
       const recovered = await agentB.recover(runId);
       const chunks = await drain(recovered.fullStream);
       expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
@@ -980,6 +981,31 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
       expect(await foreign.owner(durableAgent.id, runId)).toBeUndefined();
       next.release();
+    });
+
+    describe.each(['default', 'evented'] as const)('%s custom run IDs', engine => {
+      it.each(['stream', 'generate'] as const)(
+        '%s accepts custom run IDs containing the former lease delimiter',
+        async method => {
+          const storage = createStorage(backend);
+          const model = gatedModel('Custom run completed.');
+          model.release();
+          const agent = new Agent({
+            id: 'custom-run-id-agent',
+            name: 'Custom run ID agent',
+            instructions: 'Answer the request.',
+            model: model.model as LanguageModelV2,
+          });
+          const durableAgent =
+            engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+          new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
+
+          const result = await durableAgent[method]('hello', { runId: 'custom\u0000retake\u000042' });
+          expect(await ('output' in result ? result.output.text : result.text)).toBe('Custom run completed.');
+          expect(model.calls()).toBe(1);
+          if ('cleanup' in result) result.cleanup();
+        },
+      );
     });
 
     it('stream({ runId }) rejects with CONFLICT while another execution holds the run', async () => {
@@ -1838,7 +1864,14 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     const workflows = storage.stores.workflows!;
     let segment = 0;
     const writes: Array<{ segment: number; workflowName: string; runId: string; fence: unknown }> = [];
-    for (const method of ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState'] as const) {
+    for (const method of [
+      'persistWorkflowSnapshot',
+      'updateWorkflowResults',
+      'updateWorkflowState',
+      'appendWorkflowRunEntries',
+      'writeWorkflowRunCheckpoint',
+      'updateWorkflowRunHeader',
+    ] as const) {
       const write = workflows[method].bind(workflows) as (args: any) => Promise<any>;
       vi.spyOn(workflows, method).mockImplementation(async (args: any) => {
         writes.push({

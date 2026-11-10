@@ -68,7 +68,7 @@ export function observeSessionThreadTitle(
           .getById({ threadId: event.threadId })
           .then(thread => project(event.threadId, thread?.title))
           .catch(error => console.warn('[Factory thread-title mirror] Unable to read the bound thread.', error));
-        return;
+        return undefined;
       }
     }
   });

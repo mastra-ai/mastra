@@ -8,11 +8,11 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 const memory = new Memory({
   storage: new LibSQLStore({
     id: 'learning-memory-storage',
-    url: 'file:../../memory.db',
+    url: process.env.MASTRA_DB_URL!,
   }),
   vector: new LibSQLVector({
     id: 'learning-memory-vector',
-    url: 'file:../../memory.db',
+    url: process.env.MASTRA_VECTOR_DB_URL!,
   }),
   embedder: 'openai/text-embedding-3-small',
   options: {

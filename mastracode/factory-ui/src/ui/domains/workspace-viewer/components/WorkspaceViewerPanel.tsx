@@ -6,8 +6,8 @@ import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelSize } from '../layout';
 import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
 import type { WorkItem } from '../../factory/services/workItems';
+import type { RepositoryProviders } from './changes/tree/change-tree';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
-import type { RepositoryProviders } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 import { WorkspaceOverview } from './WorkspaceOverview';
@@ -17,6 +17,8 @@ interface WorkspaceViewerPanelProps {
   workspacePath: string;
   onSizeChange?: (size: WorkspacePanelSize) => void;
   visible?: boolean;
+  /** False keeps the overview from reading changes, which would wake an idle sandbox. */
+  readsChanges?: boolean;
   workItem?: WorkItem;
   factoryProjectId?: string;
   /** The Factory session this workspace belongs to; enables session actions such as recreating the sandbox. */
@@ -34,6 +36,7 @@ export function WorkspaceViewerPanel({
   workspacePath,
   onSizeChange,
   visible = true,
+  readsChanges = true,
   workItem,
   factoryProjectId,
   sessionId,
@@ -44,7 +47,7 @@ export function WorkspaceViewerPanel({
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
-  const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
+  const changes = useWorkspaceChanges(workspacePath, { enabled: visible && readsChanges });
   const factory = useFactoryQuery(factoryProjectId);
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
@@ -79,12 +82,7 @@ export function WorkspaceViewerPanel({
       <WorkspaceChangesPanel
         workspacePath={workspacePath}
         visible={visible}
-        changes={changes.data}
         repositoryProviders={repositoryProviders}
-        isLoading={changes.isLoading}
-        isRefreshing={changes.isFetching}
-        error={changes.error ?? undefined}
-        onRefresh={() => changes.refetch()}
         onBack={showOverview}
       />
     );

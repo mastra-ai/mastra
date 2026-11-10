@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { dirname, isAbsolute, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { IMastraLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@internal/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
@@ -49,7 +49,11 @@ function typescriptSourcesResolver(entryFile: string): Plugin {
         return null;
       }
 
-      const resolved = await resolve.call(this, id, importer, options);
+      // node-resolve passes each result back through `this.resolve`, and the commonjs plugin's resolveId loads every
+      // `.js` result to check whether it is CommonJS. With the live context that loads and transforms every installed
+      // package reachable from a surviving import, recursively, though all of them end up external.
+      const context = Object.create(this, { resolve: { value: async () => null } });
+      const resolved = await resolve.call(context, id, importer, options);
       if (!resolved || typeof resolved !== 'object' || resolved.external) {
         return null;
       }
@@ -130,6 +134,9 @@ export async function extractMastraOption<T extends keyof MastraConfig>(
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    // Chunks are written outside any package with "type": "module", so a `.js` chunk would be loaded as CommonJS
+    // (#28491). The hash keeps them distinct from the main bundle's chunks in `.mastra/output`.
+    chunkFileNames: '[name]-[hash].mjs',
   });
 
   if (result.hasCustomConfig) {

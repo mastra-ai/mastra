@@ -89,7 +89,7 @@ await observability.createFeedback({
 })
 ```
 
-The HTTP and client SDK create route accepts `CreateFeedbackBody` and sets `timestamp` server-side. It generates `feedbackId` when omitted:
+The HTTP and client SDK create route accepts `CreateFeedbackBody`, which requires a nonblank `feedback.traceId` and allows an optional `spanId`. The client supplies a missing `feedbackId` and ISO `timestamp` before retries. Direct OSS HTTP calls can omit them for server defaults. An optional top-level `contextMode` selects supplied context or stored-span resolution. OSS defaults to `"provided"`. Platform defaults to `"resolve"`. See [signal write options](/reference/client-js/observability#signal-write-options):
 
 ```typescript
 await mastraClient.createFeedback({
@@ -102,6 +102,8 @@ await mastraClient.createFeedback({
   },
 })
 ```
+
+For OSS HTTP requests, the authenticated user's ID takes precedence as `feedbackUserId`. Without an authenticated user, supply `feedbackUserId` explicitly or leave it null for anonymous feedback. `userId` describes the span user and isn't used as the HTTP feedback author. Direct storage calls retain the deprecated `userId` author alias when `feedbackUserId` is omitted. An explicit null author stays null.
 
 ### `batchCreateFeedback(args)`
 

@@ -681,6 +681,53 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(before.stderr).toBe('');
     expect(after.stderr).toBe('');
   }, 30_000);
+
+  it('still sees a live peer when the sender is busy for a moment right after asking', async () => {
+    // Presence is a fresh discovery probe with a 100 ms window. Peers answer in a few ms, but a
+    // sender whose event loop was busy past the window (a long tool result, a big parse) closed
+    // the window before reading any answer, so every saved peer read as absent and
+    // `agent_signal_send` refused with "saved peer is not currently advertised".
+    const owner = startChild('owner', resourceId, 'busy-presence');
+    await owner.waitFor('thread-owned');
+    const sender = startChild('sender', resourceId, 'busy-presence');
+    await sender.waitFor('ready');
+
+    const probe = async (threadId: string, busyMs: number) => {
+      const seen = sender.events.filter(event => event.event === 'probed').length;
+      sender.child.stdin.write(`probe ${threadId} ${busyMs}\n`);
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const probed = sender.events.filter(event => event.event === 'probed');
+        if (probed.length > seen) return probed[seen]!;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      throw new Error(`No probe result. Events: ${JSON.stringify(sender.events)}. stderr: ${sender.stderr}`);
+    };
+
+    const busyLive = await probe('owner-thread', 250);
+    const idleLive = await probe('owner-thread', 0);
+    const idleAbsent = await probe('nobody-thread', 0);
+    const busyAbsent = await probe('nobody-thread', 250);
+
+    expect(busyLive).toMatchObject({ presence: 'advertised', canAttemptSend: true });
+    expect(idleLive).toMatchObject({ presence: 'advertised', canAttemptSend: true });
+    // A thread nobody owns is still reported absent promptly: about one window on an idle
+    // sender, and about one window after a busy sender is free again.
+    expect(idleAbsent).toMatchObject({ presence: 'absent', canAttemptSend: false });
+    expect(busyAbsent).toMatchObject({ presence: 'absent', canAttemptSend: false });
+    expect(idleAbsent.elapsedMs).toBeLessThan(1_000);
+    expect(busyAbsent.elapsedMs).toBeLessThan(1_500);
+
+    sender.child.stdin.write('close\n');
+    sender.child.stdin.end();
+    owner.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(senderCode).toBe(0);
+  }, 30_000);
 });
 
 describe.skipIf(process.platform === 'win32')('cross-project agent signals over a shared discovery scope', () => {

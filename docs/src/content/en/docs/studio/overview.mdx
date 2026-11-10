@@ -40,6 +40,8 @@ When you're ready to share Studio with your team, you can deploy it to productio
 
 Chat with your agent directly, switch [models](/models), and tweak settings like temperature and top-p to understand how they affect the output.
 
+Model pickers show newer releases first within each provider when the catalog includes release dates. Models with the same release date, or without a release date, use alphabetical order. Models without dates appear after dated models.
+
 When you interact with your agent, you can follow its reasoning and view tool call outputs. You can also [observe](#observability) traces and logs to see how responses are generated.
 
 For a markdown table in a response, select **Copy table as markdown** above the table to copy it without the surrounding message. The copied table preserves markdown formatting and includes any link and footnote definitions it uses. To download the table as CSV, open the arrow beside the copy button and select **Download CSV**. Both actions become available once the text segment containing the table finishes streaming and displaying. The agent may still be running tools or writing later segments.
@@ -47,6 +49,8 @@ For a markdown table in a response, select **Copy table as markdown** above the 
 CSV exports contain plain cell text, including link labels rather than URLs. Footnote markers are preserved, but their definitions aren't included in the CSV. Values that could be interpreted as spreadsheet formulas receive a leading apostrophe so spreadsheet apps treat them as text. Ordinary signed numbers are preserved.
 
 You can also attach [scorers](#scorers) to measure and compare response quality over time.
+
+To ask about part of a response, select the text in the message and choose **Add to chat**, or press Tab to reach it from the keyboard. Each passage you add gets a numbered comment bubble in the chat, and the message box counts them, for example **2 annotations**. Select a bubble to write a comment on that passage or remove it, or open the count to find a passage in the chat. When you send, the agent receives a numbered list of the passages, each quoted with its comment, ahead of what you type. You can also send the annotations without typing anything. A selection that spans two messages doesn't offer **Add to chat**.
 
 You can send a follow-up message in the same thread during an agent response stream. Studio shows the message as pending until the stream confirms it, then continues the response below that follow-up. Other Studio tabs that have the same thread open can observe the active stream.
 
@@ -58,7 +62,7 @@ Use [Agent Builder](https://agent-builder.mastra.ai) to create and manage fully 
 
 Open an agent's **Models** panel to view its primary model and fallback models in priority order. For static model lists, you can reorder models, enable or disable fallbacks, and change the provider or model. The panel stays synchronized when Studio refetches the agent.
 
-These edits change the running server's in-memory agent and are lost when the server restarts. Persistent model-list editing is tracked in [GitHub issue #27089](https://github.com/mastra-ai/mastra/issues/27089).
+When the agent sets `editor: { model: true }`, these edits are saved through [Editor](/docs/studio/editor#decide-what-collaborators-can-edit). This requires a configured `MastraEditor` and agent storage; without either, saving fails with HTTP 500. Otherwise they change the running server's in-memory agent and are lost when the server restarts. Persistent editing for other agents is tracked in [GitHub issue #27089](https://github.com/mastra-ai/mastra/issues/27089).
 
 Function-valued model lists can vary by request context, so Studio displays them as read-only. Change a dynamic model list in code instead.
 

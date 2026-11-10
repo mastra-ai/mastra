@@ -6,14 +6,14 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  TRACES_LIST_DELTA_HORIZON_MS,
-  TRACES_LIST_DELTA_POLL_INTERVAL_MS,
-  TRACES_LIST_REFETCH_INTERVAL_MS,
-  useTracesListSource,
-} from '../use-traces-list-source';
+import { useTracesListSource } from '../use-traces-list-source';
 import { freshTrace, lastTraceQueryPage, traceQueryDeltaBatch } from './fixtures/trace-query';
 import { lastLegacyTracePage } from './fixtures/trace-query-legacy';
+import {
+  OBSERVABILITY_LIST_HORIZON_MS,
+  OBSERVABILITY_LIST_POLL_INTERVAL_MS,
+  OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
+} from '@/domains/observability/list-polling';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -84,20 +84,23 @@ describe('useTracesListSource', () => {
   });
 
   describe('when auto refresh is enabled', () => {
-    it('advances the time window and stops requests when paused', async () => {
+    it('advances the time window and stops requests when turned off', async () => {
       const requests = handlers();
-      const { result } = renderHook(() => useTracesListSource({ query }), { wrapper: Wrapper });
+      const { result, rerender } = renderHook(({ autoRefetch }) => useTracesListSource({ query, autoRefetch }), {
+        wrapper: Wrapper,
+        initialProps: { autoRefetch: true },
+      });
       await waitFor(() => expect(result.current.rows).toHaveLength(1));
-      act(() => result.current.setAutoRefetch(false));
+      rerender({ autoRefetch: false });
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
-      act(() => result.current.setAutoRefetch(true));
+      rerender({ autoRefetch: true });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10_000);
       });
       expect(requests.post).toHaveBeenCalledTimes(2);
       const [[firstBody], [secondBody]] = requests.post.mock.calls;
       expect(secondBody.timeRange.to).not.toBe(firstBody.timeRange.to);
-      act(() => result.current.setAutoRefetch(false));
+      rerender({ autoRefetch: false });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(20_000);
       });
@@ -115,12 +118,15 @@ describe('useTracesListSource', () => {
   describe('when a rolling tick returns the same data', () => {
     it('keeps the rows reference', async () => {
       const requests = handlers();
-      const { result } = renderHook(() => useTracesListSource({ query }), { wrapper: Wrapper });
+      const { result, rerender } = renderHook(({ autoRefetch }) => useTracesListSource({ query, autoRefetch }), {
+        wrapper: Wrapper,
+        initialProps: { autoRefetch: true },
+      });
       await waitFor(() => expect(result.current.rows).toHaveLength(1));
       const rowsBefore = result.current.rows;
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
-      act(() => result.current.setAutoRefetch(false));
-      act(() => result.current.setAutoRefetch(true));
+      rerender({ autoRefetch: false });
+      rerender({ autoRefetch: true });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10_000);
       });
@@ -132,7 +138,7 @@ describe('useTracesListSource', () => {
   describe('when automatic refresh starts disabled', () => {
     it.each([true, false])('does not poll or refetch on focus with rolling=%s', async rolling => {
       const requests = handlers();
-      const { result } = renderHook(() => useTracesListSource({ query, rolling, initialAutoRefetch: false }), {
+      const { result } = renderHook(() => useTracesListSource({ query, rolling, autoRefetch: false }), {
         wrapper: Wrapper,
       });
       await waitFor(() => expect(result.current.rows).toHaveLength(1));
@@ -215,7 +221,7 @@ describe('useTracesListSource', () => {
 
     const nextTick = () =>
       act(async () => {
-        await vi.advanceTimersByTimeAsync(TRACES_LIST_DELTA_POLL_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_POLL_INTERVAL_MS);
       });
 
     const refocus = () =>
@@ -253,7 +259,7 @@ describe('useTracesListSource', () => {
       const ranges = [...requests.listRequests, ...requests.deltaRequests].map(body => body.timeRange);
       expect(new Set(ranges.map(range => JSON.stringify(range))).size).toBe(1);
       for (const range of ranges) {
-        expect(Date.parse(range.to)).toBeGreaterThan(mountedAt + TRACES_LIST_DELTA_POLL_INTERVAL_MS * 2);
+        expect(Date.parse(range.to)).toBeGreaterThan(mountedAt + OBSERVABILITY_LIST_POLL_INTERVAL_MS * 2);
       }
     });
 
@@ -269,13 +275,16 @@ describe('useTracesListSource', () => {
       expect(requests.listRequests).toHaveLength(1);
     });
 
-    it('stops polling and ignores focus once auto refresh is paused', async () => {
+    it('stops polling and ignores focus once auto refresh is turned off', async () => {
       const requests = deltaHandlers();
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
-      const { result } = renderHook(() => useTracesListSource({ query, withDeltaPolling: true }), { wrapper: Wrapper });
+      const { rerender } = renderHook(
+        ({ autoRefetch }) => useTracesListSource({ query, withDeltaPolling: true, autoRefetch }),
+        { wrapper: Wrapper, initialProps: { autoRefetch: true } },
+      );
       await waitFor(() => expect(requests.deltaRequests).toHaveLength(1));
 
-      act(() => result.current.setAutoRefetch(false));
+      rerender({ autoRefetch: false });
       await nextTick();
       await nextTick();
       await refocus();
@@ -326,7 +335,7 @@ describe('useTracesListSource', () => {
           await waitFor(() => expect(result.current.error).toBeTruthy());
 
           await act(async () => {
-            await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS);
+            await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS);
           });
 
           await waitFor(() => expect(result.current.rows.map(row => row.spanId)).toEqual(['span-b']));
@@ -343,12 +352,12 @@ describe('useTracesListSource', () => {
         });
         await waitFor(() => expect(result.current.error).toBeTruthy());
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS);
+          await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS);
         });
         await waitFor(() => expect(result.current.rows).toHaveLength(1));
 
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3);
+          await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3);
         });
 
         expect(requests.listRequests).toHaveLength(2);
@@ -363,7 +372,7 @@ describe('useTracesListSource', () => {
         await waitFor(() => expect(result.current.error).toBeTruthy());
 
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3);
+          await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3);
         });
 
         expect(requests.listRequests).toHaveLength(1);
@@ -393,7 +402,7 @@ describe('useTracesListSource', () => {
 
         await waitFor(() => expect(requests.deltaRequests).toHaveLength(2));
         await waitFor(() => expect(requests.listRequests).toHaveLength(2));
-        const horizon = (at: Date) => new Date(at.getTime() + TRACES_LIST_DELTA_HORIZON_MS).toISOString();
+        const horizon = (at: Date) => new Date(at.getTime() + OBSERVABILITY_LIST_HORIZON_MS).toISOString();
         expect(requests.listRequests.map(body => body.timeRange.to)).toEqual([horizon(mountedAt), horizon(changedAt)]);
         expect(requests.deltaRequests.map(body => [body.after, body.timeRange.to])).toEqual([
           [undefined, horizon(mountedAt)],

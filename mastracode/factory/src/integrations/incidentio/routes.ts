@@ -18,6 +18,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { Intake } from '../../capabilities/intake.js';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { IncidentioApiError } from './api.js';
@@ -28,11 +29,6 @@ type RouteContext = Context;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ITEM_REF_RE = /^incidentio:(?:follow-up|incident):[\w-]+$/;
 const FOLLOW_UP_PREFIX = 'incidentio:follow-up:';
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every incident.io feature gate, mirroring
@@ -72,7 +68,7 @@ export interface MountIncidentioRoutesOptions {
 /**
  * Narrow the caller's selected incident.io sources to the ones that feed this
  * Factory project. Routing is explicit: a source feeds this Factory only when
- * its binding names both the Factory project and a board. Mirrors the Jira
+ * it is bound to the Factory project. Mirrors the Jira
  * routes' scoping semantics — the generic binding storage is provider-neutral.
  * Shared with the agent tools, which enforce the same source-level
  * authorization before fetching item details.
@@ -87,15 +83,11 @@ export async function scopeSourceIdsToProject({
   orgId: string;
   factoryProjectId: string;
   selectedIds: string[];
-}): Promise<Record<string, string>> {
+}): Promise<string[]> {
   const selected = new Set(selectedIds);
-  const intakeBoards: Record<string, string> = {};
-  for (const binding of await intake.listBindings({ orgId, integrationId: 'incidentio' })) {
-    if (binding.factoryProjectId === factoryProjectId && binding.board && selected.has(binding.sourceId)) {
-      intakeBoards[binding.sourceId] = binding.board;
-    }
-  }
-  return intakeBoards;
+  return (await intake.listBindings({ orgId, integrationId: 'incidentio' }))
+    .filter(binding => binding.factoryProjectId === factoryProjectId && selected.has(binding.sourceId))
+    .map(binding => binding.sourceId);
 }
 
 /**
@@ -249,7 +241,7 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
         }
 
         const selectedIds = selection.sourceIds ?? [];
-        const intakeBoards = factoryProjectId
+        const boundSourceIds = factoryProjectId
           ? await scopeSourceIdsToProject({
               intake,
               orgId: resolved.tenant.orgId,
@@ -257,7 +249,7 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
               selectedIds,
             })
           : null;
-        const sourceIds = intakeBoards ? Object.keys(intakeBoards) : selectedIds;
+        const sourceIds = boundSourceIds ?? selectedIds;
         if (sourceIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
@@ -295,13 +287,12 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
               sourceId: item.sourceId || null,
             });
           }
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
+          if (factoryProjectId && boundSourceIds && options.ingestFactoryIssues) {
             await options.ingestFactoryIssues({
               orgId: resolved.tenant.orgId,
               userId: resolved.tenant.userId,
               factoryProjectId,
               issues: issuePayload,
-              intakeBoards,
             });
           }
           return c.json({ issues: issuePayload, nextCursor: page.nextCursor });
@@ -339,13 +330,13 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
             404,
           );
         }
-        const intakeBoards = await scopeSourceIdsToProject({
+        const boundSourceIds = await scopeSourceIdsToProject({
           intake,
           orgId: resolved.tenant.orgId,
           factoryProjectId,
           selectedIds: selection.sourceIds ?? [],
         });
-        if (Object.keys(intakeBoards).length === 0) return c.json({ error: 'issue_not_found' }, 404);
+        if (boundSourceIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
 
         try {
           // The item must resolve through a source routed to this Factory —
@@ -355,7 +346,7 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
             orgId: resolved.tenant.orgId,
             externalSource: { type: 'issue', externalId: issueRef },
           });
-          if (!dispatch || !dispatch.sourceId || !(dispatch.sourceId in intakeBoards)) {
+          if (!dispatch || !dispatch.sourceId || !boundSourceIds.includes(dispatch.sourceId)) {
             return c.json({ error: 'issue_not_found' }, 404);
           }
           const issue = await incidentio.intake.getIssue({

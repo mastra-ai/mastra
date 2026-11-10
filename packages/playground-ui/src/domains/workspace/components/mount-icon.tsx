@@ -21,6 +21,8 @@ export function MountIcon({ mount }: { mount: WorkspaceMount }) {
     case 'cloudflare-r2':
     case 'r2':
       return <Cloud className="text-badge-orange-indicator" />;
+    case 'neon':
+      return <Cloud className="text-badge-green-indicator" />;
     case 'minio':
       return <HardDrive className="text-badge-red-indicator" />;
     case 'database':

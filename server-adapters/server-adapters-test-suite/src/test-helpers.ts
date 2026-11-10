@@ -21,7 +21,7 @@ import { CompositeVoice } from '@mastra/core/voice';
 import type { Workflow } from '@mastra/core/workflows';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import { MCPServer } from '@mastra/mcp';
+import { defineEvent, MCPServer } from '@mastra/mcp';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { WorkflowRegistry } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -35,16 +35,15 @@ import {
   getRouteSpecificSchemaDefaults,
   normalizeRoutePath,
 } from './route-test-utils';
-if (process.env.VITEST) {
-  vi.mock('@mastra/core/vector');
 
-  vi.mock('zod', async importOriginal => {
-    const actual: {} = await importOriginal();
-    return {
-      ...actual,
-    };
-  });
-}
+vi.mock('@mastra/core/vector');
+
+vi.mock('zod', async importOriginal => {
+  const actual: {} = await importOriginal();
+  return {
+    ...actual,
+  };
+});
 
 const z: any = zod;
 
@@ -512,6 +511,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         html: '<html><body>Test</body></html>',
       },
     },
+    events: {
+      'ticket.created': defineEvent({
+        description: 'A ticket was created',
+        payloadSchema: z.object({ id: z.string() }),
+      }),
+    },
   });
 
   const mcpServer2 = new MCPServer({
@@ -678,6 +683,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         'thread-query',
         'thread-query-rows',
         'span-query',
+        'span-aggregate',
       ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
       vi.spyOn(observability, 'aggregateTraces').mockResolvedValue({ rows: [], truncated: false });
@@ -688,6 +694,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       vi.spyOn(observability, 'getTraceQueryValues').mockResolvedValue({ values: [], valuesTruncated: false });
       vi.spyOn(observability, 'queryThreads').mockResolvedValue({ threads: [], page: { next: null } });
       vi.spyOn(observability, 'querySpans').mockResolvedValue({ spans: [], page: { next: null } });
+      vi.spyOn(observability, 'aggregateSpans').mockResolvedValue({ rows: [], truncated: false });
       await observability.createSpan({
         span: {
           spanId: 'test-span',
@@ -1315,6 +1322,9 @@ export function parseDatesInResponse(data: any, schema?: any, currentPath: strin
   return data;
 }
 
+// Taken before any spy so repeated setups call the real registration, not an earlier spy
+const registerTemporaryWorkflows = WorkflowRegistry.registerTemporaryWorkflows.bind(WorkflowRegistry);
+
 async function setupWorkflowRegistryMocks(
   workflows: Record<string, Workflow<any, any, any, any, any, any, any, any>>,
   mastra: Mastra,
@@ -1331,23 +1341,12 @@ async function setupWorkflowRegistryMocks(
     await mockWorkflowRun(workflow);
   }
 
-  // Mock WorkflowRegistry.registerTemporaryWorkflows to attach Mastra to workflows
-  vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {
-    for (const [id, workflow] of Object.entries(workflows)) {
-      // Register Mastra instance with the workflow
-      if (mastra) {
-        workflow.__registerMastra(mastra);
-        workflow.__registerPrimitives({
-          logger: mastra.getLogger(),
-          storage: mastra.getStorage(),
-          agents: mastra.listAgents(),
-          tts: mastra.getTTS(),
-          vectors: mastra.listVectors(),
-        });
-      }
-      WorkflowRegistry['additionalWorkflows'][id] = workflow;
-    }
-  });
+  // Register the mocked workflows in place of the real agent-builder ones
+  vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(
+    (_workflows: Record<string, Workflow<any, any, any, any, any, any, any, any>>, requestMastra?: Mastra) => {
+      registerTemporaryWorkflows(workflows, requestMastra ?? mastra);
+    },
+  );
 }
 
 export function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {

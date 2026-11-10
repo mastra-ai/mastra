@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../boards/index.js';
-import { createTestBoard } from '../boards/test-utils.js';
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { createTestBoard, selfReviewWorkBoard } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
 async function seedFactoryWithRepository(options?: { defaultModelId?: string; modelScope?: 'factory' | 'user' }) {
@@ -54,7 +54,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string; mo
 function bindingInput(
   factoryProjectId: string,
   stages = ['triage'],
-  { role = 'triage', board }: { role?: string; board?: string } = {},
+  { role = 'triage', board, pullRequest = false }: { role?: string; board?: string; pullRequest?: boolean } = {},
 ): FactoryBindingPreparationInput {
   return {
     record: { id: 'decision-1', orgId: 'org-1', factoryProjectId },
@@ -64,14 +64,22 @@ function bindingInput(
       board: board ?? null,
       stages,
       sessions: [],
-      externalSource: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue' },
-      metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra' },
+      externalSource: { integrationId: 'github', type: pullRequest ? 'pull-request' : 'issue' },
+      metadata: { repository: 'mastra-ai/mastra' },
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: 'Broken login',
+        source: { integrationId: 'github', type: pullRequest ? 'pull-request' : 'issue', externalId: '49' },
+        metadata: { githubIssueNumber: 49 },
+      }),
     },
     role,
   } as unknown as FactoryBindingPreparationInput;
 }
 
 const boards = createBoardRegistry();
+/** Work as a project stored it while Work still had its `review` self-review phase. */
+const olderWork = new Map([['work', selfReviewWorkBoard]]);
 
 describe('prepareFactoryRuleBinding', () => {
   it("starts the run on the factory's default model", async () => {
@@ -164,7 +172,7 @@ describe('prepareFactoryRuleBinding', () => {
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(userId).toBe('user-1');
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
-      expect.objectContaining({ branch: 'factory/issue-49', baseBranch: 'main', userId: 'user-1' }),
+      expect.objectContaining({ branch: 'factory/issue-49-item1', baseBranch: 'main', userId: 'user-1' }),
     );
   });
 
@@ -283,6 +291,122 @@ describe('prepareFactoryRuleBinding', () => {
     ).resolves.toHaveLength(1);
   });
 
+  describe('on an issue card that carries pull requests', () => {
+    function withPullRequests(
+      input: FactoryBindingPreparationInput,
+      numbers: number[],
+      openPullRequestNumber?: number,
+    ) {
+      const [issue] = input.item.workItem.sources;
+      input.item.workItem.sources = [
+        issue!,
+        ...numbers.map((number, index) => ({
+          ...issue!,
+          id: `source-pr-${number}`,
+          sourceType: 'pull-request',
+          externalId: `pull-request:github:456:pull-request:${number}`,
+          state: 'open',
+          metadata: { githubPullRequestNumber: number, state: 'open' },
+          createdAt: new Date(index + 1),
+        })),
+      ];
+      if (openPullRequestNumber !== undefined) input.item.metadata = { ...input.item.metadata, openPullRequestNumber };
+      return input;
+    }
+
+    async function seatedBuilder() {
+      const setup = await seedFactoryWithRepository();
+      const builder = await setup.sourceControl.sessions.create({
+        sessionId: 'sess-builder',
+        projectRepositoryId: setup.projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'factory/issue-49-item1',
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+      return { ...setup, builder };
+    }
+
+    async function prepared(
+      setup: Awaited<ReturnType<typeof seatedBuilder>>,
+      input: FactoryBindingPreparationInput,
+      registry: typeof boards = boards,
+    ) {
+      const prepare = vi.fn(async () => ({}) as never);
+      await prepareFactoryRuleBinding(
+        setup.github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        setup.seeded.projects,
+        registry,
+        input,
+      );
+      const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+      return (await setup.sourceControl.sessions.getBySessionId(sessionId))!;
+    }
+
+    const seat = (sessionId: string, branch: string) => ({
+      sessionId,
+      branch,
+      threadId: `thread-${sessionId}`,
+      startedBy: 'user-1',
+    });
+
+    it("reviews the pull request on its own branch, never in the builder's session", async () => {
+      const setup = await seatedBuilder();
+      const input = withPullRequests(
+        bindingInput(setup.project.id, ['pr-review'], { role: 'review', board: 'work' }),
+        [34],
+      );
+      (input.item as { sessions: unknown }).sessions = {
+        work: seat(setup.builder.sessionId, setup.builder.branch),
+        // Self-review reviewed the builder's branch in this seat before the pull request arrived.
+        review: seat(setup.builder.sessionId, setup.builder.branch),
+      };
+
+      const session = await prepared(setup, input);
+
+      expect(session.sessionId).not.toBe(setup.builder.sessionId);
+      expect(session.branch).toBe('factory/pr-34-item1');
+    });
+
+    it("keeps self-review on the builder's branch in an older project's Work", async () => {
+      const setup = await seatedBuilder();
+      const input = withPullRequests(
+        bindingInput(setup.project.id, ['review'], { role: 'review', board: 'work' }),
+        [34],
+      );
+
+      const session = await prepared(setup, input, olderWork);
+
+      expect(session.branch).toBe('factory/issue-49-item1');
+    });
+
+    it('moves the reviewer to the next pull request when a second one is the open one', async () => {
+      const setup = await seatedBuilder();
+      const first = await setup.sourceControl.sessions.create({
+        sessionId: 'sess-review-34',
+        projectRepositoryId: setup.projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'factory/pr-34-item1',
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+      const input = withPullRequests(
+        bindingInput(setup.project.id, ['pr-review'], { role: 'review', board: 'work' }),
+        [34, 35],
+        35,
+      );
+      (input.item as { sessions: unknown }).sessions = { review: seat(first.sessionId, first.branch) };
+
+      const session = await prepared(setup, input);
+
+      expect(session.sessionId).not.toBe(first.sessionId);
+      expect(session.branch).toBe('factory/pr-35-item1');
+    });
+  });
+
   async function planOwnedSession(branch = 'factory/issue-49') {
     const setup = await seedFactoryWithRepository();
     const planSession = await setup.sourceControl.sessions.create({
@@ -338,7 +462,8 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
-      boards,
+      // An older project's Work self-review phase, the review seat right after Building.
+      olderWork,
       withPlanSession(bindingInput(project.id, ['review'], { role: 'review' })),
     );
 
@@ -677,7 +802,7 @@ describe('prepareFactoryRuleBinding', () => {
     ).resolves.toHaveLength(0);
   });
 
-  it("names the card's repository when it is linked but turned out of the environment", async () => {
+  it("names the card's repository when it is linked but not pre-cloned", async () => {
     const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
     await sourceControl.projectRepositories.update({
       orgId: 'org-1',
@@ -697,7 +822,7 @@ describe('prepareFactoryRuleBinding', () => {
     expect(error).toBeInstanceOf(FactoryDispatchError);
     expect(error).toMatchObject({ code: 'source_repository_missing' });
     expect(error.message).toBe(
-      "Repository mastra-ai/mastra is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.",
+      'Repository mastra-ai/mastra is linked but not pre-cloned for this Factory. Turn on Pre-clone under Settings → Repositories, then retry.',
     );
     expect(prepare).not.toHaveBeenCalled();
   });
@@ -728,16 +853,16 @@ describe('prepareFactoryRuleBinding', () => {
     const { seeded, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
 
-    // A rule-started review on a Review-board card still sitting in Intake enters
-    // Reviewing, exactly like a manual click on the same action would.
+    // A rule-started review on a pull request's card still sitting in Intake enters
+    // PR review, exactly like a manual click on the same action would.
     await prepareFactoryRuleBinding(
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
       boards,
-      bindingInput(project.id, ['intake'], { role: 'review', board: 'review' }),
+      bindingInput(project.id, ['intake'], { role: 'review', board: 'work', pullRequest: true }),
     );
-    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'review' }));
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'pr-review' }));
 
     // Each Work seat leaves Intake for the lane the board assigns it.
     for (const [role, lane] of [
@@ -800,6 +925,40 @@ describe('prepareFactoryRuleBinding', () => {
       bindingInput(project.id, ['shipping'], { role: 'release', board: 'release' }),
     );
     expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'shipping' }));
+  });
+
+  it('gives a board installed as work in place of the built-in one only the lanes it declares', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const replacement = createBoardRegistry({
+      boards: [
+        defineBoard({
+          id: 'work',
+          name: 'Work',
+          initialPhase: 'intake',
+          phases: {
+            intake: { kind: 'resting', name: 'Intake', nextPhases: ['fixing', 'done'] },
+            fixing: { kind: 'working', name: 'Fixing', runner: { context: 'work' }, nextPhases: ['done'] },
+            done: { kind: 'terminal', name: 'Done' },
+          },
+        }),
+      ],
+      includeDefaultBoards: false,
+    });
+    const start = (role: string) =>
+      prepareFactoryRuleBinding(
+        github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seeded.projects,
+        replacement,
+        bindingInput(project.id, ['intake'], { role }),
+      );
+
+    // No `execute` phase here, so the built-in Work lane does not apply.
+    await start('work');
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'fixing' }));
+    // Nor is there a Planning phase for the old `plan` role.
+    expect(await start('plan').catch(failure => failure)).toMatchObject({ code: 'unsupported_provider_item' });
   });
 
   it('rejects runs with no lane before creating a source-control session', async () => {

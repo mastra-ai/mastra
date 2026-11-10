@@ -174,8 +174,8 @@ const PARSED = { reply: 'hi', number: 7 };
 
 /**
  * The two ways the wrapped engines' structured-output chunks differ from
- * plain's (both COR-1390, both pre-existing): they emit `object-result` after
- * `step-finish` and `finish` rather than before them, and their `step-finish`
+ * plain's (COR-1390): they emit `object-result` after `step-finish` but before
+ * `finish` rather than before both, and their `step-finish`
  * payload does not carry the parsed object. Declaring both as the expectation
  * keeps every parsed value itself compared.
  */
@@ -185,11 +185,12 @@ function declareWrappedObjectChunks(plain: EngineObservation): EngineObservation
     turns: plain.turns.map(turn => {
       const objectIndex = turn.chunkTypes.indexOf('object-result');
       if (objectIndex < 0) return turn;
-      const move = <T>(list: T[]): T[] => [
-        ...list.slice(0, objectIndex),
-        ...list.slice(objectIndex + 1),
-        list[objectIndex]!,
-      ];
+      const move = <T>(list: T[]): T[] => {
+        const copy = [...list];
+        const [object] = copy.splice(objectIndex, 1);
+        copy.splice(turn.chunkTypes.filter(type => type !== 'object-result').indexOf('finish'), 0, object!);
+        return copy;
+      };
       const chunkTypes = move(turn.chunkTypes);
       const chunkPayloads = move(turn.chunkPayloads);
       const stepFinish = chunkTypes.indexOf('step-finish');
@@ -206,11 +207,13 @@ function declareWrappedObjectChunks(plain: EngineObservation): EngineObservation
 
 const DECLARE_OBJECT_CHUNKS = {
   durable: {
-    reason: 'COR-1390: wrapped engines emit object-result last and omit the parsed object from step-finish',
+    reason:
+      'COR-1390: wrapped engines emit object-result after step-finish but before finish and omit the parsed object from step-finish',
     expect: declareWrappedObjectChunks,
   },
   evented: {
-    reason: 'COR-1390: wrapped engines emit object-result last and omit the parsed object from step-finish',
+    reason:
+      'COR-1390: wrapped engines emit object-result after step-finish but before finish and omit the parsed object from step-finish',
     expect: declareWrappedObjectChunks,
   },
 };
@@ -253,6 +256,7 @@ function generateScenario(overrides: Partial<EngineParityScenario> = {}): Engine
 function backgroundScenario(
   overrides: Partial<EngineParityScenario> = {},
   executions?: Partial<Record<ParityEngine, number>>,
+  executeDelayMs = 0,
 ): EngineParityScenario {
   return {
     model: { tapes: [toolCallTape('research', { topic: 'AI' }), textOnlyTape('Done.')] },
@@ -268,7 +272,10 @@ function backgroundScenario(
             description: 'Research a topic',
             inputSchema: z.object({ topic: z.string() }),
             execute: async ({ topic }) => {
+              // Count on entry: plain does not wait for the task, so host shutdown
+              // can cut the delay short.
               if (executions) executions[engine] = (executions[engine] ?? 0) + 1;
+              if (executeDelayMs) await new Promise(resolve => setTimeout(resolve, executeDelayMs));
               return { summary: `Research on ${topic}` };
             },
             background: { enabled: true },
@@ -486,7 +493,8 @@ describeParity('parity mode', target => {
     // The order difference the declaration above covers is real, on both sides.
     const plainTypes = results.plain!.turns[0]!.chunkTypes;
     expect(plainTypes.indexOf('object-result')).toBeLessThan(plainTypes.indexOf('step-finish'));
-    expect(results[target]!.turns[0]!.chunkTypes.at(-1)).toBe('object-result');
+    const wrappedTypes = results[target]!.turns[0]!.chunkTypes;
+    expect(wrappedTypes.indexOf('object-result')).toBe(wrappedTypes.indexOf('finish') - 1);
   });
 
   it('runs a generate() turn on plain and the target engine and compares it', async () => {
@@ -656,7 +664,9 @@ describeParity('parity mode', target => {
     // A deferred dispatch is only comparable with the chunk and result fields
     // declared: the wrapped engines stream an extra `background-task-progress`
     // and flush the completed result after `step-finish`, where plain keeps the
-    // dispatch placeholder.
+    // dispatch placeholder. The tool runs long enough to still be outstanding
+    // when the wrapped engines' wait step arms, so that progress chunk is there
+    // however fast the bus delivers the dispatch.
     const difference: EngineDifference = {
       reason:
         'COR-1390: wrapped engines stream background-task-progress and flush the completed result after step-finish ' +
@@ -672,16 +682,17 @@ describeParity('parity mode', target => {
           differences: { durable: difference, evented: difference },
         },
         withHostExecutions,
+        200,
       ),
     );
 
     for (const engine of ['plain', target] as const) {
       const turn = withHost[engine]!.turns[0]!;
-      // The task finishes before the loop's wait step arms, so no
-      // `background-task-completed` chunk is emitted on any engine: the proof a
+      // No `background-task-completed` chunk is emitted on any engine: the proof a
       // dispatch really went to the background is this `-started` chunk plus the
-      // result shape below, not a wait for completion.
+      // result shape below.
       expect(turn.chunkTypes).toContain('background-task-started');
+      expect(turn.chunkTypes.includes('background-task-progress'), engine).toBe(engine !== 'plain');
       expect(turn.text).toBe('Done.');
       if (engine === 'plain') {
         // Plain hands the model the dispatch placeholder and keeps going.
@@ -800,7 +811,10 @@ describe('expectEngineParity', () => {
         });
       },
       input: 'use both',
-      options: { maxSteps: 2 },
+      // Run the tools one at a time. Concurrent, the two instant tools finish in
+      // whichever order the scheduler picks, and durable/evented stream tool
+      // results in finish order, so evented would differ from plain by chance.
+      options: { maxSteps: 2, toolCallConcurrency: 1 },
     }).catch((e: Error) => e);
 
     expect(error).toBeInstanceOf(Error);

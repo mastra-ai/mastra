@@ -57,7 +57,7 @@ export const useWorkflowGraphRuntime = ({
   );
   const styledEdges = useMemo(
     () =>
-      groupWorkflowEdgeData(edges).map(edge => {
+      groupWorkflowEdgeData(edges).map((edge): WorkflowGraphEdge => {
         const previousStepId = getScopedStepId(edge.data?.previousStepId, workflowName);
         const nextStepId = getScopedStepId(edge.data?.nextStepId, workflowName);
         const previousStepSucceeded = steps[previousStepId ?? '']?.status === 'success';

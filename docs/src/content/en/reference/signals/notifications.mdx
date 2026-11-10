@@ -1,0 +1,390 @@
+---
+title: "Reference: Notifications | Signals"
+description: "Reference for notification inbox records, priorities, statuses, delivery decisions, delivery policies, dispatch configuration, and the signal metadata consumers receive."
+packages:
+  - "@mastra/core"
+---
+
+# Notifications
+
+A notification inbox record is durable state stored by `agent.sendNotificationSignal()`. It's not the same object as the notification signal delivered to a thread. The record tracks routing, priority, delivery state, deduplication, and retry history. The signal carries a summary and a snapshot of that record in its metadata.
+
+Use [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) to create records and the [Notifications guide](/docs/signals/notifications) for the delivery flow.
+
+## Notification records
+
+`NotificationRecord` is the stored inbox record.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique notification record ID.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread the notification targets.',
+  },
+  {
+    name: 'source',
+    type: 'string',
+    description: 'External system that produced the notification, such as `github`, `slack`, or `email`.',
+  },
+  {
+    name: 'kind',
+    type: 'string',
+    description: 'Notification kind within the source, such as `ci-status`, `mention`, or `direct-message`.',
+  },
+  {
+    name: 'priority',
+    type: 'NotificationPriority',
+    description: 'Delivery priority. Defaults to `medium` when the notification is created.',
+  },
+  {
+    name: 'status',
+    type: 'NotificationStatus',
+    description: 'Current lifecycle status of the record.',
+  },
+  {
+    name: 'summary',
+    type: 'string',
+    description: 'LLM-facing summary used as the notification signal contents.',
+  },
+  {
+    name: 'payload',
+    type: 'unknown',
+    isOptional: true,
+    description:
+      'Structured payload stored for tools or application code. The model never receives this field as part of the signal.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource that owns the thread, when known.',
+  },
+  {
+    name: 'agentId',
+    type: 'string',
+    isOptional: true,
+    description: 'Agent that owns the notification, when known.',
+  },
+  {
+    name: 'sourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Identifier of the source object, such as a pull request or message ID.',
+  },
+  {
+    name: 'dedupeKey',
+    type: 'string',
+    isOptional: true,
+    description: 'Key used to coalesce duplicate pending notifications from the same source and thread.',
+  },
+  {
+    name: 'coalesceKey',
+    type: 'string',
+    isOptional: true,
+    description: 'Key used to combine related pending notifications from the same source and thread.',
+  },
+  {
+    name: 'coalescedCount',
+    type: 'number',
+    isOptional: true,
+    description: 'Number of notifications folded into this record.',
+  },
+  {
+    name: 'attributes',
+    type: 'NotificationSignalAttributes',
+    isOptional: true,
+    description: 'Extra attributes copied onto the emitted notification signal as XML attributes.',
+  },
+  {
+    name: 'createdAt',
+    type: 'Date',
+    description: 'Time the record was created.',
+  },
+  {
+    name: 'updatedAt',
+    type: 'Date',
+    description: 'Time the record was last updated.',
+  },
+  {
+    name: 'deliveredAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'Time a full notification was delivered.',
+  },
+  {
+    name: 'seenAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'Time the notification was marked seen, including when the inbox tool read it.',
+  },
+  {
+    name: 'dismissedAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'Time the notification was dismissed.',
+  },
+  {
+    name: 'archivedAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'Time the notification was archived.',
+  },
+  {
+    name: 'discardedAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'Time the notification was discarded by the delivery policy.',
+  },
+  {
+    name: 'deliverAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'Earliest time the dispatcher may attempt full delivery.',
+  },
+  {
+    name: 'summaryAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'Time the dispatcher should emit a summary for this record. Cleared after the summary is emitted.',
+  },
+  {
+    name: 'deliveryReason',
+    type: 'string',
+    isOptional: true,
+    description: 'Reason returned by the delivery policy for the current decision.',
+  },
+  {
+    name: 'deliveryAttempts',
+    type: 'number',
+    isOptional: true,
+    description: 'Number of failed delivery attempts. Reaching five marks the record `failed`.',
+  },
+  {
+    name: 'lastDeliveryAttemptAt',
+    type: 'Date',
+    isOptional: true,
+    description: 'Time of the most recent delivery attempt.',
+  },
+  {
+    name: 'lastDeliveryError',
+    type: 'string',
+    isOptional: true,
+    description: 'Error from the most recent failed delivery attempt.',
+  },
+  {
+    name: 'deliveredSignalId',
+    type: 'string',
+    isOptional: true,
+    description: 'Signal ID of the full notification delivery, when one was emitted.',
+  },
+  {
+    name: 'summarySignalId',
+    type: 'string',
+    isOptional: true,
+    description: 'Signal ID of the most recent summary that included this record.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Application metadata stored on the record.',
+  },
+]}
+/>
+
+## Coalescing pending records
+
+`sendNotificationSignal()` can merge a new notification into an existing pending record instead of creating another one. Merging only considers records on the same thread, source, kind, agent, and resource.
+
+Each key serves a different purpose:
+
+- `dedupeKey` identifies the same event. Reuse it when a retry or duplicate webhook should update the existing record.
+- `coalesceKey` groups related events. Use it when several events should become one record, such as multiple failures from the same pipeline.
+
+Both keys use the same matching rules despite their different purposes.
+
+When a notification merges:
+
+- The latest `summary` and `payload` replace the previous values.
+- `priority` updates when the new notification provides one.
+- `attributes` and `metadata` merge, with the new values taking precedence.
+- `coalescedCount` increments.
+
+## Priorities and statuses
+
+`NotificationPriority` controls default delivery timing.
+
+```typescript
+type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent'
+```
+
+`NotificationStatus` is the record lifecycle.
+
+```typescript
+type NotificationStatus =
+  | 'pending'
+  | 'delivered'
+  | 'seen'
+  | 'dismissed'
+  | 'archived'
+  | 'discarded'
+  | 'failed'
+```
+
+`pending` records are eligible for dispatch. `delivered` means a full notification signal was emitted. `seen`, `dismissed`, and `archived` are inbox states. `discarded` means the delivery policy rejected the notification. `failed` means delivery reached the five-attempt cap.
+
+## Delivery decisions
+
+A delivery policy returns a `NotificationDeliveryDecision`.
+
+```typescript
+type NotificationDeliveryAction =
+  | 'deliver'
+  | 'queue'
+  | 'defer'
+  | 'summarize'
+  | 'persist'
+  | 'discard'
+
+type NotificationDeliveryDecision = {
+  action: NotificationDeliveryAction
+  deliverAt?: Date
+  summaryAt?: Date
+  reason?: string
+  streamOptions?: AgentExecutionOptions<unknown>
+  hold?: boolean
+}
+```
+
+`deliver` emits a full notification signal immediately. `queue` and `defer` leave the record pending for later dispatch. `summarize` emits or schedules a summary. `persist` stores the record without emitting a signal. `discard` marks the record discarded without delivering it.
+
+`streamOptions` are attached when delivery wakes an idle thread. They're resolved at delivery time, so a deferred or summarized notification can still carry the execution options the woken thread needs, such as model selection.
+
+`hold` applies only at delivery time. It leaves the notification pending without counting an attempt, so another process's dispatcher can deliver it. Use it when a process shares the notification store but can't run the target thread. `hold` is ignored when the notification is first sent.
+
+## Delivery policies
+
+Configure a policy through the Agent constructor's `notifications.deliveryPolicy` option.
+
+```typescript
+type NotificationDeliveryPolicyConfig = {
+  default?: NotificationDeliveryAction | NotificationDeliveryDecision
+  priorities?: Partial<
+    Record<NotificationPriority, NotificationDeliveryAction | NotificationDeliveryDecision>
+  >
+  sources?: Record<string, NotificationDeliveryAction | NotificationDeliveryDecision>
+  decide?: (
+    input: NotificationDeliveryPolicyInput,
+  ) =>
+    | NotificationDeliveryAction
+    | NotificationDeliveryDecision
+    | undefined
+    | Promise<NotificationDeliveryAction | NotificationDeliveryDecision | undefined>
+}
+
+type NotificationDeliveryPolicyInput = {
+  record: NotificationRecord
+  threadState: 'active' | 'idle'
+  now: Date
+}
+```
+
+Mastra evaluates the policy in this order:
+
+1. `decide`
+1. `sources`, matched against `record.source`
+1. `priorities`, matched against `record.priority`
+1. `default`
+1. The built-in priority policy
+
+The built-in policy is:
+
+| Priority | Idle thread | Active thread |
+| - | - | - |
+| `urgent` | Deliver immediately | Deliver immediately |
+| `high` | Deliver immediately | Emit a summary immediately, then deliver later when the thread is idle |
+| `medium` | Deliver immediately | Batch into a summary |
+| `low` | Batch into a summary | Batch into a summary |
+
+A custom `decide` function runs at receipt time and again at delivery time for records whose receipt-time decision deferred them or scheduled a summary. The record's persisted schedule fixes when and how it delivers. Only `streamOptions` and `hold` from the delivery-time decision are honored. Keep the decider side-effect free.
+
+## Dispatch
+
+`NotificationDispatchConfig` controls the scheduled dispatcher.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'enabled',
+    type: 'boolean',
+    description: 'Whether automatic scheduled dispatch is enabled. Defaults to `true`; set `false` to opt out.',
+    isOptional: true,
+  },
+  {
+    name: 'cron',
+    type: 'string',
+    description: 'Cron expression for the dispatcher schedule. Defaults to `*/1 * * * *` (once per minute).',
+    isOptional: true,
+  },
+  {
+    name: 'batchSize',
+    type: 'number',
+    description: 'Maximum notifications processed per dispatch. Defaults to `100`.',
+    isOptional: true,
+  },
+]}
+/>
+
+The dispatcher schedule is created lazily on the first deferred or summarized notification, so an app with no deferred notifications never starts it. A record that fails delivery five times is marked `failed` and stops being due. The cap is exported as `MAX_NOTIFICATION_DELIVERY_ATTEMPTS`.
+
+## Delivered signal metadata
+
+When a record delivers, the stream consumer receives a notification signal with `NotificationSignalMetadata`.
+
+```typescript
+type NotificationSignalMetadata = {
+  signal: 'notification'
+  recordId: string
+  source: string
+  kind: string
+  priority: NotificationPriority
+  status: NotificationStatus
+  coalescedCount?: number
+  deliveredAt?: string
+  seenAt?: string
+}
+```
+
+When Mastra emits a summary, the consumer receives a summary signal with `NotificationSummarySignalMetadata`.
+
+```typescript
+type NotificationSummarySignalMetadata = {
+  signal: 'summary'
+  pending: number
+  groups: Array<{ source: string; count: number }>
+  byPriority: Partial<Record<NotificationPriority, number>>
+  notificationIds: string[]
+  priority?: NotificationPriority
+}
+```
+
+These metadata shapes describe the signals. The stored record isn't the signal, and the signal doesn't include the record's `payload` or retry history.
+
+## Storage
+
+Notification records require a storage domain that supports `notifications`, such as libSQL, PostgreSQL, or MongoDB. Without it, `sendNotificationSignal()` can't store records.
+
+`sendSignal({ type: 'notification' })` bypasses inbox storage and delivers notification-shaped context directly. Use [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool) to read and manage stored records from an agent.
+
+## Related
+
+- [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options)
+- [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool)
+- [Notifications guide](/docs/signals/notifications)
+- [Thread streams](/docs/signals/thread-streams)

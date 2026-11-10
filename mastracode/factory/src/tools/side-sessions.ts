@@ -1,7 +1,7 @@
 import type { NotificationRecord, NotificationsStorage } from '@mastra/core/notifications';
 
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE, resolveSessionThread } from './deliver.js';
 import type { FactoryDeliveryController } from './deliver.js';
 import { workItemNumber } from './read-tools.js';
@@ -36,6 +36,8 @@ export interface SideSessionDependencies {
   sessions: Pick<SourceControlSessionLookup, 'listByOrigin'>;
   workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'getForProject'>;
   isRunning: (sessionId: string) => Promise<boolean>;
+  /** Whether the session is parked on a tool prompt; a parked run is still in flight but waits on a person. */
+  isParked?: (sessionId: string) => boolean;
   notifications: Pick<NotificationsStorage, 'listNotifications'> | null;
   /** Resolves the model a side session uses; omit to leave `model` null. */
   model?: (sessionId: string) => Promise<string | null>;
@@ -53,7 +55,7 @@ export function newestNotification(records: NotificationRecord[], match: (record
   return found;
 }
 
-export function itemLabel(item: WorkItemRow): string {
+export function itemLabel(item: Card): string {
   const number = workItemNumber(item);
   return number === null ? item.id : `#${number}`;
 }
@@ -87,7 +89,12 @@ export async function listSideSessions(
     if (row.factoryProjectId !== scope.factoryProjectId) continue;
     const last = newestNotification(records, record => record.attributes?.['from-session'] === row.sessionId);
     const running = await deps.isRunning(row.sessionId);
-    const state: FactorySessionRunState = running ? 'running' : last?.kind === 'blocked' ? 'parked' : 'idle';
+    const state: FactorySessionRunState =
+      deps.isParked?.(row.sessionId) || (!running && last?.kind === 'blocked')
+        ? 'parked'
+        : running
+          ? 'running'
+          : 'idle';
     const binding = await deps.workItems.findActiveRunBindingForSession({
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,

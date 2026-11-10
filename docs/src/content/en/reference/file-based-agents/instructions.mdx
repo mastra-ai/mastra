@@ -34,7 +34,7 @@ Move conditional, large, or action-oriented guidance into [`tools/`](/reference/
 
 ## Instructions in TypeScript
 
-Use `instructions.ts` when markdown can't express the prompt. The file default-exports a string, a system message, or a function returning one, and `agentInstructions()` types the export without changing it.
+Use `instructions.ts` when markdown can't express the prompt. The file default-exports a string, a system message, a non-empty array of strings or system messages, or a function returning one, and `agentInstructions()` types the export without changing it.
 
 Export a string when the prompt is assembled in code, for example from constants shared with the rest of your app:
 

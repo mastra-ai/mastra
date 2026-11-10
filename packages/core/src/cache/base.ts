@@ -44,12 +44,25 @@ export abstract class MastraServerCache extends MastraBase {
    * (with `index` set to the 0-based allocated index) to the list at `listKey`.
    * Returns the assigned index.
    *
+   * The list and its counter must expire together: a counter that outlives its
+   * list restarts at 0 while subscribers still expect the old numbering, and a
+   * counter that expires first would start reusing indices already in the list.
+   * Every append refreshes both keys to the same deadline.
+   *
+   * @param ttlMs - Minimum lifetime for both keys, in milliseconds. A cache
+   *   whose own TTL is longer, or that never expires, keeps that instead. When
+   *   omitted, the cache's default TTL applies.
+   *
    * The default implementation composes `increment()` + `listPush()` (two
-   * round-trips). Network-backed caches should override this with a single
-   * atomic server-side operation — it sits on the per-chunk durable stream
-   * publish hot path, where every awaited round-trip directly caps throughput.
+   * round-trips) and is therefore NOT atomic, and ignores `ttlMs`. Overrides
+   * should perform both steps in one server-side operation.
    */
-  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    _ttlMs?: number,
+  ): Promise<number> {
     const index = (await this.increment(counterKey)) - 1;
     await this.listPush(listKey, { ...value, index });
     return index;

@@ -64,7 +64,7 @@ jobs:
         if: steps.mdx-changes.outputs.has_changes == 'true'
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: '24.22.0'
+          node-version: '24.22.1'
           package-manager-cache: false
 
       - name: Check for removed pages without redirects
@@ -126,6 +126,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: starsling-ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -195,6 +199,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: starsling-ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -208,13 +216,12 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Check formatting
+      # One command for formatting, frontmatter, sidebars, structure, links,
+      # remark-lint, and redirects. Vale runs below on changed files only.
+      # Warnings are printed but only errors fail the job.
+      - name: Run docs checks
         working-directory: ./docs
-        run: pnpm format:check
-
-      - name: Validate reference sidebar sort order
-        working-directory: ./docs
-        run: pnpm validate:reference-sidebar
+        run: pnpm check --no-vale
 
       - name: Check for MDX changes
         id: mdx-changes
@@ -250,21 +257,6 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Validate frontmatter
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        working-directory: ./docs
-        run: pnpm dlx tsx scripts/validate-frontmatter.ts
-
-      - name: Check for docs not linked in sidebars
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        working-directory: ./docs
-        run: pnpm validate:sidebar-docs
-
-      - name: Lint with remark
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        working-directory: ./docs
-        run: pnpm lint:remark
-
       - name: Prepare Vale CI config
         if: steps.mdx-changes.outputs.has_changes == 'true'
         run: |
@@ -281,7 +273,7 @@ jobs:
       - name: Install Vale
         if: steps.mdx-changes.outputs.has_changes == 'true'
         env:
-          VALE_VERSION: 3.23.0
+          VALE_VERSION: 3.25.1
         run: |
           curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
             | tar -xz -C /usr/local/bin vale

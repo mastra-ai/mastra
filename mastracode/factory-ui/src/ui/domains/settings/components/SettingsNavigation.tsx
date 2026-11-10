@@ -3,10 +3,9 @@ import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
-  BookOpen,
   Bot,
-  Box,
   Brain,
+  Bug,
   Building2,
   Cable,
   CircleUserRound,
@@ -14,6 +13,7 @@ import {
   Inbox,
   Palette,
   SlidersHorizontal,
+  Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -32,74 +32,58 @@ type SettingsNavItem = {
 
 type SettingsNavGroup = {
   id: string;
-  label?: string;
-  ariaLabel?: string;
+  label: string;
   items: SettingsNavItem[];
 };
 
-export const PERSONAL_SETTINGS_GROUP = {
-  id: 'personal',
-  label: 'Your settings',
-  items: [
-    {
-      id: 'account',
-      label: SETTINGS_SECTION_LABELS.account,
-      icon: CircleUserRound,
-      searchText: 'my account profile identity email authentication session log out sign out user',
-    },
-    {
-      id: 'preferences',
-      label: SETTINGS_SECTION_LABELS.preferences,
-      icon: Palette,
-      searchText: 'preferences general theme appearance color scheme completion sound',
-    },
-    {
-      id: 'personal-models',
-      label: SETTINGS_SECTION_LABELS['personal-models'],
-      icon: Bot,
-      searchText: 'your personal models default model api keys providers credentials sign in oauth',
-    },
-    {
-      id: 'memory',
-      label: SETTINGS_SECTION_LABELS.memory,
-      icon: Brain,
-      searchText:
-        'your personal memory observational recall observer reflector thresholds attachments summarize context',
-    },
-    {
-      id: 'connections',
-      label: SETTINGS_SECTION_LABELS.connections,
-      icon: Cable,
-      searchText: 'your personal connections connected accounts slack communication integrations',
-    },
-  ],
-} satisfies SettingsNavGroup;
-
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
-  PERSONAL_SETTINGS_GROUP,
   {
-    id: 'factory',
-    label: 'Factory settings',
+    id: 'account',
+    label: 'Account',
+    items: [
+      {
+        id: 'account',
+        label: SETTINGS_SECTION_LABELS.account,
+        icon: CircleUserRound,
+        searchText: 'my account profile identity email authentication session log out sign out user',
+      },
+      {
+        id: 'preferences',
+        label: SETTINGS_SECTION_LABELS.preferences,
+        icon: Palette,
+        searchText: 'preferences general theme appearance color scheme completion sound',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'personal organization connections connected accounts slack integrations github gitlab tokens pat',
+      },
+    ],
+  },
+  {
+    id: 'agent',
+    label: 'Agent',
     items: [
       {
         id: 'models',
         label: SETTINGS_SECTION_LABELS.models,
         icon: Bot,
         searchText:
-          'factory shared models thinking level default api keys providers credentials sign in oauth custom endpoints',
+          'models default model your models factory models routing personal factory defaults hybrid thinking level api keys providers credentials sign in oauth custom endpoints',
       },
       {
-        id: 'factory-memory',
-        label: SETTINGS_SECTION_LABELS['factory-memory'],
+        id: 'memory',
+        label: SETTINGS_SECTION_LABELS.memory,
         icon: Brain,
         searchText:
-          'factory shared memory observational recall observer reflector thresholds attachments summarize context',
+          'memory personal memory factory memory your memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
-        id: 'skills',
-        label: SETTINGS_SECTION_LABELS.skills,
-        icon: BookOpen,
-        searchText: 'skills factory triage plan review agent instructions prompts stages',
+        id: 'tools',
+        label: SETTINGS_SECTION_LABELS.tools,
+        icon: Wrench,
+        searchText: 'tools mastra connect connections integrations sessions platform project approval',
       },
       {
         id: 'behavior',
@@ -107,29 +91,38 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
+    ],
+  },
+  {
+    id: 'factory',
+    label: 'Factory',
+    items: [
       {
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
         icon: GitBranch,
-        searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
-      },
-      {
-        id: 'environment',
-        label: SETTINGS_SECTION_LABELS.environment,
-        icon: Box,
-        searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown build triggers',
+        searchText:
+          'repositories source control git branches remotes code worktrees clone order pre-clone setup teardown github gitlab',
       },
       {
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
         icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+        searchText:
+          'work intake sources tasks issues pull requests github linear feed sync intake routes routing board catch-all',
       },
       {
         id: 'factory',
         label: SETTINGS_SECTION_LABELS.factory,
         icon: Building2,
-        searchText: 'factory project organization manage remove delete danger',
+        searchText:
+          'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
+      },
+      {
+        id: 'debug',
+        label: SETTINGS_SECTION_LABELS.debug,
+        icon: Bug,
+        searchText: 'debug versions packages release build node mastra core factory installed running',
       },
     ],
   },
@@ -162,19 +155,15 @@ export function SettingsNavigation() {
       </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <SearchInput label="Search settings" placeholder="Search settings…" value={query} onValueChange={setQuery} />
+          <SearchInput label="Search settings" placeholder="Search settings" value={query} onValueChange={setQuery} />
         </div>
       )}
       {filteredGroups.length > 0 ? (
         filteredGroups.map(group => {
-          const headerId = group.label ? `settings-${group.id}` : undefined;
+          const headerId = `settings-${group.id}`;
           return (
-            <Sidebar.NavSection
-              key={group.id}
-              aria-labelledby={headerId}
-              aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
-            >
-              {group.label && <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>}
+            <Sidebar.NavSection key={group.id} aria-labelledby={headerId}>
+              <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>
               <Sidebar.NavList>
                 {group.items.map(({ id, label, icon: Icon }) => {
                   const isActive = section === id;

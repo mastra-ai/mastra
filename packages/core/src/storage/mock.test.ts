@@ -190,6 +190,44 @@ describe('InMemoryStore - Thread Sorting', () => {
   });
 });
 
+describe('InMemoryStore - listThreads metadata filter', () => {
+  let memory: MemoryStorage;
+  const resourceId = 'r1';
+
+  beforeEach(async () => {
+    const store = new InMemoryStore();
+    memory = (await store.getStore('memory'))!;
+    await memory.saveThread({
+      thread: {
+        id: 't1',
+        resourceId,
+        title: 't1',
+        metadata: { prefs: { lang: 'en', theme: undefined } },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await memory.saveThread({
+      thread: {
+        id: 't2',
+        resourceId,
+        title: 't2',
+        metadata: { prefs: { lang: 'en', mode: 'compact' } },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+  });
+
+  it('does not match nested metadata with different keys when one value is undefined', async () => {
+    const { threads } = await memory.listThreads({
+      filter: { resourceId, metadata: { prefs: { lang: 'en', mode: 'compact' } } },
+    });
+
+    expect(threads.map(t => t.id)).toEqual(['t2']);
+  });
+});
+
 describe('InMemoryStore - Message Fetching', () => {
   let store: InMemoryStore;
   let memory: MemoryStorage;

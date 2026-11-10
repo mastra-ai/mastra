@@ -299,8 +299,8 @@ function formatAvailableTaskIds(tasks: TaskItemSnapshot[]): string {
 // Task list read/write through the thread-scoped `threadState` store
 // -----------------------------------------------------------------------------
 //
-// The `tasks` storage domain is the source of truth for the task list. It is
-// thread-scoped and read/written synchronously within a run, so a `task_update`
+// The `threadState` storage domain is the source of truth for the task list. It
+// is thread-scoped and read/written synchronously within a run, so a `task_update`
 // observes exactly the tasks a prior `task_write` produced in the same turn
 // (the store survives the per-step serialization that drops RequestContext
 // mutations). The task state processor projects this list onto the state-signal
@@ -319,6 +319,9 @@ type ResolvedThreadStateStore = {
   getState<T = unknown>(args: { threadId: string; type: string }): Promise<T | undefined>;
   setState(args: { threadId: string; type: string; value: TaskRecord[] }): Promise<void>;
 };
+
+// Share queues across execution contexts, while allowing unused stores to be collected.
+const taskMutationQueues = new WeakMap<ResolvedThreadStateStore, Map<string, Promise<void>>>();
 
 interface TaskToolAgentContext {
   threadId?: string;
@@ -403,15 +406,37 @@ async function applyTaskMutation(
   const threadId = context.agent?.threadId;
   if (!store || !threadId) return noMemoryResult();
 
-  const currentTasks = await readTaskStore(context);
-  const result = mutation(currentTasks);
-  if (!result.isError) {
-    await store.setState({ threadId, type: TASK_STATE_TYPE, value: result.tasks });
-    // Surface the new list to the task state processor for this step's snapshot.
-    context.requestContext?.set(TASKS_REQUEST_CONTEXT_KEY, result.tasks);
-    emitTaskDisplayUpdate(context.requestContext, result.tasks);
+  let queues = taskMutationQueues.get(store);
+  if (!queues) {
+    queues = new Map();
+    taskMutationQueues.set(store, queues);
   }
-  return result;
+  const previous = queues.get(threadId) ?? Promise.resolve();
+  const pending = previous.then(async () => {
+    const tasks = await store.getState<TaskRecord[]>({ threadId, type: TASK_STATE_TYPE });
+    const result = mutation(Array.isArray(tasks) ? tasks : []);
+    if (!result.isError) {
+      await store.setState({ threadId, type: TASK_STATE_TYPE, value: result.tasks });
+      // Publish before allowing the next mutation to read and publish its state.
+      context.requestContext?.set(TASKS_REQUEST_CONTEXT_KEY, result.tasks);
+      emitTaskDisplayUpdate(context.requestContext, result.tasks);
+    }
+    return result;
+  });
+  // A failed operation must not poison the queue for subsequent calls.
+  const tail = pending.then(
+    () => {},
+    () => {},
+  );
+  queues.set(threadId, tail);
+  try {
+    return await pending;
+  } finally {
+    if (queues.get(threadId) === tail) {
+      queues.delete(threadId);
+      if (queues.size === 0) taskMutationQueues.delete(store);
+    }
+  }
 }
 
 /**

@@ -44,7 +44,7 @@ export function SearchFieldBlock({
   label,
   labelIsHidden = false,
   layout = 'vertical',
-  placeholder = 'Search...',
+  placeholder = 'Search',
   onChange,
   onReset,
   className,
@@ -70,7 +70,7 @@ export function SearchFieldBlock({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            size={size || 'sm'}
+            size={`icon-${size || 'sm'}`}
             aria-label={label || 'Search'}
             disabled={disabled}
             onClick={() => onMinimizedChange?.(false)}
@@ -130,7 +130,7 @@ export function SearchFieldBlock({
             {onReset && (value || isMinimized === false) && (
               <Button
                 variant="ghost"
-                size={size || 'md'}
+                size={`icon-${size || 'md'}`}
                 aria-label="Clear search"
                 onClick={() => {
                   if (value) {

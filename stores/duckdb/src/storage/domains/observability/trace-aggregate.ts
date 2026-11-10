@@ -34,6 +34,8 @@ const DIMENSION_SQL: Record<string, string> = {
   entityId: 'r.entityId',
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
+  outcome: 'r.outcome',
+  stopReason: 'r.stopReason',
   serviceName: 'r.serviceName',
   // Spans persist execution provenance in `source`.
   executionSource: 'r.source',
@@ -59,6 +61,8 @@ const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
     'rootEntityName',
     'environment',
     'status',
+    'outcome',
+    'stopReason',
     'serviceName',
     'executionSource',
     'threadId',
@@ -67,6 +71,8 @@ const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
     'sessionId',
     'organizationId',
     'experimentId',
+    'model',
+    'provider',
   ].map(field => [field, `r.${field}`]),
 );
 
@@ -94,6 +100,14 @@ interface AggregateSource {
   /** Columns that tie a usage metric row to one population row: `traceId`, or `traceId` + `spanId`. */
   usageKey: readonly ('traceId' | 'spanId')[];
 }
+
+/** Quantile for each percentile statistic of a time-to-first measure. */
+const STATISTIC_PERCENTILES: Partial<Record<coreStorage.TraceAggregateMeasureStatistic, number>> = {
+  p50: 0.5,
+  p90: 0.9,
+  p95: 0.95,
+  p99: 0.99,
+};
 
 const PERCENTILES: Record<string, number> = {
   'duration.p50': 0.5,
@@ -194,6 +208,10 @@ function compileDuckDBAggregate(
     `CAST(${durationMsSql('r.startedAt', 'r.endedAt')} AS DOUBLE) AS durationMs`,
     `r.error IS NOT NULL AS isError`,
   );
+  const timeToFirstFields = new Set(plan.measures.map(measure => measureRule(measure.name)?.field));
+  for (const field of timeToFirstFields) {
+    if (field) factColumns.push(`CAST(r.${field} AS DOUBLE) AS ${field}`);
+  }
   if (plan.interval !== undefined) {
     const intervalMs = coreStorage.TRACE_AGGREGATE_INTERVAL_MS[plan.interval];
     if (intervalMs === undefined) throw new Error(`Unsupported trusted trace-aggregate interval: ${plan.interval}`);
@@ -241,6 +259,18 @@ function compileDuckDBAggregate(
   const measureSql = (name: string, alias = ''): string => {
     const column = (name: string) => `${alias}${name}`;
     if (name === 'count') return 'CAST(count(*) AS DOUBLE)';
+    // NULL values (no first token/chunk) are skipped, never read as 0; a group without any
+    // value gets NULL, and `.count` counts the rows that have one.
+    const timeToFirst = measureRule(name);
+    if (timeToFirst?.field) {
+      const value = column(timeToFirst.field);
+      if (timeToFirst.statistic === 'count') return `CAST(count(${value}) AS DOUBLE)`;
+      if (timeToFirst.statistic === 'avg') return `avg(${value})`;
+      if (timeToFirst.statistic === 'min') return `min(${value})`;
+      if (timeToFirst.statistic === 'max') return `max(${value})`;
+      const quantile = timeToFirst.statistic && STATISTIC_PERCENTILES[timeToFirst.statistic];
+      if (quantile !== undefined) return `quantile_cont(${value}, ${quantile})`;
+    }
     if (name === 'errorCount') return `CAST(count_if(${column('isError')}) AS DOUBLE)`;
     if (name === 'errorRate') return `CAST(count_if(${column('isError')}) AS DOUBLE) / count(*)`;
     if (name === 'duration.avg') return `avg(${column('durationMs')})`;

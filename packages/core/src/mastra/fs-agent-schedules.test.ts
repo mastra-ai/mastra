@@ -499,6 +499,8 @@ describe('Mastra — file-based agent schedules', () => {
     // Make the row due now so the next tick claims it.
     const store = (await mastra.getStorage()!.getStore('schedules'))!;
     await store.updateSchedule(fsAgentScheduleRowId('support', 'heartbeat'), { nextFireAt: Date.now() - 1000 });
+    // A row edited straight in storage is invisible to a sleeping scheduler until woken.
+    mastra.scheduler!.wake();
 
     await waitUntil(() => generate.mock.calls.length > 0, 15000);
     expect((generate.mock.calls[0] as any[])[0]).toBe('Check system health.');

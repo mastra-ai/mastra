@@ -80,7 +80,7 @@ interface Skill {
 }
 ```
 
-`source` describes where Mastra discovered the skill. Skills from a path with a `node_modules` segment are `external`, skills under `.mastra/skills` are `managed`, and all other skills, including those created with [`createSkill()`](/reference/agents/createSkill), are `local`.
+`source` describes where Mastra discovered the skill. Skills from a path with a `node_modules` segment are `external`, skills from a path under `.mastra/skills` are `managed`, and all other skills, including those created with [`createSkill()`](/reference/agents/createSkill), are `local`.
 
 ## Merging behavior
 

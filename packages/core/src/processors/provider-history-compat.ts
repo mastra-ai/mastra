@@ -57,6 +57,8 @@ export interface CompatRule {
   applyToPrompt?: (args: {
     prompt: LanguageModelV2Prompt;
     model: unknown;
+    /** Provider id of the API the prompt is sent to (see `ProcessLLMRequestArgs.apiProviderId`). */
+    apiProviderId?: string;
     messageList?: MessageList;
   }) => LanguageModelV2Prompt | undefined;
 }
@@ -424,7 +426,8 @@ export const stripForeignProviderExecutedTools: CompatRule = {
     for (const message of prompt) {
       if (message.role === 'assistant') {
         const content = message.content.filter(
-          part => part.type !== 'tool-call' || !foreignToolCallIds.has(part.toolCallId),
+          part =>
+            (part.type !== 'tool-call' && part.type !== 'tool-result') || !foreignToolCallIds.has(part.toolCallId),
         );
         if (content.length > 0) rewritten.push({ ...message, content });
         continue;
@@ -685,20 +688,14 @@ function getProviderMetadataForProvider(metadata: unknown, provider: string): Re
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 }
 
-function hasAnthropicSignatureWithoutText(part: {
-  text?: unknown;
-  providerOptions?: unknown;
-  providerMetadata?: unknown;
-}): boolean {
-  const anthropic =
-    getProviderMetadataForProvider(part.providerOptions, 'anthropic') ??
-    getProviderMetadataForProvider(part.providerMetadata, 'anthropic');
-
-  return (
-    typeof anthropic?.signature === 'string' &&
-    anthropic.signature.length > 0 &&
-    (typeof part.text !== 'string' || part.text.length === 0)
-  );
+function isEmptySignedReasoning(part: MastraDBMessage['content']['parts'][number]): boolean {
+  if (part.type !== 'reasoning') return false;
+  const signature = getProviderMetadataForProvider(part.providerMetadata, 'anthropic')?.signature;
+  if (typeof signature !== 'string' || signature.length === 0) return false;
+  const hasText =
+    (typeof part.reasoning === 'string' && part.reasoning.length > 0) ||
+    (part.details ?? []).some(detail => detail.type === 'text' && detail.text.length > 0);
+  return !hasText;
 }
 
 /**
@@ -737,15 +734,39 @@ export const cerebrasStripReasoningContent: CompatRule = {
 
 /**
  * Legacy records could contain Anthropic signed thinking metadata with an
- * empty reasoning text. Anthropic signs the exact thinking text, so forwarding
- * that mismatched pair is worse than dropping the invalid block at the provider
- * boundary.
+ * empty reasoning text. Anthropic signs the exact thinking text, so replaying
+ * that mismatched pair is rejected with the "thinking blocks cannot be
+ * modified" 400.
+ *
+ * Reactive, because an empty text with a signature is not by itself a sign of
+ * corruption: Claude 5.x returns exactly that for every thinking block when
+ * `display` is left at its default (`omitted`). Stripping those up front would
+ * change the prompt prefix on every step and break prompt caching, so the
+ * blocks are only dropped, from earlier assistant messages, once Anthropic has
+ * actually rejected the history.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/28309
  */
 export const anthropicStripEmptySignedReasoningContent: CompatRule = {
   name: 'anthropic-strip-empty-signed-reasoning-content',
-  applyToPrompt({ prompt, model }) {
-    if (!isMaybeAnthropic(model)) return undefined;
-    return stripReasoningFromPrompt(prompt, hasAnthropicSignatureWithoutText, getProtectedAssistantIndex(prompt));
+  errorPatterns: [/thinking`? or `?redacted_thinking`? blocks in the latest assistant message cannot be modified/i],
+  fix(messages) {
+    let mutated = false;
+    // The trailing assistant message of an active tool continuation is the one
+    // Anthropic requires unmodified, so it is never touched.
+    const protectedIndex = messages.at(-1)?.role === 'assistant' ? messages.length - 1 : -1;
+
+    messages.forEach((message, index) => {
+      const parts = message.content?.parts;
+      if (message.role !== 'assistant' || index === protectedIndex || !parts?.length) return;
+
+      const kept = parts.filter(part => !isEmptySignedReasoning(part));
+      if (kept.length === parts.length) return;
+      parts.splice(0, parts.length, ...kept);
+      mutated = true;
+    });
+
+    return mutated;
   },
 };
 
@@ -911,7 +932,7 @@ function hasReasoningPart(message: MastraDBMessage): boolean {
  * Deliberately not "has any reasoning part" — a previous row that already paired its own
  * reasoning with its own text says nothing about the row after it, and treating it as cover
  * would leave a genuine orphan unrepaired. The retry would then hit the same 400, and
- * `processAPIError` bails at `retryCount > 0`, turning a recoverable turn into a hard failure.
+ * `processAPIError` stops after its second pass, turning a recoverable turn into a hard failure.
  */
 function isUnpairedReasoningRow(message: MastraDBMessage): boolean {
   const parts = message.content?.parts ?? [];
@@ -1128,6 +1149,79 @@ export const anthropicOrphanedThinkingStep: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: single leading system message for Chat Completions
+// ---------------------------------------------------------------------------
+
+/**
+ * Merges the leading system messages of a Chat Completions request into one.
+ *
+ * Whether a server accepts several system messages depends on the host's chat template, not the
+ * model or provider: the same Qwen3.5 weights are accepted by some hosts and rejected with
+ * `System message must be at the beginning` by others. One leading system message is valid
+ * everywhere.
+ *
+ * Applies when the API provider id ends in `.chat` (`openai.chat`, `groq.chat`, `<name>.chat`
+ * from `createOpenAICompatible`, ...). Native APIs with a dedicated system field (`anthropic`,
+ * `google.generative-ai`, `bedrock`) and Responses APIs never do. Prompts are left unchanged when
+ * any merged message other than the last carries `providerOptions` (e.g. a cache breakpoint),
+ * since merging would drop it.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/25435
+ */
+export const chatCompletionsSingleSystemMessage: CompatRule = {
+  name: 'chat-completions-single-system-message',
+  applyToPrompt({ prompt, model, apiProviderId }) {
+    if (!(apiProviderId ?? getModelProviderId(model))?.endsWith('.chat')) return undefined;
+
+    let leading = 0;
+    while (leading < prompt.length && prompt[leading]!.role === 'system') leading++;
+    if (leading < 2) return undefined;
+
+    const leadingMessages = prompt.slice(0, leading) as Extract<LanguageModelV2Prompt[number], { role: 'system' }>[];
+    if (leadingMessages.slice(0, -1).some(m => m.providerOptions)) return undefined;
+
+    const content = leadingMessages
+      .map(m => m.content)
+      .filter(text => text.length > 0)
+      .join('\n\n');
+    const { providerOptions } = leadingMessages[leading - 1]!;
+    return [{ role: 'system', content, ...(providerOptions ? { providerOptions } : {}) }, ...prompt.slice(leading)];
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Built-in rule: tool calls without input
+// ---------------------------------------------------------------------------
+
+/**
+ * Sends an assistant tool call that has no input (`undefined` or `null`) as `{}`.
+ *
+ * A call whose arguments could not be parsed is stored as an `output-error` tool part with no
+ * `args`. Replayed as-is, providers reject every later request on the thread (Anthropic:
+ * `tool_use.input: Field required`; OpenAI-compatible: `function.arguments must be defined`).
+ * The error result stays paired with the call; only the call's input is filled in. An empty string
+ * is a real stored input, not a missing one, and is left as it is.
+ *
+ * Applies to every provider, runs in `processLLMRequest` so the stored message keeps its shape.
+ */
+export const toolCallEmptyInput: CompatRule = {
+  name: 'tool-call-empty-input',
+  applyToPrompt({ prompt }) {
+    const isEmpty = (part: { type: string; input?: unknown }) =>
+      part.type === 'tool-call' && (part.input === undefined || part.input === null);
+    if (!prompt.some(m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(isEmpty))) {
+      return undefined;
+    }
+
+    return prompt.map(message =>
+      message.role === 'assistant' && Array.isArray(message.content)
+        ? { ...message, content: message.content.map(part => (isEmpty(part) ? { ...part, input: {} } : part)) }
+        : message,
+    ) as LanguageModelV2Prompt;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -1139,12 +1233,18 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   stripForeignProviderExecutedTools,
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
+  // Both reactive Anthropic rules match the same "cannot be modified" 400 and `processAPIError` stops
+  // at the first rule that changes history. The orphaned-step repair goes first: it only removes a
+  // step that is provably broken, whereas the empty-signed strip also removes blocks that may be
+  // valid (Claude 5.x), so it must only run when no orphaned step explains the 400.
+  anthropicOrphanedThinkingStep,
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
   openaiOrphanItemId,
-  anthropicOrphanedThinkingStep,
+  chatCompletionsSingleSystemMessage,
+  toolCallEmptyInput,
   // Last, so it sees the prompt after other rules have dropped emptied turns.
   ensureUserFirstTurn,
 ];
@@ -1176,9 +1276,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   rejects). Preemptive; runs in `processLLMRequest` so the persisted
  *   message list keeps the reasoning trace.
  * - **anthropic-strip-empty-signed-reasoning-content** — strips legacy
- *   Anthropic signed reasoning blocks whose text was already lost before
- *   replay, preventing an empty thinking block with a non-empty signature from
- *   reaching Anthropic.
+ *   Anthropic signed reasoning blocks whose text was lost before replay.
+ *   Reactive (matches the "thinking blocks cannot be modified" 400), because
+ *   Claude 5.x returns empty-text signed blocks as normal output and they must
+ *   be replayed untouched to keep the prompt cache.
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
@@ -1198,6 +1299,15 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   see that thinking merged into the next step. Reactive (matches the
  *   "thinking blocks ... cannot be modified" 400); a recovery seatbelt for
  *   already-corrupted history.
+ * - **chat-completions-single-system-message** — merges the leading system
+ *   messages into one for Chat Completions providers (API provider id ending
+ *   in `.chat`), whose hosted chat templates often reject a second system
+ *   message. Skipped when an earlier one carries its own `providerOptions`.
+ *   Preemptive.
+ * - **tool-call-empty-input** — sends an assistant tool call whose input is
+ *   `undefined` or `null` as `{}`, keeping its paired result, so a stored
+ *   call with unparseable arguments can't make every later request fail.
+ *   Preemptive; the stored message keeps its shape.
  * - **ensure-user-first-turn** — inserts a `.` user turn ahead of a leading
  *   assistant turn for Amazon Bedrock and Google/Vertex, which reject
  *   assistant-first conversations. Preemptive; the turn is never persisted.
@@ -1219,12 +1329,12 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     this.rules = [...DEFAULT_COMPAT_RULES, ...(opts?.additionalRules ?? [])];
   }
 
-  processLLMRequest({ prompt, model, messageList }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
+  processLLMRequest({ prompt, model, apiProviderId, messageList }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
     let current = prompt;
     let mutated = false;
     for (const rule of this.rules) {
       if (!rule.applyToPrompt) continue;
-      const next = rule.applyToPrompt({ prompt: current, model, messageList });
+      const next = rule.applyToPrompt({ prompt: current, model, apiProviderId, messageList });
       if (next) {
         current = next;
         mutated = true;
@@ -1238,7 +1348,11 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     messageList,
     retryCount,
   }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
-    if (retryCount > 0) return;
+    // Two passes, not one: a legacy history can need two repairs that raise the same error (an
+    // orphaned thinking step and an empty signed block), and only the first rule that changes
+    // history runs per pass. A pass retries only when a rule actually changed something, so
+    // the second pass is a no-op once nothing is left to repair.
+    if (retryCount > 1) return;
 
     const messages = messageList.get.all.db();
 

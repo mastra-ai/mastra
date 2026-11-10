@@ -39,6 +39,7 @@ import {
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
+  getMimeType,
   IsDirectoryError,
   NotDirectoryError,
   UnsupportedGrepPatternError,
@@ -287,6 +288,23 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     return resolved;
   }
 
+  /**
+   * A miss on an absolute path outside the workdir (e.g. `/tmp/x/a.ts`) that
+   * does exist at that real sandbox path: the agent meant the sandbox path,
+   * but it was remapped under the workdir. Explain that instead of a bare
+   * not-found. Undefined when the path is inside the workdir or doesn't exist.
+   */
+  private async outsideWorkdirNotFound(inputPath: string, abs: string): Promise<FileNotFoundError | undefined> {
+    const base = posixPath.normalize(this.basePath);
+    const normalized = posixPath.normalize(inputPath);
+    if (!inputPath.startsWith('/') || normalized === base || normalized.startsWith(`${base}/`)) return undefined;
+    const probe = await this.exec(`test -e ${shellQuote(normalized)}`).catch(() => undefined);
+    if (probe?.exitCode !== 0) return undefined;
+    const error = new FileNotFoundError(inputPath);
+    error.message = `File not found: ${inputPath} (resolved to ${abs}). File tools only reach files under ${base}; absolute paths are workspace-relative. Put scratch worktrees under ${base}/.worktrees/.`;
+    return error;
+  }
+
   resolveAbsolutePath(inputPath: string): string | undefined {
     // Sync interface: a lazy workdir that has not resolved yet has no
     // absolute form to offer.
@@ -393,7 +411,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const native = this.sandbox.filesystem;
     if (native) {
       await this.verifyNative('target', abs, path);
-      return native.readFile(abs, options);
+      try {
+        return await native.readFile(abs, options);
+      } catch (error) {
+        const isNotFound = error instanceof FileNotFoundError || (error as { code?: unknown })?.code === 'ENOENT';
+        throw (isNotFound && (await this.outsideWorkdirNotFound(path, abs))) || error;
+      }
     }
     await this.assertContainedRealpath(abs, path);
     // Guard clauses first: redirecting from a directory "succeeds" with empty
@@ -402,7 +425,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       `if [ -d ${shellQuote(abs)} ]; then exit ${EXIT_IS_DIRECTORY}; elif [ ! -e ${shellQuote(abs)} ]; then exit ${EXIT_NOT_FOUND}; fi; base64 < ${shellQuote(abs)}`,
     );
     if (result.exitCode === EXIT_IS_DIRECTORY) throw new IsDirectoryError(path);
-    if (result.exitCode === EXIT_NOT_FOUND) throw new FileNotFoundError(path);
+    if (result.exitCode === EXIT_NOT_FOUND) {
+      throw (await this.outsideWorkdirNotFound(path, abs)) ?? new FileNotFoundError(path);
+    }
     if (result.exitCode !== 0) {
       throw new Error(`readFile ${path} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
     }
@@ -1055,20 +1080,31 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const native = this.sandbox.filesystem;
     if (native) {
       await this.verifyNative('target', abs, path);
-      const info = await native.stat(abs);
-      return { ...info, name: posixPath.basename(abs), path: `/${posixPath.relative(this.basePath, abs)}` };
+      let info: Awaited<ReturnType<typeof native.stat>>;
+      try {
+        info = await native.stat(abs);
+      } catch (error) {
+        const isNotFound = error instanceof FileNotFoundError || (error as { code?: unknown })?.code === 'ENOENT';
+        throw (isNotFound && (await this.outsideWorkdirNotFound(path, abs))) || error;
+      }
+      return {
+        ...info,
+        name: posixPath.basename(abs),
+        path: `/${posixPath.relative(this.basePath, abs)}`,
+        mimeType: info.type === 'file' ? (info.mimeType ?? getMimeType(abs)) : info.mimeType,
+      };
     }
     await this.assertContainedRealpath(abs, path);
     // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
     // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its
     // `-f` format with the same field order (%HT=type, %z=size, %m=mtime,
     // %B=birth). Delimit with `|` — neither stat interprets `\t` escapes in
-    // its format string.
+    // its format string. `-L` reports the symlink target, like LocalFilesystem.
     const result = await this.exec(
-      `stat -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
+      `stat -L -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -L -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
     );
     if (result.exitCode !== 0) {
-      throw new FileNotFoundError(path);
+      throw (await this.outsideWorkdirNotFound(path, abs)) ?? new FileNotFoundError(path);
     }
     const [kind, sizeStr, mtimeStr, ctimeStr] = result.stdout.trim().split('|');
     const type = kind && kind.toLowerCase().includes('directory') ? 'directory' : 'file';
@@ -1082,6 +1118,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       size: type === 'directory' ? 0 : size,
       modifiedAt: new Date(mtime * 1000),
       createdAt: new Date((ctime > 0 ? ctime : mtime) * 1000),
+      mimeType: type === 'file' ? getMimeType(abs) : undefined,
     };
   }
 
@@ -1111,6 +1148,6 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   getInstructions(): string {
-    return `Files are stored in a remote sandbox at ${this.basePath}. Use absolute workspace paths like /src/index.ts. All reads, writes and commands run inside the same sandbox.`;
+    return `Files are stored in a remote sandbox at ${this.basePath}. Use absolute workspace paths like /src/index.ts. All reads, writes and commands run inside the same sandbox. Absolute paths are workspace-relative (/tmp/x resolves to ${this.basePath}/tmp/x), so file tools cannot reach files outside ${this.basePath}. Create scratch git worktrees under ${this.basePath}/.worktrees/, then, in a pnpm monorepo, run \`pnpm install --prefer-offline --frozen-lockfile\` in the worktree and build the workspace packages you test against (with Turborepo: \`pnpm turbo build --filter="<package>^..."\`, which reuses the build cache).`;
   }
 }

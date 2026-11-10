@@ -23,6 +23,8 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootSpanFields: true,
     traceQueryRootEntityId: true,
     traceQueryTimeToFirstChunkSort: true,
+    traceQueryTimeToFirstToken: true,
+    traceQueryTimeToFirstTokenSort: true,
     traceAggregate: true,
     spanAggregate: true,
     threadQuery: true,
@@ -54,10 +56,21 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootSpanFields: false,
     traceQueryRootEntityId: false,
     traceQueryTimeToFirstChunkSort: false,
+    traceQueryTimeToFirstToken: false,
+    traceQueryTimeToFirstTokenSort: false,
     traceAggregate: false,
     spanAggregate: false,
     threadQuery: false,
     spanQuery: false,
+  },
+};
+
+/** Store answers legacy thread queries (thread ids only) but not thread rows. */
+export const noThreadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    threadQueryRows: false,
   },
 };
 

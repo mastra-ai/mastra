@@ -224,6 +224,7 @@ export class MaterializeError extends Error {
     message: string,
     readonly code:
       | 'git-missing'
+      | 'sandbox-unresponsive'
       | 'egress-blocked'
       | 'clone-failed'
       | 'pull-failed'
@@ -374,11 +375,20 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     );
   }
 
-  // 1. Preflight: git must be installed in the sandbox template.
+  // 1. Preflight: git must be installed in the sandbox template. Exit 124 is
+  // the provider's timeout code: the VM stopped answering, which says nothing
+  // about git, so it must not be reported as a missing binary.
   const gitVersion = await execute(sandbox, 'git', ['--version']);
-  if (gitVersion.exitCode !== 0) {
+  if (gitVersion.exitCode === 124) {
     throw new MaterializeError(
-      'git is not installed in the sandbox. The sandbox template must include git.',
+      'The sandbox stopped responding: `git --version` timed out (exit 124). Recreate the sandbox.',
+      'sandbox-unresponsive',
+    );
+  }
+  if (gitVersion.exitCode !== 0) {
+    const detail = (gitVersion.stderr || gitVersion.stdout).trim().slice(-500) || '(no output)';
+    throw new MaterializeError(
+      `git is not installed in the sandbox: \`git --version\` exited ${gitVersion.exitCode}: ${detail}. The sandbox template must include git.`,
       'git-missing',
     );
   }
@@ -441,6 +451,8 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
 }
 
 export interface SessionBranchOptions {
+  /** Repository-local authorship configured before setup commands or agent access. */
+  identity?: GitIdentity;
   branch: string;
   baseBranch: string;
   token: string;
@@ -519,6 +531,8 @@ export async function checkoutSessionBranch(
 }
 
 export interface SyncEnvironmentRepositoryOptions {
+  /** Repository-local authorship configured before setup commands or agent access. */
+  identity?: GitIdentity;
   /** The session branch to resume when the remote already carries it. */
   branch: string;
   /** The repository's default branch; new session branches start at its remote tip. */
@@ -555,6 +569,8 @@ export async function syncEnvironmentRepository(
   }
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
   const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+
+  await configureGitIdentity(sandbox, workdir, options.identity ?? {});
 
   const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
   if (current.exitCode !== 0) throw classifyGitFailure(current, 'pull-failed');
@@ -737,6 +753,8 @@ async function checkoutSessionBranchImpl(
     const configured = await execute(sandbox, 'git', ['-C', workdir, 'config', credentialKey, GH_CREDENTIAL_HELPER]);
     if (configured.exitCode !== 0) throw classifyGitFailure(configured, 'pull-failed');
   }
+
+  await configureGitIdentity(sandbox, workdir, options.identity ?? {});
 
   const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
   if (current.exitCode === 0 && current.stdout.trim() === branch) return;

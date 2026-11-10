@@ -1,5 +1,5 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionListOptions, CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
 
@@ -11,6 +11,25 @@ const CONNECTIONS = 'factory_project_source_control_connections';
 const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SESSIONS = 'source_control_sessions';
 const SESSION_REPOSITORIES = 'source_control_session_repositories';
+
+/**
+ * The user already holds this branch in a session of the same factory on
+ * another repository link, so the insert hit the factory-wide unique index.
+ * Reuse is keyed by the link, so that session is not this one to reuse.
+ */
+export class SessionBranchHeldError extends Error {
+  readonly branch: string;
+  readonly sessionId: string;
+  constructor(branch: string, sessionId: string) {
+    super(
+      `Branch ${branch} is already held by session ${sessionId} on another repository of this factory. ` +
+        'Session branches are unique per user across a factory: name the branch per card, or delete that session.',
+    );
+    this.branch = branch;
+    this.sessionId = sessionId;
+    this.name = 'SessionBranchHeldError';
+  }
+}
 
 /**
  * The user already holds the branch on this link in a session without this
@@ -288,6 +307,13 @@ export interface ProjectRepository {
   updatedAt: Date;
 }
 
+/** A project's connection with its installation and its links, each link with the repository behind it. */
+export interface ProjectConnectionWithRepositories extends ProjectSourceControlConnection {
+  installation: SourceControlInstallation;
+  /** `repository` is null when the repository row is gone or belongs to an installation outside the organization. */
+  repositories: Array<ProjectRepository & { repository: SourceControlRepository | null }>;
+}
+
 export interface ExternalRepositoryProjectTarget {
   orgId: string;
   factoryProjectId: string;
@@ -460,6 +486,18 @@ export interface SourceControlStorageHandle {
   };
   readonly connections: {
     list(args: { orgId: string; factoryProjectId: string }): Promise<ProjectSourceControlConnection[]>;
+    /**
+     * This integration's connections to any of the projects, oldest first, each with its installation and its links
+     * (oldest first, with their repositories). It takes four queries however many projects, connections or links
+     * there are, plus one when a repository sits under an installation no connection uses. A connection whose
+     * installation is gone, such as after the GitHub App was uninstalled, is left out,
+     * so one orphaned row cannot fail the read. Only installations of `orgId` are returned, so the result stays
+     * inside the organization even when a project id from another one is passed.
+     */
+    listWithRepositories(args: {
+      orgId: string;
+      factoryProjectIds: string[];
+    }): Promise<ProjectConnectionWithRepositories[]>;
     get(args: { orgId: string; id: string }): Promise<ProjectSourceControlConnection | null>;
     create(args: CreateProjectSourceControlConnectionInput): Promise<ProjectSourceControlConnection>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
@@ -708,6 +746,10 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
 
 function toBuildStatus(value: string | null): ProjectRepositoryBuildStatus {
   return value === 'configured' || value === 'failed' ? value : 'unbuilt';
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 /** Oldest first; ties (same millisecond) break on id so re-runs see one order. */
@@ -1210,6 +1252,80 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toConnection);
         },
+        listWithRepositories: async ({ orgId, factoryProjectIds }) => {
+          if (factoryProjectIds.length === 0) return [];
+          const oldestFirst: CollectionListOptions = {
+            orderBy: [
+              ['created_at', 'asc'],
+              ['id', 'asc'],
+            ],
+          };
+          const orgInstallations = async (ids: string[]) =>
+            ids.length === 0
+              ? []
+              : (
+                  await db().findMany<InstallationDbRow>(INSTALLATIONS, {
+                    id: { in: ids },
+                    integration_id: integrationId,
+                    org_id: orgId,
+                  })
+                ).map(toInstallation);
+
+          const connectionRows = await db().findMany<ConnectionDbRow>(
+            CONNECTIONS,
+            { factory_project_id: { in: unique(factoryProjectIds) }, integration_id: integrationId },
+            oldestFirst,
+          );
+          if (connectionRows.length === 0) return [];
+          const [installationList, linkRows] = await Promise.all([
+            orgInstallations(unique(connectionRows.map(row => row.installation_id))),
+            db().findMany<ProjectRepositoryDbRow>(
+              PROJECT_REPOSITORIES,
+              { connection_id: { in: connectionRows.map(row => row.id) } },
+              oldestFirst,
+            ),
+          ]);
+          const installations = new Map(installationList.map(installation => [installation.id, installation]));
+          const repositoryRows =
+            linkRows.length === 0
+              ? []
+              : await db().findMany<RepositoryDbRow>(REPOSITORIES, {
+                  id: { in: unique(linkRows.map(row => row.repository_id)) },
+                });
+          // Like `getRepository`, a repository only counts when its installation is in the organization. That is
+          // nearly always the connection's own installation, already loaded; look up any other.
+          const orgInstallationIds = new Set(installations.keys());
+          const otherInstallations = await orgInstallations(
+            unique(repositoryRows.map(row => row.installation_id)).filter(id => !orgInstallationIds.has(id)),
+          );
+          for (const installation of otherInstallations) orgInstallationIds.add(installation.id);
+          const repositories = new Map(
+            repositoryRows
+              .filter(row => orgInstallationIds.has(row.installation_id))
+              .map(row => [row.id, toRepository(row)]),
+          );
+          const linksByConnection = new Map<string, ProjectRepositoryDbRow[]>();
+          for (const row of linkRows) {
+            const links = linksByConnection.get(row.connection_id) ?? [];
+            links.push(row);
+            linksByConnection.set(row.connection_id, links);
+          }
+
+          return connectionRows.flatMap(row => {
+            const installation = installations.get(row.installation_id);
+            if (!installation) return [];
+            return [
+              {
+                ...toConnection(row),
+                installation,
+                repositories: (linksByConnection.get(row.id) ?? []).map(link => ({
+                  ...toProjectRepository(link),
+                  repository: repositories.get(link.repository_id) ?? null,
+                })),
+              },
+            ];
+          });
+        },
         get: getConnection,
         create: async input => {
           const project = await db().findOne<Record<string, unknown>>(FACTORY_PROJECTS, {
@@ -1541,7 +1657,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           };
           // Reuse is still keyed by the link, as before this column existed. A
           // branch the same user already holds on another link of the factory
-          // surfaces as the unique violation of the insert below.
+          // is reported as a branch conflict if the insert hits the unique index.
           const findExisting = async () =>
             db().findOne<SessionDbRow>(SESSIONS, {
               project_repository_id: input.projectRepositoryId,
@@ -1579,8 +1695,16 @@ export class SourceControlStorage extends FactoryStorageDomain {
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
             const row = await findExisting();
-            if (!row) throw error;
-            return reuse(row);
+            if (row) return reuse(row);
+            // Not this link's row: the same user holds the branch on another link
+            // of the factory, which only the factory-wide index can see.
+            const held = await db().findOne<SessionDbRow>(SESSIONS, {
+              factory_project_id: factoryProjectId,
+              user_id: input.userId,
+              branch: input.branch,
+            });
+            if (held) throw new SessionBranchHeldError(input.branch, held.session_id);
+            throw error;
           }
         },
         transferOwner: async ({ sessionId, expectedUserId, toUserId }) => {

@@ -1,46 +1,67 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth/ee';
 import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
-import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
+import type {
+  ApiRoute,
+  HttpLoggingConfig,
+  MastraAuthConfig,
+  ValidationErrorContext,
+  ValidationErrorResponse,
+} from '@mastra/core/server';
 import type { ExecutionContext } from 'hono';
 import { Hono } from 'hono';
 import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
-import { coreAuthMiddleware, findMatchingCustomRoute, isCustomRoutePublic, pathMatchesPattern } from '../auth/helpers';
+import { CustomRouteMatcher } from '../auth/custom-route-matcher';
+import {
+  authorizeAuthenticatedUser,
+  coreAuthMiddleware,
+  findMatchingCustomRoute,
+  isCustomRoutePublic,
+  isProtectedCustomRoute,
+  pathMatchesPattern,
+} from '../auth/helpers';
 import {
   MASTRA_AUTH_MODE_KEY,
+  MASTRA_AUTH_TOKEN_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';
 import type { MastraAuthMode } from '../constants';
-import { formatZodError } from '../handlers/error';
+import { formatZodError, isZodError } from '../handlers/error';
 import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
-import { SERVER_ROUTES, getEffectivePermission } from './routes';
+import { OPT_IN_ROUTES, SERVER_ROUTES, getEffectivePermission } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { propagateRequestAbort } from './mcp-disconnect';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
+export { cancelReaderOnResponseClose, writeWithBackpressure } from './stream-disconnect';
 export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
+  MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
   RESERVED_REQUEST_CONTEXT_KEYS,
   isReservedRequestContextKey,
@@ -57,6 +78,82 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
   }
 
   return error.getResponse();
+}
+
+/**
+ * Response for an HTTPException thrown from a `registerApiRoute` handler, or undefined for
+ * any other error (which callers keep behind a generic 500). Duck-typed so an HTTPException
+ * from `hono/http-exception`, possibly a separate Hono install, is recognised too.
+ */
+export function getCustomRouteHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const httpError = error as Error & { status?: unknown; res?: unknown; getResponse?: unknown };
+  const status = httpError.status;
+  if (
+    typeof httpError.getResponse !== 'function' ||
+    typeof status !== 'number' ||
+    !Number.isInteger(status) ||
+    status < 400 ||
+    status > 599
+  ) {
+    return undefined;
+  }
+  if (httpError.res) return (httpError.getResponse as () => Response).call(httpError);
+  return Response.json({ error: httpError.message }, { status });
+}
+
+export interface HTTPErrorResponseBody {
+  error: string;
+  cause?: { failingItems: unknown[] } | { field: string; errors: Array<{ path: string; message: string }> };
+}
+
+/**
+ * Only allowlisted causes are exposed to clients; any other cause stays server-side:
+ * - `cause.failingItems` (dataset schema-update rejections)
+ * - `cause.field` + `cause.errors` (schema validation failures), reduced to each error's path and message
+ */
+function getSafeErrorCause(error: unknown): HTTPErrorResponseBody['cause'] {
+  try {
+    const raw = error instanceof Error ? error.cause : undefined;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+    if (Array.isArray((raw as any).failingItems)) {
+      return { failingItems: (raw as any).failingItems };
+    }
+    const { field, errors } = raw as { field?: unknown; errors?: unknown };
+    if (typeof field === 'string' && Array.isArray(errors)) {
+      return {
+        field,
+        errors: errors.flatMap(e =>
+          e && typeof e.path === 'string' && typeof e.message === 'string'
+            ? [{ path: e.path, message: e.message }]
+            : [],
+        ),
+      };
+    }
+  } catch {
+    // property access threw (e.g. a getter) — omit cause
+  }
+  return undefined;
+}
+
+/**
+ * Maps a handler error to the status and JSON body every adapter sends:
+ * `error.status` (HTTPException) first, then `error.details.status` (MastraError), else 500.
+ */
+export function getHTTPErrorResponse(error: unknown): { status: number; body: HTTPErrorResponseBody } {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+
+  if (error && typeof error === 'object') {
+    if ('status' in error) {
+      const cause = getSafeErrorCause(error);
+      return { status: (error as any).status, body: { error: message, ...(cause ? { cause } : {}) } };
+    }
+    if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
+      return { status: (error.details as any).status, body: { error: message } };
+    }
+  }
+
+  return { status: 500, body: { error: message } };
 }
 
 /**
@@ -130,6 +227,11 @@ export interface MCPOptions {
    * When omitted, the principal resolved by `server.auth` is bridged
    * automatically. Provide this hook when your own middleware performs the
    * verification and you want full control over the resulting `AuthInfo`.
+   *
+   * The hook only controls `authInfo`. Tools still receive the user,
+   * permissions, roles and other reserved values Mastra server auth resolved
+   * in their `requestContext`, even when the hook's `authInfo` names a
+   * different principal.
    */
   setRequestAuth?: SetMcpRequestAuth;
 }
@@ -421,6 +523,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         executionCtx?: ExecutionContext,
       ) => Promise<Response>)
     | null = null;
+  /** Mirrors the custom-route app's router so auth can ask which route a request runs. */
+  private customRouteMatcher: CustomRouteMatcher<{
+    method: string;
+    path: string;
+    handlerCount: number;
+    route: HonoCustomApiRoute;
+  }> | null = null;
 
   /**
    * Whether custom (non-schema) API routes were registered. Adapters use this
@@ -625,13 +734,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Gets the effective RBAC provider for the current request based on auth mode.
    */
   protected getEffectiveRBACProvider(requestContext: RequestContext) {
-    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
-
-    if (authMode === 'studio') {
-      return this.mastra.getStudio?.()?.rbac ?? this.mastra.getServer()?.rbac;
-    }
-
-    return this.mastra.getServer()?.rbac;
+    return getEffectiveRBACProvider(this.mastra, requestContext);
   }
 
   /**
@@ -674,6 +777,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       request?: Request;
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
+      /** Overrides the server's custom route auth map for this check. */
+      customRouteAuthConfig?: Map<string, boolean>;
     },
   ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
     // Determine which auth config to use based on request type
@@ -717,7 +822,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       getHeader: context.getHeader,
       mastra: this.mastra,
       authConfig: authConfig as any,
-      customRouteAuthConfig: this.customRouteAuthConfig,
+      customRouteAuthConfig: context.customRouteAuthConfig ?? this.customRouteAuthConfig,
       requestContext: context.requestContext,
       rawRequest:
         context.request ??
@@ -776,38 +881,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     route: ServerRoute,
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
-    requestContext?: RequestContext,
+    requestContext: RequestContext,
   ): { status: number; error: string; message: string } | null {
-    // If RBAC is not configured, skip permission checks entirely
-    // Auth-only mode = authenticated users get full access
-    const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
-
-    if (!rbacProvider) {
-      return null;
-    }
-
-    // Get the effective permission (explicit or derived)
-    const requiredPermission = getEffectivePermission(route);
-
-    // No permission required (public route or couldn't derive)
-    if (!requiredPermission) {
-      return null;
-    }
-
-    // Check if user has the required permission(s)
-    // When an array is provided, user needs ANY ONE of them (logical OR)
-    const permissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
-    const hasAny = userPermissions && permissions.some(perm => hasPermissionFn(userPermissions, perm));
-
-    if (!hasAny) {
-      return {
-        status: 403,
-        error: 'Forbidden',
-        message: `Missing required permission: ${permissions.join(' or ')}`,
-      };
-    }
-
-    return null;
+    return getRoutePermissionError(this.mastra, route, userPermissions, hasPermissionFn, requestContext);
   }
 
   /**
@@ -1063,7 +1139,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     const schemaRoutes = routes.filter(isSchemaApiRoute);
     for (const route of schemaRoutes) {
-      await this.registerRoute(this.app, route as unknown as ServerRoute, { prefix: '' });
+      // Opt-in built-in routes are first-party: Studio and the client SDK call them under the API prefix,
+      // so they mount there like any built-in route. Other custom routes mount at the root.
+      // Matched by identity: a cloned route object lands back at the root.
+      const prefix = (OPT_IN_ROUTES as readonly unknown[]).includes(route) ? this.prefix : '';
+      await this.registerRoute(this.app, route as unknown as ServerRoute, { prefix });
     }
 
     return routes.filter((route): route is HonoCustomApiRoute => !isSchemaApiRoute(route));
@@ -1118,6 +1198,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      const httpExceptionResponse = getCustomRouteHTTPExceptionResponse(err);
+      if (httpExceptionResponse) return httpExceptionResponse;
       // Log before responding — otherwise the error is invisible on the server
       // and the client only ever sees an opaque 500.
       this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
@@ -1129,6 +1211,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     });
 
     // Register each custom route
+    const matcherEntries: Array<{ method: string; path: string; handlerCount: number; route: HonoCustomApiRoute }> = [];
     for (const route of routes) {
       const handler =
         'handler' in route && route.handler
@@ -1144,6 +1227,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       }
 
       const allHandlers = [...middlewares, handler];
+      matcherEntries.push({ method: route.method, path: route.path, handlerCount: allHandlers.length, route });
       if (route.method === 'ALL') {
         app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
       } else {
@@ -1159,7 +1243,78 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // alive after the response is sent. Without this third arg, serverless
     // runtimes freeze the invocation on return and kill any in-flight work.
     this.customRouteHandler = async (request, env, executionCtx) => app.fetch(request, env, executionCtx);
+    this.customRouteMatcher = new CustomRouteMatcher(matcherEntries);
     return true;
+  }
+
+  /**
+   * Returns the custom route the custom-route app will run for `url` (the same URL
+   * passed to `handleCustomRouteRequest`), with its decoded path params, or
+   * undefined if none will.
+   */
+  protected matchCustomRoute(
+    url: string,
+    method: string,
+  ): { route: HonoCustomApiRoute; params: Record<string, string> } | undefined {
+    if (!this.customRouteMatcher) return undefined;
+    try {
+      const match = this.customRouteMatcher.matchUrl(url, method);
+      return match ? { route: match.entry.route, params: match.params } : undefined;
+    } catch {
+      // The custom-route app can't parse or route this request either.
+      return undefined;
+    }
+  }
+
+  /**
+   * Works out what auth applies to a request before it's forwarded to the
+   * custom-route app. The route that decides is the one the app will dispatch
+   * `dispatchUrl` to, not the route the outer framework matched, because the two
+   * routers can disagree on precedence, case, trailing slashes and encoding.
+   *
+   * `requestPath` is the path passed to `checkRouteAuth`. When the dispatched route
+   * requires auth, the returned `customRouteAuthConfig` marks that path protected so
+   * the auth middleware can't skip auth on it. `fallbackRoute` is used when the app
+   * won't dispatch the request (it 404s and nothing runs); pass the framework's own
+   * route when there is one so its auth still applies.
+   */
+  protected resolveCustomRouteAuth(
+    dispatchUrl: string,
+    method: string,
+    requestPath: string,
+    fallbackRoute?: HonoCustomApiRoute,
+  ): {
+    match?: { route: HonoCustomApiRoute; params: Record<string, string> };
+    requiresAuth: boolean;
+    serverRoute: ServerRoute;
+    customRouteAuthConfig?: Map<string, boolean>;
+  } {
+    const match = this.matchCustomRoute(dispatchUrl, method);
+    const route = match?.route ?? fallbackRoute;
+
+    const requiresAuth = route
+      ? (this.customRouteAuthConfig?.get(`${route.method}:${route.path}`) ?? route.requiresAuth !== false)
+      : isProtectedCustomRoute(requestPath, method, this.customRouteAuthConfig);
+
+    const serverRoute: ServerRoute = {
+      method: (route?.method ?? method) as any,
+      path: route?.path ?? requestPath,
+      responseType: 'json',
+      handler: async () => {},
+      // An explicit requiresAuth: true keeps its meaning; otherwise the auth middleware
+      // decides from the path, which the map below forces to protected.
+      requiresAuth: requiresAuth ? (route?.requiresAuth === true ? true : undefined) : false,
+      requiresPermission: route?.requiresPermission,
+      fga: route?.fga,
+    };
+
+    let customRouteAuthConfig: Map<string, boolean> | undefined;
+    if (requiresAuth) {
+      customRouteAuthConfig = new Map(this.customRouteAuthConfig ?? []);
+      customRouteAuthConfig.set(`${method.toUpperCase()}:${requestPath}`, true);
+    }
+
+    return { match, requiresAuth, serverRoute, customRouteAuthConfig };
   }
 
   /**
@@ -1291,7 +1446,14 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (allCustomRoutes && allCustomRoutes.length > 0) {
       const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
-      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes, componentSchemas);
+      // Opt-in built-in routes are mounted under the API prefix (see registerSchemaApiRoutes), so they keep the
+      // top-level server; every other custom route is served at the root.
+      const isPrefixed = (route: ApiRoute) => (OPT_IN_ROUTES as readonly unknown[]).includes(route);
+      const customPaths = convertCustomRoutesToOpenAPIPaths(
+        allCustomRoutes.filter(route => !isPrefixed(route)),
+        componentSchemas,
+      );
+      const prefixedPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes.filter(isPrefixed), componentSchemas);
       if (Object.keys(componentSchemas).length > 0) {
         openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
       }
@@ -1302,6 +1464,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           }
         }
       }
+      Object.assign(customPaths, prefixedPaths);
       openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
     }
 
@@ -1348,76 +1511,291 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   async parsePathParams(route: ServerRoute, params: Record<string, string>): Promise<Record<string, any>> {
-    const pathParamSchema = route.pathParamSchema;
-    if (!pathParamSchema) {
-      return params;
-    }
-
-    return pathParamSchema.parseAsync(params) as Promise<Record<string, any>>;
+    return parseRoutePathParams(route, params);
   }
 
   async parseQueryParams(route: ServerRoute, params: Record<string, QueryParamValue>): Promise<Record<string, any>> {
-    const queryParamSchema = route.queryParamSchema;
-    if (!queryParamSchema) {
-      return params;
-    }
-
-    const normalizedParams = parseComplexQueryParams(queryParamSchema as z.ZodTypeAny, params);
-    return queryParamSchema.parseAsync(normalizedParams) as Promise<Record<string, any>>;
+    return parseRouteQueryParams(route, params);
   }
 
   async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {
-    const bodySchema = route.bodySchema;
-    if (!bodySchema) {
-      return body;
-    }
-
-    if (body === undefined) {
-      const omitted = await bodySchema.safeParseAsync(undefined);
-      if (omitted.success) return omitted.data;
-      // Preserve bodyless object requests with optional/defaulted fields, but keep
-      // the original missing-input error if the compatibility fallback also fails.
-      const schemaType = getSchemaTypeName(unwrapOptionalNullable(bodySchema));
-      if (schemaType === 'object' || schemaType === 'ZodObject') {
-        const emptyObject = await bodySchema.safeParseAsync({});
-        if (emptyObject.success) return emptyObject.data;
-      }
-      throw omitted.error;
-    }
-
-    return bodySchema.parseAsync(body);
+    return parseRouteBody(route, body);
   }
-
-  private static readonly CONTEXT_LABELS: Record<ValidationErrorContext, string> = {
-    query: 'query parameters',
-    body: 'request body',
-    path: 'path parameters',
-  };
 
   protected resolveValidationError(
     route: ServerRoute,
     error: ZodError,
     context: ValidationErrorContext,
   ): ValidationErrorResponse {
-    const hook = route.onValidationError ?? this.mastra.getServer()?.onValidationError;
+    return resolveRouteValidationError(this.mastra, route, error, context);
+  }
+}
 
-    if (hook) {
-      try {
-        const result = hook(error, context);
-        if (result) {
-          return result;
-        }
-      } catch (hookError) {
-        this.mastra.getLogger()?.error('Error in custom onValidationError hook', {
-          error: hookError instanceof Error ? { message: hookError.message, stack: hookError.stack } : hookError,
-        });
+/**
+ * The RBAC provider for the auth mode the request was authenticated with
+ * (studio vs server).
+ */
+export function getEffectiveRBACProvider(mastra: Mastra, requestContext: RequestContext) {
+  const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
+
+  if (authMode === 'studio') {
+    return mastra.getStudio?.()?.rbac ?? mastra.getServer()?.rbac;
+  }
+
+  return mastra.getServer()?.rbac;
+}
+
+/**
+ * Check if the user has the required permission for a route.
+ *
+ * Uses convention-based permission derivation:
+ * 1. If route has explicit `requiresPermission`, use that
+ * 2. Otherwise, derive permission from path/method (e.g., GET /agents → agents:read)
+ * 3. Routes with `requiresAuth: false` skip permission checks
+ *
+ * When the route specifies an array of permissions, the user needs ANY ONE
+ * of them (logical OR). Without an RBAC provider, authenticated users get full access.
+ *
+ * @returns Error response if permission denied, null if allowed
+ */
+export function getRoutePermissionError(
+  mastra: Mastra,
+  route: ServerRoute,
+  userPermissions: string[] | undefined,
+  hasPermissionFn: (userPerms: string[], required: string) => boolean,
+  requestContext: RequestContext,
+): { status: number; error: string; message: string } | null {
+  if (!getEffectiveRBACProvider(mastra, requestContext)) {
+    return null;
+  }
+
+  const requiredPermission = getEffectivePermission(route);
+  if (!requiredPermission) {
+    return null;
+  }
+
+  const permissions = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+  const hasAny = userPermissions && permissions.some(perm => hasPermissionFn(userPermissions, perm));
+
+  if (!hasAny) {
+    return {
+      status: 403,
+      error: 'Forbidden',
+      message: `Missing required permission: ${permissions.join(' or ')}`,
+    };
+  }
+
+  return null;
+}
+
+export async function parseRoutePathParams(
+  route: ServerRoute,
+  params: Record<string, string>,
+): Promise<Record<string, any>> {
+  const pathParamSchema = route.pathParamSchema;
+  if (!pathParamSchema) {
+    return params;
+  }
+
+  return pathParamSchema.parseAsync(params) as Promise<Record<string, any>>;
+}
+
+export async function parseRouteQueryParams(
+  route: ServerRoute,
+  params: Record<string, QueryParamValue>,
+): Promise<Record<string, any>> {
+  const queryParamSchema = route.queryParamSchema;
+  if (!queryParamSchema) {
+    return params;
+  }
+
+  const normalizedParams = parseComplexQueryParams(queryParamSchema as z.ZodTypeAny, params);
+  return queryParamSchema.parseAsync(normalizedParams) as Promise<Record<string, any>>;
+}
+
+export async function parseRouteBody(route: ServerRoute, body: unknown): Promise<unknown> {
+  const bodySchema = route.bodySchema;
+  if (!bodySchema) {
+    return body;
+  }
+
+  if (body === undefined) {
+    const omitted = await bodySchema.safeParseAsync(undefined);
+    if (omitted.success) return omitted.data;
+    // Preserve bodyless object requests with optional/defaulted fields, but keep
+    // the original missing-input error if the compatibility fallback also fails.
+    const schemaType = getSchemaTypeName(unwrapOptionalNullable(bodySchema));
+    if (schemaType === 'object' || schemaType === 'ZodObject') {
+      const emptyObject = await bodySchema.safeParseAsync({});
+      if (emptyObject.success) return emptyObject.data;
+    }
+    throw omitted.error;
+  }
+
+  return bodySchema.parseAsync(body);
+}
+
+const VALIDATION_CONTEXT_LABELS: Record<ValidationErrorContext, string> = {
+  query: 'query parameters',
+  body: 'request body',
+  path: 'path parameters',
+};
+
+export function resolveRouteValidationError(
+  mastra: Mastra,
+  route: ServerRoute,
+  error: ZodError,
+  context: ValidationErrorContext,
+): ValidationErrorResponse {
+  const hook = route.onValidationError ?? mastra.getServer()?.onValidationError;
+
+  if (hook) {
+    try {
+      const result = hook(error, context);
+      if (result) {
+        return result;
       }
+    } catch (hookError) {
+      mastra.getLogger()?.error('Error in custom onValidationError hook', {
+        error: hookError instanceof Error ? { message: hookError.message, stack: hookError.stack } : hookError,
+      });
+    }
+  }
+
+  return {
+    status: 400,
+    body: formatZodError(error, VALIDATION_CONTEXT_LABELS[context]),
+  };
+}
+
+export interface InvokeRouteOptions {
+  mastra: Mastra;
+  /**
+   * The caller's request context, already authenticated by Mastra (an HTTP route,
+   * or an MCP request bridged by `applyMcpRequestAuth`). Its user, permissions and
+   * auth mode decide what the caller may do.
+   */
+  requestContext: RequestContext;
+  pathParams?: Record<string, string>;
+  query?: Record<string, QueryParamValue>;
+  body?: unknown;
+  abortSignal?: AbortSignal;
+}
+
+/** What the route would have answered over HTTP. */
+export interface InvokeRouteResult {
+  status: number;
+  body: unknown;
+}
+
+/**
+ * Runs a server route in-process as the caller, with the checks its HTTP
+ * endpoint applies on every adapter: authentication, auth's `authorizeUser`,
+ * `authorize` and `rules` (against the route's path under `apiPrefix`), input
+ * validation, RBAC permission and FGA. Lets code outside an HTTP request (such
+ * as an MCP tool) reuse a route without proxying through the HTTP server.
+ *
+ * Authentication is not re-run: when server or studio auth is configured, the
+ * request context must already carry the user Mastra server auth resolved
+ * (`MASTRA_USER_KEY`), otherwise the call is refused with 401.
+ *
+ * Only JSON routes are supported; other response types throw. The handler gets
+ * the parsed params, `mastra`, `requestContext` and `abortSignal`, but not the
+ * HTTP-only `request`, `registeredTools`, `taskStore` or `routePrefix`, so
+ * routes that read those are not suitable.
+ */
+export async function invokeRoute(route: ServerRoute, options: InvokeRouteOptions): Promise<InvokeRouteResult> {
+  if (route.responseType !== 'json') {
+    throw new Error(
+      `invokeRoute only runs JSON routes; ${route.method} ${route.path} answers with '${route.responseType}'`,
+    );
+  }
+
+  const { mastra, requestContext } = options;
+
+  const studioAuth = mastra.getStudio?.()?.auth;
+  const serverAuth = mastra.getServer()?.auth;
+  const authConfigured = Boolean(studioAuth || serverAuth);
+  if (authConfigured && route.requiresAuth !== false) {
+    const user = requestContext.get(MASTRA_USER_KEY);
+    if (!user) {
+      return { status: 401, body: { error: 'Authentication required' } };
     }
 
-    return {
-      status: 400,
-      body: formatZodError(error, MastraServer.CONTEXT_LABELS[context]),
-    };
+    const authConfig = requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio' && studioAuth ? studioAuth : serverAuth;
+    if (authConfig) {
+      // Server auth's authorization hooks see the route's own HTTP path, not the
+      // path of whatever request (such as an MCP call) is invoking it.
+      const prefix = normalizeRoutePath(mastra.getServer()?.apiPrefix ?? '/api');
+      const path = `${prefix}${route.path.replace(/:(\w+)/g, (_, name: string) =>
+        encodeURIComponent(options.pathParams?.[name] ?? ''),
+      )}`;
+      const token = requestContext.get(MASTRA_AUTH_TOKEN_KEY);
+      const authorizationError = await authorizeAuthenticatedUser({
+        path,
+        method: route.method,
+        user,
+        mastra,
+        authConfig: authConfig as MastraAuthConfig,
+        requestContext,
+        rawRequest: new Request(`http://localhost${path}`, {
+          method: route.method,
+          headers: typeof token === 'string' && token ? { authorization: `Bearer ${token}` } : undefined,
+        }),
+        buildAuthorizeContext: () => null,
+      });
+      if (authorizationError) return authorizationError;
+    }
+  }
+
+  const parse = async <T>(context: ValidationErrorContext, run: () => Promise<T>) => {
+    try {
+      return { value: await run() };
+    } catch (error) {
+      if (isZodError(error)) return { error: resolveRouteValidationError(mastra, route, error, context) };
+      throw error;
+    }
+  };
+
+  const pathParams = await parse('path', () => parseRoutePathParams(route, options.pathParams ?? {}));
+  if (pathParams.error) return pathParams.error;
+  const query = await parse('query', () => parseRouteQueryParams(route, options.query ?? {}));
+  if (query.error) return query.error;
+  const body = await parse('body', () => parseRouteBody(route, options.body));
+  if (body.error) return body.error;
+
+  const params: Record<string, unknown> = {
+    ...pathParams.value,
+    ...query.value,
+    ...(typeof body.value === 'object' ? (body.value as Record<string, unknown>) : {}),
+  };
+
+  if (authConfigured) {
+    const userPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
+    const permissionError = getRoutePermissionError(mastra, route, userPermissions, hasPermission, requestContext);
+    if (permissionError) {
+      return {
+        status: permissionError.status,
+        body: { error: permissionError.error, message: permissionError.message },
+      };
+    }
+  }
+
+  const fgaError = await checkRouteFGA(mastra, route, requestContext, params);
+  if (fgaError) {
+    return { status: fgaError.status, body: { error: fgaError.error, message: fgaError.message } };
+  }
+
+  try {
+    const result = await route.handler({
+      ...params,
+      requestContext,
+      mastra,
+      abortSignal: options.abortSignal ?? new AbortController().signal,
+    } as any);
+    return { status: 200, body: result };
+  } catch (error) {
+    return getHTTPErrorResponse(error);
   }
 }
 

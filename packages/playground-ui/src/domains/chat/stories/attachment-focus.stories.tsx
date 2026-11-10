@@ -45,7 +45,7 @@ function AttachmentFocusChat({ factory = false, hiddenPanel = false }: { factory
               <ChatShell.Column>
                 <textarea
                   aria-label="Message"
-                  placeholder="Enter your message…"
+                  placeholder="Enter your message"
                   className={`${raisedSurfaceStyle} w-full resize-none rounded-xl p-4 text-body`}
                 />
               </ChatShell.Column>

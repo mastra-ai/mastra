@@ -99,7 +99,14 @@ import type {
   TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
-import { spanAggregateFeatures, spanQueryFeatures, timeToFirstChunkFeatures } from '../../features';
+import {
+  aggregateTimeToFirstFeatures,
+  contextFieldFeatures,
+  outcomeFeatures,
+  spanAggregateFeatures,
+  spanQueryFeatures,
+  timingFeatures,
+} from '../../features';
 import { resolveTargets, runPrune } from '../../retention';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
@@ -160,6 +167,10 @@ export interface ObservabilityDuckDBConfig {
  * Uses an append-only event-sourced model with SQL-based reconstruction for spans.
  */
 export class ObservabilityStorageDuckDB extends ObservabilityStorage {
+  override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   static override readonly retentionTables: RetentionTablesDescriptor = {
     spans: { table: 'span_events', column: 'timestamp', indexed: false },
     metrics: { table: 'metric_events', column: 'timestamp', indexed: false },
@@ -269,6 +280,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
+        ...aggregateTimeToFirstFeatures,
         ...spanQueryFeatures,
         ...spanAggregateFeatures,
         ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
@@ -278,7 +290,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
-        ...timeToFirstChunkFeatures,
+        ...contextFieldFeatures,
+        ...timingFeatures,
+        ...outcomeFeatures,
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
       ] as const;
@@ -296,6 +310,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'delta-polling',
       'trace-query',
       'trace-aggregate',
+      ...aggregateTimeToFirstFeatures,
       ...spanQueryFeatures,
       ...spanAggregateFeatures,
       ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
@@ -305,7 +320,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
-      ...timeToFirstChunkFeatures,
+      ...contextFieldFeatures,
+      ...timingFeatures,
+      ...outcomeFeatures,
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
     ] as const;
@@ -453,6 +470,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return scoreOps.getScoreById(this.db, scoreId);
+  }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return feedbackOps.getFeedbackById(this.db, feedbackId);
   }
   async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return scoreOps.getScoreAggregate(this.db, args);

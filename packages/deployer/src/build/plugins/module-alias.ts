@@ -1,6 +1,6 @@
 import { dirname, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
 import rollupAlias from '@rollup/plugin-alias';
 import { resolveModule } from 'local-pkg';
 import * as resolveExports from 'resolve.exports';

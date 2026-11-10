@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-modelslab",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Mastra ModelsLab voice integration",
   "type": "module",
   "files": [
@@ -33,10 +33,10 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

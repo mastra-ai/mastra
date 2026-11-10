@@ -41,7 +41,7 @@ export const DefaultOpen: Story = {
     <Collapsible defaultOpen className="w-[350px]">
       <CollapsibleTrigger asChild>
         <Button className="w-full justify-between">
-          Section Title
+          Section title
           <DisclosureChevron className="size-4" />
         </Button>
       </CollapsibleTrigger>
@@ -58,7 +58,7 @@ export const SettingsSection: Story = {
       <Collapsible>
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center justify-between py-2 text-subheading text-foreground hover:text-white">
-            Advanced Settings
+            Advanced settings
             <DisclosureChevron className="size-4" />
           </button>
         </CollapsibleTrigger>

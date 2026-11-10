@@ -1,6 +1,7 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { MCPOptions } from '@mastra/server/server-adapter';
 import { Module } from '@nestjs/common';
 import type { DynamicModule, MiddlewareConsumer, NestModule, Provider, Type } from '@nestjs/common';
 
@@ -112,12 +113,7 @@ export interface MastraModuleOptions {
   };
 
   /** MCP transport options */
-  mcpOptions?: {
-    /** Run in serverless mode */
-    serverless?: boolean;
-    /** Custom session ID generator */
-    sessionIdGenerator?: () => string;
-  };
+  mcpOptions?: MCPOptions;
 }
 
 /**

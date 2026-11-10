@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
@@ -44,21 +45,16 @@ export function useOverlayControllerHandlers() {
       HttpResponse.json({ authenticated: true, user: { userId: 'user-overlay', email: 'overlay@example.com' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: OVERLAY_FACTORY_ID, name: 'Overlay' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-overlay',
-            installationId: 'install-overlay',
+            id: OVERLAY_FACTORY_ID,
+            name: 'Overlay',
             repositories: [
-              {
-                id: OVERLAY_PROJECT_REPOSITORY_ID,
+              listedRepository(OVERLAY_PROJECT_REPOSITORY_ID, 'org/overlay', {
                 branch: 'main',
                 sandboxWorkdir: '/workspace/overlay',
-                repository: { slug: 'org/overlay', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
@@ -125,7 +121,9 @@ export function useOverlayControllerHandlers() {
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:sessionId/state`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${OVERLAY_FACTORY_ID}`, () =>
       HttpResponse.json({ project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', defaultThinkingLevel: 'medium' } }),
     ),
@@ -134,19 +132,24 @@ export function useOverlayControllerHandlers() {
 
 /** Renders where a command navigated and the location it carries back, so tests can assert both. */
 function NavigatedPath() {
-  const { pathname, state } = useLocation();
+  const { pathname, hash, state } = useLocation();
   return (
     <span data-testid="navigated-path" data-return-to={JSON.stringify(state)}>
       {pathname}
+      {hash}
     </span>
   );
 }
 
-export function OverlayTestProviders({ children }: { children: ReactNode }) {
+export function OverlayTestProviders({
+  children,
+  initialEntry = `/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`,
+}: {
+  children: ReactNode;
+  initialEntry?: string;
+}) {
   return (
-    <MemoryRouter
-      initialEntries={[`/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`]}
-    >
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"

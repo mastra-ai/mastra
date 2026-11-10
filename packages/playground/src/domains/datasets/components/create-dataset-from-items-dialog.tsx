@@ -203,7 +203,7 @@ export function CreateDatasetFromItemsDialog({
               Cancel
             </DialogCancel>
             <DialogAction type="submit" disabled={!name.trim()}>
-              {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
+              {isCreating ? `Creating... (${progress}/${items.length})` : 'Create dataset'}
             </DialogAction>
           </DialogFooter>
         </Form>

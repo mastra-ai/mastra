@@ -398,5 +398,21 @@ describe('DataListRoot', () => {
       fireEvent.click(screen.getByRole('button', { name: /Name.*sorted descending.*sort ascending/i }));
       expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
     });
+
+    it('names the sort button with the label when the visible header is not plain text', () => {
+      render(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortKey="ttfc" label="Time to first chunk" onSortChange={vi.fn()}>
+              <abbr>TTFC</abbr>
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      expect(screen.getByRole('button').getAttribute('aria-label')).toBe(
+        'Time to first chunk, not sorted, sort ascending',
+      );
+    });
   });
 });

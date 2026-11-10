@@ -1,5 +1,675 @@
 # @mastra/mcp
 
+## 2.9.0-alpha.2
+
+### Patch Changes
+
+- Fixed tools rebuilt with `toolsFromDefinitions()` or `toolFromDefinition()` connecting without the call's `requestContext`. The handshake a cached tool opens on its first execution now reaches the server's custom `fetch` with that call's `requestContext`, so servers that authenticate every request accept it. A tool call that reconnects still sends the new handshake with its `requestContext`, but server logs on the new connection are no longer labelled with it. Fixes #29531. ([#29539](https://github.com/mastra-ai/mastra/pull/29539))
+
+- Updated dependencies [[`ce86e53`](https://github.com/mastra-ai/mastra/commit/ce86e5327a0e835e26792e238dacc2c15a777bbf), [`bfda77d`](https://github.com/mastra-ai/mastra/commit/bfda77de9773c383f23101cde8f4ee12af8bff19), [`66c620c`](https://github.com/mastra-ai/mastra/commit/66c620c086cd4a5d12347a832057290a19cb9db2), [`964e1ba`](https://github.com/mastra-ai/mastra/commit/964e1baa24a5a383c86b9f3aa639d488e8742b13), [`311d434`](https://github.com/mastra-ai/mastra/commit/311d4342cc61e9f5a621625e28e483a892fda6bc), [`9730315`](https://github.com/mastra-ai/mastra/commit/9730315a2fddf51580599030916d43b17e1ca553), [`bf9212b`](https://github.com/mastra-ai/mastra/commit/bf9212b308c1d418cac64d54aa380dac324db1bd)]:
+  - @mastra/core@1.83.0-alpha.5
+
+## 2.9.0-alpha.1
+
+### Patch Changes
+
+- Fixed MCP tool calls running twice on the server after a dropped connection (#28415). ([#29492](https://github.com/mastra-ai/mastra/pull/29492))
+
+  When the connection fails after a tool call was sent, the server may already have run it. The client now handles this case as follows:
+
+  - Tools the server marks `readOnlyHint` or `idempotentHint` are retried once, as before.
+  - Other tools fail with `MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN` and are not sent again. This includes a request sent on a connection the server had just closed, which used to be retried silently.
+  - Other calls running on the same server are no longer aborted and resent.
+  - Calls that never reached the server, such as a refused connection, still reconnect and retry.
+
+  Check the server state before retrying a call that failed this way:
+
+  ```ts
+  import { MastraError } from '@mastra/core/error';
+
+  try {
+    await tools.createTicket.execute(input);
+  } catch (error) {
+    if (error instanceof MastraError && error.id === 'MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN') {
+      // The ticket may exist. Look it up before creating it again.
+    }
+  }
+  ```
+
+- Fixed `MCPServer` rejecting `resources/read` for URIs built from an advertised resource template. A URI that matches one of the caller's `resourceTemplates` is now passed to `getResourceContent` and returned with the template's `mimeType` and `_meta`, instead of failing with `Resource not found`. Listed resources still take precedence. Fixes [#29455](https://github.com/mastra-ai/mastra/issues/29455). ([#29493](https://github.com/mastra-ai/mastra/pull/29493))
+
+- Fixed `MCPClient.authenticate()` hanging after a successful browser sign-in. The loopback OAuth callback server now closes every open connection when it shuts down, including spare connections the browser opened and never used, so sign-in returns as soon as the authorization code arrives instead of waiting minutes for the browser to drop them. ([#29560](https://github.com/mastra-ai/mastra/pull/29560))
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+
+## 2.9.0-alpha.0
+
+### Minor Changes
+
+- MCP tools now receive the caller that Mastra server auth resolved (user, permissions, roles, resource and organization) in `requestContext` when the server is mounted on a Mastra server adapter. These values come only from the server, never from the token or headers the client sends. ([#29321](https://github.com/mastra-ai/mastra/pull/29321))
+
+- MCPClient.listTools(), listToolsets() and listToolDefinitions() no longer hand agents the tools an MCP App server marks as app-only (`_meta.ui.visibility: ['app']`). Those tools are meant to be called by the server's app UI, not by the model, so agents no longer see helpers such as data relays in their tool list, including agents rebuilt with `toolsFromDefinitions()` from a catalog cached before this change. `onServerSettled` callbacks receive the same filtered tools. ([#29321](https://github.com/mastra-ai/mastra/pull/29321))
+
+  If your code called an app-only tool through `MCPClient`, call it from the app instead. The app asks its host to run the tool (`tools/call`), and the host forwards the call to the MCP server.
+
+  ```ts
+  // Before: app-only tools were in the agent's tool list
+  const tools = await mcp.listTools();
+  await tools.dashboard_observabilityMetricAggregate.execute(input, context);
+
+  // After: listTools() no longer returns them; the app calls the tool through its host
+  ```
+
+### Patch Changes
+
+- Storage version 2 workflow results no longer load every step result into memory. With `storageVersion: 2`, `start()`, `resume()`, `restart()` and `timeTravel()` return `status`, `result`, `error`, `suspended` and the other result fields right away, and `steps` is an async function that reads the full step history from storage when you call it. Version 1 results are unchanged, and `steps` is still a record. ([#29362](https://github.com/mastra-ai/mastra/pull/29362))
+
+  ```ts
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData });
+
+  console.log(result.status, result.result); // available right away
+  const steps = await result.steps(); // reads the step results from storage
+  ```
+
+  Calling `steps()` more than once, or at the same time, reads storage only once. `onFinish` and `onError` callbacks receive the same function and can await it. If the run moved on after the result was returned, for example because it was resumed or deleted, `steps()` throws `WORKFLOW_STORAGE_V2_STEPS_STALE` instead of returning newer results. The workflow HTTP routes and MCP workflow tools still return `steps` as an object.
+
+- Tool validation failures no longer write submitted values to logs. Logs now record the tool and the failing field paths, such as `issuePaths: ["email"]`. Errors returned to the model or MCP caller are unchanged, so it can still correct its call. Fixes #29318. ([#29331](https://github.com/mastra-ai/mastra/pull/29331))
+
+  `@mastra/core/tools` now exports `getValidationIssuePaths`, which returns the failing field paths of a validation error and masks dynamic keys such as record keys as `*`.
+
+  `@mastra/mcp` now requires `@mastra/core` 1.82.0 or later.
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6)]:
+  - @mastra/core@1.83.0-alpha.0
+
+## 2.8.0
+
+### Minor Changes
+
+- Added an `onServerSettled` option to `listToolsWithErrors()`, `listToolsetsWithErrors()`, and `listToolDefinitionsWithErrors()`. It is called for each server as soon as that server's discovery succeeds, fails, or times out, so you can show healthy servers right away instead of waiting for the slowest one. ([#29028](https://github.com/mastra-ai/mastra/pull/29028))
+
+  A server that hits `perServerTimeoutMs` now reports an error with `code: MCP_DISCOVERY_TIMEOUT_CODE` (exported from `@mastra/mcp`), so you can tell a slow server apart from one that failed.
+
+  Added a `serverNames` option to the same methods to discover only the named servers. Use it to retry the servers that timed out without starting every other server again.
+
+  The `onServerSettled` callback may be `async`. If it throws or rejects, the error is logged and discovery is unaffected — a rejected callback never surfaces as an unhandled rejection.
+
+  ```ts
+  await mcp.listToolsetsWithErrors({
+    perServerTimeoutMs: 60_000,
+    onServerSettled: (serverName, { value, error, duration }) => {
+      console.log(serverName, error ? error.message : Object.keys(value), duration);
+    },
+  });
+  ```
+
+- Added a `toolResult` option to `MCPServer` so tools can return images, audio, and files to MCP clients. ([#29247](https://github.com/mastra-ai/mastra/pull/29247))
+
+  Set `toolResult.modelOutput: true` to build each result from the tool's `toModelOutput`, the same output an agent sends to its model. Images become `image` blocks, audio becomes `audio` blocks, and other files become embedded resources. For example, a workspace `read_file` of a PNG now reaches the client as an image instead of base64 inside JSON text.
+
+  ```ts
+  const server = new MCPServer({
+    id: 'media-server',
+    name: 'Media Server',
+    version: '1.0.0',
+    tools: { screenshotTool },
+    toolResult: { modelOutput: true },
+  });
+  ```
+
+  Use `toolResult.transform` to rewrite any completed tool result before it is sent, for example to forward results that are already MCP-shaped from proxied tools.
+
+  Without the new option, results are unchanged. The default of `modelOutput` becomes `true` in the next major version; if your clients parse the raw JSON text of tools that define `toModelOutput`, set `modelOutput: false` to keep the current behavior.
+
+- Added answering MCP task input from the agent chat. When a tool call that continues as an MCP task needs input, and no `inputRequests` handler is configured, the call now suspends with the server's requests instead of failing with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`. The remote task stays open. Resuming the call answers that same task, and the tool is never called a second time. ([#29032](https://github.com/mastra-ai/mastra/pull/29032))
+
+  ```typescript
+  // The tool call suspended with { type: 'mcp-input-request', taskId, requests: { approve: { ... } } }
+  await agent.resumeStream(
+    { inputResponses: { approve: { action: 'accept', content: { ok: true } } } },
+    { runId, toolCallId },
+  );
+  ```
+
+  If the server asks again, the call suspends again with a new `requestedAt`, so a UI can tell the new request from the one it already answered. A configured `inputRequests` handler still answers first, and a direct `tool.execute()` call without an agent or workflow still fails as before. See [#28986](https://github.com/mastra-ai/mastra/issues/28986).
+
+### Patch Changes
+
+- Fixed `MCPServer` denying calls to tools it had just listed when fine-grained authorization is configured. Calls now succeed whenever the policy allows the user to run the server's tools, including through the server's `fga` mapping. The same rule applies when the server's tools are given to an agent. Fixes #28787. ([#29077](https://github.com/mastra-ai/mastra/pull/29077))
+
+- Fixed `disconnect()` hanging, and stdio server processes being left running, when a server never answered its connection handshake. A connect that is still waiting is now closed when you call `disconnect()` or `reconnectServer()`, which stops the server process and lets `disconnect()` return right away. ([#29028](https://github.com/mastra-ai/mastra/pull/29028))
+
+- Fixed `MCPServer` answering a call to an unknown tool with an `isError: true` tool result. The call now fails with a JSON-RPC `-32602` (Invalid params) error, as the MCP specification requires, so clients can tell a missing tool apart from a tool that ran and failed. Fixes #29139. ([#29204](https://github.com/mastra-ai/mastra/pull/29204))
+
+  If your client checked `isError` to detect a missing tool, catch the rejected `callTool()` instead. This includes `MCPClient` with `onToolError: 'return'`, where calling a tool the server no longer serves now throws.
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`7c242c5`](https://github.com/mastra-ai/mastra/commit/7c242c55c565e9c447ab74a6f529612f0030f061), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0
+
+## 2.8.0-alpha.2
+
+### Minor Changes
+
+- Added a `toolResult` option to `MCPServer` so tools can return images, audio, and files to MCP clients. ([#29247](https://github.com/mastra-ai/mastra/pull/29247))
+
+  Set `toolResult.modelOutput: true` to build each result from the tool's `toModelOutput`, the same output an agent sends to its model. Images become `image` blocks, audio becomes `audio` blocks, and other files become embedded resources. For example, a workspace `read_file` of a PNG now reaches the client as an image instead of base64 inside JSON text.
+
+  ```ts
+  const server = new MCPServer({
+    id: 'media-server',
+    name: 'Media Server',
+    version: '1.0.0',
+    tools: { screenshotTool },
+    toolResult: { modelOutput: true },
+  });
+  ```
+
+  Use `toolResult.transform` to rewrite any completed tool result before it is sent, for example to forward results that are already MCP-shaped from proxied tools.
+
+  Without the new option, results are unchanged. The default of `modelOutput` becomes `true` in the next major version; if your clients parse the raw JSON text of tools that define `toModelOutput`, set `modelOutput: false` to keep the current behavior.
+
+- Added answering MCP task input from the agent chat. When a tool call that continues as an MCP task needs input, and no `inputRequests` handler is configured, the call now suspends with the server's requests instead of failing with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`. The remote task stays open. Resuming the call answers that same task, and the tool is never called a second time. ([#29032](https://github.com/mastra-ai/mastra/pull/29032))
+
+  ```typescript
+  // The tool call suspended with { type: 'mcp-input-request', taskId, requests: { approve: { ... } } }
+  await agent.resumeStream(
+    { inputResponses: { approve: { action: 'accept', content: { ok: true } } } },
+    { runId, toolCallId },
+  );
+  ```
+
+  If the server asks again, the call suspends again with a new `requestedAt`, so a UI can tell the new request from the one it already answered. A configured `inputRequests` handler still answers first, and a direct `tool.execute()` call without an agent or workflow still fails as before. See [#28986](https://github.com/mastra-ai/mastra/issues/28986).
+
+### Patch Changes
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0-alpha.3
+
+## 2.8.0-alpha.1
+
+### Patch Changes
+
+- Fixed `MCPServer` answering a call to an unknown tool with an `isError: true` tool result. The call now fails with a JSON-RPC `-32602` (Invalid params) error, as the MCP specification requires, so clients can tell a missing tool apart from a tool that ran and failed. Fixes #29139. ([#29204](https://github.com/mastra-ai/mastra/pull/29204))
+
+  If your client checked `isError` to detect a missing tool, catch the rejected `callTool()` instead. This includes `MCPClient` with `onToolError: 'return'`, where calling a tool the server no longer serves now throws.
+
+- Updated dependencies [[`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6)]:
+  - @mastra/core@1.82.0-alpha.2
+
+## 2.8.0-alpha.0
+
+### Minor Changes
+
+- Added an `onServerSettled` option to `listToolsWithErrors()`, `listToolsetsWithErrors()`, and `listToolDefinitionsWithErrors()`. It is called for each server as soon as that server's discovery succeeds, fails, or times out, so you can show healthy servers right away instead of waiting for the slowest one. ([#29028](https://github.com/mastra-ai/mastra/pull/29028))
+
+  A server that hits `perServerTimeoutMs` now reports an error with `code: MCP_DISCOVERY_TIMEOUT_CODE` (exported from `@mastra/mcp`), so you can tell a slow server apart from one that failed.
+
+  Added a `serverNames` option to the same methods to discover only the named servers. Use it to retry the servers that timed out without starting every other server again.
+
+  The `onServerSettled` callback may be `async`. If it throws or rejects, the error is logged and discovery is unaffected — a rejected callback never surfaces as an unhandled rejection.
+
+  ```ts
+  await mcp.listToolsetsWithErrors({
+    perServerTimeoutMs: 60_000,
+    onServerSettled: (serverName, { value, error, duration }) => {
+      console.log(serverName, error ? error.message : Object.keys(value), duration);
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `MCPServer` denying calls to tools it had just listed when fine-grained authorization is configured. Calls now succeed whenever the policy allows the user to run the server's tools, including through the server's `fga` mapping. The same rule applies when the server's tools are given to an agent. Fixes #28787. ([#29077](https://github.com/mastra-ai/mastra/pull/29077))
+
+- Fixed `disconnect()` hanging, and stdio server processes being left running, when a server never answered its connection handshake. A connect that is still waiting is now closed when you call `disconnect()` or `reconnectServer()`, which stops the server process and lets `disconnect()` return right away. ([#29028](https://github.com/mastra-ai/mastra/pull/29028))
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+
+## 2.7.0
+
+### Minor Changes
+
+- Added Mastra-storage-backed tasks to `MCPServer` (experimental). Closes #28337. ([#28521](https://github.com/mastra-ai/mastra/pull/28521))
+
+  - **Shared tasks.** A server registered on a Mastra instance with background tasks enabled keeps its tasks in Mastra storage. Any instance that shares the storage can check, answer, cancel, and run a task.
+  - **Survives restarts.** Answers outlive the instance that took them. Each instance picks up tasks left by stopped instances as soon as the server is registered.
+  - **Cleans up after itself.** Expired tasks fail, and finished tasks are deleted when their TTL ends.
+  - **Limits apply everywhere.** `maxOpenTasksPerClient` and `maxOpenTasks` count tasks across all instances.
+  - **Private by default.** Storage never keeps task ids or bearer tokens. A readable `metadata.clientLabel` shows which client sent a task.
+  - **One trace per task.** The call that creates a task, each run of the tool, and later answers and cancels share one trace. Polls aren't traced.
+  - **Opt-in recovery.** When the instance running a task stops, the task fails by default. Set `recover: true` to run the tool again on another instance. Only use it for tools that are safe to repeat.
+
+  ```typescript
+  const server = new MCPServer({
+    id: 'reports',
+    name: 'Reports',
+    version: '1.0.0',
+    tools: { buildReport },
+    tasks: { tools: { buildReport: { mode: 'always', recover: true } } },
+  });
+
+  export const mastra = new Mastra({
+    storage,
+    backgroundTasks: { enabled: true },
+    mcpServers: { reports: server },
+  });
+  ```
+
+- **MCP tasks in Studio** ([#28629](https://github.com/mastra-ai/mastra/pull/28629))
+
+  MCP servers with `tasks` enabled now report which tools run as tasks (`always` or `auto`, whether clients must support tasks to call them, and whether they recover after a restart), and give Studio an admin view to list tasks (filtered by status, tool or client, page by page), find one by its task id, and cancel or answer them. Cancelling or answering from Studio goes through the same path as the protocol's `tasks/cancel` and `tasks/update`. The view shows hashed task and client keys and a readable client label, never raw task ids or credentials. Custom task stores can opt in by implementing `MCPTaskStoreAdmin` (`list`, `updateByKey`, `cancelByKey`); stores without it are reported as not listable.
+
+  The MCP client now writes an `mcp-task` progress entry (`MCPTaskProgress`) to a tool's output stream when its call continues as an MCP task and whenever the task's status changes, so UIs can show the remote task id and status while it runs.
+
+  ```ts
+  import type { MCPTaskStore, MCPTaskStoreAdmin } from '@mastra/mcp';
+
+  // A custom store opts into Studio's task list by also implementing MCPTaskStoreAdmin.
+  class MyTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
+    // ...the MCPTaskStore methods, plus:
+    async list(options) {
+      /* newest first, with nextCursor when more match */
+    }
+    async updateByKey(taskKey, inputResponses) {
+      /* 'done' | 'ignored' | 'not_found' */
+    }
+    async cancelByKey(taskKey) {
+      /* 'done' | 'ignored' | 'not_found' */
+    }
+  }
+  ```
+
+- Added experimental support for answering tool calls with MCP Tasks (`io.modelcontextprotocol/tasks`). A long-running tool can now hand the client a task right away; the client polls for the result, so the work isn't limited by HTTP timeouts. Clients that don't support tasks keep getting normal answers. ([#28420](https://github.com/mastra-ai/mastra/pull/28420))
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'Reports',
+    version: '1.0.0',
+    tools: { buildReport, lookupCustomer },
+    tasks: {
+      tools: {
+        buildReport: 'always',
+        lookupCustomer: { mode: 'auto', syncWindowMs: 1000 },
+      },
+    },
+  });
+  ```
+
+  Tasks are bound to the caller that created them, can be cancelled (which aborts the tool's `abortSignal`), and expire after 24 hours by default. A tool that calls `suspend()` inside a task asks the client for input, and runs again with `resumeData` once the client answers. Tasks are kept in memory by default; pass `tasks.store` to keep them elsewhere. Each client can hold up to 100 open tasks and the server up to 1000 (`tasks.maxOpenTasksPerClient`, `tasks.maxOpenTasks`). Past that, an `'always'` tool answers with an error and an `'auto'` tool answers synchronously. The in-memory store also caps how many tasks it keeps, finished ones included, at 1000 per client and 10000 in total (`tasks.maxRetainedTasksPerClient`, `tasks.maxRetainedTasks`), refusing new tasks the same way.
+
+  Task runs use the request context stored when the task was created, with the bearer token removed, and get no `context.mcp`. The only exception is the first run of an `'auto'` tool, which started under the request. Read cancellation from `context.abortSignal`.
+
+- Added MCP tasks for workflows and agents served by `MCPServer` (experimental). The `tasks.workflows` and `tasks.agents` options let `run_<workflow>` and `ask_<agent>` answer with a task, using the same modes as tools. ([#28619](https://github.com/mastra-ai/mastra/pull/28619))
+
+  ```typescript
+  const server = new MCPServer({
+    id: 'reports',
+    name: 'Reports',
+    version: '1.0.0',
+    workflows: { nightly },
+    agents: { researcher },
+    tasks: {
+      workflows: { nightly: 'always' },
+      agents: { researcher: { mode: 'auto', syncWindowMs: 1000 } },
+    },
+  });
+  ```
+
+  **Workflows**: a workflow run starts once per request, and the task follows that run. A suspended step with a `resumeSchema` the client can fill in asks for input through the task, and the answer resumes the run. Other suspended steps leave the task `working` until the run is resumed some other way. Cancelling the task cancels the run, even while it waits for input. A run that fails completes the task with `isError: true`. With tasks kept in Mastra storage under a stable `MCPServer` `id`, when a server stops mid-run, Mastra's workflow recovery continues the run on the next instance and the task follows it. Tasks kept in memory end with the server.
+
+  **Agents**: an agent task runs the agent's `generate()` call as the task's work. Cancelling the task aborts that call, and agent tasks support `recover`. An agent that pauses for tool approval completes the task with an error, since tasks can't answer approvals yet.
+
+  `tasks.default` now also applies to workflows and agents not listed in `tasks.workflows` or `tasks.agents`, and `tasks.required` takes the names clients call, such as `run_nightly`.
+
+- Added experimental support for MCP tasks in `MCPClient`. A server can now answer a long-running tool call with a task instead of holding the request open. Mastra waits for the task and returns its final result, so tool calls keep the same shape. ([#28343](https://github.com/mastra-ai/mastra/pull/28343))
+
+  Turn it on per server:
+
+  ```typescript
+  const mcp = new MCPClient({
+    servers: {
+      reports: {
+        url: new URL('https://example.com/mcp'),
+        tasks: { maxWaitMs: 30 * 60_000 },
+        inputRequests: async ({ params }) => ({ action: 'accept', content: { ok: true } }),
+      },
+    },
+  });
+  ```
+
+  - A task that needs input is answered through your `inputRequests` handler and sent back with `tasks/update`, without calling the tool again.
+  - Aborting the tool call or reaching `maxWaitMs` cancels the remote task and ends the call right away, even while a poll or your input handler is still running. A cancelled or failed task becomes a tool error.
+  - Polling rides out a server restart or deploy: the client reconnects and retries with backoff for up to 5 minutes before failing the call.
+  - On an agent with background tasks enabled, these tools run as background tasks, so the agent keeps working while the remote task runs.
+  - The tool call span carries `mcpTaskKey` metadata (a hash of the task id) to match it with the server's spans for that task.
+  - `mcp.tasks.get`, `mcp.tasks.update` and `mcp.tasks.cancel` read, answer and cancel a task directly.
+
+  Tasks are off unless `tasks` is set, so existing servers behave as before. See https://github.com/mastra-ai/mastra/issues/26000.
+
+### Patch Changes
+
+- Fixed MCP task tool calls failing when a server sends a valid ISO 8601 `createdAt` that JavaScript can't parse, such as `20261029T120000Z`. The client now accepts it and counts the task's TTL from when it started waiting. ([#28899](https://github.com/mastra-ai/mastra/pull/28899))
+
+  The client also caps the wait between polls at the task's TTL, so it no longer polls up to one poll interval after the TTL ends.
+
+- Updated dependencies [[`1b8b0ac`](https://github.com/mastra-ai/mastra/commit/1b8b0ac10e134e33b292f350f519c1d200288525), [`278ecce`](https://github.com/mastra-ai/mastra/commit/278ecceb2d4f0200fb9b8a8d6e9f6cfcd39ac3ff), [`1477aad`](https://github.com/mastra-ai/mastra/commit/1477aaddf9f0086aebf7c113cb6435353416aad3), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`fcfb773`](https://github.com/mastra-ai/mastra/commit/fcfb773428c7ded1188414ba9faa01df3fa8ccc3), [`4c56da4`](https://github.com/mastra-ai/mastra/commit/4c56da456f13d104adfb5bb69ed0937a8c1ba59a), [`dfc1bc6`](https://github.com/mastra-ai/mastra/commit/dfc1bc68646d4948e28aef9faa2a3d3ccfa96de5), [`7b3f759`](https://github.com/mastra-ai/mastra/commit/7b3f759e080364820f785ed6c6b422db1a4a6366), [`cf4c4b6`](https://github.com/mastra-ai/mastra/commit/cf4c4b6e8b66b13696c9217f62aa42f38a9b873c), [`e57fc08`](https://github.com/mastra-ai/mastra/commit/e57fc08fd839a1683115a247fefb4bb40ff0e451), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`1497362`](https://github.com/mastra-ai/mastra/commit/14973622f25aea84ff2fa7186214ca1262f9f6b3), [`52265cb`](https://github.com/mastra-ai/mastra/commit/52265cba91aecebdcc45b2d95ef7b18b6d738d8b), [`280fb9d`](https://github.com/mastra-ai/mastra/commit/280fb9d75e09a408783230e45dc287ba389952d5), [`253aa55`](https://github.com/mastra-ai/mastra/commit/253aa55d8ef301a2ebae6ae83352d0f89c57d0bd), [`3ee0f7b`](https://github.com/mastra-ai/mastra/commit/3ee0f7bddde204dc87e0e2351a750d54428ef70c), [`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`b79e61a`](https://github.com/mastra-ai/mastra/commit/b79e61a92d0982ba2daa25629576656d211753f8), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`292dd6c`](https://github.com/mastra-ai/mastra/commit/292dd6cd973f5821f943eb01ad081eefcb1285af), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`ba8b955`](https://github.com/mastra-ai/mastra/commit/ba8b955b1ad6022089feec253c111035e9e7b9b6), [`db7306f`](https://github.com/mastra-ai/mastra/commit/db7306fc1710942cc421e651121569ac8be804fe), [`c5527a3`](https://github.com/mastra-ai/mastra/commit/c5527a38db8e91e4f6a3f01d8ad3c5183cc96606), [`5480e7b`](https://github.com/mastra-ai/mastra/commit/5480e7b7caa5d8f8018d22f79e36a9a19697af4b), [`d4cd4cd`](https://github.com/mastra-ai/mastra/commit/d4cd4cde06300a2ceb79b9e1d32c053e33bbfe50), [`744aaab`](https://github.com/mastra-ai/mastra/commit/744aaab6ceebe03829e8851d6ac95dca671edd2b), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`91428b2`](https://github.com/mastra-ai/mastra/commit/91428b2f43199db6901d9dc3fa0a17e50f482507), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`f145b78`](https://github.com/mastra-ai/mastra/commit/f145b788c18849b0ca562d09a61e399fe93d146d), [`fbd5957`](https://github.com/mastra-ai/mastra/commit/fbd5957959481ffc030faa3ab2e3df35e085bc2d), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990), [`1607791`](https://github.com/mastra-ai/mastra/commit/1607791e919cd48dcdb0702dd33ffd7d30c30441), [`d6a6568`](https://github.com/mastra-ai/mastra/commit/d6a65687c4662d20236534ad1b263b40e771e02f), [`f3e1356`](https://github.com/mastra-ai/mastra/commit/f3e1356e60230badc2c3288b60cd2cf6a0587db5), [`1a2ff7f`](https://github.com/mastra-ai/mastra/commit/1a2ff7ff01230ad398e136d395f20d437ff37560), [`39edcee`](https://github.com/mastra-ai/mastra/commit/39edceea4f109db8cc02897e6e8ff5350aa9aec5), [`0443fd5`](https://github.com/mastra-ai/mastra/commit/0443fd5137071cc64b0d2730d57bfb9398527410), [`6a2b35f`](https://github.com/mastra-ai/mastra/commit/6a2b35fd4bc81071b0b6be755a9e3ec0b317db18), [`1966af4`](https://github.com/mastra-ai/mastra/commit/1966af4a622641b9172141a988aff5922f7221b0), [`49080fa`](https://github.com/mastra-ai/mastra/commit/49080fabe7a86b7fac94cdab2596b2d2b320e189), [`14290e1`](https://github.com/mastra-ai/mastra/commit/14290e18078712a02270ac45e50f49806624c4ce), [`b89557e`](https://github.com/mastra-ai/mastra/commit/b89557e0cc0db19922e391eff817505e36684ff9), [`69c79cf`](https://github.com/mastra-ai/mastra/commit/69c79cf07b6fc1ffe6f2f547729f1cb05bd54eca), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`2b05803`](https://github.com/mastra-ai/mastra/commit/2b05803437af081cc4fdea2d81e3980b5f52d897), [`8b781d0`](https://github.com/mastra-ai/mastra/commit/8b781d0308eec018e84b59809cc24b2953300300), [`299d4e3`](https://github.com/mastra-ai/mastra/commit/299d4e3d2887b1525abff64bad61a67425ae6a0d), [`c0918c0`](https://github.com/mastra-ai/mastra/commit/c0918c01b337947eeb54d5d1b3ab9ed0719bb4b7), [`690bd1b`](https://github.com/mastra-ai/mastra/commit/690bd1baee178d56a75994549c318e0089debdee), [`930f604`](https://github.com/mastra-ai/mastra/commit/930f604c30de2eb7fc94437e4208d0a2ec8dee58), [`f5136e5`](https://github.com/mastra-ai/mastra/commit/f5136e56c468be0b9ee623983f174366edb7573e), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`6deb7c0`](https://github.com/mastra-ai/mastra/commit/6deb7c0a1e613d19a979e255a906c07b11f7338d), [`e77a7d9`](https://github.com/mastra-ai/mastra/commit/e77a7d910b7943368b4df6688e7645fffb6a8891), [`d102756`](https://github.com/mastra-ai/mastra/commit/d102756c708797722d95ee73ab11ba614f2f9ec8), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`e9fc83e`](https://github.com/mastra-ai/mastra/commit/e9fc83e5d4427f49af147aec86eb3f7fcb6fb8ee), [`7d3dd2b`](https://github.com/mastra-ai/mastra/commit/7d3dd2b07b47d8cc5c52ccb97054e85ebed1619a), [`d9e26f4`](https://github.com/mastra-ai/mastra/commit/d9e26f485d2658a9dc84c0f20804e9a89a57d3a0)]:
+  - @mastra/core@1.81.0
+
+## 2.7.0-alpha.0
+
+### Minor Changes
+
+- Added Mastra-storage-backed tasks to `MCPServer` (experimental). Closes #28337. ([#28521](https://github.com/mastra-ai/mastra/pull/28521))
+
+  - **Shared tasks.** A server registered on a Mastra instance with background tasks enabled keeps its tasks in Mastra storage. Any instance that shares the storage can check, answer, cancel, and run a task.
+  - **Survives restarts.** Answers outlive the instance that took them. Each instance picks up tasks left by stopped instances as soon as the server is registered.
+  - **Cleans up after itself.** Expired tasks fail, and finished tasks are deleted when their TTL ends.
+  - **Limits apply everywhere.** `maxOpenTasksPerClient` and `maxOpenTasks` count tasks across all instances.
+  - **Private by default.** Storage never keeps task ids or bearer tokens. A readable `metadata.clientLabel` shows which client sent a task.
+  - **One trace per task.** The call that creates a task, each run of the tool, and later answers and cancels share one trace. Polls aren't traced.
+  - **Opt-in recovery.** When the instance running a task stops, the task fails by default. Set `recover: true` to run the tool again on another instance. Only use it for tools that are safe to repeat.
+
+  ```typescript
+  const server = new MCPServer({
+    id: 'reports',
+    name: 'Reports',
+    version: '1.0.0',
+    tools: { buildReport },
+    tasks: { tools: { buildReport: { mode: 'always', recover: true } } },
+  });
+
+  export const mastra = new Mastra({
+    storage,
+    backgroundTasks: { enabled: true },
+    mcpServers: { reports: server },
+  });
+  ```
+
+- **MCP tasks in Studio** ([#28629](https://github.com/mastra-ai/mastra/pull/28629))
+
+  MCP servers with `tasks` enabled now report which tools run as tasks (`always` or `auto`, whether clients must support tasks to call them, and whether they recover after a restart), and give Studio an admin view to list tasks (filtered by status, tool or client, page by page), find one by its task id, and cancel or answer them. Cancelling or answering from Studio goes through the same path as the protocol's `tasks/cancel` and `tasks/update`. The view shows hashed task and client keys and a readable client label, never raw task ids or credentials. Custom task stores can opt in by implementing `MCPTaskStoreAdmin` (`list`, `updateByKey`, `cancelByKey`); stores without it are reported as not listable.
+
+  The MCP client now writes an `mcp-task` progress entry (`MCPTaskProgress`) to a tool's output stream when its call continues as an MCP task and whenever the task's status changes, so UIs can show the remote task id and status while it runs.
+
+  ```ts
+  import type { MCPTaskStore, MCPTaskStoreAdmin } from '@mastra/mcp';
+
+  // A custom store opts into Studio's task list by also implementing MCPTaskStoreAdmin.
+  class MyTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
+    // ...the MCPTaskStore methods, plus:
+    async list(options) {
+      /* newest first, with nextCursor when more match */
+    }
+    async updateByKey(taskKey, inputResponses) {
+      /* 'done' | 'ignored' | 'not_found' */
+    }
+    async cancelByKey(taskKey) {
+      /* 'done' | 'ignored' | 'not_found' */
+    }
+  }
+  ```
+
+- Added experimental support for answering tool calls with MCP Tasks (`io.modelcontextprotocol/tasks`). A long-running tool can now hand the client a task right away; the client polls for the result, so the work isn't limited by HTTP timeouts. Clients that don't support tasks keep getting normal answers. ([#28420](https://github.com/mastra-ai/mastra/pull/28420))
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'Reports',
+    version: '1.0.0',
+    tools: { buildReport, lookupCustomer },
+    tasks: {
+      tools: {
+        buildReport: 'always',
+        lookupCustomer: { mode: 'auto', syncWindowMs: 1000 },
+      },
+    },
+  });
+  ```
+
+  Tasks are bound to the caller that created them, can be cancelled (which aborts the tool's `abortSignal`), and expire after 24 hours by default. A tool that calls `suspend()` inside a task asks the client for input, and runs again with `resumeData` once the client answers. Tasks are kept in memory by default; pass `tasks.store` to keep them elsewhere. Each client can hold up to 100 open tasks and the server up to 1000 (`tasks.maxOpenTasksPerClient`, `tasks.maxOpenTasks`). Past that, an `'always'` tool answers with an error and an `'auto'` tool answers synchronously. The in-memory store also caps how many tasks it keeps, finished ones included, at 1000 per client and 10000 in total (`tasks.maxRetainedTasksPerClient`, `tasks.maxRetainedTasks`), refusing new tasks the same way.
+
+  Task runs use the request context stored when the task was created, with the bearer token removed, and get no `context.mcp`. The only exception is the first run of an `'auto'` tool, which started under the request. Read cancellation from `context.abortSignal`.
+
+- Added MCP tasks for workflows and agents served by `MCPServer` (experimental). The `tasks.workflows` and `tasks.agents` options let `run_<workflow>` and `ask_<agent>` answer with a task, using the same modes as tools. ([#28619](https://github.com/mastra-ai/mastra/pull/28619))
+
+  ```typescript
+  const server = new MCPServer({
+    id: 'reports',
+    name: 'Reports',
+    version: '1.0.0',
+    workflows: { nightly },
+    agents: { researcher },
+    tasks: {
+      workflows: { nightly: 'always' },
+      agents: { researcher: { mode: 'auto', syncWindowMs: 1000 } },
+    },
+  });
+  ```
+
+  **Workflows**: a workflow run starts once per request, and the task follows that run. A suspended step with a `resumeSchema` the client can fill in asks for input through the task, and the answer resumes the run. Other suspended steps leave the task `working` until the run is resumed some other way. Cancelling the task cancels the run, even while it waits for input. A run that fails completes the task with `isError: true`. With tasks kept in Mastra storage under a stable `MCPServer` `id`, when a server stops mid-run, Mastra's workflow recovery continues the run on the next instance and the task follows it. Tasks kept in memory end with the server.
+
+  **Agents**: an agent task runs the agent's `generate()` call as the task's work. Cancelling the task aborts that call, and agent tasks support `recover`. An agent that pauses for tool approval completes the task with an error, since tasks can't answer approvals yet.
+
+  `tasks.default` now also applies to workflows and agents not listed in `tasks.workflows` or `tasks.agents`, and `tasks.required` takes the names clients call, such as `run_nightly`.
+
+- Added experimental support for MCP tasks in `MCPClient`. A server can now answer a long-running tool call with a task instead of holding the request open. Mastra waits for the task and returns its final result, so tool calls keep the same shape. ([#28343](https://github.com/mastra-ai/mastra/pull/28343))
+
+  Turn it on per server:
+
+  ```typescript
+  const mcp = new MCPClient({
+    servers: {
+      reports: {
+        url: new URL('https://example.com/mcp'),
+        tasks: { maxWaitMs: 30 * 60_000 },
+        inputRequests: async ({ params }) => ({ action: 'accept', content: { ok: true } }),
+      },
+    },
+  });
+  ```
+
+  - A task that needs input is answered through your `inputRequests` handler and sent back with `tasks/update`, without calling the tool again.
+  - Aborting the tool call or reaching `maxWaitMs` cancels the remote task and ends the call right away, even while a poll or your input handler is still running. A cancelled or failed task becomes a tool error.
+  - Polling rides out a server restart or deploy: the client reconnects and retries with backoff for up to 5 minutes before failing the call.
+  - On an agent with background tasks enabled, these tools run as background tasks, so the agent keeps working while the remote task runs.
+  - The tool call span carries `mcpTaskKey` metadata (a hash of the task id) to match it with the server's spans for that task.
+  - `mcp.tasks.get`, `mcp.tasks.update` and `mcp.tasks.cancel` read, answer and cancel a task directly.
+
+  Tasks are off unless `tasks` is set, so existing servers behave as before. See https://github.com/mastra-ai/mastra/issues/26000.
+
+### Patch Changes
+
+- Fixed MCP task tool calls failing when a server sends a valid ISO 8601 `createdAt` that JavaScript can't parse, such as `20261029T120000Z`. The client now accepts it and counts the task's TTL from when it started waiting. ([#28899](https://github.com/mastra-ai/mastra/pull/28899))
+
+  The client also caps the wait between polls at the task's TTL, so it no longer polls up to one poll interval after the TTL ends.
+
+- Updated dependencies [[`278ecce`](https://github.com/mastra-ai/mastra/commit/278ecceb2d4f0200fb9b8a8d6e9f6cfcd39ac3ff), [`fcfb773`](https://github.com/mastra-ai/mastra/commit/fcfb773428c7ded1188414ba9faa01df3fa8ccc3), [`4c56da4`](https://github.com/mastra-ai/mastra/commit/4c56da456f13d104adfb5bb69ed0937a8c1ba59a), [`7b3f759`](https://github.com/mastra-ai/mastra/commit/7b3f759e080364820f785ed6c6b422db1a4a6366), [`cf4c4b6`](https://github.com/mastra-ai/mastra/commit/cf4c4b6e8b66b13696c9217f62aa42f38a9b873c), [`e57fc08`](https://github.com/mastra-ai/mastra/commit/e57fc08fd839a1683115a247fefb4bb40ff0e451), [`52265cb`](https://github.com/mastra-ai/mastra/commit/52265cba91aecebdcc45b2d95ef7b18b6d738d8b), [`3ee0f7b`](https://github.com/mastra-ai/mastra/commit/3ee0f7bddde204dc87e0e2351a750d54428ef70c), [`b79e61a`](https://github.com/mastra-ai/mastra/commit/b79e61a92d0982ba2daa25629576656d211753f8), [`292dd6c`](https://github.com/mastra-ai/mastra/commit/292dd6cd973f5821f943eb01ad081eefcb1285af), [`ba8b955`](https://github.com/mastra-ai/mastra/commit/ba8b955b1ad6022089feec253c111035e9e7b9b6), [`db7306f`](https://github.com/mastra-ai/mastra/commit/db7306fc1710942cc421e651121569ac8be804fe), [`5480e7b`](https://github.com/mastra-ai/mastra/commit/5480e7b7caa5d8f8018d22f79e36a9a19697af4b), [`d4cd4cd`](https://github.com/mastra-ai/mastra/commit/d4cd4cde06300a2ceb79b9e1d32c053e33bbfe50), [`744aaab`](https://github.com/mastra-ai/mastra/commit/744aaab6ceebe03829e8851d6ac95dca671edd2b), [`91428b2`](https://github.com/mastra-ai/mastra/commit/91428b2f43199db6901d9dc3fa0a17e50f482507), [`fbd5957`](https://github.com/mastra-ai/mastra/commit/fbd5957959481ffc030faa3ab2e3df35e085bc2d), [`39edcee`](https://github.com/mastra-ai/mastra/commit/39edceea4f109db8cc02897e6e8ff5350aa9aec5), [`0443fd5`](https://github.com/mastra-ai/mastra/commit/0443fd5137071cc64b0d2730d57bfb9398527410), [`6a2b35f`](https://github.com/mastra-ai/mastra/commit/6a2b35fd4bc81071b0b6be755a9e3ec0b317db18), [`1966af4`](https://github.com/mastra-ai/mastra/commit/1966af4a622641b9172141a988aff5922f7221b0), [`49080fa`](https://github.com/mastra-ai/mastra/commit/49080fabe7a86b7fac94cdab2596b2d2b320e189), [`14290e1`](https://github.com/mastra-ai/mastra/commit/14290e18078712a02270ac45e50f49806624c4ce), [`b89557e`](https://github.com/mastra-ai/mastra/commit/b89557e0cc0db19922e391eff817505e36684ff9), [`69c79cf`](https://github.com/mastra-ai/mastra/commit/69c79cf07b6fc1ffe6f2f547729f1cb05bd54eca), [`2b05803`](https://github.com/mastra-ai/mastra/commit/2b05803437af081cc4fdea2d81e3980b5f52d897), [`8b781d0`](https://github.com/mastra-ai/mastra/commit/8b781d0308eec018e84b59809cc24b2953300300), [`c0918c0`](https://github.com/mastra-ai/mastra/commit/c0918c01b337947eeb54d5d1b3ab9ed0719bb4b7), [`690bd1b`](https://github.com/mastra-ai/mastra/commit/690bd1baee178d56a75994549c318e0089debdee), [`930f604`](https://github.com/mastra-ai/mastra/commit/930f604c30de2eb7fc94437e4208d0a2ec8dee58), [`e77a7d9`](https://github.com/mastra-ai/mastra/commit/e77a7d910b7943368b4df6688e7645fffb6a8891), [`d102756`](https://github.com/mastra-ai/mastra/commit/d102756c708797722d95ee73ab11ba614f2f9ec8), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`e9fc83e`](https://github.com/mastra-ai/mastra/commit/e9fc83e5d4427f49af147aec86eb3f7fcb6fb8ee), [`7d3dd2b`](https://github.com/mastra-ai/mastra/commit/7d3dd2b07b47d8cc5c52ccb97054e85ebed1619a), [`d9e26f4`](https://github.com/mastra-ai/mastra/commit/d9e26f485d2658a9dc84c0f20804e9a89a57d3a0)]:
+  - @mastra/core@1.81.0-alpha.2
+
+## 2.6.0
+
+### Minor Changes
+
+- Added `registerProcessHooks: false` to `MCPClient` so applications can finish graceful shutdown and call `disconnect()` themselves. The default remains `true`. Fixes [#27478](https://github.com/mastra-ai/mastra/issues/27478). ([#28144](https://github.com/mastra-ai/mastra/pull/28144))
+
+  ```ts
+  const mcp = new MCPClient({
+    servers: { weather: { url: new URL('https://example.com/mcp') } },
+    registerProcessHooks: false,
+  });
+
+  process.once('SIGTERM', async () => {
+    await mcp.disconnect();
+    process.exit(0);
+  });
+  ```
+
+- Added optional type generation for direct MCP tool calls. Generate concrete input/output interfaces from your existing clients without changing dynamic discovery or execution. ([#25569](https://github.com/mastra-ai/mastra/pull/25569))
+
+  Before:
+
+  ```ts
+  export const mcp = new MCPClient({ servers });
+  ```
+
+  After:
+
+  ```ts
+  import { MCPClient } from '@mastra/mcp';
+  import type { MCPServers } from './mcp-types.generated';
+
+  export const mcp = new MCPClient<MCPServers>({
+    servers,
+    typegen: { outFile: 'mcp-types.generated.ts' },
+  });
+  ```
+
+  Run `npx @mastra/mcp generate ./client.ts` with the required server credentials. The generated type-only import can be absent on the first run. File paths resolve from the command working directory. Regenerate when server schemas change.
+
+  Discovered tools remain optional. Results retain protocol-envelope and validation-error alternatives; absent output schemas use `unknown`. Narrow results before accessing structured fields.
+
+- Added a `legacy` option to `MCPServer` that serves MCP clients that still open with `initialize` (2025-era clients such as VS Code and Cursor) over HTTP. ([#28019](https://github.com/mastra-ai/mastra/pull/28019))
+
+  ```ts
+  const server = new MCPServer({
+    name: 'My server',
+    version: '1.0.0',
+    tools,
+    legacy: 'stateless',
+  });
+  ```
+
+  Each request from these clients is answered without a session. `GET` and `DELETE` session requests get `405`, and features that need MCP 2026-07-28 (suspend/resume, `subscriptions/listen`, events) aren't available to them. The default stays `'reject'`, which answers these clients with an unsupported-protocol-version error.
+
+### Patch Changes
+
+- dependencies updates: ([#28580](https://github.com/mastra-ai/mastra/pull/28580))
+  - Updated dependency [`@modelcontextprotocol/client@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/client/v/2.4.0) (from `2.3.1`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/core@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/core/v/2.4.0) (from `2.3.1`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/node@2.1.2` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/node/v/2.1.2) (from `2.0.0`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/server@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/server/v/2.4.0) (from `2.3.1`, in `dependencies`)
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@modelcontextprotocol/ext-apps@^2.0.3` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/ext-apps/v/2.0.3) (from `^2.0.0`, in `dependencies`)
+  - Updated dependency [`@copilotkit/aimock@^1.46.0` ↗︎](https://www.npmjs.com/package/@copilotkit/aimock/v/1.46.0) (from `^1.29.0`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/semver@^7.8.0` ↗︎](https://www.npmjs.com/package/@types/semver/v/7.8.0) (from `^7.7.1`, in `devDependencies`)
+  - Updated dependency [`zod-to-json-schema@^3.25.2` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.25.2) (from `^3.25.1`, in `devDependencies`)
+
+- dependencies updates: ([#28018](https://github.com/mastra-ai/mastra/pull/28018))
+  - Updated dependency [`@modelcontextprotocol/client@2.3.1` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/client/v/2.3.1) (from `2.2.0`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/core@2.3.1` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/core/v/2.3.1) (from `2.2.0`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/server@2.3.1` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/server/v/2.3.1) (from `2.2.0`, in `dependencies`)
+
+- Fixed `MCPServer` returning an "Invalid tools/call result" error when a tool's `execute` returns no value. The tool had already run. Clients saw a failure and could retry the call, which runs the side effect again. Now a tool that returns `undefined`, or a function, sends a successful result with empty `content`. A `null` return does not change. Clients still receive the text `"null"`. ([#28438](https://github.com/mastra-ai/mastra/pull/28438))
+
+  A tool with an optional `outputSchema` that returns `undefined` now sends an error result that names the tool. A successful result for such a tool must include structured output, so clients that list tools first used to reject the reply.
+
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`a15ea70`](https://github.com/mastra-ai/mastra/commit/a15ea70e71ca57242fa61b23e7f0178d77f9af4b), [`f396b43`](https://github.com/mastra-ai/mastra/commit/f396b435c72042fc6d9e82c361fa047675995812), [`c253e13`](https://github.com/mastra-ai/mastra/commit/c253e13ac627d0325f8665004f7af8a49805a9a4), [`0a913e0`](https://github.com/mastra-ai/mastra/commit/0a913e096cb569aea396fa3d9f286cc874179ce8), [`c8f8e41`](https://github.com/mastra-ai/mastra/commit/c8f8e410d39a29b8b69cb7bf90cc9a774cb956f5), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`152e380`](https://github.com/mastra-ai/mastra/commit/152e380aca6fcf74f598a158c710c0e755ceb325), [`08640de`](https://github.com/mastra-ai/mastra/commit/08640de350ff9183c1d9ef568fde4c6ccdf181e4), [`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`24a821b`](https://github.com/mastra-ai/mastra/commit/24a821b0ff29f527787c0645a7bf7bbe50d27f57), [`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`99e4867`](https://github.com/mastra-ai/mastra/commit/99e486723d3f0063ae70a39c9840daf92a98fa23), [`a1e248b`](https://github.com/mastra-ai/mastra/commit/a1e248bfe0776ab6ca2a55fed3c423b08fb5ae03), [`0afde2c`](https://github.com/mastra-ai/mastra/commit/0afde2c114aa02b0186ae963c8c83796f8801b60), [`38ff787`](https://github.com/mastra-ai/mastra/commit/38ff787998d56210cfd938439af0fea68703a196), [`929a728`](https://github.com/mastra-ai/mastra/commit/929a7281d411ac515e0befb53a5383741b06d484), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`a5a9179`](https://github.com/mastra-ai/mastra/commit/a5a9179daa5ac1ed49447265038208c9f96cd0f8), [`38ff787`](https://github.com/mastra-ai/mastra/commit/38ff787998d56210cfd938439af0fea68703a196), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`8e1247c`](https://github.com/mastra-ai/mastra/commit/8e1247cb26fc1a3cd1c2ac6edaf34fddad897852), [`ed76bdc`](https://github.com/mastra-ai/mastra/commit/ed76bdcc88e09c0f7f0da14ffadca62b1b4a2409), [`2f655e5`](https://github.com/mastra-ai/mastra/commit/2f655e53fcae10a2423e0194a113ce52e70580fe), [`ac953f0`](https://github.com/mastra-ai/mastra/commit/ac953f08a74d063ce0e8d2368b36556f715b1fb0), [`ca04e2c`](https://github.com/mastra-ai/mastra/commit/ca04e2cbb6f5ae13edf006905d9810434b4163fe), [`9ffb79b`](https://github.com/mastra-ai/mastra/commit/9ffb79b17e6ed0f0ec6bd1640218ef2a5fb7c058), [`155e3ac`](https://github.com/mastra-ai/mastra/commit/155e3aca3e57114ce3393bd88f6848c29f37c82b), [`be5c929`](https://github.com/mastra-ai/mastra/commit/be5c9292ac6d4beb7f1020d0dc745edd18842f3d), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`e39aa42`](https://github.com/mastra-ai/mastra/commit/e39aa4237c81a2eb546a899c9739c96d6359737f), [`0d7d5cb`](https://github.com/mastra-ai/mastra/commit/0d7d5cbdccacc0b03697b3400579ea520e382061), [`7c20f00`](https://github.com/mastra-ai/mastra/commit/7c20f008c84db8f4f49e6e95d6dc965482bb2039), [`e20bbd0`](https://github.com/mastra-ai/mastra/commit/e20bbd0ef40475bda611ddfd8ea2721ddac3642c), [`c9ff73d`](https://github.com/mastra-ai/mastra/commit/c9ff73dd24e9473cb0008857105367c99ba839cb), [`f51a29e`](https://github.com/mastra-ai/mastra/commit/f51a29e82b6e2371b5c6aed46141ce20f099c9a9), [`7d58088`](https://github.com/mastra-ai/mastra/commit/7d580884fbf1fb5d90e0761272e2480ed01da70f), [`4ad204d`](https://github.com/mastra-ai/mastra/commit/4ad204dc5bdde76dca26cb7d87c48dd11f97316d), [`f5ebbf3`](https://github.com/mastra-ai/mastra/commit/f5ebbf3b2dc935b8fc068996b4db478815f05bd5), [`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb), [`e56f88e`](https://github.com/mastra-ai/mastra/commit/e56f88e18d906635b033173abcae637cf361ce8a), [`cd4722a`](https://github.com/mastra-ai/mastra/commit/cd4722a583a0eb75022b1da6a6f8210f8126e486), [`db2a1a6`](https://github.com/mastra-ai/mastra/commit/db2a1a659ecb057ae9ff6798a501ed33dd38b7c7), [`6a4a607`](https://github.com/mastra-ai/mastra/commit/6a4a607e710000e46790e20f28c2355af9ca2a05), [`2499c00`](https://github.com/mastra-ai/mastra/commit/2499c00181520cf7cda756729dc0e0085b85454f), [`de53c27`](https://github.com/mastra-ai/mastra/commit/de53c27a70dbd0c362384691459648043edbee72), [`d580530`](https://github.com/mastra-ai/mastra/commit/d580530ff36d43e752b1f838b3f8e16017e8f92b), [`a6077b7`](https://github.com/mastra-ai/mastra/commit/a6077b7f61bde8d302f20b54a2dced2d969887aa), [`5bd713b`](https://github.com/mastra-ai/mastra/commit/5bd713b4f2ca7769675d949f8052943807c11598), [`5c0a994`](https://github.com/mastra-ai/mastra/commit/5c0a99438ef82cf5584218f250a023371bab3373), [`d3f5000`](https://github.com/mastra-ai/mastra/commit/d3f500024f7b0c107c3786757b3f5481f029d061), [`682ebf6`](https://github.com/mastra-ai/mastra/commit/682ebf6b6f867224acbcb021fc142b902738ad07), [`11c83d5`](https://github.com/mastra-ai/mastra/commit/11c83d53331588e06623d5d4a35baa606bbaa424), [`dd6205e`](https://github.com/mastra-ai/mastra/commit/dd6205e985e5fd76b59d000076ab199143c989eb), [`97ade4e`](https://github.com/mastra-ai/mastra/commit/97ade4e8621a9afd01a1f38b921519ddc3086568), [`8ae87fa`](https://github.com/mastra-ai/mastra/commit/8ae87fadd01daa128086e015473881bf55d6e47b), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`2ca9e35`](https://github.com/mastra-ai/mastra/commit/2ca9e3522f117cc12fee7a9dad2f5961cd41164e), [`d1aee64`](https://github.com/mastra-ai/mastra/commit/d1aee64e65968744c118440d2d01eb4fba3616d6), [`20f40eb`](https://github.com/mastra-ai/mastra/commit/20f40ebf5623b059336f4c3000d47755941b4451), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`e718b91`](https://github.com/mastra-ai/mastra/commit/e718b91a64eb720cd755b7fd78255d0ab5a412de), [`9a9085e`](https://github.com/mastra-ai/mastra/commit/9a9085ef3481c31093152ea9976759c72dc3fd89), [`35806cb`](https://github.com/mastra-ai/mastra/commit/35806cb9b62dfed212b238d00148341d8b2f68ac), [`2fed0ad`](https://github.com/mastra-ai/mastra/commit/2fed0ad258322811ea7f2107f1121c6d5dee1c59), [`823a389`](https://github.com/mastra-ai/mastra/commit/823a3890deb5cf14484fd655c8360df4c41c4aed), [`6fea510`](https://github.com/mastra-ai/mastra/commit/6fea51000dfc4f249993a7d3959ad41ca6c422ca), [`9a83d42`](https://github.com/mastra-ai/mastra/commit/9a83d42b2461dd1629021d05704939b641330d5b), [`703b0a1`](https://github.com/mastra-ai/mastra/commit/703b0a1cb342d3a6fce72b5b07685fbb31695674), [`bfce5b6`](https://github.com/mastra-ai/mastra/commit/bfce5b6982dc17a6944484b1ee9b333f6f5023d6), [`95c6e7c`](https://github.com/mastra-ai/mastra/commit/95c6e7caf4929d941f958e3f146b551e25eaeef3), [`2447071`](https://github.com/mastra-ai/mastra/commit/2447071b11d7a5f159e6dc726eb5df0aa0db69da), [`ff35b8c`](https://github.com/mastra-ai/mastra/commit/ff35b8c3d86136509d31b87fed7f789a572dc1af), [`59421d0`](https://github.com/mastra-ai/mastra/commit/59421d0137a0642c60b687567e33bf2358be4c64), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`3143101`](https://github.com/mastra-ai/mastra/commit/31431019ddd56d0b5677f8cd169f715f0e907266), [`2829b0e`](https://github.com/mastra-ai/mastra/commit/2829b0eae687d36c8f864eba4051225ae3b82343), [`e053569`](https://github.com/mastra-ai/mastra/commit/e05356995ee8c807516d8aff836a8363dba7eee6), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`ab1727d`](https://github.com/mastra-ai/mastra/commit/ab1727d5cafb64e36b04fad9f8871dc6640d2420), [`4fc17c6`](https://github.com/mastra-ai/mastra/commit/4fc17c65e85628a71201bf7490fca1db8376cf71), [`a9ad47d`](https://github.com/mastra-ai/mastra/commit/a9ad47d8c3186e51142b9c1a3ed1e8e29ade2338), [`358c711`](https://github.com/mastra-ai/mastra/commit/358c71145d677394ce03a019156bc464afe6cc76), [`dbdfaee`](https://github.com/mastra-ai/mastra/commit/dbdfaee279dab2a5dca31134ca1967eb582e639c), [`cf0ca8b`](https://github.com/mastra-ai/mastra/commit/cf0ca8b55d67a3ccf6ee7835e4dd2addea0c82a8), [`2ded35c`](https://github.com/mastra-ai/mastra/commit/2ded35cb0c97b26f641a9eb9a5747d32164d45c9), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`d3e8ec7`](https://github.com/mastra-ai/mastra/commit/d3e8ec74e90bedefc28414e459ec9c5d52c97ccc), [`ddb7721`](https://github.com/mastra-ai/mastra/commit/ddb77211bc797c45fe434baac5c44c4193c1381e), [`d1aee64`](https://github.com/mastra-ai/mastra/commit/d1aee64e65968744c118440d2d01eb4fba3616d6), [`d58fe2a`](https://github.com/mastra-ai/mastra/commit/d58fe2ac5cd64a96dca05657f07df18f23db14e1), [`7662736`](https://github.com/mastra-ai/mastra/commit/7662736615043b8f4d0d2e7277094936ff2c88d6), [`5e88354`](https://github.com/mastra-ai/mastra/commit/5e883545edd6082e741cdce1d192e0e83fa5dc2e), [`5bb592a`](https://github.com/mastra-ai/mastra/commit/5bb592a862869d529d8d6ca48772cd0e1863f224), [`bd508a2`](https://github.com/mastra-ai/mastra/commit/bd508a2dec8c550baec245bfffc2d0853386e2eb), [`6f5eadb`](https://github.com/mastra-ai/mastra/commit/6f5eadbf7744a48ee742b940455e969922c3277d), [`578cb67`](https://github.com/mastra-ai/mastra/commit/578cb670bd8621538eda4afc1f25139e5903aab9), [`4278b9d`](https://github.com/mastra-ai/mastra/commit/4278b9dfb8aef7f274e4dfb102597cc0400475ee), [`2ac8cf1`](https://github.com/mastra-ai/mastra/commit/2ac8cf1435ba3abae9dba7b6c34f1c02f75eab21), [`1283717`](https://github.com/mastra-ai/mastra/commit/1283717ecfc652da293aafe6ff582afa07ca84a5), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`2b9f9a5`](https://github.com/mastra-ai/mastra/commit/2b9f9a55799ee7a6020a063d2419096429254481), [`307b711`](https://github.com/mastra-ai/mastra/commit/307b711bbe73132f1f319c3326333d49bc23b79d), [`45c1d16`](https://github.com/mastra-ai/mastra/commit/45c1d16c4f0cd3e5b18d2a788fb998c70b45b7c0), [`dc10589`](https://github.com/mastra-ai/mastra/commit/dc1058900dd9be01638d43491ddfd2037da12bac), [`339da0b`](https://github.com/mastra-ai/mastra/commit/339da0bef7e2e5570f533f6b41abbd746190bffb), [`34ee1d1`](https://github.com/mastra-ai/mastra/commit/34ee1d16226852f57d1f8bb34ee7a88397e5cce2), [`8c61247`](https://github.com/mastra-ai/mastra/commit/8c6124708341d699c3b1f3bb19f19be468923483), [`a9f392e`](https://github.com/mastra-ai/mastra/commit/a9f392e60e5bc1fab66280314bab5f697e8d7c09), [`fdd2201`](https://github.com/mastra-ai/mastra/commit/fdd22014f6fbfa115eba53cff42063544af2ff41), [`5c56910`](https://github.com/mastra-ai/mastra/commit/5c56910b2647e11cbb6880431e556471b25ba949), [`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`0811cda`](https://github.com/mastra-ai/mastra/commit/0811cda8d22476cf1393b429a63aaefa5292048c), [`1e31034`](https://github.com/mastra-ai/mastra/commit/1e31034b30cb9661e38af548dfda646aee74f08f), [`17444a7`](https://github.com/mastra-ai/mastra/commit/17444a7e46b656b3877faad6e61d5637f435b291), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c), [`3cdaaa8`](https://github.com/mastra-ai/mastra/commit/3cdaaa86f48812bdae1077e55be1d58dd5e85fc5), [`3be96ae`](https://github.com/mastra-ai/mastra/commit/3be96ae2f65a2ff3b2189fb79fd03b7eedee3dbe), [`852110d`](https://github.com/mastra-ai/mastra/commit/852110d4eeaf5ab74ea94747343501700033a1e8), [`b63456b`](https://github.com/mastra-ai/mastra/commit/b63456befb5f51d1a2b1288225f02c30738b6099), [`f156ad0`](https://github.com/mastra-ai/mastra/commit/f156ad0b7ed6b0ba286efd9040c061c9240d55c3), [`580452a`](https://github.com/mastra-ai/mastra/commit/580452acbbb9812eae1b31d4f3ded716c348a78b), [`4303017`](https://github.com/mastra-ai/mastra/commit/4303017f393b9c09f692837d8e9e7a19f6539cf4)]:
+  - @mastra/core@1.80.0
+
+## 2.6.0-alpha.3
+
+### Patch Changes
+
+- dependencies updates: ([#28580](https://github.com/mastra-ai/mastra/pull/28580))
+  - Updated dependency [`@modelcontextprotocol/client@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/client/v/2.4.0) (from `2.3.1`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/core@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/core/v/2.4.0) (from `2.3.1`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/node@2.1.2` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/node/v/2.1.2) (from `2.0.0`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/server@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/server/v/2.4.0) (from `2.3.1`, in `dependencies`)
+- Updated dependencies [[`59421d0`](https://github.com/mastra-ai/mastra/commit/59421d0137a0642c60b687567e33bf2358be4c64), [`6f5eadb`](https://github.com/mastra-ai/mastra/commit/6f5eadbf7744a48ee742b940455e969922c3277d)]:
+  - @mastra/core@1.80.0-alpha.7
+
+## 2.6.0-alpha.2
+
+### Patch Changes
+
+- Fixed `MCPServer` returning an "Invalid tools/call result" error when a tool's `execute` returns no value. The tool had already run. Clients saw a failure and could retry the call, which runs the side effect again. Now a tool that returns `undefined`, or a function, sends a successful result with empty `content`. A `null` return does not change. Clients still receive the text `"null"`. ([#28438](https://github.com/mastra-ai/mastra/pull/28438))
+
+  A tool with an optional `outputSchema` that returns `undefined` now sends an error result that names the tool. A successful result for such a tool must include structured output, so clients that list tools first used to reject the reply.
+
+- Updated dependencies [[`24a821b`](https://github.com/mastra-ai/mastra/commit/24a821b0ff29f527787c0645a7bf7bbe50d27f57), [`38ff787`](https://github.com/mastra-ai/mastra/commit/38ff787998d56210cfd938439af0fea68703a196), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`38ff787`](https://github.com/mastra-ai/mastra/commit/38ff787998d56210cfd938439af0fea68703a196), [`9ffb79b`](https://github.com/mastra-ai/mastra/commit/9ffb79b17e6ed0f0ec6bd1640218ef2a5fb7c058), [`155e3ac`](https://github.com/mastra-ai/mastra/commit/155e3aca3e57114ce3393bd88f6848c29f37c82b), [`7c20f00`](https://github.com/mastra-ai/mastra/commit/7c20f008c84db8f4f49e6e95d6dc965482bb2039), [`4ad204d`](https://github.com/mastra-ai/mastra/commit/4ad204dc5bdde76dca26cb7d87c48dd11f97316d), [`e56f88e`](https://github.com/mastra-ai/mastra/commit/e56f88e18d906635b033173abcae637cf361ce8a), [`cd4722a`](https://github.com/mastra-ai/mastra/commit/cd4722a583a0eb75022b1da6a6f8210f8126e486), [`2499c00`](https://github.com/mastra-ai/mastra/commit/2499c00181520cf7cda756729dc0e0085b85454f), [`d580530`](https://github.com/mastra-ai/mastra/commit/d580530ff36d43e752b1f838b3f8e16017e8f92b), [`682ebf6`](https://github.com/mastra-ai/mastra/commit/682ebf6b6f867224acbcb021fc142b902738ad07), [`dd6205e`](https://github.com/mastra-ai/mastra/commit/dd6205e985e5fd76b59d000076ab199143c989eb), [`97ade4e`](https://github.com/mastra-ai/mastra/commit/97ade4e8621a9afd01a1f38b921519ddc3086568), [`d1aee64`](https://github.com/mastra-ai/mastra/commit/d1aee64e65968744c118440d2d01eb4fba3616d6), [`9a9085e`](https://github.com/mastra-ai/mastra/commit/9a9085ef3481c31093152ea9976759c72dc3fd89), [`9a83d42`](https://github.com/mastra-ai/mastra/commit/9a83d42b2461dd1629021d05704939b641330d5b), [`2447071`](https://github.com/mastra-ai/mastra/commit/2447071b11d7a5f159e6dc726eb5df0aa0db69da), [`ab1727d`](https://github.com/mastra-ai/mastra/commit/ab1727d5cafb64e36b04fad9f8871dc6640d2420), [`4fc17c6`](https://github.com/mastra-ai/mastra/commit/4fc17c65e85628a71201bf7490fca1db8376cf71), [`ddb7721`](https://github.com/mastra-ai/mastra/commit/ddb77211bc797c45fe434baac5c44c4193c1381e), [`d1aee64`](https://github.com/mastra-ai/mastra/commit/d1aee64e65968744c118440d2d01eb4fba3616d6), [`5e88354`](https://github.com/mastra-ai/mastra/commit/5e883545edd6082e741cdce1d192e0e83fa5dc2e), [`5bb592a`](https://github.com/mastra-ai/mastra/commit/5bb592a862869d529d8d6ca48772cd0e1863f224), [`4278b9d`](https://github.com/mastra-ai/mastra/commit/4278b9dfb8aef7f274e4dfb102597cc0400475ee), [`45c1d16`](https://github.com/mastra-ai/mastra/commit/45c1d16c4f0cd3e5b18d2a788fb998c70b45b7c0), [`a9f392e`](https://github.com/mastra-ai/mastra/commit/a9f392e60e5bc1fab66280314bab5f697e8d7c09), [`0811cda`](https://github.com/mastra-ai/mastra/commit/0811cda8d22476cf1393b429a63aaefa5292048c), [`3cdaaa8`](https://github.com/mastra-ai/mastra/commit/3cdaaa86f48812bdae1077e55be1d58dd5e85fc5), [`852110d`](https://github.com/mastra-ai/mastra/commit/852110d4eeaf5ab74ea94747343501700033a1e8), [`b63456b`](https://github.com/mastra-ai/mastra/commit/b63456befb5f51d1a2b1288225f02c30738b6099), [`580452a`](https://github.com/mastra-ai/mastra/commit/580452acbbb9812eae1b31d4f3ded716c348a78b)]:
+  - @mastra/core@1.80.0-alpha.5
+
+## 2.6.0-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@modelcontextprotocol/ext-apps@^2.0.3` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/ext-apps/v/2.0.3) (from `^2.0.0`, in `dependencies`)
+  - Updated dependency [`@copilotkit/aimock@^1.46.0` ↗︎](https://www.npmjs.com/package/@copilotkit/aimock/v/1.46.0) (from `^1.29.0`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/semver@^7.8.0` ↗︎](https://www.npmjs.com/package/@types/semver/v/7.8.0) (from `^7.7.1`, in `devDependencies`)
+  - Updated dependency [`zod-to-json-schema@^3.25.2` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.25.2) (from `^3.25.1`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`0a913e0`](https://github.com/mastra-ai/mastra/commit/0a913e096cb569aea396fa3d9f286cc874179ce8), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`152e380`](https://github.com/mastra-ai/mastra/commit/152e380aca6fcf74f598a158c710c0e755ceb325), [`99e4867`](https://github.com/mastra-ai/mastra/commit/99e486723d3f0063ae70a39c9840daf92a98fa23), [`929a728`](https://github.com/mastra-ai/mastra/commit/929a7281d411ac515e0befb53a5383741b06d484), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`f51a29e`](https://github.com/mastra-ai/mastra/commit/f51a29e82b6e2371b5c6aed46141ce20f099c9a9), [`5c0a994`](https://github.com/mastra-ai/mastra/commit/5c0a99438ef82cf5584218f250a023371bab3373), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`823a389`](https://github.com/mastra-ai/mastra/commit/823a3890deb5cf14484fd655c8360df4c41c4aed), [`ff35b8c`](https://github.com/mastra-ai/mastra/commit/ff35b8c3d86136509d31b87fed7f789a572dc1af), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`358c711`](https://github.com/mastra-ai/mastra/commit/358c71145d677394ce03a019156bc464afe6cc76), [`dbdfaee`](https://github.com/mastra-ai/mastra/commit/dbdfaee279dab2a5dca31134ca1967eb582e639c), [`fdd2201`](https://github.com/mastra-ai/mastra/commit/fdd22014f6fbfa115eba53cff42063544af2ff41), [`4303017`](https://github.com/mastra-ai/mastra/commit/4303017f393b9c09f692837d8e9e7a19f6539cf4)]:
+  - @mastra/core@1.80.0-alpha.4
+
+## 2.6.0-alpha.0
+
+### Minor Changes
+
+- Added `registerProcessHooks: false` to `MCPClient` so applications can finish graceful shutdown and call `disconnect()` themselves. The default remains `true`. Fixes [#27478](https://github.com/mastra-ai/mastra/issues/27478). ([#28144](https://github.com/mastra-ai/mastra/pull/28144))
+
+  ```ts
+  const mcp = new MCPClient({
+    servers: { weather: { url: new URL('https://example.com/mcp') } },
+    registerProcessHooks: false,
+  });
+
+  process.once('SIGTERM', async () => {
+    await mcp.disconnect();
+    process.exit(0);
+  });
+  ```
+
+- Added optional type generation for direct MCP tool calls. Generate concrete input/output interfaces from your existing clients without changing dynamic discovery or execution. ([#25569](https://github.com/mastra-ai/mastra/pull/25569))
+
+  Before:
+
+  ```ts
+  export const mcp = new MCPClient({ servers });
+  ```
+
+  After:
+
+  ```ts
+  import { MCPClient } from '@mastra/mcp';
+  import type { MCPServers } from './mcp-types.generated';
+
+  export const mcp = new MCPClient<MCPServers>({
+    servers,
+    typegen: { outFile: 'mcp-types.generated.ts' },
+  });
+  ```
+
+  Run `npx @mastra/mcp generate ./client.ts` with the required server credentials. The generated type-only import can be absent on the first run. File paths resolve from the command working directory. Regenerate when server schemas change.
+
+  Discovered tools remain optional. Results retain protocol-envelope and validation-error alternatives; absent output schemas use `unknown`. Narrow results before accessing structured fields.
+
+- Added a `legacy` option to `MCPServer` that serves MCP clients that still open with `initialize` (2025-era clients such as VS Code and Cursor) over HTTP. ([#28019](https://github.com/mastra-ai/mastra/pull/28019))
+
+  ```ts
+  const server = new MCPServer({
+    name: 'My server',
+    version: '1.0.0',
+    tools,
+    legacy: 'stateless',
+  });
+  ```
+
+  Each request from these clients is answered without a session. `GET` and `DELETE` session requests get `405`, and features that need MCP 2026-07-28 (suspend/resume, `subscriptions/listen`, events) aren't available to them. The default stays `'reject'`, which answers these clients with an unsupported-protocol-version error.
+
+### Patch Changes
+
+- dependencies updates: ([#28018](https://github.com/mastra-ai/mastra/pull/28018))
+  - Updated dependency [`@modelcontextprotocol/client@2.3.1` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/client/v/2.3.1) (from `2.2.0`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/core@2.3.1` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/core/v/2.3.1) (from `2.2.0`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/server@2.3.1` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/server/v/2.3.1) (from `2.2.0`, in `dependencies`)
+- Updated dependencies [[`a15ea70`](https://github.com/mastra-ai/mastra/commit/a15ea70e71ca57242fa61b23e7f0178d77f9af4b), [`c253e13`](https://github.com/mastra-ai/mastra/commit/c253e13ac627d0325f8665004f7af8a49805a9a4), [`c8f8e41`](https://github.com/mastra-ai/mastra/commit/c8f8e410d39a29b8b69cb7bf90cc9a774cb956f5), [`08640de`](https://github.com/mastra-ai/mastra/commit/08640de350ff9183c1d9ef568fde4c6ccdf181e4), [`a1e248b`](https://github.com/mastra-ai/mastra/commit/a1e248bfe0776ab6ca2a55fed3c423b08fb5ae03), [`0afde2c`](https://github.com/mastra-ai/mastra/commit/0afde2c114aa02b0186ae963c8c83796f8801b60), [`a5a9179`](https://github.com/mastra-ai/mastra/commit/a5a9179daa5ac1ed49447265038208c9f96cd0f8), [`8e1247c`](https://github.com/mastra-ai/mastra/commit/8e1247cb26fc1a3cd1c2ac6edaf34fddad897852), [`ed76bdc`](https://github.com/mastra-ai/mastra/commit/ed76bdcc88e09c0f7f0da14ffadca62b1b4a2409), [`2f655e5`](https://github.com/mastra-ai/mastra/commit/2f655e53fcae10a2423e0194a113ce52e70580fe), [`be5c929`](https://github.com/mastra-ai/mastra/commit/be5c9292ac6d4beb7f1020d0dc745edd18842f3d), [`e39aa42`](https://github.com/mastra-ai/mastra/commit/e39aa4237c81a2eb546a899c9739c96d6359737f), [`e20bbd0`](https://github.com/mastra-ai/mastra/commit/e20bbd0ef40475bda611ddfd8ea2721ddac3642c), [`c9ff73d`](https://github.com/mastra-ai/mastra/commit/c9ff73dd24e9473cb0008857105367c99ba839cb), [`7d58088`](https://github.com/mastra-ai/mastra/commit/7d580884fbf1fb5d90e0761272e2480ed01da70f), [`db2a1a6`](https://github.com/mastra-ai/mastra/commit/db2a1a659ecb057ae9ff6798a501ed33dd38b7c7), [`6a4a607`](https://github.com/mastra-ai/mastra/commit/6a4a607e710000e46790e20f28c2355af9ca2a05), [`de53c27`](https://github.com/mastra-ai/mastra/commit/de53c27a70dbd0c362384691459648043edbee72), [`d3f5000`](https://github.com/mastra-ai/mastra/commit/d3f500024f7b0c107c3786757b3f5481f029d061), [`8ae87fa`](https://github.com/mastra-ai/mastra/commit/8ae87fadd01daa128086e015473881bf55d6e47b), [`20f40eb`](https://github.com/mastra-ai/mastra/commit/20f40ebf5623b059336f4c3000d47755941b4451), [`35806cb`](https://github.com/mastra-ai/mastra/commit/35806cb9b62dfed212b238d00148341d8b2f68ac), [`2fed0ad`](https://github.com/mastra-ai/mastra/commit/2fed0ad258322811ea7f2107f1121c6d5dee1c59), [`6fea510`](https://github.com/mastra-ai/mastra/commit/6fea51000dfc4f249993a7d3959ad41ca6c422ca), [`bfce5b6`](https://github.com/mastra-ai/mastra/commit/bfce5b6982dc17a6944484b1ee9b333f6f5023d6), [`95c6e7c`](https://github.com/mastra-ai/mastra/commit/95c6e7caf4929d941f958e3f146b551e25eaeef3), [`2829b0e`](https://github.com/mastra-ai/mastra/commit/2829b0eae687d36c8f864eba4051225ae3b82343), [`e053569`](https://github.com/mastra-ai/mastra/commit/e05356995ee8c807516d8aff836a8363dba7eee6), [`a9ad47d`](https://github.com/mastra-ai/mastra/commit/a9ad47d8c3186e51142b9c1a3ed1e8e29ade2338), [`cf0ca8b`](https://github.com/mastra-ai/mastra/commit/cf0ca8b55d67a3ccf6ee7835e4dd2addea0c82a8), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`d3e8ec7`](https://github.com/mastra-ai/mastra/commit/d3e8ec74e90bedefc28414e459ec9c5d52c97ccc), [`d58fe2a`](https://github.com/mastra-ai/mastra/commit/d58fe2ac5cd64a96dca05657f07df18f23db14e1), [`bd508a2`](https://github.com/mastra-ai/mastra/commit/bd508a2dec8c550baec245bfffc2d0853386e2eb), [`578cb67`](https://github.com/mastra-ai/mastra/commit/578cb670bd8621538eda4afc1f25139e5903aab9), [`2ac8cf1`](https://github.com/mastra-ai/mastra/commit/2ac8cf1435ba3abae9dba7b6c34f1c02f75eab21), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`307b711`](https://github.com/mastra-ai/mastra/commit/307b711bbe73132f1f319c3326333d49bc23b79d), [`dc10589`](https://github.com/mastra-ai/mastra/commit/dc1058900dd9be01638d43491ddfd2037da12bac), [`339da0b`](https://github.com/mastra-ai/mastra/commit/339da0bef7e2e5570f533f6b41abbd746190bffb), [`8c61247`](https://github.com/mastra-ai/mastra/commit/8c6124708341d699c3b1f3bb19f19be468923483), [`5c56910`](https://github.com/mastra-ai/mastra/commit/5c56910b2647e11cbb6880431e556471b25ba949), [`17444a7`](https://github.com/mastra-ai/mastra/commit/17444a7e46b656b3877faad6e61d5637f435b291), [`f156ad0`](https://github.com/mastra-ai/mastra/commit/f156ad0b7ed6b0ba286efd9040c061c9240d55c3)]:
+  - @mastra/core@1.80.0-alpha.0
+
 ## 2.5.0
 
 ### Minor Changes

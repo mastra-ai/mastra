@@ -3,29 +3,18 @@ import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { Outlet } from 'react-router';
 
+import { BoardDraftProvider } from '../domains/boardConfig/BoardDraftProvider';
+import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
-import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
+import { useServerStatus } from '../../hooks/useServerStatus';
 import { OverlaysProvider } from '../lib/overlays';
+import { PwaInstallBanner } from '../lib/pwa';
 import { AppSidebar } from '../AppSidebar';
+import { ServerProblemBanner } from './ServerProblemBanner';
 
-/**
- * Mobile-only bar above the page frame: the drawer trigger and global search.
- * Keyed off the sidebar's own media signal so it can never desync from the drawer.
- */
-function MobileHeader() {
-  const { isMobile } = useSidebar();
-  if (!isMobile) return null;
-
-  return (
-    <header className="flex h-12 shrink-0 items-center gap-2 px-3">
-      <Sidebar.MobileTrigger id="mobile-navigation-trigger" />
-      <div className="ml-auto shrink-0">
-        <GlobalSearchButton id="global-search-mobile-trigger" />
-      </div>
-    </header>
-  );
-}
+const DEFAULT_MIN_WIDTH = 200;
+const BOARD_CONFIG_MIN_WIDTH = 288;
 
 /** `[` toggles the sidebar, as the trigger's tooltip says. Needs the `Sidebar.Provider` context. */
 function SidebarShortcuts() {
@@ -34,27 +23,52 @@ function SidebarShortcuts() {
   return null;
 }
 
+function AppFrame() {
+  const { state, collapsedWidth } = useSidebar();
+  const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
+  return (
+    <AppShell sidebar={<AppSidebar />} edgeToEdge={edgeToEdge}>
+      <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
+        <Outlet />
+      </MainCard>
+    </AppShell>
+  );
+}
+
 /**
  * Application frame rendered once at the router level: sidebar + page card
  * around the routed page. Pages render only their body (see `PageLayout`).
  * Mounted under `FactoryLayout` so the sidebar only ever sees a valid factory.
+ * The mobile PWA install banner takes the top row so it never covers the page.
  */
 export function AppLayout() {
+  const problem = useServerStatus().data?.problems[0];
+  // Board configuration lists phases by name beside the page that edits them, so the sidebar
+  // widens a little while it is open. The stored width is kept and returns when it closes.
+  const configuringBoard = useBoardConfigRoute() !== undefined;
+
   return (
-    <div className="bg-sidebar h-dvh">
-      <Sidebar.Provider storageKey="mastracode-web" collapsedWidth={0}>
-        <SidebarShortcuts />
-        <OverlaysProvider>
-          <ChatSessionRouteProvider>
-            <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />}>
-              <MainCard className="flex flex-col">
-                <Outlet />
-              </MainCard>
-            </AppShell>
-            <ChatOverlays />
-          </ChatSessionRouteProvider>
-        </OverlaysProvider>
-      </Sidebar.Provider>
+    <div className="bg-sidebar flex h-dvh flex-col">
+      {problem ? <ServerProblemBanner problem={problem} /> : null}
+      <PwaInstallBanner />
+      <div className="min-h-0 flex-1">
+        <Sidebar.Provider
+          storageKey="mastracode-web"
+          collapsedWidth={0}
+          minWidth={configuringBoard ? BOARD_CONFIG_MIN_WIDTH : DEFAULT_MIN_WIDTH}
+          collapseBelow={DEFAULT_MIN_WIDTH}
+        >
+          <SidebarShortcuts />
+          <OverlaysProvider>
+            <ChatSessionRouteProvider>
+              <BoardDraftProvider>
+                <AppFrame />
+              </BoardDraftProvider>
+              <ChatOverlays />
+            </ChatSessionRouteProvider>
+          </OverlaysProvider>
+        </Sidebar.Provider>
+      </div>
     </div>
   );
 }

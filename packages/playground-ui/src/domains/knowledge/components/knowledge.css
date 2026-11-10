@@ -1,0 +1,64 @@
+.knowledge-circle {
+  background: var(--card);
+  border-color: var(--knowledge-color);
+  transition: border-color var(--duration-fast) var(--ease-out-custom);
+}
+
+.react-flow__node:focus-visible .knowledge-circle {
+  outline: 2px solid var(--knowledge-color);
+  outline-offset: 5px;
+}
+
+/* The focused page: a heavier border, so it reads as the centre of the graph. */
+.knowledge-circle[data-selected='true'] {
+  border-width: 4px;
+}
+
+/* A refocus: pages in both views glide and resize to their new place, new ones fade in, and ones that
+   leave are faded out (the graph keeps them a moment). Under reduced motion every one of these is off. */
+.knowledge-graph {
+  /* Keep in step with KNOWLEDGE_GRAPH_TRANSITION_MS in lib/useLeavingNodes.ts. */
+  --knowledge-graph-transition: 700ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.knowledge-graph .react-flow__node {
+  transition:
+    transform var(--knowledge-graph-transition),
+    width var(--knowledge-graph-transition),
+    height var(--knowledge-graph-transition),
+    opacity var(--knowledge-graph-transition);
+  animation: knowledge-node-in var(--knowledge-graph-transition) both;
+}
+
+@keyframes knowledge-node-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knowledge-graph .react-flow__node {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* With a page hovered or selected, everything but its neighbourhood fades. It fades the node's content, not
+   the node: the node's own opacity belongs to the view change, and a short fade keeps pointing responsive. */
+.knowledge-graph .react-flow__node > *,
+.knowledge-graph .react-flow__edge {
+  transition: opacity 150ms ease-out;
+}
+
+.knowledge-graph[data-emphasis] .react-flow__node:not(.knowledge-neighbour) > * {
+  opacity: 0.35;
+}
+
+.knowledge-graph[data-emphasis] .react-flow__edge:not(.knowledge-neighbour) {
+  opacity: 0.2;
+}
+
+/* A hovered dot's tooltip sits above every other circle. */
+.knowledge-graph .react-flow__node:hover {
+  z-index: 1000 !important;
+}

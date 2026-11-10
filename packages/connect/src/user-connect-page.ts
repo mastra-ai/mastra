@@ -3,10 +3,12 @@
  *
  * The page only ever talks to the mounted routes on the same origin — it never
  * sees a platform token. OAuth and credential collection happen inside the
- * platform-hosted `connectUrl` popup returned by the session route, so no
+ * launch gate (`{basePath}/connections/:id/launch`) in a popup, so no
  * vendor SDK is bundled here. Flow: explicit Connect click → POST sessions →
- * popup to `connectUrl` → poll status every 2s (5 min cap) → redirect to the
- * validated `returnTo` (or show a success state when none was given).
+ * popup to the session's `launchUrl` (the server verifies the caller owns the
+ * pending session, then 302s into the vendor OAuth flow) → poll status every
+ * 2s (5 min cap) → redirect to the validated `returnTo` (or show a success
+ * state when none was given).
  */
 
 export interface ConnectPageProvider {
@@ -172,14 +174,18 @@ export function renderConnectPage(params: ConnectPageParams): string {
         return res.json();
       })
       .then(function (session) {
+        // The popup enters OAuth through the launch gate (same-origin,
+        // authenticated) rather than a raw vendor link: the server re-checks
+        // that this browser's identity owns the pending session immediately
+        // before redirecting into the provider's consent screen.
         if (popup && !popup.closed) {
-          popup.location = session.connectUrl;
+          popup.location = session.launchUrl;
           setStatus('Finish authorizing in the popup…', false);
         } else {
           // Popup blocked: offer a manual link instead of auto-navigating away.
           status.textContent = '';
           var link = document.createElement('a');
-          link.href = session.connectUrl;
+          link.href = session.launchUrl;
           link.target = '_blank';
           link.rel = 'noopener';
           link.textContent = 'Popup blocked — click here to authorize';

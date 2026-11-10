@@ -86,43 +86,25 @@ export const percent = (value: number) => `${+(value * 100).toFixed(1)}%`;
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 export const count = (value: number) => compact.format(value);
 
-/** Legend aggregate: sum of a numeric key across points. */
-export const sumOf = (key: string) => (points: Record<string, unknown>[]) => ({
-  value: count(points.reduce<number>((sum, p) => sum + (typeof p[key] === 'number' ? p[key] : 0), 0)),
-});
-
-/** Legend aggregate: mean of a numeric key, formatted. */
-export const meanOf = (key: string, format: (v: number) => string) => (points: Record<string, unknown>[]) => {
-  const values = points.map(p => p[key]).filter((v): v is number => typeof v === 'number');
-  return { value: format(values.reduce((s, v) => s + v, 0) / Math.max(values.length, 1)) };
-};
-
 export const statusSeries = [
-  { dataKey: '2xx', label: '2xx', color: 'var(--chart-green)', aggregate: sumOf('2xx') },
-  { dataKey: '3xx', label: '3xx', color: 'var(--chart-blue)', aggregate: sumOf('3xx') },
-  { dataKey: '4xx', label: '4xx', color: 'var(--chart-amber)', aggregate: sumOf('4xx') },
-  { dataKey: '5xx', label: '5xx', color: 'var(--chart-red)', aggregate: sumOf('5xx') },
+  { dataKey: '2xx', label: '2xx', color: 'var(--chart-green)' },
+  { dataKey: '3xx', label: '3xx', color: 'var(--chart-blue)' },
+  { dataKey: '4xx', label: '4xx', color: 'var(--chart-amber)' },
+  { dataKey: '5xx', label: '5xx', color: 'var(--chart-red)' },
 ];
 
 export const percentileSeries = [
-  { dataKey: 'p50', label: 'P50', color: 'var(--chart-sequential-1)', aggregate: meanOf('p50', ms) },
-  { dataKey: 'p95', label: 'P95', color: 'var(--chart-sequential-3)', aggregate: meanOf('p95', ms) },
-  { dataKey: 'p99', label: 'P99', color: 'var(--chart-sequential-5)', aggregate: meanOf('p99', ms) },
+  { dataKey: 'p50', label: 'P50', color: 'var(--chart-sequential-1)' },
+  { dataKey: 'p95', label: 'P95', color: 'var(--chart-sequential-3)' },
+  { dataKey: 'p99', label: 'P99', color: 'var(--chart-sequential-5)' },
 ];
 
 export const errorRateSeries = [
-  { dataKey: 'errorRate', label: '5xx rate', color: 'var(--chart-red)', aggregate: meanOf('errorRate', percent) },
-  {
-    dataKey: 'clientErrorRate',
-    label: '4xx rate',
-    color: 'var(--chart-amber)',
-    aggregate: meanOf('clientErrorRate', percent),
-  },
+  { dataKey: 'errorRate', label: '5xx rate', color: 'var(--chart-red)' },
+  { dataKey: 'clientErrorRate', label: '4xx rate', color: 'var(--chart-amber)' },
 ];
 
-export const coldStartSeries = [
-  { dataKey: 'coldStarts', label: 'Cold starts', color: 'var(--chart-cyan)', aggregate: sumOf('coldStarts') },
-];
+export const coldStartSeries = [{ dataKey: 'coldStarts', label: 'Cold starts', color: 'var(--chart-cyan)' }];
 
 export const routes = [
   { method: 'POST', path: '/api/agents/:id/stream', requests: 16_400, errorRate: 0.0075, p95: 6490 },
@@ -135,14 +117,8 @@ export const routes = [
 
 /** Volume against the previous period: solid emphasis line, dashed comparison. */
 export const requestsVsPreviousSeries = [
-  { dataKey: 'total', label: 'Requests', color: 'var(--chart-blue)', emphasis: true, aggregate: sumOf('total') },
-  {
-    dataKey: 'prevTotal',
-    label: 'Previous period',
-    color: 'var(--gray-8)',
-    dashed: true,
-    aggregate: sumOf('prevTotal'),
-  },
+  { dataKey: 'total', label: 'Requests', color: 'var(--chart-blue)', emphasis: true },
+  { dataKey: 'prevTotal', label: 'Previous period', color: 'var(--gray-8)', dashed: true },
 ];
 
 /** Hourly timestamps of the window (ms), for building other hourly fixtures on the same grid. */

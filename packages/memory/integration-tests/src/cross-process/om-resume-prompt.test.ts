@@ -3,11 +3,9 @@
  * worker is SIGKILLed while the final model call is in flight, and a fresh
  * process recovers the run from the shared LibSQL file.
  *
- * Recovery finishes the turn without a second observation and stores the same
- * messages as a single-process run. But OM's per-turn state (`inputMessageIds`,
- * `drainedPartKeys`) lives only in the dead worker's memory, so the resumed
- * prompt drops the already-observed user request. Those cases are `it.fails`
- * until the turn state is persisted and rehydrated on recovery.
+ * Recovery finishes the turn without a second observation, leaves a request the
+ * model has answered to the observations once it is observed, and stores the same messages as a
+ * single-process run.
  */
 import { fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -130,10 +128,10 @@ describe.each(['durable', 'evented'] as const)('OM in-flight turn recovered by a
     if (dir) await rm(dir, { recursive: true, force: true });
   });
 
-  it('keeps the user request in every single-process request (baseline)', () => {
+  it('sends the user request until it is observed after the first answer, then leaves it to the observations (baseline)', () => {
     expect(solo.text).toBe(FINAL_ANSWER);
-    expect(solo.actor.length).toBe(3);
-    expect(solo.actor.every(call => call.hasUserRequest)).toBe(true);
+    expect(solo.actor.map(call => call.hasUserRequest)).toEqual([true, true, false]);
+    expect(solo.actor.at(-1)?.toolResults).toContain('call_1');
   });
 
   it('observes mid-turn in worker A and recovers the run in worker B', () => {
@@ -153,9 +151,11 @@ describe.each(['durable', 'evented'] as const)('OM in-flight turn recovered by a
     expect(new Set(resumed.state.messages.map(m => m.id)).size).toBe(resumed.state.messages.length);
   });
 
-  // #27614: flip to `it` once OM turn state is rehydrated on cross-worker recovery.
-  it.fails('keeps the user request in the resumed prompt', () => {
+  it('does not bring the observed request back in the resumed prompt', () => {
     expect(resumed.actor.length).toBeGreaterThanOrEqual(1);
-    for (const call of resumed.actor) expect(call.hasUserRequest).toBe(true);
+    for (const call of resumed.actor) {
+      expect(call.hasUserRequest).toBe(false);
+      expect(call.toolResults).toContain('call_1');
+    }
   });
 });

@@ -20,10 +20,7 @@ describe('Connections entry (/settings/connections)', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'First Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'First Factory', repositories: [] }] }),
       ),
     );
 

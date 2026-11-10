@@ -239,6 +239,55 @@ describe('Datasets Handlers', () => {
         expect.objectContaining({ requestContext: { tenantId: 'tenant-1' } }),
       );
     });
+
+    it('forwards agentModel to the dataset as a provider/modelId router string', async () => {
+      const startExperimentAsync = vi.fn().mockResolvedValue({
+        experimentId: 'experiment-1',
+        status: 'pending',
+        totalItems: 1,
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+
+      const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+        targetType: 'agent',
+        targetId: 'my-agent',
+        agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
+      });
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: 'dataset-1',
+        ...parsedBody,
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'agent', targetId: 'my-agent', agentModel: 'openai/gpt-5-mini' }),
+      );
+    });
+
+    describe('agentModel validation', () => {
+      const agentModel = { provider: 'openai', modelId: 'gpt-5-mini' };
+      const parse = (body: Record<string, unknown>) => TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse(body);
+
+      it('accepts agentModel for agent targets', () => {
+        const result = parse({ targetType: 'agent', targetId: 'a', agentModel });
+        expect(result.success && result.data.agentModel).toEqual(agentModel);
+      });
+
+      it('rejects agentModel for non-agent targets', () => {
+        expect(parse({ targetType: 'workflow', targetId: 'w', agentModel }).success).toBe(false);
+      });
+
+      it('rejects agentModel on create-only experiments', () => {
+        expect(parse({ start: false, targetType: 'agent', targetId: 'a', agentModel }).success).toBe(false);
+      });
+
+      it.each([{ provider: 'openai' }, { modelId: 'gpt-5-mini' }, { provider: '', modelId: 'gpt-5-mini' }])(
+        'rejects incomplete agentModel %o',
+        partial => {
+          expect(parse({ targetType: 'agent', targetId: 'a', agentModel: partial }).success).toBe(false);
+        },
+      );
+    });
   });
 
   describe('COMPARE_EXPERIMENTS_ROUTE', () => {
@@ -317,6 +366,70 @@ describe('Datasets Handlers', () => {
           experimentIds: ['a', 'b'],
           baselineId: 'a',
         });
+      });
+    });
+
+    describe('when the caller sets an organization or project', () => {
+      it('reports an experiment outside that organization as not found', async () => {
+        const own = await mastra.datasets.create({ name: 'own', organizationId: 'org_a' });
+        const foreign = await mastra.datasets.create({ name: 'foreign', organizationId: 'org_b' });
+        const ownItem = await own.addItem({ input: { q: 'q1' } });
+        const foreignItem = await foreign.addItem({ input: { q: 'q1' } });
+        const ownId = await createExperimentWithOutput(own.id, ownItem.id, 'own-output');
+        const foreignId = await createExperimentWithOutput(foreign.id, foreignItem.id, 'secret-output');
+
+        const error = await COMPARE_EXPERIMENTS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: own.id,
+          experimentIds: [ownId, foreignId],
+          organizationId: 'org_a',
+        } as any).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(HTTPException);
+        expect(error).toMatchObject({ status: 404 });
+        expect(JSON.stringify(error)).not.toContain('secret-output');
+      });
+
+      it('refuses the comparison when core does not enforce tenancy, and still compares with no scope', async () => {
+        const dataset = await mastra.datasets.create({
+          name: 'Compare DS',
+          organizationId: 'org_a',
+          projectId: 'proj_1',
+        });
+        const item = await dataset.addItem({ input: { q: 'q1' } });
+        const ids = [
+          await createExperimentWithOutput(dataset.id, item.id, 'one'),
+          await createExperimentWithOutput(dataset.id, item.id, 'two'),
+        ];
+
+        coreFeatures.delete('experiment-comparison-tenancy');
+        try {
+          for (const scope of [{ organizationId: 'org_a' }, { projectId: 'proj_1' }]) {
+            const refused = await COMPARE_EXPERIMENTS_ROUTE.handler({
+              ...createTestServerContext({ mastra }),
+              datasetId: dataset.id,
+              experimentIds: ids,
+              ...scope,
+            } as any).catch((caught: unknown) => caught);
+
+            expect(refused).toBeInstanceOf(HTTPException);
+            expect(refused).toMatchObject({
+              status: 501,
+              message: expect.stringContaining('Scoped experiment comparison requires a newer @mastra/core'),
+            });
+            expect(refused).not.toHaveProperty('items');
+          }
+
+          const unscoped = (await COMPARE_EXPERIMENTS_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            datasetId: dataset.id,
+            experimentIds: ids,
+          } as any)) as { items: unknown[] };
+
+          expect(unscoped.items).toHaveLength(1);
+        } finally {
+          coreFeatures.add('experiment-comparison-tenancy');
+        }
       });
     });
   });
@@ -580,6 +693,42 @@ describe('Datasets Handlers', () => {
         perPage: 10,
       } as any)) as any;
       expect(listed.results).toHaveLength(2);
+    });
+
+    it('rejects updating a result through a dataset the experiment does not belong to', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const other = await mastra.datasets.create({ name: 'Other DS' });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      const submitted = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+
+      await expect(
+        UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: other.id,
+          experimentId: created.experimentId,
+          resultId: submitted.id,
+          tags: ['forged'],
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].tags ?? []).not.toContain('forged');
     });
 
     it('attaches the experiment targetType to returned results', async () => {

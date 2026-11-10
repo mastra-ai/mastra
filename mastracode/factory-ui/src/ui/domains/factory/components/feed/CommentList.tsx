@@ -3,7 +3,7 @@ import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Comment, CommentArrival } from '@mastra/playground-ui/components/Comment';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { CommentListSkeleton } from './CommentListSkeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageCircle, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -14,8 +14,10 @@ import {
   usePendingCommentCreates,
   useWorkItemComments,
 } from '../../../../../hooks/useWorkItemComments';
+import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import type { PendingCommentCreate } from '../../../../../hooks/useWorkItemComments';
 import type { WorkItemComment, WorkItemCommentPage } from '../../services/commentsWire';
+import { boardOf } from '../../boardFlow';
 import type { AuditActorProfile, AuditEvent } from '../../services/audit';
 import type { WorkItem } from '../../services/workItems';
 import { ActivityEvent } from '../WorkItemActivity';
@@ -159,6 +161,7 @@ export function CommentList({
   });
   const deleteComment = useDeleteWorkItemCommentMutation({ workItemId: item.id, factoryProjectId });
   const pendingCreates = usePendingCommentCreates(item.id);
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const rows = feedRows(comments.data?.pages ?? [], pendingCreates, events, item.id, currentUser);
@@ -196,13 +199,7 @@ export function CommentList({
                 <span className="bg-border h-px flex-1" />
               </div>
             )}
-            {showSkeleton ? (
-              <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-4/5" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : null}
+            {showSkeleton ? <CommentListSkeleton /> : null}
             {comments.isError ? (
               <div className="text-muted-foreground flex items-center gap-2 px-2 py-2">
                 <Txt as="span" variant="caption">
@@ -254,7 +251,7 @@ export function CommentList({
                           style={index < landing ? landingStyle(index + 2) : undefined}
                         >
                           {row.kind === 'event' ? (
-                            <ActivityEvent event={row.event} actors={actors} className="px-2 py-1.5" />
+                            <ActivityEvent event={row.event} actors={actors} board={board} className="px-2 py-1.5" />
                           ) : (
                             <CommentArrival>
                               <CommentRow

@@ -3,13 +3,14 @@ import { useState } from 'react';
 import type { OAuthStartResponse, ProviderInfo } from '../../../../api/types';
 import {
   useCancelProviderOAuth,
+  useConnectMastraGateway,
   useOrgKeyAdminQuery,
   useProvidersQuery,
   useStartProviderOAuth,
 } from '../../../../hooks/use-providers';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { credentialAt } from '../../settings/components/provider-credential';
+import { credentialAt, signInRequest } from '../../settings/components/provider-credential';
 
 export type ProviderCredentialScope = 'org' | 'user';
 export type ProviderConnectionMethod = 'api_key' | 'oauth';
@@ -33,11 +34,13 @@ export interface ProviderConnection {
   orgKeyAdmin: boolean;
   signInProviders: ProviderInfo[];
   keyProviders: ProviderInfo[];
+  gatewayProvider?: ProviderInfo;
   provider?: ProviderInfo;
   connected: boolean;
   method?: ProviderConnectionMethod;
   hasConfiguredProvider: boolean;
   pending: boolean;
+  connectingGateway: boolean;
   error?: string;
   keyDialogProvider?: ProviderInfo;
   activeOAuth?: ActiveProviderOAuth;
@@ -47,6 +50,8 @@ export interface ProviderConnection {
   clear: () => void;
   chooseSignInProvider: (provider: ProviderInfo) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
+  chooseCustomProvider: (providerId: string) => void;
+  chooseGateway: () => void;
   closeKeyDialog: () => void;
   closeOAuth: () => void;
   completeOAuth: () => void;
@@ -56,6 +61,7 @@ export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
+  if (provider.custom) return 'api_key';
   if (scope === 'user') return credentialAt(provider, 'user');
   if (provider.source === 'deployment') return 'api_key';
   if (scope === 'org') return credentialAt(provider, 'org');
@@ -111,6 +117,7 @@ export function useProviderConnection({
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const startOAuthMutation = useStartProviderOAuth();
   const cancelOAuthMutation = useCancelProviderOAuth();
+  const connectGatewayMutation = useConnectMastraGateway();
   const [selection, setSelection] = useState(initialSelection);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
   const [activeOAuth, setActiveOAuth] = useState<ActiveProviderOAuth>();
@@ -128,6 +135,8 @@ export function useProviderConnection({
   };
   const providers = (providersQuery.data ?? []).toSorted(byConfiguredThenName);
   const provider = providers.find(candidate => candidate.provider === selection?.providerId);
+  const gatewayProvider = providers.find(candidate => candidate.connectWithMastraAccount);
+  const providerChoices = providers.filter(candidate => candidate !== gatewayProvider);
 
   const select = (nextSelection: typeof selection) => {
     setSelection(nextSelection);
@@ -137,12 +146,7 @@ export function useProviderConnection({
   const startOAuth = async (chosen: ProviderInfo) => {
     setError(undefined);
     try {
-      const modes = chosen.oauth?.modes ?? [];
-      const session = await startOAuthMutation.mutateAsync({
-        provider: chosen.provider,
-        mode: modes.length === 1 ? modes[0] : undefined,
-        ...(authEnabled && scope ? { scope } : {}),
-      });
+      const session = await startOAuthMutation.mutateAsync(signInRequest(chosen, credentialScope));
       setActiveOAuth({
         provider: chosen.provider,
         session,
@@ -156,6 +160,20 @@ export function useProviderConnection({
   const canConfigure = (chosen: ProviderInfo, method?: ProviderConnectionMethod) =>
     scope !== 'org' || !authEnabled || orgKeyAdmin || isConfigured(chosen, method);
 
+  const connectGateway = async (gateway: ProviderInfo) => {
+    if (!canConfigure(gateway, 'api_key')) return;
+    setError(undefined);
+    if (!isConfigured(gateway, 'api_key')) {
+      try {
+        await connectGatewayMutation.mutateAsync({ scope: credentialScope });
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Failed to connect the Mastra Gateway');
+        return;
+      }
+    }
+    select({ providerId: gateway.provider, method: 'api_key' });
+  };
+
   return {
     isPending:
       providersQuery.isPending ||
@@ -164,15 +182,17 @@ export function useProviderConnection({
     catalogError: providersQuery.error ?? (scope !== undefined ? authQuery.error : undefined) ?? undefined,
     authEnabled,
     orgKeyAdmin,
-    signInProviders: providers.filter(candidate => candidate.oauth?.supported === true),
-    keyProviders: providers.filter(
+    signInProviders: providerChoices.filter(candidate => candidate.oauth?.supported === true),
+    keyProviders: providerChoices.filter(
       candidate => !(hidesDeploymentKeys && candidate.source === 'deployment') && offersApiKey(candidate),
     ),
     provider,
     connected: provider ? isConfigured(provider, selection?.method) : false,
     method: selection?.method,
     hasConfiguredProvider: providers.some(candidate => isConfigured(candidate)),
-    pending: startOAuthMutation.isPending,
+    gatewayProvider,
+    pending: startOAuthMutation.isPending || connectGatewayMutation.isPending,
+    connectingGateway: connectGatewayMutation.isPending,
     error,
     keyDialogProvider,
     activeOAuth,
@@ -192,6 +212,10 @@ export function useProviderConnection({
       if (!canConfigure(chosen, 'api_key')) return;
       select({ providerId: chosen.provider, method: 'api_key' });
       if (!isConfigured(chosen, 'api_key')) setKeyDialogProvider(chosen);
+    },
+    chooseCustomProvider: providerId => select({ providerId, method: 'api_key' }),
+    chooseGateway: () => {
+      if (gatewayProvider) void connectGateway(gatewayProvider);
     },
     closeKeyDialog: () => setKeyDialogProvider(undefined),
     closeOAuth: () => {

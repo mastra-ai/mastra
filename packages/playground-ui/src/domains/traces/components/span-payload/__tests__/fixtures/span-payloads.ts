@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import type { SpanRecord } from '../../../../types';
 
@@ -7,7 +8,8 @@ export function makeSpan(overrides: Partial<SpanRecord> = {}): SpanRecord {
   return {
     traceId: 'trace-1',
     spanId: 'span-1',
-    parentSpanId: null,
+    // Only an agent run starts a trace; every other span type hangs under one.
+    parentSpanId: overrides.spanType && overrides.spanType !== SpanType.AGENT_RUN ? 'agent-root' : null,
     name: 'agent run',
     entityType: null,
     entityId: null,
@@ -141,6 +143,24 @@ export const modelGenerationSpan = makeSpan({
   },
 });
 
+/** A skill signal reaches the model as the `<skill name="…">` user message core renders it to. */
+export const modelGenerationSkillSpan = makeSpan({
+  spanId: 'span-model-generation-skill',
+  spanType: SpanType.MODEL_GENERATION,
+  name: 'llm generation',
+  input: {
+    messages: [
+      { role: 'system', content: 'You triage issues.' },
+      {
+        role: 'user',
+        content:
+          '<skill name="factory-triage">Read the issue and label it.\n\nARGUMENTS: mastra-ai/mastra#123\n\n<work-item-feed>\n@alice: this blocks the release\n</work-item-feed></skill>',
+      },
+    ],
+  },
+  output: { text: 'Labelled as bug.' },
+});
+
 export const modelStepSpan = makeSpan({
   spanId: 'span-model-step',
   spanType: SpanType.MODEL_STEP,
@@ -261,6 +281,42 @@ export const processorToolResultSpan = makeSpan({
   input: { toolName: 'search', toolCallId: 'call_17', stepNumber: 3, providerExecuted: false },
 });
 
+/** An llmRequest processor: it gets the conversation as the provider prompt, right before the model call. */
+export const processorLlmRequestSpan = makeSpan({
+  spanId: 'span-processor-llm-request',
+  name: 'llm request processor: unsupported-file-handler',
+  spanType: SpanType.PROCESSOR_RUN,
+  entityType: 'input_processor',
+  attributes: { processorPhase: 'llmRequest', processorExecutor: 'legacy', processorIndex: 8 },
+  input: {
+    prompt: [
+      { role: 'system', content: 'You are Michel, a practical home chef.' },
+      { role: 'user', content: [{ type: 'text', text: 'weather in paris' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '' },
+          { type: 'tool-call', toolCallId: 'call_1', toolName: 'weatherInfo', input: { location: 'Paris' } },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_1',
+            toolName: 'weatherInfo',
+            output: { type: 'json', value: { location: 'Paris', temperature: 15.5 } },
+          },
+        ],
+      },
+    ],
+    stepNumber: 1,
+    retryCount: 0,
+  },
+  output: { shortCircuited: false },
+});
+
 export const processorOutputStreamSpan = makeSpan({
   spanId: 'span-processor-output-stream',
   name: 'output stream processor: moderation',
@@ -317,6 +373,13 @@ export const malformedProcessorSpan = makeSpan({
   metadata: { customMetadata: 'keep-this-value' },
 });
 
+/** A processor payload with a key the preview does not know, next to keys it does. */
+export const processorWithExtrasSpan = makeSpan({
+  ...processorInputSpan,
+  spanId: 'span-processor-with-extras',
+  input: { messages: [{ role: 'user', content: 'Be brief.' }], customFlag: true },
+});
+
 export const processorInputStepSpan = makeSpan({
   spanId: 'span-processor-input-step',
   name: 'input step processor: polite-step',
@@ -356,13 +419,81 @@ export const processorRequestErrorSpan = makeSpan({
   },
 });
 
+/** A created signal after span serialization: its methods are stored as `[Function]`. */
+function serializedSignal(signal: Record<string, unknown>) {
+  return {
+    ...signal,
+    createdAt: '2026-06-01T10:00:00.000Z',
+    __isCreatedSignal: true,
+    toDBMessage: '[Function]',
+    toLLMMessage: '[Function]',
+    toDataPart: '[Function]',
+  };
+}
+
+const SKILL_SIGNAL = {
+  id: 'signal-skill-1',
+  type: 'reactive',
+  tagName: 'skill',
+  attributes: { name: 'factory-triage' },
+};
+
+export const agentRunSkillSignalSpan = makeSpan({
+  spanId: 'span-agent-run-skill-signal',
+  attributes: { signal: SKILL_SIGNAL },
+  input: serializedSignal({
+    ...SKILL_SIGNAL,
+    contents: 'Read the issue and label it.\n\n## Steps\n1. Classify severity\n\nARGUMENTS: mastra-ai/mastra#123',
+  }),
+  output: { text: 'Labelled as bug.' },
+});
+
+const USER_SIGNAL = { id: 'signal-user-1', type: 'user', tagName: 'user' };
+
+export const agentRunUserSignalSpan = makeSpan({
+  spanId: 'span-agent-run-user-signal',
+  attributes: { signal: USER_SIGNAL },
+  input: serializedSignal({ ...USER_SIGNAL, contents: 'Can you summarize the open triage queue?' }),
+  output: { text: 'Three issues are waiting.' },
+});
+
+const REMINDER_SIGNAL = {
+  id: 'signal-reminder-1',
+  type: 'reactive',
+  tagName: 'system-reminder',
+  attributes: { type: 'ci-status' },
+};
+
+export const agentRunReminderSignalSpan = makeSpan({
+  spanId: 'span-agent-run-reminder-signal',
+  attributes: { signal: REMINDER_SIGNAL },
+  input: serializedSignal({ ...REMINDER_SIGNAL, contents: 'CI on main is red.' }),
+  output: { text: 'Noted.' },
+});
+
+/** Written before `attributes.signal` was recorded: only the input says it is a signal. */
+export const agentRunLegacySignalSpan = makeSpan({
+  spanId: 'span-agent-run-legacy-signal',
+  input: serializedSignal({
+    id: 'signal-legacy-1',
+    type: 'system-reminder',
+    attributes: { type: 'deploy' },
+    contents: 'Deploy finished.',
+  }),
+});
+
 export const ALL_SPAN_FIXTURES = {
   agentRunMessagesSpan,
+  agentRunSkillSignalSpan,
+  agentRunUserSignalSpan,
+  agentRunReminderSignalSpan,
+  agentRunLegacySignalSpan,
   agentRunResumeSpan,
   agentRunSuspendedSpan,
   agentRunAbortedSpan,
   agentRunTripwireSpan,
   modelGenerationSpan,
+  modelGenerationSkillSpan,
   modelStepSpan,
   modelInferenceSpan,
   toolCallSpan,
@@ -382,3 +513,36 @@ export const ALL_SPAN_FIXTURES = {
   processorRequestErrorSpan,
   legacyProcessorSpan,
 } as const;
+
+/** An input-step processor offered two tools: one in the tool registry, one a workspace tool that is not. */
+export const processorToolsSpan = makeSpan({
+  spanId: 'span-processor-tools',
+  name: 'memory: recall',
+  spanType: SpanType.PROCESSOR_RUN,
+  entityType: 'input_step_processor',
+  entityId: 'observational-memory',
+  attributes: { processorPhase: 'inputStep', processorExecutor: 'legacy', processorIndex: 0 },
+  input: {
+    messages: [{ role: 'user', content: 'What should I cook tonight?' }],
+    messageId: 'msg-tools-0',
+    tools: [
+      { id: 'cooking-tool', name: 'cookingTool', description: 'Suggests a recipe from what is in the fridge.' },
+      { id: 'mastra_workspace_read_file', name: 'mastra_workspace_read_file', description: 'Reads a workspace file.' },
+    ],
+    toolChoice: { type: 'auto' },
+  },
+});
+
+/** A model call that was forced to one tool; model spans record definitions under the registry key. */
+export const modelToolsSpan = makeSpan({
+  spanId: 'span-model-tools',
+  name: "llm: 'gpt-5-mini'",
+  spanType: SpanType.MODEL_INFERENCE,
+  attributes: {
+    tools: [{ type: 'function', name: 'cookingTool', description: 'Suggests a recipe from what is in the fridge.' }],
+    toolChoice: { type: 'tool', toolName: 'cookingTool' },
+  },
+});
+
+/** The trace the data panel's Output tab looks tool calls up in, for spans that called none. */
+export const traceWithoutToolCalls: Awaited<ReturnType<MastraClient['getTrace']>> = { traceId: 't', spans: [] };

@@ -20,12 +20,22 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   cpuCount?: number;
   /** Memory in MB for the sandbox template. Part of the template identity. */
   memoryMb?: number;
+  /** Install Docker Engine and Compose, started on first use. Part of the template identity. */
+  docker?: boolean;
   /** Minutes idle before the sandbox pauses. Runtime only. */
   idleTimeoutMinutes?: number;
+  /** Let anyone with a port's URL open it without signing in. Fixed when a sandbox is created. */
+  publicPorts?: boolean;
 }
 
 /** Applied when neither the environment setting nor a host default is set. */
-const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } as const;
+const DEFAULT_SETTINGS = {
+  cpuCount: 2,
+  memoryMb: 1024,
+  docker: false,
+  idleTimeoutMinutes: 5,
+  publicPorts: false,
+} as const;
 
 const SETTINGS_SCHEMA = {
   type: 'object',
@@ -52,6 +62,13 @@ const SETTINGS_SCHEMA = {
         { const: 8192, title: '8 GB' },
       ],
     },
+    docker: {
+      type: 'boolean',
+      title: 'Docker',
+      description:
+        'Install Docker Engine and Compose; the daemon starts on first use. We recommend at least 2 GB of memory for Docker.',
+      default: DEFAULT_SETTINGS.docker,
+    },
     idleTimeoutMinutes: {
       type: 'integer',
       title: 'Idle timeout (minutes)',
@@ -60,14 +77,21 @@ const SETTINGS_SCHEMA = {
       minimum: 1,
       maximum: 1440,
     },
+    publicPorts: {
+      type: 'boolean',
+      title: 'Public preview links',
+      description:
+        "Anyone with a sandbox's preview link can open it without signing in. Applies to newly created sandboxes, not existing ones.",
+      default: DEFAULT_SETTINGS.publicPorts,
+    },
   },
   additionalProperties: false,
 } as const satisfies PublicSchema;
 
 /**
  * The settings schema with the provider's effective defaults as `default`:
- * the built-in values, overridden by the host's `idleTimeoutMinutes` option and
- * then its `defaults` option. The schema
+ * the built-in values, overridden by the host's `idleTimeoutMinutes` and
+ * `publicPorts` options and then its `defaults` option. The schema
  * is what clients show as placeholders, so it must match what the provider
  * applies when a setting is unset.
  */
@@ -86,8 +110,14 @@ function settingsSchema(
 
 export interface PlatformFactorySandboxOptions extends Omit<
   PlatformSandboxOptions,
-  'id' | 'sandboxId' | 'sessionId' | 'template'
+  'id' | 'sandboxId' | 'sessionId' | 'template' | 'env'
 > {
+  /**
+   * Runtime environment of every session sandbox. A function receives each
+   * session's context, so a credential can go to one factory's sessions only:
+   * `ctx => (ctx.factoryId === id ? { TOKEN } : {})`.
+   */
+  env?: Record<string, string> | ((ctx: FactorySandboxContext) => Record<string, string>);
   /** Options for the environment's repo template. */
   template?: {
     /** Build-only environment, excluded from template identity and runtime sandboxes. */
@@ -129,6 +159,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
     this.#options = options;
     this.settings = settingsSchema({
       ...(options.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: options.idleTimeoutMinutes } : {}),
+      ...(options.publicPorts !== undefined ? { publicPorts: options.publicPorts } : {}),
       ...options.defaults,
     });
   }
@@ -143,13 +174,15 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       ...(template?.buildEnv ? { buildEnv: template.buildEnv } : {}),
       cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
+      docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
     });
   }
 
   create(ctx: FactorySandboxContext, settings: PlatformFactorySandboxSettings): PlatformSandbox {
-    const { defaults, template: _template, ...options } = this.#options;
+    const { defaults, template: _template, env, ...options } = this.#options;
     return new PlatformSandbox({
       ...options,
+      ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
       id: ctx.sessionId,
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,
@@ -162,6 +195,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
         defaults?.idleTimeoutMinutes ??
         options.idleTimeoutMinutes ??
         DEFAULT_SETTINGS.idleTimeoutMinutes,
+      publicPorts: settings.publicPorts ?? defaults?.publicPorts ?? options.publicPorts ?? DEFAULT_SETTINGS.publicPorts,
     });
   }
 

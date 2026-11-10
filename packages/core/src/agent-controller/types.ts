@@ -485,6 +485,8 @@ export interface AvailableModel {
   provider: string;
   /** Model name without provider prefix */
   modelName: string;
+  /** ISO release date, when supplied by the model catalog. */
+  releaseDate?: string;
   /** Whether the provider has valid authentication */
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */
@@ -845,7 +847,12 @@ export type AgentControllerEvent =
   | { type: 'thread_owner_changed'; threadId: string; fromOwnerId: string | undefined; toOwnerId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
+  | {
+      type: 'agent_end';
+      reason?: 'complete' | 'aborted' | 'error' | 'suspended';
+      /** Why an aborted run stopped, when the abort said: `'thread-lease-lost'` when another run holds its thread lease. */
+      abortReason?: string;
+    }
   | { type: 'message_start'; message: MastraDBMessage }
   | {
       type: 'message_update';
@@ -916,7 +923,17 @@ export type AgentControllerEvent =
         }
       | { type: 'tool_input_end'; toolCallId: string; messageId?: string }
       | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-      | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+      | {
+          /** Also sent by `kill_process` and `get_process_output`, for the process they stopped or waited on. */
+          type: 'command_exit';
+          toolCallId: string;
+          exitCode: number;
+          success: boolean;
+          killed?: boolean;
+          timedOut?: boolean;
+          /** Why the command could not run or be observed; its `exitCode` is then -1. */
+          error?: string;
+        }
     ))
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }

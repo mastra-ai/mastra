@@ -36,7 +36,6 @@ function workItem(commentCount: number): WorkItem {
     triageType: null,
     acceptedAt: null,
     commentCount,
-    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-08-20T00:00:00.000Z',
     updatedAt: '2026-08-20T00:00:00.000Z',

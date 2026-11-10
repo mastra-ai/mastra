@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
 import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
 
 import type { WorkspaceChanges } from '../../../../api/types';
@@ -26,6 +27,13 @@ function changesSummary(changes: WorkspaceChanges | undefined) {
   return `${changes.changes.length} changed`;
 }
 
+function changeStats(changes: WorkspaceChanges | undefined) {
+  if (!changes?.available || changes.changes.length === 0) return undefined;
+  const { additions, deletions } = changes;
+  if (additions === undefined || deletions === undefined) return undefined;
+  return { additions, deletions };
+}
+
 export function WorkspaceOverview({
   changes,
   changesLoading,
@@ -36,20 +44,13 @@ export function WorkspaceOverview({
   onShowComments,
   recreateSandbox,
 }: WorkspaceOverviewProps) {
-  const changeCount = changes?.changes.length ?? 0;
-  const changesLabel = changesSummary(changes);
-  const hasChangeStats =
-    changes?.available === true &&
-    changeCount > 0 &&
-    changes.additions !== undefined &&
-    changes.deletions !== undefined;
-  const changesStatus = hasChangeStats ? (
-    <Txt as="span" variant="body-sm" className="flex items-center gap-1 tabular-nums">
-      <span className="text-success-indicator">+{changes.additions}</span>
-      <span className="text-destructive-foreground">−{changes.deletions}</span>
+  const stats = changeStats(changes);
+  const changesStatus = stats ? (
+    <Txt as="span" variant="body-sm">
+      <DiffStat {...stats} />
     </Txt>
   ) : (
-    <span className="text-muted-foreground">{changesLabel}</span>
+    <span className="text-muted-foreground">{changesSummary(changes)}</span>
   );
 
   return (

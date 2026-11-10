@@ -1,0 +1,48 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
+import { lazy, Suspense, useState } from 'react';
+import type { ComponentType, ReactNode } from 'react';
+
+export function PageLoader() {
+  return (
+    <div className="flex flex-1 items-center justify-center transition-opacity delay-150 starting:opacity-0">
+      <BrandLoader size="lg" aria-label="Loading page" />
+    </div>
+  );
+}
+
+export type LazyPageComponent = ComponentType & { preload: () => Promise<unknown> };
+
+/**
+ * A page loaded on first visit. Navigations run in a transition, which keeps a
+ * boundary already showing a page instead of its loader; each call returns its
+ * own component, so opening the page mounts a fresh boundary that shows it.
+ * `preload` fetches the page ahead of a visit, which then renders without the loader.
+ */
+export function lazyPage(load: () => Promise<ComponentType>, fallback: ReactNode = <PageLoader />): LazyPageComponent {
+  let loading: Promise<{ default: ComponentType }> | undefined;
+  let loaded: ComponentType | undefined;
+  const preload = () =>
+    (loading ??= load().then(
+      Page => {
+        loaded = Page;
+        return { default: Page };
+      },
+      (error: unknown) => {
+        loading = undefined;
+        throw error;
+      },
+    ));
+  const LazyLoaded = lazy(preload);
+
+  function LazyPage() {
+    // Fixed per mount, so a page that finishes loading is never swapped (and remounted).
+    const [Page] = useState<ComponentType>(() => loaded ?? LazyLoaded);
+    return (
+      <Suspense fallback={fallback}>
+        <Page />
+      </Suspense>
+    );
+  }
+  LazyPage.preload = preload;
+  return LazyPage;
+}

@@ -343,15 +343,18 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
     it('drains signal-enqueued from losers that die immediately (Vercel Lambda-death)', async () => {
       const resourceId = `lambda-death-${Date.now()}`;
       const threadId = `thread-${Date.now()}`;
-      // Hold the winner's run long enough for the losers to boot, subscribe,
-      // publish, and exit before run-completed releases the lease. The lease TTL
-      // is shortened (with renewal scaled to TTL/3) so the winner's heartbeat,
-      // not a 15s default, is what keeps the lease alive across the three runs —
-      // and so a genuinely dead owner's lease would lapse quickly.
+      // sig-1 stays in flight until the test ends it with `finish-run`, so the
+      // losers always publish while the winner owns the lease. A worker takes
+      // longer to boot than any fixed run length could reliably cover. The lease
+      // TTL is shortened (with renewal scaled to TTL/3) so the winner's heartbeat,
+      // not a 15s default, is what keeps the lease alive across the three runs.
       const env = {
         RESOURCE_ID: resourceId,
         THREAD_ID: threadId,
-        RUN_MS: '1500',
+        RUN_MS: '300',
+        HOLD_SIG_IDS: 'sig-1',
+        // Every Lambda is a replica of the same deployed agent.
+        AGENT_ID: 'lambda-agent',
         MASTRA_AGENT_THREAD_LEASE_TTL_MS: '6000',
       };
 
@@ -360,12 +363,12 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       const winner = spawnWorker('winner', env);
       workers = [winner];
       await waitForLine(winner, '"type":"ready"');
-      await new Promise(r => setTimeout(r, 300)); // let subscription settle
 
       winner.send({ cmd: 'send', sigId: 'sig-1' });
-      // Wait until the winner has acquired the lease and run-started fires —
-      // otherwise the losers might win the race.
-      await waitForLine(winner, '"type":"run-started"');
+      await waitForLine(winner, '"type":"owner-stream-resolved"');
+      expect(eventsByType(winner, 'owner-stream-resolved')).toEqual([
+        { type: 'owner-stream-resolved', sigId: 'sig-1', defined: true },
+      ]);
 
       // Lambda 2 + 3 each fire a signal then exit. They model Vercel Lambdas
       // that return their HTTP response immediately after publishing to Redis.
@@ -378,10 +381,21 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       lambda2.send({ cmd: 'send-and-exit', sigId: 'sig-2' });
       lambda3.send({ cmd: 'send-and-exit', sigId: 'sig-3' });
 
-      // Both losers should exit after publishing — well before the winner's
-      // first run finishes, so their `signal-enqueued` must reach the winner
-      // through Redis while its run is still in flight.
       await waitFor(async () => lambda2.proc.exitCode !== null && lambda3.proc.exitCode !== null, 10_000);
+
+      // Both lost the lease to the winner's in-flight run, so their signals were
+      // published as signal-enqueued for it rather than starting runs of their own.
+      for (const [loser, sigId] of [
+        [lambda2, 'sig-2'],
+        [lambda3, 'sig-3'],
+      ] as const) {
+        expect(eventsByType(loser, 'owner-stream-resolved')).toEqual([
+          { type: 'owner-stream-resolved', sigId, defined: false },
+        ]);
+        expect(eventsByType(loser, 'run-started')).toHaveLength(0);
+      }
+
+      winner.send({ cmd: 'finish-run', sigId: 'sig-1' });
 
       // Winner must drain both enqueued signals even though both publishers
       // exited immediately. This is the Vercel Lambda-death scenario where
@@ -391,6 +405,7 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       const finished = eventsByType(winner, 'run-finished');
       const finishedSigIds = new Set(finished.map(e => e.sigId));
       expect(finishedSigIds).toEqual(new Set(['sig-1', 'sig-2', 'sig-3']));
+      expect(eventsByType(winner, 'command-error')).toHaveLength(0);
     }, 60_000);
 
     it('owner without a thread subscription drains a mid-run follow-up sent from another pod', async () => {

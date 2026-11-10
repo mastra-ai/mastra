@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
-import { PermissionError } from '../../errors';
+import { FileReadRequiredError, PermissionError } from '../../errors';
 import { LocalFilesystem } from '../../filesystem';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
@@ -438,12 +438,56 @@ describe('workspace_apply_patch', () => {
     });
   });
 
-  // LocalFilesystem skips its realpath check when the target does not exist yet,
-  // so a new file under a symlinked parent directory lands outside the root.
-  // This already affects write_file on main; the fix belongs in LocalFilesystem.
   describe('symlinked parent directory (#27916)', () => {
-    it.todo('rejects "*** Add File: link/x.txt" when link points outside the workspace');
-    it.todo('rejects "*** Move to: link/x.txt" when link points outside the workspace');
+    it.each(['link/new.txt', 'link/missing/nested/new.txt'])(
+      'rejects Add File to %s without creating anything outside',
+      async destination => {
+        const workspaceDir = path.join(tempDir, 'workspace');
+        const outside = path.join(tempDir, 'outside');
+        await fs.mkdir(workspaceDir);
+        await fs.mkdir(outside);
+        await fs.symlink(outside, path.join(workspaceDir, 'link'), 'dir');
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: workspaceDir }),
+          tools: { [APPLY_PATCH]: { enabled: true } },
+        });
+        const tools = await createWorkspaceTools(workspace);
+
+        await expect(
+          tools[APPLY_PATCH].execute(
+            { patch: `*** Begin Patch\n*** Add File: ${destination}\n+content\n*** End Patch` },
+            { workspace },
+          ),
+        ).rejects.toThrow(PermissionError);
+        expect(await fs.readdir(outside)).toEqual([]);
+      },
+    );
+
+    it.each(['link/new.txt', 'link/missing/nested/new.txt'])(
+      'rejects Move to %s without moving the source outside',
+      async destination => {
+        const workspaceDir = path.join(tempDir, 'workspace');
+        const outside = path.join(tempDir, 'outside');
+        await fs.mkdir(workspaceDir);
+        await fs.mkdir(outside);
+        await fs.symlink(outside, path.join(workspaceDir, 'link'), 'dir');
+        await fs.writeFile(path.join(workspaceDir, 'source.txt'), 'content\n');
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: workspaceDir }),
+          tools: { [APPLY_PATCH]: { enabled: true } },
+        });
+        const tools = await createWorkspaceTools(workspace);
+
+        await expect(
+          tools[APPLY_PATCH].execute(
+            { patch: `*** Begin Patch\n*** Update File: source.txt\n*** Move to: ${destination}\n*** End Patch` },
+            { workspace },
+          ),
+        ).rejects.toThrow(PermissionError);
+        expect(await fs.readdir(outside)).toEqual([]);
+        expect(await fs.readFile(path.join(workspaceDir, 'source.txt'), 'utf-8')).toBe('content\n');
+      },
+    );
   });
 
   describe('read-before-write', () => {
@@ -501,7 +545,10 @@ describe('workspace_apply_patch', () => {
     it('applies nothing when a file changed after it was read', async () => {
       await fs.writeFile(path.join(tempDir, 'a.ts'), 'a\n');
       await fs.writeFile(path.join(tempDir, 'b.ts'), 'b\n');
-      const { tools, workspace } = await setup();
+      const { tools, workspace } = await setup({
+        [APPLY_PATCH]: { enabled: true, requireReadBeforeWrite: true },
+      });
+      await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'a.ts' }, { workspace });
       await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'b.ts' }, { workspace });
       await new Promise(r => setTimeout(r, 20));
       await fs.writeFile(path.join(tempDir, 'b.ts'), 'b changed\n');
@@ -522,7 +569,9 @@ describe('workspace_apply_patch', () => {
           },
           { workspace },
         ),
-      ).rejects.toThrow(/modified externally/);
+      ).rejects.toThrow(
+        expect.objectContaining({ name: 'FileReadRequiredError', message: expect.stringContaining('b.ts') }),
+      );
 
       expect(await read('a.ts')).toBe('a\n');
       expect(await read('b.ts')).toBe('b changed\n');

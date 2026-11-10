@@ -190,10 +190,23 @@ import * as tracingOps from './tracing';
 
 const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
-    ? (['span-query', 'span-query-context-fields'] as const)
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
+      ] as const)
     : ([] as const);
 const spanAggregateFeatures =
-  typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);
+  typeof coreStorage.planSpanAggregate === 'function'
+    ? ([
+        'span-aggregate',
+        // Core before the dimensions rejects `model`/`provider` in `groupBy`, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_AGGREGATE_DIMENSION_REGISTRY ?? {})
+          ? (['span-aggregate-model-dimensions'] as const)
+          : []),
+      ] as const)
+    : ([] as const);
 const threadQueryFeatures =
   typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : ([] as const);
 
@@ -971,10 +984,13 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
-        ...traceQueryOps.timeToFirstChunkFeatures,
+        ...traceQueryOps.contextFieldFeatures,
+        ...traceQueryOps.timingFeatures,
+        ...traceQueryOps.outcomeFeatures,
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
         'trace-aggregate',
+        ...traceAggregateOps.aggregateTimeToFirstFeatures,
         ...spanQueryFeatures,
         ...spanAggregateFeatures,
         ...threadQueryFeatures,
@@ -998,10 +1014,13 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
-      ...traceQueryOps.timeToFirstChunkFeatures,
+      ...traceQueryOps.contextFieldFeatures,
+      ...traceQueryOps.timingFeatures,
+      ...traceQueryOps.outcomeFeatures,
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
       'trace-aggregate',
+      ...traceAggregateOps.aggregateTimeToFirstFeatures,
       ...spanQueryFeatures,
       ...spanAggregateFeatures,
       ...threadQueryFeatures,
@@ -1485,6 +1504,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scoreId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    try {
+      return await feedbackOps.getFeedbackById(this.#client, feedbackId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_FEEDBACK_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId },
         },
         error,
       );

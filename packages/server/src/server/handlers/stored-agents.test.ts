@@ -1,4 +1,5 @@
-import type { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -772,6 +773,127 @@ describe('Stored Agents Handlers', () => {
     });
   });
 
+  describe.each(['code', 'fs'] as const)('description-only %s overrides', source => {
+    const toolRules = { operator: 'AND' as const, conditions: [] };
+    const toolMap = {
+      weatherTool: { description: 'Edited weather description', rules: toolRules },
+      selectionOnly: {},
+      rulesOnly: { rules: toolRules },
+    };
+
+    describe.each([false, true])('when tools are conditional: %s', conditional => {
+      const tools = conditional
+        ? ['admin', 'viewer'].map(role => ({
+            value: { weatherTool: { description: `Weather for ${role}` } },
+            rules: {
+              operator: 'AND' as const,
+              conditions: [{ field: 'user.role', operator: 'equals' as const, value: role }],
+            },
+          }))
+        : toolMap;
+      const expectedTools = { weatherTool: { description: 'Edited weather description' } };
+      const conditionalError = {
+        status: 400,
+        message: 'Conditional tool description overrides require project-owned rules and are not supported',
+      };
+
+      const setup = () => {
+        const storage = new InMemoryStore();
+        const agent = new Agent({
+          id: 'description-only',
+          name: 'Description Only',
+          instructions: 'Instructions owned by the project',
+          model: 'openai/gpt-4o-mini',
+          editor: { tools: { description: true } },
+        });
+        agent.source = source;
+        const mastra = new Mastra({ storage, agents: { agent } });
+        const context = {
+          mastra,
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+        } satisfies ServerContext;
+        const payload = {
+          tools,
+          integrationTools: { external: { tools: toolMap } },
+          mcpClients: { external: { tools: toolMap } },
+          toolProviders: { external: { tools: toolMap, connections: {} } },
+        };
+        return { storage, context, payload };
+      };
+
+      it('exports plain descriptions or rejects conditional overrides without trusted rules', async () => {
+        const { context, payload } = setup();
+        const result = EXPORT_STORED_AGENT_ROUTE.handler({
+          ...context,
+          storedAgentId: 'description-only',
+          ...payload,
+        });
+        if (conditional) {
+          await expect(result).rejects.toMatchObject(conditionalError);
+          return;
+        }
+        expect((await result).config).toEqual({ tools: expectedTools });
+      });
+
+      it('creates plain description overrides or rejects conditional ones before writing', async () => {
+        const { storage, context, payload } = setup();
+        const result = CREATE_STORED_AGENT_ROUTE.handler({
+          ...context,
+          id: 'description-only',
+          name: 'Description Only',
+          instructions: [],
+          model: { provider: 'openai', name: 'gpt-4o-mini' },
+          autoPublish: false,
+          ...payload,
+        });
+        const store = await storage.getStore('agents');
+        if (conditional) {
+          await expect(result).rejects.toMatchObject(conditionalError);
+          expect(await store.getById('description-only')).toBeNull();
+          return;
+        }
+        await result;
+        const saved = await store.getByIdResolved('description-only', { status: 'draft' });
+        expect(saved?.tools).toEqual(expectedTools);
+        expect(saved?.integrationTools).toBeUndefined();
+        expect(saved?.mcpClients).toBeUndefined();
+        expect(saved?.toolProviders).toBeUndefined();
+      });
+
+      it('updates plain description overrides or rejects conditional ones before writing', async () => {
+        const { storage, context, payload } = setup();
+        const store = await storage.getStore('agents');
+        await store.create({
+          agent: {
+            id: 'description-only',
+            name: 'Description Only',
+            instructions: 'Project instructions',
+            model: { provider: 'openai', name: 'gpt-4o-mini' },
+          },
+        });
+        if (!conditional) await useRealAutoVersioningOnce();
+        const before = await store.getByIdResolved('description-only', { status: 'draft' });
+        const result = UPDATE_STORED_AGENT_ROUTE.handler({
+          ...context,
+          storedAgentId: 'description-only',
+          ...payload,
+        });
+        if (conditional) {
+          await expect(result).rejects.toMatchObject(conditionalError);
+          expect(await store.getByIdResolved('description-only', { status: 'draft' })).toEqual(before);
+          return;
+        }
+        await result;
+        const saved = await store.getByIdResolved('description-only', { status: 'draft' });
+        expect(saved?.tools).toEqual(expectedTools);
+        expect(saved?.integrationTools).toBeUndefined();
+        expect(saved?.mcpClients).toBeUndefined();
+        expect(saved?.toolProviders).toBeUndefined();
+      });
+    });
+  });
+
   describe('EXPORT_STORED_AGENT_ROUTE', () => {
     it('should export deterministic JSON for a code agent override', async () => {
       mockMastra = createMockMastra({
@@ -800,13 +922,68 @@ describe('Stored Agents Handlers', () => {
         agentId: 'code-agent',
         fileName: 'agents/code-agent.json',
         config: {
-          integrationTools: { composio: { type: 'composio' } },
           instructions: 'Stored instructions',
-          mcpClients: { local: { type: 'mcp' } },
           tools: { weatherTool: { description: 'Check weather' } },
         },
         content:
-          '{\n  "instructions": "Stored instructions",\n  "integrationTools": {\n    "composio": {\n      "type": "composio"\n    }\n  },\n  "mcpClients": {\n    "local": {\n      "type": "mcp"\n    }\n  },\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
+          '{\n  "instructions": "Stored instructions",\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
+      });
+    });
+
+    it('should export a model-only code agent draft from storage', async () => {
+      mockAgentsData.set('model-agent', {
+        id: 'model-agent',
+        name: 'Model Agent',
+        modelList: [
+          {
+            id: 'fallback',
+            provider: 'openai',
+            modelId: 'gpt-5.5',
+            enabled: true,
+            maxRetries: 2,
+          },
+          {
+            id: 'primary',
+            provider: 'openai',
+            modelId: 'gpt-5.4-mini',
+            enabled: true,
+            maxRetries: 0,
+          },
+        ],
+      });
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'model-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ model: true }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'model-agent',
+      });
+
+      expect(result.config).toEqual({
+        modelList: [
+          {
+            enabled: true,
+            id: 'fallback',
+            maxRetries: 2,
+            modelId: 'gpt-5.5',
+            provider: 'openai',
+          },
+          {
+            enabled: true,
+            id: 'primary',
+            maxRetries: 0,
+            modelId: 'gpt-5.4-mini',
+            provider: 'openai',
+          },
+        ],
       });
     });
 
@@ -838,6 +1015,34 @@ describe('Stored Agents Handlers', () => {
         config: {
           requestContextSchema: { type: 'object' },
         },
+        content: '{\n  "requestContextSchema": {\n    "type": "object"\n  }\n}\n',
+      });
+    });
+
+    it('should omit fields not owned by a file-based agent editor config', async () => {
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'fs-agent': {
+            source: 'fs',
+            __getEditorConfig: () => ({ instructions: false, tools: false }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'fs-agent',
+        instructions: 'Ignored instructions',
+        tools: { weatherTool: { description: 'Ignored tool' } },
+        model: { provider: 'openai', name: 'gpt-4o' },
+        requestContextSchema: { type: 'object' },
+      });
+
+      expect(result).toMatchObject({
+        agentId: 'fs-agent',
+        config: { requestContextSchema: { type: 'object' } },
         content: '{\n  "requestContextSchema": {\n    "type": "object"\n  }\n}\n',
       });
     });
@@ -1003,7 +1208,7 @@ describe('Stored Agents Handlers', () => {
     it('should persist durable config on the initial version', async () => {
       const storage = new InMemoryStore();
       const mastra = createMockMastra({ storage: storage as unknown as MockStorage });
-      const durable = { maxSteps: 25, cleanupTimeoutMs: 0 };
+      const durable = { cleanupTimeoutMs: 0 };
 
       const result = await CREATE_STORED_AGENT_ROUTE.handler({
         ...createTestContext(mastra),
@@ -1072,7 +1277,85 @@ describe('Stored Agents Handlers', () => {
       expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'description-only-agent',
+        }),
+      });
+      expect(mockAgentsStore.create.mock.calls[0]?.[0].agent).not.toHaveProperty('instructions');
+    });
+
+    it('should persist only the owned model list when creating a model-only code agent override', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+      const editor = createMockEditor();
+      editor.agent.create = vi
+        .fn()
+        .mockImplementation(async (input: unknown) => agentsStore.create({ agent: input as never }));
+      const mastra = createMockMastra({
+        storage: storage as unknown as MockStorage,
+        editor,
+        agents: {
+          'model-only-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ model: true }),
+          },
+        },
+      });
+      const modelList = [
+        {
+          id: 'primary',
+          provider: 'openai',
+          modelId: 'gpt-5.4-mini',
+          enabled: true,
+          maxRetries: 0,
+        },
+      ];
+
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        id: 'model-only-agent',
+        name: 'Model Only Agent',
+        instructions: 'Code-owned instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        modelList,
+        tools: ['code-owned-tool'],
+        autoPublish: false,
+      });
+
+      const version = await agentsStore.getLatestVersion('model-only-agent');
+      expect(version).toMatchObject({
+        name: 'Model Only Agent',
+        modelList,
+      });
+      expect(version).not.toHaveProperty('instructions');
+      expect(version).not.toHaveProperty('model');
+      expect(version).not.toHaveProperty('tools');
+    });
+
+    it('should strip code-owned fields when creating an override for a file-based agent', async () => {
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'fs-agent': {
+            source: 'fs',
+            __getEditorConfig: () => ({ instructions: false, tools: false }),
+          },
+        },
+      });
+
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        id: 'fs-agent',
+        name: 'FS Agent',
+        instructions: 'Studio instructions',
+        tools: { weatherTool: { description: 'Studio tool' } },
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
+        agent: expect.objectContaining({
+          id: 'fs-agent',
           instructions: undefined,
+          tools: undefined,
         }),
       });
     });
@@ -1443,6 +1726,41 @@ describe('Stored Agents Handlers', () => {
       );
     });
 
+    it('should strip code-owned fields when updating an override for a file-based agent', async () => {
+      mockAgentsData.set('fs-agent', {
+        id: 'fs-agent',
+        name: 'FS Agent',
+        instructions: 'Existing instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-fs-agent-1',
+      });
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'fs-agent': {
+            source: 'fs',
+            __getEditorConfig: () => ({ instructions: false, tools: false }),
+          },
+        },
+      });
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        storedAgentId: 'fs-agent',
+        instructions: 'Studio instructions',
+        tools: { weatherTool: { description: 'Studio tool' } },
+      });
+
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'fs-agent',
+          instructions: undefined,
+          tools: undefined,
+        }),
+      );
+    });
+
     it('should allow updating memory to null to disable memory', async () => {
       // Set up an agent with memory configured
       mockAgentsData.set('memory-test', {
@@ -1711,6 +2029,25 @@ describe('Stored Agents Handlers', () => {
         expect(latestVersion.id).not.toBe(publishedVersion.id);
         expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(latestVersion.id);
         expect(published.instructions).toBe('Auto-published instructions');
+      });
+
+      it('marks a draft agent as published when a PATCH auto-publishes', async () => {
+        const agentId = 'auto-publish-draft-status-test';
+        const { agentsStore, lifecycleMastra } = await setupPublishedAgent(agentId);
+        await agentsStore.update({ id: agentId, status: 'draft' });
+        await useRealAutoVersioningOnce();
+
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Published from draft',
+          autoPublish: true,
+        });
+
+        const latestVersion = await agentsStore.getLatestVersion(agentId);
+        const stored = await agentsStore.getById(agentId);
+        expect(stored?.activeVersionId).toBe(latestVersion?.id);
+        expect(stored?.status).toBe('published');
       });
 
       it('preserves the active code-source version while replacing an unpublished rolling draft', async () => {
@@ -2471,19 +2808,19 @@ describe('createStoredAgentBodySchema', () => {
   it('should accept durable as a serializable config object', () => {
     const result = createStoredAgentBodySchema.safeParse({
       ...baseAgent,
-      durable: { maxSteps: 25, cleanupTimeoutMs: 0 },
+      durable: { cleanupTimeoutMs: 0 },
     });
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.durable).toEqual({ maxSteps: 25, cleanupTimeoutMs: 0 });
+      expect(result.data.durable).toEqual({ cleanupTimeoutMs: 0 });
     }
   });
 
   it('should reject durable options that are not serializable config', () => {
     const result = createStoredAgentBodySchema.safeParse({
       ...baseAgent,
-      durable: { maxSteps: -1 },
+      durable: { cleanupTimeoutMs: -1 },
     });
 
     expect(result.success).toBe(false);

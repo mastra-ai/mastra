@@ -10,10 +10,7 @@ describeForAllEngines(
   'AIMock loop scenario: resumed output keeps earlier tool calls',
   engine => {
     const getMock = useLoopScenarioAimock();
-    // #27926: Inngest returns no toolCalls after approval, despite executing both tools.
-    // Reproduced on three real-host runs; root cause not yet established.
-    const resumeTest = engine === 'inngest' ? it.fails : it;
-    resumeTest('returns the completed lookup and approved purchase exactly once', async () => {
+    it('returns the completed lookup and approved purchase exactly once', async () => {
       const { model, requests } = createRecordingModel({
         tapes: [
           toolCallTape('lookup', {}, 'lookup-1'),

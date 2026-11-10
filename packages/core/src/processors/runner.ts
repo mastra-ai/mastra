@@ -27,10 +27,12 @@ import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import { residentStepResults } from '../workflows/run-journal';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
 import { isProcessorWorkflow } from './is-processor-workflow';
-import { createProcessorSendSignal } from './send-signal';
+import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from './send-signal';
+import type { ProcessorLateSignalSink } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
   summarizeActiveToolsForSpan,
@@ -403,6 +405,7 @@ export class ProcessorRunner {
    * Keyed by processor ID.
    */
   private readonly processorStates: Map<string, ProcessorState>;
+  private readonly lateSignalSink?: ProcessorLateSignalSink;
 
   constructor({
     inputProcessors,
@@ -412,6 +415,7 @@ export class ProcessorRunner {
     agentName,
     agent,
     processorStates,
+    lateSignalSink,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
@@ -420,6 +424,8 @@ export class ProcessorRunner {
     agentName: string;
     agent?: Agent<any, any, any, any>;
     processorStates?: Map<string, ProcessorState>;
+    /** Receives `sendSignal` calls made after the creating step returned (durable engines). */
+    lateSignalSink?: ProcessorLateSignalSink;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
@@ -428,6 +434,7 @@ export class ProcessorRunner {
     this.agentName = agentName;
     this.agent = agent;
     this.processorStates = processorStates ?? new Map();
+    this.lateSignalSink = lateSignalSink;
   }
 
   /**
@@ -680,6 +687,7 @@ export class ProcessorRunner {
       processorStates: this.processorStates,
       abortSignal,
       agent: this.agent,
+      lateSignalSink: this.lateSignalSink,
     };
     const outputWriter: OutputWriter | undefined = writer
       ? (chunk, options) => writer.custom(chunk, options)
@@ -707,12 +715,17 @@ export class ProcessorRunner {
           }
         : undefined,
     );
-    const result = await run.start({
-      inputData,
-      ...observabilityContext,
-      requestContext,
-      outputWriter,
-    });
+    // Workflow schemas strip unknown fields. Keep the live callback off
+    // step payloads so chained processors can recover it from their run.
+    const scope = this.lateSignalSink ? workflow.mastra?.__createRunScope(run.runId) : undefined;
+    if (this.lateSignalSink) scope?.set(PROCESSOR_LATE_SIGNAL_SINK, this.lateSignalSink);
+    const result = await (async () => {
+      try {
+        return await run.start({ inputData, ...observabilityContext, requestContext, outputWriter });
+      } finally {
+        if (scope) workflow.mastra?.__releaseRunScope(run.runId);
+      }
+    })();
 
     // Check for tripwire status - this means a processor in the workflow called abort()
     if (result.status === 'tripwire') {
@@ -734,23 +747,41 @@ export class ProcessorRunner {
     if (result.status !== 'success') {
       // Collect error details from the workflow result and failed steps
       const details: string[] = [];
+      // A storage v2 result's `steps` is a loader; it holds the failed results without reading storage.
+      const steps = residentStepResults(result.steps) ?? result.steps;
       if (result.status === 'failed') {
         if (result.error) {
           details.push(result.error.message || JSON.stringify(result.error));
         }
-        for (const [stepId, step] of Object.entries(result.steps)) {
+        for (const [stepId, step] of Object.entries(steps)) {
           if (step.status === 'failed' && step.error?.message) {
             details.push(`step ${stepId}: ${step.error.message}`);
           }
         }
       }
       const detailStr = details.length > 0 ? ` — ${details.join('; ')}` : '';
-      throw new MastraError({
-        category: 'USER',
-        domain: 'AGENT',
-        id: 'PROCESSOR_WORKFLOW_FAILED',
-        text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
-      });
+      // Keep the underlying failure reachable: without it callers only see the
+      // flattened status text and lose the original error, stack and type.
+      let failedStepError: Error | undefined;
+      if (result.status === 'failed') {
+        for (const step of Object.values(steps)) {
+          if (step.status === 'failed' && step.error) {
+            failedStepError = step.error;
+            break;
+          }
+        }
+      }
+      throw new MastraError(
+        {
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_WORKFLOW_FAILED',
+          text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
+        },
+        // The step's error is the live object; `result.error` is the engine's
+        // serialized copy and has no stack or original class.
+        result.status === 'failed' ? (failedStepError ?? result.error) : undefined,
+      );
     }
 
     // Extract and validate the output from the workflow result
@@ -866,7 +897,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
-          sendSignal: createProcessorSendSignal({ messageList, writer }),
+          sendSignal: createProcessorSendSignal({ messageList, writer, lateSink: this.lateSignalSink }),
         });
 
         // Stop recording and get mutations for this processor
@@ -885,19 +916,17 @@ export class ProcessorRunner {
           if (mutations.length > 0) {
             processableMessages = getProcessableResponseMessages(processResult);
           }
-        } else {
-          if (processResult) {
-            const deletedIds = idsBeforeProcessing.filter(
-              (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
-            );
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            processableMessages = processResult || [];
-            for (const message of processResult) {
-              messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'response', { merge: false });
-            }
+        } else if (processResult) {
+          const deletedIds = idsBeforeProcessing.filter(
+            (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
+          );
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
+          processableMessages = processResult || [];
+          for (const message of processResult) {
+            messageList.removeByIds([message.id]);
+            messageList.add(message, check.getSource(message) || 'response', { merge: false });
           }
         }
 
@@ -1622,7 +1651,7 @@ export class ProcessorRunner {
           messageList,
           requestContext,
           retryCount,
-          sendSignal: createProcessorSendSignal({ messageList }),
+          sendSignal: createProcessorSendSignal({ messageList, lateSink: this.lateSignalSink }),
         });
 
         // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
@@ -1965,7 +1994,12 @@ export class ProcessorRunner {
           writer,
           abortSignal: args.abortSignal,
           agent: this.agent,
-          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
+          sendSignal: createProcessorSendSignal({
+            messageList,
+            writer,
+            rotateResponseMessageId,
+            lateSink: this.lateSignalSink,
+          }),
           sendStateSignal: async (
             stateSignal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
           ) => {
@@ -2108,6 +2142,7 @@ export class ProcessorRunner {
   async runProcessLLMRequest(args: {
     prompt: LanguageModelV2Prompt;
     model: unknown;
+    apiProviderId?: string;
     messageList?: MessageList;
     workspace?: AnyWorkspace;
     stepNumber: number;
@@ -2164,6 +2199,7 @@ export class ProcessorRunner {
           // the runner accepts the looser `unknown` to match other call paths
           // (e.g. unresolved string ids or function-typed dynamic models).
           model: args.model as never,
+          apiProviderId: args.apiProviderId,
           messageList: args.messageList,
           workspace: args.workspace,
           stepNumber: args.stepNumber,
@@ -2492,7 +2528,7 @@ export class ProcessorRunner {
           agent: this.agent,
           retryCount,
           writer,
-          sendSignal: createProcessorSendSignal({ messageList, writer }),
+          sendSignal: createProcessorSendSignal({ messageList, writer, lateSink: this.lateSignalSink }),
         });
 
         // Stop recording and get mutations for this processor
@@ -2826,7 +2862,11 @@ export class ProcessorRunner {
       const messageIdBefore = args.messageId;
       let messageIdAfter = args.messageId;
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      // The failed call's MODEL_STEP is still open here, so the span sits under it
+      // like the step's other processor spans, not flat under the agent run.
+      const parentSpan =
+        findOwnModelStepSpan(currentSpan) ??
+        (currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan);
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
         name: resolveProcessorSpanName(processor, 'requestError', `request error processor: ${processor.id}`),
@@ -2878,7 +2918,12 @@ export class ProcessorRunner {
           abortSignal,
           messageId: args.messageId,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
-          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
+          sendSignal: createProcessorSendSignal({
+            messageList,
+            writer,
+            rotateResponseMessageId,
+            lateSink: this.lateSignalSink,
+          }),
         });
 
         // Stop recording and get mutations for this processor

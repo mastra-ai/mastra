@@ -164,6 +164,8 @@ function getErrorHint(errorType: string): string | null {
       return 'Use /new to start a fresh conversation';
     case 'rate_limit':
       return 'Wait a moment and try again';
+    case 'quota':
+      return "Check the provider account's billing or usage allowance, or switch to another account";
     case 'network':
       return 'Check your internet connection';
     default:

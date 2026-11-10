@@ -1,7 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
-import { attentionKindSummaries } from './attention';
 import { builtinBoardCatalog } from './board-catalog';
 
 /**
@@ -25,9 +24,13 @@ export const server = setupServer(
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
+  http.get('*/web/status', () => HttpResponse.json({ problems: [] })),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
+  // The sidebar and the board page read the intake routes to learn whether the caller may change
+  // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   // A server without the JIRA_* env group mounts no Jira routes; the ambient
   // 404 mirrors that and the Jira service degrades to a disabled status.
@@ -45,17 +48,15 @@ export const server = setupServer(
   ),
   // Board filters read connection status even when no provider is configured.
   http.get('*/web/github/status', () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
-  // Ambient GitHub label routing (read by every board's intake feed); label-routing
-  // tests override it with `server.use(...)`.
-  http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
+  // Ambient pull requests: Work and Review both list their linked repositories'
+  // open pull requests. Pull-request tests override these with `server.use(...)`.
+  http.get('*/web/github/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
+  http.get('*/web/gitlab/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
   // GitLab intake is optional; feature tests override these ambient 404s.
   http.get('*/web/gitlab/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
-  http.get('*/web/factory/projects/:id/attention', () =>
-    HttpResponse.json({ items: [], kinds: attentionKindSummaries([]), hasMore: false }),
-  ),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),

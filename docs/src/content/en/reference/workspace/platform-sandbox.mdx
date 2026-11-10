@@ -36,7 +36,6 @@ Configure the platform credentials. The access token, project ID, and environmen
     MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_ENVIRONMENT_ID=your-environment-id
-    SANDBOX_PROVIDER=railway
     ```
   </TabItem>
 
@@ -53,7 +52,7 @@ Configure the platform credentials. The access token, project ID, and environmen
 
 On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
 
-The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`.
+The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`.
 
 ## Usage
 
@@ -99,6 +98,20 @@ const workspace = new Workspace({
 ```
 
 The default `ISOLATED` mode allows outbound internet access only, with no private network connectivity.
+
+### Public ports
+
+Ports are private by default: opening one needs a signed-in preview link. Set `publicPorts` to let anyone with a port's URL reach it, for example a webhook receiver:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new PlatformSandbox({
+    publicPorts: true,
+  }),
+})
+```
+
+The port URL is the same either way. Only whether it asks for sign-in changes. The setting is fixed when the sandbox is created, so passing it when reattaching changes nothing for that sandbox. Clones use the `publicPorts` option you passed, not the reattached sandbox's setting.
 
 ### Reattaching to a running sandbox
 
@@ -156,9 +169,11 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-`Template()` supports `cpuCount`, `memoryMB`, `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally and computes the content hash. Call `await template.build(options)` to start or reuse that provider build without provisioning a sandbox. It returns `ready`, `pending`, or `failed`, with the template ID and an optional retry hint or error.
+`Template()` supports `cpuCount`, `memoryMB`, `docker`, `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally and computes the content hash. Call `await template.build(options)` to start or reuse that provider build without provisioning a sandbox. It returns `ready`, `pending`, or `failed`, with the template ID and an optional retry hint or error.
 
 For E2B, `cpuCount()` and `memoryMB()` set the template build resources inherited by sandboxes created from the exact template or a resource-matched stale template. Both methods accept a positive safe integer. They default to 2 CPUs and 1,024 MB. Resource setters use last-value-wins semantics, and their effective values are part of the content identity. Omitting both setters is equivalent to explicitly selecting the defaults. If a pending build falls back to the provider base, that sandbox may use the provider's default resources. Check `templatePending` to detect this case.
+
+`docker()` installs Docker Engine and Compose in the E2B template. The daemon starts the first time something uses Docker, so sandboxes that never use it don't pay for it. Docker is part of the content identity only when it's on, so templates without it keep their IDs. Use at least 2,048 MB of memory with Docker.
 
 Railway converts the command, working directory, environment, and package operations to Railway template instructions. Railway currently ignores `cpuCount()` and `memoryMB()` because its sandbox template API doesn't expose matching resource settings.
 
@@ -178,7 +193,7 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-`createRepoTemplate()` accepts the same `cpuCount` and `memoryMB` sizing as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
+`createRepoTemplate()` accepts the same `cpuCount`, `memoryMB`, and `docker` settings as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
 
 `setupCommand` also accepts an array. Each entry runs as its own cached build step. `workingDirectory` sets the cwd for the build and the sandbox, and the repository is cloned to `<workingDirectory>/<repo>`. `buildEnv` passes environment variables to the build steps only. They never enter the serialized definition.
 
@@ -279,7 +294,7 @@ const sandbox = new PlatformSandbox({
 
 ### Cloning for a fleet of sandboxes
 
-`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, provider, template, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
+`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, provider, template, network isolation, timeout, instructions, env, idle timeout, public ports) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
 
 ```typescript
 const template = new PlatformSandbox({
@@ -314,6 +329,25 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 
 :::
 
+### Background processes
+
+`sandbox.processes` runs commands in the background. Output streams while they run, and you can list, attach to and stop them:
+
+```typescript
+const handle = await sandbox.processes.spawn('pnpm dev', {
+  onStdout: data => console.log(data),
+})
+
+// Everything running in the sandbox, plus exited processes not read yet
+const running = await sandbox.processes.list()
+
+await handle.kill()
+```
+
+A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts. Output written before attaching isn't available.
+
+A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits while its stream reconnects reports exit code `1` from `wait()` instead of its real exit code.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -333,7 +367,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   {
     name: 'sandboxProvider',
     type: "'railway' | 'e2b'",
-    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then railway.',
+    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then e2b.',
     isOptional: true,
   },
   {
@@ -386,6 +420,13 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     isOptional: true,
   },
   {
+    name: 'publicPorts',
+    type: 'boolean',
+    description:
+      "Let anyone with a port's URL reach it without signing in. Defaults to `false`. Fixed when the sandbox is created.",
+    isOptional: true,
+  },
+  {
     name: 'env',
     type: 'Record<string, string>',
     description:
@@ -430,6 +471,28 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 ]}
 />
 
+### Port URLs
+
+`sandbox.networking.getPortUrl(port)` returns the URL of a port your app listens on in the sandbox, for example a dev server:
+
+```typescript
+await sandbox.processes.spawn('pnpm dev --host 0.0.0.0 --port 3000')
+
+const url = await sandbox.networking?.getPortUrl(3000)
+// https://3000-<sandbox id>.sandbox.us.mastra.cloud/
+```
+
+Ports are private by default: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. With [`publicPorts: true`](#public-ports), anyone with the URL can open it without signing in. You can share it, since it never expires, and opening it wakes a paused sandbox.
+
+`networking` is `undefined` on a sandbox whose ports can't be opened. `getPortUrl()` returns `null` without starting the sandbox when the sandbox isn't running or has been destroyed, for a port that isn't a whole number from 1 to 65535, and for the sandbox's reserved control port. Other platform errors, such as an invalid access token, are thrown.
+
+A browser you control, such as an agent's browser, can't sign in. `getPortAuthCookie(port)` returns a cookie that lets it open the port's URL for an hour without signing in. Don't share the cookie: anyone holding it can open the port.
+
+```typescript
+const cookie = await sandbox.getPortAuthCookie(3000)
+if (cookie) await browserContext.addCookies([cookie])
+```
+
 ## Properties
 
 <PropertiesTable
@@ -457,9 +520,15 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   },
   {
     name: 'processes',
-    type: 'PlatformProcessManager',
+    type: 'SandboxProcessManager',
     description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+      "Background process manager. `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the sandbox, and `get(pid)` attaches to a process this manager didn't start. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
+  },
+  {
+    name: 'networking',
+    type: 'SandboxNetworking | undefined',
+    description:
+      "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra (or for anyone, with `publicPorts: true`), or `null` when the sandbox isn't running. `undefined` when the sandbox's ports can't be opened. See [Port URLs](#port-urls).",
   },
   {
     name: 'filesystem',
@@ -515,6 +584,12 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     type: '() => Promise<void>',
     description:
       'Capture the configured recovery checkpoint immediately. Resolves without work when no caller-provided id exists or the sandbox is not running.',
+  },
+  {
+    name: 'getPortAuthCookie',
+    type: '(port: number) => Promise<SandboxPortAuthCookie | null>',
+    description:
+      "Return a cookie that lets a browser you control open the port's URL for an hour without signing in, in the shape Playwright's `addCookies()` accepts. `null` in the same cases as `networking.getPortUrl()`. See [Port URLs](#port-urls).",
   },
   {
     name: 'getInfo',

@@ -1,3 +1,4 @@
+import { MastraAuthStudio } from '@mastra/auth-studio';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import type { MessageAuthor } from '@mastra/core/agent-controller';
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
@@ -366,13 +367,27 @@ function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizatio
  * provider's (possibly partial) `ISessionProvider.getClearSessionHeaders`.
  */
 function providerClearCookies(provider: IMastraAuthProvider): string[] {
+  const cookies: string[] = [];
   const getClearSessionHeaders = (provider as Partial<ISessionProvider>).getClearSessionHeaders;
-  if (typeof getClearSessionHeaders !== 'function') return [];
-  const headers = getClearSessionHeaders.call(provider) ?? {};
-  const setCookie = headers['Set-Cookie'];
-  if (!setCookie) return [];
-  // A provider may join several clearing cookies into one header value.
-  return setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim());
+  if (typeof getClearSessionHeaders === 'function') {
+    const headers = getClearSessionHeaders.call(provider) ?? {};
+    const setCookie = headers['Set-Cookie'];
+    // A provider may join several clearing cookies into one header value.
+    if (setCookie) cookies.push(...setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim()));
+  }
+  cookies.push(...providerLegacySessionClearCookies(provider));
+  return cookies;
+}
+
+/**
+ * Expiring `Set-Cookie` values for legacy copies of the provider's session
+ * cookie (e.g. one an earlier release scoped to a shared parent domain), from
+ * the optional `ISessionProvider.getLegacySessionClearCookies`.
+ */
+function providerLegacySessionClearCookies(provider: IMastraAuthProvider): string[] {
+  const getLegacy = (provider as Partial<ISessionProvider>).getLegacySessionClearCookies;
+  if (typeof getLegacy !== 'function') return [];
+  return getLegacy.call(provider) ?? [];
 }
 
 /**
@@ -410,6 +425,15 @@ export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined
     ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c),
     tenant: (c: Context) => factoryAuthTenant(c),
     isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(provider, c, organizationId),
+    ...(provider instanceof MastraAuthStudio
+      ? {
+          fetchPlatformAsUser: async (c: Context, path: string, init?: RequestInit) => {
+            const res = await provider.fetchAsRequestUser(c.req.raw, path, init);
+            forwardPendingResponseHeaders(provider, c);
+            return res;
+          },
+        }
+      : {}),
   };
 }
 
@@ -707,8 +731,7 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
               // Fallback for providers that expose ISessionProvider but leave
               // cookie construction to the server (e.g. MastraAuthStudio, which
               // returns just the sealed session as accessToken so
-              // getSessionHeaders can scope the cookie to this deployment's
-              // domain via MASTRA_COOKIE_DOMAIN / sharedApiUrl auto-detection).
+              // getSessionHeaders can issue this deployment's host-only cookie).
               // Mirrors packages/server/src/server/handlers/auth.ts:492-503.
               const resultUser = result.user as { id: string; organizationId?: string };
               const session = await provider.createSession(resultUser.id, {
@@ -720,6 +743,10 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
               for (const [key, value] of Object.entries(provider.getSessionHeaders(session))) {
                 c.header(key, value, { append: true });
               }
+            }
+            // Signing in also expires legacy (e.g. shared parent-domain) session cookies.
+            for (const cookie of providerLegacySessionClearCookies(provider)) {
+              c.header('Set-Cookie', cookie, { append: true });
             }
             return c.redirect(returnTo);
           } catch {
