@@ -422,17 +422,7 @@ export function BoardContent({
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
-            aside={
-              runsLoop && (
-                <BoardAutomationSettings
-                  factoryProjectId={factoryProjectId}
-                  autoRunEnabled={factory.autoRunEnabled ?? false}
-                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
-                  selfReviewEnabled={factory.selfReviewEnabled ?? false}
-                  offersSelfReview={boardLoop(definition)?.selfReview !== undefined}
-                />
-              )
-            }
+            aside={runsLoop && <BoardAutomationSettings factoryProjectId={factoryProjectId} />}
           />
         }
       />
