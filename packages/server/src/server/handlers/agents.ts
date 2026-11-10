@@ -1714,17 +1714,21 @@ export const CLONE_AGENT_ROUTE = createRoute({
       const cloneId = toSlug(newId || `${agentId}-clone`);
 
       // Like POST /stored/agents, the clone belongs to the authenticated caller and any body-provided authorId is
-      // ignored. Without auth there is no caller, so the body's authorId is kept.
+      // ignored. Without auth there is no caller, so the body's authorId is kept. A signed-in caller without an id
+      // can't own the clone, and an unowned clone is public, so refuse rather than publish a copy of the agent.
       const callerAuthorId = getCallerAuthorId(requestContext);
       const authenticated = callerAuthorId !== null || requestContext.get(MASTRA_USER_KEY) != null;
-      const ownerId = authenticated ? (callerAuthorId ?? undefined) : authorId;
+      if (authenticated && callerAuthorId === null) {
+        throw new HTTPException(403, { message: 'Cloning an agent requires a signed-in user with an id' });
+      }
+      const ownerId = callerAuthorId ?? authorId;
 
       const result = await editor.agent.clone(agent, {
         newId: cloneId,
         newName,
         metadata,
         authorId: ownerId,
-        ...(authenticated && ownerId ? { visibility: 'private' as const } : {}),
+        ...(authenticated ? { visibility: 'private' as const } : {}),
         requestContext,
       });
 

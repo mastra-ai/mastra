@@ -581,6 +581,29 @@ describe('stored agent visibility on /api/agents', () => {
     }
   });
 
+  // Without `mapUserToResourceId`, an auth provider can sign in a user with no id. Their clone would have no owner,
+  // which makes it public, so cloning is refused rather than publishing a copy of a private agent.
+  it("a signed-in caller without an id can't clone an agent", async () => {
+    const nameless = await startServer(
+      new Mastra({
+        logger: false,
+        storage,
+        editor: new MastraEditor(),
+        server: {
+          auth: new SimpleAuth<User>({ tokens: { nameless: { id: '', role: 'admin' } } }),
+          rbac: new StaticRBACProvider<User>({ roles: ROLES, getUserRoles: user => [user.role] }),
+        },
+      }),
+    );
+    try {
+      const res = await http('nameless', 'POST', `/agents/${PRIVATE}/clone`, { newId: 'nameless-copy' }, nameless.url);
+      expect(res.status, res.text).toBe(403);
+      expect((await http('admin', 'GET', '/stored/agents/nameless-copy')).status).toBe(404);
+    } finally {
+      await nameless.close();
+    }
+  });
+
   it('without auth configured, every stored agent stays listable and callable', async () => {
     const open = await startServer(new Mastra({ logger: false, storage, editor: new MastraEditor() }));
     try {
