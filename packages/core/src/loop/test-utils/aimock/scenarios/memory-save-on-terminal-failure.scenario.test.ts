@@ -608,7 +608,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       await new Promise(resolve => setTimeout(resolve, 300));
 
       const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      // Durable engines save the input up front but have no deadline pass yet (#29036).
+      // Inngest saves the input up front but has no deadline pass yet.
       if (deadlineSavePending.includes(engine)) {
         expect(messages.map(message => message.role)).toEqual(['user']);
         return;

@@ -446,6 +446,81 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
+  it('drops a queued deadline save once another execution has claimed the run', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const firstStep = toolCallingModel('lookup');
+    let calls = 0;
+    let releaseSave!: () => void;
+    const saveHeld = new Promise<void>(resolve => (releaseSave = resolve));
+    let processorEntered!: () => void;
+    const processorRunning = new Promise<void>(resolve => (processorEntered = resolve));
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-takeover',
+        name: 'Timeout takeover',
+        instructions: 'Look up the city.',
+        memory,
+        model: new MockLanguageModelV2({
+          doStream: async options => {
+            calls++;
+            if (calls === 1) return firstStep.doStream(options);
+            return new Promise<never>(() => {});
+          },
+        }),
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks up the city',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async () => 'Found NYC',
+          }),
+        },
+        // Holds the deadline's save until another execution has taken the run.
+        outputProcessors: [
+          {
+            id: 'held-output-processor',
+            processOutputResult: async ({ messages }: { messages: unknown[] }) => {
+              processorEntered();
+              await saveHeld;
+              return messages;
+            },
+          } as any,
+        ],
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const threadId = 'timeout-takeover-thread';
+    const result = await agent.stream('hello', {
+      memory: { thread: threadId, resource: 'timeout-resource' },
+      modelSettings: { timeout: { totalMs: 500 } },
+    });
+    try {
+      await processorRunning;
+      // Another execution takes the run, as it can once the deadline's claim hold has run out.
+      const workflows = (await storage.getStore('workflows'))!;
+      const claimed = await workflows.claimRunOwnership!({
+        runId: result.runId,
+        ownerId: 'next-execution',
+        leaseMs: 30_000,
+        force: true,
+      });
+      expect(claimed.acquired).toBe(true);
+      const memoryStore = (await storage.getStore('memory'))!;
+      await memoryStore.raiseRunFence(claimed.record!);
+      releaseSave();
+      await drain(result.fullStream);
+      // Absence can't be polled for; give a late write time to land.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const { messages } = await memory.recall({ threadId });
+      expect(JSON.stringify(messages)).not.toContain('Found NYC');
+    } finally {
+      releaseSave();
+      result.cleanup();
+    }
+  });
+
   it('removes per-step saves when an output processor trips at the total deadline', async () => {
     const storage = new InMemoryStore();
     const memory = new MockMemory({ storage });
