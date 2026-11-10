@@ -143,6 +143,55 @@ describe('AgentController: ask_user native suspension', () => {
     expect(list).toHaveBeenCalled();
   });
 
+  it('restores and claims a persisted ask_user suspension once after a restart', async () => {
+    const { session, registeredAgent } = await buildController(
+      'persisted-claim',
+      JSON.stringify({ question: 'Which?' }),
+    );
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    vi.spyOn(registeredAgent, 'listSuspendedRuns').mockResolvedValue({
+      runs: [
+        {
+          runId: 'other-run',
+          threadId,
+          resourceId,
+          status: 'suspended',
+          suspendedAt: new Date(0),
+          toolCalls: [{ toolCallId: 'other-call', toolName: 'ask_user', requiresApproval: false }],
+        },
+        {
+          runId: 'cold-run',
+          threadId,
+          resourceId,
+          status: 'suspended',
+          suspendedAt: new Date(0),
+          toolCalls: [{ toolCallId: 'cold-call', toolName: 'ask_user', requiresApproval: false }],
+        },
+      ],
+      total: 2,
+    });
+
+    expect(session.suspensions.has({ toolCallId: 'cold-call', runId: 'cold-run' })).toBe(false);
+    expect(await session.claimPersistedToolSuspension('cold-call', 'wrong-run')).toMatchObject({
+      accepted: false,
+      reason: 'no_pending_suspension',
+    });
+    expect(session.suspensions.has({ toolCallId: 'cold-call', runId: 'cold-run' })).toBe(false);
+
+    const claim = await session.claimPersistedToolSuspension('cold-call', 'cold-run');
+    expect(claim).toMatchObject({
+      accepted: true,
+      toolCallId: 'cold-call',
+      address: { toolCallId: 'cold-call', runId: 'cold-run' },
+    });
+    expect(session.suspensions.has({ toolCallId: 'cold-call', runId: 'cold-run' })).toBe(true);
+    expect(await session.claimPersistedToolSuspension('cold-call', 'cold-run')).toMatchObject({
+      accepted: false,
+      reason: 'not_pending',
+    });
+  });
+
   it.each([
     'warm',
     'warm-reattach',
