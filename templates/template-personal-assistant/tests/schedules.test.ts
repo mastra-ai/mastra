@@ -545,7 +545,7 @@ test('identified schedule creation survives elapsed timing and restart', { timeo
   let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
   try {
     app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
-    const date = new Date(Math.ceil((Date.now() + 6000) / 1000) * 1000).toISOString().replace('.000Z', 'Z');
+    const date = new Date(Math.ceil((Date.now() + 20000) / 1000) * 1000).toISOString().replace('.000Z', 'Z');
     const instant = new Date(date);
     const finite = `${instant.getUTCSeconds()} ${instant.getUTCMinutes()} ${instant.getUTCHours()} ${instant.getUTCDate()} ${instant.getUTCMonth() + 1} * ${instant.getUTCFullYear()}`;
     const requests: { thread: string; input: Record<string, unknown>; value: AgentSchedule; status: string }[] = [];
