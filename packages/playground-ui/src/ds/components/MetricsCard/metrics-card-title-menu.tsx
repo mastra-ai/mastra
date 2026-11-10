@@ -17,7 +17,8 @@ export type MetricsCardTitleMenuProps<V extends string> = {
  * A card title that switches the card's view, as on Vercel's usage cards: the title is the
  * trigger, with a chevron. The hover fill bleeds past the text so the title stays aligned.
  * Wrapped, so the top bar stretches the wrapper rather than the button, and the menu's open-state
- * nodes next to the trigger don't become the top bar's first child.
+ * nodes next to the trigger don't become the top bar's first child. Not modal: the card's actions
+ * (pin, alert) stay shown while it's open, so they stay clickable too.
  */
 export function MetricsCardTitleMenu<V extends string>({
   title,
@@ -28,7 +29,7 @@ export function MetricsCardTitleMenu<V extends string>({
 }: MetricsCardTitleMenuProps<V>) {
   return (
     <div className="flex min-w-0">
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenu.Trigger
           render={
             <button
