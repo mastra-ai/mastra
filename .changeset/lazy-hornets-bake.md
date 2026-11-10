@@ -2,4 +2,7 @@
 '@mastra/factory': patch
 ---
 
-Boards now update within a second of a change when they haven't refreshed in the last 5 seconds, and at the 5 second mark otherwise, instead of on a fixed 2 to 5 second poll. Moving or editing a card, a decision being proposed, approved, retried, failed or finished, and a session starting, parking, finishing or being torn down mid-run now reach every open board right away, including sessions picked back up after a server restart. While a board is connected it no longer asks for its cards, decisions and running sessions every 2 to 5 seconds; it checks once a minute as a safety net, and goes back to the old pace if the live connection drops. A live connection that goes silent, for example after a server restart behind a proxy, is now reopened within about a minute instead of staying dead until the page is reloaded, so comments and boards pick up live updates again. On boards whose first column isn't Intake, that column now shows its loading placeholder while new items load.
+Factory now tells open boards when something changes, so they no longer have to poll for it.
+
+- Moving or editing a card, a decision being proposed, approved, retried, failed or finished, and a session starting, parking, finishing or being torn down mid-run each send a live update to every open board of the project. This includes sessions picked back up after a server restart.
+- The live connection sends its first keepalive as soon as it opens, so a proxy that holds a response until its first byte no longer delays it.
