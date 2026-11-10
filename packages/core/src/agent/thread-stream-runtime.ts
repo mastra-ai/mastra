@@ -1553,7 +1553,7 @@ export class AgentThreadStreamRuntime {
             void retaken.then(kept => {
               if (kept || state.leaseRenewalTimers.get(runId) !== timer) return;
               this.#stopLeaseRenewal(pubsub, runId, timer);
-              this.#abortLeaseLostRun(state, runId);
+              this.#abortLeaseLostRun(state, pubsub, key, runId);
             });
           } else {
             if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, key, runId, sentAt);
@@ -1654,7 +1654,7 @@ export class AgentThreadStreamRuntime {
       // Only the registration that owns this fence may stop the run.
       if (state.leaseRenewalTimers.get(runId) === timer) {
         this.#stopLeaseRenewal(pubsub, runId, timer);
-        this.#abortLeaseLostRun(state, runId);
+        this.#abortLeaseLostRun(state, pubsub, key, runId);
       }
       throw new AgentThreadLeaseLostError(runId);
     };
@@ -1675,7 +1675,7 @@ export class AgentThreadStreamRuntime {
         void (renewal ? this.#retakeLease(pubsub, key, runId, renewal) : Promise.resolve(false)).then(kept => {
           if (kept || (renewal && state.leaseRenewalTimers.get(runId) !== renewal)) return;
           this.#stopLeaseRenewal(pubsub, runId);
-          this.#abortLeaseLostRun(state, runId);
+          this.#abortLeaseLostRun(state, pubsub, key, runId);
         });
       },
       Math.max(0, confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS - Date.now()),
@@ -1868,7 +1868,14 @@ export class AgentThreadStreamRuntime {
     return retake;
   }
 
-  #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+  #abortLeaseLostRun(state: AgentThreadRuntimeState, pubsub: PubSub, key: string, runId: string): void {
+    // A run parked on a suspension executes nowhere in this process, so losing its lease means a resume of it
+    // (on another process) or a successor took the thread. Aborting it by run id would reach that resume, so
+    // only let go of the thread here; the parked record stays resumable until it is swept.
+    if (!state.preparedRunsById.has(runId) && this.#isParkedRun(state, runId)) {
+      this.#releaseSupersededParkedRun(state, pubsub, key, runId);
+      return;
+    }
     state.leaseLostRunIds.add(runId);
     // Tool calls the step already queued check the fence after this, so they must keep failing until the
     // run ends, not find no fence and run beside the successor.
