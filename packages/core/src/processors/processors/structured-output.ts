@@ -93,7 +93,9 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       instructions: this.structuringInstructions,
       model: options.model,
       options: {
-        tracingPolicy: { internal: InternalSpans.ALL },
+        // Keep model spans external so the structuring call (and its usage/cost)
+        // is exported under the processor span; hide the agent/workflow plumbing.
+        tracingPolicy: { internal: InternalSpans.ALL & ~InternalSpans.MODEL },
       },
     });
     if (this.logger) {
@@ -296,6 +298,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           ? serializedMemoryInfo.resourceId
           : undefined;
 
+    const structuringRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
+
     // When opted in and an explicit agent is available with thread info,
     // use that agent with a model override and read-only memory.
     // This gives the structuring model full conversation context.
@@ -311,8 +315,6 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       };
 
       const messages: MessageListInput = [...(messageList?.get?.input?.db() || []), ...responseContext, promptMessage];
-
-      const structuringRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
 
       return this.agent.stream(messages, {
         model: this.structuringModel,
@@ -340,6 +342,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
       {
         structuredOutput,
+        requestContext: structuringRequestContext,
         providerOptions: this.providerOptions,
         abortSignal,
         ...observabilityContext,

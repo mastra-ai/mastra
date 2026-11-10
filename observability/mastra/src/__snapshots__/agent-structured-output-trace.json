@@ -9,8 +9,13 @@
     "│       ├── model_chunk: \"chunk: 'text'\"",
     "│       └── model_chunk: \"chunk: 'object'\"",
     "├── processor_run: \"output stream processor: Structured Output\"",
-    "│   ├── processor_run: \"llm request processor: provider-history-compat\"",
-    "│   └── processor_run: \"llm request processor: unsupported-file-handler\"",
+    "│   └── model_generation: \"llm: 'mock-model-id'\"",
+    "│       └── model_step: \"step: 0\"",
+    "│           ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "│           ├── processor_run: \"llm request processor: unsupported-file-handler\"",
+    "│           ├── model_inference: \"inference: 0\"",
+    "│           ├── model_chunk: \"chunk: 'object'\"",
+    "│           └── model_chunk: \"chunk: 'text'\"",
     "└── processor_run: \"output step processor: structured-output\""
   ],
   "spans": [
@@ -392,16 +397,6 @@
               "processorPhase": "outputStream",
               "processorExecutor": "legacy",
               "processorIndex": 0,
-              "internalUsage": {
-                "inputTokens": 15,
-                "outputTokens": 25,
-                "inputDetails": {
-                  "text": 15
-                },
-                "outputDetails": {
-                  "text": 25
-                }
-              },
               "hookDurationMs": { "__any__": "number" }
             },
             "metadata": {
@@ -422,25 +417,41 @@
               "span": {
                 "id": "<span-10>",
                 "traceId": "<trace-1>",
-                "name": "llm request processor: provider-history-compat",
-                "type": "processor_run",
+                "name": "llm: 'mock-model-id'",
+                "type": "model_generation",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
                 "parentId": "<span-9>",
-                "entityType": "input_processor",
-                "entityId": "provider-history-compat",
+                "entityType": "output_processor",
+                "entityId": "structured-output",
                 "attributes": {
-                  "processorPhase": "llmRequest",
-                  "processorExecutor": "legacy",
-                  "processorIndex": 0
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "streaming": true,
+                  "parameters": {},
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
+                  "finishReason": "stop",
+                  "responseId": "<responseId-2>",
+                  "responseModel": "mock-model-id",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
+                  }
                 },
                 "metadata": {
                   "runId": "<runId-2>",
                   "environment": "test"
                 },
                 "input": {
-                  "prompt": [
+                  "messages": [
                     {
                       "role": "system",
                       "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"items\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"items\"\n  ],\n  \"additionalProperties\": false\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
@@ -454,65 +465,287 @@
                         }
                       ]
                     }
-                  ],
-                  "stepNumber": 0,
-                  "retryCount": 0
+                  ]
                 },
                 "output": {
-                  "shortCircuited": false
+                  "files": [],
+                  "object": {
+                    "items": "test structured output"
+                  },
+                  "reasoning": [],
+                  "sources": [],
+                  "text": "{\"items\":\"test structured output\"}",
+                  "warnings": []
                 }
-              }
-            },
-            {
-              "span": {
-                "id": "<span-11>",
-                "traceId": "<trace-1>",
-                "name": "llm request processor: unsupported-file-handler",
-                "type": "processor_run",
-                "completed": true,
-                "isEvent": false,
-                "isRootSpan": false,
-                "parentId": "<span-9>",
-                "entityType": "input_processor",
-                "entityId": "unsupported-file-handler",
-                "attributes": {
-                  "processorPhase": "llmRequest",
-                  "processorExecutor": "legacy",
-                  "processorIndex": 2
-                },
-                "metadata": {
-                  "runId": "<runId-2>",
-                  "environment": "test"
-                },
-                "input": {
-                  "prompt": [
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-11>",
+                    "traceId": "<trace-1>",
+                    "name": "step: 0",
+                    "type": "model_step",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-10>",
+                    "entityType": "output_processor",
+                    "entityId": "structured-output",
+                    "attributes": {
+                      "stepIndex": 0,
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "messageId": "<messageId-2>",
+                      "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
+                      "usage": {
+                        "inputTokens": 15,
+                        "outputTokens": 25,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 25
+                        }
+                      },
+                      "isContinued": false,
+                      "finishReason": "stop"
+                    },
+                    "metadata": {
+                      "runId": "<runId-2>",
+                      "environment": "test",
+                      "modelMetadata": {
+                        "modelId": "mock-model-id",
+                        "modelVersion": "v2",
+                        "modelProvider": "mock-provider"
+                      }
+                    },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"items\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"items\"\n  ],\n  \"additionalProperties\": false\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                      },
+                      {
+                        "role": "user",
+                        "content": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
+                      }
+                    ],
+                    "output": {
+                      "text": "{\"items\":\"test structured output\"}",
+                      "toolCalls": [],
+                      "object": {
+                        "items": "test structured output"
+                      }
+                    }
+                  },
+                  "children": [
                     {
-                      "role": "system",
-                      "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"items\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"items\"\n  ],\n  \"additionalProperties\": false\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                      "span": {
+                        "id": "<span-12>",
+                        "traceId": "<trace-1>",
+                        "name": "llm request processor: provider-history-compat",
+                        "type": "processor_run",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-11>",
+                        "entityType": "input_processor",
+                        "entityId": "provider-history-compat",
+                        "attributes": {
+                          "processorPhase": "llmRequest",
+                          "processorExecutor": "legacy",
+                          "processorIndex": 0
+                        },
+                        "metadata": {
+                          "runId": "<runId-2>",
+                          "environment": "test"
+                        },
+                        "input": {
+                          "prompt": [
+                            {
+                              "role": "system",
+                              "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"items\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"items\"\n  ],\n  \"additionalProperties\": false\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                            },
+                            {
+                              "role": "user",
+                              "content": [
+                                {
+                                  "type": "text",
+                                  "text": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
+                                }
+                              ]
+                            }
+                          ],
+                          "stepNumber": 0,
+                          "retryCount": 0
+                        },
+                        "output": {
+                          "shortCircuited": false
+                        }
+                      }
                     },
                     {
-                      "role": "user",
-                      "content": [
-                        {
-                          "type": "text",
-                          "text": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
+                      "span": {
+                        "id": "<span-13>",
+                        "traceId": "<trace-1>",
+                        "name": "llm request processor: unsupported-file-handler",
+                        "type": "processor_run",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-11>",
+                        "entityType": "input_processor",
+                        "entityId": "unsupported-file-handler",
+                        "attributes": {
+                          "processorPhase": "llmRequest",
+                          "processorExecutor": "legacy",
+                          "processorIndex": 2
+                        },
+                        "metadata": {
+                          "runId": "<runId-2>",
+                          "environment": "test"
+                        },
+                        "input": {
+                          "prompt": [
+                            {
+                              "role": "system",
+                              "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"items\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"items\"\n  ],\n  \"additionalProperties\": false\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                            },
+                            {
+                              "role": "user",
+                              "content": [
+                                {
+                                  "type": "text",
+                                  "text": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
+                                }
+                              ]
+                            }
+                          ],
+                          "stepNumber": 0,
+                          "retryCount": 0
+                        },
+                        "output": {
+                          "shortCircuited": false
                         }
-                      ]
+                      }
+                    },
+                    {
+                      "span": {
+                        "id": "<span-14>",
+                        "traceId": "<trace-1>",
+                        "name": "inference: 0",
+                        "type": "model_inference",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-11>",
+                        "entityType": "output_processor",
+                        "entityId": "structured-output",
+                        "attributes": {
+                          "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
+                          "streaming": true,
+                          "parameters": {
+                            "maxRetries": 0
+                          },
+                          "availableTools": [],
+                          "toolChoice": "auto",
+                          "responseFormat": "json_schema",
+                          "usage": {
+                            "inputTokens": 15,
+                            "outputTokens": 25,
+                            "inputDetails": {
+                              "text": 15
+                            },
+                            "outputDetails": {
+                              "text": 25
+                            }
+                          },
+                          "finishReason": "stop",
+                          "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>"
+                        },
+                        "metadata": {
+                          "runId": "<runId-2>",
+                          "environment": "test"
+                        },
+                        "input": [
+                          {
+                            "role": "system",
+                            "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"items\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"items\"\n  ],\n  \"additionalProperties\": false\n}\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                          },
+                          {
+                            "role": "user",
+                            "content": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nMock V2 stream response"
+                          }
+                        ],
+                        "output": {
+                          "text": "{\"items\":\"test structured output\"}",
+                          "toolCalls": [],
+                          "object": {
+                            "items": "test structured output"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "span": {
+                        "id": "<span-15>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'object'",
+                        "type": "model_chunk",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-11>",
+                        "entityType": "output_processor",
+                        "entityId": "structured-output",
+                        "attributes": {
+                          "chunkType": "object",
+                          "sequenceNumber": 0
+                        },
+                        "metadata": {
+                          "runId": "<runId-2>",
+                          "environment": "test"
+                        },
+                        "output": {}
+                      }
+                    },
+                    {
+                      "span": {
+                        "id": "<span-16>",
+                        "traceId": "<trace-1>",
+                        "name": "chunk: 'text'",
+                        "type": "model_chunk",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-11>",
+                        "entityType": "output_processor",
+                        "entityId": "structured-output",
+                        "attributes": {
+                          "chunkType": "text",
+                          "sequenceNumber": 1
+                        },
+                        "metadata": {
+                          "runId": "<runId-2>",
+                          "environment": "test"
+                        },
+                        "output": {
+                          "items": "test structured output"
+                        }
+                      }
                     }
-                  ],
-                  "stepNumber": 0,
-                  "retryCount": 0
-                },
-                "output": {
-                  "shortCircuited": false
+                  ]
                 }
-              }
+              ]
             }
           ]
         },
         {
           "span": {
-            "id": "<span-12>",
+            "id": "<span-17>",
             "traceId": "<trace-1>",
             "name": "output step processor: structured-output",
             "type": "processor_run",

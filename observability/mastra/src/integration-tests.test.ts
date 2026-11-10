@@ -1009,6 +1009,72 @@ describe('Tracing Integration Tests', () => {
     },
   );
 
+  describe.each(agentMethods)('structuredOutput structuring call using $name', ({ method }) => {
+    const textModel = (text: string, usage: { inputTokens: number; outputTokens: number }) =>
+      new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text }],
+          finishReason: 'stop',
+          usage: { ...usage, totalTokens: usage.inputTokens + usage.outputTokens },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: text },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { ...usage, totalTokens: usage.inputTokens + usage.outputTokens },
+            },
+          ]),
+        }),
+      });
+
+    it('exports the structuring model call and its usage inside the agent turn', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Return a simple response',
+        model: textModel('apples, pears', { inputTokens: 10, outputTokens: 5 }),
+      });
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter, { requestContextKeys: ['userId'] }),
+        agents: { agent },
+      });
+      const requestContext = new RequestContext([['userId', 'user-1']]);
+
+      const result = await method(mastra.getAgent('agent'), 'List fruit', {
+        requestContext,
+        structuredOutput: {
+          schema: z.object({ items: z.string() }),
+          model: textModel('{"items":"apples, pears"}', { inputTokens: 100, outputTokens: 7 }),
+        },
+      });
+      expect(result.object).toEqual({ items: 'apples, pears' });
+
+      const rootSpans = testExporter.getRootSpans();
+      expect(rootSpans).toHaveLength(1);
+      expect(new Set(testExporter.getAllSpans().map(span => span.traceId))).toEqual(new Set([result.traceId]));
+
+      const processorSpan = testExporter
+        .getSpansByType(SpanType.PROCESSOR_RUN)
+        .find(span => span.name === 'output stream processor: Structured Output');
+      const structuringGeneration = testExporter
+        .getSpansByType(SpanType.MODEL_GENERATION)
+        .find(span => span.parentSpanId === processorSpan?.id);
+      expect(structuringGeneration).toBeDefined();
+      expect(structuringGeneration?.attributes?.usage).toMatchObject({ inputTokens: 100, outputTokens: 7 });
+      expect(structuringGeneration?.metadata).toMatchObject({ userId: 'user-1' });
+
+      expect(testExporter.getAllSpans().filter(span => span.attributes?.internalUsage)).toEqual([]);
+      expect(testExporter.getSpansByType(SpanType.AGENT_RUN).map(span => span.entityId)).toEqual(['test-agent']);
+
+      finalExpectations(testExporter);
+    });
+  });
+
   describe.each(agentMethods)('agent with input and output processors using $name', ({ name, method, model }) => {
     it('should trace all processor spans including internal agent spans', async () => {
       // Create a custom input processor that uses an agent internally

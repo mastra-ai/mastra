@@ -7,6 +7,7 @@ import { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
+import { InternalSpans } from '../../observability';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -91,6 +92,53 @@ describe('StructuredOutputProcessor', () => {
       (processor as any).__registerMastra(mastra);
 
       expect((processor as any).structuringAgent.getMastraInstance()).toBe(mastra);
+    });
+  });
+
+  describe('structuring agent context', () => {
+    it('keeps model spans external while hiding the structurer agent and workflow spans', () => {
+      expect(processor['structuringAgent'].getTracingPolicy()).toEqual({
+        internal: InternalSpans.WORKFLOW | InternalSpans.AGENT | InternalSpans.TOOL,
+      });
+    });
+
+    it('forwards a copy of the request context to the internal structuring agent', async () => {
+      const resultChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'object-result',
+        object: { color: 'blue', intensity: 'high' },
+      };
+      const streamSpy = vi
+        .spyOn(processor['structuringAgent'], 'stream')
+        .mockResolvedValue({ fullStream: convertArrayToReadableStream([resultChunk]) } as any);
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-1');
+      const { controller } = createMockController();
+
+      await processor.processOutputStream({
+        part: {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+        streamParts: [],
+        state: { controller },
+        abort: createMockAbort(),
+        retryCount: 0,
+        requestContext,
+      });
+
+      const forwarded = streamSpy.mock.calls[0]?.[1]?.requestContext;
+      expect(forwarded).toBeInstanceOf(RequestContext);
+      expect(forwarded).not.toBe(requestContext);
+      expect(forwarded?.get('userId')).toBe('user-1');
     });
   });
 
