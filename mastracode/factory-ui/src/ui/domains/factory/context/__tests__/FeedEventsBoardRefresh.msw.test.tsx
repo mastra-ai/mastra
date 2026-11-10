@@ -94,9 +94,9 @@ function boardEndpoints() {
   return { requests, board };
 }
 
-async function advance(ms: number) {
+async function advance(client: QueryClient, ms: number) {
   await act(() => vi.advanceTimersByTimeAsync(ms));
-  await delay(50);
+  await waitFor(() => expect(client.isFetching()).toBe(0));
 }
 
 async function renderConnectedBoard(client?: QueryClient) {
@@ -108,7 +108,7 @@ async function renderConnectedBoard(client?: QueryClient) {
 
 async function renderQuietBoard() {
   const rendered = await renderConnectedBoard();
-  await advance(PAST_ONE_REFRESH_GAP_MS);
+  await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
   await waitForMutationsIdle(rendered.client);
   return rendered;
 }
@@ -130,7 +130,7 @@ describe('FeedEventsProvider, on the board', () => {
     const before = { ...requests };
 
     stream.push();
-    await advance(WITHIN_A_SECOND_MS);
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
 
     await waitFor(() => expect(requests).toEqual(oneMoreOfEach(before)));
     await waitForMutationsIdle(rendered.client);
@@ -144,10 +144,10 @@ describe('FeedEventsProvider, on the board', () => {
     const before = { ...requests };
 
     for (let frame = 0; frame < 5; frame += 1) stream.push();
-    await advance(WITHIN_A_SECOND_MS);
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
 
     await waitFor(() => expect(requests).toEqual(oneMoreOfEach(before)));
-    await advance(PAST_ONE_REFRESH_GAP_MS);
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
     expect(requests).toEqual(oneMoreOfEach(before));
     await waitForMutationsIdle(rendered.client);
   });
@@ -162,9 +162,8 @@ describe('FeedEventsProvider, on the board', () => {
     for (let frame = 0; frame < 32; frame += 1) {
       stream.push();
       await act(() => vi.advanceTimersByTimeAsync(250));
-      await delay(0);
     }
-    await advance(PAST_ONE_REFRESH_GAP_MS);
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
 
     expect(requests).toEqual({ cards: before.cards + 3, decisions: before.decisions + 3, runs: before.runs + 3 });
     await waitForMutationsIdle(rendered.client);
@@ -181,12 +180,11 @@ describe('FeedEventsProvider, on the board', () => {
     for (let frame = 0; frame < 20; frame += 1) {
       stream.push();
       await act(() => vi.advanceTimersByTimeAsync(1_000));
-      await delay(0);
     }
 
     await waitFor(() => expect(rendered.result.current.cards.data?.[0]?.title).toBe('Fix logout'));
     board.readMs = 0;
-    await advance(BOARD_READ_SLOWER_THAN_THE_REFRESH_GAP_MS + PAST_ONE_REFRESH_GAP_MS);
+    await advance(rendered.client, BOARD_READ_SLOWER_THAN_THE_REFRESH_GAP_MS + PAST_ONE_REFRESH_GAP_MS);
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -197,7 +195,7 @@ describe('FeedEventsProvider, on the board', () => {
     const rendered = await renderQuietBoard();
     const connected = { ...requests };
 
-    await advance(PAST_ONE_FALLBACK_POLL_MS);
+    await advance(rendered.client, PAST_ONE_FALLBACK_POLL_MS);
     expect(requests).toEqual(connected);
 
     server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 503 })));
@@ -205,7 +203,7 @@ describe('FeedEventsProvider, on the board', () => {
     await waitFor(() => expect(rendered.result.current.connected).toBe(false));
     const dropped = { ...requests };
 
-    await advance(PAST_ONE_FALLBACK_POLL_MS);
+    await advance(rendered.client, PAST_ONE_FALLBACK_POLL_MS);
     await waitFor(() => {
       expect(requests.cards).toBeGreaterThan(dropped.cards);
       expect(requests.decisions).toBeGreaterThan(dropped.decisions);
@@ -222,9 +220,9 @@ describe('FeedEventsProvider, on the board', () => {
     stream.close();
     await waitFor(() => expect(rendered.result.current.connected).toBe(false));
     board.title = 'Fix logout';
-    await advance(PAST_ONE_STREAM_RETRY_MS);
+    await advance(rendered.client, PAST_ONE_STREAM_RETRY_MS);
     await waitFor(() => expect(rendered.result.current.connected).toBe(true));
-    await advance(WITHIN_A_SECOND_MS);
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
 
     await waitFor(() => expect(rendered.result.current.cards.data?.[0]?.title).toBe('Fix logout'));
     await waitForMutationsIdle(rendered.client);
@@ -239,7 +237,7 @@ describe('FeedEventsProvider, on the board', () => {
     board.title = 'Fix logout';
 
     const rendered = await renderConnectedBoard(client);
-    await advance(WITHIN_A_SECOND_MS);
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
 
     await waitFor(() => expect(rendered.result.current.cards.data?.[0]?.title).toBe('Fix logout'));
     expect(requests.cards).toBe(1);
@@ -279,12 +277,12 @@ describe('FeedEventsProvider, on the board', () => {
     await waitFor(() => expect(shownStages()).toEqual(['review']));
     const moving = { ...requests };
     stream.push();
-    await advance(WITHIN_A_SECOND_MS);
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
     expect(shownStages()).toEqual(['review']);
 
     settleMove();
     await waitFor(() => expect(rendered.result.current.move.isSuccess).toBe(true));
-    await advance(WITHIN_A_SECOND_MS);
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
     await waitFor(() => expect(requests.runs).toBe(moving.runs + 1));
     expect(shownStages()).toEqual(['review']);
     await waitForMutationsIdle(rendered.client);
@@ -296,8 +294,8 @@ describe('FeedEventsProvider, on the board', () => {
     boardEndpoints();
     const rendered = await renderQuietBoard();
 
-    await advance(PAST_THE_SILENCE_A_LIVE_STREAM_ALLOWS_MS);
-    await advance(PAST_ONE_STREAM_RETRY_MS);
+    await advance(rendered.client, PAST_THE_SILENCE_A_LIVE_STREAM_ALLOWS_MS);
+    await advance(rendered.client, PAST_ONE_STREAM_RETRY_MS);
 
     await waitFor(() => expect(stream.opens).toBe(2));
     await waitFor(() => expect(rendered.result.current.connected).toBe(true));
@@ -312,7 +310,7 @@ describe('FeedEventsProvider, on the board', () => {
 
     for (let ping = 0; ping < 4; ping += 1) {
       stream.ping();
-      await advance(SERVER_PING_EVERY_MS);
+      await advance(rendered.client, SERVER_PING_EVERY_MS);
     }
 
     expect(stream.opens).toBe(1);
