@@ -78,42 +78,66 @@ jobs:
             exit 0
           fi
 
-          # Prints failure, success, or nothing when the run was cancelled or unreadable.
-          job_state() {
-            local conclusions
-            conclusions=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$1/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name | startswith("Analyze")) | .conclusion' 2>/dev/null) || return 0
+          # Prints "<analyze> <notified>" for a run or attempt: analyze is failure, success, or
+          # nothing when it was cancelled or unreadable; notified is yes when its notify job
+          # passed, which means it read the alerts it was due to report.
+          run_state() {
+            local jobs analyze='' notified=no
+            jobs=$(gh api --paginate "$1/jobs?per_page=100" \
+              --jq '.jobs[] | "\(.name)\t\(.conclusion)"' 2>/dev/null) || return 0
+            conclusions=$(awk -F'\t' '$1 ~ /^Analyze/ {print $2}' <<< "$jobs")
             if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
-              echo failure
+              analyze=failure
             elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
-              echo success
+              analyze=success
             fi
+            if awk -F'\t' '$1 == "Notify Slack of CodeQL results" && $2 == "success" {found=1} END {exit !found}' <<< "$jobs"; then
+              notified=yes
+            fi
+            echo "$analyze $notified"
           }
 
-          # The newest earlier scan of main that finished gives the previous state. The newest
-          # earlier scan that fully passed is the cutoff for "new": alerts created after it ended
-          # have not been reported yet, including any a partly failed scan uploaded since.
+          # Earlier attempts of this run come first (a re-run keeps its run ID), then earlier
+          # scans of main, newest first.
+          base="repos/$GITHUB_REPOSITORY/actions/runs"
+          candidates=''
+          for ((attempt = GITHUB_RUN_ATTEMPT - 1; attempt >= 1; attempt--)); do
+            ended=$(gh api "$base/$GITHUB_RUN_ID/attempts/$attempt" --jq .updated_at 2>/dev/null) || ended=''
+            candidates+="$base/$GITHUB_RUN_ID/attempts/$attempt $ended"$'\n'
+          done
+          runs_read=true
+          if runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/codeql.yml/runs" \
+            -f branch=main -f status=completed -F per_page=30 \
+            --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"$base/\(.id) \(.updated_at)\""); then
+            candidates+="$runs"$'\n'
+          else
+            echo "::warning::Could not read earlier scans."
+            runs_read=false
+          fi
+
+          # The newest finished scan gives the previous state, for failure and recovery alerts.
+          # The cutoff for "new" alerts is the end of the newest scan that fully passed and whose
+          # notify job read the alerts: anything created after it has not been reported yet.
           previous=''
           since=''
-          if ! runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/codeql.yml/runs" \
-            -f branch=main -f status=completed -F per_page=30 \
-            --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"\(.id) \(.updated_at)\""); then
-            echo "::warning::Could not read earlier scans; alerting on failure only."
-            previous=unknown
-          fi
-          while read -r id ended; do
-            [ -n "$id" ] || continue
-            state=$(job_state "$id")
-            [ -n "$state" ] || continue
-            previous=${previous:-$state}
-            if [ "$state" = "success" ]; then
+          while read -r path ended; do
+            [ -n "$path" ] || continue
+            read -r analyze notified <<< "$(run_state "$path")"
+            [ -n "$analyze" ] || continue
+            previous=${previous:-$analyze}
+            if [ "$analyze" = "success" ] && [ "$notified" = "yes" ] && [ -n "$ended" ]; then
               since=$ended
               break
             fi
-          done <<< "$runs"
-          previous=${previous:-none}
-          echo "Previous scan: $previous (ended ${since:-n/a}); this scan: $RESULT"
+          done <<< "$candidates"
+          if [ -z "$previous" ]; then
+            if [ "$runs_read" = "true" ]; then previous=none; else previous=unknown; fi
+          fi
+          echo "Previous scan: $previous; new alerts counted from: ${since:-n/a}; this scan: $RESULT"
 
+          # When this scan passed but its alerts could not be checked, this job fails so the
+          # next scan does not use this one as its cutoff and reports them instead.
+          checked=true
           lines=()
           if [ "$RESULT" != "success" ]; then
             if [ "$previous" != "failure" ]; then
@@ -123,8 +147,10 @@ jobs:
             if [ "$previous" = "failure" ]; then
               lines+=(":white_check_mark: The CodeQL scan of main is passing again.")
             fi
-            # With no earlier scan there is nothing to compare against, so the first scan never alerts.
-            if [ -n "$since" ]; then
+            if [ "$runs_read" != "true" ]; then
+              checked=false
+            # With no earlier scan to compare against, the first scan only sets the cutoff.
+            elif [ -n "$since" ]; then
               if new=$(gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/code-scanning/alerts" \
                 -f ref=refs/heads/main -f state=open -f tool_name=CodeQL -F per_page=100 \
                 --jq ".[] | select(.created_at > \"$since\") | .number"); then
@@ -134,10 +160,12 @@ jobs:
                   lines+=(":rotating_light: CodeQL found $count new open alert(s) on main. <$ALERTS_URL|Review them>.")
                 fi
               else
-                echo "::warning::Could not read code scanning alerts; not reporting new alerts."
+                echo "::warning::Could not read code scanning alerts."
+                checked=false
               fi
             fi
           fi
+          echo "checked=$checked" >> "$GITHUB_OUTPUT"
 
           if [ "${#lines[@]}" -eq 0 ]; then
             echo "No change since the previous scan; not alerting."
@@ -159,3 +187,9 @@ jobs:
         with:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           text: ${{ steps.state.outputs.text }}
+
+      - name: Fail when the alerts could not be checked
+        if: steps.state.outputs.checked == 'false'
+        run: |
+          echo "::error::Could not read earlier scans or code scanning alerts; the next scan will report any new alerts."
+          exit 1
