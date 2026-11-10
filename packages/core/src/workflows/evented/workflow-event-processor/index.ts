@@ -121,12 +121,6 @@ export type ParentWorkflow = {
   executionPath: number[];
   resume: boolean;
   stepResults: Record<string, StepResult<any, any, any, any>>;
-  /**
-   * The parent's resolved state when the nested run was dispatched. A nested run
-   * completing as a parallel/conditional branch diffs its final state against it to
-   * hand the parent a mergeable state delta (#29732).
-   */
-  state?: Record<string, any>;
   parentWorkflow?: ParentWorkflow;
   timeTravel?: TimeTravelExecutionParams;
   restart?: RestartExecutionParams;
@@ -2752,7 +2746,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
-              state: currentState,
               input: prevResult,
               parentWorkflow,
               activeStepsPath,
@@ -2826,7 +2819,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
-              state: currentState,
               input: prevResult,
               parentWorkflow,
               activeStepsPath,
@@ -2882,7 +2874,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
-              state: currentState,
               timeTravel,
               input: prevResult,
               parentWorkflow,
@@ -2947,7 +2938,6 @@ export class WorkflowEventProcessor extends EventProcessor {
                 executionPath,
                 resumeSteps: [leafId, ...nestedResumeSteps],
                 stepResults,
-                state: currentState,
                 input: prevResult,
                 parentWorkflow,
                 activeStepsPath,
@@ -2993,7 +2983,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
-              state: currentState,
               restart,
               input: prevResult,
               parentWorkflow,
@@ -3066,7 +3055,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath,
               resumeSteps,
               stepResults,
-              state: currentState,
               input: prevResult,
               parentWorkflow,
               activeStepsPath,
@@ -3666,7 +3654,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults: Record<string, any> | undefined,
     parentWorkflow: ParentWorkflow,
   ): Record<string, any> | undefined {
-    const startState = parentWorkflow.state ?? resolveCurrentState({ stepResults: parentWorkflow.stepResults });
+    const startState = resolveCurrentState({ stepResults: parentWorkflow.stepResults });
     const keys = new Set<string>();
     for (const [stepId, result] of Object.entries(stepResults ?? {})) {
       if (stepId === '__state') continue;
