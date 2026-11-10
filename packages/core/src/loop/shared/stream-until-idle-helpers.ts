@@ -32,6 +32,9 @@ const ADOPT_LOOKUP_TIMEOUT_MS = 5_000;
 /** Inner-run chunks after which the run is parked, waiting to be resumed. */
 const PARKING_CHUNKS = new Set(['tool-call-approval', 'tool-call-suspended']);
 
+/** Step outcomes where the model may not have read the request, so its background results still need a follow-up. */
+const UNREAD_STEP_REASONS = new Set(['error', 'tripwire', 'retry', 'abort']);
+
 export const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
   'background-task-failed',
@@ -454,6 +457,10 @@ export async function runIdleLoop<
   /** Tasks whose terminal bg chunk this wrapper already saw — the startup
    * adoption lookup must not re-add them from a stale storage snapshot. */
   const settledTaskIds = new Set<string>();
+  /** Tasks whose outcome a finished model request already carried, so no follow-up is sent for them. */
+  const deliveredTaskIds = new Set<string>();
+  /** Tasks whose outcome the inner run's current model request carries, until its step finishes. */
+  let requestTaskIds: string[] = [];
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -563,6 +570,40 @@ export async function runIdleLoop<
     idleTimer = setTimeout(() => forceClose(), maxIdleMs);
   };
 
+  /**
+   * Records that a finished model request carried these tasks' outcomes, and drops their queued
+   * completions. The completion usually arrives before the request that reports it, while the
+   * turn is still running.
+   */
+  const markDelivered = (taskIds: string[]) => {
+    if (taskIds.length === 0) return;
+    for (const taskId of taskIds) deliveredTaskIds.add(taskId);
+    for (let i = pendingCompletions.length - 1; i >= 0; i--) {
+      const taskId = (pendingCompletions[i]?.payload as { taskId?: string } | undefined)?.taskId;
+      if (taskId && deliveredTaskIds.has(taskId)) pendingCompletions.splice(i, 1);
+    }
+  };
+
+  /**
+   * Tracks which background outcomes reached the model. The inner run lists them on `step-start`;
+   * they count once the same step finishes without an error. The list is internal, so it is
+   * removed before the chunk reaches the caller.
+   *
+   * @returns The chunk to forward to the caller.
+   */
+  const trackDelivery = (value: any) => {
+    if (value?.type === 'step-start') {
+      const { backgroundResultTaskIds, ...payload } = value.payload ?? {};
+      requestTaskIds = Array.isArray(backgroundResultTaskIds) ? backgroundResultTaskIds : [];
+      return backgroundResultTaskIds === undefined ? value : { ...value, payload };
+    }
+    if (value?.type === 'step-finish') {
+      if (!UNREAD_STEP_REASONS.has(value.payload?.stepResult?.reason)) markDelivered(requestTaskIds);
+      requestTaskIds = [];
+    }
+    return value;
+  };
+
   // --- Stream plumbing ---
   const pipeInner = async (inner: ReadableStream<any>) => {
     const reader = inner.getReader();
@@ -570,8 +611,9 @@ export async function runIdleLoop<
     try {
       while (true) {
         if (outerAbort.signal.aborted) break;
-        const { done, value } = await reader.read();
-        if (done) break;
+        const result = await reader.read();
+        if (result.done) break;
+        const value = trackDelivery(result.value);
         clearIdleTimer();
         if (value && typeof value === 'object' && PARKING_CHUNKS.has((value as any).type)) {
           parked = true;
@@ -731,8 +773,12 @@ export async function runIdleLoop<
         } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
           settledTaskIds.add(taskId);
           runningTaskIds.delete(taskId);
-          pendingCompletions.push(chunk);
-          if (runningTaskIds.size === 0) void processIfIdle();
+          if (!deliveredTaskIds.has(taskId)) pendingCompletions.push(chunk);
+          if (runningTaskIds.size === 0) {
+            if (pendingCompletions.length > 0) void processIfIdle();
+            // Nothing left to report: close now instead of waiting for the idle timer.
+            else tryClose();
+          }
         }
       }
     } catch {

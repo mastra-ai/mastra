@@ -86,6 +86,7 @@ import {
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
   RESOURCE_ID_KEY,
+  SKIP_BG_TASK_WAIT_KEY,
   SUBSCRIBE_PENDING_SIGNALS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
@@ -97,6 +98,7 @@ import {
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
+import { collectBackgroundResultTaskIds } from '../../shared/background-result-task-ids';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
@@ -2176,6 +2178,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             provider: currentStep.model.provider,
           });
           const inferenceStartedAt = Date.now();
+          // Only an `untilIdle` stream's inner run reads this; it runs with the in-loop wait skipped.
+          const backgroundResultTaskIds = readScoped(scopeCtx, SKIP_BG_TASK_WAIT_KEY, 'skipBgTaskWait')
+            ? collectBackgroundResultTaskIds(messageList, inputMessages)
+            : [];
 
           modelResult = executeWithContextSync({
             span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -2236,6 +2242,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       startedAt: inferenceStartedAt,
                       modelId: currentStep.model.modelId,
                       provider: currentStep.model.provider,
+                      ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
                     },
                   };
                 },

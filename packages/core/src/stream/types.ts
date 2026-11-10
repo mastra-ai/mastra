@@ -336,6 +336,11 @@ export interface StepStartPayload {
   };
   inputMessages?: LanguageModelV2Prompt;
   warnings?: LanguageModelV2CallWarning[];
+  /**
+   * @internal Background tasks whose outcome this request carries. Set only on the inner runs of
+   * an `untilIdle` stream, which removes it before the caller sees the chunk.
+   */
+  backgroundResultTaskIds?: string[];
   [key: string]: unknown;
 }
 

@@ -14,6 +14,7 @@ import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
 import { LOCAL_MODEL_REQUEST_KEY, STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
+import { collectBackgroundResultTaskIds } from '../../../../loop/shared/background-result-task-ids';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { agentLoopTermination, executionFailureTermination } from '../../../../loop/shared/execution-outcome';
@@ -1354,6 +1355,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               registryEntry.runScope ??= createRunScope();
               registryEntry.runScope.set(STEP_MODEL_MESSAGES_KEY, delegationMessages);
             }
+            // Only an `untilIdle` stream's inner run reads this; it runs with the in-loop wait skipped.
+            const backgroundResultTaskIds = typedInput.options?.skipBgTaskWait
+              ? collectBackgroundResultTaskIds(messageList, inputMessages)
+              : [];
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
@@ -1896,6 +1901,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     modelId: currentModel.modelId,
                     provider: currentModel.provider,
                     warnings,
+                    ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
                   });
                   if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
                     try {
