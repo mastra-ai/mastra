@@ -9,7 +9,6 @@ import {
   cardOwnsBranch,
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
-  DEFAULT_BOARD_ID,
   intakeTarget,
   rulePhaseField,
   withBoardClosure,
@@ -38,7 +37,6 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import { LEGACY_REVIEW_BOARD } from '../../storage/domains/work-items/legacy-review.js';
 import type { IntegrationContext } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
@@ -353,12 +351,6 @@ export class GitLabRules {
       candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
     );
     if (!binding) return { status: 'ignored' };
-    // A binding saved for the retired Review board files onto the default board, where its merge
-    // requests now live.
-    const board = this.#boards(target.target).get(
-      binding.board === LEGACY_REVIEW_BOARD || !binding.board ? DEFAULT_BOARD_ID : binding.board,
-    );
-    if (!board) return { status: 'ignored' };
 
     const connectionIds = [
       ...new Set(
@@ -592,7 +584,7 @@ export class GitLabRules {
           orgId: target.target.orgId,
           factoryProjectId: target.target.factoryProjectId,
           factoryProject,
-          board: intakeTarget(this.#boards(target.target), board),
+          board: intakeTarget(this.#boards(target.target)),
           issue,
           issueAuthor,
           issueAuthorTrusted,

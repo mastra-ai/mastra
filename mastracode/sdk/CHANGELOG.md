@@ -1,5 +1,36 @@
 # @mastra/code-sdk
 
+## 1.19.0-alpha.3
+
+### Minor Changes
+
+- Added `mouseDialogs` and `mouseInput` preferences to global settings (`GlobalSettings.preferences`). Both default to `false` and control whether the Mastra Code TUI uses the mouse in dialogs and slash suggestions, and in the input box while you type. ([#29701](https://github.com/mastra-ai/mastra/pull/29701))
+
+  ```ts
+  import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+
+  const settings = loadSettings();
+  settings.preferences.mouseDialogs = true;
+  settings.preferences.mouseInput = true;
+  saveSettings(settings);
+  ```
+
+### Patch Changes
+
+- Improved the errors `agent_signal_send` and `agent_connect` return for a peer id that no saved peer has. `agent_signal_send` now says `Cannot send: no saved peer has id <id>` instead of `peer is not saved`, which read as a sync bug when the id was only mistyped. When the id is a few characters off a saved peer's id in the same resource (including a stretch spliced in from another peer's id) or matches a saved peer's label, the error names up to three of those peers, for example `Did you mean code-agent:team:f4c572af-9c10-… ("reviewer")?`. Nothing is sent or saved until the agent retries with the exact id. ([#29840](https://github.com/mastra-ai/mastra/pull/29840))
+
+- Sandbox file tools now explain why a read fails when the agent passes an absolute path outside the workspace, such as `/tmp/x/file.ts`. File tools resolve absolute paths relative to the workspace, so `/tmp/x/file.ts` reads `<workspace>/tmp/x/file.ts`. Previously the tool reported a plain "file not found" even though the file existed at its real sandbox path. The error now shows the remapped path and says to put scratch worktrees under `<workspace>/.worktrees/`. The sandbox instructions also explain how to create a worktree there and install its dependencies with `pnpm install --prefer-offline --frozen-lockfile`, then build the workspace packages it tests against. ([#29821](https://github.com/mastra-ai/mastra/pull/29821))
+
+- Updated dependencies [[`58a66b0`](https://github.com/mastra-ai/mastra/commit/58a66b01d9b08e7b59c27fc3ab68eb90be13c0ed), [`ac2a640`](https://github.com/mastra-ai/mastra/commit/ac2a6401a09e2177555369cff2f7ad15f2cc7286), [`94b1641`](https://github.com/mastra-ai/mastra/commit/94b1641919dd90455131b16cd0572ce28008781b), [`8279c30`](https://github.com/mastra-ai/mastra/commit/8279c3073737dd1c228b5df15416ca4ce7e0c00c), [`224d519`](https://github.com/mastra-ai/mastra/commit/224d51972ac525ef866f232d09d4a911ef4b94bb), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`bc9d8d4`](https://github.com/mastra-ai/mastra/commit/bc9d8d482cec626ef2107f1cbd5a05febceaa491), [`8a10dfe`](https://github.com/mastra-ai/mastra/commit/8a10dfe648610a6687d1e4ecc10a0a81e3d80c4c), [`d77893a`](https://github.com/mastra-ai/mastra/commit/d77893aed38eefe2dbac21e9fffd872137ee6b92), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`6bc7614`](https://github.com/mastra-ai/mastra/commit/6bc7614a8f4355d17184d29f798f13e1d70609cd), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`bfedbfe`](https://github.com/mastra-ai/mastra/commit/bfedbfe5a8e5721cba782efb4652be84e9fecc04), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`a836d09`](https://github.com/mastra-ai/mastra/commit/a836d09a43c3c471b5bfced711731355bf26db26), [`7b912d2`](https://github.com/mastra-ai/mastra/commit/7b912d293d50bb91e34c6e1c75e315fb6adaf125), [`4854e36`](https://github.com/mastra-ai/mastra/commit/4854e3641931c984a5b3941371a4f0fa58eafd0e), [`5e63a3b`](https://github.com/mastra-ai/mastra/commit/5e63a3b59de455b3a016840a557576dc5191053f), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`7358ad7`](https://github.com/mastra-ai/mastra/commit/7358ad73a381765572858d520f8170ab59e88514), [`b93d804`](https://github.com/mastra-ai/mastra/commit/b93d804a7a406d834389e686687b06d22ea2e4f1), [`ed1cecb`](https://github.com/mastra-ai/mastra/commit/ed1cecba5c26a73600640f74e9a1c9d322271b23), [`4cd4c46`](https://github.com/mastra-ai/mastra/commit/4cd4c46e546d44c556fce4d731cac03cad4f88c4), [`9e5b108`](https://github.com/mastra-ai/mastra/commit/9e5b1082cbe2454c377b3328cd8a0085e7452d1a), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`28ddc16`](https://github.com/mastra-ai/mastra/commit/28ddc161a441fdc3ecbdcc1168dee773f1f25243), [`0f496bd`](https://github.com/mastra-ai/mastra/commit/0f496bd3c1cc7f07d2e4ecb3005d480406b3d342), [`de005a4`](https://github.com/mastra-ai/mastra/commit/de005a43d8703d36c5dd25d7ddd1f618ea98bf55)]:
+  - @mastra/core@1.83.0-alpha.3
+  - @mastra/client-js@1.60.0-alpha.3
+  - @mastra/memory@1.41.1-alpha.1
+  - @mastra/pg@1.36.0-alpha.2
+  - @mastra/observability@1.24.0-alpha.2
+  - @mastra/fastembed@1.3.7-alpha.0
+  - @mastra/libsql@1.30.0-alpha.0
+  - @mastra/mcp@2.9.0-alpha.1
+
 ## 1.19.0-alpha.2
 
 ### Patch Changes

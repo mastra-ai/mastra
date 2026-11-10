@@ -186,6 +186,16 @@ export type ObservabilityStorageFeature =
  * Storage adapters override only the methods they support.
  */
 export class ObservabilityStorage extends StorageDomain {
+  /**
+   * Where this domain writes data. Local includes embedded files, in-memory
+   * databases, and local replicas that sync remotely. Remote stores write
+   * through a database service. Undefined means the adapter does not report it.
+   * Platform exporters use this capability to avoid local observability writes.
+   */
+  public get persistenceLocation(): 'local' | 'remote' | undefined {
+    return undefined;
+  }
+
   constructor() {
     super({
       component: 'STORAGE',

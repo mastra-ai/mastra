@@ -13,6 +13,7 @@ import {
   cardBoardFlow,
   cardRuleFacts,
   hasPullRequest,
+  intakeTarget,
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
@@ -1908,10 +1909,10 @@ export class FactoryDecisionDispatcher {
       }
     }
     if (skipRules) {
-      // Creation already filed the card at `stage`. An existing card — a
-      // reconcile pass reacting to a label change, say — is placed there the
-      // same way, through the relocation the label routes use, so no phase rule
-      // runs for it and no transition is recorded.
+      // Creation already filed the card at `stage`. An existing card — one a
+      // reconcile pass files again, say — is placed there the same way, through
+      // a cross-board relocation, so no phase rule runs for it and no transition
+      // is recorded.
       // Another decision of the same delivery (a pull request attaching to this card, say) can
       // change the card in between; a placement skipped for that reason is retried on a fresh read.
       let item: Card | null = result.created ? null : result.item;
@@ -2068,7 +2069,6 @@ export class FactoryDecisionDispatcher {
     if (!authorTrusted(decision.metadata) || !this.#intakeRoutes || decision.skipRules === true) return false;
     if (record.workItemId !== null) return false;
     const boards = await this.#boards.load(record);
-    if (decision.stage !== boards.get(decision.board)?.initialPhase) return false;
     const routes = await this.#intakeRoutes.listIntakeRoutes({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
@@ -2086,9 +2086,9 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Applies the project's intake routes to an arrival: a decision filing the card at its
-   * board's initial phase. A decision naming a later phase (a maintainer's review request)
-   * or placing the card outright (`skipRules`) already chose where the card goes.
+   * Places an arrival where the project's intake routes say: the first enabled route matching it,
+   * else the default board's first phase. The board and phase an integration's rule named don't
+   * count; only a decision placing the card outright (`skipRules`) keeps its own.
    */
   async #routeArrival(
     record: FactoryDeferredDecisionRecord,
@@ -2096,7 +2096,6 @@ export class FactoryDecisionDispatcher {
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
     if (!this.#intakeRoutes || decision.skipRules === true) return decision;
-    if (decision.stage !== boards.get(decision.board)?.initialPhase) return decision;
     // A card another card's rule files (a board's child card) goes where that
     // board put it; routes place only what arrives from outside.
     if (record.workItemId !== null) return decision;
@@ -2104,7 +2103,6 @@ export class FactoryDecisionDispatcher {
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
     });
-    if (routes.length === 0) return decision;
     // A route can also test the issue a pull request closes, as it is now.
     const closedIssue = decision.closesIssue
       ? await this.#storage.get({ orgId: record.orgId, id: decision.closesIssue.workItemId })
@@ -2126,7 +2124,10 @@ export class FactoryDecisionDispatcher {
         : {}),
     };
     const placement = resolveIntakePlacement(routes, facts, boards);
-    if (!placement) return decision;
+    if (!placement) {
+      const fallback = intakeTarget(boards);
+      return fallback ? { ...decision, board: fallback.board, stage: fallback.initialPhase } : decision;
+    }
     return {
       ...decision,
       board: placement.board,
@@ -2137,7 +2138,7 @@ export class FactoryDecisionDispatcher {
 
   /**
    * A card an intake route placed stays on the route's board when its source is filed again
-   * (a reconcile replaying "opened" with today's label route or binding): the decision lands
+   * (a reconcile replaying "opened"): the decision lands
    * on the card's board at its first phase, so it only backfills facts and moves nothing.
    * An explicit placement (`skipRules`) still wins.
    */
@@ -2321,7 +2322,7 @@ export class FactoryDecisionDispatcher {
       ingress: { type: 'rule', identity },
       cause: 'event_route',
       causalChain,
-      eventRoute: { routeId: route.routeId, allowWorkingPhase: route.allowWorkingPhase },
+      eventRoute: { routeId: route.routeId },
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
