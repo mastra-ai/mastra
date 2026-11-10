@@ -380,6 +380,16 @@ describe('git-ref instruction readers', () => {
     expect(refLookups()).toEqual([]);
   });
 
+  it('reads nothing at a base ref name carrying a line break', () => {
+    git('checkout', '--quiet', '-b', 'pr');
+    mkdirSync(join(repo, 'src'));
+    writeFileSync(join(repo, 'src', 'AGENTS.md'), 'INJECTED from the checked-out branch');
+    git('add', 'src/AGENTS.md');
+    git('commit', '-m', 'pr');
+    const reader = createGitRefReminderReader(repo, 'main\nHEAD');
+    expect([loadAtRef('main\nHEAD'), reader.pathExists(join(repo, 'src', 'AGENTS.md'))]).toEqual([[], false]);
+  });
+
   it('reads the new content once origin/<ref> moves', () => {
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     expect(loadAtRef()).toEqual(['trusted base instructions']);

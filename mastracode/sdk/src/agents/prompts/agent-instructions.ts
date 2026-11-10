@@ -114,6 +114,9 @@ function blobMatchesId(id: string, content: Buffer): boolean {
 function createGitRefLookup(projectPath: string, ref: string) {
   let trees: string[] | undefined;
   const resolveTrees = (): string[] => {
+    // A ref name never holds a space or control character, and each line of the batch below names
+    // one object, so a line break in `ref` would add names of its own, such as the checkout's `HEAD`.
+    if ([...ref].some(char => char <= ' ' || char === '\x7f')) return [];
     try {
       const output = execFileSync('git', ['-C', projectPath, 'cat-file', '--batch-check=%(objectname)'], {
         encoding: 'utf-8',
