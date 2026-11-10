@@ -8,6 +8,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
 import type { z } from 'zod';
 
+import { rawRuleProblem, readRawRule, ruleProblem } from '../services/rules';
+
 type Facts = RuleBuilderProps['schema'];
 
 const CARD_FACT_PROPERTIES = {
@@ -79,37 +81,11 @@ export function intakeRouteFacts(on: readonly string[]): Facts {
   };
 }
 
-type RuleIssue = { path: PropertyKey[]; message: string; code: string; errors?: RuleIssue[][] };
-
-/** Zod issues as `path: message`, following the closest branch of a condition-or-group union. */
-function describeIssues(issues: RuleIssue[], prefix: PropertyKey[] = []): string[] {
-  return issues.flatMap(issue => {
-    const path = [...prefix, ...issue.path];
-    if (issue.code === 'invalid_union' && issue.errors?.length) {
-      const closest = issue.errors.reduce((best, branch) => (branch.length < best.length ? branch : best));
-      return describeIssues(closest, path);
-    }
-    return [`${path.map(String).join('.') || 'rule'}: ${issue.message}`];
-  });
-}
-
-/** Why the server would refuse this rule, if it would. */
-function validateRule<Rule>(schema: z.ZodType<Rule>, value: unknown): { rule: Rule } | { problem: string } {
-  const parsed = schema.safeParse(value);
-  if (parsed.success) return { rule: parsed.data };
-  return { problem: describeIssues(parsed.error.issues).join('; ') };
-}
-
-function ruleProblem<Rule>(schema: z.ZodType<Rule>, rule: Rule | null | undefined): string | undefined {
-  if (rule == null) return undefined;
-  const checked = validateRule(schema, rule);
-  return 'problem' in checked ? checked.problem : undefined;
-}
-
 /**
  * A rule, edited with the rule builder or as raw JSON. Unset means "every card".
  * Reports a rule the server would refuse, so the form can hold back the save.
- * `facts` defaults to the card facts a phase rule tests.
+ * `facts` defaults to the card facts a phase rule tests. Pass `json` to keep the JSON being typed outside
+ * the editor, so it outlives the editor; otherwise the editor keeps it.
  */
 export function RuleEditor<Rule>({
   label,
@@ -118,6 +94,7 @@ export function RuleEditor<Rule>({
   disabled,
   facts = CARD_FACTS,
   schema,
+  json,
   onChange,
 }: {
   label: string;
@@ -126,36 +103,21 @@ export function RuleEditor<Rule>({
   disabled: boolean;
   facts?: Facts;
   schema: z.ZodType<Rule>;
+  /** The JSON being typed, unset while the rule builder shows. */
+  json?: { text: string | undefined; onChange: (text: string | undefined) => void };
   onChange: (rule: Rule | null, problem: string | undefined) => void;
 }) {
-  const [raw, setRaw] = useState<string | undefined>(undefined);
-  const [rawProblem, setRawProblem] = useState<string | undefined>(undefined);
+  const [ownRaw, setOwnRaw] = useState<string | undefined>(undefined);
+  const raw = json ? json.text : ownRaw;
+  const setRaw = json ? json.onChange : setOwnRaw;
   const id = useId();
-  const problem = raw === undefined ? ruleProblem(schema, rule) : rawProblem;
+  const problem = raw === undefined ? ruleProblem(schema, rule) : rawRuleProblem(schema, raw);
 
   const editRaw = (text: string) => {
     setRaw(text);
-    if (text.trim() === '') {
-      setRawProblem(undefined);
-      onChange(null, undefined);
-      return;
-    }
-    let value: unknown;
-    try {
-      value = JSON.parse(text);
-    } catch {
-      setRawProblem('Not valid JSON.');
-      onChange(rule ?? null, 'Not valid JSON.');
-      return;
-    }
-    const checked = validateRule(schema, value);
-    if ('problem' in checked) {
-      setRawProblem(checked.problem);
-      onChange(rule ?? null, checked.problem);
-      return;
-    }
-    setRawProblem(undefined);
-    onChange(checked.rule, undefined);
+    const read = readRawRule(schema, text);
+    if ('problem' in read) onChange(rule ?? null, read.problem);
+    else onChange(read.rule, undefined);
   };
 
   return (
@@ -167,7 +129,6 @@ export function RuleEditor<Rule>({
           variant="ghost"
           disabled={disabled}
           onClick={() => {
-            setRawProblem(undefined);
             if (raw === undefined) {
               setRaw(rule ? JSON.stringify(rule, null, 2) : '');
               return;
