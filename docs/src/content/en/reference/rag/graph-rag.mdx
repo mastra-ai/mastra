@@ -185,8 +185,9 @@ Returns a `GraphRAGSnapshot` object containing:
   content={[
   {
     name: 'version',
-    type: 'number',
-    description: "Snapshot format version, used to reject snapshots this version of the class can't load",
+    type: '1',
+    description:
+      'Snapshot format version. Always `1` in the current format, so `deserialize` rejects snapshots with any other version',
   },
   {
     name: 'dimension',

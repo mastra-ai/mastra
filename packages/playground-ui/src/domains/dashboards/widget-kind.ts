@@ -22,6 +22,8 @@ export type WidgetKindProps<Options> = {
   expand?: DashboardExpand;
   /** A grip to drag the widget by, shown left of its title: the host is arranging the dashboard. */
   dragHandle?: MetricsCardDragHandleProps;
+  /** Renames the widget from its title; see `StatelessWidgetProps['onTitleChange']`. */
+  onTitleChange?: (title: string) => void;
   /** The widget's pin button, shown with its card's actions: the host can pin widgets. */
   pin?: WidgetPin;
   /** The card's Create alert button, for the open view: the host can turn views into alerts. */

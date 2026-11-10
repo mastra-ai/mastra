@@ -187,6 +187,47 @@ export const TitleLink: Story = {
   ),
 };
 
+function RenamableCard() {
+  const [title, setTitle] = useState('Tokens');
+  return (
+    <ChartCard
+      variant="compact"
+      title={title}
+      onTitleChange={setTitle}
+      dragHandle={{ 'aria-label': 'Move Tokens', draggable: true }}
+      total="1.6M"
+      toolbar={<MetricsLineChartLegend series={tokenSeries} />}
+    >
+      <ChartArea>
+        <MetricsLineChart
+          data={data}
+          series={tokenSeries}
+          height="fill"
+          xLabels="edges"
+          showLegend={false}
+          lineStyle="thin"
+          dots="hover"
+          valueFormatter={tokens.format}
+          axisFormatter={tokens.format}
+          {...EDGE_BUCKET_AXIS}
+        />
+      </ChartArea>
+    </ChartCard>
+  );
+}
+
+/**
+ * `onTitleChange`: the title reads as plain text and edits in place, outlined on hover and focus.
+ * Enter or blur commits, Escape reverts. Shown here next to a drag handle, as a dashboard being arranged.
+ */
+export const EditableTitle: Story = {
+  render: () => (
+    <div className="w-[min(32rem,calc(100vw-3rem))]">
+      <RenamableCard />
+    </div>
+  ),
+};
+
 /** `isLoading`: a skeleton in place of the total. */
 export const CompactLoading: Story = {
   render: () => (

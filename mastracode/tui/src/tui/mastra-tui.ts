@@ -738,6 +738,7 @@ export class MastraTUI {
       this.state.unsubscribe();
     }
     this.state.renderScheduler?.dispose();
+    this.state.mouseController?.dispose();
     disposeAssistantRenderState(this.state);
     this.state.ui.stop();
   }
@@ -1371,6 +1372,7 @@ export class MastraTUI {
         this.state.editor.addToHistory(text);
       }
       this.state.editor.setText('');
+      this.state.mouseController?.setInputMouseMode(false);
 
       if (this.state.session.run.isRunning()) {
         if (text.startsWith('/')) {
