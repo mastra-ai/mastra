@@ -6,7 +6,6 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
-import { GithubLabelRouting } from './GithubLabelRouting';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { SourcePicker } from './IntakeSourcePicker';
@@ -84,18 +83,6 @@ export function GithubIntakeSection({
           {factoriesQuery.isSuccess && slugs.length === 0 && (
             <SettingsRow label="No linked repositories yet" description="Link a repository to a Factory to add one." />
           )}
-          {slugs.length > 0 &&
-            githubFactories.map(factory => (
-              <GithubLabelRouting
-                key={factory.id}
-                factoryProjectId={factory.id}
-                name={factory.name}
-                showScope={githubFactories.length > 1}
-                repositories={factory.repositories
-                  .filter(repository => repository.provider !== 'gitlab')
-                  .map(repository => repository.slug)}
-              />
-            ))}
         </>
       )}
     </IntakeProviderCard>

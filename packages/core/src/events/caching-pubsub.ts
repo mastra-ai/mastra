@@ -33,6 +33,25 @@ export interface CachingPubSubOptions {
    */
   shouldCache?: (topic: string) => boolean;
   /**
+   * Only append to topics whose log this cache already holds. A publish to a
+   * topic with no log is delivered live and unnumbered, and `onUnlogged` is
+   * called with the topic.
+   *
+   * A process-local cache can only number a topic's frames consistently in the
+   * process that started its log. Another process numbering the same topic
+   * from 0 in its own cache would produce indices that observers drop as
+   * duplicates.
+   *
+   * @internal
+   */
+  extendExistingLogsOnly?: boolean;
+  /**
+   * Called when `extendExistingLogsOnly` leaves a publish unnumbered.
+   *
+   * @internal
+   */
+  onUnlogged?: (topic: string) => void;
+  /**
    * @deprecated No longer used. Evented steps now cache their frames when they
    * publish, so nothing needs to be copied in from another PubSub. Accepted and
    * ignored for compatibility.
@@ -104,6 +123,8 @@ export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
   private readonly shouldCache?: (topic: string) => boolean;
+  private readonly extendExistingLogsOnly: boolean;
+  private readonly onUnlogged?: (topic: string) => void;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
 
@@ -124,6 +145,8 @@ export class CachingPubSub extends PubSub {
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
+    this.extendExistingLogsOnly = options.extendExistingLogsOnly ?? false;
+    this.onUnlogged = options.onUnlogged;
   }
 
   /**
@@ -234,6 +257,12 @@ export class CachingPubSub extends PubSub {
       return;
     }
 
+    if (this.extendExistingLogsOnly && !(await this.hasLog(topic))) {
+      this.onUnlogged?.(topic);
+      await this.inner.publish(topic, fullEvent, options);
+      return;
+    }
+
     // Cache BEFORE live publish so late-joining observers never miss events,
     // and allocate the index as part of that append so the log stays in index
     // order.
@@ -264,6 +293,15 @@ export class CachingPubSub extends PubSub {
         indices.add(index);
       }
       throw error;
+    }
+  }
+
+  private async hasLog(topic: string): Promise<boolean> {
+    try {
+      return (await this.cache.listLength(this.getCacheKey(topic))) > 0;
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to read cached log length for ${topic}`, error);
+      return false;
     }
   }
 

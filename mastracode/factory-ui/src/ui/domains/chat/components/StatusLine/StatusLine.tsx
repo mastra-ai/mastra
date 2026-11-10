@@ -1,3 +1,5 @@
+import { ComposerStatus } from '@mastra/playground-ui/components/Composer';
+import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
@@ -5,19 +7,18 @@ import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { isPullRequestSource } from '../../../factory/services/workItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { PullRequestLinks } from '../PullRequestLinks';
-import { ModelPicker } from './ModelPicker';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
-import { ModelCredential } from './ModelCredential';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 
 /**
- * Session status strip below the composer. Pure composition root: each child
- * reads its own slice of the existing chat/session context.
+ * Session status row above the composer, right-aligned and hidden when empty. Pure
+ * composition root: each child reads its own slice of the existing chat/session context.
+ * The model picker lives in the composer actions instead.
  */
-export function StatusLine() {
+export function StatusLine({ children }: { children?: ReactNode }) {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
   const { factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
@@ -33,12 +34,8 @@ export function StatusLine() {
   const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
 
   return (
-    <div
-      aria-label="Session status line"
-      className="text-caption text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
-    >
-      <ModelPicker />
-      <ModelCredential />
+    <ComposerStatus aria-label="Session status line">
+      {children}
       <OperationalMemoryStatus />
       <RuntimeActivity />
       <ConnectionActivity />
@@ -47,6 +44,6 @@ export function StatusLine() {
       {!workItemsPending && (!currentItem || !isPullRequestSource(currentItem.source)) ? (
         <PullRequestLinks repository={repository} threadId={threadId} />
       ) : null}
-    </div>
+    </ComposerStatus>
   );
 }

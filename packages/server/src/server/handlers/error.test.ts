@@ -153,6 +153,21 @@ describe('handleError', () => {
     });
   });
 
+  describe('AGENT_RESUME_ABORTED_RUN', () => {
+    it('maps approving or resuming an aborted run to 409', () => {
+      const err = Object.assign(new Error('cannot resume aborted run'), { id: 'AGENT_RESUME_ABORTED_RUN' });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('cannot resume aborted run');
+    });
+  });
+
   describe.each(['AGENT_RESUME_RUN_NOT_SUSPENDED', 'WORKFLOW_RUN_NOT_SUSPENDED'])('%s', id => {
     it('maps resuming a run that is not waiting to be resumed to 409', () => {
       const err = Object.assign(new Error('not suspended'), { id });

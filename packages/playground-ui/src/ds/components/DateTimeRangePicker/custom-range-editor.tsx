@@ -182,7 +182,7 @@ function RangeEnd({
           value={time}
           onChange={e => onTimeChange(e.target.value)}
           disabled={disabled}
-          className="w-24 shrink-0 [&::-webkit-calendar-picker-indicator]:hidden"
+          className="w-24 shrink-0"
         />
       </div>
     </div>

@@ -49,21 +49,7 @@
         "values": ["high", "max"]
       }
     ],
-    "Qwen3.8-Flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "DeepSeek-V4.1-Flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "DeepSeek-V4-Pro": [
       {
         "type": "toggle"
       },
@@ -82,6 +68,20 @@
       }
     ],
     "DeepSeek-V4-Flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V4-Pro": [
       {
         "type": "toggle"
       },

@@ -305,6 +305,23 @@ describe('sendRunEndReport', () => {
     expect(env.deliveries).toHaveLength(2);
   });
 
+  it('names the toolCallId of a parked plan so a follower can answer it', async () => {
+    const env = reporting();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: { status: 'blocked', toolName: 'submit_plan', toolCallId: 'call-9' },
+      subject: 'The work session for #7',
+    });
+    expect(env.deliveries[0]!.notification).toMatchObject({
+      kind: 'blocked',
+      summary:
+        'The work session for #7 is waiting on submit_plan and needs an answer. Answer it with factory_answer_approval (toolCallId call-9).',
+      attributes: { 'parked-tool': 'submit_plan', 'tool-call-id': 'call-9' },
+    });
+  });
+
   it('names the failure code and the parked tool', async () => {
     const env = reporting();
     const since = new Date(Date.now() - 1000);

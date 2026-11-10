@@ -1,10 +1,13 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, GitPullRequest, SquareKanban } from 'lucide-react';
+import { Brain, Plus, SquareKanban } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
+import type { Location } from 'react-router';
 
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { useCanEditBoards } from '../../../../hooks/useIntakeRoutes';
+import { boardSettingsPath } from '../../settings/services/boardDraft';
 import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
@@ -14,6 +17,9 @@ export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
   const catalog = useBoardCatalog(factoryId);
+  // Only organization admins may add a board; the server refuses everyone else.
+  const canAddBoard = useCanEditBoards(factoryId);
+  const location = useLocation();
 
   if (!factoryId) return null;
 
@@ -35,10 +41,18 @@ export function FactorySection() {
               <FactoryLink
                 key={board.id}
                 to={rememberedBoardPath(factoryId, board.id)}
-                icon={board.id === 'review' ? GitPullRequest : SquareKanban}
+                icon={SquareKanban}
                 label={board.title}
               />
             ))
+          )}
+          {canAddBoard && (
+            <FactoryLink
+              to={boardSettingsPath(factoryId, { new: true })}
+              state={{ from: location }}
+              icon={Plus}
+              label="New board"
+            />
           )}
         </Sidebar.NavList>
       </section>
@@ -51,7 +65,18 @@ export function FactorySection() {
   );
 }
 
-function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentType<{ size?: number }>; label: string }) {
+function FactoryLink({
+  to,
+  state,
+  icon: Icon,
+  label,
+}: {
+  to: string;
+  /** Where closing Settings returns to, for a link that opens it. */
+  state?: { from: Location };
+  icon: ComponentType<{ size?: number }>;
+  label: string;
+}) {
   const overlays = useOverlays();
   const { pathname } = useLocation();
   const { pathname: targetPathname } = useResolvedPath(to);
@@ -62,7 +87,7 @@ function FactoryLink({ to, icon: Icon, label }: { to: string; icon: ComponentTyp
       link={{ name: label, url: to }}
       isActive={isActive}
       render={
-        <NavLink to={to} onClick={() => overlays.close('sidebar')}>
+        <NavLink to={to} state={state} onClick={() => overlays.close('sidebar')}>
           <Icon />
           <Sidebar.NavLabel>{label}</Sidebar.NavLabel>
         </NavLink>

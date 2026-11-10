@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
+import { keptReviewBoard, selfReviewWorkBoardInfo } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import {
@@ -89,7 +90,7 @@ const reviewItem = {
   id: 'review-item-1',
   createdBy: 'factory-rule-dispatcher',
   title: 'Review retry fix',
-  stages: ['review'],
+  stages: ['pr-review'],
   sessions: {
     review: {
       sessionId: 'session-review',
@@ -153,8 +154,8 @@ const relevanceReviewItems = [
 }));
 
 const pullRequestStatusItems = [
-  { id: 'draft', title: 'Draft PR', stages: ['review'], metadata: { state: 'open', draft: true, merged: false } },
-  { id: 'open', title: 'Open PR', stages: ['review'], metadata: { state: 'open', draft: false, merged: false } },
+  { id: 'draft', title: 'Draft PR', stages: ['pr-review'], metadata: { state: 'open', draft: true, merged: false } },
+  { id: 'open', title: 'Open PR', stages: ['pr-review'], metadata: { state: 'open', draft: false, merged: false } },
   {
     id: 'closed',
     title: 'Closed PR',
@@ -279,7 +280,7 @@ function stubBoardEndpoints() {
   );
 }
 
-function renderBoard(board: 'work' | 'review', search = '') {
+function renderBoard(board: 'work', search = '') {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [`/factories/${FACTORY_ID}/${board}${search}`],
   });
@@ -477,7 +478,7 @@ describe('Board work-item activity', () => {
 
   it('shows the latest human worker, initial fallback, and synthetic created event on review cards', async () => {
     stubBoardEndpoints();
-    renderBoard('review');
+    renderBoard('work', '?source=pull-request');
 
     const createdAt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
       new Date(reviewItem.createdAt),
@@ -504,7 +505,7 @@ describe('Board work-item activity', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    const { client } = renderBoard('work', '?source=pull-request');
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
@@ -531,7 +532,7 @@ describe('Board work-item activity', () => {
     expect(screen.queryByText('Requested PR')).not.toBeInTheDocument();
   });
 
-  it('shows a filter-specific review empty state', async () => {
+  it('shows a filter-specific empty state on Work filtered to pull requests', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -539,11 +540,11 @@ describe('Board work-item activity', () => {
       ),
     );
 
-    const { client } = renderBoard('review', '?teammate=github%3Anobody');
+    const { client } = renderBoard('work', '?source=pull-request&teammate=github%3Anobody');
     await waitForMutationsIdle(client);
 
     expect(
-      await within(screen.getByTestId('board-column-review')).findByText('No change requests match filters'),
+      await within(screen.getByTestId('board-column-intake')).findByText('No work items match filters'),
     ).toBeInTheDocument();
   });
 
@@ -554,7 +555,7 @@ describe('Board work-item activity', () => {
         HttpResponse.json({ workItems: pullRequestStatusItems }),
       ),
     );
-    renderBoard('review');
+    renderBoard('work', '?source=pull-request');
 
     expect(await screen.findByLabelText('Draft pull request')).toBeInTheDocument();
     expect(screen.getByLabelText('Open pull request')).toBeInTheDocument();
@@ -573,28 +574,94 @@ describe('Board work-item activity', () => {
         }),
       ),
     );
-    renderBoard('review');
+    renderBoard('work', '?source=pull-request');
 
     const row = await screen.findByRole('article', { name: reviewItem.title });
     expect(within(row).getByText('Changes requested')).toBeVisible();
   });
 
-  it('keeps the full self-review verdict on hover when a narrow row truncates it', async () => {
+  it('names the phase and the reason of a move that was rejected, with the agent rationale on hover', async () => {
+    stubBoardEndpoints();
+    const reason =
+      'The card changed (now revision 22, in execute). Retry with expectedRevision 22 if the move still applies.';
+    const rationale = 'Self-review approved the head; opening review.';
+    const rejected = {
+      id: 'event-rejected',
+      orgId: 'org-1',
+      actorId: 'agent:binding-1',
+      actorType: 'agent',
+      action: 'factory.work_item.transition_rejected',
+      targets: [{ type: 'work_item', id: workItem.id, name: workItem.title }],
+      metadata: { agentName: 'review agent', to: 'pr-review', code: 'stale', reason, cause: rationale },
+      githubProjectId: FACTORY_ID,
+      context: {},
+      occurredAt: '2026-08-05T11:00:00.000Z',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
+        HttpResponse.json({ events: [rejected, ...events], actors }),
+      ),
+    );
+    renderBoard('work');
+
+    await expectActivity('Ada Lovelace', `Move to Review rejected: ${reason}`);
+    const row = within(screen.getByLabelText('Work item activity')).getByText(`Move to Review rejected: ${reason}`);
+    expect(row).toHaveAttribute('title', `Move to Review rejected: ${reason}\n\nWhy it was asked: ${rationale}`);
+  });
+
+  it("names a rejected move's phase from the card's own board when another board uses the same phase id", async () => {
+    stubBoardEndpoints();
+    const rejected = {
+      id: 'event-rejected',
+      orgId: 'org-1',
+      actorId: 'user-ada',
+      actorType: 'human',
+      action: 'factory.work_item.transition_rejected',
+      targets: [{ type: 'work_item', id: workItem.id, name: workItem.title }],
+      metadata: { to: 'review', code: 'invalid_transition', reason: 'Not a next phase.' },
+      githubProjectId: FACTORY_ID,
+      context: {},
+      occurredAt: '2026-08-05T11:00:00.000Z',
+    };
+    server.use(
+      // The kept Review board names its `review` phase "Reviewing"; this card's older Work names its own `review` otherwise.
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [keptReviewBoard, selfReviewWorkBoardInfo], problems: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
+        HttpResponse.json({ events: [rejected, ...events], actors }),
+      ),
+    );
+    renderBoard('work');
+
+    const selfReview = selfReviewWorkBoardInfo.phases.find(phase => phase.id === 'review')!;
+    expect(selfReview.name).not.toBe('Reviewing');
+    await expectActivity('Ada Lovelace', `Move to ${selfReview.name} rejected: Not a next phase.`);
+  });
+
+  it("keeps the full self-review verdict on hover when a narrow row truncates it, in an older project's Work", async () => {
     stubBoardEndpoints();
     server.use(
+      // Work as a project stored it while Work still had its self-review phase.
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [selfReviewWorkBoardInfo], problems: [] }),
+      ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({
           workItems: [
             {
-              ...reviewItem,
+              ...workItem,
+              id: 'self-reviewed',
+              title: reviewItem.title,
+              stages: ['review'],
               sessions: {},
-              metadata: { ...reviewItem.metadata, selfReviewVerdict: 'approve', selfReviewRounds: 1 },
+              metadata: { ...workItem.metadata, selfReviewVerdict: 'approve', selfReviewRounds: 1 },
             },
           ],
         }),
       ),
     );
-    renderBoard('review');
+    renderBoard('work');
 
     const row = await screen.findByRole('article', { name: reviewItem.title });
     expect(within(row).getByTitle('Self-review: approved (round 1)')).toHaveTextContent(
