@@ -109,24 +109,24 @@ describe('Switch', () => {
     expect(uncheckedIconEl?.className).toContain('group-data-[checked]/switch:opacity-0');
   });
 
-  it('slides a round thumb with translate and stretches it on hover with a pseudo-element', () => {
+  it('slides a pill thumb with translate and stretches it on hover with a pseudo-element', () => {
     render(<Switch aria-label="Toggle" defaultChecked />);
 
     const switchEl = screen.getByRole('switch');
     const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
     expect(switchEl.className).toContain('h-[18px]');
-    expect(switchEl.className).toContain('w-[30px]');
-    expect(thumbEl?.className).toContain('size-3.5');
+    expect(switchEl.className).toContain('w-8');
+    expect(thumbEl?.className).toContain('h-3.5');
+    expect(thumbEl?.className).toContain('w-[18px]');
     expect(thumbEl?.className).toContain('rounded-full');
     expect(thumbEl?.className).toContain('transition-[translate]');
-    expect(thumbEl?.className).toContain('data-[checked]:translate-x-3');
+    expect(thumbEl?.className).toContain('data-[checked]:translate-x-2.5');
     expect(thumbEl?.className).toContain(
       '[@media(hover:hover)]:group-[:hover:not([data-disabled])]/switch:after:translate-x-0.5',
     );
     expect(thumbEl?.className).toContain(
       '[@media(hover:hover)]:group-[:hover:not([data-disabled])]/switch:data-[checked]:after:-translate-x-0.5',
     );
-    expect(thumbEl?.className).not.toMatch(/\bw-\d/);
   });
 
   it('keeps switch motion CSS-only without transient React data attributes', () => {

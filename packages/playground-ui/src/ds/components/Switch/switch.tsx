@@ -37,7 +37,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         ref={ref}
         data-slot="switch"
         className={cn(
-          'peer group/switch inline-flex h-[18px] w-[30px] shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-active p-0.5',
+          'peer group/switch inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-active p-0.5',
           'transition-colors duration-fast ease-out-custom motion-reduce:transition-none',
           'hover:bg-fill-strong',
           focusRingOffset,
@@ -50,15 +50,15 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         {...props}
       >
         {asChild ? undefined : children}
-        {/* A round thumb that slides with `translate`. On hover a same-color copy
-            (`::after`) shifts 2px toward the travel direction, so the pair reads as
-            a pill without animating width. Colors swap instantly; only the track fades. */}
+        {/* A pill thumb that slides with `translate`. On hover a same-color copy
+            (`::after`) shifts 2px toward the travel direction, so the pair reads as a
+            longer pill without animating width. Colors swap instantly; only the track fades. */}
         <SwitchPrimitive.Thumb
           data-slot="switch-thumb"
           className={cn(
-            'pointer-events-none relative isolate block size-3.5 rounded-full bg-foreground data-[checked]:bg-background',
+            'pointer-events-none relative isolate block h-3.5 w-[18px] rounded-full bg-foreground data-[checked]:bg-background',
             'transition-[translate] duration-fast ease-out-custom motion-reduce:transition-none',
-            'data-[checked]:translate-x-3',
+            'data-[checked]:translate-x-2.5',
             "after:absolute after:inset-0 after:-z-10 after:rounded-full after:bg-inherit after:content-['']",
             'after:transition-[translate] after:duration-fast after:ease-out-custom motion-reduce:after:transition-none',
             '[@media(hover:hover)]:group-[:hover:not([data-disabled])]/switch:after:translate-x-0.5',
