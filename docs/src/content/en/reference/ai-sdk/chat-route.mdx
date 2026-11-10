@@ -167,7 +167,7 @@ Set `resumable: true` on `chatRoute()` and `resume: true` on AI SDK UI's `useCha
 - `POST <path>`: Starts the agent run. The request's AI SDK chat ID becomes the Mastra memory thread ID.
 - `GET <path>/:chatId/stream`: Replays cached events and follows the active run. The route returns `204` when the run is finished, unavailable, expired, or outside the caller's scope.
 
-Pass the returned array as one entry in `server.apiRoutes`; Mastra flattens nested route arrays during server configuration.
+Pass the returned array as one entry in `server.apiRoutes`. Mastra flattens nested route arrays during server configuration.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

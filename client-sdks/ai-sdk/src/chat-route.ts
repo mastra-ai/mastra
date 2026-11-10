@@ -937,7 +937,8 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
 
       const effectiveAgentVersion = resolveAgentVersionFromQuery(name => c.req.query(name), agentVersion);
       const trustedRequestContext = (contextRequestContext || defaultOptions?.requestContext) as
-        RequestContext | undefined;
+        | RequestContext
+        | undefined;
       const resumableResourceId = trustedRequestContext?.get<string>(MASTRA_RESOURCE_ID_KEY);
       const bodyResourceId = typeof params.memory === 'object' ? params.memory?.resource : undefined;
       const bodyRequestContextResourceId = (params.requestContext as RequestContext | undefined)?.get<string>(
