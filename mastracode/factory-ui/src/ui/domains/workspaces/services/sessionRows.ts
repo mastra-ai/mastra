@@ -83,6 +83,8 @@ export interface SessionListRow {
   threadId?: string;
   pullRequest?: SessionPullRequest;
   pinned: boolean;
+  /** Every session of the card a card row stands for, so unpinning it clears a pin carried from another of them. */
+  cardSessionIds?: readonly string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -276,9 +278,25 @@ export function oneRowPerCard(
         status: carried ?? shown.status,
         active: cardRows.some(candidate => candidate.active),
         pinned: cardRows.some(candidate => candidate.pinned),
+        cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
       },
     ];
   });
+}
+
+/**
+ * Pinning a row pins the session it shows. Unpinning a card's row unpins every
+ * session of the card, since the row shows pinned while any of them is.
+ */
+export function pinnedSessionsAfter(
+  pinned: ReadonlySet<string>,
+  row: Pick<SessionListRow, 'session' | 'cardSessionIds'>,
+  pin: boolean,
+): ReadonlySet<string> {
+  const next = new Set(pinned);
+  if (pin) next.add(row.session.sessionId);
+  else for (const sessionId of row.cardSessionIds ?? [row.session.sessionId]) next.delete(sessionId);
+  return next;
 }
 
 export interface UserSessionRowInput {

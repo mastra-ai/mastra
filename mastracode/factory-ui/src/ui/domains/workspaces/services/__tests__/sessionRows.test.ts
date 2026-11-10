@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { releaseBoard, workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
 import { providerFactsCard } from '../../../../__tests__/fixtures/providerFactsCard';
-import { oneRowPerCard, sessionActivityStatus, sessionBoard } from '../sessionRows';
+import { oneRowPerCard, pinnedSessionsAfter, sessionActivityStatus, sessionBoard } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
 describe('sessionBoard', () => {
@@ -137,6 +137,20 @@ describe('oneRowPerCard', () => {
     const rows = oneRowPerCard([cardRow('review'), cardRow('triage')], boards);
 
     expect(rows.map(row => row.session.sessionId)).toEqual(['triage']);
+  });
+
+  it("unpins a card's row when its pin came from another of the card's sessions", () => {
+    const listed = (pinned: ReadonlySet<string>) =>
+      oneRowPerCard(
+        [cardRow('triage', { pinned: pinned.has('triage') }), cardRow('work', { pinned: pinned.has('work') })],
+        boards,
+      )[0];
+    const pinned = new Set(['triage']);
+    const shown = listed(pinned);
+    expect(shown).toMatchObject({ session: { sessionId: 'work' }, pinned: true });
+
+    expect(listed(pinnedSessionsAfter(pinned, shown, false)).pinned).toBe(false);
+    expect([...pinnedSessionsAfter(new Set(), shown, true)]).toEqual(['work']);
   });
 
   it('leaves sessions without a card alone', () => {

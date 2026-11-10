@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -77,6 +78,7 @@ function card(id: string, title: string, sessions: WorkItem['sessions']): WireWo
 }
 
 beforeEach(() => {
+  localStorage.removeItem('mastracode.pinnedSessions');
   stubSessionsFactory(factoryId, [projectRepositoryId]);
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, () =>
@@ -148,6 +150,19 @@ describe('Sessions sidebar lists one row per card', () => {
 
     await screen.findByRole('status', { name: 'Agent working in Build fix login' });
     expect(screen.queryByRole('status', { name: 'Agent working in Write docs' })).not.toBeInTheDocument();
+  });
+
+  it("unpins the card's row when the pin was on another of the card's sessions", async () => {
+    localStorage.setItem('mastracode.pinnedSessions', JSON.stringify([triageSession.sessionId]));
+    const user = userEvent.setup();
+    renderSection();
+
+    expect(await screen.findByLabelText('Build fix login pinned')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Session actions for Build fix login' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Unpin' }));
+
+    expect(screen.queryByLabelText('Build fix login pinned')).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('mastracode.pinnedSessions') ?? '[]')).toEqual([]);
   });
 
   it('still gives a card with one session its heading and a context row', async () => {
