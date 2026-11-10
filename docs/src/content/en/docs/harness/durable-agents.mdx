@@ -425,6 +425,42 @@ Recovery can start the same tool call before the previous execution detects owne
 
 Every replica can start with `recovery.durableAgents: 'auto'`. Replicas that boot together race to recover the same orphaned runs, but only one claim succeeds per run and the other replicas skip it. This requires a claim that every replica shares: a workflows store that supports run fencing, or a PubSub backend whose lease every replica shares. Without either, gate recovery behind your own leader election or run it from a single replica.
 
+## Database load
+
+Mastra doesn't publish a benchmarked hardware reference for durable agents, so size your database from your own workload. This section covers what drives the load and what to watch.
+
+Each checkpoint upserts the whole run snapshot as one JSONB row in `mastra_workflow_snapshot`. The snapshot holds the conversation and every tool result so far, so it grows during a run, and the total bytes a run writes grow faster than its step count. Write load depends on:
+
+- **Checkpoint frequency**: A `createDurableAgent()` agent with `recovery.durableAgents` set to `'off'` (the default) writes few checkpoints. With `'auto'`, it writes a `running` checkpoint at every step. A `createEventedAgent()` agent always writes at every step. See [snapshot persistence](#snapshot-persistence).
+- **Steps per run and payload size**: Every byte a tool returns is written again in each later checkpoint of the run.
+- **Concurrent runs**: Load scales roughly linearly with the number of runs in progress.
+
+To reduce writes and keep crash recovery:
+
+- Give the agent a fixed memory instance, so checkpoints store references to saved messages instead of full copies.
+- Return small tool results, such as IDs or URLs, instead of large documents.
+- Split long tasks into shorter runs.
+
+Each `PostgresStore` opens up to `max` connections, 20 by default, per process. Keep `replicas × stores per process × max` below the server's `max_connections`, or put a transaction-mode pooler such as PgBouncer in front. See [PostgreSQL](/integrations/databases/postgresql).
+
+Mastra deletes a run's snapshot rows when the run finishes, so `mastra_workflow_snapshot` collects dead rows quickly. Make autovacuum more aggressive for this table, for example:
+
+```sql
+ALTER TABLE mastra_workflow_snapshot SET (
+  autovacuum_vacuum_scale_factor = 0.01,
+  toast.autovacuum_vacuum_scale_factor = 0.01
+);
+```
+
+To decide whether to add capacity or tune the workload, watch:
+
+- `n_dead_tup` and `last_autovacuum` for `mastra_workflow_snapshot` in `pg_stat_user_tables`
+- The snapshot upsert's share of total time in `pg_stat_statements`
+- WAL bytes per second (`pg_stat_wal`)
+- Active connections compared with the pool `max`
+
+If the snapshot upsert dominates writes, reduce checkpoint size or frequency first. If many unrelated queries are slow, add capacity.
+
 ## Make tools safe to repeat
 
 A durable or evented agent can run the same tool call more than once. A tool call is one request from the model to run a tool. A repeat happens in these situations:
