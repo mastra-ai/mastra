@@ -71,6 +71,9 @@ export class GraphRAG {
     if (node.embedding.length !== this.dimension) {
       throw new Error(`Embedding dimension must be ${this.dimension}`);
     }
+    if (!node.embedding.every(Number.isFinite)) {
+      throw new Error('Embedding must contain only finite numbers');
+    }
     this.nodes.set(node.id, node);
   }
 
@@ -130,7 +133,7 @@ export class GraphRAG {
    * Rebuild a GraphRAG instance from a snapshot produced by `serialize()`.
    *
    * @throws if the snapshot version is unsupported, a node embedding does not
-   * match the snapshot dimension, or an edge references an unknown node.
+   * match the snapshot dimension or contains nonfinite values, or an edge references an unknown node.
    */
   static deserialize(snapshot: GraphRAGSnapshot): GraphRAG {
     if (snapshot?.version !== GRAPH_RAG_SNAPSHOT_VERSION) {
@@ -140,7 +143,7 @@ export class GraphRAG {
     const graph = new GraphRAG(snapshot.dimension, snapshot.threshold);
 
     for (const node of snapshot.nodes ?? []) {
-      // Route through addNode so embedding presence and dimension are validated
+      // Route through addNode so embedding presence, dimension, and finite values are validated
       // at load time rather than failing later inside query().
       graph.addNode({
         ...node,
@@ -349,6 +352,9 @@ export class GraphRAG {
   }): RankedNode[] {
     if (!query || query.length !== this.dimension) {
       throw new Error(`Query embedding must have dimension ${this.dimension}`);
+    }
+    if (!query.every(Number.isFinite)) {
+      throw new Error('Query embedding must contain only finite numbers');
     }
     if (topK < 1) {
       throw new Error('TopK must be greater than 0');
