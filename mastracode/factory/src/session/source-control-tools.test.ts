@@ -1377,7 +1377,7 @@ describe('source_control_push_branch to a followed work item branch', { timeout:
     };
     const push = (workItem: string) =>
       (tools.source_control_push_branch!.execute as any)({ workItem }, { workspace: { sandbox } });
-    return { ...setup, item, branch, base, git, remote, commit, push };
+    return { ...setup, seeded, projectId: project.id, item, branch, base, git, remote, commit, push };
   }
 
   it.each(['id', '#number'])('fast-forwards the followed item branch by %s', async form => {
@@ -1429,5 +1429,44 @@ describe('source_control_push_branch to a followed work item branch', { timeout:
     commit('fix');
     await expect(push(item.id)).rejects.toThrow(`'${branch}' does not exist`);
     expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
+  });
+
+  it('refuses a #number that names more than one followed work item', async () => {
+    const { seeded, projectId, item, branch, base, commit, push, remote } = await followedItem();
+    const { item: pullRequest } = await seeded.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: projectId,
+      workItem: {
+        input: {
+          board: 'review',
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:7' },
+          title: 'Factory pull request',
+          stages: ['review'],
+          sessions: {},
+          metadata: { authorTrusted: true, githubPullRequestNumber: 7 },
+        },
+      },
+      role: 'review',
+      session: { sessionId: 'session-3', branch: 'factory/pr-7', threadId: 'thread-3' },
+      resourceId: 'project-1',
+      kickoffKey: 'kickoff-2',
+      kickoffMessage: null,
+    });
+    await seeded.workItems.subscribeToWorkItem({
+      orgId: 'org-1',
+      factoryProjectId: projectId,
+      workItemId: pullRequest.id,
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+      resourceId: 'project-1',
+      userId: 'user-1',
+      reason: 'subscribed',
+    });
+    commit('fix');
+
+    await expect(push('#7')).rejects.toThrow('matches more than one followed work item');
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(base);
+    await expect(push(item.id)).resolves.toMatchObject({ pushed: true, branch });
   });
 });

@@ -304,6 +304,7 @@ export async function createSourceControlTools({
     ]);
     const ids = new Set([...follows.map(follow => follow.workItemId), ...(binding ? [binding.workItemId] : [])]);
     const number = /^#?([1-9]\d*)$/.exec(reference)?.[1];
+    const matches = [];
     for (const id of ids) {
       const item = await workItems.getForProject(target.orgId, target.factoryProjectId, id);
       if (!item) continue;
@@ -312,13 +313,20 @@ export async function createSourceControlTools({
         source: workItemBranchSource(item.externalSource),
         metadata: item.workItem.metadata,
       };
-      if (item.id !== reference && (number === undefined || String(workItemNumber(branchInput)) !== number)) continue;
-      if (item.externalSource?.type === 'pull-request') {
-        throw new Error(`Work item ${reference} is a pull-request review card; its branch is local to its session.`);
+      if (item.id === reference || (number !== undefined && String(workItemNumber(branchInput)) === number)) {
+        matches.push({ item, branchInput });
       }
-      return { id: item.id, branch: workItemBranch(branchInput) };
     }
-    throw new Error(`Work item ${reference} is not followed by or bound to this session.`);
+    const [match, ...others] = matches;
+    if (!match) throw new Error(`Work item ${reference} is not followed by or bound to this session.`);
+    // Numbers are only unique per source, so a bare #number naming two followed items must not guess.
+    if (others.length > 0) {
+      throw new Error(`Work item ${reference} matches more than one followed work item; pass its id instead.`);
+    }
+    if (match.item.externalSource?.type === 'pull-request') {
+      throw new Error(`Work item ${reference} is a pull-request review card; its branch is local to its session.`);
+    }
+    return { id: match.item.id, branch: workItemBranch(match.branchInput) };
   };
   const reference = async (target: SessionTarget) => ({
     ...(await target.provider.versionControl.getRepositoryTarget({
