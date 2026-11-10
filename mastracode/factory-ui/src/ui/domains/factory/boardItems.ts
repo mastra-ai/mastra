@@ -201,6 +201,8 @@ export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metada
   if (item.workItem?.provider !== 'factory' && item.workItem?.key) return item.workItem.key;
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}`;
+  const cardNumber = item.source === 'manual' ? sourceMetadata(item).cardNumber : undefined;
+  if (typeof cardNumber === 'number' && Number.isInteger(cardNumber) && cardNumber > 0) return `#${cardNumber}`;
   return (
     gitlabIdentifierForItem(item) ??
     linearIdentifierForItem(item) ??
