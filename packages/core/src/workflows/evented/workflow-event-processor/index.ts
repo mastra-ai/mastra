@@ -4803,7 +4803,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
     const publishAttempts = pending.publishAttempts + 1;
     try {
-      await this.errorWorkflow(event.data as Omit<ProcessorArgs, 'workflow'>, pending.error);
+      // This runs after the dispatch's storage scope has ended. Transports
+      // that deliver outside the publisher's context (Redis, GCP) would
+      // otherwise publish an untagged workflow.fail, and a v2 run would be
+      // failed through the v1 tables and stay running.
+      await runInStorageScope(storageVersionOf(failWorkflowData), () =>
+        this.errorWorkflow(failWorkflowData, pending.error),
+      );
     } catch (failErr) {
       const giveUp = publishAttempts >= WorkflowEventProcessor.MAX_FAIL_PUBLISH_ATTEMPTS;
       this.mastra
