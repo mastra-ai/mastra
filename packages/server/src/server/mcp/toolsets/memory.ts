@@ -28,8 +28,9 @@ const metadata = { type: 'object' as const, description: 'Arbitrary metadata.' }
 const defined = (values: Args) => Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
 
 /**
- * Memory: Observational Memory, threads, and messages. Every route enforces thread/resource ownership itself;
- * an agent left out by include/exclude is "not found" here, as in the agents toolset.
+ * Memory: Observational Memory, threads, and messages. Every route enforces thread/resource ownership itself.
+ * A tool given an `agentId` left out by include/exclude returns "not found", as in the agents toolset; threads
+ * read by `threadId` or listed without an `agentId` aren't filtered by agent, as on the HTTP routes.
  */
 export async function addMemoryTools(kit: CatalogueKit) {
   const { addOperation, addCombined, requestContext } = kit;
