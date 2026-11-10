@@ -357,7 +357,18 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
             })
           : undefined;
       plan = coreStorage.planTraceQuery(
-        { timeRange, where, textSearch, group, orderBy, page, pagination, mode, after, limit },
+        {
+          timeRange,
+          where,
+          ...(textSearch === undefined ? {} : { textSearch }),
+          group,
+          orderBy,
+          page,
+          pagination,
+          mode,
+          after,
+          limit,
+        },
         { authorizationBinding, scope: resolveTraceQueryScope(requestContext) },
       );
     } catch (error) {
@@ -748,7 +759,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     let plan;
     try {
       plan = coreStorage.planSpanQuery(
-        { timeRange, where, textSearch, orderBy, page },
+        { timeRange, where, ...(textSearch === undefined ? {} : { textSearch }), orderBy, page },
         { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED') },
       );
     } catch (error) {

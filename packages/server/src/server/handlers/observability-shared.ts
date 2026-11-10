@@ -804,7 +804,8 @@ export function getObservabilityStorageCapabilities(
     deltaPolling:
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
     traceQuery,
-    traceQueryTextSearch: traceQuery && declares('trace-query-text-search'),
+    traceQueryTextSearch:
+      traceQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('trace-query-text-search'),
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
     traceQueryContextIds:
@@ -837,7 +838,8 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
-    spanQueryTextSearch: spanQuery && declares('span-query-text-search'),
+    spanQueryTextSearch:
+      spanQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('span-query-text-search'),
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     spanQueryModelFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE),
     spanQueryOutcomeFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE),
