@@ -109,6 +109,26 @@ describe('built-in MCP stored_agents toolset', () => {
     return (await tool.execute!(args, {} as any)) as ToolResult;
   };
 
+  /**
+   * Calls a tool with a raw JSON-RPC request, skipping the MCP client's input validation, so the server's own
+   * checks see arguments a client could send without it.
+   */
+  const rawCallTool = async (token: string, name: string, args: Record<string, unknown>): Promise<ToolResult> => {
+    const response = await fetch(`${url}/api/mcp?toolsets=stored_agents`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+    });
+    const body = await response.text();
+    const json = JSON.parse(/^data: (.*)$/m.exec(body)?.[1] ?? body);
+    if (json.error) throw new Error(JSON.stringify(json.error));
+    return json.result;
+  };
+
   const http = async (token: string, method: string, path: string, body?: unknown) => {
     const response = await fetch(`${url}/api${path}`, {
       method,
@@ -193,6 +213,92 @@ describe('built-in MCP stored_agents toolset', () => {
     expect(status(updated)).toBe(422);
     const stored = await http('alice', 'GET', '/stored/agents/allowed-fallback');
     expect(stored.body.modelList).toEqual([allowedEntry, { ...deniedEntry, enabled: false }]);
+  });
+
+  it('checks the provider and name the agent runs, and rejects other keys on model (static and conditional)', async () => {
+    const shadowed = { ...DENIED_MODEL, providerId: 'openai', modelId: 'gpt-4o-mini' };
+    const cases: Array<[unknown, string]> = [
+      [shadowed, 'model:'],
+      [{ provider: 'openai', name: 'gpt-5', modelId: 'gpt-4o-mini' }, 'model:'],
+      [{ ...ALLOWED_MODEL, id: 'anthropic/claude-sonnet-4-5' }, 'model:'],
+      [[{ value: ALLOWED_MODEL }, { value: shadowed, rules: RULES }], 'model[1].value:'],
+    ];
+    for (const [index, [model, field]] of cases.entries()) {
+      const id = `shadow-model-${index}`;
+      const created = await rawCallTool('alice', 'create_stored_agent', { ...agentBody(id), model });
+      expect(status(created), `${JSON.stringify(model)}: ${text(created)}`).toBe(422);
+      expect(text(created)).toContain(field);
+      expect((await http('alice', 'GET', `/stored/agents/${id}`)).status).toBe(404);
+    }
+    const updated = await callTool('alice', 'update_stored_agent', { storedAgentId: 'helper', model: shadowed });
+    expect(status(updated)).toBe(422);
+
+    // Shapes outside the tool's input schema never reach the handler.
+    for (const [index, model] of [
+      'openai/gpt-4o-mini',
+      [{ value: ALLOWED_MODEL }, { value: 'anthropic/claude-sonnet-4-5', rules: RULES }],
+      [{ value: ALLOWED_MODEL }, { value: { provider: 'anthropic' }, rules: RULES }],
+    ].entries()) {
+      const id = `invalid-model-${index}`;
+      const created = await rawCallTool('alice', 'create_stored_agent', { ...agentBody(id), model });
+      expect(text(created)).toContain('Tool input validation failed');
+      expect((await http('alice', 'GET', `/stored/agents/${id}`)).status).toBe(404);
+    }
+
+    // Model settings are part of a stored model; allowed variants pass.
+    const allowed = await callTool('alice', 'create_stored_agent', {
+      ...agentBody('settings-model'),
+      model: [
+        { value: { ...ALLOWED_MODEL, temperature: 0.2, maxCompletionTokens: 500 } },
+        { value: ALLOWED_MODEL, rules: RULES },
+      ],
+    });
+    expect(allowed.isError, text(allowed)).toBeFalsy();
+  });
+
+  it('applies the builder policy to models named in default options (static and conditional)', async () => {
+    const denied = 'anthropic/claude-sonnet-4-5';
+    const schema = { type: 'object', properties: { answer: { type: 'string' } } };
+    const cases: Array<[unknown, string]> = [
+      [{ structuredOutput: { schema, model: denied } }, 'defaultOptions.structuredOutput.model:'],
+      [
+        [{ value: { maxSteps: 3 } }, { value: { structuredOutput: { schema, model: denied } }, rules: RULES }],
+        'defaultOptions[1].value.structuredOutput.model:',
+      ],
+      [{ structuredOutput: { schema, model: { id: denied } } }, 'defaultOptions.structuredOutput.model:'],
+      [{ somethingNew: { models: [denied] } }, 'defaultOptions.somethingNew.models:'],
+    ];
+    for (const [index, [defaultOptions, field]] of cases.entries()) {
+      const id = `denied-options-${index}`;
+      const created = await callTool('alice', 'create_stored_agent', { ...agentBody(id), defaultOptions });
+      expect(status(created), JSON.stringify(defaultOptions)).toBe(422);
+      expect(text(created)).toContain(field);
+      expect((await http('alice', 'GET', `/stored/agents/${id}`)).status).toBe(404);
+    }
+    const updated = await callTool('alice', 'update_stored_agent', {
+      storedAgentId: 'helper',
+      defaultOptions: cases[0]![0],
+    });
+    expect(status(updated)).toBe(422);
+
+    const allowed = await callTool('alice', 'create_stored_agent', {
+      ...agentBody('allowed-options'),
+      defaultOptions: {
+        maxSteps: 3,
+        modelSettings: { temperature: 0.1 },
+        structuredOutput: { schema, model: 'openai/gpt-4o-mini' },
+      },
+    });
+    expect(allowed.isError, text(allowed)).toBeFalsy();
+  });
+
+  it('rejects a title model the policy cannot read', async () => {
+    const created = await rawCallTool('alice', 'create_stored_agent', {
+      ...agentBody('object-title'),
+      memory: { options: { generateTitle: { model: { id: 'anthropic/claude-sonnet-4-5' } } } },
+    });
+    expect(created.isError).toBe(true);
+    expect((await http('alice', 'GET', '/stored/agents/object-title')).status).toBe(404);
   });
 
   it('applies the builder policy to the memory models too (observer, reflector, title; static and conditional)', async () => {

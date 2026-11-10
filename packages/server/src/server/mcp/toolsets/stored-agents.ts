@@ -31,8 +31,77 @@ function bodySchema(schema: unknown, omit: string[]) {
 const isObject = (value: unknown): value is Args =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** A model the stored agent will run, by body path: an explicit model id, or a reason the model is implicit. */
-type ModelUse = { field: string; model: string } | { field: string; implicit: string };
+/**
+ * A model the stored agent will run, by body path: an explicit model (an id, or the `{ provider, name }` the editor
+ * runs), or a reason the policy can't check it.
+ */
+type ModelUse =
+  | { field: string; model: string | { provider: string; name: string } }
+  | { field: string; implicit: string };
+
+/** The keys of a stored model the editor reads: what it runs (`provider/name`) and its model settings. */
+const MODEL_CONFIG_KEYS = new Set([
+  'provider',
+  'name',
+  'temperature',
+  'topP',
+  'frequencyPenalty',
+  'presencePenalty',
+  'maxCompletionTokens',
+]);
+
+/**
+ * The agent's own model, per variant when conditional. The editor runs `${provider}/${name}`, so that is what's
+ * checked. Any other key is rejected: the policy would read `id`/`providerId`/`modelId` before `name`, and the
+ * editor ignores them, so they could make the policy check a model the agent doesn't run.
+ */
+function agentModelUses(model: unknown): ModelUse[] {
+  if (model === undefined || model === null) return [];
+  const variants = Array.isArray(model)
+    ? model.map((variant, index) => [isObject(variant) ? variant.value : undefined, `model[${index}].value`] as const)
+    : ([[model, 'model']] as const);
+  return variants.map(([value, field]): ModelUse => {
+    if (!isObject(value)) return { field, implicit: 'is not a provider and name' };
+    const unknown = Object.keys(value).filter(key => !MODEL_CONFIG_KEYS.has(key));
+    if (unknown.length > 0) {
+      return { field, implicit: `has keys a stored model doesn't take (${unknown.join(', ')})` };
+    }
+    const { provider, name } = value;
+    return typeof provider === 'string' && provider && typeof name === 'string' && name
+      ? { field, model: { provider, name } }
+      : { field, implicit: 'is not a provider and name' };
+  });
+}
+
+/** Keys that name a model wherever they appear in free-form config; `modelSettings` and the like don't. */
+const MODEL_KEY = /^(model|models|modelList)$/;
+
+/**
+ * Every model named in free-form config (default options, which pass unknown keys through to the agent), at any
+ * depth: a string `model` is checked, anything else under a model key is rejected.
+ */
+function namedModelUses(value: unknown, path: string): ModelUse[] {
+  if (Array.isArray(value)) return value.flatMap((item, index) => namedModelUses(item, `${path}[${index}]`));
+  if (!isObject(value)) return [];
+  return Object.entries(value).flatMap(([key, child]): ModelUse[] => {
+    const field = `${path}.${key}`;
+    if (!MODEL_KEY.test(key)) return namedModelUses(child, field);
+    if (child === undefined) return [];
+    return key === 'model' && typeof child === 'string'
+      ? [{ field, model: child }]
+      : [{ field, implicit: 'is not a model id' }];
+  });
+}
+
+/** Models named in default options, per variant when conditional (the editor merges matching variants shallowly). */
+function defaultOptionsUses(defaultOptions: unknown): ModelUse[] {
+  if (Array.isArray(defaultOptions)) {
+    return defaultOptions.flatMap((variant, index) =>
+      namedModelUses(isObject(variant) ? variant.value : undefined, `defaultOptions[${index}].value`),
+    );
+  }
+  return namedModelUses(defaultOptions, 'defaultOptions');
+}
 
 /** OM model values that defer to a default the caller can't see: `'auto'` picks per main model and environment. */
 const IMPLICIT_OM_MODELS = new Set(['auto', 'default']);
@@ -83,8 +152,12 @@ function memoryUses(memory: unknown, field = 'memory'): ModelUse[] {
     const title = isObject(config.options) ? config.options.generateTitle : undefined;
     return [
       ...observationalMemoryUses(config.observationalMemory, `${configPath}.observationalMemory`),
-      ...(isObject(title) && typeof title.model === 'string'
-        ? [{ field: `${configPath}.options.generateTitle.model`, model: title.model }]
+      ...(isObject(title) && title.model !== undefined
+        ? [
+            typeof title.model === 'string'
+              ? { field: `${configPath}.options.generateTitle.model`, model: title.model }
+              : { field: `${configPath}.options.generateTitle.model`, implicit: 'is not a model id' },
+          ]
         : []),
     ];
   });
@@ -107,19 +180,21 @@ function modelListUses(modelList: unknown): ModelUse[] {
 
 /**
  * Models inside a stored agent's input or output processor graph (static or conditional), at every nesting depth:
- * each step's `config.model`. A provider whose config schema needs a model, given none, is implicit; a `model`
- * that isn't a string is too, since the policy can't check it.
+ * every model named in each step's config (`config.model` for the built-in providers). A provider whose config
+ * schema needs a model, given none, is implicit; a `model` that isn't a string is too, since the policy can't check it.
  */
 function processorUses(processors: unknown, field: string, editor: IMastraEditor | undefined): ModelUse[] {
   const stepUses = (step: unknown, path: string): ModelUse[] => {
     if (!isObject(step)) return [];
     const config = isObject(step.config) ? step.config : {};
     const modelField = `${path}.config.model`;
-    if (typeof config.model === 'string') return [{ field: modelField, model: config.model }];
-    if (config.model !== undefined) return [{ field: modelField, implicit: 'is not a model id' }];
+    const named = namedModelUses(config, `${path}.config`);
+    if (config.model !== undefined) return named;
     const provider = typeof step.providerId === 'string' ? editor?.getProcessorProvider?.(step.providerId) : undefined;
     const needsModel = provider?.configSchema.safeParse({}).error?.issues.some(issue => issue.path[0] === 'model');
-    return needsModel ? [{ field: modelField, implicit: 'is not set, so the processor runs on a default model' }] : [];
+    return needsModel
+      ? [...named, { field: modelField, implicit: 'is not set, so the processor runs on a default model' }]
+      : named;
   };
   const entryUses = (entry: unknown, path: string): ModelUse[] => {
     if (!isObject(entry)) return [];
@@ -179,8 +254,8 @@ export function addStoredAgentTools(kit: CatalogueKit) {
 
   /**
    * Enforces the builder model policy on every model the agent will run: its model (each conditional variant),
-   * its enabled fallback models, its memory models and its processor models, including the implicit ones the policy cannot check, which are
-   * rejected. On create, omitted memory gets the builder default: the admin's pinned memory, else Observational
+   * models named in its default options, its enabled fallback models, its memory models and its processor models.
+   * Models the policy can't check (implicit defaults, unknown shapes) are rejected. On create, omitted memory gets the builder default: the admin's pinned memory, else Observational
    * Memory on its default model (the editor's `BUILDER_BASELINE_DEFAULTS`).
    */
   const assertModelsAllowed = async (body: Args, isCreate: boolean) => {
@@ -204,7 +279,9 @@ export function addStoredAgentTools(kit: CatalogueKit) {
     } else {
       uses = memoryUses(body.memory);
     }
+    uses.unshift(...agentModelUses(body.model));
     uses.push(
+      ...defaultOptionsUses(body.defaultOptions),
       ...modelListUses(body.modelList),
       ...processorUses(body.inputProcessors, 'inputProcessors', editor),
       ...processorUses(body.outputProcessors, 'outputProcessors', editor),
@@ -212,17 +289,14 @@ export function addStoredAgentTools(kit: CatalogueKit) {
 
     const { assertModelAllowed: assertAllowed, toModelCandidates } = await import('@mastra/core/agent-builder/ee');
     const problems: string[] = [];
-    for (const use of [
-      ...(body.model !== undefined && body.model !== null ? [{ field: 'model', model: body.model }] : []),
-      ...uses,
-    ]) {
+    for (const use of uses) {
       if ('implicit' in use) {
         problems.push(
           `${use.field}: ${use.implicit}, which the builder model policy cannot check; set an allowed model`,
         );
         continue;
       }
-      const model = use.model as Parameters<typeof assertAllowed>[1];
+      const { model } = use;
       // The allowlist passes what it can't parse (e.g. '' or 'gpt-4o-mini'); here that fails closed.
       if (toModelCandidates(model).length === 0) {
         problems.push(`${use.field}: ${JSON.stringify(use.model)} is not a provider/model id the policy can check`);
