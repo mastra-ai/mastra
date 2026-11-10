@@ -5,7 +5,7 @@ import { z } from 'zod/v4';
 import { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createRoute } from './routes/route-builder';
-import { dispatchRoute, invokeRoute } from './index';
+import { dispatchRoute, invokeRoute, MastraServer } from './index';
 
 const handler = vi.fn(async ({ name, requestContext }: { name: string; requestContext: RequestContext }) => ({
   greeting: `hello ${name}`,
@@ -188,6 +188,112 @@ describe('invokeRoute', () => {
     });
 
     expect(result.status).toBe(422);
+  });
+
+  // invokeRoute shares a pipeline with dispatchRoute but is a public API of its own: these pin
+  // the places where it answers differently from an HTTP request, so the shared code cannot move them.
+  describe('contract it does not share with dispatchRoute', () => {
+    const traceRoute = (overrides: Record<string, unknown> = {}) =>
+      createRoute({
+        method: 'POST',
+        path: '/observability/traces/:traceId',
+        responseType: 'json',
+        handler: async () => ({ ok: true }),
+        ...overrides,
+      } as any);
+    const openMastra = () => new Mastra({ logger: false });
+
+    it('reports the invalid path param first when the path, query and body are all invalid', async () => {
+      const result = await invokeRoute(
+        traceRoute({
+          pathParamSchema: z.object({ traceId: z.string().uuid() }),
+          queryParamSchema: z.object({ limit: z.coerce.number() }),
+          bodySchema: z.object({ name: z.string() }),
+        }),
+        {
+          mastra: openMastra(),
+          requestContext: new RequestContext(),
+          pathParams: { traceId: 'not-a-uuid' },
+          query: { limit: 'many' },
+          body: { name: 1 },
+        },
+      );
+
+      expect(result).toMatchObject({ status: 400, body: { error: 'Invalid path parameters' } });
+    });
+
+    it('throws when a schema fails with something other than a validation error', async () => {
+      const route = traceRoute({
+        bodySchema: z.object({
+          name: z.string().transform(() => {
+            throw new Error('lookup service down');
+          }),
+        }),
+      });
+
+      await expect(
+        invokeRoute(route, {
+          mastra: openMastra(),
+          requestContext: new RequestContext(),
+          pathParams: { traceId: 't1' },
+          body: { name: 'Ada' },
+        }),
+      ).rejects.toThrow('lookup service down');
+    });
+
+    it('answers with the standard error body when the handler raises an exception carrying its own response', async () => {
+      const route = traceRoute({
+        handler: async () => {
+          throw new HTTPException(422, {
+            message: 'Unsupported query',
+            res: new Response(JSON.stringify({ custom: true }), { status: 409 }),
+          });
+        },
+      });
+
+      const result = await invokeRoute(route, {
+        mastra: openMastra(),
+        requestContext: new RequestContext(),
+        pathParams: { traceId: 't1' },
+      });
+
+      expect(result).toEqual({ status: 422, body: { error: 'Unsupported query' } });
+    });
+
+    it('asks authorize about the path under server.apiPrefix even when an adapter is mounted elsewhere', async () => {
+      class MountedServer extends MastraServer<any, any, any> {
+        stream = vi.fn();
+        getParams = vi.fn();
+        sendResponse = vi.fn();
+        registerRoute = vi.fn();
+        registerContextMiddleware = vi.fn();
+        registerAuthMiddleware = vi.fn();
+        registerHttpLoggingMiddleware = vi.fn();
+      }
+      const authorize = vi.fn(async () => true);
+      const mastra = securedMastra({ authorize }, { apiPrefix: '/mastra' });
+      new MountedServer({ app: {}, mastra, prefix: '/mounted' });
+
+      const result = await invokeRoute(traceRoute(), {
+        mastra,
+        requestContext: callerContext(['observability:write']),
+        pathParams: { traceId: 't1' },
+      });
+
+      expect(result.status).toBe(200);
+      expect(authorize.mock.calls[0]?.[0]).toBe('/mastra/observability/traces/t1');
+    });
+
+    it('leaves the segment of a path param that was not supplied empty in the path authorize sees', async () => {
+      const authorize = vi.fn(async () => true);
+
+      await invokeRoute(traceRoute(), {
+        mastra: securedMastra({ authorize }),
+        requestContext: callerContext(['observability:write']),
+      });
+
+      expect(authorize.mock.calls[0]?.[0]).toBe('/api/observability/traces/');
+    });
   });
 });
 

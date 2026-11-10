@@ -1807,7 +1807,38 @@ interface RoutePipelinePolicy {
   honorPublicPaths: boolean;
   /** Path params override same-named query/body fields, instead of the adapters' path < query < body. */
   pathParamsWin: boolean;
+  /**
+   * The path server auth's hooks are asked about. `adapter`: the registered adapter's prefix
+   * (custom routes unprefixed, with their auth config) and unsupplied path params dropped, as a
+   * client URL would be. `apiPrefix`: always under `server.apiPrefix`, each `:param` replaced in place.
+   */
+  authPath: 'adapter' | 'apiPrefix';
+  /** Order inputs are validated in, which decides the error reported when several are invalid. */
+  validationOrder: 'query-body-path' | 'path-query-body';
+  /** A schema failing with something other than a ZodError: answer 400, or let it throw. */
+  nonZodParseError: 'respond' | 'throw';
+  /** Answer with the `Response` an HTTPException carries, instead of the standard error body. */
+  customErrorResponses: boolean;
 }
+
+const DISPATCH_ROUTE_POLICY: RoutePipelinePolicy = {
+  honorPublicPaths: true,
+  pathParamsWin: true,
+  authPath: 'adapter',
+  validationOrder: 'query-body-path',
+  nonZodParseError: 'respond',
+  customErrorResponses: true,
+};
+
+/** `invokeRoute`'s contract as it shipped; changing any of these changes a public API. */
+const INVOKE_ROUTE_POLICY: RoutePipelinePolicy = {
+  honorPublicPaths: false,
+  pathParamsWin: false,
+  authPath: 'apiPrefix',
+  validationOrder: 'path-query-body',
+  nonZodParseError: 'throw',
+  customErrorResponses: false,
+};
 
 /**
  * The path-scoped half of `checkRouteAuth` for a route run in-process: `requiresAuth: false`,
@@ -1851,12 +1882,19 @@ async function checkDispatchedRouteAuth(
 
   // Server auth's authorization hooks see the route's own HTTP path, not the
   // path of whatever request (such as an MCP call) is running it.
-  const adapter = dispatchAdapterInfo.get(mastra);
-  const isCustomRoute = (adapter?.getCustomApiRoutes() ?? mastra.getServer()?.apiRoutes ?? []).includes(
-    route as unknown as ApiRoute,
-  );
-  const prefix = isCustomRoute ? '' : (adapter?.prefix ?? normalizeRoutePath(mastra.getServer()?.apiPrefix ?? '/api'));
-  const path = `${prefix}${fillRoutePath(route.path, pathParams)}` || '/';
+  const apiPrefix = normalizeRoutePath(mastra.getServer()?.apiPrefix ?? '/api');
+  const adapter = policy.authPath === 'adapter' ? dispatchAdapterInfo.get(mastra) : undefined;
+  let path: string;
+  if (policy.authPath === 'adapter') {
+    const isCustomRoute = (adapter?.getCustomApiRoutes() ?? mastra.getServer()?.apiRoutes ?? []).includes(
+      route as unknown as ApiRoute,
+    );
+    path = `${isCustomRoute ? '' : (adapter?.prefix ?? apiPrefix)}${fillRoutePath(route.path, pathParams)}` || '/';
+  } else {
+    path = `${apiPrefix}${route.path.replace(/:(\w+)/g, (_, name: string) =>
+      encodeURIComponent(String(pathParams[name] ?? '')),
+    )}`;
+  }
   const method = route.method;
   const customRouteAuthConfig = adapter?.getCustomRouteAuthConfig();
 
@@ -1915,6 +1953,9 @@ async function runRoutePipeline(
         const { status, body } = resolveRouteValidationError(mastra, route, error, kind);
         return { error: { ok: false, status, body } };
       }
+      if (policy.nonZodParseError === 'throw') {
+        throw error;
+      }
       return {
         error: {
           ok: false,
@@ -1928,26 +1969,42 @@ async function runRoutePipeline(
     }
   };
 
-  const query = await validate('query', 'query parameters', () => parseRouteQueryParams(route, input.query ?? {}));
-  if ('error' in query) return query.error;
-
-  let body: unknown = input.body;
-  if (body !== undefined || route.bodySchema) {
-    const parsedBody = await validate('body', 'request body', () => parseRouteBody(route, body));
-    if ('error' in parsedBody) return parsedBody.error;
-    body = parsedBody.value;
+  const parsed: { query?: Record<string, any>; body?: unknown; path?: Record<string, any> } = { body: input.body };
+  const steps = {
+    query: async () => {
+      const result = await validate('query', 'query parameters', () => parseRouteQueryParams(route, input.query ?? {}));
+      if ('error' in result) return result.error;
+      parsed.query = result.value;
+    },
+    body: async () => {
+      if (input.body === undefined && !route.bodySchema) return;
+      const result = await validate('body', 'request body', () => parseRouteBody(route, input.body));
+      if ('error' in result) return result.error;
+      parsed.body = result.value;
+    },
+    path: async () => {
+      const result = await validate('path', 'path parameters', () =>
+        parseRoutePathParams(route, input.pathParams ?? {}),
+      );
+      if ('error' in result) return result.error;
+      parsed.path = result.value;
+    },
+  };
+  const order =
+    policy.validationOrder === 'path-query-body'
+      ? ([steps.path, steps.query, steps.body] as const)
+      : ([steps.query, steps.body, steps.path] as const);
+  for (const step of order) {
+    const validationError = await step();
+    if (validationError) return validationError;
   }
-
-  const pathParams = await validate('path', 'path parameters', () =>
-    parseRoutePathParams(route, input.pathParams ?? {}),
-  );
-  if ('error' in pathParams) return pathParams.error;
+  const { body } = parsed;
 
   const params = {
-    ...(policy.pathParamsWin ? {} : pathParams.value),
-    ...query.value,
+    ...(policy.pathParamsWin ? {} : parsed.path),
+    ...parsed.query,
     ...(typeof body === 'object' ? body : {}),
-    ...(policy.pathParamsWin ? pathParams.value : {}),
+    ...(policy.pathParamsWin ? parsed.path : {}),
   };
 
   const authError = await authorizeRoute(mastra, route, params, requestContext);
@@ -1958,7 +2015,7 @@ async function runRoutePipeline(
   try {
     return { ok: true, result: await route.handler({ ...params, ...context }) };
   } catch (error) {
-    const customResponse = getCustomHTTPExceptionResponse(error);
+    const customResponse = policy.customErrorResponses ? getCustomHTTPExceptionResponse(error) : undefined;
     if (customResponse) {
       const text = await customResponse.text();
       let responseBody: unknown = text;
@@ -2004,7 +2061,7 @@ export async function dispatchRoute(
   input: DispatchRouteInput,
   context: ServerContext,
 ): Promise<DispatchRouteResult> {
-  return runRoutePipeline(route, input, context, { honorPublicPaths: true, pathParamsWin: true });
+  return runRoutePipeline(route, input, context, DISPATCH_ROUTE_POLICY);
 }
 
 export interface InvokeRouteOptions {
@@ -2043,8 +2100,9 @@ export interface InvokeRouteResult {
  * HTTP-only `request`, `registeredTools`, `taskStore` or `routePrefix`, so
  * routes that read those are not suitable.
  *
- * Shares its pipeline with `dispatchRoute`, which also honors public paths,
- * passes a full `ServerContext` and returns raw handler results.
+ * Shares its pipeline with `dispatchRoute`, which follows the HTTP request more
+ * closely (public paths, the adapter's prefix, custom error responses), passes a
+ * full `ServerContext` and returns raw handler results.
  */
 export async function invokeRoute(route: ServerRoute, options: InvokeRouteOptions): Promise<InvokeRouteResult> {
   if (route.responseType !== 'json') {
@@ -2061,7 +2119,7 @@ export async function invokeRoute(route: ServerRoute, options: InvokeRouteOption
       requestContext: options.requestContext,
       abortSignal: options.abortSignal ?? new AbortController().signal,
     },
-    { honorPublicPaths: false, pathParamsWin: false },
+    INVOKE_ROUTE_POLICY,
   );
   return result.ok ? { status: 200, body: result.result } : { status: result.status, body: result.body };
 }
