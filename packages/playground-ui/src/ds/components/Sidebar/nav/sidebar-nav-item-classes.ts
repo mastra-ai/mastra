@@ -48,25 +48,20 @@ const nestedExpandedItemClasses = (level: number) => {
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
 // current (`foreground`). Icons inherit that colour — lucide strokes with
 // `currentColor` — so there is nothing to restate per state.
-// The row has no fill of its own, so hover and current paint the row's own background:
-// one box for both, edge to edge, and nothing in between. No pressed rung: a click
-// makes the row current, so a darker press would only flash before it. Rows in a list
-// switch instantly, like menu rows: neither the fill nor the label fades. This sits on
-// the surface: the outer wrapper on rows with a trailing action, the link itself otherwise.
-const idleSurface = cn(
-  'rounded-lg text-muted-foreground transition-none hover:text-foreground',
-  'hover:not-disabled:not-aria-disabled:bg-fill-subtle focus-visible:bg-fill-subtle',
-);
+// One fill per row, painted on the row's own box: hover and current never stack or differ
+// in size, and there is no pressed state to flash before the row becomes current. This sits
+// on the surface: the outer wrapper on rows with a trailing action, the link itself otherwise.
+const idleSurface = 'rounded-lg text-muted-foreground hover:bg-fill-subtle hover:text-foreground';
 
-const activeSurface = 'bg-fill text-foreground hover:not-disabled:not-aria-disabled:bg-fill focus-visible:bg-fill';
+const activeSurface = 'rounded-lg bg-fill text-foreground';
 
-const featuredSurface = cn(
-  'my-2 border border-transparent bg-brand-green text-black hover:text-black hover:brightness-95',
-  'hover:not-disabled:not-aria-disabled:bg-brand-green focus-visible:bg-brand-green',
-);
+const featuredSurface = 'my-2 rounded-lg border border-transparent bg-brand-green text-black hover:brightness-95';
 
-export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) =>
-  cn(idleSurface, isActive && activeSurface, isFeatured && featuredSurface);
+export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) => {
+  if (isFeatured) return featuredSurface;
+  if (isActive) return activeSurface;
+  return idleSurface;
+};
 
 export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLayoutOptions) =>
   cn(
