@@ -120,9 +120,11 @@ describe('Switch', () => {
     expect(thumbEl?.className).toContain('rounded-full');
     expect(thumbEl?.className).toContain('transition-[translate]');
     expect(thumbEl?.className).toContain('data-[checked]:translate-x-3');
-    expect(thumbEl?.className).toContain('group-[:hover:not([data-disabled])]/switch:after:translate-x-0.5');
     expect(thumbEl?.className).toContain(
-      'group-[:hover:not([data-disabled])]/switch:data-[checked]:after:-translate-x-0.5',
+      '[@media(hover:hover)]:group-[:hover:not([data-disabled])]/switch:after:translate-x-0.5',
+    );
+    expect(thumbEl?.className).toContain(
+      '[@media(hover:hover)]:group-[:hover:not([data-disabled])]/switch:data-[checked]:after:-translate-x-0.5',
     );
     expect(thumbEl?.className).not.toMatch(/\bw-\d/);
   });

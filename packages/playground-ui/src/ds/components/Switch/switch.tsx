@@ -61,8 +61,8 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
             'data-[checked]:translate-x-3',
             "after:absolute after:inset-0 after:-z-10 after:rounded-full after:bg-inherit after:content-['']",
             'after:transition-[translate] after:duration-fast after:ease-out-custom motion-reduce:after:transition-none',
-            'group-[:hover:not([data-disabled])]/switch:after:translate-x-0.5',
-            'group-[:hover:not([data-disabled])]/switch:data-[checked]:after:-translate-x-0.5',
+            '[@media(hover:hover)]:group-[:hover:not([data-disabled])]/switch:after:translate-x-0.5',
+            '[@media(hover:hover)]:group-[:hover:not([data-disabled])]/switch:data-[checked]:after:-translate-x-0.5',
           )}
         >
           {shouldRenderIcon ? <SwitchThumbIcon checkedIcon={onIcon} icon={singleIcon} uncheckedIcon={offIcon} /> : null}
