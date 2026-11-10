@@ -258,7 +258,7 @@ The worker build reads each workflow chain statically, so arguments must be reso
 | `.commit()` | No arguments |
 | Any other method | Not supported |
 
-Condition functions and `.sleep()` or `.sleepUntil()` function identifiers are called as activities named after the identifier, but the plugin only generates activities for steps and `.map()` callbacks. Register these functions yourself in `Worker.create({ activities })`, or the run fails when it reaches them.
+Condition functions and `.sleep()` or `.sleepUntil()` function identifiers are called as activities named after the identifier, but the plugin only generates activities for steps and `.map()` callbacks. Register these functions yourself in `Worker.create({ activities })`, or the run fails when it reaches them. These functions receive `inputData`, `runId`, `workflowId`, `resourceId`, and `requestContext` as a plain object. They don't receive `getInitData()`.
 
 Nested workflows passed to `.then()` or `.parallel()` run as Temporal child workflows. Each one is registered as its own workflow type and appears as a separate execution in the Temporal UI. A suspended step inside a child workflow can't be resumed through the parent run.
 
@@ -280,7 +280,7 @@ Each step runs as a Temporal activity. Its `execute` function receives:
 - `suspend()`, except in `.foreach()` steps
 - `mastra`, when the step's module can import the Mastra instance
 
-Other `execute` parameters, such as `state`, `setState()`, `getStepResult()`, `bail()`, `abort()`, `writer`, and `tracingContext`, aren't available. Steps in a nested workflow receive the parent's `runId`, `workflowId`, `resourceId`, and request context.
+Other `execute` parameters, such as `state`, `setState()`, `getStepResult()`, `bail()`, `abort()`, `writer`, and `tracingContext`, aren't available. Steps in a nested workflow receive the parent's `runId`, `resourceId`, and request context, and the nested workflow's own `workflowId`.
 
 ### Bundling and worker operation
 
