@@ -49,6 +49,12 @@ export function viewIssues(widget: DashboardWidget, check: KindCheck, scope: Das
   let shown = 0;
   for (const [index, view] of widget.views.entries()) {
     if (!inScope(view, scope)) continue;
+    // Every view at the scope is an option in the card's menu, picked by its value; two with one value would
+    // leave one unreachable. A view with problems still counts, as the renderer numbers it once they're fixed.
+    const value = viewValue(view.label, shown++);
+    const repeated = values.has(value);
+    values.add(value);
+
     const options = check.optionsSchema.safeParse(view.options ?? {});
     if (!options.success) {
       const found = options.error.issues.length ? options.error.issues : [{ path: [], message: 'Invalid options' }];
@@ -59,16 +65,10 @@ export function viewIssues(widget: DashboardWidget, check: KindCheck, scope: Das
     }
     // Columns at the other scope are left out before the kind sees them.
     const resolved = { ...view, columns: view.columns?.filter(c => inScope(c, scope)), options: options.data };
-    const found: WidgetIssue[] = (check.issues?.(resolved) ?? []).map(message => ({ path: ['views', index], message }));
-    // Each view at the scope is an option in the card's menu, picked by its value; two with one value would leave one unreachable.
-    const value = viewValue(view.label, shown);
-    if (values.has(value)) {
-      found.push({ path: ['views', index], message: `another view is already labelled '${view.label ?? value}'` });
+    issues.push(...(check.issues?.(resolved) ?? []).map(message => ({ path: ['views', index], message })));
+    if (repeated) {
+      issues.push({ path: ['views', index], message: `another view is already labelled '${view.label ?? value}'` });
     }
-    issues.push(...found);
-    if (found.length) continue;
-    values.add(value);
-    shown++;
   }
   return issues;
 }

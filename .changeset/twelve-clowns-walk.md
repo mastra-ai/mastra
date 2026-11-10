@@ -2,7 +2,7 @@
 '@mastra/mcp-apps-components': minor
 ---
 
-Added `@mastra/mcp-apps-components/dashboards`, a strict schema for storing dashboard definitions. Unlike core's `dashboardDefinitionSchema`, it only accepts definitions the dashboard renderer can draw: built-in widget kinds only, each view's options checked against its kind, and each kind's own checks run at both org and project scope. Every problem is a zod issue with a path. Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have, point at the view, such as `rows.0.widgets.1.views.0`, and their message says what's wrong.
+Added `@mastra/mcp-apps-components/dashboards`, a strict schema for storing dashboard definitions. Unlike core's `dashboardDefinitionSchema`, it only accepts definitions the dashboard renderer can draw: built-in widget kinds only, each view's options checked against its kind, `columns` only on table views, and each kind's own checks run at both org and project scope. Every problem is a zod issue with a path. Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have, point at the view, such as `rows.0.widgets.1.views.0`, and their message says what's wrong.
 
 **Before**
 

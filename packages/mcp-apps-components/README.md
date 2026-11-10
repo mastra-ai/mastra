@@ -217,6 +217,7 @@ On top of core's checks, the schema:
 
 - Rejects widget kinds other than `kpis`, `table`, `timeseries` and `scores`.
 - Checks each view's `options`, and each table column's `options`, against the kind's own schema.
+- Rejects `columns` on views of widgets that aren't tables. The renderer ignores them, but they usually mean the widget was written as another kind.
 - Runs each kind's checks, such as a KPI reading a query its view has, or a chart's series all fitting its buckets.
 - Checks the widget at both `org` and `project` scope, so a widget that only breaks on one kind of page is rejected too.
 

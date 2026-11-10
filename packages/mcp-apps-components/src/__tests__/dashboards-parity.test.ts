@@ -4,7 +4,13 @@ import { describeIssue, prepareWidget } from '@mastra/playground-ui/domains/dash
 import { describe, expect, it } from 'vitest';
 import { inScope, KIND_CHECKS, viewIssues } from '../dashboard-views';
 import type { DashboardScope } from '../dashboard-views';
-import { BROKEN_DASHBOARDS, metricsWidgets } from './fixtures/broken-dashboards';
+import {
+  BROKEN_DASHBOARDS,
+  kpis,
+  metricsWidgets,
+  readsMissingQuery,
+  threeKpiViews,
+} from './fixtures/broken-dashboards';
 
 const registry = new Map(BUILT_IN_WIDGET_KINDS.map(kind => [kind.kind, kind]));
 const scopes: DashboardScope[] = ['org', 'project'];
@@ -33,4 +39,14 @@ describe("the strict schema's view checks", () => {
       else expect(prepared.ok).not.toBe(false);
     },
   );
+
+  it('report a later issue as the renderer does once the views before it are fixed', () => {
+    const broken = threeKpiViews(readsMissingQuery);
+    const [, second] = viewIssues(broken, KIND_CHECKS.kpis, 'project');
+
+    const fixed = threeKpiViews(kpis.views[0]!);
+
+    expect(second).toBeDefined();
+    expect(prepareWidget(fixed, registry, 'project')).toEqual({ ok: false, message: describeIssue(second) });
+  });
 });
