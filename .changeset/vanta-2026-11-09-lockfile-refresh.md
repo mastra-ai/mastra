@@ -1,4 +1,4 @@
 ---
 ---
 
-Lockfile-only refresh for Vanta findings: `@microsoft/teams.apps` 2.1.1 → 2.2.0 in the root lockfile (moves `@azure/msal-node` 5.6.0 to 7.x), plus in-range transitive updates in the MongoDB Bedrock and GenUI template lockfiles. No published package manifests change.
+Security dependency refresh. The Teams adapter now installs a patched Microsoft authentication library (`@azure/msal-node` 7.x), and the MongoDB Bedrock and GenUI templates now install patched versions of `ws`, `jose`, `yaml`, `protobufjs`, `@hono/node-server`, `chat`, `katex` and GraphQL tools. No published package changes.
