@@ -185,12 +185,55 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(STREAM_LIMIT_FRAME)).toEqual({ kind: 'stream-cut' });
   });
 
+  it('classifies the request_timeout frame as @ai-sdk/openai raises it, despite its derived 504', async () => {
+    const OUTPUT_FRAME = {
+      type: 'response.output_text.delta',
+      content_index: 0,
+      delta: 'Partial output.',
+      item_id: 'msg-1',
+      logprobs: [],
+      output_index: 0,
+      sequence_number: 1,
+    };
+    const providerError = async (frames: Array<Record<string, unknown>>) => {
+      const { createOpenAI } = await import('@ai-sdk/openai');
+      const openai = createOpenAI({
+        apiKey: 'test-key',
+        fetch: async () =>
+          new Response(frames.map(frame => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(''), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      });
+      try {
+        const { stream } = await openai.responses('gpt-5.4').doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        });
+        for await (const chunk of stream) {
+          if (chunk.type === 'error') return chunk.error;
+        }
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Expected the stream to fail');
+    };
+
+    // After output the frame arrives as a stream error chunk; before any output the provider throws it.
+    const midStream = await providerError([OUTPUT_FRAME, STREAM_LIMIT_FRAME]);
+    const beforeOutput = await providerError([STREAM_LIMIT_FRAME]);
+    expect(midStream).toMatchObject({ code: 'request_timeout', statusCode: 504 });
+    expect(beforeOutput).toMatchObject({ statusCode: 504, data: STREAM_LIMIT_FRAME });
+    expect(classifyRotationError(midStream)).toEqual({ kind: 'stream-cut' });
+    expect(classifyRotationError(beforeOutput)).toEqual({ kind: 'stream-cut' });
+  });
+
   it('keeps hopping on network failures and 5xx that never got a response', () => {
     const refused = new Error('fetch failed', {
       cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:443'), { code: 'ECONNREFUSED' }),
     });
     expect(classifyRotationError(refused)).toEqual({ kind: 'hop' });
     expect(classifyRotationError(apiError(502, { url: CODEX_URL }))).toEqual({ kind: 'hop' });
+    expect(classifyRotationError(apiError(504, { url: CODEX_URL }))).toEqual({ kind: 'hop' });
     expect(classifyRotationError({ type: 'error', error: { type: 'server_error', message: 'boom' } })).toEqual({
       kind: 'hop',
     });

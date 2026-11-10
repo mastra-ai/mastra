@@ -89,6 +89,7 @@ import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import {
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
+  isStreamCutAfterResponse,
   MODEL_FALLBACK_STATE_KEY,
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
@@ -1544,6 +1545,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       new CyberRefusalHandler(),
       new StreamErrorRetryProcessor({
         matchers: [
+          // Account rotation owns a stream the provider cut after accepting the
+          // request, with its own per-step budget. The matcher walk stops at the
+          // first match, so this entry claims the cut before the transient
+          // matchers below reach its socket-error cause (or the 504 derived for
+          // a duration-limit frame) and declines with no retries.
+          { match: isStreamCutAfterResponse, maxRetries: 0 },
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
           {
             match: isTransientConnectionError,
@@ -1564,7 +1571,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // Rotation runs last in the error lane: a transient error reaching here
       // means StreamErrorRetryProcessor already spent its budget, which is the
       // hop condition; quota/auth errors were never transient-matched and
-      // rotate immediately.
+      // rotate immediately, and stream cuts arrive with no retry spent.
       new AccountRotationProcessor({
         credentialStore: authStorage,
         // Same budget core enforces (maxProcessorRetries below): past it, core

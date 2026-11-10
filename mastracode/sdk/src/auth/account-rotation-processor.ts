@@ -136,10 +136,10 @@ export type RotationClassification =
   | { kind: 'never' };
 
 /**
- * Extra same-account retries for a stream the provider cut after accepting the
+ * Same-account retries for a stream the provider cut after accepting the
  * request. Each one can cost a full stream (900 s on the ChatGPT Codex route),
- * so the budget is small; `StreamErrorRetryProcessor` has usually spent one
- * retry already.
+ * so the budget is small. This is the whole budget: Mastra Code's
+ * `StreamErrorRetryProcessor` leaves these errors to this processor.
  */
 export const MAX_STREAM_CUT_RETRIES = 2;
 
@@ -214,6 +214,17 @@ function isNetworkErrorLike(error: unknown): boolean {
 /** The code the ChatGPT Codex backend puts on the error frame it sends when it ends a stream at 900 s. */
 const STREAM_DURATION_LIMIT_CODE = 'request_timeout';
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+/** The `error.code` of a stream error frame: the raw frame, or the frame `@ai-sdk/openai` keeps as `data`. */
+function streamErrorFrameCode(value: Record<string, unknown>): unknown {
+  const data = asRecord(value.data);
+  const frame = value.type === 'error' ? value : data?.type === 'error' ? data : undefined;
+  return asRecord(frame?.error)?.code;
+}
+
 /**
  * Whether the provider accepted the request and then the response stream died:
  * the AI SDK reports a body that fails after a 2xx response as
@@ -221,19 +232,22 @@ const STREAM_DURATION_LIMIT_CODE = 'request_timeout';
  * Codex backend ends streams at 900 s, sometimes with a `request_timeout` error
  * frame first. Either way the account and the provider answered, so this is
  * not an outage, and another account would be cut the same way.
+ *
+ * `@ai-sdk/openai` raises that frame with `code: 'request_timeout'` and a
+ * derived `statusCode: 504`, so callers must check this before any 5xx rule.
+ * Mastra Code's transient retry matchers call it first so that account
+ * rotation is the only processor that retries these errors.
  */
-function isStreamCutAfterResponse(error: unknown): boolean {
+export function isStreamCutAfterResponse(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
-    if (typeof current !== 'object') break;
-    const { statusCode, status, code, error: nested } = current as Record<string, unknown>;
+    const record = asRecord(current);
+    if (!record) break;
+    const { statusCode, status, code } = record;
     const httpStatus = typeof statusCode === 'number' ? statusCode : status;
     if (typeof httpStatus === 'number' && httpStatus >= 200 && httpStatus < 300) return true;
-    if (code === STREAM_DURATION_LIMIT_CODE) return true;
-    if (nested && typeof nested === 'object' && (nested as { code?: unknown }).code === STREAM_DURATION_LIMIT_CODE) {
-      return true;
-    }
-    current = (current as { cause?: unknown }).cause;
+    if (code === STREAM_DURATION_LIMIT_CODE || streamErrorFrameCode(record) === STREAM_DURATION_LIMIT_CODE) return true;
+    current = record.cause;
   }
   return false;
 }
@@ -250,12 +264,13 @@ export function classifyRotationError(error: unknown): RotationClassification {
   if (isProviderAuthRequiredError(error)) {
     return { kind: 'rotate', reason: 'auth-failed' };
   }
+  // Before the status, wording and network checks: the duration-limit frame
+  // carries a derived 504, and a cut body's socket-error cause reads as
+  // network-like. Each of those would hop.
+  if (isStreamCutAfterResponse(error)) return { kind: 'stream-cut' };
   const status = readErrorStatus(error);
   const byStatus = rotationFromStatus(status);
   if (byStatus) return byStatus;
-  // Before the wording and network checks: a cut stream reads as network-like
-  // (its cause is a socket error) or as `server_error`, both of which would hop.
-  if (isStreamCutAfterResponse(error)) return { kind: 'stream-cut' };
   // Wording only speaks for a statusless or 400 failure, where providers put quota and rate-limit text.
   const byKind =
     status === undefined || status === 400 ? ROTATION_BY_PROVIDER_KIND[classifyProviderError(error)] : undefined;
