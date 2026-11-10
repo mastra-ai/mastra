@@ -2,7 +2,7 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -15,8 +15,8 @@ import { useSandboxEnvMutations, useSandboxEnvsQuery } from '../../../../../hook
 import type { SandboxEnv, SandboxEnvAppliesTo } from '../../../workspaces/services/sandbox-envs';
 
 const APPLIES_TO: { value: SandboxEnvAppliesTo; label: string }[] = [
-  { value: 'runtime', label: 'Runtime' },
   { value: 'build', label: 'Build' },
+  { value: 'runtime', label: 'Runtime' },
   { value: 'both', label: 'Both' },
 ];
 
@@ -75,7 +75,9 @@ function AppliesToSelect({
   onChange: (next: SandboxEnvAppliesTo) => void;
 }) {
   return (
-    <Select
+    <SegmentedControl
+      aria-label={label}
+      size="sm"
       value={value}
       disabled={disabled}
       onValueChange={next => {
@@ -83,43 +85,45 @@ function AppliesToSelect({
         if (picked) onChange(picked.value);
       }}
     >
-      <SelectTrigger size="sm" aria-label={label} className="w-28">
-        {APPLIES_TO.find(option => option.value === value)?.label}
-      </SelectTrigger>
-      <SelectContent>
-        {APPLIES_TO.map(option => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      {APPLIES_TO.map(option => (
+        <SegmentedControlItem key={option.value} value={option.value}>
+          {option.label}
+        </SegmentedControlItem>
+      ))}
+    </SegmentedControl>
   );
 }
 
 function SandboxEnvRow({ env, disabled, mutations }: { env: SandboxEnv; disabled: boolean; mutations: Mutations }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
+  const [appliesTo, setAppliesTo] = useState<SandboxEnvAppliesTo>(env.appliesTo);
 
+  const open = () => {
+    setAppliesTo(env.appliesTo);
+    setValue('');
+    setEditing(true);
+  };
   const close = () => {
     setEditing(false);
     setValue('');
   };
+  const callbacks = {
+    onSuccess: () => {
+      close();
+      toast.success(`Saved ${env.name}`);
+    },
+    onError: (error: unknown) => toast.error(errorMessage(error, 'Failed to save the variable')),
+  };
 
+  const changed = Boolean(value) || appliesTo !== env.appliesTo;
   const save = (event: FormEvent) => {
     event.preventDefault();
-    if (!value) return;
-    mutations.set.mutate(
-      { name: env.name, value, appliesTo: env.appliesTo },
-      {
-        onSuccess: () => {
-          close();
-          toast.success(`Saved ${env.name}`);
-        },
-        onError: error => toast.error(errorMessage(error, 'Failed to save the variable')),
-      },
-    );
+    // A new value is sent with where it applies; otherwise only where it applies changes.
+    if (value) mutations.set.mutate({ name: env.name, value, appliesTo }, callbacks);
+    else if (appliesTo !== env.appliesTo) mutations.updateAppliesTo.mutate({ name: env.name, appliesTo }, callbacks);
   };
+  const pending = mutations.set.isPending || mutations.updateAppliesTo.isPending;
 
   return (
     <SettingsRow label={<span className="font-mono">{env.name}</span>}>
@@ -132,11 +136,17 @@ function SandboxEnvRow({ env, disabled, mutations }: { env: SandboxEnv; disabled
             autoFocus
             className="w-64 font-mono"
             aria-label={`New value for ${env.name}`}
-            placeholder="New value"
+            placeholder="New value (leave empty to keep)"
             value={value}
             onChange={event => setValue(event.target.value)}
           />
-          <Button type="submit" size="sm" disabled={!value || mutations.set.isPending}>
+          <AppliesToSelect
+            label={`Where ${env.name} applies`}
+            value={appliesTo}
+            disabled={false}
+            onChange={setAppliesTo}
+          />
+          <Button type="submit" size="sm" disabled={!changed || pending}>
             Save
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={close}>
@@ -144,34 +154,20 @@ function SandboxEnvRow({ env, disabled, mutations }: { env: SandboxEnv; disabled
           </Button>
         </form>
       ) : (
-        <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
-          <Txt
-            as="span"
-            variant="body-sm"
-            tone="muted"
-            className="w-40 font-mono"
-            aria-label={`${env.name} value hidden`}
-          >
+        <div className="flex w-full flex-wrap items-center gap-3 lg:justify-end">
+          <Txt as="span" variant="body-sm" tone="muted" className="font-mono" aria-label={`${env.name} value hidden`}>
             {MASK}
           </Txt>
-          <AppliesToSelect
-            label={`Where ${env.name} applies`}
-            value={env.appliesTo}
-            disabled={disabled}
-            onChange={appliesTo =>
-              mutations.updateAppliesTo.mutate(
-                { name: env.name, appliesTo },
-                { onError: error => toast.error(errorMessage(error, 'Failed to update the variable')) },
-              )
-            }
-          />
+          <Txt as="span" variant="body-sm" className="w-16" aria-label={`${env.name} applies to`}>
+            {APPLIES_TO.find(option => option.value === env.appliesTo)?.label}
+          </Txt>
           <Button
             variant="ghost"
             size="sm"
             icon={<Pencil />}
             aria-label={`Edit ${env.name}`}
             disabled={disabled}
-            onClick={() => setEditing(true)}
+            onClick={open}
           >
             Edit
           </Button>

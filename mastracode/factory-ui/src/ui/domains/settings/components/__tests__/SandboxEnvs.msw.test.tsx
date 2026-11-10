@@ -81,9 +81,8 @@ async function section() {
   return within(heading.closest('section')!);
 }
 
-async function pickAppliesTo(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, label: string) {
-  await user.click(trigger);
-  await user.click(await screen.findByRole('option', { name: label }));
+async function pickAppliesTo(user: ReturnType<typeof userEvent.setup>, group: HTMLElement, label: string) {
+  await user.click(within(group).getByRole('radio', { name: label }));
 }
 
 describe('Environment variables settings', () => {
@@ -97,7 +96,9 @@ describe('Environment variables settings', () => {
     expect(vars.getByText('NPM_TOKEN')).toBeInTheDocument();
     expect(vars.getByLabelText('DATABASE_URL value hidden')).toHaveTextContent('••••••••••••');
     expect(vars.queryByRole('button', { name: /reveal|show/i })).not.toBeInTheDocument();
-    expect(vars.getByRole('combobox', { name: 'Where NPM_TOKEN applies' })).toHaveTextContent('Build');
+    expect(vars.getByLabelText('NPM_TOKEN applies to')).toHaveTextContent('Build');
+    // Where it applies is read-only until Edit.
+    expect(vars.queryByRole('radiogroup', { name: 'Where NPM_TOKEN applies' })).not.toBeInTheDocument();
     expect(vars.getByRole('textbox', { name: 'Variable name' })).toBeInTheDocument();
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
     expect(headings).toEqual(['Environment', 'Environment variables', 'Builds', 'Danger zone']);
@@ -115,7 +116,7 @@ describe('Environment variables settings', () => {
     await user.type(valueInput, 'sk-123');
     // A textbox, not a password field: what you type is visible until it's saved.
     expect(valueInput).toHaveValue('sk-123');
-    await pickAppliesTo(user, vars.getByRole('combobox', { name: 'Where the new variable applies' }), 'Both');
+    await pickAppliesTo(user, vars.getByRole('radiogroup', { name: 'Where the new variable applies' }), 'Both');
     await user.click(vars.getByRole('button', { name: 'Add' }));
 
     await waitFor(() =>
@@ -151,18 +152,39 @@ describe('Environment variables settings', () => {
     );
   });
 
-  it('changes where a variable applies with PATCH and no value', async () => {
+  it('changes where a variable applies from Edit with PATCH and no value', async () => {
     const requests = useSandboxEnvsServer([env('API_KEY', 'runtime')]);
     const user = userEvent.setup();
 
     renderSettings();
 
     const vars = await section();
-    await pickAppliesTo(user, await vars.findByRole('combobox', { name: 'Where API_KEY applies' }), 'Build');
+    await user.click(await vars.findByRole('button', { name: 'Edit API_KEY' }));
+    const group = vars.getByRole('radiogroup', { name: 'Where API_KEY applies' });
+    expect(within(group).getByRole('radio', { name: 'Runtime' })).toHaveAttribute('aria-checked', 'true');
+    expect(vars.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await pickAppliesTo(user, group, 'Build');
+    await user.click(vars.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(requests).toEqual([{ method: 'PATCH', name: 'API_KEY', body: { appliesTo: 'build' } }]));
+    await waitFor(() => expect(vars.getByLabelText('API_KEY applies to')).toHaveTextContent('Build'));
+    expect(vars.queryByRole('radiogroup', { name: 'Where API_KEY applies' })).not.toBeInTheDocument();
+  });
+
+  it('sends a new value and where it applies together with PUT', async () => {
+    const requests = useSandboxEnvsServer([env('API_KEY', 'runtime')]);
+    const user = userEvent.setup();
+
+    renderSettings();
+
+    const vars = await section();
+    await user.click(await vars.findByRole('button', { name: 'Edit API_KEY' }));
+    await user.type(vars.getByRole('textbox', { name: 'New value for API_KEY' }), 'rotated');
+    await pickAppliesTo(user, vars.getByRole('radiogroup', { name: 'Where API_KEY applies' }), 'Both');
+    await user.click(vars.getByRole('button', { name: 'Save' }));
+
     await waitFor(() =>
-      expect(vars.getByRole('combobox', { name: 'Where API_KEY applies' })).toHaveTextContent('Build'),
+      expect(requests).toEqual([{ method: 'PUT', name: 'API_KEY', body: { value: 'rotated', appliesTo: 'both' } }]),
     );
   });
 
@@ -229,7 +251,6 @@ describe('Environment variables settings', () => {
     expect(vars.getByRole('textbox', { name: 'Variable name' })).toBeDisabled();
     expect(vars.getByLabelText('Variable value')).toBeDisabled();
     expect(vars.getByRole('button', { name: 'Edit API_KEY' })).toBeDisabled();
-    expect(vars.getByRole('combobox', { name: 'Where API_KEY applies' })).toBeDisabled();
     expect(vars.getByRole('button', { name: 'Add' })).toBeDisabled();
   });
 });
