@@ -122,7 +122,7 @@ export function WorkItemCardRows({
       <CardActions
         actions={actions}
         beforeStart={beforeStart}
-        trailing={<WorkItemActivity activity={activity} actors={actors} />}
+        trailing={<WorkItemActivity activity={activity} actors={actors} board={board} />}
       />
     </>
   );
