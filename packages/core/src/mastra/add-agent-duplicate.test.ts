@@ -40,6 +40,40 @@ describe.each([
   });
 });
 
+describe('Mastra.addAgent with stored agents', () => {
+  it('preserves the registered agent when a published editor hydrates another stored version', () => {
+    const mastra = new Mastra({ logger: false });
+    const registered = makeAgent('stored-agent');
+    const hydratedVersion = makeAgent('stored-agent');
+
+    mastra.addAgent(registered, 'stored-agent', { source: 'stored' });
+
+    expect(() => mastra.addAgent(hydratedVersion, 'stored-agent', { source: 'stored' })).not.toThrow();
+    expect(mastra.getAgent('stored-agent')).toBe(registered);
+    expect(hydratedVersion.getMastraInstance()).toBeUndefined();
+  });
+
+  it('still rejects a stored agent that conflicts with a code-defined registration', () => {
+    const mastra = new Mastra({ logger: false });
+    const registered = makeAgent('code-agent');
+    mastra.addAgent(registered, 'shared');
+
+    expect(() => mastra.addAgent(makeAgent('stored-agent'), 'shared', { source: 'stored' })).toThrow(
+      'Agent with key shared already exists',
+    );
+    expect(mastra.getAgent('shared')).toBe(registered);
+  });
+
+  it('still rejects a code-defined agent that conflicts with a stored registration', () => {
+    const mastra = new Mastra({ logger: false });
+    const registered = makeAgent('stored-agent');
+    mastra.addAgent(registered, 'shared', { source: 'stored' });
+
+    expect(() => mastra.addAgent(makeAgent('code-agent'), 'shared')).toThrow('Agent with key shared already exists');
+    expect(mastra.getAgent('shared')).toBe(registered);
+  });
+});
+
 describe('Mastra.addAgent with ToolLoopAgent inputs', () => {
   it('keeps re-registration of the same input idempotent and rejects a different input', () => {
     const mastra = new Mastra({ logger: false });

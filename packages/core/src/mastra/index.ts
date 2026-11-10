@@ -2822,9 +2822,12 @@ export class Mastra<
    *
    * This method allows dynamic registration of agents after the Mastra instance
    * has been created. The agent will be initialized with the current logger.
-   * Re-registering the same instance under the same key is a no-op.
+   * Re-registering the same instance under the same key is a no-op. Rehydrating
+   * a stored agent under an existing stored-agent key also leaves the original
+   * registration unchanged.
    *
-   * @throws {MastraError} When a different agent with the same key already exists
+   * @throws {MastraError} When a different agent with the same key already exists,
+   *   except when both registrations have source 'stored'
    *
    * @example
    * ```typescript
@@ -3021,7 +3024,8 @@ export class Mastra<
     if (agents[agentKey]) {
       if (
         agents[agentKey] === mastraAgent ||
-        (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey])
+        (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
+        (agents[agentKey].source === 'stored' && options?.source === 'stored')
       ) {
         return;
       }
