@@ -16,6 +16,7 @@ import { ProjectBoardCache, toBoardSource } from './project-boards.js';
 import type { ProjectBoardCacheOptions } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
+import { reviewBoard } from './review.js';
 import { boardDefinitionOf } from './stored-board.js';
 import { workBoard } from './work.js';
 
@@ -375,6 +376,52 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     ]);
     expect((await a.boards.get(scope, 'release'))!).toMatchObject({ name: 'Stored release', revision: 1 });
   });
+
+  it.each([false, true])(
+    'reports no problem for the Review row Factory seeded and nobody edited (Review in use: %s)',
+    async reviewInUse => {
+      const { a, scope } = await setup();
+      // What Factory stored while Review was still a seeded board: its runner predates skills.
+      const seed = boardDefinitionOf(reviewBoard);
+      const phases = seed.phases.map(phase =>
+        phase.key === 'review' ? { ...phase, runner: { context: 'review' }, tools: undefined } : phase,
+      );
+      await a.boards.insertIfMissing(scope, { ...seed, phases }, 'factory');
+
+      const described = await new ProjectBoardCache({
+        codeRegistry: createBoardRegistry({ boards: [appBoard('release')] }),
+        storage: a.boards,
+        recheckMs: RECHECK_MS,
+        reviewBoardInUse: async () => reviewInUse,
+      }).describe(scope);
+
+      expect(described.problems).toEqual([]);
+      expect(described.registry.get('review')?.name).toBe(reviewInUse ? 'Review' : undefined);
+      expect((await a.boards.get(scope, 'review'))!.revision).toBe(1);
+    },
+  );
+
+  it.each([false, true])(
+    'reports a non-Review board stored under the review key by Factory (Review in use: %s)',
+    async reviewInUse => {
+      const { a, scope } = await setup();
+      // Factory's actor alone doesn't make a row the Review seed: its board isn't Review's.
+      await a.boards.insertIfMissing(scope, { ...bugsBoard(), key: 'review', name: 'Review' }, 'factory');
+
+      const described = await new ProjectBoardCache({
+        codeRegistry: createBoardRegistry({ boards: [appBoard('release')] }),
+        storage: a.boards,
+        recheckMs: RECHECK_MS,
+        reviewBoardInUse: async () => reviewInUse,
+      }).describe(scope);
+
+      expect(described.problems).toEqual([
+        reviewInUse
+          ? 'Stored board "review" is hidden by the code board with the same key.'
+          : 'Stored board "review" isn\'t served: the key is reserved for the retired Review board.',
+      ]);
+    },
+  );
 
   it('skips a stored board that no longer compiles and still loads the code boards and the other stored boards', async () => {
     const { a, scope } = await setup();

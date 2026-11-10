@@ -101,6 +101,7 @@ export const queryKeys = {
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeLabelRoutes: (factoryProjectId: string | undefined) =>
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
+  intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
