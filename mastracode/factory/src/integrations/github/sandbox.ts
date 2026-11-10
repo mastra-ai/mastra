@@ -1066,6 +1066,59 @@ export async function pushRepositoryBranch(
   );
 }
 
+/**
+ * Fast-forward an existing remote branch to the checkout's HEAD. Refuses when the
+ * branch is missing remotely or has commits HEAD lacks; never creates or rewrites it.
+ */
+export async function fastForwardRemoteBranch(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  branch: string,
+  access: RepositoryAccess,
+  repoFullName: string,
+): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
+  }
+  if (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName)) {
+    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
+  }
+  const token = access.authorization?.token;
+  if (!token) throw new MaterializeError('Repository access did not include push credentials.', 'push-failed');
+  const env = gitAuthenticationEnvironment(
+    access.cloneUrl,
+    token,
+    access.authorization?.username ?? 'x-access-token',
+    'push-failed',
+  );
+  const ref = `refs/heads/${branch}`;
+  const heads = await gitTransfer(sandbox, ['-C', workdir, 'ls-remote', '--heads', 'origin', ref], {
+    env,
+    phase: 'work item branch probe',
+  });
+  if (heads.exitCode !== 0) throw classifyGitFailure(heads, 'push-failed');
+  const remoteOid = heads.stdout.trim().split(/\s+/)[0];
+  if (!remoteOid) {
+    throw new MaterializeError(`Refusing to push: '${branch}' does not exist on ${repoFullName}.`, 'push-failed');
+  }
+  const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', ref], {
+    env,
+    phase: 'work item branch fetch',
+  });
+  if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'push-failed');
+  const ancestor = await execute(sandbox, 'git', ['-C', workdir, 'merge-base', '--is-ancestor', remoteOid, 'HEAD']);
+  if (ancestor.exitCode === 1) {
+    throw new MaterializeError(
+      `Refusing to push: '${branch}' has commits the active HEAD lacks. Merge or rebase onto origin/${branch} first.`,
+      'push-failed',
+    );
+  }
+  if (ancestor.exitCode !== 0) throw classifyGitFailure(ancestor, 'push-failed');
+  // A plain push is fast-forward only, so a branch that moved since the check is rejected too.
+  const push = await execute(sandbox, 'git', ['-C', workdir, 'push', 'origin', `HEAD:${ref}`], { env });
+  if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
+}
+
 export interface CommitResult {
   /** True when a commit was created; false when there was nothing to commit. */
   committed: boolean;

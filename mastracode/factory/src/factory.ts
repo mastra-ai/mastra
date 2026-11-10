@@ -1813,6 +1813,7 @@ export class MastraFactory {
                 },
                 ...(workItemsStorage
                   ? {
+                      workItems: workItemsStorage,
                       selfReviewApprovedHead: () =>
                         selfReviewApprovedHead({
                           requestContext,

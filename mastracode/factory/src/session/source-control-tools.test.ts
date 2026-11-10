@@ -6,10 +6,12 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { FACTORY_INTERACTIVE_KEY } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { workItemBranch } from '../work-item-branch.js';
 import { selfReviewApprovedHead } from './self-review-gate.js';
 import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.js';
 
@@ -562,7 +564,7 @@ describe('createSourceControlTools', () => {
       expect(built.source_control_create_change_request!.description).toContain('acme/repo, acme/other');
       const pushSchema = built.source_control_push_branch!.inputSchema as any;
       expect(pushSchema.safeParse({}).success).toBe(true);
-      expect(Object.keys(pushSchema.shape)).toEqual(['repository']);
+      expect(Object.keys(pushSchema.shape)).toEqual(['repository', 'workItem']);
       const crSchema = built.source_control_create_change_request!.inputSchema as any;
       expect(Object.keys(crSchema.shape).sort()).toEqual(['body', 'draft', 'repository', 'title']);
     });
@@ -1267,5 +1269,227 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       expect(git('rev-parse', 'HEAD')).toBe(head);
       expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
     });
+  });
+});
+
+// A chat session that follows a work item lands fixes on that item's branch without raw credentials. (#29811)
+describe('source_control_push_branch to a followed work item branch', { timeout: 10_000 }, () => {
+  const roots: string[] = [];
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const gitBinary = path.join(execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim(), 'git');
+
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  async function followedItem({ follow = true, pushBranch = true, interactive = true, bound = false } = {}) {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
+    const { item } = await seeded.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      workItem: {
+        input: {
+          board: 'work',
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:7' },
+          title: 'Factory item',
+          stages: ['review'],
+          sessions: {},
+          metadata: { authorTrusted: true, githubIssueNumber: 7 },
+        },
+      },
+      role: 'work',
+      session: bound
+        ? { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' }
+        : { sessionId: 'session-2', branch: 'factory/issue-7', threadId: 'thread-2' },
+      resourceId: 'project-1',
+      kickoffKey: 'kickoff-1',
+      kickoffMessage: null,
+    });
+    if (follow) {
+      await seeded.workItems.subscribeToWorkItem({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        workItemId: item.id,
+        sessionId: 'session-1',
+        threadId: 'thread-1',
+        resourceId: 'project-1',
+        userId: 'user-1',
+        reason: 'subscribed',
+      });
+    }
+    const branch = workItemBranch({ id: item.id, source: 'github-issue', metadata: item.workItem.metadata });
+
+    const root = mkdtempSync(path.join(os.tmpdir(), 'factory-work-item-push-'));
+    roots.push(root);
+    const origin = path.join(root, 'origin.git');
+    const checkout = path.join(root, 'repo');
+    const git = (...args: string[]) =>
+      execFileSync(gitBinary, ['-C', checkout, ...args], { encoding: 'utf8', env, stdio: 'pipe' }).trim();
+    const remote = (...args: string[]) => git('--git-dir', origin, ...args);
+    const commit = (text: string) => {
+      writeFileSync(path.join(checkout, 'tracked.txt'), text);
+      git('add', 'tracked.txt');
+      git('commit', '-m', text);
+      return git('rev-parse', 'HEAD');
+    };
+    execFileSync(gitBinary, ['init', '--bare', '--initial-branch=main', origin], { env, stdio: 'pipe' });
+    execFileSync(gitBinary, ['init', '--initial-branch=main', checkout], { env, stdio: 'pipe' });
+    git('config', 'user.name', 'Test');
+    git('config', 'user.email', 'test@example.com');
+    const cloneUrl = 'https://github.com/acme/repo.git';
+    git('remote', 'add', 'origin', cloneUrl);
+    // Keep the provider clone URL, but talk to a hermetic local remote.
+    git('config', `url.${origin}.insteadOf`, cloneUrl);
+    const base = commit('base');
+    git('push', 'origin', 'main');
+    if (pushBranch) git('push', 'origin', `main:refs/heads/${branch}`);
+
+    const setup = await fixture('github');
+    setup.storage.connectionsRows[0]!.factoryProjectId = project.id;
+    setup.getRepositoryAccess.mockResolvedValue({
+      cloneUrl,
+      authorization: { scheme: 'bearer', token: 'test-token', username: 'test' },
+    });
+    const context = requestContext();
+    if (interactive) context.set(FACTORY_INTERACTIVE_KEY, true);
+    const controller = context.get('controller') as AgentControllerRequestContext;
+    context.set('controller', {
+      ...controller,
+      getState: () => ({ factoryProjectId: project.id, projectRepositoryId: 'repo-link-1' }),
+    } as AgentControllerRequestContext);
+    const tools = await createSourceControlTools({
+      requestContext: context,
+      providers: [{ id: 'github', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+      workItems: seeded.workItems,
+    });
+    const sandbox = {
+      id: 'real-git',
+      provider: 'custom',
+      workingDirectory: root,
+      async executeCommand(command: string, args: string[] = [], options?: { env?: Record<string, string> }) {
+        const result = spawnSync(command === 'git' ? gitBinary : command, args, {
+          encoding: 'utf8',
+          env: { ...env, ...options?.env },
+          timeout: 10_000,
+        });
+        if (result.error) throw result.error;
+        return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+      },
+    };
+    const push = (workItem: string) =>
+      (tools.source_control_push_branch!.execute as any)({ workItem }, { workspace: { sandbox } });
+    return { ...setup, seeded, projectId: project.id, item, branch, base, git, remote, commit, push };
+  }
+
+  it.each(['id', '#number'])('fast-forwards the followed item branch by %s', async form => {
+    const { item, branch, git, remote, commit, push, storage, emitAgent } = await followedItem();
+    const head = commit('fix');
+
+    await expect(push(form === 'id' ? item.id : '#7')).resolves.toEqual({
+      pushed: true,
+      branch,
+      repository: 'acme/repo',
+    });
+
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(head);
+    expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+    expect(remote('for-each-ref', '--format=%(refname)', 'refs/heads/factory/issue-1')).toBe('');
+    expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toEqual([]);
+    expect(emitAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          action: 'factory.agent.push',
+          metadata: expect.objectContaining({ branch, workItemId: item.id }),
+        }),
+      }),
+    );
+  });
+
+  it('refuses a work item the session does not follow', async () => {
+    const { item, branch, base, commit, push, remote } = await followedItem({ follow: false });
+    commit('fix');
+    await expect(push(item.id)).rejects.toThrow('is not followed by or bound to this session');
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(base);
+  });
+
+  it('refuses to rewrite a work item branch that has diverged from HEAD', async () => {
+    const { item, branch, base, git, commit, push, remote } = await followedItem();
+    git('switch', '-c', 'other');
+    const remoteHead = commit('remote work');
+    git('push', 'origin', `HEAD:refs/heads/${branch}`);
+    git('switch', 'main');
+    commit('local fix');
+
+    await expect(push(item.id)).rejects.toMatchObject({ code: 'push-failed' });
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(remoteHead);
+    expect(remoteHead).not.toBe(base);
+  });
+
+  it('refuses to create a work item branch that does not exist remotely', async () => {
+    const { item, branch, commit, push, remote } = await followedItem({ pushBranch: false });
+    commit('fix');
+    await expect(push(item.id)).rejects.toThrow(`'${branch}' does not exist`);
+    expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
+  });
+
+  it('refuses a #number that names more than one followed work item', async () => {
+    const { seeded, projectId, item, branch, base, commit, push, remote } = await followedItem();
+    const { item: pullRequest } = await seeded.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: projectId,
+      workItem: {
+        input: {
+          board: 'review',
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:7' },
+          title: 'Factory pull request',
+          stages: ['review'],
+          sessions: {},
+          metadata: { authorTrusted: true, githubPullRequestNumber: 7 },
+        },
+      },
+      role: 'review',
+      session: { sessionId: 'session-3', branch: 'factory/pr-7', threadId: 'thread-3' },
+      resourceId: 'project-1',
+      kickoffKey: 'kickoff-2',
+      kickoffMessage: null,
+    });
+    await seeded.workItems.subscribeToWorkItem({
+      orgId: 'org-1',
+      factoryProjectId: projectId,
+      workItemId: pullRequest.id,
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+      resourceId: 'project-1',
+      userId: 'user-1',
+      reason: 'subscribed',
+    });
+    commit('fix');
+
+    await expect(push('#7')).rejects.toThrow('matches more than one followed work item');
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(base);
+    await expect(push(pullRequest.id)).rejects.toThrow('pull-request review card');
+    await expect(push(item.id)).resolves.toMatchObject({ pushed: true, branch });
+  });
+
+  it('refuses a followed but unrun work item on a turn nobody signed in started', async () => {
+    const { item, branch, base, commit, push, remote } = await followedItem({ interactive: false });
+    commit('fix');
+    await expect(push(item.id)).rejects.toThrow('Only a person can push');
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(base);
+  });
+
+  it('lets a session push to the work item it runs on a turn nobody signed in started', async () => {
+    const { item, branch, remote, commit, push } = await followedItem({
+      interactive: false,
+      follow: false,
+      bound: true,
+    });
+    const head = commit('fix');
+    await expect(push(item.id)).resolves.toMatchObject({ pushed: true, branch });
+    expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(head);
   });
 });
