@@ -20,7 +20,7 @@ import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
 import { RepositoriesSection } from './RepositoriesSection';
-import { WorkBoardSection } from './WorkBoardSection';
+import { BoardsSection } from './BoardsSection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
@@ -69,7 +69,7 @@ export function SettingsPanel() {
           <IntakeRoutesSection factoryId={factoryId} />
         </>
       )}
-      {section === 'board' && <WorkBoardSection factoryId={factoryId} />}
+      {section === 'board' && <BoardsSection factoryId={factoryId} />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && (
         <MemorySettings

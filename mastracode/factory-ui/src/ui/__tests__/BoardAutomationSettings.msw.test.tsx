@@ -9,6 +9,7 @@ import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import { storedWorkBoard } from '../domains/settings/components/__tests__/fixtures/work-board';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -111,12 +112,16 @@ describe('Board automation settings', () => {
 
   it('sends people to the board editor to choose which runs start on their own', async () => {
     stubBoard({ items: [], factory: project() });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/boards/work`, () => HttpResponse.json(storedWorkBoard())),
+    );
     const user = userEvent.setup();
     renderBoard('work');
 
     await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
     await user.click(await screen.findByRole('link', { name: 'Edit the Work board' }));
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Work board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Boards' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Planning phase' })).toBeInTheDocument();
   });
 });
