@@ -497,6 +497,25 @@ describe('PlatformLinearIntegration', () => {
     });
   });
 
+  it('checks the connection from a single workspace snapshot', async () => {
+    const workspace2 = {
+      ...workspace,
+      linearWorkspaceId: 'workspace-2',
+      linearWorkspaceName: 'Other',
+      urlKey: 'other',
+    };
+    // The first workspace disconnects between reads.
+    const snapshots = [[workspace, workspace2], [workspace2]];
+    const fetchImpl = vi.fn<typeof fetch>(async () => json({ workspaces: snapshots.shift() ?? [] }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.checkConnection('org-1')).resolves.toMatchObject({
+      connected: true,
+      workspaceUrlKey: null,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves dispatch context with the platform-managed token when a workspace is connected', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
     const integration = createIntegration(fetchImpl);
