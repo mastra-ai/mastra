@@ -136,7 +136,8 @@ import { createSourceControlSessionLookup } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
-import { LiveSessions } from './session/live-sessions.js';
+import { liveSessionsTouchingTheFeed } from './session/live-sessions.js';
+import type { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
@@ -504,16 +505,6 @@ function buildDefaultStudioAuth(): IMastraAuthProvider {
   return new MastraAuthStudio();
 }
 
-/** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
-function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'], eventBus: PubSub): LiveSessions {
-  const liveSessions = new LiveSessions(controller);
-  liveSessions.onParkedChanged(session => {
-    const { factoryOrgId, factoryProjectId } = session.state.get();
-    if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
-  });
-  return liveSessions;
-}
-
 let warnedDefinedBoards = false;
 
 /** Warns once per process when the app declares boards in code; Factory's own boards never warn. */
@@ -843,7 +834,7 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
+    workItemsStorage.onBoardChanged(scope => touchFeed(eventBus, scope));
     // The dispatcher sleeps while idle. It wakes itself on this replica's writes
     // that leave claimable work; the bus carries those wakes to other replicas.
     workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
@@ -2069,7 +2060,7 @@ export class MastraFactory {
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
-            liveSessions: (liveSessions = liveSessionsTouchingTheFeed(controller, eventBus)),
+            liveSessions: (liveSessions = liveSessionsTouchingTheFeed(controller, eventBus, sourceControlSessions)),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,

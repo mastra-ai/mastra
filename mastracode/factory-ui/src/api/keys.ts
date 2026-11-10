@@ -213,3 +213,6 @@ export const queryKeys = {
       ...(limit === undefined ? [] : [limit]),
     ] as const,
 } as const;
+
+export const cardMoveMutationKey = (factoryProjectId: string | undefined) =>
+  ['factory', 'transition-work-item', factoryProjectId] as const;
