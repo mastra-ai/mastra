@@ -148,6 +148,45 @@ describe('registration', () => {
     mountWebMcp(config)
     await vi.waitFor(() => expect(context.registerTool).toHaveBeenCalled())
   })
+
+  it('unregisters by name on legacy implementations that ignore the signal', async () => {
+    const registered = new Set<string>()
+    const context = {
+      registerTool: vi.fn(async (tool: RegisteredTool) => {
+        if (registered.has(tool.name)) throw new DOMException('Duplicate', 'InvalidStateError')
+        registered.add(tool.name)
+      }),
+      unregisterTool: vi.fn((name: string) => {
+        if (!registered.delete(name)) throw new DOMException('Unknown', 'NotFoundError')
+      }),
+    }
+    vi.stubGlobal('document', {})
+    vi.stubGlobal('navigator', { modelContext: context })
+
+    const first = mountWebMcp(config)
+    await vi.waitFor(() => expect(registered.has('search_documentation')).toBe(true))
+    first()
+    expect(context.unregisterTool).toHaveBeenCalledWith('search_documentation')
+    expect(registered.size).toBe(0)
+
+    // A remount (or new config) registers again instead of hitting a duplicate name.
+    const second = mountWebMcp(config)
+    await vi.waitFor(() => expect(context.registerTool).toHaveBeenCalledTimes(2))
+    await expect(context.registerTool.mock.results[1]!.value).resolves.toBeUndefined()
+    second()
+    expect(registered.size).toBe(0)
+  })
+
+  it('does not unregister when registration failed', async () => {
+    const context = { ...stubContext(), unregisterTool: vi.fn() }
+    context.registerTool.mockRejectedValueOnce(new DOMException('Duplicate', 'InvalidStateError'))
+    vi.stubGlobal('document', { modelContext: context })
+    const cleanup = mountWebMcp(config)
+    await vi.waitFor(() => expect(context.registerTool).toHaveBeenCalled())
+    await Promise.resolve()
+    cleanup()
+    expect(context.unregisterTool).not.toHaveBeenCalled()
+  })
 })
 
 describe('input validation', () => {

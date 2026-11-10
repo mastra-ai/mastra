@@ -1,5 +1,7 @@
 import type { ModelContext, SearchConfig } from './index'
 
+const TOOL_NAME = 'search_documentation'
+
 export const LIMITS = { query: 500, defaultLimit: 5, maxLimit: 20, excerpt: 1000 } as const
 
 export interface SearchResult {
@@ -79,7 +81,7 @@ export async function registerSearchTool(
 
   await context.registerTool(
     {
-      name: 'search_documentation',
+      name: TOOL_NAME,
       title: 'Search Mastra documentation',
       description:
         'Search the Mastra documentation (guides, reference, integrations, models). Returns matching sections with their page title, heading, absolute URL and a plain-text excerpt.',
@@ -103,4 +105,16 @@ export async function registerSearchTool(
     },
     { signal },
   )
+
+  // Early implementations ignore the signal, so also unregister by name. On the
+  // current API the signal already removed the tool and this is a no-op.
+  const unregister = () => {
+    try {
+      Promise.resolve(context.unregisterTool?.(TOOL_NAME)).catch(() => {})
+    } catch {
+      // Already unregistered.
+    }
+  }
+  if (signal.aborted) unregister()
+  else signal.addEventListener('abort', unregister, { once: true })
 }

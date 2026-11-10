@@ -13,6 +13,8 @@ export interface SearchConfig {
 
 export interface ModelContext {
   registerTool(tool: object, options?: { signal?: AbortSignal }): unknown
+  /** Only on early implementations, which unregister by name instead of by signal. */
+  unregisterTool?(name: string): unknown
 }
 
 /**
