@@ -813,7 +813,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       "does not revert a sibling's write when a nested branch resumes without writing (%s)",
       async ([name, siblingDelay]) => {
         const id = `nested-parallel-state-resume-no-write-${name}`;
-        const earlier = makeStateStep(`${id}-earlier`, siblingDelay, { first: 1 });
+        const earlier = makeNestedWorkflow(`${id}-earlier`, siblingDelay, { first: 1 });
         const suspendingStep = createStep({
           id: `${id}-suspend`,
           inputSchema: z.object({}),
