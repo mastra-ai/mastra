@@ -1,6 +1,7 @@
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { PullRequestIcon } from '@mastra/playground-ui/components/PullRequestIcon';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Pin, User } from 'lucide-react';
@@ -11,7 +12,7 @@ import type { Location } from 'react-router';
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionSource } from '../services/sessionPresentation';
-import type { SessionExternalLink } from '../services/sessionRows';
+import type { SessionExternalLink, SessionPullRequest } from '../services/sessionRows';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionActionsMenu } from './SessionActionsMenu';
@@ -19,6 +20,10 @@ import { SessionMenuItems } from './SessionMenuItems';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
+import { relativeTime } from '../../../../lib/date/relativeTime';
+import { PULL_REQUEST_STATUS_LABELS } from '../../factory/boardItems';
+import type { PullRequestStatus } from '../../factory/boardItems';
+import { isPullRequestSource } from '../../factory/services/workItems';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -33,6 +38,7 @@ import { SessionSharingPopover } from './SessionSharingPopover';
 export function SessionNavRow({
   name,
   label,
+  level,
   title,
   url,
   externalLinks,
@@ -53,10 +59,14 @@ export function SessionNavRow({
   visibility,
   onVisibilityChange,
   changingVisibility,
+  pullRequest,
+  updatedAt,
 }: {
   name: string;
-  /** Visible text when it differs from `name`, such as a card session's context under the card's heading. */
+  /** Shown instead of the name, which stays in the accessible name: a child session's phase. */
   label?: string;
+  /** Indent level: 1 for a card's child sessions. */
+  level?: number;
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
@@ -88,12 +98,23 @@ export function SessionNavRow({
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
   /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
   changingVisibility?: boolean;
+  /** The change request the session's card is, or links to. */
+  pullRequest?: SessionPullRequest;
+  /** Shows a second line under the name: when the session last moved, and its change request. Omit for a single-line row. */
+  updatedAt?: string;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
   const sidebar = useMaybeSidebar();
   // Touch has no hover: the card would only open behind the tap that already navigated away.
   const preview = sidebar?.isMobile ? undefined : previewDetails;
+  // The live merge check lands before the work item catches up, so it wins over the item's state.
+  const pullRequestStatus = merged ? 'merged' : pullRequest?.status;
+  // A card that is a change request shows that request's state up front, in both layouts.
+  const iconShowsStatus =
+    pullRequestStatus !== undefined && source !== undefined && source !== 'user' && isPullRequestSource(source);
+  const lineShowsStatus = updatedAt !== undefined && pullRequest !== undefined && pullRequestStatus !== undefined;
+  const statusShown = iconShowsStatus || lineShowsStatus;
   const link = (
     <Link
       to={url}
@@ -116,8 +137,23 @@ export function SessionNavRow({
       }}
       title={preview ? undefined : title}
     >
-      {source ? <SessionSourceIcon source={source} /> : null}
-      <Sidebar.NavLabel>{label ?? name}</Sidebar.NavLabel>
+      {source ? (
+        <SessionSourceIcon source={source} pullRequestStatus={iconShowsStatus ? pullRequestStatus : undefined} />
+      ) : null}
+      <Sidebar.NavLabel
+        description={
+          updatedAt === undefined ? undefined : (
+            <SessionMetaLine
+              updatedAt={updatedAt}
+              pullRequest={pullRequest}
+              status={pullRequestStatus}
+              showStatusIcon={!iconShowsStatus}
+            />
+          )
+        }
+      >
+        {label ?? name}
+      </Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
@@ -136,7 +172,9 @@ export function SessionNavRow({
     changingVisibility,
   };
   const belt = loading ? undefined : status;
-  const trailing = trailingKind({ loading, status, merged });
+  // When the row already draws the change request's state, the merged badge would repeat it; keep it for screen readers only.
+  const trailing = trailingKind({ loading, status, merged: merged && !statusShown });
+  const mergedForScreenReaders = statusShown && trailingKind({ loading, status, merged }) === 'merged';
   const mergedLabel = changeRequestProvider === 'gitlab' ? 'Merge request merged' : 'Pull request merged';
   const action = (
     <>
@@ -148,6 +186,9 @@ export function SessionNavRow({
           onShare={onVisibilityChange ? () => onVisibilityChange('org') : undefined}
           sharing={changingVisibility}
         />
+      ) : null}
+      {mergedForScreenReaders ? (
+        <span role="img" aria-label={`${mergedLabel} for ${name}`} className="sr-only" />
       ) : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? (
@@ -183,6 +224,8 @@ export function SessionNavRow({
             ref={anchor}
             link={{ name, url }}
             isActive={active}
+            level={level}
+            size={updatedAt === undefined ? undefined : 'two-line'}
             className="group/session"
             // 0ms both ways — each row owns its card, so a close delay leaves the previous one up while the next opens
             render={preview ? <HoverCardTrigger delay={0} closeDelay={0} render={link} /> : link}
@@ -208,14 +251,61 @@ export function SessionNavRow({
   );
 }
 
-function SessionSourceIcon({ source }: { source: SessionSource }) {
+function SessionMetaLine({
+  updatedAt,
+  pullRequest,
+  status,
+  showStatusIcon,
+}: {
+  updatedAt: string;
+  pullRequest: SessionPullRequest | undefined;
+  status: PullRequestStatus | undefined;
+  /** Off when the leading icon already shows the change request's state. */
+  showStatusIcon: boolean;
+}) {
+  const label =
+    status && pullRequest?.provider === 'gitlab'
+      ? PULL_REQUEST_STATUS_LABELS[status].replace('pull request', 'merge request')
+      : status && PULL_REQUEST_STATUS_LABELS[status];
+  const showNumber = pullRequest?.number !== undefined;
+  return (
+    <>
+      <time dateTime={updatedAt} className="tabular-nums">
+        {relativeTime(updatedAt)}
+      </time>
+      {pullRequest && status && (showStatusIcon || showNumber) ? (
+        <span role="img" aria-label={label} title={label} className="flex items-center gap-0.5 tabular-nums">
+          {showStatusIcon ? <PullRequestStatusIcon status={status} decorative /> : null}
+          {showNumber ? (
+            <span aria-hidden>
+              {pullRequest.provider === 'gitlab' ? '!' : '#'}
+              {pullRequest.number}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function SessionSourceIcon({
+  source,
+  pullRequestStatus,
+}: {
+  source: SessionSource;
+  pullRequestStatus?: PullRequestStatus;
+}) {
   if (source === 'user') {
     return <User data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+  }
+  if (pullRequestStatus) {
+    return <PullRequestIcon data-source={source} status={pullRequestStatus} aria-hidden className="size-3.5" />;
   }
   return <SourceIcon source={source} className="size-3.5" />;
 }
 
-const trailingSlot = 'size-control-sm shrink-0 grid-rows-1 place-items-center *:col-start-1 *:row-start-1';
+// Matches the 24px the sidebar row gives its action buttons.
+const trailingSlot = 'size-6 shrink-0 grid-rows-1 place-items-center *:col-start-1 *:row-start-1';
 
 // An empty slot claims no width, so the label runs the full row until there is something to show.
 const revealedSlot =

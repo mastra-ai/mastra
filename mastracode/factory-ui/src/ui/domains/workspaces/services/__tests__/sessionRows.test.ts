@@ -131,7 +131,6 @@ describe('oneRowPerCard', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       session: { sessionId: 'work' },
-      contextLabel: 'Work',
       status: 'working',
       active: true,
       pinned: true,

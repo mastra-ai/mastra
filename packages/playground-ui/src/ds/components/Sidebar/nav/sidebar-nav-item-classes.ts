@@ -14,6 +14,12 @@ const navItemVariants = cva('flex min-w-0 cursor-pointer items-center rounded-lg
       sm: controlHeight.sm,
       md: controlHeight.md,
       lg: controlHeight.lg,
+      // A row whose label carries a description line below it. The box grows to hold both
+      // lines; when the sidebar collapses to icons it drops back to the default rung. Its
+      // icons sit on the first line, not the middle of the box: each direct svg gets the
+      // label's line height (`1lh`) and centres its glyph inside it. `!` beats the row's
+      // `[&_svg]:size-4`, which has the same specificity.
+      'two-line': 'min-h-control-lg items-start py-1.5 [&>svg]:h-lh!',
     },
   },
   defaultVariants: {
@@ -38,11 +44,15 @@ type NavItemLayoutOptions = {
 
 type ItemStyleOptions = NavRowSurfaceOptions & NavItemLayoutOptions;
 
-const nestedExpandedItemClasses = (level: number) => {
-  if (level <= 0) return 'gap-2 py-1 px-3';
-  if (level === 1) return `gap-2 py-1 pr-3 pl-8 ${controlHeight.md}`;
-  if (level === 2) return `gap-2 py-1 pr-3 pl-10 ${controlHeight.md}`;
-  return `gap-2 py-1 pr-3 pl-12 ${controlHeight.md}`;
+const nestedExpandedItemClasses = (level: number, size?: SidebarNavItemSize) => {
+  // A two-line row keeps its grown box at every depth; a nested single-line row is pinned to md.
+  const twoLine = size === 'two-line';
+  const height = twoLine ? '' : controlHeight.md;
+  const padY = twoLine ? 'py-1.5' : 'py-1';
+  if (level <= 0) return `gap-2 ${padY} px-3`;
+  if (level === 1) return `gap-2 ${padY} pr-3 pl-8 ${height}`;
+  if (level === 2) return `gap-2 ${padY} pr-3 pl-10 ${height}`;
+  return `gap-2 ${padY} pr-3 pl-12 ${height}`;
 };
 
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
@@ -65,11 +75,11 @@ export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOpti
 
 export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLayoutOptions) =>
   cn(
-    navItemVariants({ size }),
+    navItemVariants({ size: isCollapsed && size === 'two-line' ? 'md' : size }),
     'w-full justify-start',
     '[&_svg]:size-4 [&_svg]:shrink-0',
     focusRing,
-    !isCollapsed && nestedExpandedItemClasses(level),
+    !isCollapsed && nestedExpandedItemClasses(level, size),
     isCollapsed && 'gap-0 px-[13.5px] py-0',
   );
 

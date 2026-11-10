@@ -14,10 +14,16 @@ export function SessionListItem({
   row,
   disabled,
   merged,
+  level,
+  compact,
   onDelete,
 }: {
   factoryId: string;
   row: SessionListRow;
+  /** 1 for a card's child session, listed under the card's row. */
+  level?: number;
+  /** Single-line row; otherwise a second line shows when it last moved and its change request. */
+  compact: boolean;
   disabled: boolean;
   merged: boolean | undefined;
   onDelete: (row: SessionListRow) => void;
@@ -39,12 +45,14 @@ export function SessionListItem({
   return (
     <SessionNavRow
       name={row.name}
-      label={row.contextLabel}
+      label={row.phaseLabel}
+      level={level}
       url={row.openPath}
       externalLinks={row.externalLinks}
       from={row.origin === 'factory' ? location : undefined}
       source={row.source}
-      active={row.active}
+      // A card row is open while any of its sessions is; with those listed, the open one highlights instead.
+      active={row.active && !row.childRows?.some(child => child.active)}
       disabled={disabled}
       merged={merged}
       changeRequestProvider={row.pullRequest?.provider}
@@ -61,6 +69,8 @@ export function SessionListItem({
         ownUserSession && !row.session.branch.startsWith('slack/') ? handleVisibilityChange : undefined
       }
       changingVisibility={changing}
+      pullRequest={row.pullRequest}
+      updatedAt={compact ? undefined : row.updatedAt}
     />
   );
 }

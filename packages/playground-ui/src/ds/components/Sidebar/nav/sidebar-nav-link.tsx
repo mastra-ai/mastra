@@ -85,7 +85,11 @@ export function SidebarNavLink({
 
   return (
     <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
-      <NavRowBody action={rowAction} surfaceClassName={navRowSurfaceClasses({ isActive, isFeatured })}>
+      <NavRowBody
+        action={rowAction}
+        twoLine={size === 'two-line'}
+        surfaceClassName={navRowSurfaceClasses({ isActive, isFeatured })}
+      >
         <NavRowTooltip label={navTooltipLabel(link, isCollapsed)}>
           {navInteractiveRow({ render, asChild, children, link, state, Link, isActive, className: itemClassName })}
         </NavRowTooltip>
@@ -177,19 +181,35 @@ function NavRowTooltip({ label, children }: { label?: string; children: React.Re
 
 function NavRowBody({
   action,
+  twoLine,
   surfaceClassName,
   children,
 }: {
   action?: React.ReactNode;
+  twoLine: boolean;
   surfaceClassName: string;
   children: React.ReactNode;
 }) {
   if (!action) return children;
 
   return (
-    <div className={cn('flex min-w-0 items-center pr-1', surfaceClassName)}>
+    <div className={cn('flex min-w-0 pr-0.75', twoLine ? 'items-start' : 'items-center', surfaceClassName)}>
       {children}
-      {action}
+      <span
+        className={cn(
+          'flex shrink-0 items-center',
+          // Action buttons are 24px so they keep the same 3px from the row's top and right
+          // edges on every row: a 30px single-line row centres them 3px from its top, and a
+          // two-line row tucks them into its top-right corner with matching padding.
+          '[&_button]:size-6',
+          twoLine && 'pt-0.75',
+          // Their corners follow the row's rounded-lg surface, inset by those 3px, instead of
+          // reading as circles.
+          '[&_button]:rounded-[calc(var(--radius-lg)-3px)]',
+        )}
+      >
+        {action}
+      </span>
     </div>
   );
 }

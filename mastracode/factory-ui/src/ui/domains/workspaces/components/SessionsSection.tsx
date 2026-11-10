@@ -41,8 +41,6 @@ export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
   const openNewUserSession = useOpenNewUserSession();
-  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
-  const catalog = useBoardCatalog(factoryId);
   const {
     view,
     hiddenGroupKeys,
@@ -53,6 +51,10 @@ export function SessionsSection() {
     changeGroupOrder,
     resetView,
   } = useSessionListView();
+  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId, {
+    revealChildSessions: view.revealChildSessions,
+  });
+  const catalog = useBoardCatalog(factoryId);
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const deletion = useSessionDeletion(factoryId);
@@ -140,6 +142,16 @@ export function SessionsSection() {
                 onVisibilityChange={changeGroupVisibility}
                 onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
               />
+              <DropdownMenu.Separator />
+              <DropdownMenu.CheckboxItem checked={view.compact} onCheckedChange={compact => updateView({ compact })}>
+                Compact view
+              </DropdownMenu.CheckboxItem>
+              <DropdownMenu.CheckboxItem
+                checked={view.revealChildSessions}
+                onCheckedChange={revealChildSessions => updateView({ revealChildSessions })}
+              >
+                Reveal child sessions
+              </DropdownMenu.CheckboxItem>
             </PropertiesMenu>
           </div>
         }
@@ -155,13 +167,20 @@ export function SessionsSection() {
             group={group}
             showHeader={view.groupBy !== 'none'}
             renderRow={row => (
-              <SessionListItem
-                factoryId={factoryId}
-                row={row}
-                disabled={deletion.deleting}
-                merged={mergedBySessionId[row.session.sessionId] ?? row.pullRequest?.knownMerged}
-                onDelete={deletion.requestDeletion}
-              />
+              <>
+                {[row, ...(row.childRows ?? [])].map(entry => (
+                  <SessionListItem
+                    key={entry.session.sessionId}
+                    factoryId={factoryId}
+                    row={entry}
+                    level={entry === row ? undefined : 1}
+                    compact={view.compact}
+                    disabled={deletion.deleting}
+                    merged={mergedBySessionId[entry.session.sessionId] ?? entry.pullRequest?.knownMerged}
+                    onDelete={deletion.requestDeletion}
+                  />
+                ))}
+              </>
             )}
           />
         ))}
