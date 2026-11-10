@@ -2033,8 +2033,8 @@ export function createDurableToolCallStep() {
       // A run that loses its thread lease while this call runs lets it finish before it stops. The step stays
       // running until the tool body settles, even after the abort grace hands control back to the loop.
       const settleRunTool = startRunStep(registryEntry);
-      let lateResultRecorded!: () => void;
-      const lateResultRecordedPromise = new Promise<void>(resolve => (lateResultRecorded = resolve));
+      let outcomeRecorded!: () => void;
+      const outcomeRecordedPromise = new Promise<void>(resolve => (outcomeRecorded = resolve));
       try {
         try {
           ownership?.throwIfLost();
@@ -2055,14 +2055,18 @@ export function createDurableToolCallStep() {
           },
           // Run-activity tracking brackets live execution (durable-only bookkeeping).
           acquireExecution: () => markRunActive(runId),
-          // Settles once the tool body has settled and any late result below is recorded, which the deadline save waits for.
-          onToolSettled: () => void lateResultRecordedPromise.then(settleRunTool),
+          // Settles once the tool body has settled and its outcome below is recorded where needed, which the deadline save waits for.
+          onToolSettled: () => void outcomeRecordedPromise.then(settleRunTool),
           logger: logger as any,
         })
           .then(settled => {
             // The total deadline ended the run while this call ran, so the call's own commit is rejected
             // below. Leave the result where the deadline save looks for it, before the call reads as settled.
-            if (registryEntry?.executionFence?.deadlineError) {
+            // A call that failed in time is left there too: its step merges only once every sibling settles.
+            if (
+              registryEntry?.executionFence?.deadlineError ||
+              (registryEntry?.timeoutTotalMs && settled.status === 'error')
+            ) {
               // processToolResult hooks can redact or block a result, and they do not run past the deadline.
               // When one could apply, save only the abort notice so the raw value never reaches memory.
               const resultProcessed = registryEntry.outputProcessors?.some(processor =>
@@ -2070,7 +2074,7 @@ export function createDurableToolCallStep() {
                   ? processor.__processToolResult !== false
                   : typeof processor.processToolResult === 'function',
               );
-              (registryEntry.lateToolResults ??= []).push({
+              (registryEntry.settledToolResults ??= []).push({
                 toolCallId,
                 toolName,
                 args: cleanedArgs,
@@ -2088,7 +2092,7 @@ export function createDurableToolCallStep() {
             }
             return settled;
           })
-          .finally(lateResultRecorded);
+          .finally(outcomeRecorded);
 
         ownership?.throwIfLost();
         if (outcome.status === 'error') {
@@ -2302,6 +2306,16 @@ export function createDurableToolCallStep() {
           // A processor can drop the result or stash it and emit it right
           // after, and publishing can fail; only a published result counts.
           resultHidden = !resultEmitted;
+        }
+
+        // Its step merges only once every sibling settles; a total deadline before then saves it from here.
+        if (registryEntry?.timeoutTotalMs && !wasSuspended && !resultHidden) {
+          (registryEntry.settledToolResults ??= []).push({
+            toolCallId,
+            toolName,
+            args: cleanedArgs,
+            outcome: { kind: 'result', result },
+          });
         }
 
         return {

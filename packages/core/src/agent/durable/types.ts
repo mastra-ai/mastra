@@ -811,8 +811,16 @@ export interface RunRegistryEntry {
   messageList?: MessageList;
   /** Message list as of the last completed step; memory saves this when a total deadline ends the run */
   completedStepsState?: SerializedMessageListState;
-  /** Tool calls that settled after a total deadline ended the run; the deadline save records their step */
-  lateToolResults?: Array<{ toolCallId: string; toolName: string; args: unknown; outcome: ToolResultCommitOutcome }>;
+  /**
+   * Text the step in flight has streamed (as published) before a total deadline cut it off; cleared once the
+   * step completes. Only kept for runs with a total deadline.
+   */
+  streamedStepText?: string[];
+  /**
+   * Tool calls of the step in flight that settled, kept for runs with a total deadline: when the deadline ends
+   * the run before the step merges its results, the deadline save records them.
+   */
+  settledToolResults?: Array<{ toolCallId: string; toolName: string; args: unknown; outcome: ToolResultCommitOutcome }>;
   /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /**

@@ -389,8 +389,10 @@ export function createDurableLLMMappingStep() {
       // A copy, since the serialized state shares parts with the live list the next step appends to.
       // JSON rather than structuredClone: message metadata can hold callbacks, which have no place in memory.
       // Only runs with a total deadline read it, so others skip the copy.
-      if (registryEntry?.timeoutTotalMs)
+      if (registryEntry?.timeoutTotalMs) {
         registryEntry.completedStepsState = JSON.parse(JSON.stringify(serializedMessageList));
+        registryEntry.settledToolResults = undefined;
+      }
       const output: DurableAgenticExecutionOutput = {
         ...(await storeMessageListState(params, serializedMessageList)),
         messageId,

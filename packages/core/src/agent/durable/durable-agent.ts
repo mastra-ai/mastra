@@ -2765,7 +2765,7 @@ export class DurableAgent<
           await runDurableDeadlineOutputPass({
             runId,
             initData: runInput,
-            messageListState: deadlineMessageListState(runInputEntry) ?? runInput.messageListState,
+            ...deadlineMessageListState(runInputEntry, runInput.messageListState),
             entry: runInputEntry,
             mastra: this.#mastra,
             logger: this.logger,

@@ -84,7 +84,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   const DEADLINE_MS = engine === 'inngest' ? 4_000 : 800;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 30_000 : 10_000;
   // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  const deadlineSavePending: EngineVariant[] = ['durable', 'evented', 'inngest'];
+  const deadlineSavePending: EngineVariant[] = ['inngest'];
   const itDeadline = deadlineSavePending.includes(engine) ? it.fails : it;
   // Inngest already keeps the user message when the deadline lands during the input save.
   const itInFlightSave = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
@@ -671,12 +671,15 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
-  // A step whose calls all settled, one with an error and one with the abort notice, is saved whole.
-  itDeadline(
-    'total-timeout saves a step whose tool call failed alongside one cut off at the deadline',
-    async () => {
+  // A step whose calls all settled, one in time and one with the abort notice, is saved whole.
+  itDeadline.each([
+    ['failed', 'lookup failed'],
+    ['succeeded', 'order shipped'],
+  ] as const)(
+    'total-timeout saves a step whose tool call %s alongside one cut off at the deadline',
+    async (outcome, expected) => {
       const memory = new MockMemory();
-      const threadId = `${THREAD}-timeout-failed-call-${engine}`;
+      const threadId = `${THREAD}-timeout-${outcome}-call-${engine}`;
       const hang = Promise.withResolvers<unknown>();
       try {
         const result = await runLoopScenario({
@@ -693,10 +696,11 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
           tools: {
             failing: createTool({
               id: 'failing',
-              description: 'Always throws.',
+              description: 'Looks up the order.',
               inputSchema: z.object({}),
               execute: async () => {
-                throw new Error('lookup failed');
+                if (outcome === 'failed') throw new Error('lookup failed');
+                return { status: 'order shipped' };
               },
             }),
             hanging: createTool({
@@ -723,8 +727,9 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         await vi.waitFor(async () => {
           const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
           const saved = JSON.stringify(messages);
-          expect(saved).toContain('lookup failed');
-          expect(saved).toContain(TOOL_ABORT_NOTICE);
+          expect(saved).toContain(expected);
+          // Only the hanging call carries the abort notice.
+          expect(saved.split(TOOL_ABORT_NOTICE)).toHaveLength(2);
         });
       } finally {
         hang.resolve({});
@@ -1057,6 +1062,88 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
         expect(messages.map(message => message.role)).toEqual([]);
         expect(denied).toContain(threadId);
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // A tool can point the run's memory context at another thread, which MessageHistory then writes to.
+  // The deadline save checks write access to that thread too.
+  it.skipIf(engine === 'inngest')(
+    'total-timeout does not save the turn when a tool points memory at a thread the caller cannot write',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-fga-redirect-${engine}`;
+      const otherThreadId = `${threadId}-other`;
+      await memory.createThread({ threadId, resourceId: RESOURCE });
+      await memory.createThread({ threadId: otherThreadId, resourceId: RESOURCE });
+      let toolStarted = false;
+      const denies = (permission: unknown, id: string) =>
+        String(permission) === 'memory:write' && toolStarted && id === otherThreadId;
+      const denied: string[] = [];
+      const fga: IFGAProvider = {
+        check: async (_user, { resource, permission }) => !denies(permission, resource.id),
+        require: async (user, { resource, permission }) => {
+          if (denies(permission, resource.id)) {
+            denied.push(resource.id);
+            throw new FGADeniedError(user, resource, permission);
+          }
+        },
+        filterAccessible: async (_user, resources) => resources,
+      };
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'reader' });
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Wait for the courier.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          server: { fga },
+          requestContext,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async (_input, context) => {
+                toolStarted = true;
+                const memoryContext = context?.requestContext?.get('MastraMemory') as Record<string, any>;
+                context?.requestContext?.set('MastraMemory', {
+                  ...memoryContext,
+                  thread: { ...memoryContext.thread, id: otherThreadId },
+                });
+                return hang.promise;
+              },
+            }),
+          },
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] });
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        // Absence can't be polled for; give the deadline save time to land.
+        await new Promise(resolve => setTimeout(resolve, 1_500));
+
+        // Evented tools run with a copy of the request context, so there the change never reaches the save,
+        // which writes the run's own thread.
+        const redirected = engine !== 'evented';
+        expect(denied.includes(otherThreadId)).toBe(redirected);
+        const saved = async (id: string) =>
+          (await memory.recall({ threadId: id, resourceId: RESOURCE })).messages.some(
+            message => message.role === 'assistant',
+          );
+        expect(await saved(otherThreadId)).toBe(false);
+        expect(await saved(threadId)).toBe(!redirected);
       } finally {
         hang.resolve({});
       }
