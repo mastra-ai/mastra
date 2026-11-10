@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { createSessionApprovalNotifier, createSessionRunEndReporter } from './reports.js';
+import type { FactoryRunOutcome } from './reports.js';
 import { observeSessionRunReports } from './run-watch.js';
 
 function fakeSession() {
@@ -52,6 +53,26 @@ describe('observeSessionRunReports', () => {
       { status: 'blocked', toolName: 'factory_transition_work_item', toolCallId: 'call-1', approval: true },
       expect.any(Date),
     );
+  });
+
+  it('reports a parked tool as waiting only while it is still unanswered', () => {
+    const pendingSuspensions = new Map([['r:t:run-1:call-1', { toolCallId: 'call-1' }]]);
+    const session = {
+      ...fakeSession(),
+      displayState: { get: () => ({ pendingSuspensions, pendingApprovals: new Map() }) },
+    };
+    const report = vi.fn(async (_outcome: FactoryRunOutcome, _since: Date) => {});
+    observeSessionRunReports(session, report);
+
+    session.emit({ type: 'tool_suspended', toolCallId: 'call-1', toolName: 'submit_plan' } as AgentControllerEvent);
+    session.emit(end('suspended'));
+
+    const outcome = report.mock.calls[0]![0];
+    expect(outcome).toMatchObject({ status: 'blocked', toolName: 'submit_plan' });
+    expect(outcome.status === 'blocked' && outcome.stillWaiting?.()).toBe(true);
+    // Answered (e.g. the dispatcher approved the plan) before the report went out.
+    pendingSuspensions.clear();
+    expect(outcome.status === 'blocked' && outcome.stillWaiting?.()).toBe(false);
   });
 
   it('says nothing for an aborted run, and the next run’s window starts where the aborted one did', () => {

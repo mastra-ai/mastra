@@ -269,11 +269,15 @@ describe('tool answer that fails before its run starts', () => {
       throw new Error('resume failed');
     });
 
-    await Promise.all([
-      env.session.respondToToolSuspension({ resumeData: { ok: true } }),
-      env.session.respondToToolSuspension({ resumeData: { ok: true } }),
+    // respondToToolSuspension lets only one answer per suspension through (#29808),
+    // so drive two resumes of the call directly.
+    const address = env.session.suspensions.resolveAddress({})!;
+    const results = await Promise.allSettled([
+      env.session.resumeToolCall({ resumeData: { ok: true }, address }),
+      env.session.resumeToolCall({ resumeData: { ok: true }, address }),
     ]);
 
+    expect(results.map(result => result.status)).toEqual(['rejected', 'rejected']);
     expect(resume).toHaveBeenCalledTimes(2);
     expect(env.session.run.isRunning()).toBe(false);
     expect(env.session.run.getRunId()).toBeNull();
