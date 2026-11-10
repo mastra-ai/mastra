@@ -31,7 +31,13 @@ const REGISTRY = new Map(BUILT_IN_WIDGET_KINDS.map(kind => [kind.kind, kind]));
 function applyTheme(theme: McpUiTheme | undefined) {
   if (!theme) return;
   applyDocumentTheme(theme);
-  document.documentElement.classList.toggle('light', theme === 'light');
+  const root = document.documentElement;
+  root.classList.toggle('light', theme === 'light');
+  // A root `color-scheme` that differs from the host's iframe makes the browser paint an opaque
+  // canvas behind the app, which shows as a box sitting flush against the chat around it. Scoping
+  // it to the body keeps native controls themed while the canvas stays transparent.
+  document.body.style.colorScheme = root.style.colorScheme;
+  root.style.colorScheme = '';
 }
 
 type ReadyOpened = Extract<Opened, { status: 'ready' }>;

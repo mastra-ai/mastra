@@ -177,6 +177,17 @@ it("follows the host's theme, so a light host doesn't get dark-theme text", asyn
   expect(document.documentElement.classList.contains('light')).toBe(true);
 });
 
+it("keeps its canvas transparent on a host that doesn't declare a color-scheme", async () => {
+  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
+
+  await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, { theme: 'dark' });
+
+  await screen.findByText('Agent runs');
+  // A root color-scheme the host's iframe doesn't share makes the browser paint an opaque box.
+  expect(getComputedStyle(document.documentElement).colorScheme).toBe('normal');
+  expect(getComputedStyle(document.body).colorScheme).toBe('dark');
+});
+
 const PINNING = { serverTools: {}, updateModelContext: { text: {}, structuredContent: {} } };
 const APP: McpAppRef = {
   toolName: 'showObservabilityDashboard',
