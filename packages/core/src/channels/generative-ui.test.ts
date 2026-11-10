@@ -112,6 +112,28 @@ describe('ChatChannelGenerativeUIProcessor', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('enforces Slack chart limits before posting', async () => {
+    const { render, post } = renderContext();
+    const result = await renderCard(render, {
+      root: 'card',
+      elements: {
+        card: { type: 'Card', children: ['chart'] },
+        chart: {
+          type: 'Chart',
+          props: {
+            title: 'x'.repeat(51),
+            chart: { type: 'bar', categories: ['a much longer category name'], series: [{ name: 's', values: [1] }] },
+          },
+        },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.issues.join('\n')).toContain('50 characters');
+    expect(result.issues.join('\n')).toContain('20 characters');
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it('reports a failed post to the model', async () => {
     const { render, post } = renderContext();
     post.mockRejectedValueOnce(new Error('invalid_blocks'));

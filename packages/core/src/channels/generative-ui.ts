@@ -46,7 +46,17 @@ function loadJsonRenderChat(): Promise<JsonRenderChat> {
  * agent as fixable issues instead of a platform API error.
  */
 const PLATFORM_LIMITS: Record<string, Record<string, number>> = {
-  slack: { tables: 1, tableRows: 100, fields: 10 },
+  slack: {
+    tables: 1,
+    tableRows: 100,
+    tableColumns: 20,
+    fields: 10,
+    charts: 2,
+    chartTitle: 50,
+    chartLabel: 20,
+    chartSeries: 12,
+    chartPoints: 20,
+  },
 };
 
 const elementSchema = z.object({
@@ -69,8 +79,8 @@ Use it for structured content that reads better as a card than as text: status s
 
 The spec is a flat element map: { "root": "card", "elements": { "card": { "type": "Card", "props": { "title": "..." }, "children": ["facts"] }, "facts": { ... } } }. The root must be a Card. "children" lists child element ids.
 
-Components:
-- Card { title?, subtitle?, imageUrl? }: the root; holds any children.
+Components (use only these, with only these props):
+- Card { title?, subtitle?, imageUrl? }: the root; holds any children. title is plain text, at most 150 chars.
 - Section {}: groups children.
 - Text { content (markdown), style?: "plain" | "bold" | "muted" }
 - Fields {}: a grid of Field children.
@@ -82,7 +92,18 @@ Components:
 - Actions {}: a row of LinkButton children.
 - LinkButton { label, url }
 
-Keep cards small: one Table per card, at most 10 Fields per Fields group. If the result has "issues", fix the spec and call again.`;
+Rules that keep the card valid Block Kit (Slack rejects the whole message otherwise):
+- Every element id in "children" must exist in "elements", and every element except the root must be someone's child. Only Card, Section, Fields and Actions take children.
+- No empty strings: Text content, Field label/value, Table headers and cells, Chart title and labels, Image alt and LinkButton label all need text. Use "-" for a blank cell.
+- Text content uses Slack mrkdwn: **bold**, _italic_, \`code\`, links as <https://example.com|label>, "- " bullets. No headings (#), markdown tables, [label](url) links or images in text; use Card title, Table, LinkButton and Image instead. Keep each Text under 3000 chars.
+- Fields: at most 10 per Fields group; keep each label + value under 2000 chars.
+- Table: at most one per card, 100 rows (header included), 20 columns, about 10,000 chars across all cells. Split bigger data or summarize it.
+- Chart: at most 2 per card; title 1-50 chars; labels, category names and series names 1-20 chars and unique; up to 12 series or pie segments and 20 categories; every series has one value per category.
+- Image and Card imageUrl: a public https URL that points directly at a PNG, JPG or GIF. Slack fetches it, so never use private, localhost, auth-gated or made-up URLs.
+- LinkButton: absolute http(s) URL, label at most 75 chars, at most 25 per Actions row, and no two buttons with the same URL in one card.
+- Keep the whole card under 50 blocks; prefer a few focused elements over many.
+
+If the result has "issues", fix the spec and call again. If it has "error" (for example invalid_blocks), Slack rejected the card: simplify it (drop images, shorten text, remove the element most likely at fault) and retry once, or fall back to a plain text reply.`;
 
 /**
  * Gives the agent a `render_card` tool on runs whose adapter opted into
