@@ -151,7 +151,14 @@ export class BoardWrites {
     // Factory stores its boards only into a project that has none, so they go in first.
     await this.deps.boards.describe(scope);
     const row = await stored(() =>
-      this.deps.storage.create(scope, board, writer.id, this.#takeReviewKey(scope, board.key, null)),
+      this.deps.storage.create(
+        scope,
+        board,
+        writer.id,
+        this.#takeReviewKey(scope, board.key, null),
+        // The row an earlier release seeded for the retired Review board is nobody's board.
+        board.key === LEGACY_REVIEW_BOARD ? isUntouchedReviewSeed : undefined,
+      ),
     );
     this.deps.boards.invalidate(scope);
     await this.#audit(scope, writer, 'created', board);

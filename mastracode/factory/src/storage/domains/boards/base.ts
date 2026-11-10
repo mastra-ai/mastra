@@ -405,22 +405,30 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return readStoredBoard(this.ops, scope, key);
   }
 
-  /** Creates a board through the API. `before` runs in the same transaction, once the key is known to be free. */
+  /**
+   * Creates a board through the API. `before` runs in the same transaction, once the key is known
+   * to be free. A row under the key that `over` accepts does not hold it: the board is written
+   * over that row.
+   */
   async create(
     scope: StoredBoardScope,
     input: StoredBoardInput,
     actor: string,
     before?: BoardWriteStep,
+    over?: (row: StoredBoardRecord) => boolean,
   ): Promise<StoredBoardRecord> {
     await ensureVersionRow(this.ops, scope);
     try {
       return await this.#write(scope, async ops => {
         const rows = await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
-        if (rows.some(row => row.board_key === input.key)) {
+        const taken = rows.find(row => row.board_key === input.key);
+        const stored = taken && over ? await readStoredBoard(ops, scope, input.key) : null;
+        if (taken && !(stored && over?.(stored))) {
           throw new StoredBoardError('board_exists', `Board "${input.key}" already exists in this project.`);
         }
         await before?.(ops);
-        await insertBoard(ops, scope, input, { position: nextPosition(rows), actor });
+        if (taken) await writeBoard(ops, scope, taken, input, actor);
+        else await insertBoard(ops, scope, input, { position: nextPosition(rows), actor });
         return { result: undefined, changed: true };
       }).then(async () => (await this.get(scope, input.key))!);
     } catch (error) {

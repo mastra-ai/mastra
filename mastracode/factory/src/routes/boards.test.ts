@@ -984,6 +984,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       ]);
     });
 
+    it('lets the project create a board under its key over the row an earlier release seeded', async () => {
+      const { a, scope, base, replicaA } = await setup();
+      await a.boards.insertIfMissing(scope, boardDefinitionOf(reviewBoard), 'factory');
+      const open = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('review') });
+      const board = { ...bugsBoard, key: 'review' };
+
+      expect(await replicaA.send('POST', base, board)).toMatchObject({
+        status: 409,
+        body: { error: 'board_in_use', cards: 1 },
+      });
+      await a.workItems.update({ orgId: scope.orgId, id: open.item.id, userId: ADMIN, patch: { stages: ['done'] } });
+      const created = await replicaA.send('POST', base, board);
+
+      expect(created).toMatchObject({
+        status: 201,
+        body: { board: { key: 'review', name: 'Bugs', source: 'stored' } },
+      });
+      expect(await catalogBoard(replicaA.send, base, 'review')).toMatchObject({ name: 'Bugs', source: 'stored' });
+      expect(await a.boards.get(scope, 'review')).toMatchObject({ updatedBy: ADMIN, revision: 2 });
+      expect(await cardsOf(replicaA.send, scope.factoryProjectId)).toMatchObject([
+        { id: open.item.id, board: 'work', stages: ['done'] },
+      ]);
+      // The board is the project's now, so its key is taken.
+      expect(await replicaA.send('POST', base, board)).toMatchObject({ status: 409, body: { error: 'board_exists' } });
+    });
+
     it('stays hidden, with no problem reported, where an earlier release left its seeded row untouched', async () => {
       const { a, scope, base, replicaA } = await setup();
       await a.boards.insertIfMissing(scope, boardDefinitionOf(reviewBoard), 'factory');
