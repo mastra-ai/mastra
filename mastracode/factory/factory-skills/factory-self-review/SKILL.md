@@ -36,7 +36,7 @@ Push for the smallest change that fixes the reported problem, with proportionate
 
 1. Fetch the work branch the session is on (`git rev-parse --abbrev-ref HEAD`) from `origin` and reset the checkout to `origin/<branch>`. If it does not exist on `origin`, the builder never pushed: request changes saying so.
 2. Record the full head SHA (`git rev-parse HEAD`). That is the only head you review and test. Determine the base with `git merge-base HEAD origin/<default branch>` and review `base...HEAD`.
-3. If the factory-phase arguments say this is a later round, read the previous findings from the work item and confirm each blocking finding is fixed on this head. Then look for new problems only in what changed since the previous round, and only for blocking findings or regressions. Do not widen the review or raise follow-ups as required changes.
+3. If the factory-phase arguments say this is a later round, read the previous findings from the work item and confirm each blocking finding is fixed on this head. Then look for new problems only in what changed since the previous round, and only for blocking findings or regressions. Do not widen the review or raise follow-ups as required changes. Each verdict replaces the stored report, so carry earlier rounds' follow-ups that still apply into this round's **Follow-ups** list.
 
 ## Report
 

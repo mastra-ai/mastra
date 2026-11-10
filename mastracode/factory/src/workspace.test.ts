@@ -449,6 +449,7 @@ describe('bundled Factory skill assets', () => {
     expect(selfReview).toContain('Request changes only for blocking findings.');
     expect(selfReview).toContain('**Follow-ups**');
     expect(selfReview).toContain('"no optional or follow-up tiers" rule do not apply here');
+    expect(selfReview).toContain("carry earlier rounds' follow-ups that still apply");
   });
 
   it('guards the initial triage label when any status label is present', async () => {
