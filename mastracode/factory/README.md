@@ -222,7 +222,7 @@ curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work/reset" -H '
   -d "{\"expectedRevision\": $(curl -s "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work" | jq .board.revision)}"
 ```
 
-Admins can make the same edits in the Factory UI under **Settings → Work board**.
+Admins can make the same edits in the Factory UI under **Settings → Boards**, which also creates boards (from a Backlog → Doing → Done starter or a copy of an existing board), edits and deletes the ones the project created, and is reachable from **New board** in the sidebar and **Edit board** on a board.
 
 ### Migrating from `defineBoard()`
 

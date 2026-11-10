@@ -13,6 +13,7 @@ import type { BoardCandidate } from '../../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
+import { EditBoardButton } from '../../domains/factory/components/EditBoardButton';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
@@ -422,7 +423,12 @@ export function BoardContent({
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
-            aside={runsLoop && <BoardAutomationSettings factoryProjectId={factoryProjectId} />}
+            aside={
+              <>
+                <EditBoardButton factoryProjectId={factoryProjectId} boardId={definition.id} />
+                {runsLoop && <BoardAutomationSettings factoryProjectId={factoryProjectId} />}
+              </>
+            }
           />
         }
       />

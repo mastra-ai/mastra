@@ -70,7 +70,7 @@ export const shipBoard: InstalledBoardInfo = {
 };
 
 /** An installed board as the catalog route sends it. */
-function catalogInfo(board: InstalledBoard, extra: Partial<InstalledBoardInfo> = {}): InstalledBoardInfo {
+export function catalogInfo(board: InstalledBoard, extra: Partial<InstalledBoardInfo> = {}): InstalledBoardInfo {
   return {
     id: board.id,
     name: board.name,
