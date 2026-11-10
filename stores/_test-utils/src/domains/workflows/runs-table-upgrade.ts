@@ -75,4 +75,16 @@ export function createRunsTableUpgradeTests({
     await after.appendWorkflowRunEntries({ ...fresh, steps: {}, statePatch: [set(['n'], 1)] });
     expect((await after.loadWorkflowRun({ ...fresh, successfulSteps: 'full' }))?.state).toEqual({ n: 1 });
   });
+
+  it('lets several stores upgrade the runs table at once', async () => {
+    const run = { workflowName: `wf-${randomUUID()}`, runId: `run-${randomUUID()}` };
+    await (await openStore()).writeWorkflowRunCheckpoint({ ...run, header: header(run.runId), steps: {}, state: {} });
+    await dropStateColumns();
+
+    // Workers starting together each run init and add the missing columns.
+    const stores = await Promise.all(Array.from({ length: 4 }, () => openStore()));
+
+    await stores[0]!.appendWorkflowRunEntries({ ...run, steps: {}, statePatch: [set(['n'], 1)] });
+    expect((await stores[3]!.loadWorkflowRun({ ...run, successfulSteps: 'full' }))?.state).toEqual({ n: 1 });
+  });
 }
