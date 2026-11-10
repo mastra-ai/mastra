@@ -700,4 +700,113 @@ describe('generative UI through the agent loop', () => {
     expect(posted[0]).toMatchObject({ type: 'card', title: 'Deploy' });
     expect((await result.toolResults)[0]?.payload.result).toEqual({ ok: true, messageId: 'card-1' });
   });
+
+  it('lets the model condense an oversized chart from the returned issues and retry until it posts', async () => {
+    const posted: any[] = [];
+    const render = {
+      platform: 'slack',
+      generativeUI: true,
+      chatThread: {
+        post: async (card: unknown) => {
+          posted.push(card);
+          return { id: 'card-1' };
+        },
+      },
+    };
+    const days = Array.from({ length: 31 }, (_, i) => `Nov ${i + 1}`);
+    const chartSpec = (categories: string[], seriesName: string) => ({
+      spec: {
+        root: 'card',
+        elements: {
+          card: { type: 'Card', props: { title: 'Velocity' }, children: ['chart'] },
+          chart: {
+            type: 'Chart',
+            props: {
+              title: 'Daily velocity',
+              chart: { type: 'line', categories, series: [{ name: seriesName, values: categories.map((_, i) => i) }] },
+            },
+          },
+        },
+      },
+    });
+    const toolCall = (id: string, input: unknown) => [
+      { type: 'tool-call' as const, toolCallId: id, toolName: 'render_card', input: JSON.stringify(input) },
+      {
+        type: 'finish' as const,
+        finishReason: 'tool-calls' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      },
+    ];
+    // Reads the latest render_card result from the prompt, like a model would.
+    const lastToolResult = (prompt: any[]) =>
+      prompt
+        .filter(m => m.role === 'tool')
+        .flatMap(m => m.content)
+        .filter((part: any) => part.type === 'tool-result')
+        .at(-1)?.output?.value;
+
+    const seenResults: any[] = [];
+    const agent = new Agent({
+      id: 'generative-ui-retry',
+      name: 'generative-ui-retry',
+      instructions: 'You are a test agent',
+      inputProcessors: [new ChatChannelGenerativeUIProcessor()],
+      model: new MockLanguageModelV2({
+        doStream: async options => {
+          const previous = lastToolResult(options.prompt as any[]);
+          seenResults.push(previous);
+          let parts;
+          if (!previous) {
+            // First try: the raw 31-day series with the full bot name.
+            parts = toolCall('call-1', chartSpec(days, 'Factory (mastra-platform[bot])'));
+          } else if (!previous.ok) {
+            // Condense only what the issues point at.
+            const issues: string = previous.issues.join('\n');
+            const categories = issues.includes('at most 20 categories') ? days.slice(-20) : days;
+            const name = issues.includes('longer than 20 characters') ? 'Factory' : 'Factory (mastra-platform[bot])';
+            parts = toolCall(`call-${seenResults.length}`, chartSpec(categories, name));
+          } else {
+            parts = [
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 },
+              },
+            ];
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+              ...parts,
+            ]),
+          };
+        },
+      }),
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
+    const result = await agent.stream('chart daily velocity for November', { requestContext, maxSteps: 5 });
+    await result.consumeStream();
+
+    // Try, see issues, condense, try again, succeed, stop.
+    expect(seenResults).toHaveLength(3);
+    expect(seenResults[1]).toMatchObject({ ok: false });
+    expect(seenResults[1].issues).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('at most 20 categories'),
+        expect.stringContaining('"Factory (mastra-platform[bot])" longer than 20 characters'),
+      ]),
+    );
+    expect(seenResults[2]).toEqual({ ok: true, messageId: 'card-1' });
+
+    // Only the condensed card is posted, and it's still a native chart.
+    expect(posted).toHaveLength(1);
+    const chart = posted[0].children.find((child: any) => child.type === 'chart');
+    expect(chart.chart.categories).toEqual(days.slice(-20));
+    expect(chart.chart.series[0].name).toBe('Factory');
+  });
 });
