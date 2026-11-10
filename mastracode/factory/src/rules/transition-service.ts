@@ -62,8 +62,8 @@ export interface FactoryTransitionRequest {
   completedTool?: string;
   /**
    * Internal: an intake route moves the card on a status event. A route is admin-authored, so it
-   * may name any phase on the card's board regardless of the board's next phases; it enters a
-   * working phase only when the route allows it.
+   * may name any phase on the card's board regardless of the board's next phases, working ones
+   * included. The phase's `autoStart` and the dispatcher's approval check decide whether its run starts.
    */
   eventRoute?: { routeId: string };
 }

@@ -729,6 +729,24 @@ describe('intake routes moving existing cards on status events', () => {
     expect(await runs(card.id)).toEqual(['proposed']);
   });
 
+  it('starts the run of a working phase a route moves a card into when the project auto-runs', async () => {
+    const { route, deliver, deliverEvent, putAt, runs } = await setup({ autoRun: true });
+    await route({
+      name: 'Reopened back to Triage',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+    await putAt(card.id, 'done');
+
+    const moved = (await deliverEvent(card.id, { type: 'work_item.reopened' })).card;
+    expect(moved).toMatchObject({ stages: ['triage'], autonomyArmedAt: null });
+    // Triage has no autoStart, but the project's auto-run lets its run start without a person.
+    const started = await runs(card.id);
+    expect(started).toHaveLength(1);
+    expect(started).not.toContain('proposed');
+  });
+
   it('starts the run of a working phase a route moves a card into when that phase starts on its own', async () => {
     const { boards, scope, route, deliver, deliverEvent, putAt, runs } = await setup();
     await boards.create(
