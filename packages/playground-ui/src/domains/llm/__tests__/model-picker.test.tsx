@@ -158,4 +158,46 @@ describe('ModelPicker', () => {
         .getAttribute('aria-pressed'),
     ).toBe('true');
   });
+
+  describe('when the catalog holds many providers that are not connected', () => {
+    const offline = Array.from(
+      { length: 40 },
+      (_, i): ModelPickerProvider => ({
+        id: `offline-${i}`,
+        name: `Offline ${i}`,
+        connected: false,
+        models: Array.from({ length: 30 }, (_, j) => ({ id: `offline-model-${i}-${j}` })),
+      }),
+    );
+    const groq: ModelPickerProvider = { id: 'groq', name: 'Groq', connected: false, models: [{ id: 'llama-4-scout' }] };
+    const catalog = [{ ...anthropic, connected: true }, { ...openai, connected: true }, groq, ...offline];
+
+    it('lists only connected providers until the user searches', () => {
+      const list = openPicker(catalog);
+
+      expect(optionNames(list)).toEqual(['Claude Opus 4.7', 'Claude Sonnet 4.6', 'GPT-5']);
+      expect(
+        within(screen.getByRole('group', { name: 'Filter by provider' }))
+          .getAllByRole('button')
+          .map(button => button.getAttribute('aria-label') ?? button.textContent),
+      ).toEqual(['All', 'Anthropic', 'OpenAI']);
+    });
+
+    it('searches every provider and caps the matches it renders', () => {
+      const list = openPicker(catalog);
+
+      fireEvent.change(screen.getByPlaceholderText('Search models'), { target: { value: 'offline model' } });
+
+      expect(within(list).getAllByRole('option')).toHaveLength(50);
+      expect(within(list).getByText('Refine the search to see more.')).toBeTruthy();
+    });
+
+    it('finds a provider that is not connected by its name', () => {
+      const list = openPicker(catalog);
+
+      fireEvent.change(screen.getByPlaceholderText('Search models'), { target: { value: 'groq' } });
+
+      expect(optionNames(list)).toEqual(['Llama 4 Scout']);
+    });
+  });
 });

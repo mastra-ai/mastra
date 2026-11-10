@@ -19,15 +19,32 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/ds/components/Command';
+import { Txt } from '@/ds/components/Txt';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/utils/cn';
-import { compareModelReleaseDates } from '@/utils/model';
+import { compareModelReleaseDates, formatModelName } from '@/utils/model';
+
+// Catalogs run to thousands of models; rendering them all freezes the list.
+const MAX_SEARCH_RESULTS = 50;
 
 const byReleaseDate = (a: ModelPickerModel, b: ModelPickerModel) =>
   compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.id.localeCompare(b.id);
 
 const isSameModel = (a: ModelPickerValue | undefined, provider: string, model: string) =>
   a?.provider === provider && a.model === model;
+
+/** Every word of the query appears in the provider or model name or id. */
+function searchModels(providers: ModelPickerProvider[], query: string) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const matches: { provider: ModelPickerProvider; model: ModelPickerModel }[] = [];
+  for (const provider of providers) {
+    for (const model of provider.models.toSorted(byReleaseDate)) {
+      const text = `${provider.name} ${provider.id} ${model.id} ${formatModelName(model.id)}`.toLowerCase();
+      if (words.every(word => text.includes(word))) matches.push({ provider, model });
+    }
+  }
+  return matches;
+}
 
 export interface ModelPickerPanelProps {
   providers: ModelPickerProvider[];
@@ -67,18 +84,31 @@ export function ModelPickerPanel({
   const [providerFilter, setProviderFilter] = useState(initialProviderFilter);
   const searchBar = useMeasuredAutoHeight();
   const [scrolled, setScrolled] = useState(false);
-  const filtering = providers.length > 1;
-  const shownProviders =
-    query || !providerFilter ? providers : providers.filter(provider => provider.id === providerFilter);
+  // Providers without credentials stay out of the way until a search asks for them.
+  const usable = providers.filter(provider => provider.connected !== false || provider.id === value?.provider);
+  const filtering = usable.length > 1;
+  const shownProviders = providerFilter ? usable.filter(provider => provider.id === providerFilter) : usable;
+  const matches = query ? searchModels(providers, query) : [];
   // A lone group's provider is already on screen (the trigger, or the pressed filter), so it needs no heading.
   const mixedProviders = shownProviders.length > 1;
+  const renderOption = (provider: ModelPickerProvider, model: ModelPickerModel) => (
+    <ModelPickerOption
+      key={`${provider.id}/${model.id}`}
+      provider={provider}
+      model={model}
+      selected={isSameModel(value, provider.id, model.id)}
+      isDefault={isSameModel(defaultModel, provider.id, model.id)}
+      onSelect={() => onSelect({ provider: provider.id, model: model.id })}
+      renderProviderIcon={renderProviderIcon}
+    />
+  );
 
   return (
     <>
       {header}
       <Command
         loop
-        shouldFilter
+        shouldFilter={false}
         // Search and the list sit on an inset card; the header and settings sit on the frame around it.
         className={cn(
           'bg-background',
@@ -128,7 +158,7 @@ export function ModelPickerPanel({
             />
             {filtering ? (
               <ModelPickerProviderFilter
-                providers={providers}
+                providers={usable}
                 value={providerFilter}
                 onChange={setProviderFilter}
                 renderProviderIcon={renderProviderIcon}
@@ -138,22 +168,23 @@ export function ModelPickerPanel({
           </div>
           <CommandList className="max-h-none overflow-visible">
             <CommandEmpty>No matching model.</CommandEmpty>
-            {shownProviders.map(provider => (
-              <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
-                {provider.models.toSorted(byReleaseDate).map(model => (
-                  <ModelPickerOption
-                    key={model.id}
-                    provider={provider}
-                    model={model}
-                    selected={isSameModel(value, provider.id, model.id)}
-                    isDefault={isSameModel(defaultModel, provider.id, model.id)}
-                    onSelect={() => onSelect({ provider: provider.id, model: model.id })}
-                    renderProviderIcon={renderProviderIcon}
-                  />
-                ))}
+            {query ? (
+              <CommandGroup>
+                {matches.slice(0, MAX_SEARCH_RESULTS).map(({ provider, model }) => renderOption(provider, model))}
+                {matches.length > MAX_SEARCH_RESULTS ? (
+                  <Txt as="p" variant="caption" tone="muted" className="px-2 py-1.5">
+                    Refine the search to see more.
+                  </Txt>
+                ) : null}
               </CommandGroup>
-            ))}
-            {resetLabel && defaultModel && !isSameModel(value, defaultModel.provider, defaultModel.model) ? (
+            ) : (
+              shownProviders.map(provider => (
+                <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
+                  {provider.models.toSorted(byReleaseDate).map(model => renderOption(provider, model))}
+                </CommandGroup>
+              ))
+            )}
+            {!query && resetLabel && defaultModel && !isSameModel(value, defaultModel.provider, defaultModel.model) ? (
               <>
                 <CommandSeparator />
                 <CommandGroup>
