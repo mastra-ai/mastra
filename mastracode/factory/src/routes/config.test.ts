@@ -3,12 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
-import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
-import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { AuthStorage, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
 import { getModelReasoningOptions } from '@mastra/core/llm';
 import type * as CoreLlm from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
+import { InMemoryStore } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
@@ -647,6 +649,103 @@ describe('provider key routes with a tenant', () => {
     const authStorage = { setStoredApiKey } as unknown as AuthStorage;
     await putKey(buildApp(userA, authStorage), { key: 'sk-mine' });
     expect(setStoredApiKey).not.toHaveBeenCalled();
+  });
+});
+
+describe('provider key routes in local mode', () => {
+  // The real router gateways run against a models.dev catalog served at the wire.
+  const catalogs = setupServer(
+    http.get('https://models.dev/api.json', () =>
+      HttpResponse.json({
+        'acme-cloud': {
+          id: 'acme-cloud',
+          name: 'Acme Cloud',
+          env: ['ACME_CLOUD_API_KEY'],
+          api: 'https://api.acme.test/v1',
+          npm: '@ai-sdk/openai-compatible',
+          models: { 'rocket-1': { id: 'rocket-1' } },
+        },
+      }),
+    ),
+    http.get('https://api.netlify.com/api/v1/ai-gateway/providers', () => HttpResponse.json({ providers: {} })),
+  );
+  let dir: string;
+  let app: Hono;
+
+  beforeAll(() => catalogs.listen({ onUnhandledRequest: 'error' }));
+  afterAll(() => catalogs.close());
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'factory-local-keys-'));
+    const controller = new AgentController({
+      id: 'code',
+      storage: new InMemoryStore(),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({ id: 'agent', name: 'agent', instructions: 'test', model: {} as any }),
+        },
+      ],
+    });
+    app = new Hono();
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({ enabled: false }),
+        controller,
+        authStorage: new AuthStorage(join(dir, 'auth.json')),
+      }).routes(),
+    );
+  });
+
+  afterEach(async () => {
+    delete process.env.ACME_CLOUD_API_KEY;
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  const acme = async () =>
+    (
+      (await (await app.request('/web/config/providers')).json()) as { providers: { provider: string }[] }
+    ).providers.find(provider => provider.provider === 'acme-cloud');
+  const modelIds = async () =>
+    ((await (await app.request('/web/config/models')).json()) as { models: { id: string }[] }).models.map(m => m.id);
+
+  it('removing a saved key disconnects the provider right away', async () => {
+    expect(await acme()).toMatchObject({ source: 'none', envVar: 'ACME_CLOUD_API_KEY' });
+
+    const saved = await app.request('/web/config/providers/acme-cloud/key', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'sk-acme', envVar: 'ACME_CLOUD_API_KEY' }),
+    });
+    expect(saved.status).toBe(200);
+    expect(await acme()).toMatchObject({ source: 'stored' });
+    expect(await modelIds()).toContain('acme-cloud/rocket-1');
+
+    const removed = await app.request('/web/config/providers/acme-cloud/key', { method: 'DELETE' });
+    expect(removed.status).toBe(200);
+    expect(await acme()).toMatchObject({ source: 'none' });
+    expect(await modelIds()).not.toContain('acme-cloud/rocket-1');
+  });
+
+  it('removing a saved key gives back the key the server was started with', async () => {
+    process.env.ACME_CLOUD_API_KEY = 'sk-server';
+    // The settings dialog sends the provider's envVar, so saving overrides the server key.
+    const saved = await app.request('/web/config/providers/acme-cloud/key', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'sk-saved', envVar: 'ACME_CLOUD_API_KEY' }),
+    });
+    expect(saved.status).toBe(200);
+    expect(await acme()).toMatchObject({ source: 'stored' });
+
+    const removed = await app.request('/web/config/providers/acme-cloud/key', { method: 'DELETE' });
+    expect(removed.status).toBe(200);
+    expect(await acme()).toMatchObject({ source: 'env' });
+    expect(process.env.ACME_CLOUD_API_KEY).toBe('sk-server');
+    expect(await modelIds()).toContain('acme-cloud/rocket-1');
   });
 });
 
