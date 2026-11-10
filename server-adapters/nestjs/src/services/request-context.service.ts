@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import {
+  bindDispatchAdapter,
   MASTRA_CLIENT_TYPE_HEADER,
-  MASTRA_DISPATCH_ADAPTER_KEY,
   MASTRA_IS_STUDIO_KEY,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
@@ -64,7 +64,7 @@ export class RequestContextService {
   private parseRequestContext(): RequestContext {
     const context = new RequestContext();
     if (this.customRoutes) {
-      context.set(MASTRA_DISPATCH_ADAPTER_KEY, this.customRoutes.dispatchAdapter);
+      bindDispatchAdapter(context, this.customRoutes.dispatchAdapter);
     }
 
     try {

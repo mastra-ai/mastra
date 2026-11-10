@@ -33,7 +33,6 @@ import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
-  MASTRA_DISPATCH_ADAPTER_KEY,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
@@ -62,7 +61,6 @@ export { cancelReaderOnResponseClose, writeWithBackpressure } from './stream-dis
 export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
-  MASTRA_DISPATCH_ADAPTER_KEY,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
@@ -731,7 +729,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     bodyRequestContext?: Record<string, any>;
   }): RequestContext {
     const requestContext = new RequestContext();
-    requestContext.set(MASTRA_DISPATCH_ADAPTER_KEY, this.dispatchAdapter);
+    bindDispatchAdapter(requestContext, this.dispatchAdapter);
     if (bodyRequestContext) {
       for (const [key, value] of Object.entries(bodyRequestContext)) {
         if (isReservedRequestContextKey(key)) continue;
@@ -1799,17 +1797,29 @@ export interface DispatchAdapterInfo {
 }
 
 /**
- * Opaque handle naming one registered adapter. An adapter records it in each request's context
- * under `MASTRA_DISPATCH_ADAPTER_KEY` so routes dispatched from that request get its policy.
+ * Opaque handle naming one registered adapter. An adapter binds it to each request context it
+ * creates (`bindDispatchAdapter`) so routes dispatched with that context get its policy.
  */
 export type DispatchAdapterHandle = Readonly<Record<string, never>>;
 
 const dispatchAdapters = new WeakMap<Mastra, Map<DispatchAdapterHandle, DispatchAdapterInfo>>();
 
+// Kept beside the request context rather than in it, so agent and tool code never see the handle
+// and no client input can set it.
+const servingAdapters = new WeakMap<RequestContext, DispatchAdapterHandle>();
+
+/**
+ * Record that `handle`'s adapter is serving the request `requestContext` belongs to. Adapters
+ * built on `MastraServer` do this for every request; other adapters must call it.
+ */
+export function bindDispatchAdapter(requestContext: RequestContext, handle: DispatchAdapterHandle): void {
+  servingAdapters.set(requestContext, handle);
+}
+
 /**
  * Tell `dispatchRoute` where an adapter serves a Mastra instance's routes. Adapters built on
- * `MastraServer` register themselves; adapters that are not must call this, and set the returned
- * handle in each request's context under `MASTRA_DISPATCH_ADAPTER_KEY`.
+ * `MastraServer` register themselves; adapters that are not must call this, and bind the returned
+ * handle to each request context they create with `bindDispatchAdapter`.
  */
 export function registerDispatchAdapter(mastra: Mastra, info: DispatchAdapterInfo): DispatchAdapterHandle {
   const adapters = dispatchAdapters.get(mastra) ?? new Map<DispatchAdapterHandle, DispatchAdapterInfo>();
@@ -1822,7 +1832,7 @@ export function registerDispatchAdapter(mastra: Mastra, info: DispatchAdapterInf
 /**
  * The adapter whose HTTP paths and checks a dispatched route gets. Among the adapters serving
  * `routePrefix` (all of them when it is not given), that is the one serving the current request
- * (`MASTRA_DISPATCH_ADAPTER_KEY`), else the only one. `prefix` is undefined when it cannot be
+ * (`bindDispatchAdapter`), else the only one. `prefix` is undefined when it cannot be
  * told: several candidates and none serving this request, a `routePrefix` no registered adapter
  * serves (a custom route's own `routePrefix` is empty, for one), or nothing to go on. Guessing
  * between adapters could skip one's stricter checks, so it is never done.
@@ -1840,7 +1850,7 @@ function resolveDispatchAdapter(
     routePrefix === undefined
       ? adapters
       : adapters.filter(([, adapter]) => normalizeRoutePath(adapter.prefix ?? '') === normalizeRoutePath(routePrefix));
-  const serving = requestContext.get(MASTRA_DISPATCH_ADAPTER_KEY);
+  const serving = servingAdapters.get(requestContext);
   const match =
     candidates.find(([handle]) => handle === serving) ?? (candidates.length === 1 ? candidates[0] : undefined);
   if (!match) {

@@ -50,6 +50,31 @@ describe('Express adapter - checkRoutePermission override with two adapters on o
       handler: async ({ mastra, requestContext, abortSignal, request }) =>
         dispatchRoute(listTools, {}, { mastra, requestContext, abortSignal, request, routePrefix: '/api' }),
     });
+    const keys = createRoute({
+      method: 'GET',
+      path: '/__keys',
+      responseType: 'json',
+      handler: async ({ requestContext }) => [...requestContext.keys()],
+    });
+    const copied = createRoute({
+      method: 'GET',
+      path: '/__copied',
+      responseType: 'json',
+      handler: async ({ mastra, requestContext, abortSignal }) =>
+        dispatchRoute(
+          listTools,
+          {},
+          {
+            mastra,
+            requestContext: new RequestContext([...requestContext.entries()]),
+            abortSignal,
+            routePrefix: '/api',
+          },
+        ).then(
+          () => ({ refused: false }),
+          (error: Error) => ({ refused: /cannot tell which path/.test(error.message) }),
+        ),
+    });
     const mastra = new Mastra({
       logger: false,
       tools: {
@@ -62,7 +87,7 @@ describe('Express adapter - checkRoutePermission override with two adapters on o
       },
       server: {
         auth: { authenticateToken: async (token: string) => (token === 'valid' ? { id: 'user-1' } : null) },
-        apiRoutes: [probe as any],
+        apiRoutes: [probe as any, keys as any, copied as any],
       },
     });
 
@@ -85,6 +110,14 @@ describe('Express adapter - checkRoutePermission override with two adapters on o
 
     expect((await open('/api/tools')).status).toBe(200);
     expect(await (await open('/__dispatch')).json()).toMatchObject({ ok: true });
+
+    // The serving adapter is not a request-context entry, so handlers can't read it and a client
+    // can't supply it: a context copied entry by entry, or one naming it in its body, is not served.
+    const keysProbe = await locked('/__keys?requestContext=' + encodeURIComponent('{"mastra__dispatchAdapter":{}}'));
+    expect(((await keysProbe.json()) as string[]).filter(key => key.toLowerCase().includes('dispatch'))).toEqual([
+      'mastra__dispatchAdapter',
+    ]);
+    expect(await (await locked('/__copied')).json()).toEqual({ refused: true });
 
     // Outside a request either adapter served, the prefix alone can't say whose policy applies.
     const requestContext = new RequestContext();
