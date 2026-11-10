@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   SettingsContainer,
   SettingsEmptyRow,
@@ -117,7 +118,9 @@ function ProviderLogo({ connection }: { connection: ConnectToolConnection }) {
       {logoUrl && failedSrc !== logoUrl ? (
         <img src={logoUrl} alt="" className="size-4 shrink-0 object-contain" onError={() => setFailedSrc(logoUrl)} />
       ) : (
-        <span className="text-xs font-medium uppercase">{providerName.charAt(0)}</span>
+        <Txt as="span" variant="column" className="uppercase">
+          {providerName.charAt(0)}
+        </Txt>
       )}
     </SettingsItemIcon>
   );

@@ -48,9 +48,7 @@ function SectionRowBase({
         >
           {label}
         </FieldLabel>
-        {description != null && (
-          <FieldDescription className="mt-1 max-w-[62ch] text-pretty">{description}</FieldDescription>
-        )}
+        {description != null && <FieldDescription className="mt-1 text-pretty">{description}</FieldDescription>}
         <FieldError className="mt-1">{errorMsg}</FieldError>
       </div>
       {children != null && (

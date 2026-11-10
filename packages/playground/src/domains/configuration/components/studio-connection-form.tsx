@@ -24,11 +24,11 @@ function headersRecord(rows: HeaderRow[]) {
   return Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]));
 }
 
-function sameConnection(a: ConnectionDraft, b: ConnectionDraft) {
+function matchesConfig(draft: ConnectionDraft, config: StudioConfig) {
   return (
-    a.baseUrl.trim() === b.baseUrl.trim() &&
-    a.apiPrefix.trim() === b.apiPrefix.trim() &&
-    JSON.stringify(headersRecord(a.headers)) === JSON.stringify(headersRecord(b.headers))
+    draft.baseUrl.trim() === config.baseUrl.trim() &&
+    draft.apiPrefix.trim() === (config.apiPrefix ?? '').trim() &&
+    JSON.stringify(headersRecord(draft.headers)) === JSON.stringify(config.headers)
   );
 }
 
@@ -41,23 +41,21 @@ function headerCountLabel(count: number) {
 /**
  * The URL, API prefix and headers only work as a set (a new instance often needs its own prefix and auth header), so
  * edits stay a draft until "Save changes" applies them together: Studio switches once, from one working connection
- * to the next.
+ * to the next. Saving changes the stored config, which remounts the form (it's keyed by it) on the saved values.
  */
 export function StudioConnectionForm({ initialConfig }: { initialConfig: StudioConfig }) {
   const { setConfig } = useStudioConfig();
   // Rows keep an id so removing one doesn't hand its inputs to the next. A counter, not `crypto.randomUUID`,
   // which is missing when Studio is served over plain http.
   const nextId = useRef(0);
-  const [saved, setSaved] = useState(
-    (): ConnectionDraft => ({
-      baseUrl: initialConfig.baseUrl,
-      apiPrefix: initialConfig.apiPrefix ?? '',
-      headers: Object.entries(initialConfig.headers).map(([name, value]) => ({ id: nextId.current++, name, value })),
-    }),
-  );
-  const [draft, setDraft] = useState(saved);
+  const draftFromConfig = (): ConnectionDraft => ({
+    baseUrl: initialConfig.baseUrl,
+    apiPrefix: initialConfig.apiPrefix ?? '',
+    headers: Object.entries(initialConfig.headers).map(([name, value]) => ({ id: nextId.current++, name, value })),
+  });
+  const [draft, setDraft] = useState(draftFromConfig);
   const [urlError, setUrlError] = useState<string>();
-  const changed = !sameConnection(draft, saved);
+  const changed = !matchesConfig(draft, initialConfig);
 
   const updateHeader = (id: number, patch: Partial<HeaderRow>) =>
     setDraft(current => ({
@@ -76,12 +74,11 @@ export function StudioConnectionForm({ initialConfig }: { initialConfig: StudioC
       apiPrefix: draft.apiPrefix.trim() || undefined,
       headers: headersRecord(draft.headers),
     });
-    setSaved(draft);
     toast.success('Connection saved');
   }
 
   function discard() {
-    setDraft(saved);
+    setDraft(draftFromConfig());
     setUrlError(undefined);
   }
 

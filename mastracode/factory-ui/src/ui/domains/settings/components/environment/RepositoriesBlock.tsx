@@ -67,7 +67,7 @@ export function RepositoriesBlock({
             if (disabled || order(next) === order(live)) return;
             void onSave({ repositories: reorderPatch([...next, ...dead]) });
           }}
-          className="flex min-w-0 flex-col"
+          className="divide-border flex min-w-0 flex-col divide-y *:py-3.25 *:first:pt-0 *:last:pb-0"
         >
           {live.map((repository, index) => (
             <ContentBlock
@@ -79,7 +79,6 @@ export function RepositoriesBlock({
                 <RepositoryRow
                   repository={repository}
                   position={index + 1}
-                  last={index === live.length - 1}
                   provider={providers[repository.projectRepositoryId] ?? 'github'}
                   disabled={disabled}
                   dragHandleProps={dragHandleProps}
@@ -161,7 +160,6 @@ function DeadRepositoryRow({
 function RepositoryRow({
   repository,
   position,
-  last,
   provider,
   disabled,
   dragHandleProps,
@@ -173,8 +171,6 @@ function RepositoryRow({
 }: {
   repository: FactoryEnvironmentRepository;
   position: number;
-  /** The rows share one card cell (the drag list), so each takes the card's row spacing itself. */
-  last: boolean;
   provider: 'github' | 'gitlab';
   disabled: boolean;
   dragHandleProps: React.HTMLAttributes<HTMLElement> | null;
@@ -189,16 +185,7 @@ function RepositoryRow({
   const detailsId = useId();
 
   return (
-    <div
-      role="group"
-      aria-label={label}
-      className={cn(
-        'flex flex-col gap-2 py-3.25',
-        position === 1 && 'pt-0',
-        last && 'pb-0',
-        position > 1 && 'border-border border-t',
-      )}
-    >
+    <div role="group" aria-label={label} className="flex flex-col gap-2">
       <SettingsItem
         media={
           <>

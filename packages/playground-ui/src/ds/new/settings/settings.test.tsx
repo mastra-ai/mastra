@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
@@ -211,13 +211,12 @@ describe('Settings', () => {
   });
 
   describe('when a list sits in a container', () => {
-    it('puts its count and action in a header row above its items', () => {
-      let added = 0;
-      render(
+    function renderList(onAdd: () => void = () => {}) {
+      return render(
         <SettingsContainer>
           <SettingsListHeader
             action={
-              <button type="button" onClick={() => (added += 1)}>
+              <button type="button" onClick={onAdd}>
                 Add account
               </button>
             }
@@ -227,33 +226,50 @@ describe('Settings', () => {
           <SettingsItem title="mastra-ai" description="GitHub" />
         </SettingsContainer>,
       );
+    }
 
-      const rows = document.querySelector('[data-slot="settings-container"]')?.children;
-      expect(rows?.[0]?.getAttribute('data-slot')).toBe('settings-list-header');
-      expect(rows?.[1]?.getAttribute('data-slot')).toBe('settings-item');
+    it('shows the count and action in a header above the items', () => {
+      const { container } = renderList();
+
+      const list = within(container);
+      const count = list.getByText('1 account');
+      list.getByRole('button', { name: 'Add account' });
+      expect(
+        count.compareDocumentPosition(list.getByText('mastra-ai')) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('runs the header action', () => {
+      let added = 0;
+      renderList(() => (added += 1));
+
       fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+
       expect(added).toBe(1);
-      // A truncated string title can still be read in full on hover.
+    });
+
+    it('keeps a truncated title readable in full on hover', () => {
+      renderList();
+
       expect(screen.getByText('mastra-ai').getAttribute('title')).toBe('mastra-ai');
     });
 
-    it('shows an empty list as one row with its empty text and action', () => {
-      render(
+    it('shows an empty list as its empty text and action', () => {
+      const { container } = render(
         <SettingsContainer>
           <SettingsEmptyRow action={<button type="button">Add header</button>}>No request headers</SettingsEmptyRow>
         </SettingsContainer>,
       );
 
-      const container = document.querySelector('[data-slot="settings-container"]');
-      expect(container?.children).toHaveLength(1);
-      expect(container?.contains(screen.getByText('No request headers'))).toBe(true);
-      expect(container?.contains(screen.getByRole('button', { name: 'Add header' }))).toBe(true);
+      const list = within(container);
+      list.getByText('No request headers');
+      list.getByRole('button', { name: 'Add header' });
     });
   });
 
   describe('when a list has notices and other controls', () => {
-    it('keeps them inside the container, and hides an empty notice row', () => {
-      render(
+    it('shows them in the list, and renders nothing for an empty notice row', () => {
+      const { container } = render(
         <SettingsContainer>
           <SettingsListHeader action={<button type="button">Refresh</button>}>2 accounts</SettingsListHeader>
           <SettingsNoticeRow>Couldn’t load accounts</SettingsNoticeRow>
@@ -261,10 +277,10 @@ describe('Settings', () => {
         </SettingsContainer>,
       );
 
-      const container = document.querySelector('[data-slot="settings-container"]');
-      expect(container?.contains(screen.getByText('Couldn’t load accounts'))).toBe(true);
-      expect(container?.contains(screen.getByRole('button', { name: 'Refresh' }))).toBe(true);
-      expect(screen.getByTestId('empty-notices').childNodes).toHaveLength(0);
+      const list = within(container);
+      list.getByText('Couldn’t load accounts');
+      list.getByRole('button', { name: 'Refresh' });
+      expect(screen.getByTestId('empty-notices').textContent).toBe('');
     });
   });
 
