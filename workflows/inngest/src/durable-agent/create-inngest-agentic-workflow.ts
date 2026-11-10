@@ -460,7 +460,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         const state = inputData as IterationState;
         const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-        const { step } = engine as { step: BaseContext<Inngest>['step'] };
+        const { step, inngestRunId } = engine as { step: BaseContext<Inngest>['step']; inngestRunId?: string };
 
         const emitStepFinish = async (isContinued: boolean) => {
           if (state.lastStepResult) {
@@ -472,23 +472,32 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             // Carry the step's response messages so `onStepFinish(event).response.messages` and
             // `output.steps[i].response.messages` match the regular loop (#26780), as core does:
             // only the part that changed since the previous step-finish, which readers rebuild. The
-            // diff is computed from the memoized state, so every replay of this predicate computes
-            // the same one, and the cursor travels with the iteration state.
-            let nextCursor: ResponseMessagesCursor | undefined;
-            try {
-              const list = new MessageList({}).deserialize(state.messageListState);
-              const { diff, cursor } = diffResponseMessages(
-                state.responseMessagesCursor ?? { producer: `inngest:${state.runId}` },
-                list.get.response.aiV5.model(),
-              );
-              deferredChunk.payload._durableResponseMessagesDiff = diff;
-              nextCursor = cursor;
-            } catch (error) {
-              mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
-            }
-            await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
-              await emitChunkEvent(pubsub, state.runId, deferredChunk);
-            });
+            // diff is built inside the memoized step, so replays reuse it rather than recompute it,
+            // and the cursor it returns travels with the iteration state. Each Inngest function run
+            // (the first one, and each resume) starts with the whole list.
+            const previousCursor = state.responseMessagesCursor;
+            const nextCursor: ResponseMessagesCursor | null = await step.run(
+              `emit-step-finish-${state.runId}-${state.iterationCount}`,
+              async () => {
+                let cursor: ResponseMessagesCursor | null = null;
+                try {
+                  const list = new MessageList({}).deserialize(state.messageListState);
+                  const producer = `inngest:${state.runId}:${inngestRunId ?? ''}`;
+                  const result = diffResponseMessages(
+                    previousCursor?.producer === producer ? previousCursor : { producer },
+                    list.get.response.aiV5.model(),
+                  );
+                  deferredChunk.payload._durableResponseMessagesDiff = result.diff;
+                  cursor = result.cursor;
+                } catch (error) {
+                  mastra
+                    ?.getLogger?.()
+                    ?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+                }
+                await emitChunkEvent(pubsub, state.runId, deferredChunk);
+                return cursor;
+              },
+            );
             if (nextCursor) state.responseMessagesCursor = nextCursor;
           }
         };
