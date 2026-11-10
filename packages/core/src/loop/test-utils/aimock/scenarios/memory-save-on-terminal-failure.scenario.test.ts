@@ -84,9 +84,13 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   const DEADLINE_MS = engine === 'inngest' ? 4_000 : 800;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 30_000 : 10_000;
   // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  // Inngest saves it: the deadline stops the stuck tool step and the turn ends through the finish path.
-  const deadlineSavePending: EngineVariant[] = ['durable', 'evented'];
+  const deadlineSavePending: EngineVariant[] = ['durable', 'evented', 'inngest'];
   const itDeadline = deadlineSavePending.includes(engine) ? it.fails : it;
+  // Inngest already keeps the user message when the deadline lands during the input save.
+  const itInFlightSave = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
+  // Inngest already saves a turn whose tool step is cut off: the deadline stops that step on its worker
+  // and the turn ends through the finish path.
+  const itStoppedStep = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
 
   // On Inngest the caller reports the timeout at the deadline and the worker saves the stopped step shortly after.
   async function settleDeadlineSave(memory: MastraMemory, threadId: string) {
@@ -159,7 +163,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     expect(sent, `${label}: follow-up sees the tool result`).toContain('call_echo');
   }
 
-  itDeadline(
+  itStoppedStep(
     'total-timeout after a completed tool step',
     async () => {
       const memory = new MockMemory();
@@ -499,7 +503,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
   // A processor that writes a data part when the turn ends must see it saved at the deadline too,
   // as it is on a normal finish, so the UI can re-render it from history.
-  itDeadline(
+  itStoppedStep(
     'total-timeout saves the data part an output processor writes at the end of the turn',
     async () => {
       const memory = new MockMemory();
@@ -536,18 +540,24 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         },
       });
 
-      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      const dataParts = messages
-        .flatMap(message => message.content.parts)
-        .filter(part => part.type === 'data-turn-summary');
-      expect(dataParts).toEqual([expect.objectContaining({ data: { status: 'timed-out' } })]);
+      // On Inngest the worker runs the output processors when it finishes the stopped turn, after the caller's error.
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const dataParts = messages
+            .flatMap(message => message.content.parts)
+            .filter(part => part.type === 'data-turn-summary');
+          expect(dataParts).toEqual([expect.objectContaining({ data: { status: 'timed-out' } })]);
+        },
+        { timeout: engine === 'inngest' ? 5_000 : 1_000, interval: 100 },
+      );
     },
     TEST_TIMEOUT_MS,
   );
 
   // A failed completion check moves the answer to a new message. The deadline save must put the
   // processor's data part on the answer still streaming, not on the rejected one, as a finish does.
-  itDeadline(
+  itStoppedStep(
     'total-timeout saves the data part with the answer after a failed completion check',
     async () => {
       const memory = new MockMemory();
@@ -582,11 +592,17 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         },
       });
 
-      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      const withPart = messages.filter(message => message.content.parts.some(p => p.type === 'data-turn-summary'));
-      expect(withPart).toHaveLength(1);
-      expect(JSON.stringify(withPart[0]!.content.parts)).toContain('PARTIAL');
-      expect(JSON.stringify(withPart[0]!.content.parts)).not.toContain('Let me check.');
+      // On Inngest the worker saves the stopped turn when it finishes it, after the caller's error.
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const withPart = messages.filter(message => message.content.parts.some(p => p.type === 'data-turn-summary'));
+          expect(withPart).toHaveLength(1);
+          expect(JSON.stringify(withPart[0]!.content.parts)).toContain('PARTIAL');
+          expect(JSON.stringify(withPart[0]!.content.parts)).not.toContain('Let me check.');
+        },
+        { timeout: engine === 'inngest' ? 5_000 : 1_000, interval: 100 },
+      );
     },
     TEST_TIMEOUT_MS,
   );
@@ -618,6 +634,18 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         },
       });
       expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+      if (engine === 'inngest') {
+        // The deadline stops the model step on its worker, which saves the streamed text when it finishes the turn.
+        await vi.waitFor(
+          async () => {
+            const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+            expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+            expect(messages[1]!.content.content).toMatch(/^(PARTIAL )+/);
+          },
+          { timeout: 5_000, interval: 100 },
+        );
+        return;
+      }
       // Absence can't be polled for; give a late write time to land.
       await new Promise(resolve => setTimeout(resolve, 300));
 
@@ -635,7 +663,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
   // The step streamed text, then its only call was cut off: the step is kept whole, text and all,
   // so its text must not be added a second time as streamed text of an unfinished step.
-  itDeadline(
+  itStoppedStep(
     'total-timeout saves the text of a step whose call was cut off once',
     async () => {
       const memory = new MockMemory();
@@ -686,7 +714,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   );
 
   // A step whose calls all settled, one with an error and one with the abort notice, is saved whole.
-  itDeadline(
+  itStoppedStep(
     'total-timeout saves a step whose tool call failed alongside one cut off at the deadline',
     async () => {
       const memory = new MockMemory();
@@ -889,7 +917,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
   // Durable engines save the input before the run starts; a deadline during that save must not lose it.
   // On normal/fs the held save is the deadline pass's own write.
-  itDeadline(
+  itInFlightSave(
     'total-timeout while the input save is still in flight keeps the user message once',
     async () => {
       const memory = new MockMemory();
@@ -953,7 +981,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   );
 
   // With observational memory on, its processor owns history writes instead of MessageHistory.
-  itDeadline(
+  itStoppedStep(
     'total-timeout after a completed tool step, observational memory',
     async () => {
       const memory = createObservationalMemory();
@@ -1079,7 +1107,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   );
 
   // The finish path undoes per-step saves when an output processor trips, so the deadline pass must too.
-  itDeadline(
+  itStoppedStep(
     'total-timeout removes per-step saves when an output processor trips',
     async () => {
       const memory = new MockMemory();
@@ -1125,6 +1153,17 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         });
         expect(result.chunks!.some(chunk => chunk.type === 'tool-result')).toBe(true);
         expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+        if (engine === 'inngest') {
+          // The worker undoes the per-step saves when it finishes the stopped turn, after the caller's error.
+          await vi.waitFor(
+            async () => {
+              const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+              expect(messages.map(message => message.role)).toEqual(['user']);
+            },
+            { timeout: 5_000, interval: 100 },
+          );
+          return;
+        }
         // Absence can't be polled for; give a late write time to land.
         await new Promise(resolve => setTimeout(resolve, 1_000));
 

@@ -44,7 +44,6 @@ import {
   describeParity,
   expectParity,
 } from '../parity';
-import { TOOL_ABORT_NOTICE } from '../../../shared/tool-abort-grace';
 import { MastraTimeoutError } from '../../../timeout';
 
 const THREAD = 'thread-t37';
