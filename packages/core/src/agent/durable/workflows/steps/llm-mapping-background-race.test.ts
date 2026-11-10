@@ -13,6 +13,8 @@ const threadId = 'background-mapping-thread';
 const taskId = 'background-task-1';
 const toolCallId = 'background-call';
 const runningMetadata = { mastra: { backgroundTask: { taskId, status: 'running' } } };
+const startedAt = new Date('2026-01-01T00:00:00.000Z');
+const completedAt = new Date('2026-01-01T00:00:05.000Z');
 
 function parts(list: MessageList) {
   return list.get.all.db().flatMap(message => message.content.parts ?? []);
@@ -51,7 +53,9 @@ describe('durable mapping of a concurrently completed background task', () => {
       },
       'response',
     );
-    const staleSnapshot = list.serialize();
+    // serialize() returns the live message objects; deep-copy so the snapshot
+    // does not share metadata with the live list.
+    const staleSnapshot = JSON.parse(JSON.stringify(list.serialize()));
     globalRunRegistry.set(runId, { messageList: list } as any);
 
     // The mapping read yields before deserializing the older workflow snapshot.
@@ -65,7 +69,7 @@ describe('durable mapping of a concurrently completed background task', () => {
           toolInvocation: { state: 'result', toolCallId, toolName: 'research', args: {}, result },
           providerMetadata: { mastra: { backgroundTask: { taskId, status } } },
         },
-        { mode: 'stream' },
+        { mode: 'stream', backgroundTasks: { [toolCallId]: { taskId, startedAt, completedAt } } },
       );
       expect(invocation(list)?.providerMetadata?.mastra?.backgroundTask?.status).toBe(status);
     });
@@ -107,5 +111,10 @@ describe('durable mapping of a concurrently completed background task', () => {
     persisted.deserialize(output.messageListState);
     expect(invocation(persisted)?.toolInvocation.result).toEqual(result);
     expect(invocation(persisted)?.providerMetadata?.mastra?.backgroundTask?.status).toBe(status);
+    const message = persisted.get.all.db().find(m => m.id === 'assistant-message');
+    const entry = (message?.content.metadata?.backgroundTasks as Record<string, any> | undefined)?.[toolCallId];
+    expect(entry?.taskId).toBe(taskId);
+    expect(new Date(entry?.startedAt).toISOString()).toBe(startedAt.toISOString());
+    expect(new Date(entry?.completedAt).toISOString()).toBe(completedAt.toISOString());
   });
 });

@@ -133,9 +133,16 @@ export function createDurableLLMMappingStep() {
                     ?.backgroundTask?.status === 'running',
               )
             ) {
-              terminalBackgroundParts.set(part.toolInvocation.toolCallId, {
+              const toolCallId = part.toolInvocation.toolCallId;
+              const backgroundTaskEntry = (
+                message.content.metadata?.backgroundTasks as Record<string, unknown> | undefined
+              )?.[toolCallId];
+              terminalBackgroundParts.set(toolCallId, {
                 restore: list => {
-                  list.updateToolInvocation(part, { mode: 'stream' });
+                  list.updateToolInvocation(part, {
+                    mode: 'stream',
+                    ...(backgroundTaskEntry ? { backgroundTasks: { [toolCallId]: backgroundTaskEntry } } : {}),
+                  });
                 },
                 taskId: backgroundTask.taskId as string,
               });
