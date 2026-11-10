@@ -216,7 +216,13 @@ export const baseIterationStateSchema = z.object({
   pendingFeedbackStop: z.boolean().optional(),
   // The response messages the run's step-finish events have sent (see agent/streams/response-messages.ts)
   responseMessagesCursor: z
-    .object({ producer: z.string(), seq: z.number(), fingerprints: z.array(z.string()) })
+    .object({
+      producer: z.string(),
+      seq: z.number(),
+      fingerprints: z.array(z.string()),
+      wholeListSize: z.number().optional(),
+      sentSinceWholeList: z.number().optional(),
+    })
     .optional(),
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),

@@ -625,6 +625,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || terminated || !isSubscribed || !controller) {
       return;
     }
+    // Events wait for the skipped history to be read; their silence until then isn't the run's.
+    if (skippedEventsReplayed) return;
     clearIdleTimer();
     const generation = idleGeneration;
     idleTimer = setTimeout(() => {
@@ -667,6 +669,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         clearTimeout(timer);
         timedOut = true;
         skippedEventsReplayed = undefined;
+        armIdleTimer();
       });
   }
 
