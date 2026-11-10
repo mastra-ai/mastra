@@ -229,16 +229,16 @@ export class GraphRAG {
     if (chunks.length !== embeddings.length) {
       throw new Error('Chunks and embeddings must have the same length');
     }
+    const graph = new GraphRAG(this.dimension, this.threshold);
+
     // Create nodes from chunks
     chunks.forEach((chunk, index) => {
-      const node: GraphNode = {
+      graph.addNode({
         id: index.toString(),
         content: chunk.text,
         embedding: embeddings[index]?.vector,
         metadata: { ...chunk.metadata },
-      };
-      this.addNode(node);
-      this.nodes.set(node.id, node);
+      });
     });
 
     // Create edges based on cosine similarity
@@ -250,7 +250,7 @@ export class GraphRAG {
 
         // Only create edges if similarity is above threshold
         if (similarity > this.threshold) {
-          this.addEdge({
+          graph.addEdge({
             source: i.toString(),
             target: j.toString(),
             weight: similarity,
@@ -259,6 +259,9 @@ export class GraphRAG {
         }
       }
     }
+
+    this.nodes = graph.nodes;
+    this.edges = graph.edges;
   }
 
   private selectWeightedNeighbor(neighbors: Array<{ id: string; weight: number }>): string {

@@ -149,6 +149,47 @@ describe('GraphRAG', () => {
       const edges = graph.getEdges();
       expect(edges.length).toBe(6);
     });
+
+    it('replaces old nodes and edges when rebuilding with fewer chunks (#29364)', () => {
+      const graph = new GraphRAG(2);
+      graph.createGraph(
+        [
+          { text: 'old A', metadata: {} },
+          { text: 'old B', metadata: {} },
+        ],
+        [{ vector: [1, 0] }, { vector: [1, 0] }],
+      );
+      graph.createGraph([{ text: 'new', metadata: {} }], [{ vector: [0, 1] }]);
+
+      expect(graph.getNodes().map(node => node.content)).toEqual(['new']);
+      expect(graph.getEdges()).toEqual([]);
+      expect(graph.query({ query: [1, 0], topK: 5 }).map(node => node.content)).toEqual(['new']);
+    });
+
+    it('keeps the previous graph when a rebuild has an invalid embedding (#29364)', () => {
+      const graph = new GraphRAG(2);
+      graph.createGraph(
+        [
+          { text: 'old A', metadata: {} },
+          { text: 'old B', metadata: {} },
+        ],
+        [{ vector: [1, 0] }, { vector: [1, 0] }],
+      );
+      const previousNodes = graph.getNodes();
+      const previousEdges = graph.getEdges();
+
+      expect(() =>
+        graph.createGraph(
+          [
+            { text: 'new A', metadata: {} },
+            { text: 'new B', metadata: {} },
+          ],
+          [{ vector: [0, 1] }, { vector: [0] }],
+        ),
+      ).toThrow('Embedding dimension must be 2');
+      expect(graph.getNodes()).toEqual(previousNodes);
+      expect(graph.getEdges()).toEqual(previousEdges);
+    });
   });
 
   describe('query', () => {
