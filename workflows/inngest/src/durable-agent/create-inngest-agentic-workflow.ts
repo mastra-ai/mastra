@@ -52,6 +52,8 @@ import { agentLoopTermination, generationUsage } from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
+import { holdRunThreadLease } from './thread-lease';
+import type { RunThreadTarget } from './thread-lease';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
 // persisted so a finished run's snapshot replaces its stale suspended one and
@@ -225,6 +227,31 @@ function createResumeClaimReleaseFunction(inngest: Inngest, workflow: InngestWor
   );
 }
 
+/**
+ * Run a step's execute while holding its run's thread lease, so the thread stays busy for as long as the run
+ * executes, even after the process that started it exits (#29766). The step keeps its id, so Inngest still
+ * replays its memoized result without executing (or taking the lease) again.
+ */
+function holdingThreadLease<TStep extends { execute: (params: any) => Promise<any> }>(
+  step: TStep,
+  target: (params: Parameters<TStep['execute']>[0]) => RunThreadTarget | undefined,
+): TStep {
+  return {
+    ...step,
+    execute: async (params: Parameters<TStep['execute']>[0]) => {
+      const run = target(params);
+      const release = run?.runId
+        ? await holdRunThreadLease(params.mastra, run, InngestDurableStepIds.AGENTIC_LOOP)
+        : undefined;
+      try {
+        return await step.execute(params);
+      } finally {
+        release?.();
+      }
+    },
+  };
+}
+
 export function createInngestDurableAgenticWorkflow(options: InngestDurableAgenticWorkflowOptions) {
   const workflow = createAgenticLoopWorkflow(options);
   // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
@@ -237,11 +264,17 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
   const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS, retries } = options;
   const { createWorkflow } = init(inngest);
 
-  // Create the LLM execution step - tools and model are resolved from Mastra at runtime
-  const llmExecutionStep = createDurableLLMExecutionStep();
+  // Create the LLM execution step - tools and model are resolved from Mastra at runtime.
+  // Model and tool steps hold the run's thread lease while they execute (see ./thread-lease).
+  const llmExecutionStep = holdingThreadLease(
+    createDurableLLMExecutionStep(),
+    ({ inputData }) => inputData as IterationState,
+  );
 
   // Create the tool call step - each tool call runs as its own step with suspend support
-  const toolCallStep = createDurableToolCallStep();
+  const toolCallStep = holdingThreadLease(createDurableToolCallStep(), ({ getInitData }) =>
+    getInitData<IterationState>(),
+  );
 
   // Create the LLM mapping step - reuse from core
   const llmMappingStep = createDurableLLMMappingStep();

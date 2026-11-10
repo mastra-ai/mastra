@@ -1,6 +1,13 @@
-import { DURABLE_STOP_WHEN_ERROR_ID, DurableAgentDefaults, globalRunRegistry } from '@mastra/core/agent/durable';
+import {
+  agentThreadStreamRuntime,
+  DURABLE_STOP_WHEN_ERROR_ID,
+  DurableAgentDefaults,
+  DurableStepIds,
+  globalRunRegistry,
+} from '@mastra/core/agent/durable';
 
 import { MessageList } from '@mastra/core/agent/message-list';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
@@ -13,6 +20,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InngestExecutionEngine } from '../execution-engine';
 
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+import { INNGEST_AGENT_THREAD_BUSY_ERROR_ID } from './thread-lease';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -726,5 +734,53 @@ describe('Inngest fallback model list (#26146)', () => {
       getInitData: () => state,
     });
     expect((await byId('map-to-llm-input').mapConfig({ inputData: next })).modelList).toEqual(modelList);
+  });
+});
+
+/**
+ * #29766: the run's model and tool steps hold its thread lease, so the thread stays busy after the caller exits
+ * and a step never executes while another run still executing holds the thread.
+ */
+describe('createInngestDurableAgenticWorkflow thread lease (#29766)', () => {
+  const workflow = createInngestDurableAgenticWorkflow({ inngest: new Inngest({ id: 'inngest-thread-lease-tests' }) });
+  const steps = (workflow as any).executionGraph.steps;
+  const findStep = (id: string) => findEntry(steps, entry => entry.type === 'step' && entry.step?.id === id)?.step;
+  const state = { threadId: 't1', resourceId: 'r1' };
+
+  const threadHeldBy = async (runId: string) => {
+    const pubsub = new EventEmitterPubSub();
+    await agentThreadStreamRuntime.reclaimDurableThreadLease(pubsub, runId, 't1', 'r1');
+    return {
+      pubsub,
+      getAgentById: () => {
+        throw new Error('not registered');
+      },
+      getStorage: () => ({
+        getStore: async () => ({ loadWorkflowSnapshot: async () => ({ status: 'running' }) }),
+      }),
+    };
+  };
+
+  it('does not run a model step while another executing run holds the thread', async () => {
+    const step = findStep(DurableStepIds.LLM_EXECUTION);
+    expect(step).toBeDefined();
+    const mastra = await threadHeldBy('run-a');
+    await expect(
+      step.execute({ inputData: { runId: 'run-b', agentId: 'agent', state }, mastra }),
+    ).rejects.toMatchObject({ id: INNGEST_AGENT_THREAD_BUSY_ERROR_ID });
+  });
+
+  it('does not run a tool step while another executing run holds the thread', async () => {
+    const foreach = findForeachEntry(steps);
+    const step = foreach?.step?.step;
+    expect(step?.id).toBe(DurableStepIds.TOOL_CALL);
+    const mastra = await threadHeldBy('run-a');
+    await expect(
+      step.execute({
+        inputData: { toolCallId: 'call-1', toolName: 'sideEffect', args: {} },
+        getInitData: () => ({ runId: 'run-b', agentId: 'agent', state }),
+        mastra,
+      }),
+    ).rejects.toMatchObject({ id: INNGEST_AGENT_THREAD_BUSY_ERROR_ID });
   });
 });

@@ -111,6 +111,7 @@ import {
   setLoopStatus,
 } from './create-inngest-agentic-workflow';
 import { keepSuspendedRunScopes } from './resume-scopes';
+import { waitForThreadToFree } from './thread-lease';
 
 class InngestAgentPubSubRouter extends PubSub {
   constructor(
@@ -1574,6 +1575,20 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             return isMastraTimeoutError(reason) && reason !== abortController.signal.reason;
           };
           // The deadline already reported the timeout and cleared the run's rows; don't start it.
+          if (deadlineFired()) return;
+          // Don't start beside a run still executing on this thread, even one whose caller has exited (#29766).
+          await waitForThreadToFree(
+            mastra,
+            agent.getPubSub(),
+            {
+              runId,
+              threadId,
+              resourceId,
+              readOnly: workflowInput.state?.memoryConfig?.readOnly,
+            },
+            InngestDurableStepIds.AGENTIC_LOOP,
+            abortController.signal,
+          );
           if (deadlineFired()) return;
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
