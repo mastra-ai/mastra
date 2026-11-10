@@ -208,6 +208,10 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
         expect(resolverCalls).toBe(1);
         expect(body.calls).toBe(0);
         expect(failEvents).toHaveLength(1);
+        expect(failEvents[0]!.data).toMatchObject({
+          executionPath: [1],
+          prevResult: { status: 'failed', error: { message: 'concurrency boom' } },
+        });
       },
     );
 
@@ -247,6 +251,11 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
         expect(conditionCalls).toBe(1);
         expect(body.calls).toBe(1);
         expect(failEvents.map(event => event.data.workflowId)).toEqual([loopId]);
+        // Failed at the loop step, so the failure is streamed for that step.
+        expect(failEvents[0]!.data).toMatchObject({
+          executionPath: [0],
+          prevResult: { status: 'failed', error: { message: 'condition boom' } },
+        });
         if (bodyKind === 'nested workflow') {
           expect(await runStatuses(store, `${loopId}-child`)).toEqual(['success']);
         }

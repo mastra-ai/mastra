@@ -1523,44 +1523,50 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.publishFinishEvent({
-      type: 'workflow.end',
-      runId,
-      data: {
-        ...finishArgs,
-        workflow: undefined,
-        state: finalState,
-        finishPendingCleanup: deleteSnapshotAfterEnd === true && !loopFailure,
-      },
-    });
-
-    await this.assertCurrentRunFence(runId);
-    // A loop failure still to report keeps the snapshot, accepting that a declined one can outlive the run.
-    if (deleteSnapshotAfterEnd === true && !loopFailure) {
-      // Declined terminal snapshots must not outlive completed runs (#22209),
-      // but remain recoverable until parent/loop and finish publications succeed.
-      try {
-        const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
-        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
-      } catch (e) {
-        if (isRunFenceConflictError(e)) throw e;
-        this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
-      }
+    try {
       await this.publishFinishEvent({
-        type: 'workflow.finish-cleanup-complete',
+        type: 'workflow.end',
         runId,
-        data: { workflowId, requestContext },
+        data: {
+          ...finishArgs,
+          workflow: undefined,
+          state: finalState,
+          finishPendingCleanup: deleteSnapshotAfterEnd === true && !loopFailure,
+        },
       });
-    }
 
-    await this.assertCurrentRunFence(runId);
-    // A successor may have replaced the registration while finish was published.
-    if (
-      internalWorkflow &&
-      this.mastra.__hasInternalWorkflow(args.workflowId, runId) &&
-      this.mastra.__getInternalWorkflow(args.workflowId, runId) === internalWorkflow
-    ) {
-      this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
+      await this.assertCurrentRunFence(runId);
+      // A loop failure still to report keeps the snapshot, accepting that a declined one can outlive the run.
+      if (deleteSnapshotAfterEnd === true && !loopFailure) {
+        // Declined terminal snapshots must not outlive completed runs (#22209),
+        // but remain recoverable until parent/loop and finish publications succeed.
+        try {
+          const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+          await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+        } catch (e) {
+          if (isRunFenceConflictError(e)) throw e;
+          this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
+        }
+        await this.publishFinishEvent({
+          type: 'workflow.finish-cleanup-complete',
+          runId,
+          data: { workflowId, requestContext },
+        });
+      }
+
+      await this.assertCurrentRunFence(runId);
+      // A successor may have replaced the registration while finish was published.
+      if (
+        internalWorkflow &&
+        this.mastra.__hasInternalWorkflow(args.workflowId, runId) &&
+        this.mastra.__getInternalWorkflow(args.workflowId, runId) === internalWorkflow
+      ) {
+        this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
+      }
+    } catch (error) {
+      // Report the loop failure even if finishing the child failed: a redelivery of this
+      // workflow.end would evaluate the loop condition again.
+      throw loopFailure ?? error;
     }
     if (loopFailure) throw loopFailure;
   }
@@ -2253,12 +2259,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         await this.#recordFailedLoopStep(args, getEntryId(step.step), failed, bodyState);
         const { workflow: _workflow, ...run } = args;
-        // handle() then fails the loop's run directly.
+        // handle() then publishes this run's workflow.fail, at the loop step.
         throw markNonRedeliverable(
           new RunFailure(conditionError, {
             ...run,
             // processWorkflowFail reads the final state from stepResults.__state first.
             stepResults: { ...run.stepResults, [getEntryId(step.step)]: failed, __state: bodyState as any },
+            prevResult: failed,
             state: bodyState,
           }),
         );
@@ -2267,8 +2274,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * Records a loop step that failed while its step end could not be published. Guarded stores
-   * committed it already; on others the step would stay `running` under the failed run.
+   * Records a loop step that failed while its step end could not be published. Otherwise the
+   * step stays `running` under the failed run, unless a guarded delivery committed the failure.
    */
   async #recordFailedLoopStep(
     args: ProcessorArgs,
@@ -2278,9 +2285,10 @@ export class WorkflowEventProcessor extends EventProcessor {
   ) {
     try {
       const store = await this.mastra.getStorage()?.getStore('workflows');
-      if (!store || store.supportsWorkflowStepGuards()) return;
+      if (!store) return;
       const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
-      // Only replace this iteration's running record, never a newer result.
+      // Only replace a running record, so a committed failure or a finished result stays.
+      // Read-then-write: without step guards this cannot tell iterations apart reliably.
       if (snapshot?.context[leafId]?.status !== 'running') return;
       await store.updateWorkflowResults({
         workflowName: args.workflowId,
@@ -5065,7 +5073,16 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
     const publishAttempts = pending.publishAttempts + 1;
     try {
-      await this.errorWorkflow(failWorkflowData, pending.error);
+      if (pending.failRun) {
+        // Carries the failed step and its path, so the failure is recorded and streamed at that step.
+        await this.mastra.pubsub.publish('workflows', {
+          type: 'workflow.fail',
+          runId: pending.failRun.runId,
+          data: pending.failRun,
+        });
+      } else {
+        await this.errorWorkflow(failWorkflowData, pending.error);
+      }
     } catch (failErr) {
       const giveUp = publishAttempts >= WorkflowEventProcessor.MAX_FAIL_PUBLISH_ATTEMPTS;
       this.mastra

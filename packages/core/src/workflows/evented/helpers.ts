@@ -49,12 +49,16 @@ export function isNonRedeliverable(error: unknown): boolean {
  * a loop condition runs while handling its nested body's `workflow.end`.
  */
 export class RunFailure extends Error {
+  declare readonly run: Omit<ProcessorArgs, 'workflow'>;
+
   constructor(
     readonly error: Error,
-    readonly run: Omit<ProcessorArgs, 'workflow'>,
+    run: Omit<ProcessorArgs, 'workflow'>,
   ) {
     super(error.message, { cause: error });
     this.name = 'RunFailure';
+    // Non-enumerable so loggers don't serialize the request context (auth token) and step results.
+    Object.defineProperty(this, 'run', { value: run, enumerable: false });
   }
 }
 

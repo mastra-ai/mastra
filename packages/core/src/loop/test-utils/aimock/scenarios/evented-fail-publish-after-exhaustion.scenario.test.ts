@@ -94,8 +94,8 @@ describeForAllEngines(
     });
 
     it('retries the workflow.fail publish for a throwing stopWhen without calling it again', async () => {
-      // A throwing stopWhen is non-redeliverable, so it goes terminal on the
-      // first delivery; the first workflow.fail publish for it then throws.
+      // A throwing stopWhen ends the loop step as failed on the first delivery; the
+      // workflow.fail that follows throws once and is published again on redelivery.
       const flaky = createFlakyPublishPubSub(new EventEmitterPubSub(), { 'workflow.fail': 1 });
       let stopWhenCalls = 0;
       let toolCalls = 0;

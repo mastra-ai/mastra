@@ -4,7 +4,7 @@
 
 Fixed workflow runs whose `dowhile` or `dountil` condition, or `foreach` concurrency function, throws.
 
-**Default engine, which Inngest workflows also use:** `run.start()` used to reject with the error and the run stayed `running` in storage. It now resolves with the failed run, and the run and its step are stored as failed.
+**Default engine:** `run.start()` used to reject with the error and the run stayed `running` in storage. It now resolves with the failed run, and the run and its step are stored as failed. Inngest workflows, which already failed the run, now also keep the results of the steps that ran and record the failed step.
 
 ```ts
 const result = await run.start({ inputData });

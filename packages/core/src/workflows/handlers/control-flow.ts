@@ -967,13 +967,16 @@ export async function executeLoop(
         nonRetryable: true,
         metadata: body.metadata,
       };
-      // The body already reported this iteration as a success.
-      if (engine.options.emitStepEvents !== false) {
-        await engine.wrapDurableOperation(
-          `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.emit_failure`,
-          () => emitStepResultEvents({ stepId, execResults: failed, pubsub, runId }),
-        );
-      }
+      // The body already reported this iteration as a success, and already sent its step finish.
+      await engine.wrapDurableOperation(
+        `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.emit_failure`,
+        () =>
+          publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'workflow-step-result', payload: { id: stepId, ...failed } },
+          }),
+      );
       return failed;
     }
     await engine.endChildSpan({
@@ -1110,7 +1113,7 @@ export async function executeForeach(
       await engine.wrapDurableOperation(
         `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.concurrency_failure`,
         async () => {
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
+          await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
             type: 'watch',
             runId,
             data: {
