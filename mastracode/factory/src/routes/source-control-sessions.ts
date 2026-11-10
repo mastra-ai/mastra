@@ -14,7 +14,7 @@ import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.j
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
   isRunBound,
-  isWorkerSession,
+  sessionMemoryPlacement,
   sessionMemoryResourceId,
   listFactorySessionThreads,
   sessionThreadsToMove,
@@ -109,10 +109,12 @@ function withCapabilities<T extends object>(session: T, capabilities: SessionCap
 
 type OwnershipRefusal = { status: 409 | 503; error: string };
 
-async function ownershipRefusal(
+/** `runBound` comes from {@link resolveReadableSession}, which already looked it up to place the session's memory. */
+function ownershipRefusal(
   session: SourceControlSession,
   options: SourceControlSessionRoutesOptions,
-): Promise<OwnershipRefusal | null> {
+  runBound: boolean,
+): OwnershipRefusal | null {
   // Shared threads live on the Factory's memory resource, which an owner change keeps; without one they sit on the owner's.
   if (!session.factoryProjectId) {
     return { status: 409, error: "This session isn't linked to a Factory, so it can't change owner." };
@@ -125,7 +127,7 @@ async function ownershipRefusal(
   }
   // Slack finds a thread's session by its sender, a Factory run's session follows its work item,
   // and a side session acts for the session that started it.
-  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) || (await isWorkerSession(session, options.workItems))) {
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) || session.originSessionId || runBound) {
     return { status: 409, error: 'Only user sessions can change owner' };
   }
   return null;
@@ -261,9 +263,9 @@ async function resolveReadableSession(
 ) {
   const match = await resolveSession(options.sourceControls, sessionId);
   if (!match || !canViewSourceControlSession(match.session, viewer)) return null;
-  const resourceId = await sessionMemoryResourceId(options.controller, match.session, options.workItems);
+  const { resourceId, runBound } = await sessionMemoryPlacement(options.controller, match.session, options.workItems);
   if (!canReadSessionResource(match.session, resourceId, viewer)) return null;
-  return { ...match, resourceId };
+  return { ...match, resourceId, runBound };
 }
 
 /**
@@ -568,16 +570,16 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if ('response' in resolved) return resolved.response;
         const readable = await resolveReadableSession(options, c.req.param('sessionId'), resolved.tenant);
         if (!readable) return c.json({ error: 'Session not found' }, 404);
-        const { session, resourceId } = readable;
-        const [owners, recreateSandbox, takeOwnership] = await Promise.all([
+        const { session, resourceId, runBound } = readable;
+        const [owners, recreateSandbox] = await Promise.all([
           resolveOwnerProfiles([session.userId]),
           canRecreateSandbox(options) &&
             sessionManagePermission(loose(c), options.auth, resolved.tenant, session).then(
               permission => permission === 'allowed',
             ),
-          session.userId !== resolved.tenant.userId &&
-            ownershipRefusal(session, options).then(refusal => refusal === null),
         ]);
+        const takeOwnership =
+          session.userId !== resolved.tenant.userId && ownershipRefusal(session, options, runBound) === null;
         return c.json({
           session: {
             ...withCapabilities(withOwnerProfile(session, owners), {
@@ -693,7 +695,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const sessionId = c.req.param('sessionId');
         const readable = await resolveReadableSession(options, sessionId, resolved.tenant);
         if (!readable) return c.json({ error: 'Session not found' }, 404);
-        const { sourceControl, session } = readable;
+        const { sourceControl, session, runBound } = readable;
         let body: unknown;
         try {
           body = await c.req.json();
@@ -705,7 +707,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         }
         const expectedOwnerId = body.expectedOwnerId;
         if (session.userId === userId) return c.json({ session });
-        const refusal = await ownershipRefusal(session, options);
+        const refusal = ownershipRefusal(session, options, runBound);
         if (refusal) return c.json({ error: refusal.error }, refusal.status);
         const transferred = await sourceControl.sessions.transferOwner({
           sessionId,

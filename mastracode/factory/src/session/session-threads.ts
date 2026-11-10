@@ -49,11 +49,20 @@ export async function sessionMemoryResourceId(
   session: FactorySessionOwnership,
   runs: SessionRunBindings | undefined,
 ): Promise<string> {
+  return (await sessionMemoryPlacement(controller, session, runs)).resourceId;
+}
+
+/** {@link sessionMemoryResourceId}, plus the run-binding lookup it made, for callers that need both. */
+export async function sessionMemoryPlacement(
+  controller: SessionThreadLookup | undefined,
+  session: FactorySessionOwnership,
+  runs: SessionRunBindings | undefined,
+): Promise<{ resourceId: string; runBound: boolean }> {
   const [own, runBound] = await Promise.all([
     controller?.queryThreadById({ threadId: session.sessionId }),
     isRunBound(session, runs),
   ]);
-  return memoryResourceOf(session, own, runBound);
+  return { resourceId: memoryResourceOf(session, own, runBound), runBound };
 }
 
 export async function isRunBound(session: FactorySessionOwnership, runs: SessionRunBindings | undefined) {

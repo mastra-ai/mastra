@@ -79,8 +79,8 @@ class OrgCustomProvidersSnapshot {
   }
 }
 
-/** Whether the custom providers domain is ready; a failed init retries at most every 15 seconds. */
-export function customProvidersReady(storage: CustomProvidersStorage): Promise<boolean> {
+/** Whether the custom providers domain is ready; a failed init retries in the background, at most every 15 seconds. */
+export function customProvidersReady(storage: Pick<CustomProvidersStorage, 'ensureReady'>): Promise<boolean> {
   return ensureReadyWithBackoff(storage, 'custom provider storage is unavailable; custom providers will not resolve');
 }
 

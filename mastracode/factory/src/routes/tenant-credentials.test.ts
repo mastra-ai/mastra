@@ -213,7 +213,7 @@ describe('TenantCredentialStore', () => {
     expect(store.get('openai')).toBeUndefined();
   });
 
-  it('retries an unavailable credential storage every 15 seconds, not on every request and model call', async () => {
+  it('retries an unavailable credential storage in the background, not on every request and model call', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     onTestFinished(() => {
       vi.useRealTimers();
@@ -227,7 +227,7 @@ describe('TenantCredentialStore', () => {
     await expect(store.getApiKey('openai')).resolves.toBeUndefined();
     expect(ensureReady).toHaveBeenCalledTimes(1);
 
-    vi.setSystemTime(Date.now() + 15_000);
+    vi.setSystemTime(Date.now() + 1_000);
     await store.getApiKey('openai');
     expect(ensureReady).toHaveBeenCalledTimes(2);
   });

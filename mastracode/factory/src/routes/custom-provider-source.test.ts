@@ -121,7 +121,7 @@ describe('primeCustomProvidersForRequestContext', () => {
 });
 
 describe('unavailable custom provider storage', () => {
-  it('retries its init every 15 seconds, not on every request, model call, and wake', async () => {
+  it('retries its init in the background, not on every request, model call, and wake', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     onTestFinished(() => {
       vi.useRealTimers();
@@ -140,7 +140,7 @@ describe('unavailable custom provider storage', () => {
     }
     expect(ensureReady).toHaveBeenCalledTimes(1);
 
-    vi.setSystemTime(Date.now() + 15_000);
+    vi.setSystemTime(Date.now() + 1_000);
     await app.request('/ok');
     expect(ensureReady).toHaveBeenCalledTimes(2);
   });

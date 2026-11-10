@@ -2002,13 +2002,13 @@ describe('custom provider routes', () => {
     expect((await res.json()).error).toBe('custom_providers_unavailable');
   });
 
-  it('retries a failed storage init every 15 seconds, not on every settings request', async () => {
+  it('serves custom providers again a second after storage recovers, without retrying on every settings request', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     onTestFinished(() => {
       vi.useRealTimers();
       vi.restoreAllMocks();
     });
-    const ensureReady = vi.spyOn(seed.customProviders, 'ensureReady').mockRejectedValue(new Error('db down'));
+    const ensureReady = vi.spyOn(seed.customProviders, 'ensureReady').mockRejectedValueOnce(new Error('db down'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const app = buildApp(userA);
 
@@ -2018,9 +2018,9 @@ describe('custom provider routes', () => {
     }
     expect(ensureReady).toHaveBeenCalledTimes(1);
 
-    vi.setSystemTime(Date.now() + 15_000);
-    await app.request('/web/config/custom-providers');
-    expect(ensureReady).toHaveBeenCalledTimes(2);
+    vi.setSystemTime(Date.now() + 1_000);
+    expect((await app.request('/web/config/custom-providers')).status).toBe(503);
+    await vi.waitFor(async () => expect((await app.request('/web/config/custom-providers')).status).toBe(200));
   });
 
   it('validates the payload', async () => {
