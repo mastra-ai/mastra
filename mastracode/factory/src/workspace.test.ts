@@ -530,6 +530,9 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Add `status: auto-triaged` for every GitHub issue.');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
     expect(triage).toContain('Add `status: needs approval` when `Route: Await approval`');
+    expect(triage).toContain(
+      "Never add it for an item that **A board that waives the approval wait** sends to planning: that board's instructions are the approval, and the label would stop every later re-triage at **Awaiting approval**.",
+    );
     // A new repository has none of these labels, and one missing label makes `gh issue edit
     // --add-label` add none: every label the skill adds is created first, then added alone.
     const labels = triage.slice(triage.indexOf('**GitHub labels may not exist yet.**'));

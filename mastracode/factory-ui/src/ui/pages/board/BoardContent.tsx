@@ -240,7 +240,7 @@ export function BoardContent({
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
   const anyFilterActive = boardFiltersActive(filters) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
-  const hasIntakeSource = intake.connected;
+  const hasIntakeSource = intake.fed;
 
   const stageViews = stages.map(stage => {
     const isInitialPhase = stage.id === definition.initialPhase;

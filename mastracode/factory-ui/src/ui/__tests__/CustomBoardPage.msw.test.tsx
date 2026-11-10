@@ -8,9 +8,28 @@ import { releaseBoard } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
-import type { BoardCatalogResponse } from '../../api/types';
+import type { BoardCatalogResponse, IntakeRouteListResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
 import { saveKanbanView, stageToggle } from './boardLayoutQueries';
+
+function intakeRouteTo(boardKey: string, enabled = true): IntakeRouteListResponse['intakeRoutes'][number] {
+  return {
+    id: `route-${boardKey}`,
+    name: `File onto ${boardKey}`,
+    enabled,
+    position: 0,
+    when: null,
+    target: { boardKey, phaseKey: null, joinClosedIssue: false },
+    on: [],
+    allowWorkingPhase: false,
+    revision: 1,
+    createdBy: 'user-1',
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedBy: 'user-1',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+    problems: [],
+  };
+}
 
 function renderBoard(
   board = 'boards/release',
@@ -18,6 +37,7 @@ function renderBoard(
   boards = [releaseBoard],
   githubSourceIds: string[] = ['acme/app'],
   linear: { sourceIds: string[]; bindings: unknown[] } | null = null,
+  intakeRoutes = [intakeRouteTo('release')],
 ) {
   const intakeRequest = vi.fn(() => HttpResponse.json({ issues: [], pullRequests: [] }));
   server.use(
@@ -36,6 +56,9 @@ function renderBoard(
           },
         ],
       }),
+    ),
+    http.get('*/web/factory/projects/:id/intake-routes', () =>
+      HttpResponse.json({ intakeRoutes } satisfies IntakeRouteListResponse),
     ),
     http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
     http.get('*/web/intake/config', () =>
@@ -62,10 +85,9 @@ function renderBoard(
 }
 
 describe('custom-only board routing', () => {
-  // Its cards come from the project's intake routes, not from a feed it browses: a connected
-  // source is all it takes.
+  // Its cards come from an intake route that targets it, not from a feed it browses.
   it.each(['list', 'board'])(
-    'says intake is clear in a custom initial phase while the project has a connected source, in the %s layout',
+    'says intake is clear in a custom initial phase while an intake route files a connected source onto it, in the %s layout',
     async layout => {
       const { client } = renderBoard();
       const user = userEvent.setup();
@@ -102,6 +124,24 @@ describe('custom-only board routing', () => {
       expect(await screen.findByRole('textbox', { name: 'Work item title' })).toHaveFocus();
     },
   );
+
+  // A connected source files onto the default board unless a route sends it elsewhere, so a
+  // board no enabled route targets never receives a card.
+  it.each([
+    ['no route targets it', [intakeRouteTo('work')]],
+    ['its only route is off', [intakeRouteTo('release', false)]],
+  ])('offers intake setup while a source is connected but %s', async (_case, intakeRoutes) => {
+    const { client } = renderBoard(undefined, undefined, undefined, undefined, null, intakeRoutes);
+    await waitForMutationsIdle(client);
+
+    const queued = await screen.findByTestId('board-column-queued');
+    expect(await within(queued).findByText(/No intake sources/)).toBeVisible();
+    expect(within(queued).queryByText('Intake is clear')).not.toBeInTheDocument();
+    expect(within(queued).getByRole('link', { name: 'Connect issue source' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/intake',
+    );
+  });
 
   // Selected sources are shared across factories; a source bound only to another project's board
   // files nothing here, so this project still has nothing connected.

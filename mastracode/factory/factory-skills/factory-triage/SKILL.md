@@ -201,7 +201,7 @@ After a GitHub comment is posted or updated, reconcile the labels before the ter
 
 - Add `status: auto-triaged` for every GitHub issue.
 - Remove `status: needs triage` whenever it is present, including when Phase 1 added it: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
-- Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject.
+- Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject. Never add it for an item that **A board that waives the approval wait** sends to planning: that board's instructions are the approval, and the label would stop every later re-triage at **Awaiting approval**.
 - Add the selected `effort:<level>`, `impact:<level>`, and `severity:<level>` labels from the handoff, each in its own call.
 - Remove only conflicting alternatives from these explicit labels: `effort:low`, `effort:medium`, `effort:high`, `impact:low`, `impact:medium`, `impact:high`, `severity:critical`, `severity:high`, `severity:medium`, and `severity:low`. On every initial run and refresh, keep exactly the selected effort label, exactly the selected impact label, and exactly the selected severity label. Confidence is never a label.
 - Create and add every label above the way **GitHub labels may not exist yet** says: create it first, then add it alone, so a missing label never costs the others.
