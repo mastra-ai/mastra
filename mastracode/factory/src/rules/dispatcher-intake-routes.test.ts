@@ -282,7 +282,7 @@ describe('intake routes placing linked cards', () => {
 
     const trusted = await deliver({ sourceKey: 'github-issue:1', metadata: { authorTrusted: true } });
     expect(placed(trusted)).toEqual({ board: 'work', stages: ['triage'] });
-    // The card remembers the route, so label routes and replays leave it where the route put it.
+    // The card remembers the route, so label changes and replays leave it where the route put it.
     expect(trusted?.metadata).toMatchObject({ intakeRouteId: toTriage.id });
     // Entered through the board's initial phase, then moved by a recorded transition.
     expect(trusted?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'triage']);
@@ -298,7 +298,7 @@ describe('intake routes placing linked cards', () => {
       name: DEFAULT_INTAKE_ROUTE.name,
       target: { boardKey: 'work', phaseKey: 'intake' },
     });
-    // A label route would send these to Docs; the default route keeps outside work in Intake first.
+    // Even with a Docs board installed, the default route keeps outside work in Intake first.
     await boards.create(scope, docsBoard, 'admin');
     const arrivals = [
       { sourceKey: 'github-issue:1', board: 'docs', metadata: { authorTrusted: false } },

@@ -1909,10 +1909,10 @@ export class FactoryDecisionDispatcher {
       }
     }
     if (skipRules) {
-      // Creation already filed the card at `stage`. An existing card — a
-      // reconcile pass reacting to a label change, say — is placed there the
-      // same way, through the relocation the label routes use, so no phase rule
-      // runs for it and no transition is recorded.
+      // Creation already filed the card at `stage`. An existing card — one a
+      // reconcile pass files again, say — is placed there the same way, through
+      // a cross-board relocation, so no phase rule runs for it and no transition
+      // is recorded.
       // Another decision of the same delivery (a pull request attaching to this card, say) can
       // change the card in between; a placement skipped for that reason is retried on a fresh read.
       let item: Card | null = result.created ? null : result.item;
@@ -2138,7 +2138,7 @@ export class FactoryDecisionDispatcher {
 
   /**
    * A card an intake route placed stays on the route's board when its source is filed again
-   * (a reconcile replaying "opened" with today's label route or binding): the decision lands
+   * (a reconcile replaying "opened"): the decision lands
    * on the card's board at its first phase, so it only backfills facts and moves nothing.
    * An explicit placement (`skipRules`) still wins.
    */
