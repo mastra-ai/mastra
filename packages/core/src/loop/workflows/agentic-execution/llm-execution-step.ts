@@ -86,6 +86,7 @@ import {
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
   RESOURCE_ID_KEY,
+  SKIP_BG_TASK_WAIT_KEY,
   SUBSCRIBE_PENDING_SIGNALS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
@@ -97,6 +98,7 @@ import {
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
+import { backgroundOutcomesInPrompt, snapshotBackgroundOutcomes } from '../../shared/background-outcomes';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
@@ -1990,6 +1992,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : currentStep.model?.specificationVersion === 'v3'
               ? messageList.get.all.aiV6.llmPrompt
               : messageList.get.all.aiV5.llmPrompt;
+        // `skipBgTaskWait` marks an `untilIdle` inner run, the only reader of these outcomes. Taken
+        // before the prompt is built so an outcome that lands meanwhile is never counted as sent.
+        const backgroundOutcomes = readScoped(scopeCtx, SKIP_BG_TASK_WAIT_KEY, 'skipBgTaskWait')
+          ? snapshotBackgroundOutcomes(messageList)
+          : undefined;
         let downloadError: MastraError | undefined;
         let inputMessages = await llmPromptForModel(messageListPromptArgs).catch(error => {
           if (!isDownloadAssetsError(error)) {
@@ -1998,6 +2005,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           downloadError = error;
           return [];
         });
+        const builtPrompt = inputMessages;
         removeTrailingAssistantGuardContinuations(messageList);
         await persistUnavailableAttachments({
           messageList,
@@ -2095,6 +2103,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : inputMessages;
           writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
         }
+        // A cached reply may come from a different prompt under a custom cache key, so it never
+        // counts as having answered a background result.
+        const backgroundResultTaskIds =
+          backgroundOutcomes && !cachedResponse
+            ? backgroundOutcomesInPrompt(backgroundOutcomes, builtPrompt, inputMessages)
+            : [];
 
         if (downloadError) {
           // Use the existing error-processor and model-fallback path without calling
@@ -2123,10 +2137,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               for (const chunk of replayChunks) {
                 // Reattach per-run metadata that was stripped at cache time. A cached
                 // step-start timestamp belongs to the original provider call, so omit it
-                // rather than reporting stale inference timing for the replay.
+                // rather than reporting stale inference timing for the replay. Cached background
+                // task ids belong to the original run.
                 let replayChunk = chunk;
                 if (chunk.type === 'step-start' && chunk.payload && typeof chunk.payload === 'object') {
-                  const { startedAt: _startedAt, ...payload } = chunk.payload as Record<string, unknown>;
+                  const {
+                    startedAt: _startedAt,
+                    backgroundResultTaskIds: _cachedTaskIds,
+                    ...payload
+                  } = chunk.payload as Record<string, unknown>;
                   replayChunk = { ...chunk, payload };
                 }
                 controller.enqueue({
@@ -2236,6 +2255,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       startedAt: inferenceStartedAt,
                       modelId: currentStep.model.modelId,
                       provider: currentStep.model.provider,
+                      ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
                     },
                   };
                 },
