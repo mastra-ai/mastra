@@ -947,6 +947,36 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       });
     });
 
+    // The descriptor reports "protected" whenever server.auth is set, so auth.public must not open the endpoint.
+    it('keeps the endpoint bearer-protected, and reported as protected, when auth.public lists its path', async () => {
+      delete process.env.MASTRA_DEV;
+      const auth = new SimpleAuth<TestUser>({ tokens: { ...USERS }, public: ['/api/mcp', '/api/mcp/builtin'] });
+      const started = await startServer(new Mastra({ logger: false, server: { auth } }));
+      try {
+        const initialize = (headers: Record<string, string>) =>
+          fetch(`${started.url}/api/mcp`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'initialize',
+              params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } },
+            }),
+          });
+        expect((await initialize({})).status).toBe(401);
+        expect((await initialize({ authorization: 'Bearer owner-token' })).status).toBe(200);
+
+        expect((await fetch(`${started.url}/api/mcp/builtin`)).status).toBe(401);
+        const descriptor = await fetch(`${started.url}/api/mcp/builtin`, {
+          headers: { authorization: 'Bearer owner-token' },
+        });
+        expect(((await descriptor.json()) as { auth: unknown }).auth).toEqual({ type: 'protected', provider: null });
+      } finally {
+        await started.close();
+      }
+    });
+
     it('reports open dev-only access under mastra dev without auth', async () => {
       process.env.MASTRA_DEV = 'true';
       const { status, body } = await describeOn(new Mastra({ logger: false }));

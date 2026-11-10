@@ -46,8 +46,10 @@ export function isMissingMCPPackage(error: unknown): boolean {
 }
 
 /**
- * The only place `@mastra/mcp` (an optional peer dependency) is loaded, so apps that never serve the built-in MCP
- * endpoint never load the MCP SDK. When it isn't installed the endpoint answers 501.
+ * Loads `@mastra/mcp` (an optional peer dependency) on the first MCP request, so apps that never serve the
+ * built-in MCP endpoint don't load the MCP SDK at startup. The only other import is the descriptor route's
+ * install check (./descriptor), which runs when Studio opens the MCP Servers page on an enabled server.
+ * When the package isn't installed the endpoint answers 501.
  * The catalogue is loaded here as well: it imports the server adapter, which imports this route.
  */
 async function loadBuiltinMCP(mastra: Mastra) {
