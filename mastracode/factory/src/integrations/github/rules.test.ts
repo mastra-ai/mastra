@@ -6714,7 +6714,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           : new LibSQLFactoryStorage({ id: 'github-self-review-handoff', url: ':memory:' }),
       );
       // Work as a project stored it with its self-review phase: execute -> review (self-review) -> pr-review.
-      const boards = olderWork();
+      const boards = autoStartingBoards(olderWork());
       const configVersion = 'self-review-handoff';
       const card = (
         await seeded.workItems.upsert({
@@ -6767,7 +6767,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         storage: seeded.workItems,
         boards,
         intakeRoutes: seeded.boards,
-        isAutoRunEnabled: async () => true,
         ownerId: 'worker-1',
       });
       const openPullRequest = async (headSha: string) => {

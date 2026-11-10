@@ -1130,7 +1130,6 @@ describe('FactoryDecisionDispatcher', () => {
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      isAutoRunEnabled: async () => true,
       transitionService,
       storage,
       ownerId: 'worker-1',
