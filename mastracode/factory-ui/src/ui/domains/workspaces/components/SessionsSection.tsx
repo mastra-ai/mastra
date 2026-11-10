@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -23,6 +24,7 @@ import {
 } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
+import type { SessionListRow } from '../services/sessionRows';
 import { compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
@@ -166,22 +168,28 @@ export function SessionsSection() {
             key={group.key}
             group={group}
             showHeader={view.groupBy !== 'none'}
-            renderRow={row => (
-              <>
-                {[row, ...(row.childRows ?? [])].map(entry => (
-                  <SessionListItem
-                    key={entry.session.sessionId}
-                    factoryId={factoryId}
-                    row={entry}
-                    level={entry === row ? undefined : 1}
-                    compact={view.compact}
-                    disabled={deletion.deleting}
-                    merged={mergedBySessionId[entry.session.sessionId] ?? entry.pullRequest?.knownMerged}
-                    onDelete={deletion.requestDeletion}
-                  />
-                ))}
-              </>
-            )}
+            renderRow={row => {
+              const item = (entry: SessionListRow, level?: number, subItems?: ReactNode) => (
+                <SessionListItem
+                  key={entry.session.sessionId}
+                  factoryId={factoryId}
+                  row={entry}
+                  level={level}
+                  compact={view.compact}
+                  disabled={deletion.deleting}
+                  merged={mergedBySessionId[entry.session.sessionId] ?? entry.pullRequest?.knownMerged}
+                  onDelete={deletion.requestDeletion}
+                  subItems={subItems}
+                />
+              );
+              return item(
+                row,
+                undefined,
+                row.childRows?.length ? (
+                  <Sidebar.NavList className="mt-0.5">{row.childRows.map(child => item(child, 1))}</Sidebar.NavList>
+                ) : undefined,
+              );
+            }}
           />
         ))}
       </div>

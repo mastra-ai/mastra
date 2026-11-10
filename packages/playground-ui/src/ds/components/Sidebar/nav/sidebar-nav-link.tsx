@@ -6,6 +6,7 @@ import { useMaybeSidebarState } from '../root/sidebar-context';
 import { navItemClasses, navItemLayoutClasses, navRowSurfaceClasses } from './sidebar-nav-item-classes';
 import type { SidebarNavItemSize } from './sidebar-nav-item-classes';
 import { SidebarNavLabel } from './sidebar-nav-label';
+import { Button } from '@/ds/components/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -85,11 +86,7 @@ export function SidebarNavLink({
 
   return (
     <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
-      <NavRowBody
-        action={rowAction}
-        twoLine={size === 'two-line'}
-        surfaceClassName={navRowSurfaceClasses({ isActive, isFeatured })}
-      >
+      <NavRowBody action={rowAction} surfaceClassName={navRowSurfaceClasses({ isActive, isFeatured })}>
         <NavRowTooltip label={navTooltipLabel(link, isCollapsed)}>
           {navInteractiveRow({ render, asChild, children, link, state, Link, isActive, className: itemClassName })}
         </NavRowTooltip>
@@ -181,35 +178,47 @@ function NavRowTooltip({ label, children }: { label?: string; children: React.Re
 
 function NavRowBody({
   action,
-  twoLine,
   surfaceClassName,
   children,
 }: {
   action?: React.ReactNode;
-  twoLine: boolean;
   surfaceClassName: string;
   children: React.ReactNode;
 }) {
   if (!action) return children;
 
   return (
-    <div className={cn('flex min-w-0 pr-0.75', twoLine ? 'items-start' : 'items-center', surfaceClassName)}>
+    <div
+      className={cn(
+        'group/nav-row relative flex min-w-0 items-center pr-0.75 has-[[data-slot=sidebar-nav-description]]:items-start',
+        surfaceClassName,
+      )}
+    >
       {children}
-      <span
-        className={cn(
-          'flex shrink-0 items-center',
-          // Action buttons are 24px so they keep the same 3px from the row's top and right
-          // edges on every row: a 30px single-line row centres them 3px from its top, and a
-          // two-line row tucks them into its top-right corner with matching padding.
-          '[&_button]:size-6',
-          twoLine && 'pt-0.75',
-          // Their corners follow the row's rounded-lg surface, inset by those 3px, instead of
-          // reading as circles.
-          '[&_button]:rounded-[calc(var(--radius-lg)-3px)]',
-        )}
-      >
+      {/* A row with a description tucks its actions into the top-right corner, as far from
+          the top as `Sidebar.NavAction` sits from the right. */}
+      <span className="flex shrink-0 items-center group-has-[[data-slot=sidebar-nav-description]]/nav-row:pt-0.75">
         {action}
       </span>
     </div>
+  );
+}
+
+/**
+ * An icon button for a row's `action` slot: 24px, so it keeps 3px from the row's top and
+ * right edges on a 30px row, with corners inset from the row's `rounded-lg` by those 3px.
+ *
+ * A row with actions is `group/nav-row` and `relative`, so hover-only actions reveal with
+ * `group-hover/nav-row:` without lighting up while a nested row in `subItems` is hovered.
+ */
+export function SidebarNavAction({ className, ...props }: Omit<ComponentProps<typeof Button>, 'variant' | 'size'>) {
+  return (
+    <Button
+      type="button"
+      {...props}
+      variant="ghost"
+      size="icon-sm"
+      className={cn('size-6 rounded-[calc(var(--radius-lg)-3px)]', className)}
+    />
   );
 }

@@ -156,7 +156,8 @@ export function groupSessionRows(
 
 export function collapsedRowsKeepingActive(rows: readonly SessionListRow[], additionalRowCount = 0): SessionListRow[] {
   const collapsed = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
-  const open = rows.find(row => row.active);
+  // A card whose open session is listed under it keeps the card in view.
+  const open = rows.find(row => row.active || row.childRows?.some(child => child.active));
   const openOutsideFold = open !== undefined && !collapsed.includes(open);
   const visible = rows.slice(0, collapsed.length + Number(openOutsideFold) + additionalRowCount);
   // The open row already occupies a slot, including when a later batch reaches it.

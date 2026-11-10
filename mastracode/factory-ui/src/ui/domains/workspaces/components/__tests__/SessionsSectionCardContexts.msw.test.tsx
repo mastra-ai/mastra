@@ -199,7 +199,10 @@ describe('Sessions sidebar view options', () => {
     expect(triage).not.toHaveTextContent('Triage fix login');
     expect(review).not.toHaveTextContent('Review fix login');
     expect(screen.queryByRole('link', { name: /: Write docs$/ })).not.toBeInTheDocument();
-
+    // Nested in the card's list item, so screen readers hear them as one level down.
+    const cardItem = screen.getByRole('link', { name: 'Build fix login' }).closest('li');
+    if (!cardItem) throw new Error('The card row is not a list item');
+    expect(within(cardItem).getByRole('list')).toContainElement(review);
     first.unmount();
     renderSection();
     expect(await screen.findByRole('link', { name: /^Review.*: Review fix login$/ })).toBeInTheDocument();

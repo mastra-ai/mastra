@@ -8,9 +8,8 @@ export type SidebarNavLabelProps = ComponentPropsWithoutRef<'span'> & {
   /** Override sidebar state. Defaults to context, then `'default'`. */
   state?: SidebarState;
   /**
-   * Secondary line under the label (time, counts, small icons). Pair with
-   * `Sidebar.NavLink size="two-line"` so the row grows to hold it. Hidden when
-   * the sidebar is collapsed.
+   * Secondary line under the label (time, counts, small icons). The row grows to
+   * hold it. Hidden when the sidebar is collapsed.
    */
   description?: ReactNode;
 };
@@ -32,13 +31,15 @@ export function SidebarNavLabel({ children, className, description, state: state
   if (state === 'collapsed') {
     return <VisuallyHidden>{children}</VisuallyHidden>;
   }
-  if (description !== undefined) {
+  if (description != null && description !== false) {
     return (
       <span {...rest} className={cn('flex min-w-0 flex-1 flex-col text-left', className)}>
         <span className="truncate">{children}</span>
-        {/* The row sizes every descendant svg to 16px at equal specificity, so the
-            description's glyphs need `!` to sit at the meta line's 12px. */}
-        <span className="flex min-w-0 items-center gap-1.5 truncate text-meta text-muted-foreground [&_svg]:size-3!">
+        {/* The slot attribute both grows the row and out-ranks its 16px svg rule. */}
+        <span
+          data-slot="sidebar-nav-description"
+          className="flex min-w-0 items-center gap-1.5 truncate text-meta text-muted-foreground data-[slot=sidebar-nav-description]:[&_svg]:size-3"
+        >
           {description}
         </span>
       </span>

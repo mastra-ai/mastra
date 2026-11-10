@@ -236,15 +236,6 @@ export function buildFactorySessionRow({
 
 const CARRIED_STATUSES: readonly SessionActivityStatus[] = ['waiting', 'working'];
 
-function cardOrder(item: WorkItem, boards: readonly InstalledBoardInfo[] | undefined) {
-  const phases = boards?.find(board => board.id === itemBoard(item))?.phases;
-  const stage = item.stages[0] ?? '';
-  return {
-    opened: cardThreadSession(item, phases, stage)?.sessionId,
-    sessions: cardContextSessions(item, phases, stage),
-  };
-}
-
 /**
  * A card's sessions in the order it lists them: the session it opens first, then
  * the rest in card order, then any the card no longer lists.
@@ -255,19 +246,21 @@ function orderCardRows(
 ): SessionListRow[] {
   const item = cardRows[0].item;
   if (!item) return [...cardRows];
-  const { opened, sessions } = cardOrder(item, boards);
-  const order = sessions.map(entry => entry.ref.sessionId);
+  const phases = boards?.find(board => board.id === itemBoard(item))?.phases;
+  const stage = item.stages[0] ?? '';
+  const opened = cardThreadSession(item, phases, stage)?.sessionId;
+  const sessions = cardContextSessions(item, phases, stage);
   const rank = (row: SessionListRow) => {
     if (row.session.sessionId === opened) return -1;
-    const index = order.indexOf(row.session.sessionId);
-    return index === -1 ? order.length : index;
+    const index = sessions.findIndex(entry => entry.ref.sessionId === row.session.sessionId);
+    return index === -1 ? sessions.length : index;
   };
-  return cardRows.toSorted((a, b) => rank(a) - rank(b));
-}
-
-function phaseLabel(row: SessionListRow, boards: readonly InstalledBoardInfo[] | undefined): string | undefined {
-  if (!row.item) return undefined;
-  return cardOrder(row.item, boards).sessions.find(entry => entry.ref.sessionId === row.session.sessionId)?.label;
+  const phaseLabel = (row: SessionListRow) =>
+    sessions.find(entry => entry.ref.sessionId === row.session.sessionId)?.label;
+  // The card's own row keeps its name; the sessions under it are named by phase.
+  return cardRows
+    .toSorted((a, b) => rank(a) - rank(b))
+    .map((row, index) => (index === 0 ? row : { ...row, phaseLabel: phaseLabel(row) }));
 }
 
 export interface OneRowPerCardOptions {
@@ -278,8 +271,9 @@ export interface OneRowPerCardOptions {
 /**
  * A card lists one row, for its current session. With child sessions hidden the
  * row takes on what any of the card's sessions shows (running, waiting on you),
- * so work in another context isn't hidden; revealed, each session shows its own.
- * The row is open and pinned while any of the card's sessions is.
+ * so work in another context isn't hidden, and is open while any of them is;
+ * revealed, each session shows its own state. The row is pinned while any of
+ * the card's sessions is.
  */
 export function oneRowPerCard(
   rows: readonly SessionListRow[],
@@ -296,17 +290,19 @@ export function oneRowPerCard(
     if (!cardRows || cardRows.length === 1) return [row];
     const [shown, ...others] = orderCardRows(cardRows, boards);
     if (shown !== row) return [];
+    const shared = {
+      pinned: cardRows.some(candidate => candidate.pinned),
+      cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
+    };
+    // Listed, each session shows its own state and the open one highlights.
+    if (revealChildSessions) return [{ ...shown, ...shared, childRows: others }];
     const carried = CARRIED_STATUSES.find(status => cardRows.some(candidate => candidate.status === status));
     return [
       {
         ...shown,
-        status: revealChildSessions ? shown.status : (carried ?? shown.status),
+        ...shared,
+        status: carried ?? shown.status,
         active: cardRows.some(candidate => candidate.active),
-        pinned: cardRows.some(candidate => candidate.pinned),
-        cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
-        ...(revealChildSessions
-          ? { childRows: others.map(child => ({ ...child, phaseLabel: phaseLabel(child, boards) })) }
-          : {}),
       },
     ];
   });

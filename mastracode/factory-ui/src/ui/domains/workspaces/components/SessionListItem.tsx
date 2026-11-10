@@ -1,4 +1,5 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
 import { updatePinnedSessions } from '../hooks/usePinnedSessions';
@@ -17,6 +18,7 @@ export function SessionListItem({
   level,
   compact,
   onDelete,
+  subItems,
 }: {
   factoryId: string;
   row: SessionListRow;
@@ -27,6 +29,8 @@ export function SessionListItem({
   disabled: boolean;
   merged: boolean | undefined;
   onDelete: (row: SessionListRow) => void;
+  /** The card's child sessions, nested under its row. */
+  subItems?: ReactNode;
 }) {
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
@@ -51,8 +55,7 @@ export function SessionListItem({
       externalLinks={row.externalLinks}
       from={row.origin === 'factory' ? location : undefined}
       source={row.source}
-      // A card row is open while any of its sessions is; with those listed, the open one highlights instead.
-      active={row.active && !row.childRows?.some(child => child.active)}
+      active={row.active}
       disabled={disabled}
       merged={merged}
       changeRequestProvider={row.pullRequest?.provider}
@@ -70,7 +73,9 @@ export function SessionListItem({
       }
       changingVisibility={changing}
       pullRequest={row.pullRequest}
-      updatedAt={compact ? undefined : row.updatedAt}
+      updatedAt={row.updatedAt}
+      compact={compact}
+      subItems={subItems}
     />
   );
 }
