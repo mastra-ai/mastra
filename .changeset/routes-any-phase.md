@@ -14,9 +14,8 @@ if (route.allowWorkingPhase) {
   /* the route may move cards into a working phase */
 }
 
-// After: every route may. The target phase's `autoStart` (or the project's auto-run) decides whether its run starts.
-const phase = board.phases.find(p => p.key === route.target.phaseKey);
-const startsOnItsOwn = phase?.autoStart === true;
+// After: drop the check. Every route may move cards into a working phase. Whether the phase's run then starts
+// follows the phase's `autoStart` and `autoStartWhen`, the project's auto-run, and Factory-authored PR re-review.
 ```
 
 ```bash
