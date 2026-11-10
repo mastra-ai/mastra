@@ -375,7 +375,21 @@
                         "role": "user",
                         "content": "What is 5 + 3?"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "Let me calculate that for you. ",
+                      "toolCalls": [
+                        {
+                          "toolCallId": "call-calc-1",
+                          "toolName": "calculator",
+                          "args": {
+                            "operation": "add",
+                            "a": 5,
+                            "b": 3
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 {
@@ -808,7 +822,11 @@
                         "role": "tool",
                         "content": "[tool-result: calculator]"
                       }
-                    ]
+                    ],
+                    "output": {
+                      "text": "The result of 5 + 3 is 8.",
+                      "toolCalls": []
+                    }
                   }
                 },
                 {

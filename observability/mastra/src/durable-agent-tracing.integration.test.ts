@@ -729,4 +729,62 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       }
     },
   );
+
+  // Issue #29818: MODEL_INFERENCE ended at the raw provider `finish` without output, so
+  // exporters that send it as the model call (OTel/Langfuse, Datadog, PostHog) showed a
+  // prompt with no response. It must carry the processed response, while its timing
+  // still stops at the provider finish and excludes the tool that runs afterwards.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    '%s agent: each model call span carries its processed response, timed without the tool',
+    async variant => {
+      class RedactProcessor implements Processor {
+        readonly id = 'redact';
+        readonly name = 'Redact';
+        async processOutputStream({ part }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+          if (part.type === 'text-delta') {
+            return { ...part, payload: { ...part.payload, text: part.payload.text.replace('42', '[REDACTED]') } };
+          }
+          return part;
+        }
+      }
+      const slowLookup = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async () => {
+          await new Promise(r => setTimeout(r, 50));
+          return { value: 42 };
+        },
+      });
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'x',
+        model: toolThenTextModel('lookup', { q: 'answer' }, 'The answer is 42.') as any,
+        tools: { lookup: slowLookup },
+        outputProcessors: [new RedactProcessor()],
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      if (variant === 'plain') {
+        await (await wrapped.stream('What is the answer?')).consumeStream();
+        await settle(testExporter);
+      } else {
+        await runToCompletion(wrapped, 'What is the answer?', testExporter);
+      }
+
+      const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
+      expect(inferences).toHaveLength(2);
+      expect(inferences[0].output).toMatchObject({
+        text: '',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'lookup', args: { q: 'answer' } }],
+      });
+      expect(inferences[1].output).toMatchObject({ text: 'The answer is [REDACTED].', toolCalls: [] });
+      expect(JSON.stringify(inferences.map(i => i.output))).not.toContain('42');
+      expect(inferences[0].attributes).toMatchObject({ finishReason: 'tool-calls', usage: { inputTokens: 10 } });
+
+      const [toolCall] = testExporter.getSpansByType('tool_call' as any) as any[];
+      expect(+new Date(inferences[0].endTime)).toBeLessThanOrEqual(startOf(toolCall));
+      expect(testExporter.getIncompleteSpans()).toHaveLength(0);
+    },
+  );
 });
