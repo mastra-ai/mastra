@@ -23,6 +23,32 @@ if (typeof globalThis.window !== 'undefined') {
       disconnect() {}
     };
   }
-  // Base UI's ScrollArea, in the table widget, calls getAnimations; jsdom has no Web Animations API.
+  // Studio's trace list loads its next page when the list's end scrolls into view.
+  if (typeof globalThis.IntersectionObserver === 'undefined') {
+    globalThis.IntersectionObserver = class {
+      root = null;
+      rootMargin = '';
+      thresholds = [];
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    } as unknown as typeof IntersectionObserver;
+  }
+  // Base UI's scroll areas wait for animations to finish; jsdom doesn't animate.
   Element.prototype.getAnimations ??= () => [];
+  // Studio's dialogs ask whether the screen is mobile-sized.
+  window.matchMedia ??= (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
 }

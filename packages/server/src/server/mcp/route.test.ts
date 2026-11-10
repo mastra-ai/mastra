@@ -145,11 +145,17 @@ describe('built-in MCP route without @mastra/mcp-apps-components installed', () 
     workerd: () => new Error('No such module "@mastra/mcp-apps-components/trace-viewer".'),
   };
 
-  afterEach(() => vi.doUnmock('@mastra/mcp-apps-components/trace-viewer'));
+  const VIEWER = '@mastra/mcp-apps-components/trace-viewer';
+  const LIST = '@mastra/mcp-apps-components/trace-list';
+  afterEach(() => {
+    vi.doUnmock(VIEWER);
+    vi.doUnmock(LIST);
+  });
 
-  async function serveWithAppsImport(load: () => unknown) {
+  async function serveWithAppsImport(loadViewer: () => unknown, loadList: () => unknown = loadViewer) {
     vi.stubEnv('MASTRA_DEV', 'true');
-    vi.doMock('@mastra/mcp-apps-components/trace-viewer', load);
+    vi.doMock(VIEWER, loadViewer);
+    vi.doMock(LIST, loadList);
     const app = await serveWithMCPImport(() => vi.importActual('@mastra/mcp'));
     const { server } = (await app.request()) as { server: { appResourceList: { uri: string }[] } };
     return server.appResourceList.map(resource => resource.uri);
@@ -164,8 +170,26 @@ describe('built-in MCP route without @mastra/mcp-apps-components installed', () 
     });
   }
 
-  it('serves the trace viewer when installed', async () => {
-    const apps = await serveWithAppsImport(() => vi.importActual('@mastra/mcp-apps-components/trace-viewer'));
+  it('serves both apps when installed', async () => {
+    const apps = await serveWithAppsImport(
+      () => vi.importActual(VIEWER),
+      () => vi.importActual(LIST),
+    );
+    expect(apps.sort()).toEqual(['ui://mastra/trace-list', 'ui://mastra/trace-viewer']);
+  });
+
+  it('serves the trace viewer from an older version without the trace list', async () => {
+    const apps = await serveWithAppsImport(
+      () => vi.importActual(VIEWER),
+      () => {
+        throw Object.assign(
+          new Error(
+            'Package subpath \'./trace-list\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
+          ),
+          { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
+        );
+      },
+    );
     expect(apps).toEqual(['ui://mastra/trace-viewer']);
   });
 

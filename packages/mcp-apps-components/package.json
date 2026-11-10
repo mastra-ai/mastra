@@ -35,6 +35,16 @@
         "default": "./dist/dashboards.cjs"
       }
     },
+    "./trace-list": {
+      "import": {
+        "types": "./dist/trace-list.d.ts",
+        "default": "./dist/trace-list.js"
+      },
+      "require": {
+        "types": "./dist/trace-list.d.ts",
+        "default": "./dist/trace-list.cjs"
+      }
+    },
     "./trace-viewer": {
       "import": {
         "types": "./dist/trace-viewer.d.ts",

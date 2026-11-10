@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+@import '@mastra/playground-ui/components.css';
+@import '@mastra/playground-ui/sources.css';
+
+@source '.';
+
+html,
+body {
+  background-color: transparent;
+}

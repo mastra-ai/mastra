@@ -75,10 +75,12 @@ async function loadBuiltinMCP(mastra: Mastra) {
 }
 
 const TRACE_VIEWER_URI = 'ui://mastra/trace-viewer';
+const TRACE_LIST_URI = 'ui://mastra/trace-list';
 const APPS_PACKAGE = '@mastra/mcp-apps-components';
 
+type AppResource = { name: string; description?: string; html: string };
 type BuiltinApps = {
-  appResources: Record<string, { name: string; description?: string; html: string }>;
+  appResources: Record<string, AppResource>;
   apps: BuiltinMCPApps;
 };
 let builtinApps: Promise<BuiltinApps | undefined> | undefined;
@@ -91,11 +93,33 @@ let builtinApps: Promise<BuiltinApps | undefined> | undefined;
 function loadBuiltinApps(): Promise<BuiltinApps | undefined> {
   builtinApps ??= (async () => {
     try {
-      // Keep this import directly inside `try`, like `@mastra/mcp` above.
-      const { traceViewerApp } = await import('@mastra/mcp-apps-components/trace-viewer');
-      return { appResources: { [TRACE_VIEWER_URI]: traceViewerApp }, apps: { traceViewer: TRACE_VIEWER_URI } };
+      // Keep each import directly inside its own `try`, like `@mastra/mcp` above (wrangler's esbuild only
+      // accepts an unresolvable dynamic import there). Separate subpaths let an older package without the
+      // trace list still serve the trace viewer.
+      let traceViewer: AppResource | undefined;
+      let traceList: AppResource | undefined;
+      try {
+        traceViewer = (await import('@mastra/mcp-apps-components/trace-viewer')).traceViewerApp;
+      } catch (error) {
+        if (!isMissingAppsPackage(error)) throw error;
+      }
+      try {
+        traceList = (await import('@mastra/mcp-apps-components/trace-list')).traceListApp;
+      } catch (error) {
+        if (!isMissingAppsPackage(error)) throw error;
+      }
+      if (!traceViewer && !traceList) return undefined;
+      const result: BuiltinApps = { appResources: {}, apps: {} };
+      if (traceViewer) {
+        result.appResources[TRACE_VIEWER_URI] = traceViewer;
+        result.apps.traceViewer = TRACE_VIEWER_URI;
+      }
+      if (traceList) {
+        result.appResources[TRACE_LIST_URI] = traceList;
+        result.apps.traceList = TRACE_LIST_URI;
+      }
+      return result;
     } catch (error) {
-      if (isMissingAppsPackage(error)) return undefined;
       builtinApps = undefined;
       throw error;
     }

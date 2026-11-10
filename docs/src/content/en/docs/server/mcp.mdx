@@ -188,6 +188,8 @@ npm install @mastra/mcp-apps-components
 
 With it installed, `get_trace` opens the trace in Studio's trace timeline. Select a span to see its input, output, and attributes. The view loads the rest of a long trace and each span through `get_trace` and `get_span`, so it shows only what the caller's permissions allow.
 
+`query_traces` and `list_traces` open Studio's trace explorer on the results. The time range, sort, and filters the model asked for stay applied, and you can clear the model's filters to see every trace. From there you can filter, change the time range, page through traces, and open a trace on its timeline. If the observability store supports span and thread queries, the explorer also has Spans and Threads tabs. Every query goes back through the same MCP tools, with the caller's permissions.
+
 Apps are served only to clients that declare MCP Apps support. Other clients, such as Claude Code in a terminal, get the same tools and JSON results as without the package. Set `apps: false` to turn them off:
 
 ```typescript title="src/mastra/index.ts"

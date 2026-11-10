@@ -1,0 +1,159 @@
+import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces/components/format-hierarchical-spans';
+import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
+import { TraceSpanTimeline } from '@mastra/playground-ui/domains/traces/components/trace-span-timeline';
+import { TraceSummaryDescription } from '@mastra/playground-ui/domains/traces/components/trace-summary-description';
+import type { LightSpanRecord, SpanRecord } from '@mastra/playground-ui/domains/traces/types';
+import type { App } from '@modelcontextprotocol/ext-apps';
+import { useEffect, useMemo, useState } from 'react';
+import { callTool } from './mcp-app';
+
+/** The built-in server's light trace (`get_trace`): every span's tree fields, paged by `nextOffset`. */
+export type LightTrace = { traceId: string; spanCount: number; spans: LightSpanRecord[]; nextOffset?: number };
+
+export function isLightTrace(value: unknown): value is LightTrace {
+  return !!value && typeof value === 'object' && Array.isArray((value as LightTrace).spans);
+}
+
+/** Loads the rest of a trace that `get_trace` cut to fit the result size limit. */
+async function loadRest(app: App, trace: LightTrace): Promise<LightSpanRecord[]> {
+  const spans = [...trace.spans];
+  let offset = trace.nextOffset;
+  while (offset !== undefined) {
+    const page = await callTool(app, 'get_trace', { traceId: trace.traceId, offset });
+    if (!isLightTrace(page) || page.spans.length === 0) break;
+    spans.push(...page.spans);
+    offset = page.nextOffset;
+  }
+  return spans;
+}
+
+function SpanPanel({
+  app,
+  traceId,
+  spanId,
+  onClose,
+}: {
+  app: App;
+  traceId: string;
+  spanId: string;
+  onClose: () => void;
+}) {
+  const [state, setState] = useState<{ span?: SpanRecord; error?: string; loading: boolean }>({ loading: true });
+  useEffect(() => {
+    let current = true;
+    setState({ loading: true });
+    callTool(app, 'get_span', { traceId, spanId }).then(
+      result => {
+        const span = (result as { span?: SpanRecord })?.span ?? (result as SpanRecord | undefined);
+        if (current) setState({ span, loading: false });
+      },
+      (error: Error) => current && setState({ error: error.message, loading: false }),
+    );
+    return () => {
+      current = false;
+    };
+  }, [app, traceId, spanId]);
+
+  if (state.error) {
+    return (
+      <Txt variant="body-sm" tone="muted" className="p-4">
+        {state.error}
+      </Txt>
+    );
+  }
+  return (
+    <DataPanel variant="inline" title={`Span ${spanId}`}>
+      <SpanDataPanelView
+        traceId={traceId}
+        spanId={spanId}
+        span={state.span}
+        isLoading={state.loading}
+        onClose={onClose}
+      />
+    </DataPanel>
+  );
+}
+
+export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrace; spanId?: string }) {
+  const [spans, setSpans] = useState(trace.spans);
+  const [selectedSpanId, setSelectedSpanId] = useState(spanId);
+  useEffect(() => {
+    setSpans(trace.spans);
+    if (trace.nextOffset !== undefined) void loadRest(app, trace).then(setSpans);
+  }, [app, trace]);
+
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans), [spans]);
+  const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
+  useEffect(() => setExpandedSpanIds(spans.map(span => span.spanId)), [spans]);
+  const rootSpan = spans.find(span => span.parentSpanId == null);
+
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <DataPanel variant="inline" title={`Trace ${trace.traceId}`}>
+        <DataPanel.Header>
+          <DataPanel.HeaderContent>
+            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+            {rootSpan && <TraceSummaryDescription rootSpan={rootSpan} />}
+          </DataPanel.HeaderContent>
+        </DataPanel.Header>
+        <DataPanel.Content className="p-0">
+          <TraceSpanTimeline
+            hierarchicalSpans={hierarchicalSpans}
+            selectedSpanId={selectedSpanId}
+            onSpanClick={id => setSelectedSpanId(current => (current === id ? undefined : id))}
+            expandedSpanIds={expandedSpanIds}
+            setExpandedSpanIds={setExpandedSpanIds}
+          />
+        </DataPanel.Content>
+      </DataPanel>
+      {selectedSpanId && (
+        <div className="h-[32rem]">
+          <SpanPanel
+            app={app}
+            traceId={trace.traceId}
+            spanId={selectedSpanId}
+            onClose={() => setSelectedSpanId(undefined)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Loads a trace through `get_trace` and draws it, with `spanId` open when given. */
+export function TraceById({ app, traceId, spanId }: { app: App; traceId: string; spanId?: string }) {
+  const [state, setState] = useState<{ trace?: LightTrace; error?: string }>({});
+  useEffect(() => {
+    let current = true;
+    setState({});
+    callTool(app, 'get_trace', { traceId }).then(
+      result => {
+        if (!current) return;
+        setState(isLightTrace(result) ? { trace: result } : { error: 'The tool returned no trace.' });
+      },
+      (error: Error) => current && setState({ error: error.message }),
+    );
+    return () => {
+      current = false;
+    };
+  }, [app, traceId]);
+
+  if (state.error) {
+    return (
+      <Txt variant="body-sm" tone="muted" className="p-4">
+        {state.error}
+      </Txt>
+    );
+  }
+  if (!state.trace) {
+    return (
+      <div className="flex min-h-25 items-center justify-center">
+        <Spinner size="sm" aria-label="Loading the trace" />
+      </div>
+    );
+  }
+  return <OpenedTrace app={app} trace={state.trace} spanId={spanId} />;
+}

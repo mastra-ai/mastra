@@ -9,6 +9,7 @@ import {
 } from '../../handlers/observability';
 import {
   AGGREGATE_SPANS,
+  GET_CAPABILITIES,
   AGGREGATE_TRACES,
   GET_FEEDBACK_AGGREGATE,
   GET_FEEDBACK_BREAKDOWN,
@@ -155,15 +156,27 @@ export function addObservabilityTools(kit: CatalogueKit) {
   const { call, addOperation, addCombined, config } = kit;
 
   if (config.toolsets.has('observability')) {
-    const bodyTool = (route: ServerRoute, rows?: string, schema: unknown = route.bodySchema) =>
-      addOperation(route, hoistRepeated(asObjectSchema(toJSONSchema(schema))), async (args, signal) => {
-        const result = await call(route, { body: args }, signal);
-        // Trace and span rows are spans, which get_span returns in full.
-        const detail = rows === 'traces' || rows === 'spans' ? 'get_span' : undefined;
-        return rows ? fitRows(result, rows, PAGE_LIMIT_HINT, { cursors: CURSORS, detail }) : result;
-      });
+    // Hosts with MCP Apps open trace lists in Studio's trace explorer; others read the JSON as before.
+    const traceListLink = kit.apps.traceList ? { meta: { ui: { resourceUri: kit.apps.traceList } } } : undefined;
+    const bodyTool = (
+      route: ServerRoute,
+      rows?: string,
+      schema: unknown = route.bodySchema,
+      options?: Parameters<typeof addOperation>[3],
+    ) =>
+      addOperation(
+        route,
+        hoistRepeated(asObjectSchema(toJSONSchema(schema))),
+        async (args, signal) => {
+          const result = await call(route, { body: args }, signal);
+          // Trace and span rows are spans, which get_span returns in full.
+          const detail = rows === 'traces' || rows === 'spans' ? 'get_span' : undefined;
+          return rows ? fitRows(result, rows, PAGE_LIMIT_HINT, { cursors: CURSORS, detail }) : result;
+        },
+        options,
+      );
 
-    bodyTool(QUERY_TRACES, 'traces');
+    bodyTool(QUERY_TRACES, 'traces', undefined, traceListLink);
     bodyTool(AGGREGATE_TRACES);
     bodyTool(QUERY_SPANS, 'spans');
     bodyTool(AGGREGATE_SPANS);
@@ -215,12 +228,22 @@ export function addObservabilityTools(kit: CatalogueKit) {
     addOperation(GET_TRACE_TRAJECTORY_ROUTE, object({ traceId }, ['traceId']), (args, signal) =>
       call(GET_TRACE_TRAJECTORY_ROUTE, { pathParams: { traceId: args.traceId } }, signal),
     );
-    addOperation(LIST_TRACES_ROUTE, hoistRepeated(listQuerySchema(LIST_TRACES_ROUTE)), async (args, signal) =>
-      fitRows(await call(LIST_TRACES_ROUTE, { query: args }, signal), 'spans', PER_PAGE_HINT, {
-        cursors: CURSORS,
-        detail: 'get_span',
-      }),
+    addOperation(
+      LIST_TRACES_ROUTE,
+      hoistRepeated(listQuerySchema(LIST_TRACES_ROUTE)),
+      async (args, signal) =>
+        fitRows(await call(LIST_TRACES_ROUTE, { query: args }, signal), 'spans', PER_PAGE_HINT, {
+          cursors: CURSORS,
+          detail: 'get_span',
+        }),
+      traceListLink,
     );
+    // The trace list asks which views the store supports; the model has no use for it.
+    if (kit.apps.traceList) {
+      addOperation(GET_CAPABILITIES, object({}), (_args, signal) => call(GET_CAPABILITIES, {}, signal), {
+        meta: { ui: { resourceUri: kit.apps.traceList, visibility: ['app'] } },
+      });
+    }
     addOperation(LIST_LOGS, hoistRepeated(listQuerySchema(LIST_LOGS)), async (args, signal) =>
       fitRows(await call(LIST_LOGS, { query: args }, signal), 'logs', PER_PAGE_HINT, { cursors: CURSORS }),
     );

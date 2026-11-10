@@ -6,8 +6,9 @@ import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import type { ServerMCPConfig } from '@mastra/core/server';
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
+import { DuckDBStore } from '@mastra/duckdb';
 import { MastraStorageExporter, Observability } from '@mastra/observability';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { Hono } from 'hono';
@@ -17,6 +18,7 @@ import { MastraServer } from '../index';
 
 const UI = 'io.modelcontextprotocol/ui';
 const TRACE_VIEWER = 'ui://mastra/trace-viewer';
+const TRACE_LIST = 'ui://mastra/trace-list';
 
 /** Bearer token = role. `tracer` may read traces; `runner` may use the MCP server but not read traces. */
 const PERMISSIONS: Record<string, string[]> = {
@@ -29,12 +31,21 @@ afterAll(async () => {
   for (const cleanup of cleanups.reverse()) await cleanup();
 });
 
-/** Serves a Mastra that has recorded one agent run's trace. */
-async function start(mcp: ServerMCPConfig = {}) {
+/**
+ * Serves a Mastra that has recorded one agent run's trace. Its observability store answers trace queries
+ * (DuckDB) unless `traceQuery` is false (the in-memory store, which only lists traces).
+ */
+async function start(mcp: ServerMCPConfig = {}, { traceQuery = true } = {}) {
   const exporter = new MastraStorageExporter({ strategy: 'auto' });
   const mastra = new Mastra({
     logger: false,
-    storage: new InMemoryStore(),
+    storage: traceQuery
+      ? new MastraCompositeStore({
+          id: 'mcp-apps',
+          default: new InMemoryStore(),
+          domains: { observability: await new DuckDBStore({ path: ':memory:' }).getStore('observability') },
+        })
+      : new InMemoryStore(),
     agents: {
       helper: new Agent({
         id: 'helper',
@@ -122,6 +133,26 @@ describe('built-in MCP server apps', () => {
     expect(span.span.spanId).toBe(spanId);
   });
 
+  it('opens trace queries in the trace list, with its app-only capabilities tool', async () => {
+    const client = await server.connect('tracer', { rendersApps: true });
+
+    const { tools } = await client.listTools();
+    expect(tools.find(tool => tool.name === 'query_traces')?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST } });
+    // Hosts keep app-only tools from the model but list them; the list asks which views the store supports.
+    const capabilitiesTool = tools.find(tool => tool.name === 'get_observability_capabilities');
+    expect(capabilitiesTool?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST, visibility: ['app'] } });
+
+    const page = await client.readResource({ uri: TRACE_LIST });
+    expect(page.contents[0]).toMatchObject({ uri: TRACE_LIST, mimeType: 'text/html;profile=mcp-app' });
+
+    // The list's own reads, as this caller: which views the store supports, then the traces.
+    const { capabilities } = json(await client.callTool({ name: 'get_observability_capabilities', arguments: {} }));
+    expect(capabilities.traceQuery).toBe(true);
+    const timeRange = { from: new Date(Date.now() - 3_600_000).toISOString(), to: new Date().toISOString() };
+    const { traces } = json(await client.callTool({ name: 'query_traces', arguments: { timeRange } }));
+    expect(traces.map((trace: { traceId: string }) => trace.traceId)).toContain(server.traceId);
+  });
+
   it('gives a client that does not render apps the same tools with no app links', async () => {
     const client = await server.connect('tracer', { rendersApps: false });
 
@@ -131,6 +162,8 @@ describe('built-in MCP server apps', () => {
     const getTrace = tools.find(tool => tool.name === 'get_trace');
     expect(getTrace).toBeDefined();
     expect(getTrace?._meta?.ui).toBeUndefined();
+    expect(tools.find(tool => tool.name === 'query_traces')?._meta?.ui).toBeUndefined();
+    expect(tools.map(tool => tool.name)).not.toContain('get_observability_capabilities');
 
     const result = await client.callTool({ name: 'get_trace', arguments: { traceId: server.traceId } });
     expect(result._meta?.ui).toBeUndefined();
@@ -143,6 +176,7 @@ describe('built-in MCP server apps', () => {
     const { tools } = await client.listTools();
     expect(tools.map(tool => tool.name)).not.toContain('get_trace');
     expect(tools.map(tool => tool.name)).not.toContain('get_span');
+    expect(tools.map(tool => tool.name)).not.toContain('get_observability_capabilities');
     // The viewer's own calls are tool calls, so it can't reach them either.
     await expect(
       client.callTool({ name: 'get_span', arguments: { traceId: server.traceId, spanId: 'x' } }),
@@ -157,4 +191,20 @@ it('serves no apps with `server.mcp.apps: false`', async () => {
   const { tools } = await client.listTools();
   expect(tools.find(tool => tool.name === 'get_trace')?._meta?.ui).toBeUndefined();
   await expect(client.readResource({ uri: TRACE_VIEWER })).rejects.toThrow();
+  await expect(client.readResource({ uri: TRACE_LIST })).rejects.toThrow();
+  expect(tools.map(tool => tool.name)).not.toContain('get_observability_capabilities');
+});
+
+it('opens list_traces in the trace list on a store without trace queries', async () => {
+  const { connect, traceId } = await start({}, { traceQuery: false });
+  const client = await connect('tracer', { rendersApps: true });
+
+  const { tools } = await client.listTools();
+  expect(tools.map(tool => tool.name)).not.toContain('query_traces');
+  expect(tools.find(tool => tool.name === 'list_traces')?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST } });
+  // The list still learns what the store supports, and falls back to listing.
+  const { capabilities } = json(await client.callTool({ name: 'get_observability_capabilities', arguments: {} }));
+  expect(capabilities.traceQuery).toBe(false);
+  const { spans } = json(await client.callTool({ name: 'list_traces', arguments: {} }));
+  expect(spans.map((span: { traceId: string }) => span.traceId)).toContain(traceId);
 });

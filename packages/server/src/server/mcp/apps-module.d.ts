@@ -3,3 +3,7 @@
 declare module '@mastra/mcp-apps-components/trace-viewer' {
   export const traceViewerApp: { name: string; description: string; html: string };
 }
+
+declare module '@mastra/mcp-apps-components/trace-list' {
+  export const traceListApp: { name: string; description: string; html: string };
+}
