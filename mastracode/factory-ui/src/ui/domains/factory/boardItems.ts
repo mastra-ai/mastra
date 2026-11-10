@@ -351,8 +351,8 @@ export function cardThreadSession(
   phases: readonly ContextPhase[] | undefined,
   columnStage: string,
 ): WorkItemSessionRef | undefined {
-  const context = phases && visitedContexts(item, phases, columnStage)[0];
-  return context === undefined ? itemThreadSession(item.sessions) : contextSession(item, phases, context);
+  const context = phases ? visitedContexts(item, phases, columnStage)[0] : undefined;
+  return phases && context !== undefined ? contextSession(item, phases, context) : itemThreadSession(item.sessions);
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */

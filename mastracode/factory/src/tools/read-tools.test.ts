@@ -1,6 +1,9 @@
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
+import { LiveSessions } from '../session/live-sessions.js';
+import type { LiveSession } from '../session/live-sessions.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { WorkItemCommentRow } from '../storage/domains/comments/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -493,6 +496,48 @@ describe('factory_list_attention', () => {
     }>('factory_list_attention', {});
     expect(result.needsRepository).toMatchObject([{ workItemId: 'unnamed', number: 1 }]);
     expect(result.linkedRepositories).toEqual(['mastra-ai/mastra', 'mastra-ai/platform']);
+  });
+
+  it('lists a run parked on a tool prompt while it is still in flight', async () => {
+    let created: (session: LiveSession) => void = () => {};
+    const liveSessions = new LiveSessions({
+      onSessionCreated: listener => {
+        created = listener;
+        return () => {};
+      },
+      onSessionDeleted: () => () => {},
+    });
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    const pendingSuspensions = new Map<string, { toolName: string }>();
+    created({
+      identity: { getId: () => 'session-builder' },
+      run: { isRunning: () => true },
+      state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }) },
+      displayState: { get: () => ({ pendingSuspensions }) },
+      subscribe: listener => {
+        emit = listener;
+        return () => {};
+      },
+    });
+    const { deps, run } = setup({ items: [item({ id: 'x' })] });
+    deps.liveSessions = () => liveSessions;
+    type Waiting = { waiting: Array<{ sessionId: string; toolName: string; label: string; waitingSince: string }> };
+
+    await expect(run<Waiting>('factory_list_attention', {})).resolves.toMatchObject({ waiting: [] });
+
+    // The run never ends: submit_plan parks it mid-stream, and it must show without waiting for agent_end.
+    pendingSuspensions.set('call-1', { toolName: 'submit_plan' });
+    emit({ type: 'tool_suspended', toolCallId: 'call-1', toolName: 'submit_plan', args: {}, suspendPayload: {} });
+
+    const result = await run<Waiting>('factory_list_attention', {});
+    expect(result.waiting).toEqual([
+      {
+        sessionId: 'session-builder',
+        toolName: 'submit_plan',
+        label: 'Plan waiting for review',
+        waitingSince: expect.any(String),
+      },
+    ]);
   });
 
   it('flags truncation when incidents are cut by the limit', async () => {

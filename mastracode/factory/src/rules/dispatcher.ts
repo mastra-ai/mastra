@@ -1545,16 +1545,26 @@ export class FactoryDecisionDispatcher {
       }
       case 'notify': {
         const binding = await this.#requireBinding(record);
+        // A notification can wake the idle session, so it runs as the session's
+        // owner like any other Factory-started run, never as nobody.
+        const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+        const startedBy = item?.sessions[binding.role]?.startedBy;
+        if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
         const session = await this.#requireSession(binding);
+        const requestContext = factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId });
         await awaitNotification(() =>
-          session.sendNotificationSignal({
-            source: 'factory',
-            kind: 'rule-notification',
-            summary: decision.title,
-            payload: { body: decision.body, level: decision.level },
-            sourceId: record.id,
-            dedupeKey: record.idempotencyKey,
-          }),
+          session.sendNotificationSignal(
+            {
+              source: 'factory',
+              kind: 'rule-notification',
+              summary: decision.title,
+              payload: { body: decision.body, level: decision.level },
+              sourceId: record.id,
+              dedupeKey: record.idempotencyKey,
+            },
+            { requestContext },
+          ),
         );
       }
     }

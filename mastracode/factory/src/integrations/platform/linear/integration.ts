@@ -384,10 +384,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   async checkConnection(orgId: string): Promise<LinearConnectionCheck> {
     const connection = await this.loadConnection(orgId);
+    // A single link pattern is only accurate with one connected workspace;
+    // with several, agents must link issues by their own `url`.
+    const workspaces = connection ? await this.#listWorkspaces() : [];
     return {
       connected: connection !== null,
       canComment: connection !== null && this.canPostComments(connection),
-      workspaceUrlKey: connection?.workspaceUrlKey ?? null,
+      workspaceUrlKey: workspaces.length === 1 ? (connection?.workspaceUrlKey ?? null) : null,
       checkedAt: Date.now(),
     };
   }
