@@ -2,23 +2,39 @@
 '@mastra/factory': minor
 ---
 
-Removed the per-project `reviewTestChecksEnabled` setting. `source_control_publish_test_check` now publishes whenever a review skill calls it, so the review skill decides whether a change request gets a `Factory Review / tests` check. The tool still refuses a head that is not the change request's current head, and still reports a provider that cannot publish commit checks.
+Removed the `source_control_publish_test_check` session tool and the per-project `reviewTestChecksEnabled` setting that gated it. Factory's review skills now report test results only in their `## Factory test report` comment. An app that wants a commit check passes its own tool through `tools` and builds it on the new `factory.reviewedChangeRequest(requestContext)`. That returns the change request a Review run reviews (provider, repository, number, current head and branch), or `undefined` outside a Review run. Its `publishCommitCheck()` refuses a head that moved, a closed change request, and a provider that cannot publish commit checks.
 
-`FactoryProject` no longer has the field, and `FactoryProjectsStorage.update` no longer accepts it. `PATCH /web/factory/projects/:id` still accepts it for one more release and ignores it.
+`platformConnectTools(projectId)` is now exported, so an app passing `tools` can keep the Mastra Connect tools Factory offers by default.
+
+`FactoryProject` no longer has `reviewTestChecksEnabled`, and `FactoryProjectsStorage.update` no longer accepts it. `PATCH /web/factory/projects/:id` still accepts it for one more release and ignores it.
 
 **Before**
 
 ```ts
 await projects.update({ orgId, id, input: { autoRunEnabled: true, reviewTestChecksEnabled: true } });
-if (project.reviewTestChecksEnabled) {
-  // ...
-}
+// A review skill called source_control_publish_test_check.
 ```
 
 **After**
 
-Drop the field, and drop the call when it set nothing else. To stop or start publishing checks, change the review skill: it publishes when it calls `source_control_publish_test_check`.
-
 ```ts
 await projects.update({ orgId, id, input: { autoRunEnabled: true } });
+
+const factory: MastraFactory = new MastraFactory({
+  // ...
+  tools: async ({ requestContext }) => ({
+    ...(await platformConnectTools(process.env.MASTRA_PROJECT_ID!)({ requestContext })),
+    publish_test_check: createTool({
+      id: 'publish_test_check',
+      inputSchema: z.object({ headSha: z.string(), status: z.enum(['success', 'failure']), summary: z.string() }),
+      execute: async (input, { requestContext }) => {
+        const reviewed = await factory.reviewedChangeRequest(requestContext!);
+        if (!reviewed) throw new Error('Only a Review run can publish a test check.');
+        return reviewed.publishCommitCheck({ ...input, name: 'Review / tests', title: input.summary });
+      },
+    }),
+  }),
+});
 ```
+
+Call your tool from your own review skill.

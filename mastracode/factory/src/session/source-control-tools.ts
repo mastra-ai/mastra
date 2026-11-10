@@ -5,7 +5,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.js';
-import type { VersionControl } from '../capabilities/version-control.js';
+import type { CommitCheck, CommitCheckStatus, VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import {
   ensureLocalBranch,
@@ -227,9 +227,6 @@ async function emitAgentAudit(
   }
 }
 
-/** Fixed server-side so an agent cannot publish under, and impersonate, another required check. */
-export const FACTORY_TEST_CHECK_NAME = 'Factory Review / tests';
-
 const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
 const changeRequestSchema = repositorySchema.extend({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
@@ -240,7 +237,6 @@ export async function createSourceControlTools({
   providers,
   audit,
   selfReviewApprovedHead,
-  boundChangeRequestId,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
@@ -251,11 +247,6 @@ export async function createSourceControlTools({
    * `null` means Self-review has not approved; a SHA is the approved head.
    */
   selfReviewApprovedHead?: () => Promise<string | null | undefined>;
-  /**
-   * The change request a Review-bound session reviews; test checks may only target it.
-   * When provided, sessions that are not Review-bound (it resolves `undefined`) cannot publish.
-   */
-  boundChangeRequestId?: () => Promise<string | undefined>;
 }): Promise<IntegrationTools> {
   if (!requestContext || typeof (requestContext as { get?: unknown }).get !== 'function') return {};
   const controller = requestContext.get('controller') as
@@ -695,64 +686,6 @@ export async function createSourceControlTools({
         return target.provider.versionControl.createReview({ ...base, event: input.event, body: input.body! });
       },
     }),
-    source_control_publish_test_check: createTool({
-      id: 'source_control_publish_test_check',
-      description: `Publish the Factory review test result as a "${FACTORY_TEST_CHECK_NAME}" commit check on the change request's current head. Publish "in-progress" before running the test plan and a final status after. Refused when headSha is not the current head. ${repositoryArgument}`,
-      inputSchema: changeRequestSchema.extend({
-        headSha: z
-          .string()
-          .trim()
-          .regex(/^([0-9a-f]{40}|[0-9a-f]{64})$/i, 'headSha must be a full 40- or 64-character commit SHA.'),
-        status: z.enum(['in-progress', 'success', 'failure', 'neutral', 'cancelled', 'skipped']),
-        title: z.string().trim().min(1),
-        summary: z.string().trim().min(1),
-        details: z.string().optional(),
-      }),
-      execute: async input => {
-        const target = await targetFor(input);
-        const publishCommitCheck = target.provider.versionControl.publishCommitCheck;
-        if (!publishCommitCheck) {
-          throw new Error(`${target.provider.id} does not support publishing commit checks; nothing was published.`);
-        }
-        const bound = boundChangeRequestId ? await boundChangeRequestId() : undefined;
-        if (bound === undefined) {
-          throw new Error(
-            'Only a Review session bound to this change request can publish test checks; nothing was published.',
-          );
-        }
-        if (bound !== changeRequestId(input.changeRequestId)) {
-          throw new Error(
-            `This session reviews change request ${bound}, not ${input.changeRequestId}; nothing was published.`,
-          );
-        }
-        const ref = await reference(target);
-        const pullRequest = await target.provider.versionControl.getPullRequest({
-          ...ref,
-          pullRequestId: changeRequestId(input.changeRequestId),
-        });
-        if (!pullRequest || pullRequest.state !== 'open') {
-          throw new Error(`Change request ${input.changeRequestId} is not open; nothing was published.`);
-        }
-        const headSha = input.headSha.toLowerCase();
-        if (pullRequest.headSha.toLowerCase() !== headSha) {
-          throw new Error(
-            `headSha ${headSha} is not the current change-request head ${pullRequest.headSha}. Nothing was published. Re-run the test plan on the current head.`,
-          );
-        }
-        return publishCommitCheck({
-          connection: ref.connection,
-          sourceId: ref.sourceId,
-          actingUserId: ref.actingUserId,
-          headSha,
-          ref: pullRequest.headBranch,
-          name: FACTORY_TEST_CHECK_NAME,
-          status: input.status,
-          title: input.title,
-          summary: input.summary,
-          ...(input.details !== undefined ? { details: input.details } : {}),
-        });
-      },
-    }),
     source_control_request_reviewers: createTool({
       id: 'source_control_request_reviewers',
       description: `Request individual or team reviewers on a pull request or merge request. Provider limitations are returned explicitly. ${repositoryArgument}`,
@@ -789,5 +722,101 @@ export async function createSourceControlTools({
         });
       },
     }),
+  };
+}
+
+/** The change request a Review run reviews, as `MastraFactory.reviewedChangeRequest()` returns it to an app tool. */
+export interface ReviewedChangeRequest {
+  /** Source-control integration id, such as `github` or `gitlab`. */
+  provider: string;
+  /** Repository slug, such as `acme/app`. */
+  repository: string;
+  /** The pull request or merge request number. */
+  changeRequestId: string;
+  /** The change request's head when it was read. */
+  headSha: string;
+  headBranch: string;
+  /**
+   * Publish a commit check on `headSha`. Refused, with nothing published, when
+   * the change request is no longer open, `headSha` is not its current head, or
+   * the provider cannot publish commit checks.
+   */
+  publishCommitCheck(input: PublishReviewedCommitCheckInput): Promise<CommitCheck>;
+}
+
+export interface PublishReviewedCommitCheckInput {
+  /** Full commit SHA you tested. */
+  headSha: string;
+  /** Publishing again with the same name updates the check. */
+  name: string;
+  status: CommitCheckStatus;
+  title: string;
+  summary: string;
+  details?: string;
+}
+
+/**
+ * The change request the session's Review run is bound to, read from its
+ * provider. `undefined` when the session is not a Review run bound to a
+ * change request.
+ */
+export async function resolveReviewedChangeRequest({
+  requestContext,
+  providers,
+  boundChangeRequestId,
+}: {
+  requestContext: RequestContext;
+  providers: readonly SourceControlToolProvider[];
+  boundChangeRequestId: () => Promise<string | undefined>;
+}): Promise<ReviewedChangeRequest | undefined> {
+  const changeRequestId = await boundChangeRequestId();
+  if (changeRequestId === undefined) return undefined;
+  const target = await resolveSessionTarget(requestContext, providers);
+  const ref = {
+    ...(await target.provider.versionControl.getRepositoryTarget({
+      orgId: target.orgId,
+      repositoryId: target.repository.id,
+    })),
+    actingUserId: target.userId,
+  };
+  const read = async () => {
+    const pullRequest = await target.provider.versionControl.getPullRequest({ ...ref, pullRequestId: changeRequestId });
+    if (!pullRequest || pullRequest.state !== 'open') {
+      throw new Error(`Change request ${changeRequestId} is not open; nothing was published.`);
+    }
+    return pullRequest;
+  };
+  const opened = await read();
+  return {
+    provider: target.provider.id,
+    repository: target.repository.slug,
+    changeRequestId,
+    headSha: opened.headSha.toLowerCase(),
+    headBranch: opened.headBranch,
+    publishCommitCheck: async input => {
+      const publish = target.provider.versionControl.publishCommitCheck;
+      if (!publish) {
+        throw new Error(`${target.provider.id} does not support publishing commit checks; nothing was published.`);
+      }
+      const current = await read();
+      const headSha = input.headSha.toLowerCase();
+      if (current.headSha.toLowerCase() !== headSha) {
+        throw new Error(
+          `headSha ${headSha} is not the current change-request head ${current.headSha}. Nothing was published.`,
+        );
+      }
+      return publish({
+        connection: ref.connection,
+        sourceId: ref.sourceId,
+        actingUserId: ref.actingUserId,
+        headSha,
+        ref: current.headBranch,
+        name: input.name,
+        status: input.status,
+        title: input.title,
+        summary: input.summary,
+        ...(input.details !== undefined ? { details: input.details } : {}),
+      });
+    },
   };
 }
