@@ -1,3 +1,7 @@
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { connectedContentProcessor } from '../src/mastra/processors/connected-content';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -845,3 +849,61 @@ test('partial document writes preserve references without blind retry', { timeou
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test(
+  'aborted Gmail reads retain their cancellation notice in the stream and saved history',
+  { timeout: 30000 },
+  async () => {
+    const { connectedFixture } = await import('./connections');
+    const fixture = await connectedFixture(() => ({
+      text: '',
+      calls: [{ name: 'google_mail_get_message', args: {} }],
+    }));
+    const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-mail-abort-'));
+    const storage = new LibSQLStore({ id: 'abort-history', url: `file:${join(dataDir, 'assistant.db')}` });
+    const memory = new Memory({ storage, options: { lastMessages: 10, generateTitle: false } });
+    const controller = new AbortController();
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const reader = new Agent({
+      id: 'mail-reader',
+      name: 'Mail reader',
+      instructions: 'Read the message.',
+      model: { id: 'openai/gpt-6-luna', url: fixture.modelUrl, apiKey: 'example' },
+      memory,
+      tools: {
+        google_mail_get_message: createTool({
+          id: 'google_mail_get_message',
+          description: 'Read a Gmail message.',
+          inputSchema: z.object({}),
+          execute: async () => {
+            controller.abort();
+            await blocked;
+            return { id: 'late-message' };
+          },
+        }),
+      },
+      outputProcessors: [connectedContentProcessor],
+    });
+    try {
+      const stream = await reader.stream('Read Gmail.', {
+        memory: { thread: 'aborted-read', resource: 'local-owner' },
+        abortSignal: controller.signal,
+      });
+      const chunks = [];
+      for await (const chunk of stream.fullStream) chunks.push(chunk);
+      const expected = /Tool execution was aborted while running/;
+      assert.match(JSON.stringify(chunks), expected);
+      const history = await memory.recall({ threadId: 'aborted-read', resourceId: 'local-owner' });
+      assert.match(JSON.stringify(history), expected);
+      assert.doesNotMatch(JSON.stringify(history), /No supported full plain-text body/);
+    } finally {
+      release();
+      await storage.close();
+      await fixture.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  },
+);

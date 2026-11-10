@@ -137,7 +137,8 @@ export function normalizeMail(value: unknown) {
 export const connectedContentProcessor = {
   id: 'connected-content',
   processToolResult({ toolName, toolCallId, args, result, messageList }) {
-    if (toolName !== 'google_mail_get_message') return;
+    // Native cancellation notices are strings, not provider message envelopes.
+    if (toolName !== 'google_mail_get_message' || typeof result === 'string') return;
     messageList.updateToolInvocation({
       type: 'tool-invocation',
       toolInvocation: {
