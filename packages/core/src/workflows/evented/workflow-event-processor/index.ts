@@ -1486,83 +1486,20 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.scheduleRunTopicCleanup(workflowId, runId);
     }
 
-    // handle nested workflow
     if (parentWorkflow) {
-      // get the step from the parent workflow and process it if it's a loop.
-      // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
-      // Streams etc.) strips the loop `condition` function from its stepGraph
-      // copy, so resolve the live loop-owning workflow from the registry and
-      // only fall back to the payload copy if it can't be found (#23111).
-      // When grandparent descent misses (either mode — see #resolveLiveWorkflow),
-      // degrade to a public-registry lookup by the loop owner's id: the same
-      // resolution the 2-level case (no grandparent) already uses, and strictly
-      // better than the function-stripped payload copy of last resort.
-      let liveParentWorkflow: Workflow | null | undefined;
-      try {
-        liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
-      } catch {
-        // Registry lookups throw when the ancestor chain root isn't registered
-        // on this worker; fall through to resolving the loop owner by id.
-        liveParentWorkflow = undefined;
-      }
-      liveParentWorkflow ??= this.#tryResolveWorkflow(parentWorkflow.workflowId);
-      const step =
-        liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
-        parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
-      if (step?.type === 'loop') {
-        // The nested run's final state replaces the parent's: the parent's
-        // `__state` predates this iteration and would win over `state`.
-        const loopStepResults: Record<string, any> = { ...parentWorkflow.stepResults, __state: finalState };
-        // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
-        await this.#processLoop(
-          {
-            workflow: parentWorkflow as unknown as Workflow,
-            workflowId: parentWorkflow.workflowId,
-            prevResult,
-            runId: parentWorkflow.runId,
-            executionPath: parentWorkflow.executionPath,
-            stepResults: loopStepResults,
-            state: finalState,
-            activeStepsPath: parentWorkflow.activeStepsPath,
-            resumeSteps: parentWorkflow.resumeSteps,
-            resumeData: parentWorkflow.resumeData,
-            parentWorkflow: parentWorkflow.parentWorkflow,
-            requestContext,
-            actor,
-            retryCount: 0,
-          },
-          step,
-          prevResult,
-          // A restarted child re-drives the stored occurrence, so it completes under that
-          // occurrence too; otherwise the leaf stays 'running' and the next iteration is stale.
-          !parentWorkflow.timeTravel && !parentWorkflow.resumeSteps?.length
-            ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy
-            : undefined,
-        );
-      } else {
-        await this.mastra.pubsub.publish('workflows', {
-          type: 'workflow.step.end',
-          runId: parentWorkflow.runId, // Use parent's runId for event routing
-          data: {
-            workflowId: parentWorkflow.workflowId,
-            runId: parentWorkflow.runId,
-            executionPath: parentWorkflow.executionPath,
-            resumeSteps,
-            stepResults: parentWorkflow.stepResults,
-            prevResult,
-            resumeData,
-            activeStepsPath,
-            parentWorkflow: parentWorkflow.parentWorkflow,
-            parentContext: parentWorkflow,
-            requestContext,
-            actor,
-            timeTravel,
-            perStep,
-            state: finalState,
-            nestedRunId: runId, // Pass nested workflow's runId for step retrieval
-          },
-        });
-      }
+      await this.#handNestedSuccessToParent({
+        parentWorkflow,
+        nestedRunId: runId,
+        prevResult,
+        state: finalState,
+        resumeSteps,
+        resumeData,
+        activeStepsPath,
+        requestContext,
+        actor,
+        timeTravel,
+        perStep,
+      });
     }
 
     await this.publishFinishEvent({
@@ -1603,6 +1540,114 @@ export class WorkflowEventProcessor extends EventProcessor {
     ) {
       this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
     }
+  }
+
+  /** Hands a nested run's successful result to the parent step that runs it. */
+  async #handNestedSuccessToParent({
+    parentWorkflow,
+    nestedRunId,
+    prevResult,
+    state,
+    resumeSteps,
+    resumeData,
+    activeStepsPath,
+    requestContext,
+    actor,
+    timeTravel,
+    perStep,
+    outputOptions,
+  }: Pick<
+    ProcessorArgs,
+    | 'prevResult'
+    | 'resumeSteps'
+    | 'resumeData'
+    | 'activeStepsPath'
+    | 'requestContext'
+    | 'actor'
+    | 'timeTravel'
+    | 'perStep'
+    | 'outputOptions'
+  > & {
+    parentWorkflow: ParentWorkflow;
+    nestedRunId: string;
+    state: Record<string, any>;
+  }) {
+    // get the step from the parent workflow and process it if it's a loop.
+    // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
+    // Streams etc.) strips the loop `condition` function from its stepGraph
+    // copy, so resolve the live loop-owning workflow from the registry and
+    // only fall back to the payload copy if it can't be found (#23111).
+    // When grandparent descent misses (either mode, see #resolveLiveWorkflow),
+    // degrade to a public-registry lookup by the loop owner's id: the same
+    // resolution the 2-level case (no grandparent) already uses, and strictly
+    // better than the function-stripped payload copy of last resort.
+    let liveParentWorkflow: Workflow | null | undefined;
+    try {
+      liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
+    } catch {
+      // Registry lookups throw when the ancestor chain root isn't registered
+      // on this worker; fall through to resolving the loop owner by id.
+      liveParentWorkflow = undefined;
+    }
+    liveParentWorkflow ??= this.#tryResolveWorkflow(parentWorkflow.workflowId);
+    const step =
+      liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
+      parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
+    if (step?.type === 'loop') {
+      // The nested run's final state replaces the parent's: the parent's
+      // `__state` predates this iteration and would win over `state`.
+      const loopStepResults: Record<string, any> = { ...parentWorkflow.stepResults, __state: state };
+      // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
+      await this.#processLoop(
+        {
+          workflow: parentWorkflow as unknown as Workflow,
+          workflowId: parentWorkflow.workflowId,
+          prevResult,
+          runId: parentWorkflow.runId,
+          executionPath: parentWorkflow.executionPath,
+          stepResults: loopStepResults,
+          state,
+          activeStepsPath: parentWorkflow.activeStepsPath,
+          resumeSteps: parentWorkflow.resumeSteps,
+          resumeData: parentWorkflow.resumeData,
+          parentWorkflow: parentWorkflow.parentWorkflow,
+          requestContext,
+          actor,
+          retryCount: 0,
+        },
+        step,
+        prevResult,
+        // A restarted child re-drives the stored occurrence, so it completes under that
+        // occurrence too; otherwise the leaf stays 'running' and the next iteration is stale.
+        !parentWorkflow.timeTravel && !parentWorkflow.resumeSteps?.length
+          ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy
+          : undefined,
+      );
+      return;
+    }
+    await this.mastra.pubsub.publish('workflows', {
+      type: 'workflow.step.end',
+      runId: parentWorkflow.runId, // Use parent's runId for event routing
+      data: {
+        workflowId: parentWorkflow.workflowId,
+        runId: parentWorkflow.runId,
+        executionPath: parentWorkflow.executionPath,
+        resumeSteps,
+        stepResults: parentWorkflow.stepResults,
+        prevResult,
+        resumeData,
+        activeStepsPath,
+        parentWorkflow: parentWorkflow.parentWorkflow,
+        parentContext: parentWorkflow,
+        requestContext,
+        actor,
+        timeTravel,
+        perStep,
+        state,
+        ...(outputOptions ? { outputOptions } : {}),
+        nestedRunId, // Pass nested workflow's runId for step retrieval
+      },
+    });
   }
 
   protected async processWorkflowSuspend(args: ProcessorArgs) {
@@ -2470,7 +2515,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                   id !== leafId && result?.status === 'success' && result.metadata?.startedBy === previousEventId,
               )
             : undefined;
-        const runningResult = {
+        const runningRecord = {
           ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
           payload: prevResult.status === 'success' ? prevResult.output : undefined,
           startedAt: Date.now(),
@@ -2502,6 +2547,16 @@ export class WorkflowEventProcessor extends EventProcessor {
               }
             : {}),
         };
+        // Name the new child run before it exists. Otherwise a loop leaf keeps the
+        // previous iteration's finished child here until the new child starts, and a
+        // restart in that gap would reuse the finished child's result.
+        const runningResult =
+          nestedWorkflowStep && nestedDispatch === 'start'
+            ? {
+                ...runningRecord,
+                metadata: { ...(runningRecord.metadata as Record<string, unknown> | undefined), nestedRunId },
+              }
+            : runningRecord;
         try {
           await workflowsStore.updateWorkflowResults({
             workflowName: workflowId,
@@ -2895,6 +2950,84 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowName: leafId,
             runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
+
+        // The nested run finished, but the process died before this step recorded
+        // its outcome. A finished run cannot be restarted, so hand its stored
+        // outcome up as the run itself would have (#20225 does the same on the
+        // default engine). Only a run started for this step's path qualifies: a
+        // foreach iteration can fall back to a sibling iteration's run id.
+        const recordedParent = snapshot.parentWorkflow as StoredParentWorkflow | undefined;
+        const ranForThisStep =
+          recordedParent?.runId === runId &&
+          recordedParent.executionPath?.length === executionPath.length &&
+          recordedParent.executionPath.every((index, depth) => index === executionPath[depth]);
+        const finishedResult =
+          snapshot.status === 'success' &&
+          (snapshot.result as StepResult<any, any, any, any> | undefined)?.status === 'success'
+            ? (snapshot.result as StepResult<any, any, any, any>)
+            : undefined;
+        if (ranForThisStep && (finishedResult || snapshot.status === 'failed')) {
+          const parentContext: ParentWorkflow = {
+            stepId: leafId,
+            workflowId,
+            runId,
+            stepGraph,
+            executionPath,
+            resume: false,
+            resumeSteps,
+            stepResults,
+            restart,
+            input: prevResult,
+            parentWorkflow,
+            activeStepsPath,
+            resumeData,
+          };
+          const nestedState = (snapshot.context as Record<string, any>)?.__state ?? snapshot.value ?? currentState;
+          if (finishedResult) {
+            await this.#handNestedSuccessToParent({
+              parentWorkflow: parentContext,
+              nestedRunId,
+              prevResult: finishedResult,
+              state: nestedState,
+              resumeSteps,
+              resumeData,
+              activeStepsPath,
+              requestContext,
+              actor,
+              timeTravel,
+              perStep,
+              outputOptions,
+            });
+            return;
+          }
+          // Hand up the failed step's own record, which keeps the step's error as thrown.
+          const failedStepId = getStepId(nestedWorkflow, snapshot.activePaths ?? []);
+          const failedStep = failedStepId ? (snapshot.context as Record<string, any>)[failedStepId] : undefined;
+          await this.mastra.pubsub.publish('workflows', {
+            type: 'workflow.step.end',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              stepResults,
+              prevResult: failedStep?.status === 'failed' ? failedStep : { status: 'failed', error: snapshot.error },
+              timeTravel,
+              restart,
+              resumeData,
+              activeStepsPath,
+              requestContext,
+              actor,
+              parentWorkflow,
+              parentContext,
+              state: nestedState,
+              outputOptions,
+              nestedRunId,
+            },
+          });
+          return;
+        }
 
         // The process died mid-resume before the nested run's suspended step
         // claimed the resume (nested run still suspended, or running with no
