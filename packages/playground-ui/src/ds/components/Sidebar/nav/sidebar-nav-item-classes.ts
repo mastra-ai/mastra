@@ -1,7 +1,6 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { controlHeight } from '@/ds/primitives/control-size';
-import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -49,18 +48,21 @@ const nestedExpandedItemClasses = (level: number) => {
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
 // current (`foreground`). Icons inherit that colour — lucide strokes with
 // `currentColor` — so there is nothing to restate per state.
-// Rows in a list switch instantly, like menu rows: neither the fill nor the label fades.
-// This sits on the surface because that is the element carrying `state-layer` — the
-// outer wrapper on rows with a trailing action, the link itself otherwise.
+// The row has no fill of its own, so hover and current paint the row's own background:
+// one box for both, edge to edge, and nothing in between. No pressed rung: a click
+// makes the row current, so a darker press would only flash before it. Rows in a list
+// switch instantly, like menu rows: neither the fill nor the label fades. This sits on
+// the surface: the outer wrapper on rows with a trailing action, the link itself otherwise.
 const idleSurface = cn(
-  'rounded-lg text-muted-foreground transition-none before:transition-none hover:text-foreground',
-  surfaceStateLayerStyle,
+  'rounded-lg text-muted-foreground transition-none hover:text-foreground',
+  'hover:not-disabled:not-aria-disabled:bg-fill-subtle focus-visible:bg-fill-subtle',
 );
 
-const activeSurface = 'bg-fill text-foreground';
+const activeSurface = 'bg-fill text-foreground hover:not-disabled:not-aria-disabled:bg-fill focus-visible:bg-fill';
 
 const featuredSurface = cn(
   'my-2 border border-transparent bg-brand-green text-black hover:text-black hover:brightness-95',
+  'hover:not-disabled:not-aria-disabled:bg-brand-green focus-visible:bg-brand-green',
 );
 
 export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) =>
