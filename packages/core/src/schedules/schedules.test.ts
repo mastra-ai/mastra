@@ -370,15 +370,21 @@ describe('mastra.schedules canonical service', () => {
     }
   });
 
-  it('list hides completed schedules unless explicitly filtered by status', async () => {
+  it('list fetches active and paused schedules before storage limits unless status is explicit', async () => {
     const { mastra } = makeMastra(['a']);
     const completed = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });
     await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'y' });
     const store = await mastra.getStorage()!.getStore('schedules');
     await store!.updateSchedule(completed.id, { status: 'completed' });
+    const listSpy = vi.spyOn(store!, 'listSchedules');
 
     expect((await mastra.schedules.list()).map(schedule => schedule.id)).not.toContain(completed.id);
+    expect(listSpy.mock.calls.map(([filter]) => filter?.status)).toEqual(['active', 'paused']);
+
+    listSpy.mockClear();
     expect((await mastra.schedules.list({ status: 'completed' })).map(schedule => schedule.id)).toEqual([completed.id]);
+    expect(listSpy).toHaveBeenCalledOnce();
+    expect(listSpy).toHaveBeenCalledWith({ status: 'completed' });
   });
 
   it('update({ status: active }) on a paused schedule recomputes nextFireAt like resume()', async () => {

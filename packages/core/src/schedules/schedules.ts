@@ -521,14 +521,21 @@ export class Schedules {
 
   async list(filter?: ListSchedulesFilter): Promise<AnySchedule[]> {
     const store = await this.#getStore();
-    const schedules = await store.listSchedules({
-      ...(filter?.agentId ? { ownerType: 'agent', ownerId: filter.agentId } : {}),
+    const storeFilter = {
+      ...(filter?.agentId ? { ownerType: 'agent' as const, ownerId: filter.agentId } : {}),
       ...(filter?.workflowId ? { workflowId: filter.workflowId } : {}),
-      ...(filter?.status ? { status: filter.status } : {}),
-    });
+    };
+    const schedules = filter?.status
+      ? await store.listSchedules({ ...storeFilter, status: filter.status })
+      : (
+          await Promise.all([
+            store.listSchedules({ ...storeFilter, status: 'active' }),
+            store.listSchedules({ ...storeFilter, status: 'paused' }),
+          ])
+        )
+          .flat()
+          .sort((a, b) => a.createdAt - b.createdAt);
     const views = schedules
-      // Completed schedules are hidden unless explicitly requested by status.
-      .filter(s => filter?.status !== undefined || s.status !== 'completed')
       .map(toScheduleView)
       .filter((s): s is AnySchedule => s !== null)
       // `workflowId` filters at the store level, but an `agentId` filter must

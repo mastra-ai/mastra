@@ -112,11 +112,17 @@ export class SchedulesLibSQL extends SchedulesStorage {
       tableName: TABLE_SCHEDULES,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
     });
-    await this.#db.alterTable({
-      tableName: TABLE_SCHEDULES,
-      schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
-      ifNotExists: ['run_at', 'end_at'],
-    });
+    for (const column of ['run_at', 'end_at']) {
+      try {
+        await this.#db.alterTable({
+          tableName: TABLE_SCHEDULES,
+          schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
+          ifNotExists: [column],
+        });
+      } catch (error) {
+        if (!(await this.#db.hasColumn(TABLE_SCHEDULES, column))) throw error;
+      }
+    }
     await this.#db.createTable({
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
