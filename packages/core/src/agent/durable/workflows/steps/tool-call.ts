@@ -15,6 +15,7 @@ import {
 } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
+import { computeModelOutputProviderMetadata } from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { ToolResultCommitOutcome } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
@@ -2124,15 +2125,37 @@ export function createDurableToolCallStep() {
                 logger?.warn?.(`[DurableAgent] Failed to transform the late result of ${toolName}: ${transformError}`);
                 lateOutcome = { kind: 'result', result: TOOL_ABORT_NOTICE };
               }
+              let lateProviderMetadata = withToolPayloadTransformProviderMetadata(
+                typedInput.providerMetadata as Record<string, any> | undefined,
+                lateTransformMetadata,
+              );
+              // Save what toModelOutput returns, so the next turn sends the model the mapped output, not the raw result.
+              // When mapping fails, save only the abort notice.
+              if (
+                settled.status === 'success' &&
+                lateOutcome.kind === 'result' &&
+                lateOutcome.result !== TOOL_ABORT_NOTICE
+              ) {
+                try {
+                  lateProviderMetadata = await computeModelOutputProviderMetadata({
+                    tool: getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool,
+                    toolName,
+                    toolCallId,
+                    result: settled.rawResult,
+                    existingProviderMetadata: lateProviderMetadata,
+                    parentSpan: stepSpan,
+                  });
+                } catch (mappingError) {
+                  logger?.warn?.(`[DurableAgent] Failed to map the late result of ${toolName}: ${mappingError}`);
+                  lateOutcome = { kind: 'result', result: TOOL_ABORT_NOTICE };
+                }
+              }
               (registryEntry.settledToolResults ??= []).push({
                 toolCallId,
                 toolName,
                 args: cleanedArgs,
                 outcome: lateOutcome,
-                providerMetadata: withToolPayloadTransformProviderMetadata(
-                  typedInput.providerMetadata as Record<string, any> | undefined,
-                  lateTransformMetadata,
-                ),
+                providerMetadata: lateProviderMetadata,
               });
             }
             return settled;

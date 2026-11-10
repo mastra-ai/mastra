@@ -805,6 +805,70 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
+  // The saved result keeps what toModelOutput returns, also when the deadline save writes it.
+  itDeadline.each(['in time', 'just after the deadline'] as const)(
+    'total-timeout saves the model output of a call that finished %s alongside one cut off',
+    async when => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-model-output-${when.length}-${engine}`;
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Run both tools.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            mapped: createTool({
+              id: 'mapped',
+              description: 'Reads a large file.',
+              inputSchema: z.object({}),
+              execute: async () => {
+                if (when !== 'in time') await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 150));
+                return { contents: 'RAW-FILE-CONTENTS' };
+              },
+              toModelOutput: () => ({ type: 'text', value: 'MAPPED-FOR-MODEL' }),
+            }),
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              {
+                toolCalls: [
+                  { id: 'call_mapped', name: 'mapped', arguments: {} },
+                  { id: 'call_hang', name: 'hanging', arguments: {} },
+                ],
+              },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          const saved = JSON.stringify(messages);
+          expect(saved).toContain('RAW-FILE-CONTENTS');
+          expect(saved).toContain('MAPPED-FOR-MODEL');
+        });
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     'provider-error after a completed tool step',
     async () => {
