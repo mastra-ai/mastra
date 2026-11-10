@@ -35,8 +35,9 @@ export type PlatformMemoryOptions = PlatformMemoryClientOptions & {
   /** Use a preconfigured client instead of building one from the options above. */
   client?: PlatformMemoryClient;
   /**
-   * How working memory is shown to the model. Defaults to `readonly`;
-   * `tool` also gives the agent an `updateWorkingMemory` tool; `off` omits it.
+   * How working memory is shown to the model. Defaults to `readonly`: the resource's stored
+   * working memory is added to each run's prompt. `tool` also gives the agent an
+   * `updateWorkingMemory` tool (not in read-only runs); `off` leaves working memory out.
    */
   workingMemory?: 'readonly' | 'tool' | 'off';
 };
@@ -105,6 +106,79 @@ function memoryContext(requestContext: RequestContext | undefined, messageList: 
   return null;
 }
 
+const WORKING_MEMORY_TAG = 'platform-working-memory';
+
+/**
+ * Adds the resource's stored working memory as a system message. The hosted processors don't
+ * deliver it, so the client reads it on the first step of every run: a fresh read each run, so an
+ * update between runs shows up on the next one.
+ */
+async function addWorkingMemory(
+  client: PlatformMemoryClient,
+  messageList: MessageListLike,
+  resourceId: string,
+  canUpdate: boolean,
+) {
+  const data = await client.getWorkingMemory(resourceId);
+  messageList.clearSystemMessages(WORKING_MEMORY_TAG);
+  if (canUpdate) {
+    messageList.addSystem(
+      `WORKING_MEMORY_SYSTEM_INSTRUCTION:
+Store and update any conversation-relevant information about the user by calling the updateWorkingMemory tool. Pass the whole memory each time: anything you leave out is removed.
+
+<working_memory_data>
+${data ?? ''}
+</working_memory_data>`,
+      WORKING_MEMORY_TAG,
+    );
+  } else if (data) {
+    messageList.addSystem(
+      `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
+The following is what is remembered about the user. Use it for context; you cannot change it.
+
+<working_memory_data>
+${data}
+</working_memory_data>`,
+      WORKING_MEMORY_TAG,
+    );
+  }
+}
+
+/**
+ * What a read-only run sees of the thread, read through the context route, which writes nothing:
+ * observations, the continuation reminder, then the messages not yet observed. Running the hosted
+ * processors instead would save messages and start observation.
+ */
+async function addReadOnlyContext(
+  client: PlatformMemoryClient,
+  messageList: MessageListLike,
+  threadId: string,
+  resourceId: string,
+) {
+  const context = await client.getContext(threadId, resourceId, { workingMemory: 'off' });
+  const prompt = context.prompt ?? [
+    ...(context.system
+      ? [{ id: 'om-system', role: 'system', content: context.system, parts: [], createdAt: new Date(0).toISOString() }]
+      : []),
+    ...(context.continuation
+      ? [
+          {
+            id: 'om-continuation',
+            role: 'user',
+            content: context.continuation,
+            parts: [],
+            createdAt: new Date(0).toISOString(),
+          },
+        ]
+      : []),
+    ...context.messages,
+  ];
+  for (const message of prompt) {
+    if (message.role === 'system') messageList.addSystem(message.content, 'memory');
+    else messageList.add(messageFromApi(message, threadId, resourceId), 'memory');
+  }
+}
+
 async function applyResult(
   result: MemoryProcessorsResult,
   agent: Pick<ProcessInputStepArgs, 'messageList' | 'writer' | 'abort' | 'rotateResponseMessageId'>,
@@ -158,6 +232,7 @@ export class PlatformMemory extends MastraMemory {
   // there and apply what comes back (list, stream parts, message-id rotations, abort).
   async getInputProcessors(): Promise<InputProcessor[]> {
     const client = this.client;
+    const workingMemoryMode = this.workingMemoryMode;
     return [
       {
         id: 'platform-memory',
@@ -173,7 +248,14 @@ export class PlatformMemory extends MastraMemory {
           rotateResponseMessageId,
         }: ProcessInputStepArgs) {
           const ctx = memoryContext(requestContext, messageList);
-          if (!ctx || ctx.readOnly) return messageList;
+          if (!ctx) return messageList;
+          if (ctx.readOnly) {
+            if (stepNumber === 0) {
+              await addReadOnlyContext(client, messageList, ctx.threadId, ctx.resourceId);
+              if (workingMemoryMode !== 'off') await addWorkingMemory(client, messageList, ctx.resourceId, false);
+            }
+            return messageList;
+          }
           const result = await client.runProcessors(
             ctx.threadId,
             {
@@ -185,7 +267,11 @@ export class PlatformMemory extends MastraMemory {
             },
             abortSignal,
           );
-          return applyResult(result, { messageList, writer, abort, rotateResponseMessageId });
+          const list = await applyResult(result, { messageList, writer, abort, rotateResponseMessageId });
+          if (stepNumber === 0 && workingMemoryMode !== 'off') {
+            await addWorkingMemory(client, messageList, ctx.resourceId, workingMemoryMode === 'tool');
+          }
+          return list;
         },
       },
     ];

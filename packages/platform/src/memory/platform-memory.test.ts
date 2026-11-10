@@ -19,6 +19,7 @@ function fakeMemoryApi() {
   const messages = new Map<string, StoredMessage[]>();
   const requests: { method: string; path: string; headers: Headers; body?: any }[] = [];
   let observations: string | null = null;
+  const workingMemory = new Map<string, string>();
 
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -46,7 +47,13 @@ function fakeMemoryApi() {
       messages.set(id, list);
       return json({ messages: body.messages }, 201);
     }
-    if (path === '/working-memory' && method === 'PUT') return json({ ok: true });
+    if (path === '/working-memory' && method === 'PUT') {
+      workingMemory.set(body.resourceId, body.workingMemory);
+      return json({ ok: true });
+    }
+    if (path === '/working-memory' && method === 'GET') {
+      return json({ workingMemory: workingMemory.get(url.searchParams.get('resourceId')!) ?? null });
+    }
     if ((m = path.match(/^\/threads\/([^/]+)\/processors$/)) && method === 'POST') {
       const id = decodeURIComponent(m[1]!);
       const list = body.messageList;
@@ -89,7 +96,12 @@ function fakeMemoryApi() {
     }
     if ((m = path.match(/^\/threads\/([^/]+)\/context$/))) {
       const id = decodeURIComponent(m[1]!);
-      return json({ system: observations, messages: messages.get(id) ?? [], observedAt: null });
+      // Like the service: read-only, observations first as `om-system`, then unobserved messages.
+      const unobserved = messages.get(id) ?? [];
+      const system = observations
+        ? [{ id: 'om-system', role: 'system', content: observations, parts: [], createdAt: new Date(0).toISOString() }]
+        : [];
+      return json({ system: observations, messages: unobserved, prompt: [...system, ...unobserved], observedAt: null });
     }
     if ((m = path.match(/^\/threads\/([^/]+)\/messages$/))) {
       const all = messages.get(decodeURIComponent(m[1]!)) ?? [];
@@ -144,8 +156,9 @@ describe('PlatformMemory', () => {
     api = fakeMemoryApi();
   });
 
-  function agentWith(prompts: unknown[]) {
+  function agentWith(prompts: unknown[], options: { workingMemory?: 'readonly' | 'tool' | 'off' } = {}) {
     const memory = new PlatformMemory({
+      ...options,
       accessToken: 'tok_1',
       instanceId: 'mem_1',
       apiUrl: 'https://platform.test',
@@ -352,6 +365,67 @@ describe('PlatformMemory', () => {
 
     const put = api.requests.find(r => r.path === '/working-memory')!;
     expect(put.body).toEqual({ resourceId: 'user_1', workingMemory: '# User\n- Name: Ada' });
+  });
+
+  it("keeps a read-only run read-only but still gives it the thread's stored context", async () => {
+    const prompts: any[] = [];
+    const { agent } = agentWith(prompts);
+    await agent.generate('My name is Ada.', { memory: { thread: 'thread_ro', resource: 'user_1' } });
+    api.observe('<observations>\n* User prefers TypeScript.\n</observations>');
+    const stored = structuredClone(api.messages.get('thread_ro'));
+    const before = api.requests.length;
+
+    await agent.generate('What do you know about me?', {
+      memory: { thread: 'thread_ro', resource: 'user_1', options: { readOnly: true } },
+    });
+
+    const prompt = JSON.stringify(prompts.at(-1));
+    expect(prompt).toContain('User prefers TypeScript.');
+    expect(prompt).toContain('My name is Ada.');
+    const writes = api.requests.slice(before).filter(r => r.method !== 'GET');
+    expect(writes).toEqual([]);
+    expect(api.messages.get('thread_ro')).toEqual(stored);
+  });
+
+  it.each([
+    ['readonly', true, false],
+    ['tool', true, true],
+    ['off', false, false],
+  ] as const)('delivers working memory in %s mode as configured', async (mode, delivered, hasTool) => {
+    const prompts: any[] = [];
+    const { agent, memory } = agentWith(prompts, { workingMemory: mode });
+    const memoryArg = { thread: `thread_wm_${mode}`, resource: 'user_wm' };
+    const systemOf = (prompt: any) =>
+      prompt
+        .filter((m: any) => m.role === 'system')
+        .map((m: any) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+        .join('\n');
+
+    await memory.updateWorkingMemory({
+      threadId: memoryArg.thread,
+      resourceId: 'user_wm',
+      workingMemory: '- Name: Ada',
+    });
+    await agent.generate('Hi.', { memory: memoryArg });
+    // A second turn after the memo changes, so a stale first read can't pass.
+    await memory.updateWorkingMemory({
+      threadId: memoryArg.thread,
+      resourceId: 'user_wm',
+      workingMemory: '- Name: Grace',
+    });
+    await agent.generate('Hi again.', { memory: memoryArg });
+
+    expect(systemOf(prompts[0]).includes('- Name: Ada')).toBe(delivered);
+    expect(systemOf(prompts[1]).includes('- Name: Grace')).toBe(delivered);
+    expect(systemOf(prompts[1]).includes('- Name: Ada')).toBe(false);
+    expect('updateWorkingMemory' in memory.listTools()).toBe(hasTool);
+    expect(memory.listTools({ readOnly: true })).toEqual({});
+
+    // A read-only run still sees the memo (unless off) but is told it can't change it.
+    await agent.generate('Read only.', { memory: { ...memoryArg, options: { readOnly: true } } });
+    const readOnlySystem = systemOf(prompts[2]);
+    expect(readOnlySystem.includes('- Name: Grace')).toBe(delivered);
+    expect(readOnlySystem).not.toContain('updateWorkingMemory');
   });
 
   it('rejects thread-scoped working memory instead of sharing it across threads', async () => {
