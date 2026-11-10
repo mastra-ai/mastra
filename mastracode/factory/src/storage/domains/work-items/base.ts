@@ -1346,8 +1346,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Wired once at boot. Fires after every committed write to a card or a deferred
-   * decision, the rows a board shows, so open boards refetch instead of polling.
+   * Wired once at boot. Fires after a committed write changes what a board shows of a card
+   * or a deferred decision, so open boards refetch instead of polling.
    */
   onBoardChanged(listener: (scope: FactoryBoardScope) => void): void {
     this.#boardChanged = listener;
