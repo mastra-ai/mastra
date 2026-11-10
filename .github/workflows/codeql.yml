@@ -123,11 +123,16 @@ jobs:
           # next scan must announce it. A repeat failure that posted nothing still counts, as its
           # notify job passed. The cutoff for "new" alerts is the end of the newest scan that fully
           # passed and whose notify job read the alerts: anything created after it has not been
-          # reported yet.
+          # reported yet. When earlier scans exist but none of them can be the cutoff (they all
+          # failed, or none delivered, or they are older than the runs read), every open alert is
+          # reported: they may never have been. Only a repository with no earlier scan at all gets
+          # a silent first baseline.
           previous=''
           since=''
+          earlier=no
           while read -r path ended; do
             [ -n "$path" ] || continue
+            earlier=yes
             read -r analyze notified <<< "$(run_state "$path")"
             case "$analyze" in success | failure) ;; *) continue ;; esac
             [ "$notified" = "yes" ] || continue
@@ -140,7 +145,7 @@ jobs:
           if [ -z "$previous" ]; then
             if [ "$runs_read" = "true" ]; then previous=none; else previous=unknown; fi
           fi
-          echo "Previous scan: $previous; new alerts counted from: ${since:-n/a}; this scan: $RESULT"
+          echo "Previous scan: $previous; earlier scans: $earlier; new alerts counted from: ${since:-n/a}; this scan: $RESULT"
 
           # When this scan passed but its alerts could not be checked, this job fails so the
           # next scan does not use this one as its cutoff and reports them instead.
@@ -157,14 +162,16 @@ jobs:
             if [ "$runs_read" != "true" ]; then
               checked=false
             # With no earlier scan to compare against, the first scan only sets the cutoff.
-            elif [ -n "$since" ]; then
+            elif [ -n "$since" ] || [ "$earlier" = "yes" ]; then
               if new=$(gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/code-scanning/alerts" \
                 -f ref=refs/heads/main -f state=open -f tool_name=CodeQL -F per_page=100 \
                 --jq ".[] | select(.created_at > \"$since\") | .number"); then
                 count=$(grep -c . <<< "$new" || true)
-                echo "New open alerts on main since $since: $count"
-                if [ "$count" -gt 0 ]; then
+                echo "Open alerts on main created after '${since:-the start}': $count"
+                if [ "$count" -gt 0 ] && [ -n "$since" ]; then
                   lines+=(":rotating_light: CodeQL found $count new open alert(s) on main. <$ALERTS_URL|Review them>.")
+                elif [ "$count" -gt 0 ]; then
+                  lines+=(":rotating_light: CodeQL has $count open alert(s) on main that earlier scans may not have reported. <$ALERTS_URL|Review them>.")
                 fi
               else
                 echo "::warning::Could not read code scanning alerts."
