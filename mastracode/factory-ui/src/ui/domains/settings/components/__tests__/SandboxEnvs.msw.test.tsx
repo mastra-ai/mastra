@@ -81,55 +81,72 @@ async function section() {
   return within(heading.closest('section')!);
 }
 
-async function pickAppliesTo(user: ReturnType<typeof userEvent.setup>, group: HTMLElement, label: string) {
-  await user.click(within(group).getByRole('radio', { name: label }));
+type User = ReturnType<typeof userEvent.setup>;
+
+async function openRowAction(user: User, vars: Awaited<ReturnType<typeof section>>, name: string, action: string) {
+  await user.click(await vars.findByRole('button', { name: `${name} actions` }));
+  await user.click(await screen.findByRole('menuitem', { name: action }));
 }
 
 describe('Environment variables settings', () => {
-  it('sits between Environment and Builds and lists names with masked values', async () => {
-    useSandboxEnvsServer([env('DATABASE_URL', 'runtime'), env('NPM_TOKEN', 'build')]);
+  it('sits between Environment and Builds and lists variables in a table with masked values', async () => {
+    useSandboxEnvsServer([env('DATABASE_URL', 'runtime'), env('NPM_TOKEN', 'both')]);
 
     renderSettings();
 
     const vars = await section();
-    expect(await vars.findByText('DATABASE_URL')).toBeInTheDocument();
-    expect(vars.getByText('NPM_TOKEN')).toBeInTheDocument();
-    expect(vars.getByLabelText('DATABASE_URL value hidden')).toHaveTextContent('••••••••••••');
+    const table = await vars.findByRole('table', { name: 'Environment variables' });
+    const headers = within(table)
+      .getAllByRole('columnheader')
+      .map(header => header.textContent);
+    expect(headers).toEqual(['Name', 'Value', 'Applies to', 'Updated', 'Actions']);
+    expect(within(table).getByText('DATABASE_URL')).toBeInTheDocument();
+    expect(within(table).getByLabelText('DATABASE_URL value hidden')).toHaveTextContent('••••••••••••');
+    expect(within(table).getByLabelText('NPM_TOKEN applies to')).toHaveTextContent('BuildRuntime');
+    expect(within(table).getByLabelText('DATABASE_URL applies to')).toHaveTextContent('Runtime');
     expect(vars.queryByRole('button', { name: /reveal|show/i })).not.toBeInTheDocument();
-    expect(vars.getByLabelText('NPM_TOKEN applies to')).toHaveTextContent('Build');
-    // Where it applies is read-only until Edit.
-    expect(vars.queryByRole('radiogroup', { name: 'Where NPM_TOKEN applies' })).not.toBeInTheDocument();
-    expect(vars.getByRole('textbox', { name: 'Variable name' })).toBeInTheDocument();
+    // The add form only opens from the header button.
+    expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument();
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
     expect(headings).toEqual(['Environment', 'Environment variables', 'Builds', 'Danger zone']);
   });
 
-  it('adds a variable with PUT and clears the form', async () => {
+  it('shows an empty state when there are no variables', async () => {
+    useSandboxEnvsServer([]);
+
+    renderSettings();
+
+    const vars = await section();
+    expect(await vars.findByText('No variables yet.')).toBeInTheDocument();
+    expect(vars.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('adds a variable from the dialog with PUT, showing the value while typing', async () => {
     const requests = useSandboxEnvsServer([]);
     const user = userEvent.setup();
 
     renderSettings();
 
     const vars = await section();
-    await user.type(await vars.findByRole('textbox', { name: 'Variable name' }), 'API_KEY');
-    const valueInput = vars.getByRole('textbox', { name: 'Variable value' });
+    await user.click(await vars.findByRole('button', { name: 'Add variable' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'API_KEY');
+    const valueInput = within(dialog).getByRole('textbox', { name: 'Value' });
     await user.type(valueInput, 'sk-123');
     // A textbox, not a password field: what you type is visible until it's saved.
     expect(valueInput).toHaveValue('sk-123');
-    await pickAppliesTo(user, vars.getByRole('radiogroup', { name: 'Where the new variable applies' }), 'Both');
-    await user.click(vars.getByRole('button', { name: 'Add' }));
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Build' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(requests).toEqual([{ method: 'PUT', name: 'API_KEY', body: { value: 'sk-123', appliesTo: 'both' } }]),
     );
-    expect(await vars.findByText('API_KEY')).toBeInTheDocument();
-    expect(vars.getByLabelText('API_KEY value hidden')).toHaveTextContent('••••••••••••');
-    expect(vars.queryByText('sk-123')).not.toBeInTheDocument();
-    expect(vars.getByRole('textbox', { name: 'Variable name' })).toHaveValue('');
-    expect(vars.getByLabelText('Variable value')).toHaveValue('');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(await vars.findByLabelText('API_KEY value hidden')).toHaveTextContent('••••••••••••');
+    expect(screen.queryByText('sk-123')).not.toBeInTheDocument();
   });
 
-  it('asks before replacing an existing variable from the add form', async () => {
+  it('blocks adding a name that already exists and asks for at least one target', async () => {
     const requests = useSandboxEnvsServer([env('API_KEY', 'runtime')]);
     const user = userEvent.setup();
 
@@ -137,19 +154,19 @@ describe('Environment variables settings', () => {
 
     const vars = await section();
     await vars.findByText('API_KEY');
-    await user.type(vars.getByRole('textbox', { name: 'Variable name' }), 'API_KEY');
-    await user.type(vars.getByLabelText('Variable value'), 'new-value');
-    await user.click(vars.getByRole('button', { name: 'Add' }));
+    await user.click(vars.getByRole('button', { name: 'Add variable' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'API_KEY');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Value' }), 'v');
+    expect(within(dialog).getByText('API_KEY already exists. Edit it instead.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
 
-    const dialog = await screen.findByRole('alertdialog');
-    expect(within(dialog).getByText('Replace API_KEY?')).toBeInTheDocument();
+    await user.clear(within(dialog).getByRole('textbox', { name: 'Name' }));
+    await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'OTHER');
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Runtime' }));
+    expect(within(dialog).getByText('Pick at least one.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(requests).toEqual([]);
-    await user.click(within(dialog).getByRole('button', { name: 'Replace' }));
-    await waitFor(() =>
-      expect(requests).toEqual([
-        { method: 'PUT', name: 'API_KEY', body: { value: 'new-value', appliesTo: 'runtime' } },
-      ]),
-    );
   });
 
   it('changes where a variable applies from Edit with PATCH and no value', async () => {
@@ -159,54 +176,38 @@ describe('Environment variables settings', () => {
     renderSettings();
 
     const vars = await section();
-    await user.click(await vars.findByRole('button', { name: 'Edit API_KEY' }));
-    const group = vars.getByRole('radiogroup', { name: 'Where API_KEY applies' });
-    expect(within(group).getByRole('radio', { name: 'Runtime' })).toHaveAttribute('aria-checked', 'true');
-    expect(vars.getByRole('button', { name: 'Save' })).toBeDisabled();
-    await pickAppliesTo(user, group, 'Build');
-    await user.click(vars.getByRole('button', { name: 'Save' }));
+    await openRowAction(user, vars, 'API_KEY', 'Edit');
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('textbox', { name: 'Name' })).toBeDisabled();
+    expect(within(dialog).getByRole('textbox', { name: 'Value' })).toHaveValue('');
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Build' }));
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Runtime' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(requests).toEqual([{ method: 'PATCH', name: 'API_KEY', body: { appliesTo: 'build' } }]));
-    await waitFor(() => expect(vars.getByLabelText('API_KEY applies to')).toHaveTextContent('Build'));
-    expect(vars.queryByRole('radiogroup', { name: 'Where API_KEY applies' })).not.toBeInTheDocument();
+    await waitFor(() => expect(vars.getByLabelText('API_KEY applies to')).toHaveTextContent(/^Build$/));
   });
 
-  it('sends a new value and where it applies together with PUT', async () => {
+  it('sends a new value and where it applies together with PUT, then masks it again', async () => {
     const requests = useSandboxEnvsServer([env('API_KEY', 'runtime')]);
     const user = userEvent.setup();
 
     renderSettings();
 
     const vars = await section();
-    await user.click(await vars.findByRole('button', { name: 'Edit API_KEY' }));
-    await user.type(vars.getByRole('textbox', { name: 'New value for API_KEY' }), 'rotated');
-    await pickAppliesTo(user, vars.getByRole('radiogroup', { name: 'Where API_KEY applies' }), 'Both');
-    await user.click(vars.getByRole('button', { name: 'Save' }));
+    await openRowAction(user, vars, 'API_KEY', 'Edit');
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Value' }), 'rotated');
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Build' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(requests).toEqual([{ method: 'PUT', name: 'API_KEY', body: { value: 'rotated', appliesTo: 'both' } }]),
     );
-  });
-
-  it('edits a value with PUT from an empty field, then masks it again', async () => {
-    const requests = useSandboxEnvsServer([env('API_KEY', 'both')]);
-    const user = userEvent.setup();
-
-    renderSettings();
-
-    const vars = await section();
-    await user.click(await vars.findByRole('button', { name: 'Edit API_KEY' }));
-    const input = vars.getByRole('textbox', { name: 'New value for API_KEY' });
-    expect(input).toHaveValue('');
-    await user.type(input, 'rotated');
-    await user.click(vars.getByRole('button', { name: 'Save' }));
-
-    await waitFor(() =>
-      expect(requests).toEqual([{ method: 'PUT', name: 'API_KEY', body: { value: 'rotated', appliesTo: 'both' } }]),
-    );
-    await waitFor(() => expect(vars.queryByRole('textbox', { name: 'New value for API_KEY' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(vars.getByLabelText('API_KEY value hidden')).toHaveTextContent('••••••••••••');
-    expect(vars.queryByText('rotated')).not.toBeInTheDocument();
+    expect(screen.queryByText('rotated')).not.toBeInTheDocument();
   });
 
   it('cancels an edit without sending anything', async () => {
@@ -216,12 +217,12 @@ describe('Environment variables settings', () => {
     renderSettings();
 
     const vars = await section();
-    await user.click(await vars.findByRole('button', { name: 'Edit API_KEY' }));
-    await user.type(vars.getByRole('textbox', { name: 'New value for API_KEY' }), 'draft');
-    await user.click(vars.getByRole('button', { name: 'Cancel' }));
+    await openRowAction(user, vars, 'API_KEY', 'Edit');
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Value' }), 'draft');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    expect(vars.queryByRole('textbox', { name: 'New value for API_KEY' })).not.toBeInTheDocument();
-    expect(vars.getByLabelText('API_KEY value hidden')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(requests).toEqual([]);
   });
 
@@ -232,7 +233,7 @@ describe('Environment variables settings', () => {
     renderSettings();
 
     const vars = await section();
-    await user.click(await vars.findByRole('button', { name: 'Delete API_KEY' }));
+    await openRowAction(user, vars, 'API_KEY', 'Delete');
     const dialog = await screen.findByRole('alertdialog');
     expect(requests).toEqual([]);
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
@@ -243,14 +244,16 @@ describe('Environment variables settings', () => {
 
   it('explains and disables saving when the server has no encryption key', async () => {
     useSandboxEnvsServer([env('API_KEY', 'runtime')], false);
+    const user = userEvent.setup();
 
     renderSettings();
 
     const vars = await section();
     expect(await vars.findByText(/can't be saved until a credential encryption key is configured/)).toBeInTheDocument();
-    expect(vars.getByRole('textbox', { name: 'Variable name' })).toBeDisabled();
-    expect(vars.getByLabelText('Variable value')).toBeDisabled();
-    expect(vars.getByRole('button', { name: 'Edit API_KEY' })).toBeDisabled();
-    expect(vars.getByRole('button', { name: 'Add' })).toBeDisabled();
+    expect(vars.getByRole('button', { name: 'Add variable' })).toBeDisabled();
+    await user.click(vars.getByRole('button', { name: 'API_KEY actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toHaveAttribute('aria-disabled', 'true');
+    // Delete still works so old values can be removed.
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).not.toHaveAttribute('aria-disabled', 'true');
   });
 });
