@@ -2683,9 +2683,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   ]
                 }
               },
-              "allowWorkingPhase": {
-                "type": "boolean"
-              },
               "revision": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -2718,7 +2715,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "when",
               "target",
               "on",
-              "allowWorkingPhase",
               "revision",
               "createdBy",
               "createdAt",
@@ -2995,9 +2991,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               }
             },
-            "allowWorkingPhase": {
-              "type": "boolean"
-            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -3030,7 +3023,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
-            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -5080,9 +5072,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               }
             },
-            "allowWorkingPhase": {
-              "type": "boolean"
-            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -5115,7 +5104,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
-            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -7544,9 +7532,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               }
             },
-            "allowWorkingPhase": {
-              "type": "boolean"
-            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -7579,7 +7564,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "when",
             "target",
             "on",
-            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -7872,9 +7856,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   ]
                 }
               },
-              "allowWorkingPhase": {
-                "type": "boolean"
-              },
               "revision": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -7907,7 +7888,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "when",
               "target",
               "on",
-              "allowWorkingPhase",
               "revision",
               "createdBy",
               "createdAt",

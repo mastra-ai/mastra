@@ -139,9 +139,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       on: ['work_item.closed'],
       when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'completed' }] },
       target: { boardKey: 'work', phaseKey: 'done' },
-      allowWorkingPhase: false,
       createdBy: 'factory',
     });
+    // A route moves a card into any phase; there is no per-route permission to read back.
+    expect(closedCompleted).not.toHaveProperty('allowWorkingPhase');
     expect(closedCanceled).toMatchObject({
       name: CLOSED_CANCELED_ROUTE.name,
       position: 4,
@@ -175,13 +176,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
         position: 9,
         on: ['pull_request.synchronized'],
         target: { boardKey: 'work', phaseKey: 'pr-review' },
-        allowWorkingPhase: true,
       },
       {
         position: 10,
         on: ['pull_request.review_requested'],
         target: { boardKey: 'work', phaseKey: 'pr-review' },
-        allowWorkingPhase: true,
       },
     ]);
     const all = [closesIssue, seeded, pullRequests, closedCompleted, closedCanceled, reopened, ...pullRequestEvents];
@@ -479,22 +478,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       conditions: [{ field: 'event.reason', operator: 'equals' as const, value: 'canceled' }],
     };
 
-    it('reads back the events and working-phase permission it was saved with, and defaults to new cards', async () => {
+    it('reads back the events it was saved with, and defaults to new cards', async () => {
       const { boards, scope } = await setup();
       const closes = await boards.createIntakeRoute(
         scope,
         route('Closed as not planned', {
           on: ['work_item.closed', 'work_item.reopened'],
           when: CANCELED,
-          allowWorkingPhase: true,
           target: { boardKey: 'work', phaseKey: 'canceled' },
         }),
         'u',
       );
       const bare = await boards.createIntakeRoute(scope, route('New cards'), 'u');
 
-      expect(closes).toMatchObject({ on: ['work_item.closed', 'work_item.reopened'], allowWorkingPhase: true });
-      expect(bare).toMatchObject({ on: ['work_item.created'], allowWorkingPhase: false });
+      expect(closes).toMatchObject({ on: ['work_item.closed', 'work_item.reopened'] });
+      expect(bare).toMatchObject({ on: ['work_item.created'] });
       expect(await boards.listIntakeRoutes(scope)).toEqual([closes, bare]);
     });
 
@@ -505,10 +503,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       const changed = await boards.updateIntakeRoute(
         scope,
         created.id,
-        { on: ['work_item.reopened'], allowWorkingPhase: true },
+        { on: ['work_item.reopened'] },
         { expectedRevision: 1, actor: 'u2' },
       );
-      expect(changed).toMatchObject({ on: ['work_item.reopened'], allowWorkingPhase: true, revision: 2 });
+      expect(changed).toMatchObject({ on: ['work_item.reopened'], revision: 2 });
       // A patch that leaves `on` alone keeps it.
       const renamed = await boards.updateIntakeRoute(
         scope,
@@ -516,7 +514,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
         { name: 'Renamed' },
         { expectedRevision: 2, actor: 'u2' },
       );
-      expect(renamed).toMatchObject({ on: ['work_item.reopened'], allowWorkingPhase: true, revision: 3 });
+      expect(renamed).toMatchObject({ on: ['work_item.reopened'], revision: 3 });
     });
 
     it.each([
@@ -622,7 +620,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
         name: 'Old route',
         when: TRUSTED,
         on: ['work_item.created'],
-        allowWorkingPhase: false,
       });
     });
   });

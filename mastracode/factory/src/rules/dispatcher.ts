@@ -2321,7 +2321,7 @@ export class FactoryDecisionDispatcher {
       ingress: { type: 'rule', identity },
       cause: 'event_route',
       causalChain,
-      eventRoute: { routeId: route.routeId, allowWorkingPhase: route.allowWorkingPhase },
+      eventRoute: { routeId: route.routeId },
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);

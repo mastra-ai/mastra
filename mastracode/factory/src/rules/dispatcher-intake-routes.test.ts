@@ -706,9 +706,8 @@ describe('intake routes moving existing cards on status events', () => {
     expect(createBoardRegistry().get('work')!.allowsTransition('done', 'intake')).toBe(false);
   });
 
-  it('moves a card into a working phase such as Triage only when the route allows it', async () => {
-    const { route, deliver, deliverEvent, putAt, routeDecisions, stageAudits, boards, scope, workItems } =
-      await setup();
+  it("moves a card into a working phase such as Triage, where the phase's own start decides the run", async () => {
+    const { route, deliver, deliverEvent, putAt, runs, stageAudits, workItems } = await setup();
     const reopened = await route({
       name: 'Reopened back to Triage',
       on: ['work_item.reopened'],
@@ -719,25 +718,61 @@ describe('intake routes moving existing cards on status events', () => {
     await putAt(card.id, 'done', 'arm');
     expect((await workItems.get({ orgId: 'org-1', id: card.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
 
-    expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['done'] });
-    // Refused for good, not retried: the route has to change first.
-    expect(await routeDecisions(card.id)).toEqual(['succeeded']);
-    expect(await stageAudits(card.id)).toContainEqual({
-      action: 'factory.work_item.transition_rejected',
-      actorId: expect.stringMatching(/^intake-route:/),
-      metadata: expect.objectContaining({ cause: 'event_route', code: 'approval_required', to: 'triage' }),
-    });
-
-    await boards.updateIntakeRoute(
-      scope,
-      reopened.id,
-      { allowWorkingPhase: true },
-      { expectedRevision: reopened.revision, actor: 'admin' },
-    );
     const moved = (await deliverEvent(card.id, { type: 'work_item.reopened' })).card;
     expect(moved).toMatchObject({ stages: ['triage'] });
-    // The reopen is not a person's say-so: the card waits for consent again before it runs.
+    expect(moved!.stageHistory.at(-1)).toMatchObject({ stage: 'triage', by: `intake-route:${reopened.id}` });
+    expect(await stageAudits(card.id)).not.toContainEqual(
+      expect.objectContaining({ action: 'factory.work_item.transition_rejected' }),
+    );
+    // The reopen is not a person's say-so, and Triage does not start on its own: its run waits for a person.
     expect(moved?.autonomyArmedAt).toBeNull();
+    expect(await runs(card.id)).toEqual(['proposed']);
+  });
+
+  it('starts the run of a working phase a route moves a card into when the project auto-runs', async () => {
+    const { route, deliver, deliverEvent, putAt, runs } = await setup({ autoRun: true });
+    await route({
+      name: 'Reopened back to Triage',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+    await putAt(card.id, 'done');
+
+    const moved = (await deliverEvent(card.id, { type: 'work_item.reopened' })).card;
+    expect(moved).toMatchObject({ stages: ['triage'], autonomyArmedAt: null });
+    // Triage has no autoStart, but the project's auto-run lets its run start without a person.
+    const started = await runs(card.id);
+    expect(started).toHaveLength(1);
+    expect(started).not.toContain('proposed');
+  });
+
+  it('starts the run of a working phase a route moves a card into when that phase starts on its own', async () => {
+    const { boards, scope, route, deliver, deliverEvent, putAt, runs } = await setup();
+    await boards.create(
+      scope,
+      {
+        ...docsBoard,
+        phases: docsBoard.phases.map(phase =>
+          phase.key === 'writing'
+            ? { ...phase, runner: { context: 'work', skill: 'write-docs' }, autoStart: true }
+            : phase,
+        ),
+      },
+      'admin',
+    );
+    await route({
+      name: 'Reopened back to Writing',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'docs', phaseKey: 'writing' },
+    });
+    const card = (await deliver({ sourceKey: 'github-issue:1', board: 'docs', stage: 'inbox' }))!;
+    await putAt(card.id, 'published');
+
+    expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['writing'] });
+    const started = await runs(card.id);
+    expect(started).toHaveLength(1);
+    expect(started).not.toContain('proposed');
   });
 
   it("ignores a route that names another board, or is disabled, and takes the next match on the card's board", async () => {
