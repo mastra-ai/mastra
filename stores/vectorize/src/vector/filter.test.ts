@@ -249,6 +249,13 @@ describe('VectorizeFilterTranslator', () => {
       expect(() => translator.translate({ $and: [{ resource_id: 'u' }, clause] } as any)).toThrow(/clause/);
     });
 
+    it.each(['constructor', 'toString', 'hasOwnProperty'])('merges a field named %s like any other field', field => {
+      const filter: any = { $and: [{ resource_id: 'u' }, JSON.parse(`{"${field}": "a"}`)] };
+      const translated = translator.translate(filter) as Record<string, unknown>;
+      expect(Object.keys(translated).sort()).toEqual([field, 'resource_id'].sort());
+      expect(Object.getOwnPropertyDescriptor(translated, field)?.value).toEqual({ $eq: 'a' });
+    });
+
     it('treats empty, null and undefined clauses as no condition', () => {
       const filter: any = { $and: [{ resource_id: 'u' }, {}, null, undefined] };
       expect(translator.translate(filter)).toEqual({ resource_id: { $eq: 'u' } });

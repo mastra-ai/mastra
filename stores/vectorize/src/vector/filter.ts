@@ -60,7 +60,8 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVec
   }
 
   private mergeClauses(clauses: VectorizeVectorFilter[]): VectorizeVectorFilter {
-    const merged: Record<string, Record<string, unknown>> = {};
+    // A Map, so field names like `constructor` are never read from Object.prototype.
+    const merged = new Map<string, Record<string, unknown>>();
     for (const clause of clauses) {
       if (clause === null || clause === undefined) continue;
       if (typeof clause !== 'object' || Array.isArray(clause)) {
@@ -70,20 +71,23 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVec
       this.validateFilter(clause);
       const translated = this.translateNode(clause) as Record<string, Record<string, unknown>>;
       for (const [field, condition] of Object.entries(translated)) {
-        const operators = Object.keys({ ...merged[field], ...condition });
-        const combined = Object.keys(merged[field] ?? {}).length + Object.keys(condition).length;
-        if (merged[field] && (operators.length !== combined || !isRangePair(operators))) {
-          throw new Error(
-            `Vectorize $and clauses on ${field} can only combine one lower and one upper bound; got ${[
-              ...Object.keys(merged[field]),
-              ...Object.keys(condition),
-            ].join(', ')}`,
-          );
+        const existing = merged.get(field);
+        if (existing) {
+          const operators = [...Object.keys(existing), ...Object.keys(condition)];
+          if (new Set(operators).size !== operators.length || !isRangePair(operators)) {
+            throw new Error(
+              `Vectorize $and clauses on ${field} can only combine one lower and one upper bound; got ${operators.join(', ')}`,
+            );
+          }
         }
-        merged[field] = { ...merged[field], ...condition };
+        merged.set(field, { ...existing, ...condition });
       }
     }
-    return merged as VectorizeVectorFilter;
+    const result: Record<string, Record<string, unknown>> = {};
+    for (const [field, condition] of merged) {
+      Object.defineProperty(result, field, { value: condition, enumerable: true, writable: true, configurable: true });
+    }
+    return result as VectorizeVectorFilter;
   }
 
   private translateNode(node: VectorizeVectorFilter, currentPath: string = ''): any {
