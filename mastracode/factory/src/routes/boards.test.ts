@@ -951,9 +951,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     it('keeps its finished cards on Work when the project creates a board under its key, which starts empty', async () => {
       const { a, scope, base, replicaA } = await setup();
-      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('done') });
-      // Read once, so a list kept from before the board exists would show.
-      expect(await cardsOf(replicaA.send, scope.factoryProjectId)).toMatchObject([{ board: 'work', stages: ['done'] }]);
+      // Finished while Review was still in use, so its row is stored on `review`.
+      const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('review') });
+      await a.workItems.update({ orgId: scope.orgId, id: item.id, userId: ADMIN, patch: { stages: ['done'] } });
 
       const created = await replicaA.send('POST', base, { ...bugsBoard, key: 'review' });
 
