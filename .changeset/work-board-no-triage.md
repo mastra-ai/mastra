@@ -6,6 +6,8 @@ New projects' Work board has no Triage phase: a project created now gets Intake 
 
 Factory now adds its Work board only to a project that has no boards yet. `factory.upsertBoard(board, { projects: 'all' })` also covers projects created later in the same process: a project with no boards gets the app's boards first, so it gets no Work from Factory beside an app's `work` board.
 
+A project without a Work board still files every integration arrival (GitHub, GitLab, Linear, Jira, incident.io) and every card created without a board: its intake routes place them, and one no route takes lands in the initial phase of the project's first board. Before, such a project filed nothing.
+
 `includeDefaultBoards` is deprecated and ignored, with a one-time warning. To run your own Work board, store it under the `work` key at startup instead of turning the default off:
 
 ```ts

@@ -13,18 +13,24 @@ import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { MastraFactory } from '../factory.js';
+import { resolveGithubRules } from '../integrations/github/default-rules.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
+import { GithubRules } from '../integrations/github/rules.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
+import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { compileBoardDefinition } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
+import { createBoardRegistry } from './registry.js';
 import type { InstalledBoard } from './registry.js';
 import { workSeedWithTriage } from './work-seeds.js';
 
@@ -126,6 +132,25 @@ const bugsBoard: StoredBoardInput = {
     { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: ['fixed'] },
     { key: 'fixed', name: 'Fixed', kind: 'terminal' },
     { key: 'wontfix', name: "Won't fix", kind: 'terminal' },
+  ],
+};
+
+/** An app board with a pull request review phase, for a project that has no Work. */
+const opsBoard: StoredBoardInput = {
+  key: 'ops',
+  name: 'Ops',
+  phases: [
+    { key: 'inbox', name: 'Inbox', kind: 'resting', nextPhases: ['fix', 'review', 'closed'] },
+    { key: 'fix', name: 'Fix', kind: 'working', runner: { context: 'work' }, nextPhases: ['review', 'closed'] },
+    {
+      key: 'review',
+      name: 'Review',
+      kind: 'working',
+      runner: { context: 'review', skill: 'factory-review' },
+      tools: ['factory_review_source', 'factory_record_review_verdict'],
+      nextPhases: ['fix', 'inbox', 'closed'],
+    },
+    { key: 'closed', name: 'Closed', kind: 'terminal' },
   ],
 };
 
@@ -1024,6 +1049,133 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           expect((await replica.boards.list({ orgId, factoryProjectId: projectId })).map(row => row.key)).toEqual([
             'bugs',
           ]);
+        }, 60_000);
+
+        it("files a work-less project's GitHub arrivals on the app's board, where its routes place them", async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const replica = await boot(await isolatedDatabase(), orgId);
+          await replica.factory.upsertBoard(opsBoard, { projects: 'all' });
+          const projectId = await createProject(replica, 'Ops only');
+          const scope = { orgId, factoryProjectId: projectId };
+          expect((await replica.boards.list(scope)).map(row => row.key)).toEqual(['ops']);
+          const route = await replica.send('POST', `/web/factory/projects/${projectId}/intake-routes`, {
+            name: 'Pull requests go to Ops review',
+            when: {
+              operator: 'AND',
+              conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }],
+            },
+            target: { boardKey: 'ops', phaseKey: 'review' },
+          });
+          expect(route.status, JSON.stringify(route.json)).toBe(201);
+
+          const sourceControl = replica.github.sourceControlStorage;
+          const installation = await sourceControl.installations.upsert({
+            orgId,
+            connectedByUserId: 'admin-user',
+            externalId: '7',
+          });
+          const repository = await sourceControl.repositories.upsert({
+            orgId,
+            input: { installationId: installation.id, externalId: '10', slug: 'acme/ops', defaultBranch: 'main' },
+          });
+          const connection = await sourceControl.connections.create({
+            orgId,
+            factoryProjectId: projectId,
+            installationId: installation.id,
+            createdByUserId: 'admin-user',
+          });
+          await sourceControl.projectRepositories.link({
+            orgId,
+            connectionId: connection.id,
+            repositoryId: repository.id,
+            createdByUserId: 'admin-user',
+            sandboxProvider: 'local',
+            sandboxWorkdir: '/workspace',
+          });
+
+          // The GitHub rules and dispatcher Factory runs, over the project's stored boards.
+          const workItems = replica.workItems;
+          const boards = new ProjectBoardCache({
+            codeRegistry: createBoardRegistry(),
+            storage: replica.boards,
+            recheckMs: 0,
+          });
+          const configVersion = 'work-less-arrivals-v1';
+          const rules = new GithubRules({
+            github: {
+              rules: resolveGithubRules(),
+              slug: 'factory-app',
+              getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue('write'),
+            } as never,
+            sourceControl,
+            integrationStorage: replica.storage.getDomain<IntegrationStorage>('integrations').forIntegration('github'),
+            projects: replica.storage.getDomain<FactoryProjectsStorage>('projects'),
+            storage: workItems,
+            boards,
+            configVersion,
+          });
+          const dispatcher = new FactoryDecisionDispatcher({
+            controller: { getSession: vi.fn(async () => undefined), listActiveThreadRuns: () => [] } as never,
+            transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
+            storage: workItems,
+            boards,
+            intakeRoutes: replica.boards,
+            isAutoRunEnabled: async () => false,
+            ownerId: 'work-less-arrivals',
+          });
+          let tick = 0;
+          const deliver = async (delivery: unknown) => {
+            expect(await rules.ingest(delivery as never)).toEqual({ status: 'committed' });
+            for (let pass = 0; pass < 3; pass++) {
+              await dispatcher.runOnce(new Date(Date.parse('2030-01-01T00:00:00Z') + 1000 * tick++));
+            }
+          };
+          const sender = { installation: { id: 7 }, repository: { id: 10, full_name: 'acme/ops' } };
+          await deliver({
+            event: 'issues',
+            deliveryId: `issue-${randomUUID()}`,
+            payload: {
+              action: 'opened',
+              ...sender,
+              sender: { login: 'maintainer' },
+              issue: { number: 42, title: 'Disk alert', html_url: 'https://github.com/acme/ops/issues/42' },
+            },
+          });
+          await deliver({
+            event: 'pull_request',
+            deliveryId: `pr-${randomUUID()}`,
+            payload: {
+              action: 'opened',
+              ...sender,
+              sender: { login: 'maintainer' },
+              pull_request: {
+                number: 17,
+                title: 'Raise the disk limit',
+                html_url: 'https://github.com/acme/ops/pull/17',
+                state: 'open',
+                merged: false,
+                head: { ref: 'raise-disk-limit', sha: 'abc1234def000000000000000000000000000000' },
+                base: { ref: 'main' },
+              },
+            },
+          });
+
+          const cards = await workItems.list(scope);
+          // No route takes the issue: it lands on the project's first board, in its initial phase.
+          expect(cards.find(card => card.title === 'Disk alert')).toMatchObject({ board: 'ops', stages: ['inbox'] });
+          expect(cards.find(card => card.title === 'Raise the disk limit')).toMatchObject({
+            board: 'ops',
+            stages: ['review'],
+          });
+          expect(cards).toHaveLength(2);
+
+          // A card a person files without a board lands there too.
+          const filed = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
+            title: 'Rotate keys',
+          });
+          expect(filed.status, JSON.stringify(filed.json)).toBe(200);
+          expect(filed.json.workItem).toMatchObject({ board: 'ops', stages: ['inbox'] });
         }, 60_000);
 
         it("keeps a new project's edited Work board across a restart that upserts another board", async () => {
