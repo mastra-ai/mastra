@@ -595,7 +595,7 @@ Rules test a card's facts, read from its work item as the provider reported it:
 | `source.provider`    | The provider the work item comes from; the integration for every integration Factory ships.                                                                                                                 |
 | `source.repository`  | Where the item lives: the GitHub repository or GitLab project path (`acme/app`, `acme/platform/api`), the Linear team key (`ENG`) or the Jira project key (`OPS`). Absent for incident.io and manual cards. |
 
-Strings compare case-insensitively, so `source.repository equals Acme/App` matches `acme/app`. A fact the item doesn't have fails every operator except `not_exists`, `not_equals`, `not_contains` and `not_in`.
+Strings compare case-insensitively, so `source.repository equals Acme/App` matches `acme/app`. A list fact (`item.labels`, `item.assignees`) is tested by its members: `item.assignees equals ada` matches when Ada is one of the assignees, and an empty list counts as missing, so `item.assignees exists` matches only assigned items. A fact the item doesn't have fails every operator except `not_exists`, `not_equals`, `not_contains` and `not_in`.
 
 The example below is a custom board, not Work's behavior: it auto-starts and auto-approves planning only for cards labelled `effort:low`.
 

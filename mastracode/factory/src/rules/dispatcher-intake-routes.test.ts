@@ -701,7 +701,7 @@ const CLOSED_AS = (reason: 'completed' | 'canceled') =>
   ({ operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: reason }] }) as const;
 
 /** A route condition testing one fact. */
-const when = (field: string, operator: 'equals' | 'contains' | 'in', value: string | string[]) =>
+const when = (field: string, operator: 'equals' | 'contains' | 'in' | 'exists', value?: string | string[]) =>
   ({ operator: 'AND', conditions: [{ field, operator, value }] }) as const;
 
 describe('intake routes sending a repository, team or project to its own board', () => {
@@ -826,6 +826,22 @@ describe('intake routes sending a repository, team or project to its own board',
     expect(placed(await deliver(linearIssue('ENG', 5, 'In Review')))).toEqual({ board: 'work', stages: ['planning'] });
     expect(placed(await deliver(jiraIssue('OPS', 6)))).toEqual({ board: 'work', stages: ['triage'] });
     expect(placed(await deliver(linearIssue('ENG', 7)))).toEqual({ board: 'docs', stages: ['inbox'] });
+  });
+
+  it('sends assigned items by who they are assigned to, and leaves unassigned ones to the next route', async () => {
+    const { boards, scope, route, deliver } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    await route({ name: "Grace's", when: when('item.assignees', 'equals', 'grace'), target: { boardKey: 'docs' } });
+    await route({
+      name: 'Assigned',
+      when: when('item.assignees', 'exists'),
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
+    const unassigned = { ...jiraIssue('OPS', 9), metadata: { ...jiraIssue('OPS', 9).metadata, assignees: [] } };
+
+    expect(placed(await deliver(jiraIssue('OPS', 8)))).toEqual({ board: 'docs', stages: ['inbox'] });
+    expect(placed(await deliver(linearIssue('ENG', 10)))).toEqual({ board: 'work', stages: ['triage'] });
+    expect(placed(await deliver(unassigned))).toEqual({ board: 'work', stages: ['intake'] });
   });
 });
 
