@@ -1,4 +1,5 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { hashKey, useQueryClient } from '@tanstack/react-query';
+import type { QueryKey } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -44,44 +45,49 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
     let settling: ReturnType<typeof setTimeout> | undefined;
-    let refreshing: Promise<unknown> = Promise.resolve();
     let lastRefreshAt = Number.NEGATIVE_INFINITY;
     let streaming = false;
     const setStreaming = (open: boolean) => {
       streaming = open;
       setConnected(open);
     };
+    const cardsKey = queryKeys.workItems(factoryProjectId);
     const boardKeys = [
-      queryKeys.workItems(factoryProjectId),
+      cardsKey,
       queryKeys.factoryDecisionsRoot(factoryProjectId),
       queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
     ];
-    // A board read taken while a card is moving puts it back in the column it is leaving.
-    const cardMovesSettled = () => {
-      const moves = { mutationKey: cardMoveMutationKey(factoryProjectId) };
-      if (queryClient.isMutating(moves) === 0) return;
-      return new Promise<void>(resolve => {
-        const unsubscribe = queryClient.getMutationCache().subscribe(() => {
-          if (queryClient.isMutating(moves) > 0) return;
-          unsubscribe();
-          resolve();
-        });
+    // One read per query at a time, with at most one more queued behind it: a frame cancelling a slow
+    // read for the next would starve a busy board, and a read that never ends holds up only its own query.
+    const reading = new Map<string, { again: boolean }>();
+    const reread = (queryKey: QueryKey) => {
+      // A card read taken mid-move puts the card back in the column it is leaving; the move re-reads the cards when it lands.
+      if (queryKey === cardsKey && queryClient.isMutating({ mutationKey: cardMoveMutationKey(factoryProjectId) }) > 0) {
+        return;
+      }
+      const hash = hashKey(queryKey);
+      const inFlight = reading.get(hash);
+      if (inFlight) {
+        inFlight.again = true;
+        return;
+      }
+      const read = { again: false };
+      reading.set(hash, read);
+      void queryClient.invalidateQueries({ queryKey }).finally(() => {
+        reading.delete(hash);
+        if (read.again && !abort.signal.aborted) reread(queryKey);
       });
     };
-    // One refresh at a time: a frame cancelling a slow board read for the next would starve a busy board.
     const refreshBoard = () => {
       if (settling) return;
       const wait = Math.max(BOARD_REFRESH_SETTLE_MS, lastRefreshAt + BOARD_FALLBACK_POLL_MS - Date.now());
       settling = setTimeout(() => {
-        refreshing = refreshing.then(cardMovesSettled).then(() => {
-          settling = undefined;
-          if (abort.signal.aborted) return;
-          lastRefreshAt = Date.now();
-          return Promise.all(boardKeys.map(queryKey => queryClient.invalidateQueries({ queryKey })));
-        });
+        settling = undefined;
+        lastRefreshAt = Date.now();
+        for (const queryKey of boardKeys) reread(queryKey);
       }, wait);
     };
-    // The only poll for cards and decisions: it takes a frame's path, so no read lands while a card is moving.
+    // The only poll for cards and decisions: it takes a frame's path, so it never reads cards mid-move either.
     const poll = setInterval(() => {
       if (!streaming || Date.now() - lastRefreshAt >= FEED_SAFETY_POLL_MS) refreshBoard();
     }, BOARD_FALLBACK_POLL_MS);

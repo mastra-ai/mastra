@@ -223,8 +223,11 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
           };
         }),
       );
-      // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
-      // move pending until the card shows that run, so its button never reappears in between.
+    },
+    // Landed or not, the board skipped its card reads while this was in flight, so it re-reads here.
+    // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
+    // move pending until the card shows that run, so its button never reappears in between.
+    onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),

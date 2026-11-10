@@ -324,6 +324,61 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
+  it('keeps reading decisions while a card move hangs, and leaves the card where it is going', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    server.use(stream.handler);
+    const { requests, board } = boardEndpoints();
+    const settleMove = heldCardMove(board);
+    const rendered = await renderQuietBoard();
+    const shownStages = () => rendered.result.current.cards.data?.[0]?.stages;
+    const [item] = rendered.result.current.cards.data ?? [];
+    if (!item) throw new Error('the board never loaded its card');
+
+    act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+    await waitFor(() => expect(shownStages()).toEqual(['review']));
+    const moving = { ...requests };
+    for (let frame = 0; frame < 3; frame += 1) {
+      stream.push();
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    }
+
+    expect(refreshes(requests)).toEqual({ cards: moving.cards, decisions: moving.decisions + 3 });
+    expect(shownStages()).toEqual(['review']);
+    settleMove();
+    await waitForMutationsIdle(rendered.client);
+  });
+
+  it('keeps reading decisions while a card read hangs, then reads the cards once more when it ends', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    server.use(stream.handler);
+    const { requests } = boardEndpoints();
+    const rendered = await renderQuietBoard();
+    let releaseCards = () => {};
+    const cardsHeld = new Promise<void>(resolve => {
+      releaseCards = resolve;
+    });
+    server.use(
+      http.get(BOARD_URL, async () => {
+        requests.cards += 1;
+        await cardsHeld;
+        return HttpResponse.json(boardSnapshot('Fix login'));
+      }),
+    );
+    const before = { ...requests };
+
+    for (let frame = 0; frame < 3; frame += 1) {
+      stream.push();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_REFRESH_GAP_MS));
+    }
+
+    await waitFor(() => expect(requests.decisions).toBe(before.decisions + 3));
+    // The held read is never cancelled for a newer one; one more waits behind it.
+    expect(requests.cards).toBe(before.cards + 1);
+    releaseCards();
+    await waitFor(() => expect(requests.cards).toBe(before.cards + 2));
+    await waitForMutationsIdle(rendered.client);
+  });
+
   it('reopens a stream that has gone silent, the way a dead server leaves it', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
