@@ -164,13 +164,12 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
 
   #templateOptions(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): RepoTemplateOptions {
     const { defaults } = this.#options;
-    // Factory's build env goes in explicitly, never through the spread: the
-    // legacy `buildEnv` option hashes values into the template name.
+    // Build env goes in only with its revision: without one, `buildEnv`
+    // values are hashed into the template name.
     const { resolveHead: _resolveHead, buildEnv, buildEnvRevision, ...rest } = ctx;
     return {
       ...rest,
-      ...(buildEnv && Object.keys(buildEnv).length > 0 ? { buildStepEnv: buildEnv } : {}),
-      ...(buildEnvRevision ? { buildEnvRevision } : {}),
+      ...(buildEnvRevision ? { buildEnvRevision, ...(buildEnv ? { buildEnv } : {}) } : {}),
       cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
     };
