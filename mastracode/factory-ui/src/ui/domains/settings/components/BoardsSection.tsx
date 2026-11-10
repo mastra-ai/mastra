@@ -9,7 +9,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useId, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
+import type { Location } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import type { InstalledBoardInfo, StoredBoardInfo } from '../../../../api/types';
@@ -34,7 +35,7 @@ import { SettingsSubsection } from './SettingsSubsection';
 
 const STARTER = '__starter__';
 /** The refusals of a create that are about the key, shown on the key field. */
-const KEY_REFUSALS = new Set(['code_board', 'reserved_board', 'board_exists']);
+const KEY_REFUSALS = new Set(['code_board', 'board_exists']);
 
 function errorText(error: BoardRequestError): string {
   return error.conflicts.length > 0 ? error.conflicts.join('\n') : error.message;
@@ -93,7 +94,7 @@ function BoardEditor({
   const rules = useRuleProblems();
   const save = useSaveBoardMutation(factoryId, board.key);
   const reset = useResetBoardMutation(factoryId, board.key);
-  const remove = useDeleteBoardMutation(factoryId, board.key);
+  const remove = useDeleteBoardMutation(factoryId, board.key, onDeleted);
   const skills = useSkillNames(factoryId);
   const readOnly = !canEdit || !board.editable;
   const changed = JSON.stringify(draft) !== JSON.stringify(draftOf(board));
@@ -174,7 +175,7 @@ function BoardEditor({
                   <AlertDialog.Action
                     onClick={() => {
                       clearErrors();
-                      remove.mutate(revision, { onSuccess: onDeleted });
+                      remove.mutate(revision);
                     }}
                   >
                     Delete board
@@ -361,8 +362,21 @@ export function BoardsSection({ factoryId }: { factoryId?: string }) {
   const data = query.data;
   const boards = orderedBoards(catalog.data ?? []);
   const id = useId();
-  const show = (target: { board?: string; new?: true }) =>
-    setParams(target.new ? { new: '1' } : target.board ? { board: target.board } : {}, { replace: true });
+  const location = useLocation();
+  // Closing Settings returns to the page it was opened from, which the location's state carries.
+  const show = (target: { board?: string; new?: true }, state: unknown = location.state) =>
+    setParams(target.new ? { new: '1' } : target.board ? { board: target.board } : {}, { replace: true, state });
+  const showAfterDelete = (deleted: string) => {
+    const from = (location.state as { from?: Location } | null)?.from;
+    // The page Settings was opened from is gone with the board: return to the Work board instead.
+    const gone = factoryId !== undefined && from?.pathname === boardPath(factoryId, deleted);
+    show(
+      {},
+      gone
+        ? { from: { ...from, pathname: boardPath(factoryId, DEFAULT_BOARD_ID), search: '', hash: '' } }
+        : location.state,
+    );
+  };
 
   return (
     <SettingsSubsection
@@ -413,7 +427,7 @@ export function BoardsSection({ factoryId }: { factoryId?: string }) {
               board={data.board}
               canEdit={data.canEdit ?? false}
               onReload={() => void query.refetch()}
-              onDeleted={() => show({})}
+              onDeleted={() => showAfterDelete(data.board.key)}
             />
           )}
         </>

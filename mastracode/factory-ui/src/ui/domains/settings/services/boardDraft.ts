@@ -1,13 +1,7 @@
+import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@mastra/factory/rules/validation';
+
 import type { StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
 import { settingsSectionPath } from '../settingsSections';
-
-/**
- * What the server accepts as a board or phase key (`BOARD_IDENTIFIER_RE` and
- * `MAX_BOARD_IDENTIFIER_LENGTH` in `@mastra/factory/rules/validation`). Kept here because that
- * module pulls server code into the browser bundle; `boardDraft.test.ts` holds the two together.
- */
-export const BOARD_KEY_RE = /^[a-z0-9][a-z0-9_-]*$/i;
-export const MAX_BOARD_KEY_LENGTH = 128;
 
 /** A board as the editor holds it: everything a save sends except the key and the revision. */
 export interface BoardDraft {
@@ -26,15 +20,16 @@ export function keyFromName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9_]+/g, '-')
     .replace(/^[-_]+/, '')
-    .slice(0, MAX_BOARD_KEY_LENGTH)
+    .slice(0, MAX_BOARD_IDENTIFIER_LENGTH)
     .replace(/-+$/, '');
 }
 
 /** Why the server would refuse this key, if it would. */
 export function keyProblem(key: string, taken: readonly string[] = []): string | undefined {
   if (key === '') return 'Enter a key.';
-  if (key.length > MAX_BOARD_KEY_LENGTH) return `Use at most ${MAX_BOARD_KEY_LENGTH} characters.`;
-  if (!BOARD_KEY_RE.test(key)) return 'Use letters, digits, hyphens and underscores, starting with a letter or digit.';
+  if (key.length > MAX_BOARD_IDENTIFIER_LENGTH) return `Use at most ${MAX_BOARD_IDENTIFIER_LENGTH} characters.`;
+  if (!BOARD_IDENTIFIER_RE.test(key))
+    return 'Use letters, digits, hyphens and underscores, starting with a letter or digit.';
   if (taken.includes(key)) return 'This key is already in use.';
   return undefined;
 }

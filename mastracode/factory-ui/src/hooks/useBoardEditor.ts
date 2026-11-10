@@ -117,7 +117,7 @@ export function useResetBoardMutation(factoryProjectId: string | undefined, boar
 }
 
 /**
- * Create a board of the project's own. Refused with `code_board` or `reserved_board` for a key
+ * Create a board of the project's own. Refused with `code_board` for a key
  * Factory keeps, and `board_exists` for one the project already uses.
  */
 export function useCreateBoardMutation(factoryProjectId: string | undefined) {
@@ -133,8 +133,12 @@ export function useCreateBoardMutation(factoryProjectId: string | undefined) {
   });
 }
 
-/** Delete a board no card sits on; refused with `revision_mismatch` when someone changed it since `expectedRevision`. */
-export function useDeleteBoardMutation(factoryProjectId: string | undefined, boardKey: string) {
+/**
+ * Delete a board no card sits on; refused with `revision_mismatch` when someone changed it since
+ * `expectedRevision`. `onDeleted` runs before the board leaves the cache, so the caller can leave
+ * the board while whatever shows it is still mounted.
+ */
+export function useDeleteBoardMutation(factoryProjectId: string | undefined, boardKey: string, onDeleted: () => void) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation<void, BoardRequestError, number>({
@@ -146,6 +150,7 @@ export function useDeleteBoardMutation(factoryProjectId: string | undefined, boa
       if (!res.ok) throw refusal(res.status, (await res.json().catch(() => undefined)) as BoardRefusal | undefined);
     },
     onSuccess: async () => {
+      onDeleted();
       queryClient.removeQueries({ queryKey: queryKeys.board(factoryProjectId, boardKey), exact: true });
       await queryClient.invalidateQueries({ queryKey: queryKeys.boardCatalog(factoryProjectId), exact: true });
     },

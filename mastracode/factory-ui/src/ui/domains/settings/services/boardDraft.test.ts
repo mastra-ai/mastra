@@ -1,16 +1,9 @@
 import { storedBoardInputSchema } from '@mastra/factory/boards/stored-board';
-import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@mastra/factory/rules/validation';
 import { describe, expect, it } from 'vitest';
 
-import { BOARD_KEY_RE, MAX_BOARD_KEY_LENGTH, keyFromName, keyProblem, starterBoard } from './boardDraft';
+import { keyFromName, keyProblem, starterBoard } from './boardDraft';
 
 describe('board keys', () => {
-  it('accepts and refuses the keys the server does', () => {
-    expect(BOARD_KEY_RE.source).toBe(BOARD_IDENTIFIER_RE.source);
-    expect(BOARD_KEY_RE.flags).toBe(BOARD_IDENTIFIER_RE.flags);
-    expect(MAX_BOARD_KEY_LENGTH).toBe(MAX_BOARD_IDENTIFIER_LENGTH);
-  });
-
   it('derives a key the server accepts from a board name', () => {
     expect(keyFromName('Bug Triage')).toBe('bug-triage');
     expect(keyFromName('  --Émile’s board!  ')).toBe('mile-s-board');

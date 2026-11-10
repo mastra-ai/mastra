@@ -44,15 +44,30 @@ function serve(board: StoredBoardResponse | (() => StoredBoardResponse)) {
   return read;
 }
 
-/** Shows where the app is, so a test can tell a navigation from a re-render. */
+/** Shows where the app is and where closing Settings would go, so a test can tell a navigation from a re-render. */
 function Location() {
-  const { pathname, search } = useLocation();
-  return <output aria-label="Location">{`${pathname}${search}`}</output>;
+  const { pathname, search, state } = useLocation();
+  const from = (state as { from?: { pathname: string } } | null)?.from;
+  return (
+    <>
+      <output aria-label="Location">{`${pathname}${search}`}</output>
+      <output aria-label="Closes to">{from?.pathname ?? ''}</output>
+    </>
+  );
 }
 
-function renderSection(search = '') {
+/** `openedFrom` is the page Settings was opened from, which closing Settings returns to. */
+function renderSection(search = '', openedFrom?: string) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/fp-1/settings/board${search}`]}>
+    <MemoryRouter
+      initialEntries={[
+        {
+          pathname: '/factories/fp-1/settings/board',
+          search,
+          state: openedFrom ? { from: { pathname: openedFrom, search: '', hash: '' } } : null,
+        },
+      ]}
+    >
       <Routes>
         <Route path="/factories/:factoryId/settings/board" element={<BoardsSection factoryId="fp-1" />} />
         <Route path="*" element={null} />
@@ -483,7 +498,6 @@ describe('BoardsSection', () => {
     });
 
     it.each([
-      ['reserved_board', 'review', 'Board key "review" is reserved for the retired Review board.'],
       ['code_board', 'release', 'Board "release" is defined in code; it cannot be created here.'],
       ['board_exists', 'bugs', 'Board "bugs" already exists in this project.'],
     ])('shows a %s refusal on the key and keeps the form', async (error, key, message) => {
@@ -647,6 +661,31 @@ describe('BoardsSection', () => {
         expect(deleted).toHaveBeenCalledExactlyOnceWith('3');
         expect(screen.queryByRole('button', { name: 'Delete board' })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Reset to default' })).toBeInTheDocument();
+      });
+
+      it('closes Settings to the Work board after deleting the board Settings was opened from', async () => {
+        serveProject({ stored: [bugs] });
+        server.use(http.delete(BUGS_URL, () => new HttpResponse(null, { status: 204 })));
+        const user = userEvent.setup();
+        renderSection('?board=bugs', '/factories/fp-1/boards/bugs');
+        const closesTo = () => screen.getByRole('status', { name: 'Closes to' });
+
+        // Opening the new-board form, backing out of it and picking a board keep the page Settings returns to.
+        await user.click(await screen.findByRole('button', { name: 'New board' }));
+        await user.click(
+          within(await screen.findByRole('region', { name: 'New board' })).getByRole('button', { name: 'Cancel' }),
+        );
+        await screen.findByRole('region', { name: 'Planning phase' });
+        expect(closesTo()).toHaveTextContent('/factories/fp-1/boards/bugs');
+        await user.click(screen.getByRole('combobox', { name: 'Board' }));
+        await user.click(await screen.findByRole('option', { name: 'Bugs' }));
+        expect(closesTo()).toHaveTextContent('/factories/fp-1/boards/bugs');
+
+        await user.click(await screen.findByRole('button', { name: 'Delete board' }));
+        await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete board' }));
+
+        await screen.findByRole('region', { name: 'Planning phase' });
+        expect(closesTo()).toHaveTextContent(/^\/factories\/fp-1\/work$/);
       });
 
       it('stays when the server refuses the delete because it still has cards', async () => {
