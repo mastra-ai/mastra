@@ -1,16 +1,18 @@
 import { RequestContext } from '@mastra/core/request-context';
 import {
   MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_DISPATCH_ADAPTER_KEY,
   MASTRA_IS_STUDIO_KEY,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '@mastra/server/server-adapter';
-import { Inject, Injectable, Logger, Scope } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import type { Request, Response } from 'express';
 
 import { MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
+import { CustomRouteService } from './custom-route.service';
 
 /**
  * REQUEST-scoped service that manages request context and abort signaling.
@@ -26,6 +28,7 @@ export class RequestContextService {
   constructor(
     @Inject(REQUEST) private readonly request: Request,
     @Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions,
+    @Optional() @Inject(CustomRouteService) private readonly customRoutes?: CustomRouteService,
   ) {
     this.abortController = new AbortController();
     this.context = this.parseRequestContext();
@@ -60,6 +63,9 @@ export class RequestContextService {
    */
   private parseRequestContext(): RequestContext {
     const context = new RequestContext();
+    if (this.customRoutes) {
+      context.set(MASTRA_DISPATCH_ADAPTER_KEY, this.customRoutes.dispatchAdapter);
+    }
 
     try {
       if (this.request.method === 'POST' || this.request.method === 'PUT' || this.request.method === 'PATCH') {

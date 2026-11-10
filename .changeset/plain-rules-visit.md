@@ -18,6 +18,6 @@ const outcome = await dispatchRoute(
 if (!outcome.ok) console.log(outcome.status, outcome.body); // e.g. 403 { error: 'Forbidden', ... }
 ```
 
-Rules are read against the path the route is served under, taken from the server adapter created for the `Mastra` instance. If you create more than one adapter for the same instance, set `routePrefix` in the context to the prefix of the one whose paths apply. Adapters that don't extend `MastraServer` can call the new `registerDispatchAdapter` to say where they serve routes.
+Rules are read against the path the route is served under, and the checks are those of the server adapter that served the request the request context came from, even when several adapters serve the same `Mastra` instance. Outside a request, the only adapter serving the instance is used, or the one serving `routePrefix` when set; `dispatchRoute` refuses rather than pick between several. Adapters that don't extend `MastraServer` can call the new `registerDispatchAdapter` to say where they serve routes, and set the handle it returns in each request context under `MASTRA_DISPATCH_ADAPTER_KEY`.
 
 The built-in adapters still run route permission checks through `checkRoutePermission`, so a subclass that overrides it keeps working, and the override now also applies to routes run with `dispatchRoute`.

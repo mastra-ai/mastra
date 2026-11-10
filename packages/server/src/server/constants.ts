@@ -28,6 +28,12 @@ export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
 
 export const MASTRA_USER_ROLES_KEY = 'mastra__userRoles';
 
+/**
+ * The server adapter that is serving the current request, as the handle `registerDispatchAdapter`
+ * returned. `dispatchRoute` applies that adapter's paths and checks.
+ */
+export const MASTRA_DISPATCH_ADAPTER_KEY = 'mastra__dispatchAdapter';
+
 export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
 
 export const MASTRA_IS_STUDIO_KEY = 'mastra__isStudio';
@@ -80,6 +86,8 @@ export const RESERVED_REQUEST_CONTEXT_KEYS = [
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_AUTH_MODE_KEY,
+  // Names the adapter whose policy dispatchRoute applies to in-process calls.
+  MASTRA_DISPATCH_ADAPTER_KEY,
   // Delegation stores a live memory instance here. A body-supplied value would
   // be handed to the agent as its memory and throw on the first memory call.
   MASTRA_INHERITED_MEMORY_KEY,

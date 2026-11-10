@@ -3,6 +3,7 @@ import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { DEFAULT_ROLES, FGADeniedError, StaticRBACProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute, SimpleAuth } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -873,25 +874,57 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
       if (sameErrorBodies) expect(dispatched.body).toEqual(http.body);
     });
 
-    it('does not guess between two adapters serving the same Mastra instance', async () => {
+    it('uses the paths of the adapter serving the request when several serve the same Mastra instance', async () => {
       second = await startServer(mastra, { prefix: '/internal' });
 
-      // Nothing says which server's paths the rules should be read against, so nothing runs.
-      expect((await probeResponse(server, generate)).status).toBe(500);
-      expect((await probeResponse(second, generate)).status).toBe(500);
-
-      // Told which prefix it is serving, each one agrees with its own HTTP routes again.
+      // Each request carries the adapter serving it, so each agrees with its own HTTP routes,
+      // whether or not the caller names the prefix.
       for (const [target, prefix] of [
         [server, '/mastra'],
         [second, '/internal'],
       ] as const) {
-        expect((await viaHttp(target, prefix, generate)).status).toBe(200);
-        expect((await viaDispatch(target, generate, prefix)).status).toBe(200);
-        const http = await viaHttp(target, prefix, tool);
-        expect(http.status).toBe(403);
-        const dispatched = await viaDispatch(target, tool, prefix);
-        expect(dispatched.status).toBe(403);
-        if (sameErrorBodies) expect(dispatched.body).toEqual(http.body);
+        for (const routePrefix of [undefined, prefix]) {
+          expect((await viaHttp(target, prefix, generate)).status).toBe(200);
+          expect((await viaDispatch(target, generate, routePrefix)).status).toBe(200);
+          const http = await viaHttp(target, prefix, tool);
+          expect(http.status).toBe(403);
+          const dispatched = await viaDispatch(target, tool, routePrefix);
+          expect(dispatched.status).toBe(403);
+          if (sameErrorBodies) expect(dispatched.body).toEqual(http.body);
+        }
+      }
+
+      // Outside a request either one served, nothing says whose paths apply, so nothing runs.
+      const requestContext = new RequestContext();
+      requestContext.set('mastra__user', USERS['member-token']);
+      await expect(
+        dispatchRoute(generate.route(), generate.input, {
+          mastra,
+          requestContext,
+          abortSignal: new AbortController().signal,
+        }),
+      ).rejects.toThrow(/cannot tell which path/);
+    });
+
+    it('refuses to guess between two adapters serving the same prefix, outside a request', async () => {
+      const third = await startServer(mastra, { prefix: '/mastra' });
+      try {
+        // Within a request, the adapter serving it decides, even though another serves the same prefix.
+        expect((await viaDispatch(third, generate, '/mastra')).status).toBe(200);
+        expect((await viaDispatch(third, tool, '/mastra')).status).toBe(403);
+
+        const requestContext = new RequestContext();
+        requestContext.set('mastra__user', USERS['member-token']);
+        await expect(
+          dispatchRoute(generate.route(), generate.input, {
+            mastra,
+            requestContext,
+            abortSignal: new AbortController().signal,
+            routePrefix: '/mastra',
+          }),
+        ).rejects.toThrow(/cannot tell which path/);
+      } finally {
+        await third.close?.();
       }
     });
   });

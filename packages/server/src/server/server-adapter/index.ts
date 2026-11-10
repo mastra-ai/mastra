@@ -33,6 +33,7 @@ import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_DISPATCH_ADAPTER_KEY,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
@@ -61,6 +62,7 @@ export { cancelReaderOnResponseClose, writeWithBackpressure } from './stream-dis
 export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_DISPATCH_ADAPTER_KEY,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
@@ -571,6 +573,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected httpLoggingConfig?: HttpLoggingConfig;
   protected customApiRoutes?: ApiRoute[];
   protected mcpOptions?: MCPOptions;
+  /** This adapter's `registerDispatchAdapter` handle, recorded on each request it serves. */
+  private readonly dispatchAdapter: DispatchAdapterHandle;
   private customRouteHandler:
     | ((
         request: Request,
@@ -629,7 +633,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
     this.prefix = normalizeRoutePath(prefix);
-    registerDispatchAdapter(mastra, {
+    this.dispatchAdapter = registerDispatchAdapter(mastra, {
       prefix: this.prefix,
       getCustomRouteAuthConfig: () => this.customRouteAuthConfig,
       getCustomApiRoutes: () => this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [],
@@ -727,6 +731,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     bodyRequestContext?: Record<string, any>;
   }): RequestContext {
     const requestContext = new RequestContext();
+    requestContext.set(MASTRA_DISPATCH_ADAPTER_KEY, this.dispatchAdapter);
     if (bodyRequestContext) {
       for (const [key, value] of Object.entries(bodyRequestContext)) {
         if (isReservedRequestContextKey(key)) continue;
@@ -1793,40 +1798,56 @@ export interface DispatchAdapterInfo {
   checkRouteRBAC?: (route: ServerRoute, requestContext: RequestContext) => RouteAuthorizationError | null;
 }
 
-const dispatchAdapters = new WeakMap<Mastra, DispatchAdapterInfo[]>();
+/**
+ * Opaque handle naming one registered adapter. An adapter records it in each request's context
+ * under `MASTRA_DISPATCH_ADAPTER_KEY` so routes dispatched from that request get its policy.
+ */
+export type DispatchAdapterHandle = Readonly<Record<string, never>>;
+
+const dispatchAdapters = new WeakMap<Mastra, Map<DispatchAdapterHandle, DispatchAdapterInfo>>();
 
 /**
  * Tell `dispatchRoute` where an adapter serves a Mastra instance's routes. Adapters built on
- * `MastraServer` register themselves; adapters that are not must call this.
+ * `MastraServer` register themselves; adapters that are not must call this, and set the returned
+ * handle in each request's context under `MASTRA_DISPATCH_ADAPTER_KEY`.
  */
-export function registerDispatchAdapter(mastra: Mastra, info: DispatchAdapterInfo): void {
-  const adapters = dispatchAdapters.get(mastra) ?? [];
-  adapters.push(info);
+export function registerDispatchAdapter(mastra: Mastra, info: DispatchAdapterInfo): DispatchAdapterHandle {
+  const adapters = dispatchAdapters.get(mastra) ?? new Map<DispatchAdapterHandle, DispatchAdapterInfo>();
+  const handle: DispatchAdapterHandle = Object.freeze({});
+  adapters.set(handle, info);
   dispatchAdapters.set(mastra, adapters);
+  return handle;
 }
 
 /**
- * The adapter whose HTTP paths a dispatched route is authorized against: the one serving
- * `routePrefix` when given, otherwise the only one registered. `prefix` is undefined when that
- * cannot be told: several adapters and no `routePrefix`, a `routePrefix` none of the registered
- * adapters serves (a custom route's own `routePrefix` is empty, for one), or nothing to go on.
+ * The adapter whose HTTP paths and checks a dispatched route gets. Among the adapters serving
+ * `routePrefix` (all of them when it is not given), that is the one serving the current request
+ * (`MASTRA_DISPATCH_ADAPTER_KEY`), else the only one. `prefix` is undefined when it cannot be
+ * told: several candidates and none serving this request, a `routePrefix` no registered adapter
+ * serves (a custom route's own `routePrefix` is empty, for one), or nothing to go on. Guessing
+ * between adapters could skip one's stricter checks, so it is never done.
  */
 function resolveDispatchAdapter(
   mastra: Mastra,
   routePrefix: string | undefined,
+  requestContext: RequestContext,
 ): { prefix: string | undefined; adapter?: DispatchAdapterInfo } {
-  const adapters = dispatchAdapters.get(mastra) ?? [];
-  if (routePrefix === undefined) {
-    return adapters.length === 1
-      ? { prefix: normalizeRoutePath(adapters[0]!.prefix ?? ''), adapter: adapters[0] }
-      : { prefix: undefined };
+  const adapters = [...(dispatchAdapters.get(mastra) ?? new Map<DispatchAdapterHandle, DispatchAdapterInfo>())];
+  if (routePrefix !== undefined && adapters.length === 0) {
+    return { prefix: normalizeRoutePath(routePrefix) };
   }
-  const prefix = normalizeRoutePath(routePrefix);
-  const serving = adapters.filter(adapter => normalizeRoutePath(adapter.prefix ?? '') === prefix);
-  if (adapters.length > 0 && serving.length === 0) {
+  const candidates =
+    routePrefix === undefined
+      ? adapters
+      : adapters.filter(([, adapter]) => normalizeRoutePath(adapter.prefix ?? '') === normalizeRoutePath(routePrefix));
+  const serving = requestContext.get(MASTRA_DISPATCH_ADAPTER_KEY);
+  const match =
+    candidates.find(([handle]) => handle === serving) ?? (candidates.length === 1 ? candidates[0] : undefined);
+  if (!match) {
     return { prefix: undefined };
   }
-  return { prefix, adapter: serving.length === 1 ? serving[0] : undefined };
+  const [, adapter] = match;
+  return { prefix: normalizeRoutePath(adapter.prefix ?? ''), adapter };
 }
 
 /** Studio auth for Studio requests when `studio.auth` is configured, otherwise `server.auth`. */
@@ -1978,7 +1999,7 @@ async function checkDispatchedRouteAuth(
   let path: string | undefined;
   let customRouteAuthConfig: Map<string, boolean> | undefined;
   if (policy.authPath === 'adapter') {
-    const { prefix, adapter } = resolveDispatchAdapter(mastra, context.routePrefix);
+    const { prefix, adapter } = resolveDispatchAdapter(mastra, context.routePrefix, requestContext);
     customRouteAuthConfig = adapter?.getCustomRouteAuthConfig?.();
     const customRoutes = adapter?.getCustomApiRoutes?.() ?? mastra.getServer()?.apiRoutes ?? [];
     // Opt-in built-in routes are listed as custom routes but served under the prefix.
@@ -2128,7 +2149,9 @@ async function runRoutePipeline(
 
   // With an adapter serving the routes, its own RBAC check runs so subclass overrides apply here too.
   const adapter =
-    policy.authPath === 'adapter' ? resolveDispatchAdapter(mastra, context.routePrefix).adapter : undefined;
+    policy.authPath === 'adapter'
+      ? resolveDispatchAdapter(mastra, context.routePrefix, requestContext).adapter
+      : undefined;
   const authError = adapter?.checkRouteRBAC
     ? (adapter.checkRouteRBAC(route, requestContext) ?? (await checkRouteFGA(mastra, route, requestContext, params)))
     : await authorizeRoute(mastra, route, params, requestContext);
@@ -2185,10 +2208,11 @@ async function runRoutePipeline(
  *    parsed params.
  * 5. `route.handler` with the parsed params and `context`.
  *
- * The prefix comes from the adapter serving the Mastra instance. With several adapters, set
- * `context.routePrefix` to the one whose paths apply; with none registered it is required.
- * When the prefix cannot be told, or `routePrefix` is one no registered adapter serves, a
- * caller without a user gets 401 and the call otherwise throws rather than guess a path.
+ * The adapter's paths and checks apply: the adapter serving the request `requestContext` came
+ * from, else the only adapter serving the Mastra instance (or `context.routePrefix`, when set).
+ * With none registered, `routePrefix` is required. When the adapter cannot be told (several
+ * serve the prefix and none served this request), or `routePrefix` is one no registered adapter
+ * serves, a caller without a user gets 401 and the call otherwise throws rather than guess.
  *
  * It is stricter than HTTP in three ways. With auth configured, a route needs a user unless
  * its path is declared public; a path merely outside the `protected` patterns is not let
