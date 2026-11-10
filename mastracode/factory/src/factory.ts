@@ -65,7 +65,7 @@ import {
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { occupiedPhasesOf, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
-import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
+import { publishDispatchWake, REPOSITORY_LINKED_TOPIC, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -563,6 +563,7 @@ export class MastraFactory {
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeRepositoryLinkedWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -843,6 +844,20 @@ export class MastraFactory {
     ).catch(error => {
       console.warn(
         `[factory] subscribing to dispatcher wakes failed; other replicas' work waits for this replica's own wakes: ${error instanceof Error ? error.message : error}`,
+      );
+      return undefined;
+    });
+    const wakeIntegrationWorkers = () => {
+      for (const integration of integrations) integration.wakeWorkers?.();
+    };
+    this.#unsubscribeRepositoryLinkedWakes = subscribeDispatchWakes(
+      eventBus,
+      this.#dispatchWakeOrigin,
+      wakeIntegrationWorkers,
+      REPOSITORY_LINKED_TOPIC,
+    ).catch(error => {
+      console.warn(
+        `[factory] subscribing to repository-link wakes failed; a repository linked on another replica is picked up by the idle recheck: ${error instanceof Error ? error.message : error}`,
       );
       return undefined;
     });
@@ -1469,6 +1484,8 @@ export class MastraFactory {
       ...(githubIntegration || gitlabIntegration
         ? {
             onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
+              for (const integration of integrations) integration.wakeWorkers?.();
+              publishDispatchWake(eventBus, this.#dispatchWakeOrigin, REPOSITORY_LINKED_TOPIC);
               void (async () => {
                 const linkedInGithub =
                   githubIntegration &&
@@ -2504,6 +2521,9 @@ export class MastraFactory {
             `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
           ),
         );
+      const unsubscribeRepositoryLinkedWakes = this.#unsubscribeRepositoryLinkedWakes;
+      this.#unsubscribeRepositoryLinkedWakes = undefined;
+      await unsubscribeRepositoryLinkedWakes?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
       const backfill = this.#workItemSplitBackfill;
       backfill?.controller.abort();
       const results = await Promise.allSettled([

@@ -249,6 +249,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    */
   readonly authorizedBots: readonly string[];
   readonly #pollingEnabled: boolean;
+  #eventWorker: PlatformGithubEventWorker | undefined;
   readonly #pollingIntervalMs: number | undefined;
   readonly #pullRequestReconcileEnabled: boolean;
   readonly #issueReconcileEnabled: boolean;
@@ -864,42 +865,45 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
-    return [
-      new PlatformGithubEventWorker({
-        client: this.#client,
-        controller: ctx.controller,
-        github: this,
-        storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
-        ingestFactoryEvent: attachGithubRules(this, ctx),
-        reconcileFactoryState: this.#pullRequestReconcileEnabled
-          ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
-          : undefined,
-        reconcileIssuesFactoryState: this.#issueReconcileEnabled
-          ? attachGithubIssueReconciler(
-              this,
-              ctx,
-              input => this.fetchIssueState(input),
-              input => this.listOpenIssueStates(input),
-            )
-          : undefined,
-        pollEventsEnabled: this.#pollingEnabled,
-        intervalMs: this.#pollingIntervalMs,
-        pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
-        issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
-        // Resolved lazily: workers are constructed before versionControl
-        // storage is initialized, and the worker only reads these slices once
-        // it is running.
-        sourceControl: {
-          projectRepositories: {
-            listConfiguredExternalKeys: () => this.storage.projectRepositories.listConfiguredExternalKeys(),
-            listByExternalRepository: args => this.storage.projectRepositories.listByExternalRepository(args),
-          },
-          repositories: {
-            findByExternalId: args => this.storage.repositories.findByExternalId(args),
-          },
+    this.#eventWorker = new PlatformGithubEventWorker({
+      client: this.#client,
+      controller: ctx.controller,
+      github: this,
+      storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
+      ingestFactoryEvent: attachGithubRules(this, ctx),
+      reconcileFactoryState: this.#pullRequestReconcileEnabled
+        ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+        : undefined,
+      reconcileIssuesFactoryState: this.#issueReconcileEnabled
+        ? attachGithubIssueReconciler(
+            this,
+            ctx,
+            input => this.fetchIssueState(input),
+            input => this.listOpenIssueStates(input),
+          )
+        : undefined,
+      pollEventsEnabled: this.#pollingEnabled,
+      intervalMs: this.#pollingIntervalMs,
+      pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
+      issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
+      // Resolved lazily: workers are constructed before versionControl
+      // storage is initialized, and the worker only reads these slices once
+      // it is running.
+      sourceControl: {
+        projectRepositories: {
+          listConfiguredExternalKeys: () => this.storage.projectRepositories.listConfiguredExternalKeys(),
+          listByExternalRepository: args => this.storage.projectRepositories.listByExternalRepository(args),
         },
-      }),
-    ];
+        repositories: {
+          findByExternalId: args => this.storage.repositories.findByExternalId(args),
+        },
+      },
+    });
+    return [this.#eventWorker];
+  }
+
+  wakeWorkers(): void {
+    this.#eventWorker?.wake();
   }
 
   /**
