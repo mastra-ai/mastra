@@ -1,0 +1,17 @@
+{
+  "name": "cor-1519-studio-browser",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "mastra dev", "test": "playwright test -c e2e/playwright.config.ts" },
+  "dependencies": {
+    "@mastra/core": "link:/workspace/mastra/packages/core",
+    "@mastra/memory": "link:/workspace/mastra/packages/memory",
+    "@mastra/libsql": "link:/workspace/mastra/stores/libsql",
+    "mastra": "link:/workspace/mastra/packages/cli",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "link:/workspace/mastra/packages/playground/node_modules/@playwright/test",
+    "@copilotkit/aimock": "link:/workspace/mastra/server-adapters/hono/node_modules/@copilotkit/aimock"
+  }
+}

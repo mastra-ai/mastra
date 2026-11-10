@@ -1,0 +1,41 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@mastra/core':
+        specifier: link:/workspace/mastra/packages/core
+        version: link:../../../packages/core
+      '@mastra/libsql':
+        specifier: link:/workspace/mastra/stores/libsql
+        version: link:../../../stores/libsql
+      '@mastra/memory':
+        specifier: link:/workspace/mastra/packages/memory
+        version: link:../../../packages/memory
+      mastra:
+        specifier: link:/workspace/mastra/packages/cli
+        version: link:../../../packages/cli
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@copilotkit/aimock':
+        specifier: link:/workspace/mastra/server-adapters/hono/node_modules/@copilotkit/aimock
+        version: link:../../../server-adapters/hono/node_modules/@copilotkit/aimock
+      '@playwright/test':
+        specifier: link:/workspace/mastra/packages/playground/node_modules/@playwright/test
+        version: link:../../../packages/playground/node_modules/@playwright/test
+
+packages:
+
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
+snapshots:
+
+  zod@4.6.7: {}

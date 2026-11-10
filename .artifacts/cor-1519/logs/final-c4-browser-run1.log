@@ -1,0 +1,8 @@
+Running 6 tests using 1 worker
+  ✓  1 [chromium] › e2e/stop-reload.spec.ts:79:7 › Studio chat Stop and reload on plain-agent › when the user presses Cancel while the tool is running › aborts the run on the server, never calls the model again, and leaves the chat idle (5.5s)
+  ✓  2 [chromium] › e2e/stop-reload.spec.ts:105:7 › Studio chat Stop and reload on plain-agent › when the page is reloaded while the run is in flight › re-attaches to the live run and shows the reply when it finishes (3.8s)
+  ✓  3 [chromium] › e2e/stop-reload.spec.ts:123:7 › Studio chat Stop and reload on plain-agent › when the page is reloaded and the user presses Cancel › aborts the live run from the reloaded tab, and the next message still runs (4.0s)
+  ✓  4 [chromium] › e2e/stop-reload.spec.ts:79:7 › Studio chat Stop and reload on durable-agent › when the user presses Cancel while the tool is running › aborts the run on the server, never calls the model again, and leaves the chat idle (4.9s)
+  ✓  5 [chromium] › e2e/stop-reload.spec.ts:105:7 › Studio chat Stop and reload on durable-agent › when the page is reloaded while the run is in flight › re-attaches to the live run and shows the reply when it finishes (3.8s)
+  ✓  6 [chromium] › e2e/stop-reload.spec.ts:123:7 › Studio chat Stop and reload on durable-agent › when the page is reloaded and the user presses Cancel › aborts the live run from the reloaded tab, and the next message still runs (4.2s)
+  6 passed (26.9s)

@@ -13,7 +13,7 @@
 | Inngest | inngest-cli 1.49.0-28cb5336b (from repo script `pnpm --filter @mastra/inngest setup:inngest-cli`), inngest SDK 4.26.2, real dev server |
 | Redis | redis:7-alpine 7.4.12, local Docker on :6381. This is LOCAL, not remote. |
 | Model edge | @copilotkit/aimock 1.47.0, used only at the HTTP model edge. Runtime, storage, transport and HTTP are real. |
-| Browser | Playwright 1.64.1. Chrome Headless Shell 156.0.8078.4 is installed and launches. It was used only to check availability. |
+| Browser | Playwright 1.64.1, Chrome Headless Shell 156.0.8078.4 (system deps via `sudo playwright install-deps chromium`, user cache only). Used for cell 4b. |
 
 ## Results by cell
 
@@ -62,13 +62,13 @@ The stall is real Redis `CLIENT PAUSE <ms> ALL`. The matrix is plain and durable
   - Plain agent with Redis cache: stream() waited about 3.07s for run-record writes.
   - Durable agent: caller waited about 3.1s for read-back.
 - **12s stall on a connected bus** (longer than the 10s `LOGGED_EVENT_DELIVERY_TIMEOUT_MS`): every cell delivered every frame.
-- **Backlog:** 10 concurrent plain runs during a 5s pause.
-  - Callers finished in about 100–135ms with 200 frames.
-  - At that moment the bus had started 10 publishes and acknowledged 0, so at least 200 frames were queued in process.
-  - Peak concurrent publishes was 10, one per run because each run's chain is serial.
-  - The queue drained about 100–160ms after the pause ended. Replays were complete.
-  - Heap delta was GC noise and is not meaningful.
-  - The queue is unbounded. Total memory under a long stall was not measured.
+- **Backlog:** 10 concurrent plain runs started during a 5s `CLIENT PAUSE ALL` (`logs/final-c2.log`, `[COR-1519 backlog]` line).
+  - Accounting method: a test-only `RedisStreamsPubSub` subclass counts `publish()` calls on `agent.stream.*` topics: *started* (entered publish), *acked* (publish resolved), *in flight* (started minus acked). No runtime instrumentation. `agent.control.*` topics and run-record cache writes are NOT counted.
+  - Produced: 200 frames reached callers (10 runs × 20 frames) by ~100–135ms. The stream topic carries the same 20 events per run, lifecycle events (step-start/step-finish/finish) included, so 200 bus publishes were owed.
+  - At callers-done: started=10, acked=0, so 10 publishes were in flight (one per run; each run's chain is serial) and 190 had not yet reached the bus. Unacked total 200.
+  - "≥200 queued in process" is an **inference/lower bound**: it is produced-minus-acked on stream topics only. Exact per-run queue length was not read (the chain is a private promise), and the publisher's initial `running` record write plus any control traffic would be additional.
+  - After unpause: all 200 acked; drained ~100–160ms after the pause ended. Replays complete.
+  - Heap delta was GC noise and is not meaningful. Memory growth under a long stall was not measured.
 - **L1:** a durable agent with in-memory cache, on a cold (never connected) bus stalled longer than 5s, fails the run cleanly.
   - The error is "write client did not connect to Redis within 5000ms".
   - Replay contains only the error frame.
@@ -95,31 +95,32 @@ Result: 6/6 passed (`logs/final-c3.log`).
   - Replays match.
 - Not covered: concurrent supervisors.
 
-### Cell 4: Shipped browser Stop and reload path. PASS at the HTTP/client level
+### Cell 4: Shipped browser Stop and reload path. PASS (HTTP/client level and real browser)
 
-Command:
+**4a. HTTP/client level** (committed test):
 
 ```
 cd server-adapters/hono && npx vitest run src/__tests__/browser-stop-reload.test.ts
 ```
 
-Result: 6/6 passed (`logs/final-c4.log`). Earlier runs: 3 in a row with no flakes.
+Result: 6/6 (`logs/final-c4.log`), plus 3 earlier runs with no flakes. Real MastraClient against a real Hono server, plain and durable agents, making the calls useChat makes on the signals path (`sendMessage`, `subscribeToThread({withRunStatus, withInitialHistory})`, `abortThread({expectedRunId})`): reload mid-run adopts `activeRunId`; Stop from sending tab; Stop from reloaded tab; stale Stop returns `aborted=false`; next message works.
 
-- Studio defaults to thread signals. The client calls useChat makes are:
-  - `sendMessage`
-  - `subscribeToThread({withRunStatus, withInitialHistory})`
-  - `abortThread({expectedRunId})`
-- The test runs those calls through a real MastraClient against a real Hono server, for plain and durable agents. Cases:
-  - reload mid-run adopts `activeRunId`
-  - Stop from the sending tab
-  - Stop from a reloaded tab
-  - a stale Stop returns `aborted=false`
-  - the next message works
-- Not covered:
-  - a real browser rendering Studio
-  - the React hook itself
-  - legacy-stream mode
-- Browser infrastructure is available now: Chromium launches after `playwright install chromium` plus `install-deps`. However, the kitchen-sink Studio e2e app mocks the model in-process with recorded fixtures, not at the HTTP edge. A Studio browser run that follows this brief's AIMock rule would need a new kitchen-sink agent pointed at AIMock. That was not done.
+**4b. Real browser, shipped Studio UI** (disposable fixture, not committed to source paths; in `studio-browser/`):
+
+```
+cd .artifacts/cor-1519/studio-browser && pnpm install && npx playwright test -c e2e/playwright.config.ts
+```
+
+Result: 6/6, 3 consecutive runs (`logs/final-c4-browser-run1.log`, `run2.log`; first run console only), ~27s each.
+
+- Setup: headless Chromium (Playwright 1.64.1, Chrome Headless Shell 156.0.8078.4) driving the Studio bundled by the repo CLI (`mastra dev`, cli dist built from baseline) on :4111. Isolated project links local core/memory/libsql/cli; LibSQL file storage; `Memory()`; agents `plain-agent` and `durable-agent` (`createDurableAgent`) with a gated `wait` tool. Model is AIMock (LLMock 1.47.0) over HTTP on :4319, keyed on a predicate (tool call, then "The wait is over." after the tool result). Fixture-only routes `/cor1519/state|release|reset` expose tool counters and the gate. No repo source, dependency or workflow changes.
+- Observed shipped transport: Studio issues `POST /api/agents/:id/threads/subscribe` and `POST /api/agents/:id/send-message` (signals path). The stop control is the composer button with accessible name "Cancel".
+- Cases, each for plain and durable:
+  1. **Cancel mid-tool:** browser sends `POST …/threads/abort` with `{threadId, expectedRunId}`; server tool sees the abort (started 1, aborted 1, finished 0); AIMock gets exactly 1 request (no follow-up model call); UI returns to "Send" and never shows the reply; after page reload the user message is shown, no reply in UI or persisted thread messages.
+  2. **Reload mid-run:** after reload the UI shows the user message and the "Cancel" control (re-attached to the live run). Releasing the tool, the reply appears exactly once in the UI, UI returns to "Send", tool finished once, AIMock got 2 requests, and the persisted thread holds the reply once.
+  3. **Reload then Cancel:** Cancel from the reloaded tab sends `threads/abort`, tool aborted, 1 model request, UI idle; a new message in the same thread runs to completion and renders its reply.
+- So the shipped UI does reconnect after reload on this path; no missing-reconnect behavior was found.
+- Not covered: legacy-stream / generate / network chat modes, multiple simultaneous tabs, Studio served from a production `mastra build`, and non-Chromium browsers. Spec is not in `packages/playground/e2e` (that suite mocks models in-process); it lives with the artifacts.
 
 ### Cell 5: Real remote Redis under load. UNVERIFIED
 
@@ -137,6 +138,6 @@ There is no approved remote endpoint in the environment. The PR 3 latency figure
 
 - L1 (cold-bus durable connect timeout) is described above.
 - The plain publisher queue is unbounded. Only depth was measured, not memory under a long stall.
-- Cell 4 does not drive a real browser.
+- Cell 4 real-browser evidence covers the default signals transport in Chromium only, from a disposable fixture outside the repo test suites.
 - Cell 5 is unverified.
 - All Redis evidence is local Docker. Emulated RTT was not used and would not count as remote evidence.
