@@ -93,8 +93,6 @@ export type ProcessorArgs = {
   parentContext?: {
     workflowId: string;
     input: any;
-    stepResults?: Record<string, any>;
-    state?: Record<string, any>;
   };
   retryCount?: number;
   perStep?: boolean;
@@ -1558,7 +1556,10 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: parentWorkflow.executionPath,
             resumeSteps,
             stepResults: parentWorkflow.stepResults,
-            prevResult,
+            prevResult: {
+              ...prevResult,
+              __stateDelta: this.nestedRunStateDelta(finalState, stepResults, parentWorkflow),
+            },
             resumeData,
             activeStepsPath,
             parentWorkflow: parentWorkflow.parentWorkflow,
@@ -1673,6 +1674,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults: parentWorkflow.stepResults,
           prevResult: {
             ...prevResult,
+            __stateDelta: this.nestedRunStateDelta(finalState, stepResults, parentWorkflow),
             suspendPayload: {
               ...prevResult.suspendPayload,
               __workflow_meta: {
@@ -3651,19 +3653,29 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * A nested workflow completing as a parallel/conditional branch hands the parent its
-   * full final state rather than a setState() delta. Diff it against the parent state the
-   * nested run started from so its updates merge with siblings' instead of being lost to
-   * whichever branch finishes last (#29732).
+   * The setState() delta a nested run hands its parent step. Without it the parent only
+   * sees the nested run's full final state, and a nested parallel/conditional branch's
+   * updates would be lost to whichever sibling finishes last (#29732). It covers every key
+   * a nested step explicitly wrote (recorded as `__stateWrites`, so writes made before a
+   * suspend, or that restore the start value, still count) plus any key that differs from
+   * the state the nested run started with (paths that don't record writes), with values
+   * taken from the final state.
    */
-  private nestedBranchStateDelta(
+  private nestedRunStateDelta(
     finalState: Record<string, any>,
-    parentContext: NonNullable<ProcessorArgs['parentContext']>,
+    stepResults: Record<string, any> | undefined,
+    parentWorkflow: ParentWorkflow,
   ): Record<string, any> | undefined {
-    const startState = parentContext.state ?? resolveCurrentState({ stepResults: parentContext.stepResults });
-    const delta = Object.fromEntries(
-      Object.entries(finalState).filter(([key, value]) => !deepEqual(value, startState[key])),
-    );
+    const startState = parentWorkflow.state ?? resolveCurrentState({ stepResults: parentWorkflow.stepResults });
+    const keys = new Set<string>();
+    for (const [stepId, result] of Object.entries(stepResults ?? {})) {
+      if (stepId === '__state') continue;
+      for (const key of result?.__stateWrites ?? []) keys.add(key);
+    }
+    for (const [key, value] of Object.entries(finalState)) {
+      if (!deepEqual(value, startState[key])) keys.add(key);
+    }
+    const delta = Object.fromEntries([...keys].filter(key => key in finalState).map(key => [key, finalState[key]]));
     return Object.keys(delta).length > 0 ? delta : undefined;
   }
 
@@ -3706,10 +3718,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // For all other steps the delta is redundant with __state and is dropped.
     const isParallelBranch =
       (rawStep?.type === 'parallel' || rawStep?.type === 'conditional') && executionPath.length > 1;
-    const branchStateDelta = isParallelBranch
-      ? ((extractedStateDelta as Record<string, any> | undefined) ??
-        (parentContext ? this.nestedBranchStateDelta(currentState, parentContext) : undefined))
-      : undefined;
+    const branchStateDelta = isParallelBranch ? (extractedStateDelta as Record<string, any> | undefined) : undefined;
     prevResult = cleanPrevResult as typeof prevResult;
 
     // The just-finished entry. Keep it raw (declarative agent / tool / mapping
@@ -4189,6 +4198,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       // clear from activeStepsPath
       delete activeStepsPath[stepId];
 
+      // In a nested run, record which keys this step explicitly wrote (unioned with
+      // earlier runs of the step, e.g. before a suspend) so nestedRunStateDelta can
+      // hand the parent every write, not just keys that differ from the start state.
+      const priorStateWrites: string[] = (stepResults[stepId] as any)?.__stateWrites ?? [];
+      const stateWrites = parentWorkflow
+        ? [...new Set([...priorStateWrites, ...Object.keys(extractedStateDelta ?? {})])]
+        : [];
+
       // handle nested workflow
       if (parentContext) {
         prevResult = stepResults[stepId] = {
@@ -4210,7 +4227,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       // sibling updates key-by-key instead of last-writer-wins on full state
       // snapshots (#22319). The delta is stripped again before results are
       // surfaced to users.
-      let storedResult = branchStateDelta ? { ...prevResult, __stateDelta: branchStateDelta } : prevResult;
+      let storedResult = {
+        ...prevResult,
+        ...(branchStateDelta ? { __stateDelta: branchStateDelta } : {}),
+        ...(stateWrites.length > 0 ? { __stateWrites: stateWrites } : {}),
+      } as typeof prevResult;
 
       const startedBy = stepResults[stepId]?.metadata?.startedBy ?? prevResult?.metadata?.startedBy;
       const guardCompletion =

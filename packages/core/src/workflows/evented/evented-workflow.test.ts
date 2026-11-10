@@ -720,6 +720,91 @@ describe('Workflow (Evented Engine Specific)', () => {
       expect(result.status).toBe('success');
       expect((result as any).state).toEqual({ second: 1, approved: true });
     });
+
+    it.for([
+      ['later-finishes-first', 5, 50],
+      ['later-finishes-last', 50, 5],
+    ] as const)(
+      'keeps a later nested branch write that restores the start value (%s)',
+      async ([name, laterDelay, earlierDelay]) => {
+        const id = `nested-parallel-restore-${name}`;
+        const earlier = makeNestedWorkflow(`${id}-earlier`, earlierDelay, { first: 1 });
+        const later = makeNestedWorkflow(`${id}-later`, laterDelay, { first: 0 });
+
+        const workflow = createWorkflow({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema,
+          steps: [earlier, later],
+        });
+        workflow.parallel([earlier, later]).commit();
+
+        // Branch writes merge in declaration order, as for plain step branches (#22319)
+        const result = await runWorkflow(workflow, id, { first: 0 });
+        expect(result.status).toBe('success');
+        expect((result as any).state).toEqual({ first: 0 });
+      },
+    );
+
+    it('keeps a nested branch write made before it suspended', async () => {
+      const id = 'nested-parallel-resume-state';
+      const earlier = makeNestedWorkflow(`${id}-earlier`, 5, { first: 1 });
+      const suspendingStep = createStep({
+        id: `${id}-suspending`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        resumeSchema: z.object({}),
+        stateSchema,
+        execute: async ({ setState, suspend, resumeData }) => {
+          if (resumeData) return {};
+          await new Promise(resolve => setTimeout(resolve, 30));
+          await setState({ first: 2 });
+          return suspend({});
+        },
+      });
+      const later = createWorkflow({
+        id: `${id}-later`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [suspendingStep],
+      })
+        .then(suspendingStep)
+        .commit();
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [earlier, later],
+      });
+      workflow.parallel([earlier, later]).commit();
+
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const started = await run.start({ inputData: {}, initialState: { first: 0 } });
+        expect(started.status).toBe('suspended');
+
+        const result = await run.resume({
+          step: [later.id, suspendingStep.id],
+          resumeData: {},
+          outputOptions: { includeState: true },
+        });
+        expect(result.status).toBe('success');
+        expect((result as any).state).toEqual({ first: 2 });
+        expect(JSON.stringify(result.steps)).not.toContain('__stateWrites');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 
   describe('terminal snapshot cleanup (issue #22209)', () => {
