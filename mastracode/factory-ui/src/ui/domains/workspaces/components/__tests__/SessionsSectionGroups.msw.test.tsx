@@ -58,28 +58,31 @@ const sessions = [
   session('user-new', 'User new', 'user/new', 'new'),
 ];
 
-const releaseItem = {
-  id: 'release-item',
+// One card per release session: the sidebar lists one row per card.
+const releaseItems = [releaseOld, releaseNew].map(release => ({
+  id: `${release.sessionId}-item`,
   orgId: 'org-1',
   createdBy: 'user-1',
   factoryProjectId: factoryId,
   board: 'release',
   externalSource: null,
   parentWorkItemId: null,
-  title: 'Ship 1.0',
+  title: `Ship ${release.title}`,
   stages: ['preparing'],
   stageHistory: [],
-  sessions: Object.fromEntries(
-    [releaseOld, releaseNew].map(release => [
-      release.sessionId,
-      { sessionId: release.sessionId, branch: release.branch, threadId: release.sessionId, startedBy: 'user-1' },
-    ]),
-  ),
+  sessions: {
+    [release.sessionId]: {
+      sessionId: release.sessionId,
+      branch: release.branch,
+      threadId: release.sessionId,
+      startedBy: 'user-1',
+    },
+  },
   metadata: {},
   revision: 1,
   createdAt: '2026-09-04T08:00:00.000Z',
   updatedAt: '2026-09-04T10:00:00.000Z',
-};
+}));
 
 beforeEach(() => {
   groupSessionsByBoard();
@@ -90,7 +93,7 @@ beforeEach(() => {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
-      HttpResponse.json({ workItems: [releaseItem] }),
+      HttpResponse.json({ workItems: releaseItems }),
     ),
   );
 });
@@ -230,7 +233,7 @@ describe('Sessions sidebar groups', () => {
   it("lists sessions in a custom board's terminal phase under Done", async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
-        HttpResponse.json({ workItems: [{ ...releaseItem, stages: ['shipped'] }] }),
+        HttpResponse.json({ workItems: releaseItems.map(item => ({ ...item, stages: ['shipped'] })) }),
       ),
     );
     const user = userEvent.setup();
@@ -276,7 +279,7 @@ describe('Sessions sidebar groups', () => {
     const catalogLoaded = new Promise<void>(resolve => (releaseCatalog = resolve));
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
-        HttpResponse.json({ workItems: [{ ...releaseItem, stages: ['shipped'] }] }),
+        HttpResponse.json({ workItems: releaseItems.map(item => ({ ...item, stages: ['shipped'] })) }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, async () => {
         await catalogLoaded;

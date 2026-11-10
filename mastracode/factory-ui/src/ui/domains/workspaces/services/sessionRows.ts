@@ -2,6 +2,8 @@ import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
 import {
+  cardContextSessions,
+  cardThreadSession,
   changeRequestNumberForItem,
   contextLabel,
   externalLinkLabel,
@@ -81,6 +83,8 @@ export interface SessionListRow {
   threadId?: string;
   pullRequest?: SessionPullRequest;
   pinned: boolean;
+  /** Every session of the card a card row stands for, so unpinning it clears a pin carried from another of them. */
+  cardSessionIds?: readonly string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -225,6 +229,74 @@ export function buildFactorySessionRow({
     createdAt: session.createdAt,
     updatedAt: item?.updatedAt ?? session.updatedAt,
   };
+}
+
+const CARRIED_STATUSES: readonly SessionActivityStatus[] = ['waiting', 'working'];
+
+/** The row a card lists: the session it opens, else the first of its sessions in the order the card lists them. */
+function cardRow(
+  cardRows: readonly SessionListRow[],
+  boards: readonly InstalledBoardInfo[] | undefined,
+): SessionListRow {
+  const item = cardRows[0].item;
+  if (!item) return cardRows[0];
+  const phases = boards?.find(board => board.id === itemBoard(item))?.phases;
+  const stage = item.stages[0] ?? '';
+  const opened = cardThreadSession(item, phases, stage)?.sessionId;
+  const order = cardContextSessions(item, phases, stage).map(entry => entry.ref.sessionId);
+  const rank = (row: SessionListRow) => {
+    if (row.session.sessionId === opened) return -1;
+    const index = order.indexOf(row.session.sessionId);
+    return index === -1 ? order.length : index;
+  };
+  return cardRows.toSorted((a, b) => rank(a) - rank(b))[0];
+}
+
+/**
+ * A card lists one row, for its current session. The row takes on what any of
+ * the card's sessions shows (running, waiting on you, pinned, open), so work in
+ * another context isn't hidden.
+ */
+export function oneRowPerCard(
+  rows: readonly SessionListRow[],
+  boards: readonly InstalledBoardInfo[] | undefined,
+): SessionListRow[] {
+  const rowsByCard = new Map<string, SessionListRow[]>();
+  for (const row of rows) {
+    if (row.itemId === undefined) continue;
+    rowsByCard.set(row.itemId, [...(rowsByCard.get(row.itemId) ?? []), row]);
+  }
+  return rows.flatMap(row => {
+    const cardRows = row.itemId === undefined ? undefined : rowsByCard.get(row.itemId);
+    if (!cardRows || cardRows.length === 1) return [row];
+    const shown = cardRow(cardRows, boards);
+    if (shown !== row) return [];
+    const carried = CARRIED_STATUSES.find(status => cardRows.some(candidate => candidate.status === status));
+    return [
+      {
+        ...shown,
+        status: carried ?? shown.status,
+        active: cardRows.some(candidate => candidate.active),
+        pinned: cardRows.some(candidate => candidate.pinned),
+        cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
+      },
+    ];
+  });
+}
+
+/**
+ * Pinning a row pins the session it shows. Unpinning a card's row unpins every
+ * session of the card, since the row shows pinned while any of them is.
+ */
+export function pinnedSessionsAfter(
+  pinned: ReadonlySet<string>,
+  row: Pick<SessionListRow, 'session' | 'cardSessionIds'>,
+  pin: boolean,
+): ReadonlySet<string> {
+  const next = new Set(pinned);
+  if (pin) next.add(row.session.sessionId);
+  else for (const sessionId of row.cardSessionIds ?? [row.session.sessionId]) next.delete(sessionId);
+  return next;
 }
 
 export interface UserSessionRowInput {
