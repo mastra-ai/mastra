@@ -1,3 +1,4 @@
+import { createHmac, createSecretKey, KeyObject } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -258,11 +259,13 @@ describe('MastraJwtAuth', () => {
     let jwksUri: string;
     let privateKey: CryptoKey;
     let otherPrivateKey: CryptoKey;
+    let publicKeyPem: string;
     let jwksRequests = 0;
 
     beforeAll(async () => {
       const pair = await generateKeyPair('RS256');
       privateKey = pair.privateKey;
+      publicKeyPem = KeyObject.from(pair.publicKey).export({ type: 'spki', format: 'pem' }) as string;
       otherPrivateKey = (await generateKeyPair('RS256')).privateKey;
       const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
       server = createServer((_req, res) => {
@@ -318,7 +321,15 @@ describe('MastraJwtAuth', () => {
 
     it('rejects HMAC tokens signed with the public key material (algorithm confusion)', async () => {
       const auth = new MastraJwtAuth({ jwksUri });
-      const forged = jwt.sign({ sub: 'attacker' }, 'anything', { header: { alg: 'HS256', kid: 'key-1' } });
+      // The attack: HS256 keyed with the public key exactly as the JWKS client hands it to the verifier.
+      const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+      const now = Math.floor(Date.now() / 1000);
+      const unsigned = `${encode({ alg: 'HS256', typ: 'JWT', kid: 'key-1' })}.${encode({ sub: 'attacker', iat: now, exp: now + 300 })}`;
+      const forged = `${unsigned}.${createHmac('sha256', publicKeyPem).update(unsigned).digest('base64url')}`;
+      // Sanity check: the signature is a valid HS256 signature keyed with the public key bytes.
+      expect(jwt.verify(forged, createSecretKey(Buffer.from(publicKeyPem)), { algorithms: ['HS256'] })).toMatchObject({
+        sub: 'attacker',
+      });
       await expect(auth.authenticateToken(forged)).rejects.toThrow();
     });
 

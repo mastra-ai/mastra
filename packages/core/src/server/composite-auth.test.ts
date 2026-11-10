@@ -192,6 +192,16 @@ describe('CompositeAuth OAuth hooks', () => {
     expect(await composite.verifyAudience(user, 'https://mcp')).toBe(false);
   });
 
+  it('rejects a user it did not authenticate instead of skipping the audience check', async () => {
+    const composite = new CompositeAuth([new TokenAuth('a', { audience: true })]);
+    const user = await composite.authenticateToken('a|https://mcp', req);
+    expect(await composite.verifyAudience({ ...(user as object) }, 'https://mcp')).toBe(false);
+    expect(await composite.verifyAudience('a|https://mcp', 'https://mcp')).toBe(false);
+    // Nothing could check the audience anyway, so there is nothing to fail closed on.
+    const unchecked = new CompositeAuth([new TokenAuth('b')]);
+    expect(await unchecked.verifyAudience({ token: 'b' }, 'https://mcp')).toBe(true);
+  });
+
   it('exposes inner providers in order', () => {
     const a = new TokenAuth('a');
     const b = new TokenAuth('b');

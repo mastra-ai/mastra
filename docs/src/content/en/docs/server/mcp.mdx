@@ -183,7 +183,7 @@ export const mastra = new Mastra({
 
 ### Token audience
 
-Setting `server.mcp.oauth.resource` also makes the endpoint check that a token was issued for it: the token's `aud` claim must include the `resource` value. A token for another API gets a `401` with `error="invalid_token"`, so a token leaked from a different service can't be replayed against your MCP endpoint. Without `resource`, any token your auth provider accepts works, as it did before. The check only applies to `/api/mcp`, never to other routes.
+Setting `server.mcp.oauth.resource` also makes the endpoint check that a token was issued for it: the token's `aud` claim must include the `resource` value. A token for another API gets a `401` with `error="invalid_token"`, so a token leaked from a different service can't be replayed against your MCP endpoint. Without `resource`, any token your auth provider accepts works, as it did before. The check only applies to `/api/mcp`: other routes still accept a token issued for a different API. The comparison is exact, so `https://my-app.example.com/api/mcp/` with a trailing slash doesn't match `https://my-app.example.com/api/mcp`.
 
 Configure your identity provider to issue tokens with that audience, for example by registering the `resource` URL as an API identifier in Auth0. Auth0 also verifies its own `audience` option (`AUTH0_AUDIENCE`), so either set that option to the `resource` URL or issue tokens whose `aud` includes both values.
 
@@ -193,7 +193,7 @@ Configure your identity provider to issue tokens with that audience, for example
 | [Auth0](/reference/auth/auth0) | `https://<domain>/` | Yes |
 | [Okta](/reference/auth/okta) | `issuer` option | No. Okta checks the token against its own `audience` option, so set that to the `resource` URL. |
 | [Clerk](/reference/auth/clerk) | Frontend API URL from the publishable key. Your OAuth application must issue JWT access tokens (the default for applications created since January 2026). Opaque tokens are rejected. | No |
-| [Supabase](/reference/auth/supabase) | `<url>/auth/v1` | No |
+| [Supabase](/reference/auth/supabase) | `<url>/auth/v1`. Clients can only sign in there if the OAuth 2.1 server is turned on for your Supabase project. | No |
 | [`CompositeAuth`](/docs/auth/composite-auth) | All inner providers' servers | Delegated to the provider that authenticated the token |
 | WorkOS, Google, Neon, Firebase, Better Auth, custom providers | Set `authorizationServers` | No |
 

@@ -485,12 +485,15 @@ export class CompositeAuth
   }
 
   /**
-   * Delegates to the provider that authenticated `user`. Returns true (audience not enforced)
-   * when that provider has no `verifyAudience`.
+   * Delegates to the provider that authenticated `user`. Returns true (audience not enforced) when that
+   * provider has no `verifyAudience`. When the authenticating provider can't be determined (for example the
+   * user object was replaced after authentication), returns false if any wrapped provider could check the
+   * audience, so the check fails closed.
    */
   async verifyAudience(user: unknown, audience: string): Promise<boolean> {
     const provider = isObjectLike(user) ? this.authenticatedProviderByObject.get(user) : undefined;
-    if (typeof provider?.verifyAudience !== 'function') return true;
+    if (!provider) return !this.providers.some(p => typeof p.verifyAudience === 'function');
+    if (typeof provider.verifyAudience !== 'function') return true;
     return provider.verifyAudience(user, audience);
   }
 
