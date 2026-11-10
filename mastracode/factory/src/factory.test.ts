@@ -907,6 +907,13 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
+  it('hands the context-left sandbox stop to the transition service when a sandbox is configured', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), sandbox: () => ({ id: 'sb' }) as never });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    expect(transitionServiceOptions).toHaveLength(1);
+    expect(transitionServiceOptions[0]!.onContextLeft).toBeTypeOf('function');
+  });
+
   it('threads the default config version when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });

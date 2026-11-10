@@ -122,6 +122,7 @@ import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
+import { createContextSandboxStops, createTerminalSandboxStops } from './sandbox/context-sandboxes.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { CachedSandboxEnvs } from './sandbox/sandbox-env-cache.js';
@@ -1179,23 +1180,11 @@ export class MastraFactory {
         : undefined;
     const retireTerminalSessions =
       sessionRetirement && workItemsReady
-        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) => {
-            const item = await workItemsStorage.get({ orgId, id: workItemId });
-            if (!item) return;
-            const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
-            await Promise.all(
-              sessionIds.map(async sessionId => {
-                const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
-                if (!sourceControl) return;
-                await sessionRetirement.retireSession({
-                  sourceControl,
-                  orgId,
-                  sessionId,
-                  deleteSession: false,
-                });
-              }),
-            );
-          }
+        ? createTerminalSandboxStops({
+            workItems: workItemsStorage,
+            sessions: sourceControlSessions,
+            retirement: sessionRetirement,
+          })
         : undefined;
     // Terminal-stage cleanup: ingest any trailing tool results from the item's
     // bound threads, then revoke the bindings so completed items leave the
@@ -1318,6 +1307,32 @@ export class MastraFactory {
             ...(args.actor.type === 'agent' ? { initiatingBindingId: args.actor.bindingId } : {}),
           })
       : retireTerminalSessions;
+    // Leaving a context's last phase stops that context's sandbox; coming back resumes it.
+    const stopLeftContextSandbox =
+      sessionRetirement && workItemsReady
+        ? createContextSandboxStops({
+            workItems: workItemsStorage,
+            boards,
+            sessions: sourceControlSessions,
+            retirement: sessionRetirement,
+            // `this.#prepared` is assigned below; transitions only run long after.
+            runInFlight: async sessionId => {
+              const session = await this.#prepared?.base.controller.getSession(sessionId);
+              if (!session) return null;
+              let unsubscribe = () => {};
+              const ended = new Promise<void>(resolve => {
+                unsubscribe = session.subscribe(event => {
+                  if (event.type === 'agent_end') resolve();
+                });
+              });
+              if (!session.stream.isActive()) {
+                unsubscribe();
+                return null;
+              }
+              return { ended: ended.finally(unsubscribe) };
+            },
+          })
+        : undefined;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           configVersion,
@@ -1325,6 +1340,7 @@ export class MastraFactory {
           storage: workItemsStorage,
           audit: auditDomain,
           ...(onTerminalStage ? { onTerminalStage } : {}),
+          ...(stopLeftContextSandbox ? { onContextLeft: stopLeftContextSandbox } : {}),
           onTransitionCommitted: (() => {
             const notifyStageChange = createStageChangeNotifier({
               workItems: workItemsStorage,
