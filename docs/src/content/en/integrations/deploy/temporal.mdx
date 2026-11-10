@@ -255,9 +255,12 @@ The worker build reads each workflow chain statically, so arguments must be reso
 | `.sleep()` | A numeric literal or a function identifier |
 | `.sleepUntil()` | A `new Date(...)` expression, a string or number literal, or a function identifier |
 | `.map()` | An inline function or a top-level function identifier. Declarative object mappings aren't supported |
+| `.commit()` | No arguments |
 | Any other method | Not supported |
 
-Nested workflows passed to `.then()` or `.parallel()` run as Temporal child workflows. Each one is registered as its own workflow type and appears as a separate execution in the Temporal UI.
+Condition functions and `.sleep()` or `.sleepUntil()` function identifiers are called as activities named after the identifier, but the plugin only generates activities for steps and `.map()` callbacks. Register these functions yourself in `Worker.create({ activities })`, or the run fails when it reaches them.
+
+Nested workflows passed to `.then()` or `.parallel()` run as Temporal child workflows. Each one is registered as its own workflow type and appears as a separate execution in the Temporal UI. A suspended step inside a child workflow can't be resumed through the parent run.
 
 An unsupported construct stops the worker build with an error that names the workflow and file:
 
@@ -274,7 +277,7 @@ Each step runs as a Temporal activity. Its `execute` function receives:
 - `runId`, `workflowId`, and `resourceId`
 - `requestContext`
 - `getInitData()`
-- `suspend()`
+- `suspend()`, except in `.foreach()` steps
 - `mastra`, when the step's module can import the Mastra instance
 
 Other `execute` parameters, such as `state`, `setState()`, `getStepResult()`, `bail()`, `abort()`, `writer`, and `tracingContext`, aren't available. Steps in a nested workflow receive the parent's `runId`, `workflowId`, `resourceId`, and request context.
@@ -284,7 +287,7 @@ Other `execute` parameters, such as `state`, `setState()`, `getStepResult()`, `b
 On startup, `MastraPlugin` bundles your Mastra entry file and writes the generated code to `node_modules/.mastra/`:
 
 - `workflow.mjs`: the workflow bundle, which runs in Temporal's deterministic workflow sandbox
-- `activities.mjs`: the step, condition, and mapping code, which runs as regular Node.js activities
+- `activities.mjs`: the step and mapping code, which runs as regular Node.js activities
 - `activity-bindings.json`: the map from step ids to activity exports
 
 Keep I/O, clients, agents, tools, storage, and MCP connections inside step `execute` functions. The workflow bundle can't import Node.js builtins such as `node:fs`. When it does, the build fails with `Temporal workflow bundle cannot depend on Node.js builtin`, and you need to move that dependency into a step. Check the generated files in `node_modules/.mastra/` when a build or activity lookup fails.
