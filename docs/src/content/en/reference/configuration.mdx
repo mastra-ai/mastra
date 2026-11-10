@@ -898,7 +898,7 @@ Configures the [built-in MCP server](/docs/server/mcp) that exposes your agents,
 | `include` | `{ agents?: string[]; workflows?: string[]; tools?: string[] }` | `undefined` | When set for a primitive type, only these are exposed. Each entry matches a primitive's `id` or its registration key. |
 | `exclude` | `{ agents?: string[]; workflows?: string[]; tools?: string[] }` | `undefined` | Never exposed. Each entry matches a primitive's `id` or its registration key. Takes precedence over `include`. |
 | `serverInfo` | `{ name?: string; version?: string; title?: string; instructions?: string }` | `undefined` | Server identity reported to MCP clients. |
-| `oauth` | `{ resource?: string; authorizationServers?: string[]; scopesSupported?: string[] }` | `undefined` | OAuth discovery and token audience settings. See [`server.mcp.oauth`](#servermcpoauth). |
+| `oauth` | `{ resource?: string; requireAudience?: boolean; authorizationServers?: string[]; scopesSupported?: string[] }` | `undefined` | OAuth discovery and token audience settings. See [`server.mcp.oauth`](#servermcpoauth). |
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -927,6 +927,7 @@ OAuth protected-resource metadata for the [built-in MCP server](/docs/server/mcp
 | Property | Type | Default | Description |
 | - | - | - | - |
 | `resource` | `string` | Endpoint URL derived from the request | Canonical public URL of the MCP endpoint, for example `https://my-app.example.com/api/mcp`. Setting it also requires the token's `aud` claim to include this URL on `/api/mcp`, for auth providers that support audience checks. |
+| `requireAudience` | `boolean` | `false` | Requires `resource`. Rejects MCP requests with a `401` when the auth provider that accepted the token can't check the audience, including such providers inside `CompositeAuth`. When `false`, those requests are accepted and Mastra logs a warning at startup. |
 | `authorizationServers` | `string[]` | From the auth provider | Issuer URLs of the authorization servers that MCP clients get tokens from. |
 | `scopesSupported` | `string[]` | From the auth provider | OAuth scopes advertised to MCP clients. Left out of the metadata when unset. |
 

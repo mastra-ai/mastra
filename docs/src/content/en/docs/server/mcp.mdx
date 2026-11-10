@@ -197,7 +197,32 @@ Configure your identity provider to issue tokens with that audience, for example
 | [`CompositeAuth`](/docs/auth/composite-auth) | All inner providers' servers | Delegated to the provider that authenticated the token |
 | WorkOS, Google, Neon, Firebase, Better Auth, custom providers | Set `authorizationServers` | No |
 
-When `resource` is set and a provider can't check the audience, Mastra logs a warning at startup that the token audience isn't enforced for that provider. Custom providers opt in by implementing `verifyAudience()` and `getOAuthMetadata()`, see [custom auth providers](/docs/auth/custom-auth-provider).
+When `resource` is set and a provider can't check the audience, Mastra logs a warning at startup and accepts that provider's tokens for any audience. This keeps API keys and other opaque tokens working. To reject them on `/api/mcp` instead, set `requireAudience: true`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { CompositeAuth, SimpleAuth } from '@mastra/core/server'
+import { MastraJwtAuth } from '@mastra/auth'
+
+const jwtAuth = new MastraJwtAuth({
+  jwksUri: 'https://auth.example.com/.well-known/jwks.json',
+  issuer: 'https://auth.example.com/',
+})
+const apiKeyAuth = new SimpleAuth({ tokens: { [process.env.API_KEY!]: { id: 'ci' } } })
+
+export const mastra = new Mastra({
+  server: {
+    auth: new CompositeAuth([jwtAuth, apiKeyAuth]),
+    mcp: {
+      oauth: { resource: 'https://my-app.example.com/api/mcp', requireAudience: true },
+    },
+  },
+})
+```
+
+With `requireAudience`, a request authenticated by a provider without an audience check, such as `SimpleAuth`, gets a `401` with `error="invalid_token"` on `/api/mcp`. Inside `CompositeAuth`, only requests accepted by those providers are rejected. Other routes still accept them. `requireAudience` needs `resource`, and without `resource` nothing is checked.
+
+Custom providers opt in by implementing `verifyAudience()` and `getOAuthMetadata()`, see [custom auth providers](/docs/auth/custom-auth-provider).
 
 ### Connect an OAuth client
 
