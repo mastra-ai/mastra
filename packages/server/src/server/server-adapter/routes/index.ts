@@ -97,7 +97,7 @@ export interface RouteMCPConfig {
   description: string;
   /**
    * Only offer the tool when the server supports it, for example when the observability store can run
-   * trace queries. Evaluated against capabilities computed once per process.
+   * trace queries. Evaluated on each MCP request; store capabilities are cached per process after a successful lookup.
    */
   requires?: (capabilities: BuiltinMCPCapabilities) => boolean;
 }

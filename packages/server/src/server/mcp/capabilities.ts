@@ -28,14 +28,23 @@ const SCORE_ANALYSIS_METHODS = [
   'getScorePercentiles',
 ] as const;
 
-const storeCapabilities = new WeakMap<Mastra, Promise<StoreCapabilities>>();
+const storeCapabilities = new WeakMap<Mastra, Promise<StoreCapabilities | undefined>>();
 
-async function resolveStoreCapabilities(mastra: Mastra): Promise<StoreCapabilities> {
-  const store = await mastra
-    .getStorage()
-    ?.getStore('observability')
-    .catch(() => undefined);
-  if (!store) return { observability: null, scores: { list: false, analyze: false }, traceStructure: false };
+const NO_STORE: StoreCapabilities = {
+  observability: null,
+  scores: { list: false, analyze: false },
+  traceStructure: false,
+};
+
+/** `undefined` when the store lookup failed, so the next call tries again. */
+async function resolveStoreCapabilities(mastra: Mastra): Promise<StoreCapabilities | undefined> {
+  let store;
+  try {
+    store = await mastra.getStorage()?.getStore('observability');
+  } catch {
+    return undefined;
+  }
+  if (!store) return NO_STORE;
   return {
     observability: getObservabilityStorageCapabilities(store),
     scores: {
@@ -50,8 +59,9 @@ async function resolveStoreCapabilities(mastra: Mastra): Promise<StoreCapabiliti
 }
 
 /**
- * Store capabilities are resolved once per Mastra instance (the store does not change while the
- * process runs); memory and the editor are checked on every call because agents can be added at runtime.
+ * Store capabilities are resolved once per Mastra instance (the store does not change while the process runs),
+ * unless the lookup fails, which is retried on the next call; memory and the editor are checked on every call
+ * because agents can be added at runtime.
  */
 export async function getBuiltinMCPCapabilities(mastra: Mastra): Promise<BuiltinMCPCapabilities> {
   let pending = storeCapabilities.get(mastra);
@@ -63,5 +73,7 @@ export async function getBuiltinMCPCapabilities(mastra: Mastra): Promise<Builtin
   const storedAgents =
     Boolean(mastra.getEditor?.()) && Boolean(await storage?.getStore('agents').catch(() => undefined));
   const agentMemory = Object.values(mastra.listAgents?.() ?? {}).some(agent => agent.hasOwnMemory?.());
-  return { ...(await pending), storedAgents, memory: agentMemory || storedAgents };
+  const store = await pending;
+  if (!store) storeCapabilities.delete(mastra);
+  return { ...(store ?? NO_STORE), storedAgents, memory: agentMemory || storedAgents };
 }
