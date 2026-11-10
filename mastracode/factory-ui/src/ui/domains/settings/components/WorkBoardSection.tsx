@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -20,7 +21,7 @@ import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import { SettingsSubsection } from './SettingsSubsection';
 
-const WORK_BOARD = 'work';
+const WORK_BOARD = DEFAULT_BOARD_ID;
 const MAX_INSTRUCTIONS = 1000;
 const MAX_OBJECTIVE = 2000;
 const MAX_GOAL_RUNS = 50;

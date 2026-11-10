@@ -1,3 +1,5 @@
+import { boardFlow, workBoard as workBoardDefinition } from '@mastra/factory/boards';
+
 import type { BoardCatalogResponse, InstalledBoardInfo } from '../../src/api/types';
 
 export const releaseBoard: InstalledBoardInfo = {
@@ -24,25 +26,81 @@ export const releaseBoard: InstalledBoardInfo = {
   ],
 };
 
-export const builtinBoardCatalog: BoardCatalogResponse = {
-  boards: [
-    {
-      id: 'work',
-      title: 'Work',
-      initialPhase: 'intake',
-      phases: [
-        { id: 'intake', title: 'Intake', kind: 'resting', transitions: [] },
-        { id: 'triage', title: 'Triage', kind: 'working', role: 'triage', transitions: [] },
-        { id: 'planning', title: 'Planning', kind: 'working', role: 'plan', transitions: [] },
-        { id: 'execute', title: 'Building', kind: 'working', role: 'build', transitions: [] },
-        { id: 'review', title: 'Review', kind: 'resting', transitions: [] },
-        { id: 'pr-review', title: 'PR review', kind: 'working', role: 'review', transitions: [] },
-        { id: 'done', title: 'Done', kind: 'terminal', transitions: [] },
-        { id: 'canceled', title: 'Canceled', kind: 'terminal', transitions: [] },
-      ],
-    },
+const phase = (
+  id: string,
+  kind: 'resting' | 'working' | 'terminal',
+  nextPhases: string[],
+  context?: string,
+): InstalledBoardInfo['phases'][number] => ({
+  id,
+  name: id.charAt(0).toUpperCase() + id.slice(1),
+  title: id.charAt(0).toUpperCase() + id.slice(1),
+  kind,
+  nextPhases,
+  ...(context ? { context, role: context } : {}),
+  transitions: nextPhases.map(to => ({ outcome: null, to })),
+});
+
+/** A board running the pull request loop under its own phase names, as the catalog sends it. */
+export const shipBoard: InstalledBoardInfo = {
+  id: 'ship',
+  name: 'Ship',
+  title: 'Ship',
+  initialPhase: 'inbox',
+  flow: {
+    triage: 'think',
+    build: 'make',
+    selfReview: 'check',
+    pullRequestReview: 'pr',
+    completed: 'shipped',
+    canceled: 'dropped',
+  },
+  phases: [
+    phase('inbox', 'resting', ['think', 'make', 'pr', 'dropped']),
+    phase('think', 'working', ['inbox', 'make', 'dropped'], 'triage'),
+    phase('make', 'working', ['check', 'pr', 'dropped'], 'work'),
+    phase('check', 'working', ['make', 'pr', 'inbox'], 'review'),
+    phase('pr', 'working', ['shipped', 'dropped', 'inbox'], 'review'),
+    phase('shipped', 'terminal', ['pr']),
+    phase('dropped', 'terminal', ['inbox']),
   ],
 };
+
+/** The built-in Work board as the catalog route sends it, read off the real declaration. */
+export const workBoardInfo: InstalledBoardInfo = {
+  id: workBoardDefinition.id,
+  name: workBoardDefinition.name,
+  title: workBoardDefinition.name,
+  initialPhase: workBoardDefinition.initialPhase,
+  flow: catalogFlow(boardFlow(workBoardDefinition)),
+  phases: Object.entries(workBoardDefinition.phases).map(([id, phase]) => ({
+    id,
+    name: phase.name,
+    title: phase.name,
+    kind: phase.kind,
+    nextPhases: [...phase.nextPhases],
+    ...(phase.kind === 'working' ? { context: phase.runner.context, role: phase.runner.context } : {}),
+    transitions: (workBoardDefinition.transitions[id as keyof typeof workBoardDefinition.phases] ?? []).map(
+      ({ outcome, to }) => ({
+        outcome,
+        to,
+      }),
+    ),
+  })),
+};
+
+function catalogFlow(flow: ReturnType<typeof boardFlow>): NonNullable<InstalledBoardInfo['flow']> {
+  return {
+    ...(flow.triage ? { triage: flow.triage } : {}),
+    ...(flow.build ? { build: flow.build } : {}),
+    ...(flow.selfReview ? { selfReview: flow.selfReview } : {}),
+    ...(flow.pullRequestReview ? { pullRequestReview: flow.pullRequestReview } : {}),
+    ...(flow.completed ? { completed: flow.completed.phase } : {}),
+    ...(flow.canceled ? { canceled: flow.canceled.phase } : {}),
+  };
+}
+
+export const builtinBoardCatalog: BoardCatalogResponse = { boards: [workBoardInfo] };
 
 function workingPhase(
   id: string,
@@ -107,12 +165,15 @@ export const workBoardCatalog: BoardCatalogResponse = {
 export const keptReviewBoard: InstalledBoardInfo = {
   id: 'review',
   title: 'Review',
+  name: 'Review',
   initialPhase: 'intake',
+  flow: { pullRequestReview: 'review', completed: 'done', canceled: 'canceled' },
   phases: [
     {
       id: 'intake',
       title: 'Intake',
       kind: 'resting',
+      nextPhases: ['review', 'done', 'canceled'],
       transitions: [
         { outcome: null, to: 'review' },
         { outcome: null, to: 'done' },
@@ -123,7 +184,9 @@ export const keptReviewBoard: InstalledBoardInfo = {
       id: 'review',
       title: 'Reviewing',
       kind: 'working',
+      context: 'review',
       role: 'review',
+      nextPhases: ['intake', 'done', 'canceled'],
       transitions: [
         { outcome: null, to: 'intake' },
         { outcome: null, to: 'done' },

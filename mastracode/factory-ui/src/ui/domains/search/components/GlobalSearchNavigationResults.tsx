@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Brain, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucide-react';
@@ -21,7 +22,7 @@ export function GlobalSearchNavigationResults({
         title="Work"
         subtitle="Factory navigation"
         value={`Work Factory navigation /factories/${factoryId}/work`}
-        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, DEFAULT_BOARD_ID), false)}
       />
       <CommandPaletteItem
         icon={<GitPullRequest />}

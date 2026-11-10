@@ -798,6 +798,20 @@ export const FACTORY_ROUTE_CONTRACTS = {
           /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),
           initialPhase: z.string(),
+          /**
+           * Which phase plays each part of the pull request loop, read from what the phases declare.
+           * A part the board has no phase for is absent. Absent from servers older than the loop.
+           */
+          flow: z
+            .object({
+              triage: z.string().optional(),
+              build: z.string().optional(),
+              selfReview: z.string().optional(),
+              pullRequestReview: z.string().optional(),
+              completed: z.string().optional(),
+              canceled: z.string().optional(),
+            })
+            .optional(),
           phases: z.array(
             z.object({
               id: z.string(),

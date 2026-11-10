@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import {
@@ -120,8 +121,9 @@ export function useBoardIntake({
   sourceFilters?: Pick<BoardFilterState, 'source' | 'linearProject'>;
 }) {
   const kind = definition.id;
-  // Pull requests are reviewed on Work.
-  const browsesPullRequests = kind === 'work';
+  // Unrouted issues and unfiled pull requests land on the default board.
+  const defaultBoard = definition.id === DEFAULT_BOARD_ID;
+  const browsesPullRequests = defaultBoard;
   const initialPhase = definition.initialPhase;
   const repository = repositories[0];
   const projectRepositoryId = repository?.projectRepositoryId;
@@ -184,21 +186,21 @@ export function useBoardIntake({
   const incidentioReady = incidentioEligible && (incidentioRouted || bindingsFailed);
 
   // GitHub issues route by label: a label routed to a board sends its issues
-  // there, and Work keeps every unrouted issue. A custom board only offers the
+  // there, and the default board keeps every unrouted issue. A custom board only offers the
   // GitHub feed when at least one label is routed to it.
   const labelRoutesQuery = useIntakeLabelRoutesQuery(gitlabRepository ? undefined : factoryProjectId);
   const labelRoutes = (labelRoutesQuery.data ?? []).filter(route => route.integrationId === 'github');
   const routedHere = labelRoutes.some(route => route.board === kind);
-  // Until routes load, no board can tell which issues it owns: Work would
+  // Until routes load, no board can tell which issues it owns: the default board would
   // flash cards routed elsewhere and a custom board would look empty. A failed
   // load is not "no routes" either, so the feed reports that error instead of
-  // classifying every issue as Work.
+  // classifying every issue as the default board's.
   const routesPending = !gitlabRepository && githubEnabled && githubSelected && labelRoutesQuery.isPending;
   const routesFailed = !gitlabRepository && labelRoutesQuery.isError;
   const routesSettled = gitlabRepository || labelRoutesQuery.isSuccess;
 
   const githubIntakeActive =
-    !gitlabRepository && (kind === 'work' || routedHere || routesFailed) && githubEnabled && githubSelected;
+    !gitlabRepository && (defaultBoard || routedHere || routesFailed) && githubEnabled && githubSelected;
   const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
   const available: IntakeSource[] = [
     ...(githubIntakeActive ? (['github'] as const) : []),
@@ -207,8 +209,8 @@ export function useBoardIntake({
     ...(jiraReady ? (['jira'] as const) : []),
     ...(incidentioReady ? (['incidentio'] as const) : []),
   ];
-  // Work also lists the pull requests of its linked repositories, but they are
-  // not an issue source: a Work board without one still asks to connect one.
+  // The default board also lists the pull requests of its linked repositories, but they are
+  // not an issue source: a default board without one still asks to connect one.
   const feedSources: IntakeSource[] = browsesPullRequests && repository ? [...available, pullRequestSource] : available;
   const pickedSources = sourceFilters ? pickedBoardSources(sourceFilters) : new Set<string>();
   const browsedSources = feedSources.filter(
@@ -222,17 +224,17 @@ export function useBoardIntake({
   // Fetch every configured source so person filters can include provider identities
   // even when a source filter hides its feed. Only browsed feeds affect loading.
   const issues = useProjectIssuesQuery(githubIntakeActive ? githubRepositoryIds : NO_REPOSITORIES);
-  // Auto-triage is a Work-only lane, so only Work browses the triaged feed.
+  // Auto-triaged issues land on the default board, so only it browses the triaged feed.
   const triageIssues = useProjectIssuesQuery(
-    kind === 'work' && browsesGithub ? githubRepositoryIds : NO_REPOSITORIES,
+    defaultBoard && browsesGithub ? githubRepositoryIds : NO_REPOSITORIES,
     AUTO_TRIAGED_LABEL,
   );
   // Mirrors the server's resolution: the first route (in listing order) whose
-  // label the issue carries wins; unrouted issues belong to Work.
+  // label the issue carries wins; unrouted issues belong to the default board.
   const boardIssues = (issues.data ?? []).filter(issue => {
     if (!routesSettled) return false;
-    const routedBoard = labelRoutes.find(route => hasLabel(issue.labels, route.label))?.board ?? 'work';
-    return routedBoard === kind;
+    const routedBoard = labelRoutes.find(route => hasLabel(issue.labels, route.label))?.board;
+    return routedBoard === undefined ? defaultBoard : routedBoard === kind;
   });
   const projectBindings = (bindingsQuery.data ?? []).filter(binding => binding.factoryProjectId === factoryProjectId);
   const pulls = useProjectPullRequestsQuery(
@@ -316,7 +318,7 @@ export function useBoardIntake({
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
     [initialPhase]: feed,
-    ...(kind === 'work' && browsesGithub ? { triage: triageIssues } : {}),
+    ...(defaultBoard && browsesGithub ? { triage: triageIssues } : {}),
   };
 
   // Keep an unresolved board pending while discovering its routed sources.
@@ -339,6 +341,6 @@ export function useBoardIntake({
     participantCandidates,
     feedByColumn,
     isPending,
-    isTriagePending: kind === 'work' && browsesGithub && triageIssues.isPending,
+    isTriagePending: defaultBoard && browsesGithub && triageIssues.isPending,
   };
 }

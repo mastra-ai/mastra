@@ -9,6 +9,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { workBoardInfo } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -491,6 +492,24 @@ describe('Board card buttons move the card', () => {
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps Work's moves and its unfiled issues against a server older than the board loop", async () => {
+    // A server from before the catalog named each board's loop parts sends no `flow` for Work.
+    const { flow: _flow, ...olderWork } = workBoardInfo;
+    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem], issues: [logoutIssue] });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [olderWork] }),
+      ),
+    );
+    renderWorkBoard();
+
+    expect(await screen.findByRole('button', { name: 'Details for Crash on logout' })).toBeVisible();
+    await moveFromCardDetails('Fix login bug', 'Investigate');
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(transitions[0]).toMatchObject({ itemId: 'item-1', body: { board: 'work', stage: 'triage' } });
   });
 
   it('files a candidate in Intake, posts its custom prompt as a comment, then moves it', async () => {
