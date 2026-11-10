@@ -118,17 +118,21 @@ jobs:
             runs_read=false
           fi
 
-          # The newest finished scan gives the previous state, for failure and recovery alerts.
-          # The cutoff for "new" alerts is the end of the newest scan that fully passed and whose
-          # notify job read the alerts: anything created after it has not been reported yet.
+          # The newest finished scan whose notify job passed gives the previous state, for failure
+          # and recovery alerts: a scan whose Slack post failed never announced its state, so the
+          # next scan must announce it. A repeat failure that posted nothing still counts, as its
+          # notify job passed. The cutoff for "new" alerts is the end of the newest scan that fully
+          # passed and whose notify job read the alerts: anything created after it has not been
+          # reported yet.
           previous=''
           since=''
           while read -r path ended; do
             [ -n "$path" ] || continue
             read -r analyze notified <<< "$(run_state "$path")"
             case "$analyze" in success | failure) ;; *) continue ;; esac
+            [ "$notified" = "yes" ] || continue
             previous=${previous:-$analyze}
-            if [ "$analyze" = "success" ] && [ "$notified" = "yes" ] && [ -n "$ended" ]; then
+            if [ "$analyze" = "success" ] && [ -n "$ended" ]; then
               since=$ended
               break
             fi
