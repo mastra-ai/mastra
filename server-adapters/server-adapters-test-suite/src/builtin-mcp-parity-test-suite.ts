@@ -1,3 +1,5 @@
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { Agent } from '@mastra/core/agent';
 import type { IFGAProvider, RoleDefinition } from '@mastra/core/auth/ee';
 import { DEFAULT_ROLES, FGADeniedError, StaticRBACProvider } from '@mastra/core/auth/ee';
@@ -772,12 +774,16 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       else process.env.MASTRA_DEV = originalDev;
     });
 
-    const mcpStatus = async (mastra: Mastra, path = '/api/mcp') => {
+    const mcpStatus = async (mastra: Mastra, path = '/api/mcp', token?: string) => {
       const started = await startServer(mastra);
       try {
         const response = await fetch(`${started.url}${path}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 1,
@@ -806,6 +812,25 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       expect(await mcpStatus(new Mastra({ logger: false, server: { mcp: { enabled: true } } }))).toBe(200);
       process.env.MASTRA_DEV = 'true';
       expect(await mcpStatus(new Mastra({ logger: false, server: { mcp: { enabled: false } } }))).toBe(404);
+    });
+
+    // Node 22 makes a request body unreadable once a clone of that request is garbage collected. Adapters
+    // clone the request to parse its JSON body, and the MCP transport reads the original afterwards.
+    it('still reads the request body when garbage is collected before the transport runs', async () => {
+      setFlagsFromString('--expose-gc');
+      const collectGarbage = runInNewContext('gc') as () => void;
+      class CollectingAuth extends SimpleAuth<TestUser> {
+        async authenticateToken(...args: Parameters<SimpleAuth<TestUser>['authenticateToken']>) {
+          for (let round = 0; round < 2; round++) {
+            collectGarbage();
+            await new Promise(resolve => setTimeout(resolve, 20));
+          }
+          return super.authenticateToken(...args);
+        }
+      }
+      const auth = new CollectingAuth({ tokens: { ...USERS }, mapUserToResourceId: user => user.id });
+      const mastra = new Mastra({ logger: false, server: { auth } });
+      expect(await mcpStatus(mastra, '/api/mcp', Object.keys(USERS)[0])).toBe(200);
     });
 
     it('serves at server.mcp.path without shadowing the MCP server registry', async () => {
