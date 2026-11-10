@@ -173,6 +173,12 @@ export interface EnsureFactorySourceSessionArgs {
    * run has an interactive user — e.g. the person who approved a proposed run.
    */
   attributeToUserId?: string;
+  /**
+   * Nobody asked for this session, so what it writes names no one. Defaults to
+   * true exactly when `attributeToUserId` is absent; a session started by an
+   * unattributed one passes it explicitly, since it still names an owner to bill.
+   */
+  unattributed?: boolean;
   /** A pre-generated session id, so a caller can name the branch after it. Defaults to a fresh UUID. */
   sessionId?: string;
   /** Defaults to 'org'. A side session copies its parent's visibility. */
@@ -271,7 +277,9 @@ export async function resolvePrimaryEnvironmentRepository(args: {
  * The run is attributed to `attributeToUserId` when the caller has an
  * interactive user (e.g. the approver of a proposed run), and otherwise falls
  * back to whoever connected the repository (`connection.createdByUserId`),
- * because a genuinely autonomous run has no interactive user of its own.
+ * because a genuinely autonomous run has no interactive user of its own. That
+ * owner only lends credentials: the session is stored `unattributed`, so its
+ * comments, reviews and change requests are not labeled with the connector.
  */
 export async function ensureFactorySourceSession(
   args: EnsureFactorySourceSessionArgs,
@@ -301,6 +309,7 @@ export async function ensureFactorySourceSession(
     factoryProjectId,
     orgId,
     userId,
+    unattributed: args.unattributed ?? args.attributeToUserId === undefined,
     branch: existing?.branch ?? branch,
     baseBranch: resolved.baseBranch,
     visibility: args.visibility ?? 'org',

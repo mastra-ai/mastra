@@ -4,7 +4,12 @@ import { createTool } from '@mastra/core/tools';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.js';
+import {
+  FACTORY_INTERACTIVE_KEY,
+  getFactoryAuthOrgId,
+  getFactoryAuthUserFromContext,
+  getFactoryAuthUserId,
+} from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import {
@@ -23,6 +28,7 @@ import type {
   SourceControlSession,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import { FACTORY_SLACK_SENDER_KEY } from '../tools/scope.js';
 import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.js';
 import { updateSessionEnvironmentRepository } from './environment-state-processor.js';
@@ -273,12 +279,15 @@ export async function createSourceControlTools({
   const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
     withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
-  const reference = async (target: SessionTarget) => ({
-    ...(await target.provider.versionControl.getRepositoryTarget({
-      orgId: target.orgId,
-      repositoryId: target.repository.id,
-    })),
-    actingUserId: target.userId,
+  // Who a write is for. Someone steering the turn comes first: the linked Slack sender, whose
+  // turn runs on the session owner's credentials, else the signed-in caller. A turn nobody steers
+  // is for the session's owner, unless nobody asked for the session and that owner only lends
+  // credentials.
+  const interactive = requestContext.get(FACTORY_INTERACTIVE_KEY) === true;
+  const slackSender = requestContext.get(FACTORY_SLACK_SENDER_KEY) as { userId: string } | undefined;
+  const reference = async ({ provider, orgId, repository, session, userId }: SessionTarget) => ({
+    ...(await provider.versionControl.getRepositoryTarget({ orgId, repositoryId: repository.id })),
+    actingUserId: interactive ? (slackSender?.userId ?? userId) : session.unattributed ? undefined : session.userId,
   });
 
   return {
@@ -757,9 +766,7 @@ export async function createSourceControlTools({
           );
         }
         return publishCommitCheck({
-          connection: ref.connection,
-          sourceId: ref.sourceId,
-          actingUserId: ref.actingUserId,
+          ...ref,
           headSha,
           ref: pullRequest.headBranch,
           name: FACTORY_TEST_CHECK_NAME,

@@ -533,6 +533,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         id: globalThis.crypto.randomUUID(),
         ...fields,
         factoryProjectId,
+        unattributed: input.unattributed ?? false,
         title: input.title ?? null,
         visibility: input.visibility ?? 'org',
         originSessionId: origin?.sessionId ?? null,
@@ -575,7 +576,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       );
       if (branchOwned) return { status: 'conflict' as const, reason: 'branch_owned' as const, session };
       // A new row, so a caller holding the old one keeps its pre-transfer snapshot like base.ts.
-      const updated = { ...session, userId: toUserId, updatedAt: new Date() };
+      const updated = { ...session, userId: toUserId, unattributed: false, updatedAt: new Date() };
       this.sessionsRows[index] = updated;
       return { status: 'updated' as const, session: updated };
     },

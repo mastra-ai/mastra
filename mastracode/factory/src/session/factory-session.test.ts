@@ -159,6 +159,8 @@ describe('ensureFactorySourceSession', () => {
         baseBranch: 'main',
         // Autonomous runs are org-visible by default.
         visibility: 'org',
+        // Nobody asked for it: `user-1` is only the connector whose credentials it borrows.
+        unattributed: true,
       }),
     );
   });
@@ -181,6 +183,8 @@ describe('ensureFactorySourceSession', () => {
     expect(result).toMatchObject({ sessionId, userId: 'user-2' });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
       userId: 'user-2',
+      // A person asked for it, so what it writes is theirs.
+      unattributed: false,
       visibility: 'private',
       originSessionId: 'parent-session',
       originThreadId: 'parent-thread',

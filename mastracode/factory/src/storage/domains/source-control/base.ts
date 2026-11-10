@@ -174,6 +174,9 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       origin_thread_id: { type: 'text', nullable: true },
       // When the origin muted this side session's reports; null while it gets them.
       origin_muted_at: { type: 'timestamp', nullable: true },
+      // True when nobody asked for the session. Nullable so the column can be
+      // added to populated tables; NULL reads as false, the owner asked.
+      unattributed: { type: 'boolean', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
@@ -378,7 +381,14 @@ export interface SourceControlSession {
   /** The factory the session belongs to. Null only on rows the backfill could not resolve. */
   factoryProjectId: string | null;
   orgId: string;
+  /** Whose credentials run the session. Also who its work is for, unless `unattributed`. */
   userId: string;
+  /**
+   * True when nobody asked for the session: a rule started it, and its owner
+   * (whoever connected the repository) only lends credentials. What it writes
+   * on its own names no one.
+   */
+  unattributed: boolean;
   branch: string;
   title: string | null;
   visibility: SourceControlSessionVisibility;
@@ -412,6 +422,8 @@ export interface CreateSourceControlSessionInput {
   factoryProjectId: string;
   orgId: string;
   userId: string;
+  /** Nobody asked for the session; `userId` only lends credentials. Defaults to false. */
+  unattributed?: boolean;
   branch: string;
   title?: string | null;
   /** Defaults to 'org' when omitted, matching how NULL rows are read. */
@@ -563,7 +575,10 @@ export interface SourceControlStorageHandle {
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
-    /** Move a shared session to `toUserId` while `expectedUserId` still owns it; a private one is a `stale_owner` conflict. */
+    /**
+     * Move a shared session to `toUserId` while `expectedUserId` still owns it; a private one is a `stale_owner`
+     * conflict. The new owner asked for it, so the session stops being `unattributed`.
+     */
     transferOwner(args: {
       sessionId: string;
       expectedUserId: string;
@@ -673,6 +688,7 @@ interface SessionDbRow extends Record<string, unknown> {
   origin_session_id?: string | null;
   origin_thread_id?: string | null;
   origin_muted_at?: Date | null;
+  unattributed?: boolean | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
@@ -791,6 +807,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     factoryProjectId: row.factory_project_id ?? null,
     orgId: row.org_id,
     userId: row.user_id,
+    unattributed: Boolean(row.unattributed),
     branch: row.branch,
     title: row.title,
     visibility: row.visibility === 'private' ? 'private' : 'org',
@@ -1680,6 +1697,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               origin_session_id: input.origin?.sessionId ?? null,
               origin_thread_id: input.origin?.threadId ?? null,
               origin_muted_at: null,
+              unattributed: input.unattributed ?? false,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,
@@ -1719,7 +1737,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
                   refusedPrivate = true;
                   return null;
                 }
-                return current.user_id === toUserId ? null : { user_id: toUserId, updated_at: new Date() };
+                // A person took the session over, so what it writes is theirs from here on.
+                return current.user_id === toUserId
+                  ? null
+                  : { user_id: toUserId, unattributed: false, updated_at: new Date() };
               },
             );
             if (updated) {
