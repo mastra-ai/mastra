@@ -321,7 +321,9 @@ export class FactoryTransitionService {
     result: FactoryTransitionResult,
   ): Promise<void> {
     if (!this.#audit) return;
-    const from = item ? currentStage(item.stages) : undefined;
+    // Board-neutral, like the stage notification: `currentStage` only knows the
+    // built-in rule stages and would drop custom-board phases.
+    const from = item && item.stages.length === 1 ? item.stages[0] : undefined;
     if (result.status === 'accepted' && result.stage === from && !request.reenter) return;
     const outcome =
       result.status === 'accepted'
@@ -420,6 +422,13 @@ export class FactoryTransitionService {
         'The work item does not have one canonical phase on the requested board.',
       );
     }
+    // The Work board's own reason comes first: its phase graph alone only says the move is not
+    // declared, which leaves an agent moving an issue card to PR review guessing why.
+    const pullRequestCardRejection =
+      request.board === 'work' ? workPullRequestCardRejection(isPullRequest, request.stage) : undefined;
+    if (pullRequestCardRejection) {
+      return this.#commitRejection(request, transitionId, 'invalid_transition', pullRequestCardRejection);
+    }
     if (
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
       (!request.eventRoute && !board.allowsTransition(fromStage, request.stage))
@@ -435,11 +444,6 @@ export class FactoryTransitionService {
         'invalid_transition',
         `The ${board.name} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
       );
-    }
-    const pullRequestCardRejection =
-      request.board === 'work' ? workPullRequestCardRejection(isPullRequest, request.stage) : undefined;
-    if (pullRequestCardRejection) {
-      return this.#commitRejection(request, transitionId, 'invalid_transition', pullRequestCardRejection);
     }
 
     if (

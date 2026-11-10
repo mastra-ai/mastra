@@ -9,6 +9,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGithubRuleContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
+import { workItemBranch } from '../../work-item-branch.js';
 import { GithubAppIdentity } from './app-identity.js';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 import type { GithubRuleOverrides } from './default-rules.js';
@@ -3456,6 +3457,158 @@ describe('GithubRules', () => {
       status: 'replayed',
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(2);
+  });
+
+  describe('a merged PR whose Review card has no parent link', () => {
+    async function mergeFromOwnBranch(
+      permission: string,
+      head: { repo?: { id: number } } = {},
+      otherCardBranch = false,
+    ) {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
+      // The PR was opened from a session that only follows the card: no session on the card
+      // holds the branch, no provenance was recorded, and the Review card was filed unlinked.
+      const work = await createLinkedIssue(workItems, project.id, ['review']);
+      const headBranch = workItemBranch({ id: work.id, source: 'github-issue', metadata: work.workItem.metadata });
+      if (otherCardBranch) {
+        await workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            title: 'Other',
+            stages: ['execute'],
+            sessions: { work: { sessionId: 'session-other', branch: headBranch, threadId: 'session-other' } },
+            metadata: {},
+          },
+        });
+      }
+      const card = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          title: 'PR 17',
+          stages: ['pr-review'],
+          sessions: {},
+          metadata: { headBranch },
+        },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const merged = pullRequest('closed', 'delivery-merged-branch', true);
+      merged.payload.pull_request.head = { ref: headBranch, ...head };
+      Object.assign(merged.payload.pull_request, { user: { login: 'contributor' } });
+
+      await expect(service.ingest(merged)).resolves.toEqual({ status: 'committed' });
+      const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+      return {
+        reviewCardDone: decisions.some(d => d.workItemId === card.item.id && d.decision.type === 'transition'),
+        workDone: decisions.some(
+          d => d.workItemId !== card.item.id && d.decision.type === 'transition' && d.decision.stage === 'done',
+        ),
+      };
+    }
+
+    it('closes the work item whose own branch the PR came from', async () => {
+      await expect(mergeFromOwnBranch('write', { repo: { id: 10 } })).resolves.toEqual({
+        reviewCardDone: true,
+        workDone: true,
+      });
+    });
+
+    it.each([
+      { name: 'a fork branch named after the card', permission: 'write', head: { repo: { id: 99 } } },
+      { name: 'an untrusted author', permission: 'read', head: { repo: { id: 10 } } },
+    ])('leaves the work item alone for $name', async ({ permission, head }) => {
+      await expect(mergeFromOwnBranch(permission, head)).resolves.toEqual({ reviewCardDone: true, workDone: false });
+    });
+
+    it('leaves the work item alone when another card also claims the branch', async () => {
+      await expect(mergeFromOwnBranch('write', { repo: { id: 10 } }, true)).resolves.toEqual({
+        reviewCardDone: true,
+        workDone: false,
+      });
+    });
+  });
+
+  it('links an opened Review card to the work item named by the PR head branch when no session holds it', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await createLinkedIssue(workItems, project.id, ['execute']);
+    const headBranch = workItemBranch({ id: work.id, source: 'github-issue', metadata: work.workItem.metadata });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    const opened = pullRequest('opened', 'delivery-own-branch-link');
+    opened.payload.pull_request.head.ref = headBranch;
+
+    await service.ingest(opened);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
+      expect.objectContaining({
+        workItemId: work.id,
+        decision: expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr' }),
+      }),
+    ]);
+  });
+
+  it('does not link a PR to a same-named branch card from another repository', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const { item: work } = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/other/issues/42',
+        },
+        title: 'Issue 42 elsewhere',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    const opened = pullRequest('opened', 'delivery-other-repo-branch');
+    opened.payload.pull_request.head.ref = workItemBranch({
+      id: work.id,
+      source: 'github-issue',
+      metadata: work.workItem.metadata,
+    });
+
+    await service.ingest(opened);
+    expect(
+      (await workItems.listDeferredDecisions('org-1', project.id)).some(record => record.workItemId === work.id),
+    ).toBe(false);
   });
 
   it('closes the Review card of a merged PR that provenance bound to its work item', async () => {

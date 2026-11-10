@@ -453,6 +453,8 @@ transitionPolicy: context => {
 nextPhases: ['build'],
 ```
 
+The built-in Work and Review boards no longer declare a transition policy, so `workBoard.transitionPolicy` and `reviewBoard.transitionPolicy` are `undefined`. A board that wraps either one and calls its policy (for example `context => workBoard.transitionPolicy!(context)`) throws `transitionPolicy is not a function` on every transition, recorded as a `rule_error`. Drop the delegating call; keep only your own checks, or move them to `nextPhases` and `exitTool`.
+
 Rule contexts still carry `acceptedAt`, deprecated: it is the stamp on older cards and `null` for cards since.
 
 ### Board phase semantics
@@ -1108,7 +1110,7 @@ Read tools and `factory_message_origin` are available on every turn. The other t
 
 `factory_switch_session_model` changes the model of a side, work item or review session you own in the same Factory, without recreating it. It refuses a model this server can't run. A running session switches right away; a stopped one uses the model on its next run.
 
-`factory_create_work_item` files the card as the caller where the project's [intake routes](#intake-routes) send it, or in the Work board's first phase when no route matches, posts the brief as its first comment, and subscribes the session. Name the `repository` when the Factory links more than one: a run can't start on a card that doesn't say which. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the parent item and plan pre-approval. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
+`factory_create_work_item` files the card as the caller where the project's [intake routes](#intake-routes) send it, or in the Work board's first phase when no route matches, posts the brief as its first comment, and subscribes the session. Name the `repository` when the Factory links more than one: a run can't start on a card that doesn't say which. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title and the parent item. It can't pre-approve plans: a plan waits for a person unless the board's phase auto-approves it. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
 
 #### Messaging between sessions
 
@@ -1271,6 +1273,14 @@ pnpm --filter ./mastracode/factory lint
 pnpm --filter ./mastracode/factory build:lib
 pnpm --filter ./mastracode/factory smoke:dist
 ```
+
+The full `test` suite takes several minutes. For quick verification, run only the colocated test files for the code you changed:
+
+```bash
+pnpm --filter ./mastracode/factory exec vitest run <test-files> --reporter=dot --bail 1
+```
+
+Broad runs, like the full suite, whole `src/integrations` or `src/rules` directories, `vitest related`, or `vitest run --changed`, can fan out to most of the suite because many modules are shared. Run them in the background or leave them to CI.
 
 Tests are colocated with source as `*.test.ts`. Use `smoke:dist` after building to verify that the published entry point can be imported successfully.
 

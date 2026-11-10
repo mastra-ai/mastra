@@ -6,7 +6,7 @@ import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-i
 import { RequestContext } from '@mastra/core/request-context';
 import { FactorySandbox, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
-import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   /** Whether the mock VM already carries a matching setup marker (warm template image). */
@@ -66,7 +66,10 @@ const mocks = vi.hoisted(() => ({
         await sandbox.ensureRunning();
         return { metadata: { sandboxId: `sbx-${ctx.sessionId}` } };
       }),
-      executeCommand: vi.fn(async (command: string) => {
+      // Production wraps processes.spawn in place, like executeCommand.
+      processes: { spawn: vi.fn(async () => ({ pid: 1 })) },
+      // Production wraps executeCommand in place; tests stub this inner mock.
+      exec: vi.fn(async (command: string) => {
         await sandbox.ensureRunning();
         // The workdir resolver probes the VM's default cwd (its home dir).
         if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
@@ -74,6 +77,7 @@ const mocks = vi.hoisted(() => ({
         if (mocks.isMarkerProbe(command)) return { exitCode: mocks.markerPresent ? 0 : 1, stdout: '', stderr: '' };
         return { exitCode: 0, stdout: '', stderr: '' };
       }),
+      executeCommand: (...args: [string, ...unknown[]]) => sandbox.exec(...args),
       setEnv: mocks.setEnv,
     };
     return sandbox;
@@ -433,6 +437,19 @@ describe('bundled Factory skill assets', () => {
         'request changes adds `status:changes-requested` and removes `status:auto-approved`',
       );
     }
+  });
+
+  it('limits self-review requested changes to blocking findings about the stated fix', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const selfReview = await fs.readFile(path.join(assetRoot, 'factory-self-review', 'SKILL.md'), 'utf8');
+
+    expect(selfReview).toContain('## Blocking vs. follow-up');
+    expect(selfReview).toContain('correctness, safety, or test coverage of the stated fix');
+    expect(selfReview).toContain('Follow-ups never send the card back to Building.');
+    expect(selfReview).toContain('Request changes only for blocking findings or a failed approval gate.');
+    expect(selfReview).toContain("Carry the previous report's unresolved follow-ups");
+    expect(selfReview).toContain('**Follow-ups**');
+    expect(selfReview).toContain('"no optional or follow-up tiers" rule do not apply here');
   });
 
   it('guards the initial triage label when any status label is present', async () => {
@@ -1251,8 +1268,7 @@ describe('GitHub session workspace preparation', () => {
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
       /setup-failed|Setup command failed/,
     );
-    const exec = (mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> })
-      .executeCommand;
+    const exec = (mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> }).exec;
     const markerWrites = () =>
       exec.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length;
     expect(markerWrites()).toBe(0);
@@ -1261,8 +1277,7 @@ describe('GitHub session workspace preparation', () => {
     mocks.createSandbox.mockClear();
     addSession({ id: 'session-b' });
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
-    const exec2 = (mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> })
-      .executeCommand;
+    const exec2 = (mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> }).exec;
     expect(exec2.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length).toBe(1);
   });
 
@@ -1849,7 +1864,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace.skills?.maybeRefresh();
     await (workspace as any).sandbox.getInfo();
     const sandbox = await mocks.createSandbox.mock.results[0]!.value;
-    sandbox.executeCommand.mockClear();
+    sandbox.exec.mockClear();
 
     // With the sandbox live, the guarded fallback must pass skill discovery
     // through to the checkout instead of reporting empty roots.
@@ -1864,7 +1879,7 @@ describe('GitHub session workspace preparation', () => {
     } finally {
       warnSpy.mockRestore();
     }
-    expect(sandbox.executeCommand).toHaveBeenCalled();
+    expect(sandbox.exec).toHaveBeenCalled();
   });
 
   it('opens no workspace for a project-keyed resourceId from a retired session kind', async () => {
@@ -2106,7 +2121,7 @@ describe('GitHub session workspace preparation', () => {
     const first = await mocks.createSandbox.mock.results[0]!.value;
     const dead = new Error('sandbox gone');
     dead.name = 'SandboxDestroyedError';
-    first.executeCommand.mockRejectedValueOnce(dead);
+    first.exec.mockRejectedValueOnce(dead);
 
     await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow('sandbox gone');
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
@@ -2159,7 +2174,7 @@ describe('GitHub session workspace preparation', () => {
     const first = await mocks.createSandbox.mock.results[0]!.value;
     const transport = Object.assign(new Error('exec transport failed'), { opened: true });
     transport.name = 'SandboxExecTransportError';
-    first.executeCommand.mockRejectedValueOnce(transport);
+    first.exec.mockRejectedValueOnce(transport);
 
     await expect((resolved as any).sandbox.executeCommand('git', ['commit'])).rejects.toThrow('exec transport failed');
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
@@ -2198,7 +2213,7 @@ describe('GitHub session workspace preparation', () => {
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const first = await mocks.createSandbox.mock.results[0]!.value;
-    first.executeCommand.mockRejectedValueOnce(
+    first.exec.mockRejectedValueOnce(
       Object.assign(new Error('spawn nope ENOENT'), { code: 'ENOENT', syscall: 'spawn nope', path: 'nope' }),
     );
 
@@ -2239,7 +2254,7 @@ describe('GitHub session workspace preparation', () => {
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const first = await mocks.createSandbox.mock.results[0]!.value;
-    first.executeCommand.mockRejectedValueOnce(new Error('command exited 1'));
+    first.exec.mockRejectedValueOnce(new Error('command exited 1'));
 
     await expect((resolved as any).sandbox.executeCommand('false')).rejects.toThrow('command exited 1');
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
@@ -2590,6 +2605,201 @@ describe('GitHub session workspace preparation', () => {
     await sandbox.start();
 
     expect(() => requireGithubTokenInjector(workerContext)('rotated-worker-token')).not.toThrow();
+  });
+
+  describe('when the installed installation token ages', () => {
+    const originalAccess = mocks.getRepositoryAccess.getMockImplementation()!;
+    let minted = 0;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      minted = 0;
+      mocks.getRepositoryAccess.mockImplementation(async () => ({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer' as const, token: `minted-${++minted}` },
+      }));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      mocks.getRepositoryAccess.mockImplementation(originalAccess);
+    });
+
+    async function startSession() {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const installed = lastGhToken();
+      expect(installed).toMatch(/^minted-/);
+      const reuse = () =>
+        workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a'),
+          mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        });
+      return { installed, reuse };
+    }
+
+    it('re-mints GH_TOKEN on reuse once it is 45 minutes old', async () => {
+      const { installed, reuse } = await startSession();
+
+      vi.advanceTimersByTime(44 * 60_000);
+      mocks.setEnv.mockClear();
+      await reuse();
+      expect(mocks.setEnv).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(2 * 60_000);
+      await reuse();
+      expect(lastGhToken()).toMatch(/^minted-/);
+      expect(lastGhToken()).not.toBe(installed);
+    });
+
+    it('re-mints GH_TOKEN before a command once it is 45 minutes old within one turn', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const installed = lastGhToken();
+      const sandbox = (resolved as any).sandbox;
+
+      vi.advanceTimersByTime(44 * 60_000);
+      mocks.setEnv.mockClear();
+      await sandbox.executeCommand('gh', ['pr', 'list']);
+      expect(mocks.setEnv).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(2 * 60_000);
+      await sandbox.executeCommand('git', ['push']);
+      expect(lastGhToken()).toMatch(/^minted-/);
+      expect(lastGhToken()).not.toBe(installed);
+    });
+
+    it('re-mints GH_TOKEN before a background spawn once it is 45 minutes old', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const installed = lastGhToken();
+      const sandbox = (resolved as any).sandbox;
+
+      vi.advanceTimersByTime(46 * 60_000);
+      await sandbox.processes.spawn('gh pr checks --watch');
+      expect(lastGhToken()).toMatch(/^minted-/);
+      expect(lastGhToken()).not.toBe(installed);
+    });
+
+    it('shares one re-mint between concurrent commands', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const sandbox = (resolved as any).sandbox;
+
+      vi.advanceTimersByTime(46 * 60_000);
+      const before = minted;
+      await Promise.all([sandbox.executeCommand('gh', ['pr', 'list']), sandbox.executeCommand('git', ['push'])]);
+      expect(minted).toBe(before + 1);
+    });
+
+    it('does not overwrite a PAT installed while a command re-mint is in flight', async () => {
+      const { reuse } = await startSession();
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+
+      vi.advanceTimersByTime(46 * 60_000);
+      mocks.getRepositoryAccess.mockImplementationOnce(async () => {
+        mocks.githubPat = 'ghp_org_pat';
+        await reuse();
+        return {
+          cloneUrl: 'https://github.com/octocat/hello.git',
+          authorization: { scheme: 'bearer' as const, token: 'minted-late' },
+        };
+      });
+      await sandbox.executeCommand('gh', ['pr', 'list']);
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
+    it('installs a fresh token instead of the expired one on sandbox reconnect', async () => {
+      const { installed } = await startSession();
+
+      vi.advanceTimersByTime(61 * 60_000);
+      mocks.setEnv.mockClear();
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      await sandbox.start();
+
+      expect(lastGhToken()).toMatch(/^minted-/);
+      expect(lastGhToken()).not.toBe(installed);
+    });
+
+    it('still reconnects with the current token when the re-mint fails', async () => {
+      const { installed } = await startSession();
+
+      vi.advanceTimersByTime(61 * 60_000);
+      mocks.setEnv.mockClear();
+      const access = mocks.getRepositoryAccess.getMockImplementation()!;
+      let calls = 0;
+      mocks.getRepositoryAccess.mockImplementation(async (...args: any[]) => {
+        if (++calls > 1) throw new Error('mint failed');
+        return (access as any)(...args);
+      });
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      await expect(sandbox.start()).resolves.not.toThrow();
+      expect(lastGhToken()).toBe(installed);
+
+      // The reinstalled token keeps its age, so the next command still re-mints it.
+      mocks.getRepositoryAccess.mockImplementation(access);
+      await sandbox.executeCommand('git', ['push']);
+      expect(lastGhToken()).not.toBe(installed);
+      expect(lastGhToken()).toMatch(/^minted-/);
+    });
+
+    it('keeps an org PAT installed regardless of age', async () => {
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('ghp_org_pat');
+
+      vi.advanceTimersByTime(61 * 60_000);
+      mocks.setEnv.mockClear();
+      await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      });
+      expect(mocks.setEnv).not.toHaveBeenCalled();
+
+      await mocks.createSandbox.mock.results[0]!.value.executeCommand('gh', ['pr', 'list']);
+      expect(mocks.setEnv).not.toHaveBeenCalled();
+
+      await mocks.createSandbox.mock.results[0]!.value.start();
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
+    it('does not replace an installed org PAT when a later PAT lookup fails', async () => {
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace, github } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('ghp_org_pat');
+
+      // getGithubPat fails soft: a storage error reads as "no PAT configured".
+      const settingsGet = github.integrationStorage.settings.get as ReturnType<typeof vi.fn>;
+      settingsGet.mockClear();
+      settingsGet.mockRejectedValue(new Error('storage unavailable'));
+      vi.advanceTimersByTime(46 * 60_000);
+      mocks.setEnv.mockClear();
+      await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      });
+      await mocks.createSandbox.mock.results[0]!.value.executeCommand('gh', ['pr', 'list']);
+      expect(settingsGet).toHaveBeenCalled();
+      expect(mocks.setEnv).not.toHaveBeenCalled();
+
+      await mocks.createSandbox.mock.results[0]!.value.start();
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
   });
 
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {
@@ -3909,9 +4119,9 @@ describe('factory environment sandbox context', () => {
       markers: { repos?: Record<string, boolean>; workspace?: boolean } = {},
     ) {
       const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-      const sandbox = mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> };
-      const original = sandbox.executeCommand.getMockImplementation()!;
-      sandbox.executeCommand.mockImplementation(async (command: string, ...rest: unknown[]) => {
+      const sandbox = mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> };
+      const original = sandbox.exec.getMockImplementation()!;
+      sandbox.exec.mockImplementation(async (command: string, ...rest: unknown[]) => {
         const text = String(command);
         const repoProbe = /test -d "[^"]*\/([^/"]+)\/\.git" && test -f/.exec(text);
         if (repoProbe) {
@@ -3923,7 +4133,7 @@ describe('factory environment sandbox context', () => {
         return original(command, ...rest);
       });
       await workspace.sandbox.getInfo();
-      return { workspace, exec: sandbox.executeCommand };
+      return { workspace, exec: sandbox.exec };
     }
 
     it('materializes every repository beneath the root, syncs the others with their own token and sets up once', async () => {

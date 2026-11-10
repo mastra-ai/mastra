@@ -1071,6 +1071,38 @@ describe('FactoryDecisionDispatcher', () => {
     expect(consumeStream).toHaveBeenCalledOnce();
   });
 
+  it("sends a rule notification as the session's owner, so a woken run has an authenticated user (#29819)", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Checks failed',
+      body: 'The build is red.',
+      level: 'warning',
+      idempotencyKey: 'notify-1',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, sendNotificationSignal } = createSession();
+    const primeCredentials = vi.fn(async () => {});
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'rule-notification', summary: 'Checks failed' }),
+      { requestContext: expect.anything() },
+    );
+    const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
+    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+  });
+
   it('renews the lease while an external delivery remains in flight', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));

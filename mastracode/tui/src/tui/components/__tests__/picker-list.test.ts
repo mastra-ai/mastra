@@ -10,6 +10,7 @@ function list(options: { maxVisible?: number; emptyText?: () => string } = {}) {
   return new PickerList<string>({
     ...options,
     renderItem: (item, selected) => [`${selected ? '> ' : '  '}${item}`],
+    onActivate: () => {},
   });
 }
 
@@ -55,6 +56,7 @@ describe('PickerList', () => {
     const picker = new PickerList<string>({
       maxVisible: 2,
       renderItem: (item, selected) => [`${selected ? '> ' : '  '}${item}`, `    detail for ${item}`],
+      onActivate: () => {},
     });
     picker.setItems(items(5), 2);
     expect(strip(picker.render(40))).toEqual([
@@ -94,8 +96,35 @@ describe('PickerList', () => {
   });
 
   it('pads each row by paddingX and paddingY', () => {
-    const picker = new PickerList<string>({ paddingX: 1, paddingY: 1, renderItem: item => [item] });
+    const picker = new PickerList<string>({
+      paddingX: 1,
+      paddingY: 1,
+      renderItem: item => [item],
+      onActivate: () => {},
+    });
     picker.setItems(['a', 'b'], 0);
     expect(picker.render(5)).toEqual(['     ', ' a   ', '     ', '     ', ' b   ', '     ']);
+  });
+
+  it('maps a clicked row to the item drawn there, across wrapped multi-line items and the scroll window', () => {
+    const activated: number[] = [];
+    const picker = new PickerList<string>({
+      maxVisible: 2,
+      renderItem: item => [item, `detail for ${item} that wraps at narrow widths`],
+      onActivate: index => activated.push(index),
+    });
+    picker.setItems(items(5), 2);
+    const width = 20;
+    const lines = strip(picker.render(width));
+    const item2Top = lines.indexOf('item-2');
+    expect(item2Top).toBeGreaterThan(1);
+
+    const target = picker.mouseTarget({ row: item2Top + 1, col: 0, width });
+    expect(target).toMatchObject({ top: item2Top, height: lines.indexOf('(3/5)') - item2Top });
+    target!.activate();
+    picker.mouseTarget({ row: 0, col: 0, width })!.activate();
+    expect(activated).toEqual([2, 1]);
+
+    expect(picker.mouseTarget({ row: lines.indexOf('(3/5)'), col: 0, width })).toBeUndefined();
   });
 });

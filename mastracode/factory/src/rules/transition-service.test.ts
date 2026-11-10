@@ -1850,6 +1850,40 @@ describe('audit trail', () => {
     });
   });
 
+  it('records from for custom-board phases and skips same-phase commits', async () => {
+    const seed = await createFactoryStorageForTests();
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'approval',
+      phases: {
+        approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'resting' },
+      },
+    });
+    const item = await createItem(seed.workItems, { board: board.id, stages: ['approval'] });
+    const service = new FactoryTransitionService({
+      storage: seed.workItems,
+      configVersion: 'audit-test',
+      audit: seed.audit,
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const moved = await service.transition(request(item, { stage: 'shipped', identity: 'ship-1' }));
+    expect(moved.status).toBe('accepted');
+    const current = await seed.workItems.get({ orgId: 'org-1', id: item.id });
+    assert(current);
+    const same = await service.transition(request(current, { stage: 'shipped', identity: 'ship-2' }));
+    expect(same.status).toBe('accepted');
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      action: 'factory.work_item.stage_moved',
+      metadata: { from: 'approval', to: 'shipped' },
+    });
+  });
+
   it('names the agent whose consent the dispatcher carries as a human actor', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await createItem(seed.workItems, { stages: ['planning'] });
@@ -2566,6 +2600,18 @@ describe('pull request cards on the Work board', () => {
       status: 'accepted',
       decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' }],
     });
+  });
+
+  it('tells an agent moving a Review card with an open PR to PR review why it stays in Review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'work', stages: ['review'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition(request(item, { stage: 'pr-review' }));
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(result.status === 'rejected' && result.reason).toMatch(
+      /^PR review holds only pull request cards.*stays in Review while its pull request is open, and the merge moves it to Done\.$/,
+    );
   });
 
   it('keeps PR review for pull request cards: an issue card cannot enter it, nor a PR card self-review', async () => {

@@ -201,6 +201,8 @@ export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metada
   if (item.workItem?.provider !== 'factory' && item.workItem?.key) return item.workItem.key;
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}`;
+  const cardNumber = item.source === 'manual' ? sourceMetadata(item).cardNumber : undefined;
+  if (typeof cardNumber === 'number' && Number.isInteger(cardNumber) && cardNumber > 0) return `#${cardNumber}`;
   return (
     gitlabIdentifierForItem(item) ??
     linearIdentifierForItem(item) ??
@@ -349,8 +351,8 @@ export function cardThreadSession(
   phases: readonly ContextPhase[] | undefined,
   columnStage: string,
 ): WorkItemSessionRef | undefined {
-  const context = phases && visitedContexts(item, phases, columnStage)[0];
-  return context === undefined ? itemThreadSession(item.sessions) : contextSession(item, phases, context);
+  const context = phases ? visitedContexts(item, phases, columnStage)[0] : undefined;
+  return phases && context !== undefined ? contextSession(item, phases, context) : itemThreadSession(item.sessions);
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */

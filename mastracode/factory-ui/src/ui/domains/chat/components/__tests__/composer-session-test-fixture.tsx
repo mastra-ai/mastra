@@ -2,6 +2,7 @@ import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
+import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Link, MemoryRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { expect } from 'vitest';
@@ -375,4 +376,11 @@ export function createdDraftSession(title: string) {
     createdAt: '2026-07-23T00:00:00.000Z',
     updatedAt: '2026-07-23T00:00:00.000Z',
   };
+}
+
+/** Opens the composer's "+" attach menu and picks `file` from Photos. */
+export async function pickImage(user: UserEvent, file: File) {
+  await user.click(screen.getByRole('button', { name: 'Attach images' }));
+  await user.click(await screen.findByRole('menuitem', { name: 'Photos' }));
+  await user.upload(screen.getByLabelText('Photos'), file);
 }
