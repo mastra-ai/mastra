@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import packageJson from '../package.json';
 
@@ -22,6 +24,18 @@ describe('package exports', () => {
         default: './dist/lib/*.cjs.js',
       },
     });
+  });
+
+  it('publishes fonts.css with every font package it imports as a dependency', () => {
+    expect(packageJson.exports['./fonts.css']).toBe('./fonts.css');
+    expect(packageJson.files).toContain('fonts.css');
+
+    const fontsCss = readFileSync(resolve(__dirname, '../fonts.css'), 'utf8');
+    const imported = [...fontsCss.matchAll(/@import '(@fontsource[^/]*\/[^/']+)\//g)].map(([, name]) => name);
+    expect(imported.length).toBeGreaterThan(0);
+    for (const name of imported) {
+      expect(packageJson.dependencies, name).toHaveProperty([name]);
+    }
   });
 
   it('publishes the tabbed container layout entrypoint', () => {
