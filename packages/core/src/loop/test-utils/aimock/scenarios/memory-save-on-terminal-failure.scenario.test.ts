@@ -806,6 +806,69 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   );
 
   // The saved result keeps what toModelOutput returns, also when the deadline save writes it.
+  itDeadline(
+    'total-timeout saves a tool result a stream processor hid alongside a call cut off',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-hidden-result-${engine}`;
+      const hang = Promise.withResolvers<unknown>();
+      const hide: Processor = {
+        id: 'hide-tool-result',
+        processOutputStream: async ({ part }) =>
+          part.type === 'tool-result' && part.payload.toolCallId === 'call_quiet' ? null : part,
+      };
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Run both tools.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          outputProcessors: [hide],
+          expectStreamError: true,
+          collectChunks: true,
+          tools: {
+            quiet: createTool({
+              id: 'quiet',
+              description: 'Returns a value.',
+              inputSchema: z.object({}),
+              execute: async () => ({ value: 'QUIET-RESULT' }),
+            }),
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              {
+                toolCalls: [
+                  { id: 'call_quiet', name: 'quiet', arguments: {} },
+                  { id: 'call_hang', name: 'hanging', arguments: {} },
+                ],
+              },
+            );
+          },
+        });
+        expect(result.chunks!.some(chunk => chunk.type === 'error')).toBe(true);
+
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(JSON.stringify(messages)).toContain('QUIET-RESULT');
+        });
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   itDeadline.each(['in time', 'just after the deadline'] as const)(
     'total-timeout saves the model output of a call that finished %s alongside one cut off',
     async when => {

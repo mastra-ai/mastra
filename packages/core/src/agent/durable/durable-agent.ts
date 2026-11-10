@@ -849,6 +849,11 @@ export class DurableAgent<
    * settles the execution saves the turn from it as a terminal write.
    */
   #runInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
+  /**
+   * Registry entries of recovered executions whose memory is fenced but which are not registered yet,
+   * so a total deadline in that window still saves the turn.
+   */
+  #recoveredEntries = new WeakMap<ExecutionFence, RunRegistryEntry>();
 
   /**
    * User-supplied snapshot-persistence policy
@@ -1799,8 +1804,13 @@ export class DurableAgent<
       cleanup: () => {},
     };
     this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController, executionFence);
-    // The recovered run's deadline saves the turn from its persisted input, as stream() and resume() do.
-    this.#runInputs.set(executionFence, workflowInput);
+    // The recovered run's deadline saves the turn as of the crash, until its first step snapshots it.
+    this.#runInputs.set(executionFence, {
+      ...workflowInput,
+      messageListState:
+        (latestMessageListState as DurableAgenticWorkflowInput['messageListState'] | undefined) ??
+        workflowInput.messageListState,
+    });
 
     return {
       requestContext,
@@ -2746,7 +2756,8 @@ export class DurableAgent<
     const finished = totalTimeout || (status !== undefined && status !== 'suspended');
     const runInput = totalTimeout && fence ? this.#runInputs.get(fence) : undefined;
     // Captured before the error below lets the caller clean the run up.
-    const runInputEntry = runInput && getRunRegistryEntry(runId, this.#mastra);
+    const runInputEntry =
+      runInput && (getRunRegistryEntry(runId, this.#mastra) ?? (fence && this.#recoveredEntries.get(fence)));
     let wrote = false;
     let deadlineSave: Promise<void> | undefined;
     const writeTerminalState = async () => {
@@ -4513,6 +4524,7 @@ export class DurableAgent<
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
       await this.#coverMemory(executionFence, recoveryState.requestContext, true);
+      this.#recoveredEntries.set(executionFence, recoveryState.registryEntry as unknown as RunRegistryEntry);
       this.#assertRecoveryActive();
     } catch (error) {
       const settlement = await executionFence?.settle(async () => {});

@@ -2377,7 +2377,8 @@ export function createDurableToolCallStep() {
         }
 
         // Its step merges only once every sibling settles; a total deadline before then saves it from here.
-        if (registryEntry?.timeoutTotalMs && !wasSuspended && !resultHidden) {
+        // A result hidden from the stream is still saved, as the step's merge does.
+        if (registryEntry?.timeoutTotalMs && !wasSuspended) {
           (registryEntry.settledToolResults ??= []).push({
             toolCallId,
             toolName,

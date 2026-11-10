@@ -967,6 +967,80 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     30000,
   );
 
+  it('saves a recovered run whose total deadline fires before its stream is set up', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    let secondStepEntered = false;
+    const build = () => {
+      const firstStepModel = toolCallingModel('hold');
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async options => {
+          if (++calls === 1) return firstStepModel.doStream(options);
+          secondStepEntered = true;
+          return new Promise<never>(() => {});
+        },
+      });
+      const baseAgent = new Agent({
+        id: 'timeout-early-recover-agent',
+        name: 'Timeout Early Recover Agent',
+        instructions: 'You are a helpful agent.',
+        model,
+        memory,
+        tools: {
+          hold: createTool({
+            id: 'hold',
+            description: 'Looks up the city',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async () => 'Found NYC',
+          }),
+        },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      new Mastra({
+        agents: { 'timeout-early-recover-agent': durableAgent as any },
+        logger: false,
+        storage,
+        pubsub,
+        recovery: { durableAgents: 'auto' },
+      });
+      return durableAgent;
+    };
+
+    const firstDurable = build();
+    const started = await firstDurable.stream('hello', {
+      modelSettings: { timeout: { totalMs: 300 } },
+      savePerStep: false,
+      memory: { thread: 'early-thread', resource: 'early-resource' },
+    });
+    const runId = (started as unknown as { runId: string }).runId;
+    await vi.waitFor(() => expect(secondStepEntered).toBe(true));
+    // The crash comes before process 1's own deadline.
+    globalRunRegistry.clear();
+    __resetExecutionFencesForTests();
+    await pubsub.close();
+    pubsub = new EventEmitterPubSub();
+
+    const secondDurable = build();
+    // Holds recovery between arming the budget and registering the run, past the budget.
+    const publish = pubsub.publish.bind(pubsub);
+    vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+      if ((event as { type?: string }).type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
+      return publish(topic, event);
+    });
+    // The deadline settles the execution before recover() returns it.
+    await expect(secondDurable.recover(runId, { force: true, onError: () => {} })).rejects.toThrow();
+
+    // The deadline saves the turn as of the crash, including the step completed before it.
+    await vi.waitFor(async () => {
+      const { messages } = await memory.recall({ threadId: 'early-thread', resourceId: 'early-resource' });
+      expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(JSON.stringify(messages)).toContain('Found NYC');
+    });
+  }, 30000);
+
   it('keeps abort() reaching an in-flight tool after the run registry entry is evicted (#26126)', async () => {
     let toolSignal: AbortSignal | undefined;
     let markEntered!: () => void;
