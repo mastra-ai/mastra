@@ -1014,20 +1014,29 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
           // A turn can outlive the token installed when the workspace was
-          // resolved, so check its age before every command. Best-effort: a
-          // failed re-mint leaves the current token in place. Concurrent
-          // commands share one refresh.
+          // resolved, so check its age before every command and background
+          // spawn. Best-effort: a failed re-mint leaves the current token in
+          // place. Concurrent callers share one refresh.
+          let commandRefresh: Promise<unknown> | undefined;
+          const refreshBeforeCommand = () =>
+            (commandRefresh ??= refreshStaleGithubToken()
+              .catch(() => {})
+              .finally(() => {
+                commandRefresh = undefined;
+              }));
           const executeCommand = sandbox.executeCommand?.bind(sandbox);
           if (executeCommand) {
-            let commandRefresh: Promise<unknown> | undefined;
             sandbox.executeCommand = async (...args) => {
-              commandRefresh ??= refreshStaleGithubToken()
-                .catch(() => {})
-                .finally(() => {
-                  commandRefresh = undefined;
-                });
-              await commandRefresh;
+              await refreshBeforeCommand();
               return executeCommand(...args);
+            };
+          }
+          const processes = sandbox.processes;
+          if (processes) {
+            const spawn = processes.spawn.bind(processes);
+            processes.spawn = async (...args) => {
+              await refreshBeforeCommand();
+              return spawn(...args);
             };
           }
           // Attached inside the construction closure, so exactly once per

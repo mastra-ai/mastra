@@ -66,6 +66,8 @@ const mocks = vi.hoisted(() => ({
         await sandbox.ensureRunning();
         return { metadata: { sandboxId: `sbx-${ctx.sessionId}` } };
       }),
+      // Production wraps processes.spawn in place, like executeCommand.
+      processes: { spawn: vi.fn(async () => ({ pid: 1 })) },
       // Production wraps executeCommand in place; tests stub this inner mock.
       exec: vi.fn(async (command: string) => {
         await sandbox.ensureRunning();
@@ -2654,6 +2656,20 @@ describe('GitHub session workspace preparation', () => {
 
       vi.advanceTimersByTime(2 * 60_000);
       await sandbox.executeCommand('git', ['push']);
+      expect(lastGhToken()).toMatch(/^minted-/);
+      expect(lastGhToken()).not.toBe(installed);
+    });
+
+    it('re-mints GH_TOKEN before a background spawn once it is 45 minutes old', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const installed = lastGhToken();
+      const sandbox = (resolved as any).sandbox;
+
+      vi.advanceTimersByTime(46 * 60_000);
+      await sandbox.processes.spawn('gh pr checks --watch');
       expect(lastGhToken()).toMatch(/^minted-/);
       expect(lastGhToken()).not.toBe(installed);
     });
