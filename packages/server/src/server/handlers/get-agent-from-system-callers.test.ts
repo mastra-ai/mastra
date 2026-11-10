@@ -47,7 +47,11 @@ describe('getAgentFromSystem callers', () => {
     const allowed: Record<string, { count: number; reason: string }> = {
       'agents.ts': { count: 3, reason: 'getAgentFromSystem itself (checked) + GET /agents (author-filtered first)' },
       'memory.ts': { count: 4, reason: 'memory resolvers call assertStoredAgentAccess on the resolved agent' },
-      'schedules.ts': { count: 1, reason: 'assertStoredAgentAccess(execute) before scheduling' },
+      'schedules.ts': {
+        count: 2,
+        reason:
+          "assertStoredAgentAccess before scheduling, and in canAccessScheduleAgent for existing schedules' agents",
+      },
       'scores.ts': { count: 1, reason: 'scorer listing is author-filtered before hydration' },
       'channels.ts': { count: 1, reason: 'stored agents are write-checked against storage first; code agents only' },
       'agent-versions.ts': {

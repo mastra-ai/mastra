@@ -329,6 +329,40 @@ describe('stored agent visibility on /api/agents', () => {
       expect((await http('scheduler', 'POST', '/schedules', body(PUBLIC))).status).toBe(200);
     });
 
+    // Schedules have no owner of their own; they inherit the visibility of the agent they run.
+    it("another user's schedules of it are hidden and can't be changed or fired", async () => {
+      const create = (agentId: string) =>
+        http('admin', 'POST', '/schedules', { agentId, cron: '0 0 1 1 *', prompt: 'secret plan' });
+      // Creating a schedule only accepts agents already loaded into Mastra.
+      expect((await http('admin', 'GET', `/agents/${PUBLIC}`)).status).toBe(200);
+      const hidden = (await create(PRIVATE)).json.id as string;
+      const shared = (await create(PUBLIC)).json.id as string;
+      expect([hidden, shared]).toEqual([expect.any(String), expect.any(String)]);
+
+      const listed = (await http('scheduler', 'GET', '/schedules')).json.schedules.map((s: { id: string }) => s.id);
+      expect(listed).toContain(shared);
+      expect(listed).not.toContain(hidden);
+      expect((await http('scheduler', 'GET', `/schedules?agentId=${PRIVATE}`)).json.schedules).toEqual([]);
+
+      const calls: Array<[string, string, unknown?]> = [
+        ['GET', ''],
+        ['GET', '/triggers'],
+        ['PATCH', '', { prompt: 'changed' }],
+        ['POST', '/pause'],
+        ['POST', '/resume'],
+        ['POST', '/run'],
+      ];
+      reply();
+      for (const [method, suffix, body] of calls) {
+        const res = await http('scheduler', method, `/schedules/${hidden}${suffix}`, body);
+        expect(res, `${method} ${suffix}`).toMatchObject({ status: 404, json: { error: 'Schedule not found' } });
+      }
+      expect(llm.getRequests()).toHaveLength(0);
+      expect((await http('scheduler', 'GET', `/schedules/${shared}`)).status).toBe(200);
+      expect((await http('scheduler', 'POST', `/schedules/${shared}/pause`)).status).toBe(200);
+      expect((await http('alice', 'GET', `/schedules/${hidden}`)).json.prompt).toBe('secret plan');
+    });
+
     it('alice still lists and calls it', async () => {
       reply();
       expect(Object.keys((await http('alice', 'GET', '/agents')).json)).toContain(PRIVATE);
