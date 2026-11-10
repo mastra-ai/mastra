@@ -23,6 +23,8 @@ export interface RunReportSession {
       pendingApprovals: ReadonlyMap<string, unknown>;
     };
   };
+  /** True from the moment an answer to the call is claimed, before the parked prompt clears. */
+  isAnsweringToolCall?(toolCallId: string): boolean;
 }
 
 /** Reports one run's end; `since` is when the run's window opened. Should not throw. */
@@ -81,6 +83,7 @@ export function observeSessionRunReports(
     if (outcome?.status === 'blocked' && parkedCallId && session.displayState) {
       const { displayState } = session;
       outcome.stillWaiting = () => {
+        if (session.isAnsweringToolCall?.(parkedCallId)) return false;
         const { pendingSuspensions, pendingApprovals } = displayState.get();
         return (
           pendingApprovals.has(parkedCallId) ||

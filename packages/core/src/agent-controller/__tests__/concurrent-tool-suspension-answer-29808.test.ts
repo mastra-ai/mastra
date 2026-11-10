@@ -118,4 +118,34 @@ describe('concurrent answers to one parked tool call', () => {
     expect(env.session.displayState.get().pendingSuspensions.size).toBe(0);
     expect(env.session.suspensions.resolveAddress({})).toBeUndefined();
   }, 30_000);
+
+  it('keeps the prompt parked and reports the error when a single answer finds the run gone', async () => {
+    const env = await suspendedSession();
+    vi.spyOn(env.agent, 'sendStreamResume').mockRejectedValueOnce(
+      new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+        domain: 'AGENT',
+        category: 'USER',
+        text: 'no suspended run',
+      }),
+    );
+
+    await env.session.respondToToolSuspension({ resumeData: { ok: true } });
+
+    expect(errors(env.events)).toEqual(['no suspended run']);
+    expect(env.session.displayState.get().pendingSuspensions.size).toBe(1);
+    expect(env.session.suspensions.resolveAddress({})).toBeDefined();
+  }, 30_000);
+
+  it('shows the call as being answered from the moment the answer is claimed', async () => {
+    const env = await suspendedSession();
+    expect(env.session.isAnsweringToolCall('call-1')).toBe(false);
+
+    const answered = env.session.respondToToolSuspension({ resumeData: { ok: true } });
+    expect(env.session.isAnsweringToolCall('call-1')).toBe(true);
+    await answered;
+
+    await vi.waitFor(() => expect(runEnds(env.events)).toContain('complete'), { timeout: 10_000 });
+    expect(env.session.isAnsweringToolCall('call-1')).toBe(false);
+  }, 30_000);
 });

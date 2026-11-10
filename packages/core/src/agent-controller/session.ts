@@ -1773,14 +1773,11 @@ export interface PendingSuspension extends SuspensionAddress {
 }
 
 /**
- * Errors a resume throws when another answer already resumed the suspended run:
- * the storage claim went to someone else, or the run is no longer suspended.
+ * The error a resume throws when another answer already claimed the suspended
+ * run in storage. Other resume failures (the run is gone, say) stay errors.
  */
 function isResumeAlreadyClaimedError(error: unknown): boolean {
-  return (
-    error instanceof MastraError &&
-    (error.id === 'AGENT_RESUME_ALREADY_CLAIMED' || error.id === 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN')
-  );
+  return error instanceof MastraError && error.id === 'AGENT_RESUME_ALREADY_CLAIMED';
 }
 
 export function getSuspensionAddressKey({ resourceId, threadId, runId, toolCallId }: SuspensionAddress): string {
@@ -6000,6 +5997,18 @@ export class Session<TState = unknown> {
   /** Release a claim taken with {@link claimToolResponse}. */
   releaseToolResponse(toolCallId: string): void {
     this.#claimedToolResponses.delete(toolCallId);
+  }
+
+  /**
+   * Whether an answer to `toolCallId` was claimed or is being applied. True from
+   * the synchronous claim on, before the parked prompt is cleared.
+   */
+  isAnsweringToolCall(toolCallId: string): boolean {
+    if (this.#claimedToolResponses.has(toolCallId)) return true;
+    const address = this.suspensions.resolveAddress({ toolCallId });
+    if (!address) return false;
+    const key = getSuspensionAddressKey(address);
+    return this.#claimedToolResponses.has(key) || this.#answeringSuspensions.has(key);
   }
 
   /**

@@ -75,6 +75,31 @@ describe('observeSessionRunReports', () => {
     expect(outcome.status === 'blocked' && outcome.stillWaiting?.()).toBe(false);
   });
 
+  it('stops reporting a parked tool as waiting once an answer to it is claimed', () => {
+    const answering = new Set<string>();
+    const session = {
+      ...fakeSession(),
+      displayState: {
+        get: () => ({
+          pendingSuspensions: new Map([['r:t:run-1:call-1', { toolCallId: 'call-1' }]]),
+          pendingApprovals: new Map(),
+        }),
+      },
+      isAnsweringToolCall: (toolCallId: string) => answering.has(toolCallId),
+    };
+    const report = vi.fn(async (_outcome: FactoryRunOutcome, _since: Date) => {});
+    observeSessionRunReports(session, report);
+
+    session.emit({ type: 'tool_suspended', toolCallId: 'call-1', toolName: 'submit_plan' } as AgentControllerEvent);
+    session.emit(end('suspended'));
+
+    const outcome = report.mock.calls[0]![0];
+    expect(outcome.status === 'blocked' && outcome.stillWaiting?.()).toBe(true);
+    // The prompt is still parked, but an answer (the dispatcher approving the plan) is already claimed.
+    answering.add('call-1');
+    expect(outcome.status === 'blocked' && outcome.stillWaiting?.()).toBe(false);
+  });
+
   it('says nothing for an aborted run, and the next run’s window starts where the aborted one did', () => {
     vi.useFakeTimers({ now: new Date('2026-10-15T12:00:00Z') });
     try {

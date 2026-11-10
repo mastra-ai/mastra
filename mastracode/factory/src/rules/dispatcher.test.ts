@@ -85,6 +85,7 @@ function createSession(
   let threadId = 'thread-1';
   const settings: Record<string, unknown> = {};
   const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: unknown }) => void>();
+  const claimedAnswers = new Set<string>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
     if (reason === 'error' && options?.runError) {
       for (const listener of agentEndListeners) {
@@ -239,6 +240,12 @@ function createSession(
       }
       emitAgentEnd('complete');
     }),
+    claimToolSuspension: vi.fn((toolCallId: string) => {
+      if (claimedAnswers.has(toolCallId)) return { accepted: false as const };
+      claimedAnswers.add(toolCallId);
+      return { accepted: true as const, claimKey: toolCallId };
+    }),
+    releaseToolResponse: vi.fn((claimKey: string) => claimedAnswers.delete(claimKey)),
     sendNotificationSignal,
   };
   const controller = {
@@ -4279,6 +4286,14 @@ describe('FactoryDecisionDispatcher', () => {
       toolCallId: 'call-plan',
       requestContext: expect.any(RequestContext),
     });
+    // Claimed when the run parks, so its run-end report never says the plan waits for an answer.
+    const [claimOrder] = session.claimToolSuspension.mock.invocationCallOrder;
+    const [answerOrder] = session.respondToToolSuspension.mock.invocationCallOrder;
+    const [releaseOrder] = session.releaseToolResponse.mock.invocationCallOrder;
+    expect(session.claimToolSuspension).toHaveBeenCalledWith('call-plan');
+    expect(claimOrder).toBeLessThan(answerOrder!);
+    expect(releaseOrder).toBeGreaterThan(answerOrder!);
+    expect(session.releaseToolResponse).toHaveBeenCalledWith('call-plan');
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
