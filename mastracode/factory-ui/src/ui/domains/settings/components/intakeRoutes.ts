@@ -157,7 +157,6 @@ export function sendNewCardsTo(
           when: route.when,
           target: { boardKey: to.id, phaseKey },
           on: route.on,
-          allowWorkingPhase: route.allowWorkingPhase,
         },
       });
     }

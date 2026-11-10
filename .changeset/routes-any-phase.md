@@ -6,18 +6,6 @@
 
 The move is not a person's go-ahead, so whether work starts follows the usual rules. A phase with `autoStart` (and a matching `autoStartWhen`) starts its run. So does any phase when the project's auto-run is on, and a re-review of a pull request Factory opened. Otherwise the run is proposed for a person to approve. With auto-run on, a reopen route into Triage therefore re-runs Triage straight away.
 
-`allowWorkingPhase` is no longer used. Create and update requests still accept it for this release, but it is ignored, not stored, and no longer returned on routes. Clients that read it from route responses should stop:
-
-```ts
-// Before
-if (route.allowWorkingPhase) {
-  /* the route may move cards into a working phase */
-}
-
-// After: drop the check. Every route may move cards into a working phase. Whether the phase's run then starts
-// follows the phase's `autoStart` and `autoStartWhen`, the project's auto-run, and Factory-authored PR re-review.
-```
-
 ```bash
 curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
   "name": "Reopened bugs re-run Triage",
