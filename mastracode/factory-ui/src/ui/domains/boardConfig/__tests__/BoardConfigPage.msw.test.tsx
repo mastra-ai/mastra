@@ -12,7 +12,9 @@ import type {
   FactorySkillInfo,
   FactorySkillsResponse,
   ReplaceBoardBody,
+  StoredBoardInfo,
   StoredBoardResponse,
+  StoredPhaseInfo,
 } from '../../../../api/types';
 import { createAppRoutes } from '../../../router';
 import { storedWorkBoard } from './fixtures/work-board';
@@ -515,29 +517,95 @@ describe('Board configuration', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
-  it("leaves factory automation off an app board's configuration", async () => {
-    stubFactory();
-    const releaseUrl = `${PROJECT_URL}/boards/release`;
-    serveBoard(
+  describe('a custom board', () => {
+    const RELEASE_URL = `${PROJECT_URL}/boards/release`;
+    const RELEASE_PHASES: StoredPhaseInfo[] = [
+      { key: 'queued', name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
       {
-        board: {
-          key: 'release',
-          name: 'Release Preview',
-          description: null,
-          phases: storedWorkBoard().board.phases.slice(0, 2),
-          revision: 1,
-          source: 'app',
-          editable: true,
-          codeBehaviour: {},
-          problems: [],
-        },
-        canEdit: true,
+        key: 'drafting',
+        name: 'Drafting',
+        kind: 'working',
+        runner: { skill: 'release-notes', context: 'release' },
+        nextPhases: ['published'],
       },
-      releaseUrl,
-    );
-    renderAt(`/factories/${FACTORY_ID}/boards/release/config`);
+      { key: 'published', name: 'Published', kind: 'terminal', nextPhases: [] },
+    ];
+    const releaseBoard = (board: Partial<StoredBoardInfo> = {}): StoredBoardResponse => ({
+      board: {
+        key: 'release',
+        name: 'Release Preview',
+        description: null,
+        phases: RELEASE_PHASES,
+        revision: 3,
+        source: 'stored',
+        editable: true,
+        codeBehaviour: null,
+        problems: [],
+        ...board,
+      },
+      canEdit: true,
+    });
 
-    expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Release Preview');
-    expect(screen.queryByRole('switch', { name: 'Auto-start runs' })).not.toBeInTheDocument();
+    it('saves a stored board to its own address, with no factory automation on it', async () => {
+      stubFactory();
+      serveBoard(releaseBoard(), RELEASE_URL);
+      const saved = vi.fn<(body: ReplaceBoardBody) => void>();
+      server.use(
+        http.patch(RELEASE_URL, async ({ request }) => {
+          const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
+          saved(body);
+          return HttpResponse.json(releaseBoard({ ...body, revision: 4 }));
+        }),
+      );
+      const { client } = renderAt(`/factories/${FACTORY_ID}/boards/release/config`);
+
+      expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Release Preview');
+      expect(screen.queryByRole('switch', { name: 'Auto-start runs' })).not.toBeInTheDocument();
+      expect(configNav().getByRole('link', { name: 'Drafting' })).toHaveAttribute(
+        'href',
+        `/factories/${FACTORY_ID}/boards/release/config/drafting`,
+      );
+
+      const user = await openPhase('Drafting');
+      await user.type(screen.getByRole('textbox', { name: 'Drafting instructions' }), 'Keep it short.');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitForMutationsIdle(client);
+
+      expect(saved).toHaveBeenCalledOnce();
+      const body = saved.mock.calls[0]![0];
+      expect(body.expectedRevision).toBe(3);
+      expect(body.phases.find(phase => phase.key === 'drafting')?.runner).toEqual({
+        skill: 'release-notes',
+        context: 'release',
+        instructions: 'Keep it short.',
+      });
+    });
+
+    it('shows a board defined in app code without letting anyone change it', async () => {
+      stubFactory();
+      serveBoard(releaseBoard({ source: 'app', editable: false, revision: null, codeBehaviour: {} }), RELEASE_URL);
+      renderAt(`/factories/${FACTORY_ID}/boards/release/config`);
+
+      expect(
+        await screen.findByText("This board is defined in code, so it can't be changed here."),
+      ).toBeInTheDocument();
+      const user = userEvent.setup();
+      await user.click(configNav().getByRole('link', { name: 'Drafting' }));
+      expect(await screen.findByRole('textbox', { name: 'Drafting instructions' })).toBeDisabled();
+      expect(screen.queryByRole('textbox', { name: 'Phase name' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    });
+
+    it('lists the factory skills beside a custom board', async () => {
+      stubFactory();
+      serveBoard(releaseBoard(), RELEASE_URL);
+      const { router } = renderAt(`/factories/${FACTORY_ID}/boards/release/config`);
+
+      const nav = within(await screen.findByRole('navigation', { name: 'Board configuration' }));
+      await userEvent.setup().click(await nav.findByRole('link', { name: 'Skills' }));
+
+      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/release/skills`);
+      expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
+    });
   });
 });
