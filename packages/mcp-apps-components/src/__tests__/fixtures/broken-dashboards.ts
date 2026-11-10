@@ -92,6 +92,24 @@ export const withView = (widget: DashboardWidget, change: (view: DashboardWidget
 type Issue = { path: PropertyKey[]; message: string };
 
 /** Definitions core accepts but the renderer can't draw, with the issues the strict schema reports. */
+/**
+ * KPI views: `first`, then an unlabelled view the menu calls '1', then one labelled '1'. The third
+ * view's label clashes with the second's however `first` fares.
+ */
+export const threeKpiViews = (first: DashboardWidgetView): DashboardWidget => ({
+  ...kpis,
+  views: [first, kpis.views[0]!, { ...kpis.views[0]!, label: '1' }],
+});
+
+/** The `kpis` view with its KPI reading a query the view doesn't have. */
+export const readsMissingQuery: DashboardWidgetView = {
+  ...kpis.views[0]!,
+  options: { items: [{ ...(kpis.views[0]!.options as KpisOptions).items[0]!, value: { query: 'nope' } }] },
+};
+
+/** The `kpis` view with options its kind rejects: no items. */
+export const emptyKpis: DashboardWidgetView = { ...kpis.views[0]!, options: { items: [] } };
+
 export const BROKEN_DASHBOARDS: [name: string, definition: DashboardDefinition, issues: Issue[]][] = [
   [
     'an unknown kind',
@@ -199,5 +217,30 @@ export const BROKEN_DASHBOARDS: [name: string, definition: DashboardDefinition, 
       })),
     ),
     [{ path: ['rows', 0, 'widgets', 0, 'views', 0], message: "options.defaultSort: no column 'calls'" }],
+  ],
+  [
+    'a repeated label after a view that fails',
+    definition(threeKpiViews(emptyKpis)),
+    [
+      {
+        path: ['rows', 0, 'widgets', 0, 'views', 0, 'options', 'items'],
+        message: 'Too small: expected array to have >=1 items',
+      },
+      { path: ['rows', 0, 'widgets', 0, 'views', 2], message: "another view is already labelled '1'" },
+    ],
+  ],
+  [
+    'a view whose options fail, and another whose kind finds a problem',
+    definition({ ...kpis, views: [emptyKpis, { ...readsMissingQuery, label: 'Other' }] }),
+    [
+      {
+        path: ['rows', 0, 'widgets', 0, 'views', 0, 'options', 'items'],
+        message: 'Too small: expected array to have >=1 items',
+      },
+      {
+        path: ['rows', 0, 'widgets', 0, 'views', 1],
+        message: "options: reads query 'nope', which the view doesn't have",
+      },
+    ],
   ],
 ];

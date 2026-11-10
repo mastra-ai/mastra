@@ -217,12 +217,13 @@ On top of core's checks, the schema:
 
 - Rejects widget kinds other than `kpis`, `table`, `timeseries` and `scores`.
 - Checks each view's `options`, and each table column's `options`, against the kind's own schema.
+- Rejects `columns` on views of widgets that aren't tables. The renderer ignores them, but they usually mean the widget was written as another kind.
 - Runs each kind's checks, such as a KPI reading a query its view has, or a chart's series all fitting its buckets.
 - Checks the widget at both `org` and `project` scope, so a widget that only breaks on one kind of page is rejected too.
 
-Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have or two views with one label, point at the view, such as `rows.0.widgets.1.views.0`, with a message saying what's wrong, such as `options: reads query 'nope', which the view doesn't have`.
+Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have or two views with one label, point at the view, such as `rows.0.widgets.1.views.0`, with a message saying what's wrong, such as `options: reads query 'nope', which the view doesn't have`. All of a definition's problems come back together, so one fix can address them all.
 
-`result.data` is the definition you passed in, unchanged; store it as sent. Definitions that core has already parsed, with its defaults filled in, also pass. Use `strictDashboardWidgetSchema` to check a single widget, such as one being added or pinned; its issue paths start at the widget. Checks across widgets, such as unique ids and the widget limit, need the full definition.
+`result.data` is the definition you passed in, unchanged; store it as sent. A definition that passes still passes after core's `dashboardDefinitionSchema` has parsed it and filled in its defaults, so you can check what you store either way. Use `strictDashboardWidgetSchema` to check a single widget, such as one being added or pinned; its issue paths start at the widget. Checks across widgets, such as unique ids and the widget limit, need the full definition.
 
 Don't use these schemas in a request-body schema. Their input type is `unknown` and their JSON schema is empty, so a request type built from them would type `definition` as `unknown`, and generated API docs would describe it as anything. Keep core's `dashboardDefinitionSchema` there, and check with the strict schemas in the service before storing. Use `StrictDashboardDefinition` to type what you store and return.
 

@@ -47,13 +47,25 @@ export const inScope = (item: { scope?: DashboardScope }, scope: DashboardScope)
 /**
  * What the renderer rejects in the widget's views at `scope`, in the order it finds them: options
  * parsed, then the kind's own issues, then labels unique. Takes a widget core's schema accepts.
+ * Views in `skipKindChecks` skip the kind's own issues, for callers that already report them.
  */
-export function viewIssues(widget: DashboardWidget, check: KindCheck, scope: DashboardScope): WidgetIssue[] {
+export function viewIssues(
+  widget: DashboardWidget,
+  check: KindCheck,
+  scope: DashboardScope,
+  skipKindChecks: ReadonlySet<number> = new Set(),
+): WidgetIssue[] {
   const issues: WidgetIssue[] = [];
   const values = new Set<string>();
   let shown = 0;
   for (const [index, view] of widget.views.entries()) {
     if (!inScope(view, scope)) continue;
+    // Every view at the scope is an option in the card's menu, picked by its value; two with one value would
+    // leave one unreachable. A view with problems still counts, as the renderer numbers it once they're fixed.
+    const value = viewValue(view.label, shown++);
+    const repeated = values.has(value);
+    values.add(value);
+
     const options = check.optionsSchema.safeParse(view.options ?? {});
     if (!options.success) {
       const found = options.error.issues.length ? options.error.issues : [{ path: [], message: 'Invalid options' }];
@@ -64,16 +76,12 @@ export function viewIssues(widget: DashboardWidget, check: KindCheck, scope: Das
     }
     // Columns at the other scope are left out before the kind sees them.
     const resolved = { ...view, columns: view.columns?.filter(c => inScope(c, scope)), options: options.data };
-    const found: WidgetIssue[] = (check.issues?.(resolved) ?? []).map(message => ({ path: ['views', index], message }));
-    // Each view at the scope is an option in the card's menu, picked by its value; two with one value would leave one unreachable.
-    const value = viewValue(view.label, shown);
-    if (values.has(value)) {
-      found.push({ path: ['views', index], message: `another view is already labelled '${view.label ?? value}'` });
+    if (!skipKindChecks.has(index)) {
+      issues.push(...(check.issues?.(resolved) ?? []).map(message => ({ path: ['views', index], message })));
     }
-    issues.push(...found);
-    if (found.length) continue;
-    values.add(value);
-    shown++;
+    if (repeated) {
+      issues.push({ path: ['views', index], message: `another view is already labelled '${view.label ?? value}'` });
+    }
   }
   return issues;
 }
@@ -85,8 +93,10 @@ export const zodIssues = (error: z.ZodError, prefix: PropertyKey[]): WidgetIssue
 
 /**
  * What the renderer would reject in a widget core accepts, paths relative to the widget. Every
- * view's options and columns are parsed first; the kind's own checks then run at each scope the
- * widget shows at, as the renderer runs them there.
+ * view's options and columns are parsed; the kind's own checks then run at each scope the widget
+ * shows at, as the renderer runs them there, skipping views whose options or columns don't parse.
+ * All problems come back together. It also rejects columns on views that aren't tables, which the
+ * renderer ignores.
  */
 export function widgetIssues(widget: DashboardWidget): WidgetIssue[] {
   if (!isBuiltInKind(widget.kind)) {
@@ -99,30 +109,32 @@ export function widgetIssues(widget: DashboardWidget): WidgetIssue[] {
   }
   const check = KIND_CHECKS[widget.kind];
 
-  const parsed: WidgetIssue[] = [];
+  const issues = new Map<string, WidgetIssue>();
+  const add = (found: WidgetIssue[]) => {
+    for (const issue of found) issues.set(`${JSON.stringify(issue.path)} ${issue.message}`, issue);
+  };
+  // The table's own checks would report a bad column again, at the view.
+  const badColumns = new Set<number>();
   for (const [i, view] of widget.views.entries()) {
     const options = check.optionsSchema.safeParse(view.options ?? {});
-    if (!options.success) parsed.push(...zodIssues(options.error, ['views', i, 'options']));
+    if (!options.success) add(zodIssues(options.error, ['views', i, 'options']));
     if (!view.columns) continue;
+    // The renderer ignores columns on other kinds; rejected so a widget written as another kind isn't stored.
     if (widget.kind !== 'table') {
-      parsed.push({ path: ['views', i, 'columns'], message: 'Only table widgets have columns' });
+      add([{ path: ['views', i, 'columns'], message: 'Only table widgets have columns' }]);
       continue;
     }
     for (const [m, column] of view.columns.entries()) {
       const columnOptions = tableColumnOptionsSchema.safeParse(column.options ?? {});
       if (!columnOptions.success) {
-        parsed.push(...zodIssues(columnOptions.error, ['views', i, 'columns', m, 'options']));
+        add(zodIssues(columnOptions.error, ['views', i, 'columns', m, 'options']));
+        badColumns.add(i);
       }
     }
   }
-  if (parsed.length) return parsed;
 
-  const issues = new Map<string, WidgetIssue>();
   for (const scope of DASHBOARD_SCOPES) {
-    if (!inScope(widget, scope)) continue;
-    for (const issue of viewIssues(widget, check, scope)) {
-      issues.set(`${JSON.stringify(issue.path)} ${issue.message}`, issue);
-    }
+    if (inScope(widget, scope)) add(viewIssues(widget, check, scope, badColumns));
   }
   return [...issues.values()];
 }
