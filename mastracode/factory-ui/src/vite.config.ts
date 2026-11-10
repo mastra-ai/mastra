@@ -5,12 +5,10 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import ts from 'typescript';
-import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
-
-const fsAllow = [searchForWorkspaceRoot(here)];
 
 /**
  * Dev-proxy target for the API server and the UI dev-server port. Overridable
@@ -332,11 +330,6 @@ export default defineConfig(({ mode }) => {
     server: {
       host: uiHost,
       port: uiPort,
-      fs: {
-        // Linked font files resolve outside the workspace; expose only that
-        // package instead of pnpm's entire global store.
-        allow: fsAllow,
-      },
       // OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the
       // configured UI origin ahead of time. Silently hopping to a free port
       // would keep the UI working while every OAuth redirect breaks — fail
