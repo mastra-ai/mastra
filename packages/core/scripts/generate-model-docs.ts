@@ -1317,8 +1317,8 @@ function generateProvidersSidebarItems(grouped: GroupedProviders, aiSdkProviders
 
 // Extra guidance for AI SDK providers whose names collide with model IDs from other providers
 const AI_SDK_PROVIDER_NOTES: Record<string, string> = {
-  'amazon-bedrock': `The \`aws-bedrock/*\` model IDs that can appear in editor autocomplete belong to [LLM Gateway](/models/providers/llmgateway-providers). Use them with the \`llmgateway-providers/\` prefix, for example \`llmgateway-providers/aws-bedrock/claude-opus-4-6\`.`,
-  azure: `The \`azure/*\` model IDs that can appear in editor autocomplete belong to [LLM Gateway](/models/providers/llmgateway-providers). Use them with the \`llmgateway-providers/\` prefix, for example \`llmgateway-providers/azure/gpt-5.4\`. To use your own Azure OpenAI deployments through the model router, register the [Azure OpenAI gateway](/models/gateways/azure-openai).`,
+  'amazon-bedrock': `To use Bedrock models through a model router string, use the full ID that [LLM Gateway](/models/providers/llmgateway-providers) lists, including its provider prefix, for example \`llmgateway-providers/aws-bedrock/claude-opus-4-6\`. Dropping the \`llmgateway-providers/\` prefix leaves an ID that doesn't resolve.`,
+  azure: `Some router providers serve Azure-hosted models, for example \`llmgateway-providers/azure/gpt-5.4\` from [LLM Gateway](/models/providers/llmgateway-providers) and \`edenai/azure/gpt-4.1-nano\` from [Eden AI](/models/providers/edenai). Use the full ID the provider lists, including its prefix. Dropping the prefix leaves an \`azure/...\` ID that doesn't resolve. To use your own Azure OpenAI deployments through the model router, register the [Azure OpenAI gateway](/models/gateways/azure-openai).`,
 };
 
 async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
