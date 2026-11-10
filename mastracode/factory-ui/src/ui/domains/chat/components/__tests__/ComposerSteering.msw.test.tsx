@@ -16,6 +16,7 @@ import { Composer } from '../Composer';
 import {
   FACTORY_ID,
   SESSION_ID,
+  pickImage,
   releaseSession,
   renderThread,
   stubPreparingSession,
@@ -95,7 +96,7 @@ describe('Composer steering', () => {
       const user = userEvent.setup();
       await renderActiveRun();
 
-      await user.upload(screen.getByLabelText('Attach images'), new File(['png'], 'shot.png', { type: 'image/png' }));
+      await pickImage(user, new File(['png'], 'shot.png', { type: 'image/png' }));
 
       expect(await screen.findByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Abort' })).toBeEnabled();

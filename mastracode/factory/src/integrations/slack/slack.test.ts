@@ -96,7 +96,7 @@ describe('resolveLinkedSender', () => {
     const thread = makeThread();
     const result = await resolveLinkedSender({ thread, message: makeMessage('T-1') });
     expect(result).toEqual({ status: 'ungated' });
-    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(thread.post).not.toHaveBeenCalled();
   });
 
   it('resolves the tenant for a linked sender, no card posted', async () => {
@@ -111,10 +111,10 @@ describe('resolveLinkedSender', () => {
       externalTeamId: 'T-1',
       externalUserId: 'U-sender',
     });
-    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(thread.post).not.toHaveBeenCalled();
   });
 
-  it('blocks the run and posts an ephemeral Connect card for an unlinked sender', async () => {
+  it('blocks the run and replies in the thread with a Connect card mentioning an unlinked sender', async () => {
     process.env.MASTRACODE_CHANNELS_PUBLIC_URL = 'https://mc.example.com';
     const thread = makeThread();
     const accountLinks = makeStore(null);
@@ -122,17 +122,15 @@ describe('resolveLinkedSender', () => {
     const result = await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks });
 
     expect(result).toEqual({ status: 'blocked' });
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
-
-    // Ephemeral (visible only to the sender), with fallbackToDM.
-    // Addressed to the sender, not the channel: the card is a private nudge.
-    const [user, , options] = thread.postEphemeral.mock.calls[0];
-    expect(user).toEqual({ userId: 'U-sender', userName: 'caleb' });
-    expect(options).toEqual({ fallbackToDM: true });
+    // A public thread reply, so the sender is notified and the rest of the
+    // thread can see why the agent didn't answer.
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledTimes(1);
 
     // The link carries NO identity: Slack proves the account during OIDC, so
     // a forwarded card can't bind the original sender to whoever clicks it.
-    const card = thread.postEphemeral.mock.calls[0][1];
+    const card = thread.post.mock.calls[0][0];
+    expect(JSON.stringify(card)).toContain('<@U-sender> Connect your Slack account');
     expect(JSON.stringify(card)).toContain('then mention me again.');
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
@@ -145,8 +143,10 @@ describe('resolveLinkedSender', () => {
 
     await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks: makeStore(null) });
 
-    const card = thread.postEphemeral.mock.calls[0][1];
+    const card = thread.post.mock.calls[0][0];
     expect(JSON.stringify(card)).toContain('then message me again.');
+    // No mention needed in a DM.
+    expect(JSON.stringify(card)).not.toContain('<@U-sender>');
   });
 
   it('treats a missing team id as unlinked and blocks the run, still offering the card', async () => {
@@ -160,7 +160,7 @@ describe('resolveLinkedSender', () => {
     expect(result).toEqual({ status: 'blocked' });
     expect(accountLinks.getAccountLink).not.toHaveBeenCalled();
     // The card needs no team id now, and connecting is still the way out.
-    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
   });
 
   it('blocks the run without a card when no public URL is configured', async () => {
@@ -172,7 +172,7 @@ describe('resolveLinkedSender', () => {
     const result = await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks });
 
     expect(result).toEqual({ status: 'blocked' });
-    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(thread.post).not.toHaveBeenCalled();
   });
 });
 
@@ -706,8 +706,33 @@ describe('handler dispatch gating', () => {
     // The host handler is now the only gate — core dispatches whatever reaches it.
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(ctx.requestContext.get('user')).toBeUndefined();
+    // Plain thread chatter didn't address the agent: only the sender sees the card.
+    expect(thread.post).not.toHaveBeenCalled();
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
     expect(prime).not.toHaveBeenCalled();
+  });
+
+  it('publicly prompts an unlinked sender only when they mention the agent in a subscribed thread', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeSubscribedThread();
+    const handlers = createHandlers({ accountLinks: fullStore(null) });
+    const defaultHandler = vi.fn();
+
+    for (const text of ['lgtm', 'I think the build is red', 'ok merging']) {
+      await handlers.onSubscribedMessage!(thread, { ...makeMessage('T-1'), text }, defaultHandler, handlerCtx());
+    }
+    expect(thread.post).not.toHaveBeenCalled();
+    expect(thread.postEphemeral).toHaveBeenCalledTimes(3);
+
+    await handlers.onSubscribedMessage!(
+      thread,
+      { ...makeMessage('T-1'), text: '@shipyard can you check the build?', isMention: true },
+      defaultHandler,
+      handlerCtx(),
+    );
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('<@U-sender> Connect your Slack account');
   });
 
   it('blocks dispatch for a linked sender with several factories and no default', async () => {
@@ -816,7 +841,9 @@ describe('pre-dispatch error feedback', () => {
       const f = fixture(slot);
       if (card === 'connect') {
         f.accountLinks.getAccountLink.mockResolvedValue(null as any);
-        f.thread.postEphemeral.mockRejectedValue(new Error('card failed'));
+        // Subscribed-thread chatter gets the ephemeral card; mentions and DMs a public one.
+        if (slot === 'onSubscribedMessage') f.thread.postEphemeral.mockRejectedValue(new Error('card failed'));
+        else f.thread.post.mockRejectedValueOnce(new Error('card failed'));
       } else {
         f.projects.get.mockResolvedValue(null);
         f.projects.list.mockResolvedValue([]);

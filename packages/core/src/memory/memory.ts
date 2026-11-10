@@ -384,6 +384,17 @@ https://mastra.ai/en/docs/memory/overview`,
     return !this.embedder && this.vector?.isSelfEmbedding === true;
   }
 
+  /**
+   * `semanticRecall.maxChunkChars` from this instance's own options. Per-request memory options
+   * can't change it: they arrive from API callers, and a tiny value would cost one embedding and
+   * one vector row per character. Chunk boundaries also decide row ids, so they must stay fixed
+   * for an index.
+   */
+  protected get configuredMaxChunkChars(): number | undefined {
+    const semanticRecall = this.threadConfig.semanticRecall;
+    return typeof semanticRecall === 'object' ? semanticRecall.maxChunkChars : undefined;
+  }
+
   protected getEmbeddingIndexName(dimensions?: number): string {
     const separator = this.vector?.indexSeparator ?? '_';
     // A self-embedding store picks its own dimension, so this name is keyed on the mode.
@@ -546,6 +557,15 @@ https://mastra.ai/en/docs/memory/overview`,
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     observabilityContext?: Partial<ObservabilityContext>;
+    /**
+     * The run's record of messages already written to the semantic recall index, from
+     * `MessageList.getEmbeddedMessages()`. Messages recorded with the same text are not embedded
+     * again, and newly embedded ones are added. Agent runs pass it through the save queue;
+     * direct callers omit it.
+     *
+     * @internal
+     */
+    embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
@@ -965,6 +985,7 @@ https://mastra.ai/en/docs/memory/overview`,
             embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }
@@ -1108,6 +1129,7 @@ https://mastra.ai/en/docs/memory/overview`,
             embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticRecallConfig,
+            maxChunkChars: this.configuredMaxChunkChars,
           }),
         );
       }
