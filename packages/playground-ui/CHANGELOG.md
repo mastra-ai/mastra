@@ -1,5 +1,165 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.5
+
+### Patch Changes
+
+- Fixed MCP apps in chat, such as the observability dashboard widget, showing as an opaque box pressed against the surrounding messages. The app viewer now gives its frame the same color scheme as the theme it sends to the app, so the browser no longer paints a solid background behind the app and it sits on the chat background with its own spacing. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- Removed the tool-call style for the retired Factory `source_control_publish_test_check` tool. ([#29888](https://github.com/mastra-ai/mastra/pull/29888))
+
+- Fixed chart cards with a view picker blocking their own actions while the picker was open. You can now pin a widget or open its alerts without closing the view menu first. ([#29906](https://github.com/mastra-ai/mastra/pull/29906))
+
+- Fixed the KPI group on dashboards showing its drag handle and unpin button over the cards' top border at all times. On screens that can hover, the floating controls now only appear when the group is hovered or focused. On touch screens, the drag handle (while rearranging) and the unpin button (while pinned) stay visible so they can still be tapped. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- Metrics card groups of three or more now use three columns from 48rem wide instead of staying on two until 56rem, so three KPIs sit on one row on medium-width dashboards instead of wrapping 2 + 1. Groups of one or two cards keep two columns, and groups of exactly four keep their 2 + 2 layout at that width. ([#29887](https://github.com/mastra-ai/mastra/pull/29887))
+
+- `DatePicker` now fills the width of its container. Before, it kept its content width and left an empty strip inside a wider popover. Popovers that size to their content look the same. A width class passed through `className` (for example `w-fit`) still replaces the default. ([#29769](https://github.com/mastra-ai/mastra/pull/29769))
+
+  `<Input type="time">` now shows a design-system clock icon in every browser and theme, replacing Chromium's native picker icon and picker. The value is typed or stepped with the arrow keys. `DateTimePicker` and the custom range editor in `DateTimeRangePicker` no longer need to hide the native icon themselves.
+
+- Updated dependencies [[`3655736`](https://github.com/mastra-ai/mastra/commit/3655736ec9dc2e1d03d0af3c6be812ccddfc8223), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`c0bad48`](https://github.com/mastra-ai/mastra/commit/c0bad48e3a7abef3d8f14fa2c194e09e0f431bba), [`69f481c`](https://github.com/mastra-ai/mastra/commit/69f481cb1e83f67d50cf83dd0baa6c9333609d48), [`2cfa924`](https://github.com/mastra-ai/mastra/commit/2cfa92405b0e0f8b644dd47c4f55abb4dce573c9), [`832fb19`](https://github.com/mastra-ai/mastra/commit/832fb190f72fe8e0fc82e48ade5aaacdd4dbb2f7)]:
+  - @mastra/core@1.83.0-alpha.4
+  - @mastra/ai-sdk@1.12.0-alpha.0
+  - @mastra/client-js@1.60.0-alpha.4
+  - @mastra/react@1.15.0-alpha.4
+
+## 69.0.0-alpha.4
+
+### Minor Changes
+
+- Replaced `ThinkingLevelBars` with `ThinkingLevelIcon`, a single brain filled to the picked level that matches the brains in `ThinkingLevelRamp`. It turns amber for costly levels, stays empty while no level is set, and pulses with `loading`. `ThinkingLevelPicker` and `ThinkingLevelUnavailable` now show it on their button. ([#29853](https://github.com/mastra-ai/mastra/pull/29853))
+
+  ```tsx
+  // Before
+  <ThinkingLevelBars options={options} value={level} loading={loading} />
+
+  // After
+  <ThinkingLevelIcon options={options} value={level} loading={loading} />
+  ```
+
+- Added shared composer pieces: a combined provider and model picker, an attach menu, a status row and grouped action slots. ([#29845](https://github.com/mastra-ai/mastra/pull/29845))
+
+  - `ModelPicker` (`@mastra/playground-ui/domains/llm`) is one trigger for provider and model. It searches across every provider, shows a provider filter row when there is more than one provider, and opens as a swipeable bottom `Drawer` on phones.
+    - Pass raw catalog ids: the picker shows readable names ("claude-opus-4-6" as "Claude Opus 4.6"), sorts each provider newest first by `releaseDate`, and leads every row with its provider logo.
+    - Catalogs of thousands of models stay responsive: providers with `connected: false` sit behind a "+N" button, and search shows the first 50 matches.
+    - `defaultModel` marks the default model. `reset` adds an action at the end of the list, e.g. clearing an override; pass it only while there is something to reset.
+    - `settings` holds controls such as the thinking level, and `addProvider` puts a "+" link beside the search field.
+    - `renderProviderIcon` swaps in your own provider icons, and `openOnSelectedProvider` opens filtered to the selected provider.
+  - `ComposerAttachMenu`: the "+" attach control with Camera (touch devices only), Photos and Files, plus your own `actions` such as "From a URL…". It opens as a menu on desktop and a bottom `Drawer` on phones.
+  - `ComposerStatus`: a right-aligned status row above the composer that hides itself when empty.
+  - `ComposerActionsStart` and `ComposerActionsEnd`: leading and trailing groups for the composer actions row.
+  - `ComposerHeader` `placement="overlay"`: floats the header above the composer so opening it never moves the transcript.
+
+  ```tsx
+  import {
+    Composer,
+    ComposerActions,
+    ComposerActionsEnd,
+    ComposerActionsStart,
+    ComposerAttachMenu,
+    ComposerBox,
+    ComposerHeader,
+    ComposerInput,
+    ComposerStatus,
+  } from '@mastra/playground-ui/components/Composer';
+  import { ModelPicker } from '@mastra/playground-ui/domains/llm';
+
+  <>
+    <ComposerStatus>2 queued</ComposerStatus>
+    <Composer onSubmit={send}>
+      <ComposerHeader placement="overlay" open={reconnecting}>
+        Reconnecting…
+      </ComposerHeader>
+      <ComposerBox>
+        <ComposerInput placeholder="Message the agent" />
+        <ComposerActions>
+          <ComposerActionsStart>
+            <ComposerAttachMenu onFiles={addFiles} accept="image/*" />
+          </ComposerActionsStart>
+          <ComposerActionsEnd>
+            <ModelPicker
+              providers={[{ id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-5', releaseDate: '2025-08-07' }] }]}
+              value={{ provider: 'openai', model: 'gpt-5' }}
+              defaultModel={{ provider: 'openai', model: 'gpt-5' }}
+              reset={override ? { label: 'Reset to the default', onClick: clearOverride } : undefined}
+              onValueChange={({ provider, model }) => setModel(provider, model)}
+            />
+            {sendButton}
+          </ComposerActionsEnd>
+        </ComposerActions>
+      </ComposerBox>
+    </Composer>
+  </>;
+  ```
+
+- Redesigned `ThinkingLevelRamp` and made the thinking level controls keep their size while the level loads or can't be picked, so a model picker that holds them no longer jumps. ([#29845](https://github.com/mastra-ai/mastra/pull/29845))
+
+  - `ThinkingLevelRamp` is now a row of brain icons that fill up with each level. A raised pill sits on the picked level and shows its name (amber for costly levels). Click a level to pick it, or drag across the row and the level is saved once you let go. It stays a slider for keyboards and screen readers.
+  - `ThinkingLevelRamp` accepts `value={undefined}` to show a disabled row with no pill. Pass `loading` to pulse it while the level loads, `unavailableReason` to say why no level can be picked, and `reset` for a text button that returns to an inherited level.
+  - Removed `ThinkingLevelSlider`. Use `ThinkingLevelRamp` for an inline control, or `ThinkingLevelPicker` for a compact button that opens the ramp. `ariaLabel` becomes `label`, and `disabled` becomes `value={undefined}` or `unavailableReason`.
+
+  ```tsx
+  // Before
+  <ThinkingLevelSlider options={options} value={level} ariaLabel="Thinking" onChange={setLevel} />
+
+  // After
+  <ThinkingLevelRamp options={options} value={level} label="Thinking" onChange={setLevel} />
+  ```
+
+  ```tsx
+  <ThinkingLevelRamp options={options} value={undefined} label="Thinking" loading onChange={setLevel} />
+
+  <ThinkingLevelRamp
+    options={options}
+    value={level}
+    label="Thinking"
+    reset={{ label: 'Use default', onClick: useDefault }}
+    onChange={setLevel}
+  />
+  ```
+
+- Added in-place renaming for dashboard widget titles. Pass `onTitleChange` to `StatelessWidget` (or `ChartCard`) and plain titles become editable: hover or focus shows a dashed outline, Enter or clicking away saves the trimmed title, and Escape cancels. Titles with a view menu or an expand link stay read-only. Saving the new title is up to you. ([#29751](https://github.com/mastra-ai/mastra/pull/29751))
+
+  ```tsx
+  <StatelessWidget {...widgetProps} onTitleChange={title => saveWidget({ ...widget, title })} />
+  ```
+
+- Changed empty charts to look the same everywhere: the chart keeps its dates but drops its lines and y-axis, under dashed rulers and "No data in this range". Legends stay hidden while a chart loads or has nothing to show, and totals show 0 instead of "—" when the range is empty. ([#29740](https://github.com/mastra-ai/mastra/pull/29740))
+
+  `ChartArea`'s `emptyMessage` is now only for a reason other than an empty range, such as a preview that can't run yet; leave it out for an empty range. The `emptyMessage` option of `timeseries` and `scores` dashboard widgets is deprecated: saved definitions still parse, but every empty chart shows "No data in this range". Table widgets keep their `emptyMessage`.
+
+  ```tsx
+  // Before
+  <ChartArea isEmpty={runs === 0} emptyMessage="No agent runs in this range.">
+    <MetricsLineChart {...chart} />
+  </ChartArea>
+
+  // After
+  <ChartArea isEmpty={runs === 0}>
+    <MetricsLineChart {...chart} />
+  </ChartArea>
+  ```
+
+### Patch Changes
+
+- Thinned the Metrics, Traces, Logs, Tools, Prompts, Experiments, Datasets, Scorers, Workspaces, Settings and Processor icons to the same line weight as every other icon, so they no longer look heavier than the icons beside them. They keep their overall look; Settings and Processor are now outlines instead of solid shapes. The Agent, Workflow and MCP Server icons are unchanged. ([#28868](https://github.com/mastra-ai/mastra/pull/28868))
+
+- Fixed the KPI row on dashboards being narrower than the cards around it when it can be moved, pinned, or turned into an alert. Its move, alert, and pin buttons now float over the top edge of the row instead of sitting beside the figures, so the row lines up with the rest of the dashboard. Like on chart cards, the buttons stay visible while the dashboard is being rearranged or the row is pinned, and otherwise show on hover or keyboard focus. ([#29753](https://github.com/mastra-ai/mastra/pull/29753))
+
+- Fixed filter rows on narrow screens. When the filters and the controls on the right no longer fit on one line, the controls now move to their own line below, and the filter input fills the rest of the first line instead of dropping under the time range. The filter input also shrinks further before wrapping and grows up to 320px on wide screens. ([#29786](https://github.com/mastra-ai/mastra/pull/29786))
+
+- Long Markdown lists now stay fast while a reply streams. `MarkdownRenderer` re-renders only the list item still being written instead of re-parsing the whole list on every chunk. Once the reply finishes, the list renders exactly as before. While it streams, a bold or italic marker the stream left open now closes inside the item being written, instead of spilling the next marker into it or showing as stray text below the list. ([#29596](https://github.com/mastra-ai/mastra/pull/29596))
+
+- Improved resize performance on pages with many metrics charts. Charts that are scrolled out of view are no longer redrawn when their container resizes; they redraw once they scroll back into view, so opening a side panel no longer freezes the page. ([#29726](https://github.com/mastra-ai/mastra/pull/29726))
+
+- Updated dependencies [[`58a66b0`](https://github.com/mastra-ai/mastra/commit/58a66b01d9b08e7b59c27fc3ab68eb90be13c0ed), [`ac2a640`](https://github.com/mastra-ai/mastra/commit/ac2a6401a09e2177555369cff2f7ad15f2cc7286), [`94b1641`](https://github.com/mastra-ai/mastra/commit/94b1641919dd90455131b16cd0572ce28008781b), [`8279c30`](https://github.com/mastra-ai/mastra/commit/8279c3073737dd1c228b5df15416ca4ce7e0c00c), [`224d519`](https://github.com/mastra-ai/mastra/commit/224d51972ac525ef866f232d09d4a911ef4b94bb), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`bc9d8d4`](https://github.com/mastra-ai/mastra/commit/bc9d8d482cec626ef2107f1cbd5a05febceaa491), [`8a10dfe`](https://github.com/mastra-ai/mastra/commit/8a10dfe648610a6687d1e4ecc10a0a81e3d80c4c), [`d77893a`](https://github.com/mastra-ai/mastra/commit/d77893aed38eefe2dbac21e9fffd872137ee6b92), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`bfedbfe`](https://github.com/mastra-ai/mastra/commit/bfedbfe5a8e5721cba782efb4652be84e9fecc04), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`a836d09`](https://github.com/mastra-ai/mastra/commit/a836d09a43c3c471b5bfced711731355bf26db26), [`4854e36`](https://github.com/mastra-ai/mastra/commit/4854e3641931c984a5b3941371a4f0fa58eafd0e), [`7358ad7`](https://github.com/mastra-ai/mastra/commit/7358ad73a381765572858d520f8170ab59e88514), [`7601d91`](https://github.com/mastra-ai/mastra/commit/7601d91220294b5ef2f489a8606543b0cbccf26f), [`b93d804`](https://github.com/mastra-ai/mastra/commit/b93d804a7a406d834389e686687b06d22ea2e4f1), [`ed1cecb`](https://github.com/mastra-ai/mastra/commit/ed1cecba5c26a73600640f74e9a1c9d322271b23), [`4cd4c46`](https://github.com/mastra-ai/mastra/commit/4cd4c46e546d44c556fce4d731cac03cad4f88c4), [`9e5b108`](https://github.com/mastra-ai/mastra/commit/9e5b1082cbe2454c377b3328cd8a0085e7452d1a), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`28ddc16`](https://github.com/mastra-ai/mastra/commit/28ddc161a441fdc3ecbdcc1168dee773f1f25243), [`0f496bd`](https://github.com/mastra-ai/mastra/commit/0f496bd3c1cc7f07d2e4ecb3005d480406b3d342), [`de005a4`](https://github.com/mastra-ai/mastra/commit/de005a43d8703d36c5dd25d7ddd1f618ea98bf55)]:
+  - @mastra/core@1.83.0-alpha.3
+  - @mastra/client-js@1.60.0-alpha.3
+  - @mastra/memory@1.41.1-alpha.1
+  - @mastra/react@1.15.0-alpha.3
+  - @mastra/ai-sdk@1.11.3
+
 ## 69.0.0-alpha.3
 
 ### Patch Changes

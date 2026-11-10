@@ -1334,8 +1334,10 @@ export class Memory extends MastraMemory {
     // If the agent calls the update working memory tool multiple times simultaneously
     // each call could overwrite the other call
     // so get an in memory mutex to make sure this.getWorkingMemory() returns up to date data each time
-    const mutexKey =
-      memoryConfig?.workingMemory?.scope === `resource` ? `resource-${resourceId}` : `thread-${threadId}`;
+    // Key off the merged config: scope defaults to 'resource', so threads sharing a
+    // resource must share the lock even when the caller didn't pass a scope.
+    const scope = config.workingMemory.scope || 'resource';
+    const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
     const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
       ? this.updateWorkingMemoryMutexes.get(mutexKey)!
       : new Mutex();

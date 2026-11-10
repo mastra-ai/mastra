@@ -21,10 +21,18 @@ const isBrandColor = (token: string) => token.startsWith('color-brand-') && !the
 /** Numbers the colors are built from, not colors. */
 const COLOR_INPUTS = new Set(['fill-tint', 'chart-series-l', 'chart-series-c']);
 
+/** Images drawn from theme variables, not colors. */
+const THEME_IMAGES = new Set(['time-field-icon']);
+
 const themeColorTokens = themeVariables.filter(token => {
   if (!token) return false;
   if (token.startsWith('color-')) return isBrandColor(token);
-  return !token.startsWith('elevation-') && !token.startsWith('shadow-') && !COLOR_INPUTS.has(token);
+  return (
+    !token.startsWith('elevation-') &&
+    !token.startsWith('shadow-') &&
+    !COLOR_INPUTS.has(token) &&
+    !THEME_IMAGES.has(token)
+  );
 });
 
 const foundationPages = [

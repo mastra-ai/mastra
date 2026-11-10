@@ -12,7 +12,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-pro": [
+    "deepseek-flash": [
       {
         "type": "toggle"
       },
@@ -21,7 +21,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-flash": [
+    "deepseek-v4-pro": [
       {
         "type": "toggle"
       },

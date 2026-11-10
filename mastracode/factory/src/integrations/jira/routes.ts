@@ -247,7 +247,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
               selectedIds,
             })
           : null;
-        const intakeBoards = projectScope?.intakeBoards ?? null;
         const scopes = projectScope?.scopes ?? unfilteredJiraScopes(selectedIds);
         if (scopes.length === 0) {
           return c.json({ issues: [], nextCursor: null });
@@ -271,13 +270,12 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId || null,
           }));
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
+          if (factoryProjectId && projectScope && options.ingestFactoryIssues) {
             await options.ingestFactoryIssues({
               orgId: resolved.tenant.orgId,
               userId: resolved.tenant.userId,
               factoryProjectId,
               issues: issuePayload.map(issue => ({ ...issue, site: null })),
-              intakeBoards,
             });
           }
           return c.json({ issues: issuePayload, nextCursor });
@@ -325,7 +323,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           // Factory never filed, reads like one that doesn't exist (as on Linear).
           const routed =
             issue?.sourceId != null &&
-            issue.sourceId in projectScope.intakeBoards &&
+            projectScope.sourceIds.includes(issue.sourceId) &&
             (projectScope.takes(issue.sourceId, issue.labels) ||
               !!(await workItems?.getByProjectSource({
                 orgId: resolved.tenant.orgId,

@@ -1,7 +1,11 @@
 import type { BoardCandidate } from './boardCandidates';
 import { sourceMetadata } from './boardItems';
 import type { BoardFilterState } from './boardFilters';
+import { cardHasPullRequest } from './services/workItems';
 import type { WorkItem, WorkItemSource } from './services/workItems';
+
+/** The source filter value for cards carrying a pull or merge request; where `/review` now leads. */
+export const PULL_REQUEST_SOURCE_FILTER = 'pull-request';
 
 export const BOARD_SOURCE_OPTIONS = [
   { value: 'github', label: 'GitHub' },
@@ -10,6 +14,8 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'jira', label: 'Jira' },
   { value: 'incidentio', label: 'incident.io' },
   { value: 'manual', label: 'Manual' },
+  // Not a provider: any card carrying a pull or merge request, its own or attached to its issue.
+  { value: PULL_REQUEST_SOURCE_FILTER, label: 'Pull requests' },
 ] as const;
 
 type BoardSourceFilters = Pick<BoardFilterState, 'source' | 'linearProject'>;
@@ -37,7 +43,12 @@ export function cardMatchesSourceFilters(
   liveCandidate?: BoardCandidate,
 ): boolean {
   const sources = pickedBoardSources(filters);
-  if (sources.size > 0 && !sources.has(boardSource(card.source))) return false;
+  if (
+    sources.size > 0 &&
+    !sources.has(boardSource(card.source)) &&
+    !(sources.has(PULL_REQUEST_SOURCE_FILTER) && cardHasPullRequest(card))
+  )
+    return false;
   if (card.source !== 'linear-issue' || filters.linearProject.size === 0) return true;
   const projectId = sourceMetadata(liveCandidate ?? card).linearProjectId;
   return typeof projectId === 'string' && filters.linearProject.has(projectId);

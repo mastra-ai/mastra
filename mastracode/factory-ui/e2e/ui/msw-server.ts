@@ -28,6 +28,9 @@ export const server = setupServer(
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
+  // The sidebar and the board page read the intake routes to learn whether the caller may change
+  // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   // A server without the JIRA_* env group mounts no Jira routes; the ambient
   // 404 mirrors that and the Jira service degrades to a disabled status.
@@ -45,9 +48,6 @@ export const server = setupServer(
   ),
   // Board filters read connection status even when no provider is configured.
   http.get('*/web/github/status', () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
-  // Ambient GitHub label routing (read by every board's intake feed); label-routing
-  // tests override it with `server.use(...)`.
-  http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
   // Ambient pull requests: Work and Review both list their linked repositories'
   // open pull requests. Pull-request tests override these with `server.use(...)`.
   http.get('*/web/github/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),

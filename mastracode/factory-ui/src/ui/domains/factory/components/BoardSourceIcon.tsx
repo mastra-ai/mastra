@@ -1,6 +1,6 @@
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { CircleDot } from 'lucide-react';
+import { CircleDot, GitPullRequest } from 'lucide-react';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import type { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
@@ -14,6 +14,7 @@ const SOURCE_MARKS = {
   jira: { Icon: JiraIcon, color: '#1868DB' },
   incidentio: { Icon: IncidentIoIcon, color: '#F2555A' },
   manual: { Icon: CircleDot, color: 'var(--muted-foreground)' },
+  'pull-request': { Icon: GitPullRequest, color: 'var(--muted-foreground)' },
 };
 
 /** Brand colors belong to the SVG mark, independent of menu highlight colors. */

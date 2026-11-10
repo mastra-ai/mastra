@@ -588,7 +588,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               steps: state.accumulatedSteps,
             },
           });
-          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
+          const textRewritten = !!lastStep && finishResult.outputTextChanged;
+          if (lastStep && finishResult.outputTextChanged) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;
           }
@@ -731,6 +732,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
+              ...(textRewritten && { textRewritten }),
             });
           }
 
