@@ -25,7 +25,7 @@ function createLinearGetIssueTool(linear: LinearIntegration, orgId: string, work
   // The URL pattern lets the agent link a ticket it mentions without fetching it first.
   const linkHint = workspaceUrlKey
     ? ` Issues in this workspace link as https://linear.app/${workspaceUrlKey}/issue/<identifier> (e.g. https://linear.app/${workspaceUrlKey}/issue/ENG-123).`
-    : '';
+    : ' To link an issue, use the `url` field of the fetched issue.';
   return createTool({
     id: 'linear_get_issue',
     description: `Fetch a Linear issue's full details — title, description, state, assignee, labels, priority, and discussion comments. Use this whenever you're working on a Linear issue (e.g. ENG-123) to get its complete context.${linkHint}`,

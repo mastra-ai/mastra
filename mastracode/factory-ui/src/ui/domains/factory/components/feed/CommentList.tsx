@@ -14,8 +14,10 @@ import {
   usePendingCommentCreates,
   useWorkItemComments,
 } from '../../../../../hooks/useWorkItemComments';
+import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import type { PendingCommentCreate } from '../../../../../hooks/useWorkItemComments';
 import type { WorkItemComment, WorkItemCommentPage } from '../../services/commentsWire';
+import { boardOf } from '../../boardFlow';
 import type { AuditActorProfile, AuditEvent } from '../../services/audit';
 import type { WorkItem } from '../../services/workItems';
 import { ActivityEvent } from '../WorkItemActivity';
@@ -159,6 +161,7 @@ export function CommentList({
   });
   const deleteComment = useDeleteWorkItemCommentMutation({ workItemId: item.id, factoryProjectId });
   const pendingCreates = usePendingCommentCreates(item.id);
+  const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const rows = feedRows(comments.data?.pages ?? [], pendingCreates, events, item.id, currentUser);
@@ -248,7 +251,7 @@ export function CommentList({
                           style={index < landing ? landingStyle(index + 2) : undefined}
                         >
                           {row.kind === 'event' ? (
-                            <ActivityEvent event={row.event} actors={actors} className="px-2 py-1.5" />
+                            <ActivityEvent event={row.event} actors={actors} board={board} className="px-2 py-1.5" />
                           ) : (
                             <CommentArrival>
                               <CommentRow

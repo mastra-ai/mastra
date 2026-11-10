@@ -18,6 +18,8 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   },
   deltaPolling: false,
   traceQuery: false,
+  traceQueryTextSearch: false,
+  spanQueryTextSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
   traceQueryContextFields: false,

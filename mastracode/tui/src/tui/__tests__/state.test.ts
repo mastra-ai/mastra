@@ -35,6 +35,12 @@ vi.mock('@earendil-works/pi-tui', () => {
   };
 });
 
+vi.mock('../mouse/controller.js', () => ({
+  MouseController: class {
+    dispose() {}
+  },
+}));
+
 vi.mock('../components/custom-editor.js', () => ({
   CustomEditor: class {
     getModeColor?: () => string | undefined;
@@ -51,7 +57,7 @@ vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => {
   return {
     ...actual,
     // Keep state initialization hermetic: don't read the host's real settings.
-    loadSettings: vi.fn(() => ({ voice: { enabled: false } })),
+    loadSettings: vi.fn(() => ({ voice: { enabled: false }, preferences: { mouseDialogs: false, mouseInput: false } })),
   };
 });
 
