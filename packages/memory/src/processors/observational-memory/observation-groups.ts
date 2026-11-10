@@ -186,6 +186,41 @@ export function wrapInObservationGroup(
   return `<observation-group id="${id}" range="${range}"${kindAttr}>\n${content}\n</observation-group>`;
 }
 
+function isObservationGroupOpeningLine(line: string): boolean {
+  const trimmed = line.trimStart();
+  return trimmed.startsWith(OBSERVATION_GROUP_OPEN) && /\s/.test(trimmed[OBSERVATION_GROUP_OPEN.length] ?? '');
+}
+
+/**
+ * Moves a cut of `cut` leading lines so it never splits an observation group. A cut inside a group
+ * moves back to just before the group's opening tag (and the blank lines that separate it from the
+ * previous group). When nothing precedes that group, the cut moves forward to just after its closing
+ * tag instead, so the whole group is cut. A cut outside every group, and observations without group
+ * tags, are returned unchanged.
+ */
+export function alignLineCutToObservationGroups(lines: readonly string[], cut: number): number {
+  let openingLine = -1;
+  for (let i = 0; i < cut; i++) {
+    const line = lines[i]!;
+    if (isObservationGroupOpeningLine(line)) {
+      openingLine = i;
+    } else if (line.trim() === OBSERVATION_GROUP_CLOSE) {
+      openingLine = -1;
+    }
+  }
+  if (openingLine === -1) return cut;
+
+  let before = openingLine;
+  while (before > 0 && lines[before - 1]!.trim() === '') before--;
+  if (before > 0) return before;
+
+  for (let i = cut; i < lines.length; i++) {
+    if (lines[i]!.trim() === OBSERVATION_GROUP_CLOSE) return i + 1;
+  }
+  // The group never closes, so there is no boundary after the cut either.
+  return cut;
+}
+
 export function parseObservationGroups(observations: string): ObservationGroup[] {
   if (!observations) {
     return [];
