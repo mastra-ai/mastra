@@ -14,6 +14,7 @@ import { markFrameworkCondition } from '../../utils';
 import { RedeliveryDriver } from './redelivery-driver';
 
 const schema = z.object({ n: z.number() });
+const optionalState = z.object({ n: z.number().optional() });
 
 async function runStatuses(store: WorkflowsStorage, workflowName: string) {
   const { runs } = await store.listWorkflowRuns({ workflowName });
@@ -94,6 +95,39 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
         expect(failEvents).toHaveLength(1);
       },
     );
+
+    it('keeps the state the body set when the condition throws', async () => {
+      const { result, runId, store } = await runToEnd({
+        storage: getStorage(),
+        build: () =>
+          createWorkflow({
+            id: 'throwing-condition-state',
+            inputSchema: schema,
+            outputSchema: schema,
+            stateSchema: optionalState,
+          })
+            .dowhile(
+              createStep({
+                id: 'charge',
+                inputSchema: schema,
+                outputSchema: schema,
+                stateSchema: optionalState,
+                execute: async ({ inputData, setState }) => {
+                  await setState({ n: 42 });
+                  return inputData;
+                },
+              }),
+              async () => {
+                throw new Error('condition boom');
+              },
+            )
+            .commit(),
+      });
+
+      expect(result.status).toBe('failed');
+      const snapshot = await store.loadWorkflowSnapshot({ workflowName: 'throwing-condition-state', runId });
+      expect(snapshot?.context.__state).toEqual({ n: 42 });
+    });
 
     // The condition runs while handling the child's workflow.end, so the failure must
     // still be reported against the loop's run and leave the finished child alone.

@@ -1098,7 +1098,7 @@ export async function executeForeach(
     });
   } catch (error) {
     // Fail the foreach step: a throw would reject run.start() and leave the run recorded as running.
-    return {
+    const failed: StepResult<any, any, any, any> = {
       status: 'failed',
       error: getErrorFromUnknown(error, { serializeStack: false }),
       payload: prevOutput,
@@ -1106,6 +1106,23 @@ export async function executeForeach(
       endedAt: Date.now(),
       nonRetryable: true,
     };
+    if (engine.options.emitStepEvents !== false) {
+      await engine.wrapDurableOperation(
+        `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.concurrency_failure`,
+        async () => {
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-start',
+              payload: { id: stepId, payload: prevOutput, startedAt: failed.startedAt, status: 'running' },
+            },
+          });
+          await emitStepResultEvents({ stepId, execResults: failed, pubsub, runId });
+        },
+      );
+    }
+    return failed;
   }
   const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;

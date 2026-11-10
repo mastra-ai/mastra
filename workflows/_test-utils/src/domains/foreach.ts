@@ -1181,5 +1181,20 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
         expect(snapshot?.status).toBe('failed');
       }
     });
+
+    it('should stream a failed run when the concurrency function throws', async () => {
+      const { workflow } = registry!['foreach-throwing-concurrency']!;
+      const { stream } = ctx;
+      if (!stream) return;
+
+      const { events } = await stream(workflow, [{ n: 1 }, { n: 2 }]);
+
+      expect(events.find((event: any) => event.type === 'workflow-finish')).toMatchObject({
+        payload: { workflowStatus: 'failed' },
+      });
+      expect(
+        events.filter((event: any) => event.type === 'workflow-step-result' && event.payload?.id === 'double').at(-1),
+      ).toMatchObject({ payload: { status: 'failed', error: { message: 'concurrency boom' } } });
+    });
   });
 }

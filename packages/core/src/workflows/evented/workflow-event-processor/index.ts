@@ -2224,6 +2224,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       // workflow.end, and the child itself succeeded.
       const conditionError = error as Error;
       const failed = failedLoopStep(result, conditionError);
+      const bodyState = resolveCurrentState({ stepResult: result, stepResults: args.stepResults, state: args.state });
       try {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
@@ -2235,11 +2236,12 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: args.executionPath,
             resumeSteps: args.resumeSteps,
             stepResults: args.stepResults,
-            prevResult: failed,
+            // Step end prefers prevResult.__state over the stored state, which predates the body.
+            prevResult: { ...failed, __state: bodyState } as typeof failed & { __state: Record<string, any> },
             activeStepsPath: args.activeStepsPath,
             requestContext: args.requestContext,
             actor: args.actor,
-            state: resolveCurrentState({ stepResult: result, stepResults: args.stepResults, state: args.state }),
+            state: bodyState,
             outputOptions: args.outputOptions,
           },
         });
@@ -2292,6 +2294,8 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepId: leafId,
               result: { ...failed, metadata: { ...failed.metadata, startedBy } },
               requestContext: withoutAuthToken(args.requestContext),
+              // The step end that follows adopts this snapshot's state, so keep the body's updates.
+              state: resolveCurrentState({ stepResult: result, stepResults: args.stepResults, state: args.state }),
               completionGuard: { eventId: startedBy },
             });
             throw conditionError;

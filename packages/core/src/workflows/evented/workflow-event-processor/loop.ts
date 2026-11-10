@@ -5,7 +5,7 @@ import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { isFrameworkCondition, resolveForeachConcurrency } from '../../utils';
-import { markNonRedeliverable, resolveCurrentState, withoutAuthToken } from '../helpers';
+import { isNonRedeliverable, markNonRedeliverable, resolveCurrentState, withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
 import type { ProcessorArgs } from '.';
@@ -191,6 +191,50 @@ export async function processWorkflowLoop(
 }
 
 export async function processWorkflowForEach(
+  args: ProcessorArgs,
+  deps: {
+    pubsub: PubSub;
+    mastra: Mastra;
+    step: Extract<StepFlowEntry, { type: 'foreach' }>;
+  },
+) {
+  try {
+    return await advanceForEach(args, deps);
+  } catch (error) {
+    if (!isNonRedeliverable(error)) throw error;
+    // The concurrency function threw. Fail the run at the foreach step, so the failed step
+    // is recorded and streamed. If this publish throws, handle() fails the run itself.
+    const stepId = getEntryId(deps.step.step);
+    const failed: StepResult<any, any, any, any> = {
+      status: 'failed',
+      error: error as Error,
+      payload: (args.prevResult as any)?.output,
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+      nonRetryable: true,
+    };
+    await deps.pubsub.publish('workflows', {
+      type: 'workflow.fail',
+      runId: args.runId,
+      data: {
+        parentWorkflow: args.parentWorkflow,
+        workflowId: args.workflowId,
+        runId: args.runId,
+        executionPath: [args.executionPath[0]!],
+        resumeSteps: args.resumeSteps,
+        stepResults: { ...args.stepResults, [stepId]: failed },
+        prevResult: failed,
+        activeStepsPath: args.activeStepsPath,
+        requestContext: args.requestContext,
+        actor: args.actor,
+        state: resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
+        outputOptions: args.outputOptions,
+      },
+    });
+  }
+}
+
+async function advanceForEach(
   {
     workflowId,
     prevResult,
