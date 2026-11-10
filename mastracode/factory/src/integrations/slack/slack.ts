@@ -578,7 +578,7 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * its thread reaches the controller.
  *
  * Without this a Slack session runs on the SDK's built-in mode default
- * (`openai/gpt-5.5`), so a factory configured for any other provider fails every
+ * (`openai/gpt-5.6-sol`), so a factory configured for any other provider fails every
  * message with a missing-credentials error. The web kickoff has always applied
  * the factory default; this brings Slack to the same footing.
  *

@@ -33,7 +33,7 @@ Gauge the people involved: the author's merged-PR/issue counts (`gh pr list --au
 
 If the issue is vague, do not stop to ask for clarification. Investigate the most plausible reading of it, record that reading as an assumption, and note what extra information from the reporter would firm it up as an open question.
 
-At the end of this phase, publish a small summary to the source issue as stated below. For GitHub issues, call `github_upsert_factory_triage_comment` with the issue number and the marker-prefixed pending summary; it updates Factory’s canonical marked comment or creates it when absent. For Linear issues, publish the pending summary through Linear. For Jira issues, post a plain-text `Triage in progress: <one or two sentences>` with `jira_create_comment`; Jira renders comments as plain text, so omit the HTML marker. incident.io has no writeback tool and GitLab has no issue-comment tool, so skip the pending summary for those sources; the handoff lives in this conversation.
+At the end of this phase, publish a small summary to the source issue as stated below. For GitHub issues, call `github_upsert_factory_triage_comment` with the issue number and the marker-prefixed pending summary; it updates Factory’s canonical marked comment or creates it when absent. For Linear issues, post the pending summary with `linear_create_comment`, leaving out the `<!-- mastra-factory-triage -->` marker line: Linear does not render HTML and would show it as text. For Jira issues, post a plain-text `Triage in progress: <one or two sentences>` with `jira_create_comment`; Jira renders comments as plain text, so omit the HTML marker. incident.io has no writeback tool and GitLab has no issue-comment tool, so skip the pending summary for those sources; the handoff lives in this conversation.
 
 ```markdown
 <!-- mastra-factory-triage -->
@@ -153,6 +153,7 @@ Fill the placeholders as follows:
 - Keep everything else in the one collapsed **Details** block. Only the ratings table, the summary, the next step, and open questions stay visible. Every line in Details has to earn its place: cut anything a planner would not act on.
 - On GitHub, link every file or `file:line` reference to the code at the commit you investigated: `[`stream.ts:42`](https://github.com/<owner>/<repo>/blob/<full SHA>/src/stream.ts#L42)`. Use the full SHA, not a branch name, so the link keeps pointing at the code you read. Link issues, PRs, and commits you mention too.
 - Use no alerts or emoji, and no tables other than the ratings table.
+- On Linear, which renders Markdown but no HTML, adapt the template: leave out the `<!-- mastra-factory-triage -->` marker line, and write the collapsed block in Linear's own syntax — a `+++ Details` line opens it and a lone `+++` line closes it, each with a blank line around it — in place of the `<details>`, `<summary>` and `</details>` lines. Everything else stays the same.
 
 Severity guide:
 
@@ -207,7 +208,7 @@ Apply only these label mutations. Do not remove `status: needs approval` merely 
 
 For non-GitHub sources, use the same structured handoff without attempting GitHub publication or label mutations:
 
-- Linear issues → publish the handoff through Linear.
+- Linear issues → post the handoff as a new comment with `linear_create_comment`, in the Linear form the output contract describes (no marker line, `+++ Details` … `+++` instead of `<details>`).
 - Jira issues → post a new plain-text comment with `jira_create_comment` (Jira has no marked-comment upsert and shows Markdown tables and HTML literally). The Jira audience may not have access to the target repository, so post only a reporter-safe summary: type, severity, route, and a few sentences on the conclusion and next step. Keep file paths, code, reproduction steps, and repository history out of it; the full handoff stays in this conversation.
 - incident.io follow-ups and GitLab issues → no external publication; the final conversation message is the handoff.
 

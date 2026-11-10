@@ -3,6 +3,9 @@ packages:
 
 # Security floors for Dependabot alerts on transitive deps.
 overrides:
+  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7 <11.0.1) / CVE-2026-118773 (glob >=9 <=14.0.1); cross-major, approved
+  'minimatch@>=7.0.0 <11.0.1': 11.0.5
+  'glob@>=9.0.0 <14.0.2': 14.0.4
   # Vanta 2026-10-26: CVE-2026-111181 (body-parser <1.20.9), via verdaccio -> express 4
   body-parser@<1.20.9: 1.20.9
   adm-zip@<=0.6.0: 0.6.1
@@ -40,4 +43,6 @@ overrides:
   # Vanta 2026-10-09: GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f (critical), GHSA-xw65-4hp5-5hc7 / AIKIDO-2026-258160, -970464, -869467; @verdaccio/hooks pins handlebars 4.7.9
   'handlebars@<4.7.10': 4.7.10
 patchedDependencies:
+  # minimatch 11 removed makeRe(); match package-access patterns with minimatch() instead
+  '@verdaccio/core@8.4.0': patches/@verdaccio__core@8.4.0.patch
   'body-parser@1.20.9': patches/body-parser@1.20.9.patch
