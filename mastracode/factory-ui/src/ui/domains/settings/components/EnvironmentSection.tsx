@@ -57,7 +57,7 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
         scope="factory"
         title="Environment variables"
         action={<AddSandboxEnvButton factoryId={factoryId} />}
-        description="Available to every sandbox of this Factory. Values are encrypted and can't be viewed after saving, and anything running in the sandbox can read them. Runtime changes apply to the next command; processes already running keep the old value. Build changes apply on the next build."
+        description="Added to every sandbox in this Factory."
       >
         <SandboxEnvsBlock factoryId={factoryId} />
       </SettingsSubsection>
