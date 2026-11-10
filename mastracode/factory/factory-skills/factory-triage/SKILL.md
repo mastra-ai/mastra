@@ -112,32 +112,19 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 **Next step:** <one action>
 
 <details>
-<summary><strong>Why these ratings</strong></summary>
+<summary><strong>Details</strong></summary>
+
+**Why these ratings**
 
 - **Confidence** — <evidence>
 - **Effort** — <scope>
 - **Impact** — <who is affected and how>
 
-</details>
+**Root cause** — <root cause with evidence, contributing areas with file paths and relevant history, affected surface, suggested direction, related issues/PRs. Distill — this is a handoff artifact, not a transcript.>
 
-<details>
-<summary><strong>Root cause</strong></summary>
+**Reproduction** — <for reproduced bugs: exact successful steps. Otherwise: attempted steps, environment, and result, or `Not applicable` / `Not reproduced` with a reason.>
 
-<root cause with evidence, contributing areas with file paths and relevant history, affected surface, suggested direction, related issues/PRs. Distill — this is a handoff artifact, not a transcript.>
-
-</details>
-
-<details>
-<summary><strong>Reproduction</strong></summary>
-
-<for reproduced bugs: exact successful steps. Otherwise: attempted steps, environment, and result, or `Not applicable` / `Not reproduced` with a reason.>
-
-</details>
-
-<details>
-<summary><strong>Assumptions</strong></summary>
-
-<every recorded decision from the run>
+**Assumptions** — <every recorded decision from the run, or `None`>
 
 </details>
 
@@ -152,7 +139,7 @@ Fill the placeholders as follows:
 - `<Type>` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other, capitalized for display. `<Severity>` and `<level>` are the lowercase ratings from the guides below. `<Route>` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
 - `<dots>` shows the rating at a glance. Severity uses four dots: `●○○○` low, `●●○○` medium, `●●●○` high, `●●●●` critical. Confidence, effort, and impact use three: `●○○` low, `●●○` medium, `●●●` high. Always follow the dots with the word.
 - Each rating reason is at most 12 words.
-- Keep the collapsed sections collapsed. Only the ratings table, the summary, the next step, and open questions stay visible.
+- Keep everything else in the one collapsed **Details** block. Only the ratings table, the summary, the next step, and open questions stay visible. Every line in Details has to earn its place: cut anything a planner would not act on.
 - Use no alerts or emoji, and no tables other than the ratings table.
 
 Severity guide:
