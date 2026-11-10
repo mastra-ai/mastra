@@ -63,7 +63,7 @@ import {
   REVIEW_CONTEXT,
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
-import { occupiedPhasesOf, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
+import { occupiedPhasesOf, ownReviewBoard, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
@@ -642,8 +642,8 @@ export class MastraFactory {
    * so the definition is checked as an edit is; a new key gets none (no tool, source-closed or
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
-   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `reserved_board` for the
-   * retired Review board's key, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
+   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use` when cards
+   * sit in a phase it removes, `project_not_found`).
    * Available after `prepare()`.
    *
    * @example
@@ -676,7 +676,7 @@ export class MastraFactory {
     }
     const { writes, boards, projects, audit } = store;
     const input = writes.validate(board);
-    // Work and app boards are stored per project like any other; the retired Review board's key is reserved.
+    // Work and app boards are stored per project like any other.
     writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
     let scopes: StoredBoardScope[];
@@ -974,6 +974,8 @@ export class MastraFactory {
       );
     }
 
+    // Cards on a board of the project's own under `review` are that board's, not the retired Review board's.
+    workItemsStorage.useOwnReviewBoard(ownReviewBoard(this.#boards, { stored: storage.isDomainReady('boards') }));
     // Each project's boards are the code boards plus the boards it stored. Load every project
     // before anything reads its boards; without the boards domain the code boards serve directly.
     if (storage.isDomainReady('boards') && storage.isDomainReady('projects')) {

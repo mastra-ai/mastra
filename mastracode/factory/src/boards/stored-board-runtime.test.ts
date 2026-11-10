@@ -1011,9 +1011,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
               { projects: [{ orgId, factoryProjectId: first }] },
             ),
           ).rejects.toMatchObject({ code: 'phase_in_use' });
-          await expect(
-            replica.factory.upsertBoard({ ...bugsBoard, key: 'review' }, { projects: 'all' }),
-          ).rejects.toMatchObject({ code: 'reserved_board' });
+          // `review` is a key like any other: the board is stored, and a card on it stays on it.
+          const review = await replica.factory.upsertBoard(
+            { ...bugsBoard, key: 'review' },
+            { projects: [{ orgId, factoryProjectId: first }] },
+          );
+          expect(review.inserted).toEqual([{ orgId, factoryProjectId: first }]);
+          const reviewCard = await replica.send('POST', `/web/factory/projects/${first}/work-items`, {
+            board: 'review',
+            title: 'Typo in the docs',
+          });
+          expect(reviewCard.status).toBe(200);
+          expect(await replica.workItems.get({ orgId, id: reviewCard.json.workItem.id })).toMatchObject({
+            board: 'review',
+            stages: ['reported'],
+          });
           // Work's key is checked against Work's code behaviour, as an edit is.
           await expect(
             replica.factory.upsertBoard({ ...bugsBoard, key: 'work' }, { projects: 'all' }),

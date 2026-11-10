@@ -5,8 +5,7 @@
  * the built-in Work board and app boards in each project once, and they are edited under their own
  * key; their code behaviour stays attached, so an edit it can't honour is refused
  * (`code_behaviour`), and reset rewrites Factory's current definition at the next revision. They
- * can't be created over, and Work can't be deleted. The retired Review board's key is reserved. The
- * writes themselves are `BoardWrites`.
+ * can't be created over, and Work can't be deleted. The writes themselves are `BoardWrites`.
  */
 
 import type { ApiRoute } from '@mastra/core/server';

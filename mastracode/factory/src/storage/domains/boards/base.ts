@@ -398,11 +398,8 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return { version, boards: await this.list(scope) };
   }
 
-  async get(scope: StoredBoardScope, key: string): Promise<StoredBoardRecord | null> {
-    const row = await this.ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: key });
-    if (!row) return null;
-    const phases = await this.ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: key });
-    return toRecord(row, phases);
+  get(scope: StoredBoardScope, key: string): Promise<StoredBoardRecord | null> {
+    return readStoredBoard(this.ops, scope, key);
   }
 
   /** Creates a board through the API. */
@@ -815,6 +812,18 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
 async function readVersion(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<string | null> {
   const row = await ops.findOne<{ version: string }>(VERSIONS, scopeWhere(scope));
   return row?.version ?? null;
+}
+
+/** The project's board under `key`, read through `ops` so a caller inside a transaction reads within it. */
+export async function readStoredBoard(
+  ops: FactoryStorageOps,
+  scope: StoredBoardScope,
+  key: string,
+): Promise<StoredBoardRecord | null> {
+  const row = await ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: key });
+  if (!row) return null;
+  const phases = await ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: key });
+  return toRecord(row, phases);
 }
 
 async function readBoards(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<StoredBoardRecord[]> {
