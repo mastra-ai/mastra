@@ -7,7 +7,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { runSetupCommand, SetupCommandError } from '../integrations/github/sandbox.js';
+import { runSetupCommand, runTeardownCommand, SetupCommandError } from '../integrations/github/sandbox.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import { SandboxEnvsStorage } from '../storage/domains/sandbox-envs/base.js';
 import { attachSandboxEnvRefresh, resolveSandboxEnv, sandboxBuildContext } from './sandbox-env.js';
@@ -53,6 +53,24 @@ describe('sandbox env on a real LocalSandbox', () => {
 
   const print = async (sandbox: LocalSandbox, name: string) =>
     (await sandbox.executeCommand('sh', ['-c', `printf %s "$${name}"`])).stdout;
+
+  it('masks the Runtime values a failing teardown printed, including an edit picked up by that command', async () => {
+    const store = await makeStore();
+    await store.set(ORG, PROJECT, { name: 'PROOF_RUNTIME', value: 'runtime-one', appliesTo: 'runtime' }, 'u');
+    const sandbox = await attached(store);
+    await sandbox._start();
+    // Edited after the sandbox started: the teardown command itself refreshes and sees the new value.
+    await store.set(ORG, PROJECT, { name: 'PROOF_RUNTIME', value: 'runtime-two', appliesTo: 'runtime' }, 'u');
+
+    const error = await runTeardownCommand(
+      sandbox as Parameters<typeof runTeardownCommand>[0],
+      dir,
+      'echo "token is $PROOF_RUNTIME" >&2; exit 5',
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(SetupCommandError);
+    expect((error as Error).message).toBe('Teardown command failed (exit 5): token is ***');
+  });
 
   it('applies, edits and deletes runtime variables on the next command', async () => {
     const store = await makeStore();

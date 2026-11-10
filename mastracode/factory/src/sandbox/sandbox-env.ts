@@ -85,6 +85,16 @@ export function maskSandboxEnvValues(text: string, env: Record<string, string> |
 
 type EnvOverlay = Record<string, string | undefined>;
 
+const appliedBySandbox = new WeakMap<object, () => Record<string, string>>();
+
+/**
+ * The Factory runtime values currently applied to a sandbox, so output from a
+ * command that ran in it (a failed teardown) can be masked without a storage read.
+ */
+export function appliedSandboxEnv(sandbox: object): Record<string, string> {
+  return appliedBySandbox.get(sandbox)?.() ?? {};
+}
+
 export interface RefreshableSandbox {
   ensureRunning?: () => Promise<void>;
   setEnv?: (update: (env: EnvOverlay) => EnvOverlay) => void;
@@ -136,6 +146,7 @@ export function attachSandboxEnvRefresh(
     applied = { ...next };
   };
   apply(options.initial.runtime);
+  appliedBySandbox.set(sandbox, () => applied);
 
   const original = sandbox.ensureRunning?.bind(sandbox);
   if (!original) return;

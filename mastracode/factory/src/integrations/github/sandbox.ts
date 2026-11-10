@@ -18,7 +18,7 @@
 import type { RepositoryAccess } from '../../capabilities/version-control.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
-import { maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
+import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
 
@@ -1159,8 +1159,8 @@ async function runLifecycleCommand(
     phase: 'setup' | 'teardown';
     timeoutMs?: number;
     env?: Record<string, string>;
-    /** Values to mask in a failure message, beyond `env`. */
-    mask?: Record<string, string>;
+    /** Values to mask in a failure message, beyond `env`; a function is read once the command has run. */
+    mask?: Record<string, string> | (() => Record<string, string>);
   },
 ): Promise<void> {
   const result = await sh(sandbox, `cd ${shellQuote(workdir)} && { ${command}\n}`, {
@@ -1174,7 +1174,8 @@ async function runLifecycleCommand(
     // Factory value (Build or Runtime) the command printed.
     // Mask before trimming: a value with an edge newline or space would no longer match once trimmed.
     const output = result.stderr.trim() ? result.stderr : result.stdout;
-    const detail = maskSandboxEnvValues(output, { ...options.mask, ...options.env }).trim().slice(-1800);
+    const mask = typeof options.mask === 'function' ? options.mask() : options.mask;
+    const detail = maskSandboxEnvValues(output, { ...mask, ...options.env }).trim().slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,
@@ -1215,6 +1216,8 @@ export async function runTeardownCommand(
 ): Promise<void> {
   return runLifecycleCommand(sandbox, workdir, command, {
     phase: 'teardown',
+    // The command sees the Factory runtime values applied to this sandbox, so a failure is masked with them.
+    mask: () => appliedSandboxEnv(sandbox),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });
 }
