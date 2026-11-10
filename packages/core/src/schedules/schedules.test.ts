@@ -215,6 +215,26 @@ describe('mastra.schedules canonical service', () => {
     expect(typeof resumed.nextFireAt).toBe('number');
   });
 
+  it('resuming a one-off wakes and starts the scheduler runtime', async () => {
+    const { mastra } = makeMastra(['a']);
+    const schedule = await mastra.schedules.create({
+      agentId: 'a',
+      runAt: Date.now() + 60_000,
+      prompt: 'p',
+    });
+    await mastra.schedules.pause(schedule.id);
+
+    const publishWake = vi.spyOn(mastra, '__publishSchedulerWake');
+    const ensureRuntime = vi.spyOn(mastra, '__ensureScheduleRuntimeReady');
+
+    const resumed = await mastra.schedules.resume(schedule.id);
+
+    expect(resumed.status).toBe('active');
+    expect(resumed.nextFireAt).toBe(schedule.runAt);
+    expect(publishWake).toHaveBeenCalledWith(schedule.id);
+    expect(ensureRuntime).toHaveBeenCalledOnce();
+  });
+
   it('rejects pause/resume on completed schedules but reactivates on a timing change', async () => {
     const { mastra } = makeMastra(['a']);
     const schedule = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'p' });

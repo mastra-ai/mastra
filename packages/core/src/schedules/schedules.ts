@@ -760,6 +760,8 @@ export class Schedules {
     // One-offs keep their runAt (a past runAt fires on the next tick).
     if (existing.runAt != null) {
       const updated = await store.updateSchedule(existing.id, { status: 'active', nextFireAt: existing.runAt });
+      await this.#mastra.__publishSchedulerWake(updated.id);
+      await this.#mastra.__ensureScheduleRuntimeReady();
       return toScheduleView(updated)!;
     }
     // A paused schedule whose cadence has run out has nothing left to resume.
