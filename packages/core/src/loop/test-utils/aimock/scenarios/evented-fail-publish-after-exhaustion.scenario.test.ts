@@ -15,6 +15,7 @@
 
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
+import { DurableStepIds } from '../../../../agent/durable/constants';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { createTool } from '../../../../tools';
 import { createFlakyPublishPubSub } from '../../../../workflows/evented/test-utils/flaky-publish-pubsub';
@@ -141,8 +142,13 @@ describeForAllEngines(
       expect(result).not.toBe('HANG');
       const { streamError, requests } = result as Awaited<typeof scenario>;
       expect(flaky.rejected['workflow.fail']).toBe(1);
-      // Two workflow.fail publishes happen without rejections; the rejected one is retried once.
-      expect(flaky.attempts['workflow.fail']).toBe(3);
+      // The rejected publish is retried once, and both attempts fail the agent loop's run,
+      // not the iteration run whose end evaluated stopWhen.
+      expect(flaky.attempts['workflow.fail']).toBe(2);
+      expect(flaky.attemptWorkflowIds['workflow.fail']).toEqual([
+        DurableStepIds.AGENTIC_LOOP,
+        DurableStepIds.AGENTIC_LOOP,
+      ]);
       expect(stopWhenCalls).toBe(1);
       expect(toolCalls).toBe(1);
       expect(requests).toHaveLength(1);

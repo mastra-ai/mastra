@@ -4,6 +4,7 @@
 
 import { TripWire } from '../../agent/trip-wire';
 import { MASTRA_AUTH_TOKEN_KEY } from '../../request-context';
+import type { ProcessorArgs } from './workflow-event-processor';
 
 /**
  * Returns a copy of a serialized request context without the framework-managed
@@ -28,6 +29,7 @@ export function restoreLiveRequestContext(
 }
 
 const NON_REDELIVERABLE = Symbol.for('mastra.evented.nonRedeliverable');
+const FRAMEWORK_CONDITION = Symbol.for('mastra.evented.frameworkCondition');
 
 /**
  * Marks an error as deterministic (for example a throwing user callback), so the
@@ -41,6 +43,33 @@ export function markNonRedeliverable<T extends Error>(error: T): T {
 
 export function isNonRedeliverable(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as any)[NON_REDELIVERABLE] === true;
+}
+
+/**
+ * Carries the run to fail when it can differ from the run of the event being handled:
+ * a loop condition runs while handling its nested body's `workflow.end`.
+ */
+export class RunFailure extends Error {
+  constructor(
+    readonly error: Error,
+    readonly run: Omit<ProcessorArgs, 'workflow'>,
+  ) {
+    super(error.message, { cause: error });
+    this.name = 'RunFailure';
+  }
+}
+
+/**
+ * Marks a loop condition built by the framework. It does its own storage and pubsub
+ * I/O, so its errors keep the redelivery budget unless it marks them non-redeliverable.
+ */
+export function markFrameworkCondition<T extends object>(condition: T): T {
+  Object.defineProperty(condition, FRAMEWORK_CONDITION, { value: true });
+  return condition;
+}
+
+export function isFrameworkCondition(condition: unknown): boolean {
+  return typeof condition === 'function' && (condition as any)[FRAMEWORK_CONDITION] === true;
 }
 
 /**
