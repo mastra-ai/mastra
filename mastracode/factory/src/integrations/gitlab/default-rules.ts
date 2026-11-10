@@ -6,7 +6,13 @@ import {
   reviewsPullRequest,
   sourceExternalId,
 } from '../../boards/index.js';
-import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import {
+  closedByRoutes,
+  pullRequestMoveByRoutes,
+  recordExplicitRuleOverrides,
+  routedOnly,
+  unreviewedPullRequestCard,
+} from '../../rules/event-rules.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
 
@@ -185,13 +191,12 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
   if (context.phase?.kind === 'resting') return;
   // An untrusted push must not start review passes on demand.
   if (!trustedGitLabActor(context) && !context.mergeRequest.factoryAuthored) return;
-  return {
-    type: 'transition',
+  return pullRequestMoveByRoutes('pull_request.synchronized', {
     idempotencyKey: `${context.ingress.id}:re-review-updated`,
     board: context.board,
     stage,
     ...(reviewing ? { reenter: true } : {}),
-  } as const;
+  });
 }
 
 function mergeRequestCommented(context: FactoryGitLabRuleContext) {
@@ -215,21 +220,18 @@ function mergeRequestCommented(context: FactoryGitLabRuleContext) {
 
 function mergeRequestMerged(context: FactoryGitLabRuleContext) {
   if (!context.item || !context.board || !context.mergeRequest?.merged) return;
-  const closure = context.boardClosure;
-  const done = closure?.completed;
+  if (unreviewedPullRequestCard(context)) return routedOnly(context, 'pull_request.merged');
+  const done = context.boardClosure?.completed ?? context.flow?.completed;
   if (isPullRequestCard(context.item) && reviewsPullRequest(context)) {
-    // A board with no `sourceClosed` (the retired Review board) finishes it in its first terminal phase.
-    const finished = done ?? context.flow?.completed;
-    if (!finished) return;
-    return {
-      type: 'transition',
+    if (!done) return;
+    return pullRequestMoveByRoutes('pull_request.merged', {
       idempotencyKey: `${context.ingress.id}:merge-request-merged`,
       board: context.board,
-      stage: finished.phase,
+      stage: done.phase,
       message: {
-        text: `GitLab merge request !${context.mergeRequest.number} merged; this merge request card was moved to ${finished.title}.`,
+        text: `GitLab merge request !${context.mergeRequest.number} merged; this merge request card was moved to ${done.title}.`,
       },
-    } as const;
+    });
   }
   if (!authoringCard(context)) return;
   const role = context.flow?.buildRole;
@@ -251,16 +253,15 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
           'so this card stays where it is until it merges.',
       } as const;
     }
-    if (!closure || !done) return;
-    return {
-      type: 'transition',
+    if (!done) return;
+    return pullRequestMoveByRoutes('pull_request.merged', {
       idempotencyKey: `${context.ingress.id}:work-merged`,
       board: context.board,
       stage: done.phase,
       message: {
-        text: `GitLab merge request !${context.mergeRequest.number} merged; this ${closure.boardTitle} card was moved to ${done.title}.`,
+        text: `GitLab merge request !${context.mergeRequest.number} merged; this card was moved to ${done.title}.`,
       },
-    } as const;
+    });
   }
   if (!role) return;
   return {
@@ -275,6 +276,7 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
 
 function mergeRequestClosed(context: FactoryGitLabRuleContext) {
   if (!context.item || !context.board || !context.mergeRequest || context.mergeRequest.merged) return;
+  if (unreviewedPullRequestCard(context)) return routedOnly(context, 'pull_request.closed');
   if (!reviewsPullRequest(context)) return;
   if (!isPullRequestCard(context.item)) {
     // An issue card waiting in pull request review on its last open merge request goes back to
@@ -282,20 +284,18 @@ function mergeRequestClosed(context: FactoryGitLabRuleContext) {
     const initialPhase = context.flow?.initialPhase;
     if (!initialPhase || !attachedMergeRequest(context) || !inPullRequestReview(context)) return;
     if (newestOpenPullRequestNumber(context.item, context.mergeRequest.number) !== null) return;
-    return {
-      type: 'transition',
+    return pullRequestMoveByRoutes('pull_request.closed', {
       idempotencyKey: `${context.ingress.id}:merge-request-closed`,
       board: context.board,
       stage: initialPhase,
       message: {
         text: `GitLab merge request !${context.mergeRequest.number} was closed without merging; this card was moved back to ${initialPhase}.`,
       },
-    } as const;
+    });
   }
   const canceled = context.boardClosure?.canceled ?? context.flow?.canceled;
   if (!canceled) return;
-  return {
-    type: 'transition',
+  return pullRequestMoveByRoutes('pull_request.closed', {
     idempotencyKey: `${context.ingress.id}:merge-request-closed`,
     board: context.board,
     stage: canceled.phase,
@@ -304,7 +304,7 @@ function mergeRequestClosed(context: FactoryGitLabRuleContext) {
         `GitLab merge request !${context.mergeRequest.number} was closed without merging; ` +
         `this merge request card was moved to ${canceled.title}.`,
     },
-  } as const;
+  });
 }
 
 export const defaultGitLabRules = Object.freeze({

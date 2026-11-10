@@ -15,13 +15,30 @@ import {
   DEFAULT_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTES,
   MAX_INTAKE_ROUTES,
+  PULL_REQUEST_CLOSED_ISSUE_ROUTE,
+  PULL_REQUEST_CLOSED_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
+  PULL_REQUEST_MERGED_ROUTE,
+  PULL_REQUEST_REVIEW_REQUESTED_ROUTE,
+  PULL_REQUEST_UPDATED_ROUTE,
   REOPENED_ROUTE,
   StoredBoardsStorage,
 } from './base.js';
 
 const DEFAULT_NAMES = DEFAULT_INTAKE_ROUTES.map(({ route }) => route.name);
-const EVENT_ROUTE_NAMES = [CLOSED_COMPLETED_ROUTE.name, CLOSED_CANCELED_ROUTE.name, REOPENED_ROUTE.name];
+const PULL_REQUEST_EVENT_ROUTES = [
+  PULL_REQUEST_MERGED_ROUTE,
+  PULL_REQUEST_CLOSED_ROUTE,
+  PULL_REQUEST_CLOSED_ISSUE_ROUTE,
+  PULL_REQUEST_UPDATED_ROUTE,
+  PULL_REQUEST_REVIEW_REQUESTED_ROUTE,
+];
+const EVENT_ROUTE_NAMES = [
+  CLOSED_COMPLETED_ROUTE.name,
+  CLOSED_CANCELED_ROUTE.name,
+  REOPENED_ROUTE.name,
+  ...PULL_REQUEST_EVENT_ROUTES.map(({ name }) => name),
+];
 import type { StoredBoardScope, StoredIntakeRouteInput } from './base.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -83,9 +100,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
   it('gives a new project the default routes, once, and never brings one back once deleted', async () => {
     const { boards, scope } = await setup({ seeded: true });
 
-    const [closesIssue, seeded, pullRequests, closedCompleted, closedCanceled, reopened, ...rest] =
+    const [closesIssue, seeded, pullRequests, closedCompleted, closedCanceled, reopened, ...pullRequestEvents] =
       await boards.listIntakeRoutes(scope);
-    expect(rest).toEqual([]);
     // Its condition stands on its own (trusted authors only), so it can go first.
     expect(closesIssue).toMatchObject({
       name: CLOSES_ISSUE_INTAKE_ROUTE.name,
@@ -140,7 +156,35 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       when: null,
       target: { boardKey: 'work', phaseKey: 'intake' },
     });
-    const all = [closesIssue, seeded, pullRequests, closedCompleted, closedCanceled, reopened];
+    // A pull request's merge, close, push and review request move its Work card through routes too.
+    expect(pullRequestEvents).toMatchObject([
+      { position: 6, on: ['pull_request.merged'], when: null, target: { boardKey: 'work', phaseKey: 'done' } },
+      {
+        position: 7,
+        on: ['pull_request.closed'],
+        when: PULL_REQUEST_CLOSED_ROUTE.when,
+        target: { boardKey: 'work', phaseKey: 'canceled' },
+      },
+      {
+        position: 8,
+        on: ['pull_request.closed'],
+        when: PULL_REQUEST_CLOSED_ISSUE_ROUTE.when,
+        target: { boardKey: 'work', phaseKey: 'intake' },
+      },
+      {
+        position: 9,
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', phaseKey: 'pr-review' },
+        allowWorkingPhase: true,
+      },
+      {
+        position: 10,
+        on: ['pull_request.review_requested'],
+        target: { boardKey: 'work', phaseKey: 'pr-review' },
+        allowWorkingPhase: true,
+      },
+    ]);
+    const all = [closesIssue, seeded, pullRequests, closedCompleted, closedCanceled, reopened, ...pullRequestEvents];
     expect(await boards.listIntakeRoutes(scope)).toEqual(all);
 
     // Each delete re-places the rest, bumping the revision of every route after it.
@@ -248,6 +292,39 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect(listed.toSorted()).toEqual([...DEFAULT_NAMES, 'Mine'].toSorted());
   });
 
+  it('adds the pull request event routes once, at the end, to a project that already had the close and reopen routes', async () => {
+    const { storage, boards, scope } = await setup({ seeded: true });
+    const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
+    // The state a project set up before pull request events were routable is in, with one of
+    // its close routes deleted by an admin: that one stays deleted.
+    await boards.listIntakeRoutes(scope);
+    await storage.ops.updateMany('factory_intake_route_locks', where, {
+      seeded_defaults: [
+        'closes-issue',
+        'outside-authors',
+        'pull-requests',
+        'closed-completed',
+        'closed-canceled',
+        'reopened',
+      ],
+    });
+    for (const { name } of [...PULL_REQUEST_EVENT_ROUTES, CLOSED_CANCELED_ROUTE]) {
+      await storage.ops.deleteMany('factory_intake_routes', { ...where, name });
+    }
+    await storage.ops.updateMany('factory_intake_routes', { ...where, name: REOPENED_ROUTE.name }, { position: 4 });
+
+    const expected = [
+      CLOSES_ISSUE_INTAKE_ROUTE.name,
+      DEFAULT_INTAKE_ROUTE.name,
+      PULL_REQUEST_INTAKE_ROUTE.name,
+      CLOSED_COMPLETED_ROUTE.name,
+      REOPENED_ROUTE.name,
+      ...PULL_REQUEST_EVENT_ROUTES.map(({ name }) => name),
+    ];
+    expect(await names(boards, scope)).toEqual(expected);
+    expect(await names(boards, scope)).toEqual(expected);
+  });
+
   it('adds the close and reopen routes once, at the end, to a project that already had the placement routes', async () => {
     const { storage, boards, scope } = await setup({ seeded: true });
     const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
@@ -286,8 +363,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     // A deleted default stays deleted.
     const reopened = (await boards.listIntakeRoutes(scope)).find(row => row.name === REOPENED_ROUTE.name)!;
     await boards.deleteIntakeRoute(scope, reopened.id, { expectedRevision: reopened.revision });
-    expect(await names(boards, scope)).toEqual([...placement, CLOSED_COMPLETED_ROUTE.name, CLOSED_CANCELED_ROUTE.name]);
-    expect(await names(boards, scope)).toEqual([...placement, CLOSED_COMPLETED_ROUTE.name, CLOSED_CANCELED_ROUTE.name]);
+    const remaining = [...placement, ...EVENT_ROUTE_NAMES.filter(name => name !== REOPENED_ROUTE.name)];
+    expect(await names(boards, scope)).toEqual(remaining);
+    expect(await names(boards, scope)).toEqual(remaining);
   });
 
   it('reads back every field of a route, and fills the defaults', async () => {
@@ -478,6 +556,28 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       // Narrowing `on` back to new cards would leave a condition that can never be tested.
       await expect(
         boards.updateIntakeRoute(scope, closes.id, { on: ['work_item.created'] }, { expectedRevision: 1, actor: 'u' }),
+      ).rejects.toMatchObject({ code: 'invalid_intake_route' });
+      expect(await boards.getIntakeRoute(scope, closes.id)).toEqual(closes);
+    });
+
+    it('refuses a close reason on a route that handles no issue close, including after a patch', async () => {
+      const { boards, scope } = await setup();
+      // Pull request events carry no reason, so the condition could never match.
+      await expect(
+        boards.createIntakeRoute(scope, route('Unmerged', { on: ['pull_request.closed'], when: CANCELED }), 'u'),
+      ).rejects.toMatchObject({ code: 'invalid_intake_route' });
+      const closes = await boards.createIntakeRoute(
+        scope,
+        route('Closes', { on: ['work_item.closed', 'pull_request.closed'], when: CANCELED }),
+        'u',
+      );
+      await expect(
+        boards.updateIntakeRoute(
+          scope,
+          closes.id,
+          { on: ['pull_request.closed'] },
+          { expectedRevision: 1, actor: 'u' },
+        ),
       ).rejects.toMatchObject({ code: 'invalid_intake_route' });
       expect(await boards.getIntakeRoute(scope, closes.id)).toEqual(closes);
     });

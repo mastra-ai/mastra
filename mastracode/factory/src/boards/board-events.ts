@@ -6,8 +6,47 @@ import { CARD_RULE_FIELDS } from '../rules/rule-group.js';
  * webhooks onto these. Status events change where a card belongs: only these can move a card, so
  * only these may be named in a route's `on`.
  */
-export const STATUS_EVENTS = ['work_item.created', 'work_item.closed', 'work_item.reopened'] as const;
+export const STATUS_EVENTS = [
+  'work_item.created',
+  'work_item.closed',
+  'work_item.reopened',
+  'pull_request.opened',
+  'pull_request.synchronized',
+  'pull_request.review_requested',
+  'pull_request.merged',
+  'pull_request.closed',
+] as const;
 export type StatusEvent = (typeof STATUS_EVENTS)[number];
+
+/**
+ * What happened to a card's pull request (GitHub) or merge request (GitLab): opened by the card's
+ * session, pushed to, re-review requested, merged, or closed unmerged. A provider's default rule
+ * decides whether the event moves the card at all; a route on the card's board naming the event
+ * decides where it goes.
+ */
+export type PullRequestEvent = Extract<StatusEvent, `pull_request.${string}`>;
+
+export function isPullRequestEvent(type: StatusEvent): type is PullRequestEvent {
+  return type.startsWith('pull_request.');
+}
+
+/**
+ * Whether the event may move a card that is, or isn't, finished: a reopen moves only a finished
+ * card, a close or a merge only an unfinished one. A push or a review request re-reviews a pull
+ * request whatever its card's phase.
+ */
+export function eventMovesCard(type: StatusEvent, finished: boolean): boolean {
+  switch (type) {
+    case 'work_item.reopened':
+      return finished;
+    case 'work_item.closed':
+    case 'pull_request.merged':
+    case 'pull_request.closed':
+      return !finished;
+    default:
+      return true;
+  }
+}
 
 /** Activity on a card: it never moves the card, it only tells the card's session. */
 export const ACTIVITY_EVENTS = ['work_item.commented', 'work_item.edited'] as const;
@@ -55,18 +94,17 @@ function isStatusEvent(value: string): value is StatusEvent {
   return (STATUS_EVENTS as readonly string[]).includes(value);
 }
 
-function namesEventField(group: RuleGroup): boolean {
+function namesField(group: RuleGroup, fields: readonly string[]): boolean {
   return group.conditions.some(condition =>
-    'conditions' in condition
-      ? namesEventField(condition)
-      : (EVENT_RULE_FIELDS as readonly string[]).includes(condition.field),
+    'conditions' in condition ? namesField(condition, fields) : fields.includes(condition.field),
   );
 }
 
 /**
  * Why a route's `on` and `when` can't be saved together, or null. `on` must name at least one
  * status event, each once; `event.*` conditions need an event besides `work_item.created`, which
- * places new cards and carries no event facts.
+ * places new cards and carries no event facts, and `event.reason` needs `work_item.closed`, the
+ * only event with a reason.
  */
 export function routeEventsProblem(on: readonly string[], when: RuleGroup | null): string | null {
   if (on.length === 0) return '`on` must name at least one event.';
@@ -77,8 +115,11 @@ export function routeEventsProblem(on: readonly string[], when: RuleGroup | null
     }
     if (!isStatusEvent(event)) return `"${event}" is not a board event; use one of ${STATUS_EVENTS.join(', ')}.`;
   }
-  if (when && on.every(event => event === 'work_item.created') && namesEventField(when)) {
+  if (when && on.every(event => event === 'work_item.created') && namesField(when, EVENT_RULE_FIELDS)) {
     return '`event.type` and `event.reason` only apply to routes that handle an event besides work_item.created.';
+  }
+  if (when && !on.includes('work_item.closed') && namesField(when, ['event.reason'])) {
+    return '`event.reason` only applies to routes that handle work_item.closed: no other event carries a reason.';
   }
   return null;
 }

@@ -87,19 +87,26 @@ export function intakeTargetProblem(
 }
 
 /**
- * On a board that reviews pull requests a new pull request card lands at rest or in the pull
- * request review phase, and nothing else lands in that review: a card arriving here carries no
- * attached pull request yet. `FactoryTransitionService` refuses any move that breaks this, so a
- * route can't either.
+ * On a board that reviews pull requests a pull request card works only in the pull request review
+ * phase (it may also rest or finish), and nothing else lands in that review: a card arriving here
+ * carries no attached pull request yet, and an existing issue card enters it only with one on it.
+ * `FactoryTransitionService` refuses any move that breaks this, so a route can't either.
  */
-function placementTakesCard(board: InstalledBoard, phase: string, facts: RuleFacts): boolean {
+function placementTakesCard(
+  board: InstalledBoard,
+  phase: string,
+  facts: RuleFacts,
+  carriesPullRequest = false,
+): boolean {
   const flow = boardFlow(board);
   const review = flow.pullRequestReview;
   if (!review) return true;
-  const pullRequest = facts['source.kind'] === 'pull_request';
-  // A board that reviews pull requests but builds nothing (the retired Review board) holds only them.
-  if (!pullRequest) return flow.build !== undefined && phase !== review;
-  return phase === review || board.phaseKind(phase) === 'resting';
+  if (facts['source.kind'] !== 'pull_request') {
+    // A board that reviews pull requests but builds nothing (the retired Review board) holds only them.
+    if (flow.build === undefined) return false;
+    return phase !== review || carriesPullRequest;
+  }
+  return phase === review || board.phaseKind(phase) !== 'working';
 }
 
 /**
@@ -197,6 +204,7 @@ export function resolveEventRoute(
   event: BoardEventFacts,
   cardFacts: RuleFacts,
   board: InstalledBoard,
+  carriesPullRequest = false,
 ): { phase: string; routeId: string; allowWorkingPhase: boolean } | undefined {
   const facts: RuleFacts = {
     ...cardFacts,
@@ -207,7 +215,7 @@ export function resolveEventRoute(
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;
     const phase = route.target.phaseKey ?? board.initialPhase;
-    if (board.phaseKind(phase) === undefined || !placementTakesCard(board, phase, facts)) continue;
+    if (board.phaseKind(phase) === undefined || !placementTakesCard(board, phase, facts, carriesPullRequest)) continue;
     return { phase, routeId: route.id, allowWorkingPhase: route.allowWorkingPhase };
   }
   return undefined;

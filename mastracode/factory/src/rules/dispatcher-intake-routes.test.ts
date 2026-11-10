@@ -123,7 +123,14 @@ async function setup(
   /** Gives the dispatcher another turn, a day later, so a decision waiting to retry runs again. */
   const retry = () => dispatcher.runOnce(new Date('2030-01-02T00:00:00Z'));
   /** Commits a status event on an existing card, as an integration does when no rule decided anything, and dispatches it. */
-  const deliverEvent = async (cardId: string, event: BoardEventFacts, identity = `event-${(deliveries += 1)}`) => {
+  const deliverEvent = (cardId: string, event: BoardEventFacts, identity = `event-${(deliveries += 1)}`) =>
+    deliverDecision(cardId, { type: 'routeEvent', idempotencyKey: `${identity}:event-route`, event }, identity);
+  /** Commits a rule's decision on an existing card, as an integration's default rule would, and dispatches it. */
+  const deliverDecision = async (
+    cardId: string,
+    decision: FactoryCommitDecision,
+    identity = `decision-${(deliveries += 1)}`,
+  ) => {
     const card = await workItems.get({ orgId: 'org-1', id: cardId });
     const committed = await workItems.commitRuleEvaluation({
       ...scope,
@@ -133,7 +140,7 @@ async function setup(
       expectedRevision: card!.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
-      decisions: [{ type: 'routeEvent', idempotencyKey: `${identity}:event-route`, event }],
+      decisions: [decision],
       causalChain: [],
       now: new Date('2030-01-01T00:00:00Z'),
     });
@@ -173,6 +180,7 @@ async function setup(
     route,
     deliver,
     deliverEvent,
+    deliverDecision,
     putAt,
     routeDecisions,
     stageAudits,
@@ -776,5 +784,145 @@ describe('intake routes moving existing cards on status events', () => {
     expect((await deliverEvent(card.id, { type: 'work_item.closed', reason: 'completed' })).card).toMatchObject({
       stages: ['intake'],
     });
+  });
+});
+
+describe('intake routes moving existing cards on pull request events', () => {
+  /** A pull request's own card, filed by a trusted author: the default routes send it to PR review. */
+  async function pullRequestCard(harness: Awaited<ReturnType<typeof setup>>, board = 'work', stage = 'pr-review') {
+    return (await harness.deliver({
+      sourceKey: 'github-pr:17',
+      source: 'github-pr',
+      board,
+      stage,
+      metadata: { authorTrusted: true },
+    }))!;
+  }
+
+  it("keeps the default rule's own move, re-entry and message included, where the default route agrees", async () => {
+    const harness = await setup({ withDefaultRoute: true });
+    const card = await pullRequestCard(harness);
+    expect(card.stages).toEqual(['pr-review']);
+
+    const reviewRuns = async () =>
+      (await harness.workItems.listDeferredDecisions('org-1', harness.project.id)).filter(
+        decision => decision.workItemId === card.id && decision.decision.type === 'invokeSkill',
+      ).length;
+    const before = await reviewRuns();
+    // A push to a pull request in review: the rule re-enters PR review to restart the pass.
+    const pushed = await harness.deliverDecision(card.id, {
+      type: 'transition',
+      idempotencyKey: 'push:re-review-updated',
+      board: 'work',
+      stage: 'pr-review',
+      reenter: true,
+      event: { type: 'pull_request.synchronized' },
+    });
+    // Re-entering the phase it sits in queues a fresh review pass.
+    expect(pushed.card).toMatchObject({ stages: ['pr-review'] });
+    expect(await reviewRuns()).toBe(before + 1);
+
+    const merged = await harness.deliverDecision(card.id, {
+      type: 'transition',
+      idempotencyKey: 'merge:pull-request-merged',
+      board: 'work',
+      stage: 'done',
+      message: { text: 'Pull request #17 merged.' },
+      event: { type: 'pull_request.merged' },
+    });
+    expect(merged.card).toMatchObject({ stages: ['done'] });
+    expect(merged.card!.stageHistory.at(-1)!.by).not.toMatch(/^intake-route:/);
+  });
+
+  it('sends a merged pull request wherever an admin points its route', async () => {
+    const harness = await setup({ withDefaultRoute: true });
+    const mergedRoute = (await harness.boards.listIntakeRoutes(harness.scope)).find(route =>
+      route.on.includes('pull_request.merged'),
+    )!;
+    await harness.boards.updateIntakeRoute(
+      harness.scope,
+      mergedRoute.id,
+      { target: { boardKey: 'work', phaseKey: 'canceled' } },
+      { expectedRevision: mergedRoute.revision, actor: 'admin' },
+    );
+    const card = await pullRequestCard(harness);
+
+    const merged = await harness.deliverDecision(card.id, {
+      type: 'transition',
+      idempotencyKey: 'merge:pull-request-merged',
+      board: 'work',
+      stage: 'done',
+      event: { type: 'pull_request.merged' },
+    });
+    expect(merged.card).toMatchObject({ stages: ['canceled'] });
+    expect(merged.card!.stageHistory.at(-1)).toMatchObject({ stage: 'canceled', by: `intake-route:${mergedRoute.id}` });
+  });
+
+  it("still finishes a merged card with the rule's own move when the admin disables the merge route", async () => {
+    const harness = await setup({ withDefaultRoute: true });
+    const mergedRoute = (await harness.boards.listIntakeRoutes(harness.scope)).find(route =>
+      route.on.includes('pull_request.merged'),
+    )!;
+    await harness.boards.updateIntakeRoute(
+      harness.scope,
+      mergedRoute.id,
+      { enabled: false },
+      { expectedRevision: mergedRoute.revision, actor: 'admin' },
+    );
+    const card = await pullRequestCard(harness);
+
+    const merged = await harness.deliverDecision(card.id, {
+      type: 'transition',
+      idempotencyKey: 'merge:pull-request-merged',
+      board: 'work',
+      stage: 'done',
+      event: { type: 'pull_request.merged' },
+    });
+    expect(merged.card).toMatchObject({ stages: ['done'] });
+    expect(merged.card!.stageHistory.at(-1)!.by).not.toMatch(/^intake-route:/);
+  });
+
+  it('moves a finished card on a merge or a close never, and re-reviews it on a push', async () => {
+    const harness = await setup({ withDefaultRoute: true });
+    const card = await pullRequestCard(harness);
+    await harness.putAt(card.id, 'done');
+
+    const closed = await harness.deliverDecision(card.id, {
+      type: 'transition',
+      idempotencyKey: 'close:pull-request-closed',
+      board: 'work',
+      stage: 'canceled',
+      event: { type: 'pull_request.closed' },
+    });
+    expect(closed.card).toMatchObject({ stages: ['done'] });
+
+    const pushed = await harness.deliverDecision(card.id, {
+      type: 'transition',
+      idempotencyKey: 'push:re-review-updated',
+      board: 'work',
+      stage: 'pr-review',
+      event: { type: 'pull_request.synchronized' },
+    });
+    expect(pushed.card).toMatchObject({ stages: ['pr-review'] });
+  });
+
+  it('moves a pull request card on a board with no pull request loop only where a route naming the event says', async () => {
+    const harness = await setup();
+    await harness.boards.create(harness.scope, docsBoard, 'admin');
+    const card = await pullRequestCard(harness, 'docs', 'inbox');
+    expect(placed(card)).toEqual({ board: 'docs', stages: ['inbox'] });
+
+    expect((await harness.deliverEvent(card.id, { type: 'pull_request.merged' })).card).toMatchObject({
+      stages: ['inbox'],
+    });
+
+    const route = await harness.route({
+      name: 'Merged docs ship',
+      on: ['pull_request.merged'],
+      target: { boardKey: 'docs', phaseKey: 'published' },
+    });
+    const merged = (await harness.deliverEvent(card.id, { type: 'pull_request.merged' })).card;
+    expect(merged).toMatchObject({ stages: ['published'] });
+    expect(merged!.stageHistory.at(-1)).toMatchObject({ stage: 'published', by: `intake-route:${route.id}` });
   });
 });

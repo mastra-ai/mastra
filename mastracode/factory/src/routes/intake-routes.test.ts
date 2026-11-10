@@ -157,7 +157,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
     const [closesIssue, route, pullRequests, ...events] = await list(replicaA.send, base, MEMBER);
-    // Close and reopen routes target Done, Canceled and Intake, and none has a problem to report.
+    // Close, reopen and pull request routes target Work's phases, and none has a problem to report.
     expect(events).toMatchObject([
       { name: 'Closed issues go to Done', on: ['work_item.closed'], target: { phaseKey: 'done' }, problems: [] },
       {
@@ -172,8 +172,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         target: { phaseKey: 'intake' },
         problems: [],
       },
+      // A pull request's merge, close, push and review request move its card the same way.
+      { on: ['pull_request.merged'], target: { phaseKey: 'done' }, problems: [] },
+      { on: ['pull_request.closed'], target: { phaseKey: 'canceled' }, problems: [] },
+      { on: ['pull_request.closed'], target: { phaseKey: 'intake' }, problems: [] },
+      { on: ['pull_request.synchronized'], target: { phaseKey: 'pr-review' }, allowWorkingPhase: true, problems: [] },
+      {
+        on: ['pull_request.review_requested'],
+        target: { phaseKey: 'pr-review' },
+        allowWorkingPhase: true,
+        problems: [],
+      },
     ]);
-    expect(events).toHaveLength(3);
+    expect(events).toHaveLength(8);
     expect(closesIssue).toMatchObject({
       name: CLOSES_ISSUE_INTAKE_ROUTE.name,
       position: 0,
