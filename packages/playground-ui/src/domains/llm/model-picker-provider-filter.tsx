@@ -7,18 +7,26 @@ interface ModelPickerProviderFilterProps {
   providers: ModelPickerProvider[];
   value?: string;
   onChange: (providerId: string | undefined) => void;
+  /** Providers kept out of the row; a trailing button lists them. */
+  moreCount: number;
+  browsingMore: boolean;
+  onBrowseMore: () => void;
   renderProviderIcon: (providerId: string) => ReactNode;
   sheet: boolean;
 }
 
-/** "All" plus one toggle per provider; pressing the active provider again shows all of them. */
+/** "All", one toggle per provider (pressing the active one again shows all), then the rest behind one button. */
 export function ModelPickerProviderFilter({
   providers,
   value,
   onChange,
+  moreCount,
+  browsingMore,
+  onBrowseMore,
   renderProviderIcon,
   sheet,
 }: ModelPickerProviderFilterProps) {
+  const pillClassName = cn('shrink-0 aria-pressed:bg-fill aria-pressed:text-foreground', sheet && 'h-11 px-4');
   return (
     <div
       role="group"
@@ -29,8 +37,8 @@ export function ModelPickerProviderFilter({
         type="button"
         variant="ghost"
         size="sm"
-        className={cn('shrink-0 aria-pressed:bg-fill aria-pressed:text-foreground', sheet && 'h-11 px-4')}
-        aria-pressed={!value}
+        className={pillClassName}
+        aria-pressed={!value && !browsingMore}
         onClick={() => onChange(undefined)}
       >
         All
@@ -56,6 +64,19 @@ export function ModelPickerProviderFilter({
           </Button>
         );
       })}
+      {moreCount > 0 ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={pillClassName}
+          aria-pressed={browsingMore}
+          aria-label={`${moreCount} more providers`}
+          onClick={onBrowseMore}
+        >
+          +{moreCount}
+        </Button>
+      ) : null}
     </div>
   );
 }

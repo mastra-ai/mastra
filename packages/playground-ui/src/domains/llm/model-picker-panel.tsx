@@ -1,8 +1,9 @@
 import { Plus, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
+import { useDeferredValue, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ModelPickerOption } from './model-picker-option';
 import { ModelPickerProviderFilter } from './model-picker-provider-filter';
+import { ModelPickerProviderOption } from './model-picker-provider-option';
 import type {
   ModelPickerAddProvider,
   ModelPickerModel,
@@ -22,7 +23,7 @@ import {
 import { Txt } from '@/ds/components/Txt';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/utils/cn';
-import { compareModelReleaseDates, formatModelName } from '@/utils/model';
+import { compareModelReleaseDates } from '@/utils/model';
 
 // Catalogs run to thousands of models; rendering them all freezes the list.
 const MAX_SEARCH_RESULTS = 50;
@@ -33,15 +34,25 @@ const byReleaseDate = (a: ModelPickerModel, b: ModelPickerModel) =>
 const isSameModel = (a: ModelPickerValue | undefined, provider: string, model: string) =>
   a?.provider === provider && a.model === model;
 
-/** Every word of the query appears in the provider or model name or id. */
+// "Opus 4.6" finds claude-opus-4-6: ids and queries compare as plain words.
+const searchWords = (text: string) => text.toLowerCase().replace(/[-_./:]/g, ' ');
+
+/**
+ * Models whose provider name, provider id or model id hold every word of the query, in the order of
+ * `providers`. Runs on each keystroke over catalogs of thousands, so it sorts only the matches and stops
+ * once it has more than the list shows.
+ */
 function searchModels(providers: ModelPickerProvider[], query: string) {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const words = searchWords(query).split(' ').filter(Boolean);
   const matches: { provider: ModelPickerProvider; model: ModelPickerModel }[] = [];
   for (const provider of providers) {
-    for (const model of provider.models.toSorted(byReleaseDate)) {
-      const text = `${provider.name} ${provider.id} ${model.id} ${formatModelName(model.id)}`.toLowerCase();
-      if (words.every(word => text.includes(word))) matches.push({ provider, model });
-    }
+    const providerText = searchWords(`${provider.name} ${provider.id}`);
+    const found = provider.models.filter(model => {
+      const text = `${providerText} ${searchWords(model.id)}`;
+      return words.every(word => text.includes(word));
+    });
+    for (const model of found.toSorted(byReleaseDate)) matches.push({ provider, model });
+    if (matches.length > MAX_SEARCH_RESULTS) break;
   }
   return matches;
 }
@@ -82,13 +93,23 @@ export function ModelPickerPanel({
   // The popover and sheet unmount when closed, so each open starts with a fresh search and filter.
   const [query, setQuery] = useState('');
   const [providerFilter, setProviderFilter] = useState(initialProviderFilter);
+  const [browsingMore, setBrowsingMore] = useState(false);
+  // Typing stays ahead of the list, which catches up with the latest query.
+  const deferredQuery = useDeferredValue(query);
   const searchBar = useMeasuredAutoHeight();
   const [scrolled, setScrolled] = useState(false);
-  // Providers without credentials stay out of the way until a search asks for them.
-  const usable = providers.filter(provider => provider.connected !== false || provider.id === value?.provider);
-  const filtering = usable.length > 1;
+  // Providers without credentials wait behind "+N" (or a search) unless picked or filtered to.
+  const inRow = (provider: ModelPickerProvider) =>
+    provider.connected !== false || provider.id === value?.provider || provider.id === providerFilter;
+  const usable = providers.filter(inRow);
+  const others = providers.filter(provider => !inRow(provider));
+  const filtering = usable.length > 1 || others.length > 0;
   const shownProviders = providerFilter ? usable.filter(provider => provider.id === providerFilter) : usable;
-  const matches = query ? searchModels(providers, query) : [];
+  const matches = deferredQuery ? searchModels([...usable, ...others], deferredQuery) : [];
+  const filterTo = (providerId: string | undefined) => {
+    setProviderFilter(providerId);
+    setBrowsingMore(false);
+  };
   // A lone group's provider is already on screen (the trigger, or the pressed filter), so it needs no heading.
   const mixedProviders = shownProviders.length > 1;
   const renderOption = (provider: ModelPickerProvider, model: ModelPickerModel) => (
@@ -160,7 +181,13 @@ export function ModelPickerPanel({
               <ModelPickerProviderFilter
                 providers={usable}
                 value={providerFilter}
-                onChange={setProviderFilter}
+                onChange={filterTo}
+                moreCount={others.length}
+                browsingMore={browsingMore}
+                onBrowseMore={() => {
+                  setProviderFilter(undefined);
+                  setBrowsingMore(true);
+                }}
                 renderProviderIcon={renderProviderIcon}
                 sheet={sheet}
               />
@@ -168,7 +195,7 @@ export function ModelPickerPanel({
           </div>
           <CommandList className="max-h-none overflow-visible">
             <CommandEmpty>No matching model.</CommandEmpty>
-            {query ? (
+            {deferredQuery ? (
               <CommandGroup>
                 {matches.slice(0, MAX_SEARCH_RESULTS).map(({ provider, model }) => renderOption(provider, model))}
                 {matches.length > MAX_SEARCH_RESULTS ? (
@@ -177,6 +204,17 @@ export function ModelPickerPanel({
                   </Txt>
                 ) : null}
               </CommandGroup>
+            ) : browsingMore ? (
+              <CommandGroup heading="Not connected">
+                {others.map(provider => (
+                  <ModelPickerProviderOption
+                    key={provider.id}
+                    provider={provider}
+                    onSelect={() => filterTo(provider.id)}
+                    renderProviderIcon={renderProviderIcon}
+                  />
+                ))}
+              </CommandGroup>
             ) : (
               shownProviders.map(provider => (
                 <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
@@ -184,7 +222,11 @@ export function ModelPickerPanel({
                 </CommandGroup>
               ))
             )}
-            {!query && resetLabel && defaultModel && !isSameModel(value, defaultModel.provider, defaultModel.model) ? (
+            {!deferredQuery &&
+            !browsingMore &&
+            resetLabel &&
+            defaultModel &&
+            !isSameModel(value, defaultModel.provider, defaultModel.model) ? (
               <>
                 <CommandSeparator />
                 <CommandGroup>

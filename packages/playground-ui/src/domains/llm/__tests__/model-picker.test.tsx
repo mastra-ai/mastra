@@ -172,7 +172,7 @@ describe('ModelPicker', () => {
     const groq: ModelPickerProvider = { id: 'groq', name: 'Groq', connected: false, models: [{ id: 'llama-4-scout' }] };
     const catalog = [{ ...anthropic, connected: true }, { ...openai, connected: true }, groq, ...offline];
 
-    it('lists only connected providers until the user searches', () => {
+    it('lists connected providers first and counts the rest behind one button', () => {
       const list = openPicker(catalog);
 
       expect(optionNames(list)).toEqual(['Claude Opus 4.7', 'Claude Sonnet 4.6', 'GPT-5']);
@@ -180,7 +180,18 @@ describe('ModelPicker', () => {
         within(screen.getByRole('group', { name: 'Filter by provider' }))
           .getAllByRole('button')
           .map(button => button.getAttribute('aria-label') ?? button.textContent),
-      ).toEqual(['All', 'Anthropic', 'OpenAI']);
+      ).toEqual(['All', 'Anthropic', 'OpenAI', '41 more providers']);
+    });
+
+    it('browses the other providers and opens the models of the one picked', () => {
+      const list = openPicker(catalog);
+
+      fireEvent.click(screen.getByRole('button', { name: '41 more providers' }));
+      expect(optionNames(list)).toHaveLength(41);
+      fireEvent.click(within(list).getByRole('option', { name: /Groq/ }));
+
+      expect(optionNames(list)).toEqual(['Llama 4 Scout']);
+      expect(screen.getByRole('button', { name: 'Groq, not connected' }).getAttribute('aria-pressed')).toBe('true');
     });
 
     it('searches every provider and caps the matches it renders', () => {
