@@ -11,25 +11,28 @@ describe('workflow', () => {
   describe('createStep', () => {
     describe('StepParams overload', () => {
       it('should infer input and output types from schemas', () => {
+        const inputSchema = zv3.object({ name: zv3.string(), age: zv3.number() });
+        const outputSchema = zv3.object({ greeting: zv3.string(), isAdult: zv3.boolean() });
         const step = createStep({
           id: 'my-step',
-          inputSchema: zv3.object({ name: zv3.string(), age: zv3.number() }),
-          outputSchema: zv3.object({ greeting: zv3.string(), isAdult: zv3.boolean() }),
+          inputSchema,
+          outputSchema,
           execute: async ({ inputData }) => {
             expectTypeOf(inputData).toEqualTypeOf<{ name: string; age: number }>();
             return { greeting: `Hello, ${inputData.name}!`, isAdult: inputData.age >= 18 };
           },
         });
 
+        // step schemas are StandardSchemaWithJSON, so zv3.infer applies to the zod v3 source schemas
         expectTypeOf(step.id).toEqualTypeOf<'my-step'>();
-        expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<{
-          name: string;
-          age: number;
-        }>();
-        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<{
-          greeting: string;
-          isAdult: boolean;
-        }>();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<
+          zv3.infer<typeof inputSchema>
+        >();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<
+          zv3.infer<typeof outputSchema>
+        >();
+        expectTypeOf<zv3.infer<typeof inputSchema>>().toEqualTypeOf<{ name: string; age: number }>();
+        expectTypeOf<zv3.infer<typeof outputSchema>>().toEqualTypeOf<{ greeting: string; isAdult: boolean }>();
       });
 
       it('should infer state type from stateSchema', () => {
@@ -102,15 +105,15 @@ describe('workflow', () => {
           model: 'gpt-4o',
         });
 
+        const schema = zv3.object({ sentiment: zv3.enum(['positive', 'negative', 'neutral']) });
         const step = createStep(agent, {
-          structuredOutput: {
-            schema: zv3.object({ sentiment: zv3.enum(['positive', 'negative', 'neutral']) }),
-          },
+          structuredOutput: { schema },
         });
 
         expectTypeOf(step.id).toEqualTypeOf<'my-agent'>();
         expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
-        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<{
+        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<zv3.infer<typeof schema>>();
+        expectTypeOf<zv3.infer<typeof schema>>().toEqualTypeOf<{
           sentiment: 'positive' | 'negative' | 'neutral';
         }>();
         expectTypeOf(step).toEqualTypeOf<
@@ -187,11 +190,13 @@ describe('workflow', () => {
 
     describe('Tool overload', () => {
       it('should infer types from tool schemas', () => {
+        const inputSchema = zv3.object({ a: zv3.number(), b: zv3.number(), op: zv3.enum(['+', '-', '*', '/']) });
+        const outputSchema = zv3.object({ result: zv3.number() });
         const tool = createTool({
           id: 'calculator',
           description: 'Performs calculations',
-          inputSchema: zv3.object({ a: zv3.number(), b: zv3.number(), op: zv3.enum(['+', '-', '*', '/']) }),
-          outputSchema: zv3.object({ result: zv3.number() }),
+          inputSchema,
+          outputSchema,
           execute: async inputData => {
             return { result: 42 };
           },
@@ -200,12 +205,17 @@ describe('workflow', () => {
         const step = createStep(tool);
 
         expectTypeOf(step.id).toEqualTypeOf<'calculator'>();
-        expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<{
+        expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<
+          zv3.infer<typeof inputSchema>
+        >();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<
+          zv3.infer<typeof outputSchema>
+        >();
+        expectTypeOf<zv3.infer<typeof inputSchema>>().toEqualTypeOf<{
           a: number;
           b: number;
           op: '+' | '-' | '*' | '/';
         }>();
-        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<{ result: number }>();
         expectTypeOf(step).toEqualTypeOf<
           Step<
             'calculator',
