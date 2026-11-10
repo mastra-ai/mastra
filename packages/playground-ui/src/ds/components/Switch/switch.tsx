@@ -4,7 +4,6 @@ import * as React from 'react';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
-import './switch.css';
 
 type SwitchProps = Omit<SwitchPrimitive.Root.Props, 'className'> & {
   className?: string;
@@ -38,31 +37,32 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         ref={ref}
         data-slot="switch"
         className={cn(
-          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-hover p-0.5',
-          'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
-          'hover:bg-fill-active',
-          'active:bg-fill-strong',
+          'peer group/switch inline-flex h-[18px] w-[30px] shrink-0 cursor-pointer items-center rounded-full border-0 bg-fill-active p-0.5',
+          'transition-colors duration-fast ease-out-custom motion-reduce:transition-none',
+          'hover:bg-fill-strong',
           focusRingOffset,
-          'data-[checked]:bg-foreground/90',
-          'data-[checked]:hover:bg-foreground',
-          'data-[checked]:active:bg-foreground/75',
-          'data-[disabled]:cursor-not-allowed data-[disabled]:bg-fill-hover data-[disabled]:hover:bg-fill-hover',
-          'data-[disabled]:data-[checked]:bg-foreground/30 data-[disabled]:data-[checked]:hover:bg-foreground/30',
+          'data-[checked]:bg-foreground/90 data-[checked]:hover:bg-foreground',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50',
+          'data-[disabled]:hover:bg-fill-active data-[disabled]:data-[checked]:hover:bg-foreground/90',
           className,
         )}
         {...renderProps}
         {...props}
       >
         {asChild ? undefined : children}
+        {/* A round thumb that slides with `translate`. On hover a same-color copy
+            (`::after`) shifts 2px toward the travel direction, so the pair reads as
+            a pill without animating width. Colors swap instantly; only the track fades. */}
         <SwitchPrimitive.Thumb
           data-slot="switch-thumb"
           className={cn(
-            'switch-thumb-motion pointer-events-none relative block h-4 w-5 rounded-full bg-foreground',
-            'transition-[background-color,translate,width,transform] duration-normal ease-out-custom motion-reduce:transition-none',
-            'group-active/switch:w-6 group-data-[disabled]/switch:w-5',
-            'data-[checked]:translate-x-3 data-[checked]:bg-background data-[unchecked]:translate-x-0',
-            'group-active/switch:data-[checked]:translate-x-2',
-            'data-[disabled]:data-[checked]:bg-background/75 data-[disabled]:data-[unchecked]:bg-foreground/45',
+            'pointer-events-none relative isolate block size-3.5 rounded-full bg-foreground data-[checked]:bg-background',
+            'transition-[translate] duration-fast ease-out-custom motion-reduce:transition-none',
+            'data-[checked]:translate-x-3',
+            "after:absolute after:inset-0 after:-z-10 after:rounded-full after:bg-inherit after:content-['']",
+            'after:transition-[translate] after:duration-fast after:ease-out-custom motion-reduce:after:transition-none',
+            'group-[:hover:not([data-disabled])]/switch:after:translate-x-0.5',
+            'group-[:hover:not([data-disabled])]/switch:data-[checked]:after:-translate-x-0.5',
           )}
         >
           {shouldRenderIcon ? <SwitchThumbIcon checkedIcon={onIcon} icon={singleIcon} uncheckedIcon={offIcon} /> : null}
@@ -84,7 +84,7 @@ function SwitchThumbIcon({
 }) {
   const iconClassName = cn(
     'absolute inset-0 flex items-center justify-center text-background',
-    'transition-[color,opacity] duration-normal ease-out-custom motion-reduce:transition-none',
+    'transition-opacity duration-fast ease-out-custom motion-reduce:transition-none',
     '[&_svg]:stroke-2.5 [&_svg]:size-2.5',
   );
 

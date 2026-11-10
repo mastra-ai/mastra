@@ -109,23 +109,22 @@ describe('Switch', () => {
     expect(uncheckedIconEl?.className).toContain('group-data-[checked]/switch:opacity-0');
   });
 
-  it('moves the thumb by width and translation rather than scaling', () => {
+  it('slides a round thumb with translate and stretches it on hover with a pseudo-element', () => {
     render(<Switch aria-label="Toggle" defaultChecked />);
 
     const switchEl = screen.getByRole('switch');
     const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
-    expect(switchEl.className).toContain('border-0');
-    expect(switchEl.className).not.toContain('overflow-hidden');
-    expect(switchEl.className).not.toContain('active:scale');
-    expect(switchEl.className).not.toContain('hover:scale');
-    expect(switchEl.className).not.toContain('transition-[background-color,scale]');
-    expect(thumbEl?.className).toContain('transition-[background-color,translate,width,transform]');
-    expect(thumbEl?.className).toContain('switch-thumb-motion');
-    expect(thumbEl?.className).toContain('w-5');
+    expect(switchEl.className).toContain('h-[18px]');
+    expect(switchEl.className).toContain('w-[30px]');
+    expect(thumbEl?.className).toContain('size-3.5');
+    expect(thumbEl?.className).toContain('rounded-full');
+    expect(thumbEl?.className).toContain('transition-[translate]');
     expect(thumbEl?.className).toContain('data-[checked]:translate-x-3');
-    expect(thumbEl?.className).toContain('group-active/switch:w-6');
-    expect(thumbEl?.className).not.toContain('group-active/switch:scale');
-    expect(thumbEl?.className).toContain('group-active/switch:data-[checked]:translate-x-2');
+    expect(thumbEl?.className).toContain('group-[:hover:not([data-disabled])]/switch:after:translate-x-0.5');
+    expect(thumbEl?.className).toContain(
+      'group-[:hover:not([data-disabled])]/switch:data-[checked]:after:-translate-x-0.5',
+    );
+    expect(thumbEl?.className).not.toMatch(/\bw-\d/);
   });
 
   it('keeps switch motion CSS-only without transient React data attributes', () => {
