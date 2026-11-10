@@ -27,7 +27,6 @@ function seededRoutes(): IntakeRouteInfo[] {
       joinClosedIssue: route.target.joinClosedIssue ?? false,
     },
     on: [...(route.on ?? ['work_item.created'])],
-    allowWorkingPhase: route.allowWorkingPhase ?? false,
     revision: 1,
     createdBy: 'factory',
     createdAt: '2026-11-01T00:00:00.000Z',
@@ -56,7 +55,6 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
       const body = (await request.json()) as Pick<IntakeRouteInfo, 'name' | 'when'> & {
         target: { boardKey: string; phaseKey?: string };
         on?: IntakeRouteInfo['on'];
-        allowWorkingPhase?: boolean;
       };
       state.requests.push({ method: 'POST', path: '', body });
       const route: IntakeRouteInfo = {
@@ -66,7 +64,6 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
         when: body.when ?? null,
         target: { boardKey: body.target.boardKey, phaseKey: body.target.phaseKey ?? null, joinClosedIssue: false },
         on: body.on ?? ['work_item.created'],
-        allowWorkingPhase: body.allowWorkingPhase ?? false,
         createdBy: 'admin',
       };
       // A route that places new cards goes ahead of the first route taking every new card. Each
@@ -188,9 +185,9 @@ describe('IntakeRoutesSection', () => {
     });
     expect(byName('Reopened issues go back to Intake on Ship')?.target.phaseKey).toBe('inbox');
     expect(byName('Merged pull requests go to Done on Ship')?.target.phaseKey).toBe('shipped');
-    expect(byName('Pushes to a reviewed pull request re-review it on Ship')).toMatchObject({
-      allowWorkingPhase: true,
-      target: { boardKey: 'ship', phaseKey: 'pr' },
+    expect(byName('Pushes to a reviewed pull request re-review it on Ship')?.target).toMatchObject({
+      boardKey: 'ship',
+      phaseKey: 'pr',
     });
     // The copies only move existing cards, so they go after the catch-all, which never takes a
     // status event; Work keeps its own event routes for its cards.

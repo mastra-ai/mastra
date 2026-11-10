@@ -114,11 +114,6 @@ const intakeRouteFields = {
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     }),
 };
-/**
- * @deprecated Ignored and never stored: a route moves a card into any phase, and the phase's own
- * `autoStart` decides whether its run starts. Accepted for one release so older clients keep working.
- */
-const ignoredAllowWorkingPhase = z.boolean().optional();
 export const intakeRouteInputSchema = z
   .object({
     name: intakeRouteFields.name,
@@ -126,7 +121,6 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: ignoredAllowWorkingPhase,
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -137,7 +131,6 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: ignoredAllowWorkingPhase,
     expectedRevision: boardRevisionSchema,
   })
   .strict()

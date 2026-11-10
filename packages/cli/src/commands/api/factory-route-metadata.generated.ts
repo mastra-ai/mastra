@@ -430,7 +430,6 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "allowWorkingPhase",
       "enabled",
       "expectedRevision",
       "name",
@@ -693,7 +692,6 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "allowWorkingPhase",
       "enabled",
       "name",
       "on",
@@ -4759,11 +4757,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "on": {
           "$ref": "#/$defs/__schema12"
         },
-        "allowWorkingPhase": {
-          "$ref": "#/$defs/__schema14"
-        },
         "expectedRevision": {
-          "$ref": "#/$defs/__schema15"
+          "$ref": "#/$defs/__schema14"
         }
       },
       "required": [
@@ -5011,9 +5006,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema14": {
-          "type": "boolean"
-        },
-        "__schema15": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
@@ -7324,9 +7316,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "$ref": "#/$defs/__schema8"
           }
-        },
-        "allowWorkingPhase": {
-          "type": "boolean"
         }
       },
       "required": [

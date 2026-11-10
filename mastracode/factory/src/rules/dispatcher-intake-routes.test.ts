@@ -973,7 +973,10 @@ describe('intake routes moving existing cards on status events', () => {
       on: ['work_item.reopened'],
       target: { boardKey: 'docs', phaseKey: 'writing' },
     });
-    const card = (await deliver({ sourceKey: 'github-issue:1', board: 'docs', stage: 'inbox' }))!;
+    // Routes, not the filing decision, put the card on Docs.
+    await route({ name: 'New cards go to Docs', target: { boardKey: 'docs', phaseKey: 'inbox' } });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+    expect(card).toMatchObject({ board: 'docs', stages: ['inbox'] });
     await putAt(card.id, 'published');
 
     expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['writing'] });
