@@ -4,35 +4,34 @@ A personal assistant for questions, planning, and writing that remembers your re
 
 ## Why we built this
 
-Repeating the same preferences in every conversation adds friction. This assistant keeps a shared owner profile while preserving each conversation's history separately.
+Building your own assistant lets you shape how it works around your preferences and the services you already use. Mastra Connect manages account authorization and supplies tools for those services, so you can add responsibilities without building each integration yourself. This template gives you a starting point with persistent memory, objectives, and schedules, while keeping external changes subject to your approval.
+
+## Demo
+
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1794299422/Mastra_Personal_Assistant_gemevy.mp4"></video>
 
 ## Prerequisites
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` for the default `openai/gpt-6-luna` model. Your account needs access to that model; `ASSISTANT_MODEL` can select another OpenAI model available to your account.
-- **[Mastra Connect credentials](https://mastra.ai/docs/mastra-platform/connect)** (optional): set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` together after creating a Platform project and app access token. `MASTRA_PLATFORM_SECRET_KEY` is the native fallback. Connect accounts in that project separately; the OpenAI key does not authorize access to them.
-- The assistant supports one owner per installation. Local mode listens on `127.0.0.1`. Each conversation can hold one explicit objective and its task list. Schedules use explicit timezones and stay attached to their original conversations.
-- Conversations, preferences, objectives, tasks, schedules, and native traces persist in `.data/assistant.db` without automatic expiration. `ASSISTANT_DATA_DIR` changes the directory, relative to the template root or an absolute path. Keep your database private; deleting it removes the installation's stored context.
+- **[Mastra Connect credentials](https://mastra.ai/docs/mastra-platform/connect)**: required for connected services and the Gmail, Google Docs and Notion examples. Set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` together after creating a Platform project and app access token. `MASTRA_PLATFORM_SECRET_KEY` is the native fallback. Connect accounts in that project separately; the OpenAI key does not authorize access to them.
 
 ## Quickstart 🚀
 
-1. **Open the local template**
-   - From your existing Mastra checkout, run `cd templates/template-personal-assistant`.
-   - Run `npm install --workspaces=false && npm run setup` to install dependencies and create `.env` without replacing an existing file.
-2. **Add your API key**
-   - Fill in `.env` using the setting described under Prerequisites.
+1. **Create your project**
+   - Run `npx create-mastra@latest my-personal-assistant --template personal-assistant` to scaffold the template and install dependencies.
+   - Run `cd my-personal-assistant`.
+2. **Add your API keys**
+   - Run `cp .env.example .env` and fill in the values described under Prerequisites.
 3. **Start the dev server**
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
-   - Select **Personal Assistant** and send “Help me plan a focused morning.” The assistant should suggest a practical plan in the conversation.
+   - Local Studio requires no username or password. Select **Personal Assistant** and send “Help me plan a focused morning.” The assistant should suggest a practical plan in the conversation.
 
 ## Try it out
 
 - Say “Remember that I prefer concise bullet points.” Restart the server, open a new conversation, and ask for a morning plan. Look for the saved response style.
-- With Gmail and Google Docs connected, ask “Read Gmail message `<message ID>` in full, review the proposal, cite the message ID, and create a Google document with the review.” Review the separate document-creation and content-insertion approvals. A created blank document is unfinished; if insertion fails, keep the document ID and inspect it before deciding to retry.
-- With Notion connected, ask “Read the tasks on page `<page ID>` as markdown and rank them by deadlines and blockers. Cite source IDs and identify missing dates or unread pages. Do not change Notion.” The reviewed markdown read runs without confirmation; other Notion reads require approval. A truncated page or unknown blocks leave the task inventory incomplete.
-- Add another responsibility in a separate conversation: “Monitor unresolved Jira issues in project `<project key>` every weekday at 09:00 America/Sao_Paulo. Cite issue keys, do not change Jira, and keep monitoring until I cancel.” Review the schedule ID and next occurrence; pause, resume, or cancel it through the conversation. Unknown Jira reads require approval too.
+- (depends on Mastra Platform) With Gmail and Google Docs connected, ask “Read Gmail message `<message ID>` in full, review the proposal, cite the message ID, and create a Google document with the review.” Review the separate document-creation and content-insertion approvals. A created blank document is unfinished; if insertion fails, keep the document ID and inspect it before deciding to retry.
+- (depends on Mastra Platform) With Notion connected, ask “Read the tasks on page `<page ID>` as markdown and rank them by deadlines and blockers. Cite source IDs and identify missing dates or unread pages. Do not change Notion.” The reviewed markdown read runs without confirmation; other Notion reads require approval. A truncated page or unknown blocks leave the task inventory incomplete.
 - Say “Set an objective to prepare my meeting agenda. Track research, drafting and review as tasks; wait for my meeting topic before proceeding.” Supply the topic when asked, then restart and inspect the unfinished objective and tasks in that conversation. Ask to pause, resume with an additional evaluation allowance, or clear one when needed.
-
-Keep the server running for scheduled checks. Busy or approval-blocked conversations can skip checks, and missed checks may not replay. Run-now during an active conversation can be discarded. A completed cadence is not proof of completed work; inspect the provider results in the original conversation.
 
 ## Customization
 
@@ -41,17 +40,21 @@ Keep the server running for scheduled checks. Busy or approval-blocked conversat
 
 Optional `ASSISTANT_MAX_OUTPUT_TOKENS` (1–32768) sets the default output limit for assistant responses, including scheduled checks. `ASSISTANT_MODEL_MAX_RETRIES` (0–5) sets each native model/provider and processor retry limit; zero disables both, while positive limits can compound. For a bounded scheduled analysis that needs a read and a later answer step, set `ASSISTANT_MAX_STEPS=6`, `ASSISTANT_MAX_OUTPUT_TOKENS=1024`, and `ASSISTANT_MODEL_MAX_RETRIES=0`. The ordinary step default remains 20. When output and retry settings are unset, native defaults remain in effect. Connect's own HTTP read retries are separate. These settings do not bound the separate goal judge or total spending; explicit request options can override defaults.
 
-To enable connected tools, follow the linked Connect setup, add the optional credentials to `.env`, and authorize the services you need. `ASSISTANT_CONNECT_PROVIDERS` accepts a JSON array of provider IDs and defaults to `["google-mail","google-docs","notion","jira"]`. `ASSISTANT_CONNECT_TOOLS` optionally restricts the available exact tool keys; it does not change provider OAuth permissions. Optional `MASTRA_ORG_ID` and `MASTRA_PLATFORM_REGION` follow the native Connect configuration.
+To enable connected tools, follow the linked Connect setup, add the Connect credentials to `.env`, and authorize the services you need. `ASSISTANT_CONNECT_PROVIDERS` accepts a JSON array of provider IDs and defaults to `["google-mail","google-docs","notion","jira"]`. `ASSISTANT_CONNECT_TOOLS` optionally restricts the available exact tool keys; it does not change provider OAuth permissions. Optional `MASTRA_ORG_ID` and `MASTRA_PLATFORM_REGION` follow the native Connect configuration.
 
 The developer-owned read registry in `src/mastra/connect.ts` permits the exact keys `google_mail_get_message` and `notion_get_page_as_markdown` without confirmation for sources accessible to the connection. Every other connected tool, including unfamiliar reads, similar names and Notion mutations, requires native approval. Connections refresh before runs and recovery; unresolved providers are reported as unavailable rather than empty sources. One owner's scope includes project-global connections. Review project access before connecting sensitive accounts.
 
 Approval decisions apply to the pending run and stored arguments. Return to the same conversation after restarting to recover pending calls. Retrieved content cannot grant permissions. Full plain-text email decoding is limited to 64 KiB, 64 MIME parts and eight nested levels; attachments and HTML-only content are unsupported. External mutations can fail partially or have uncertain results. Inspect existing provider references before deciding to retry; the template adds no automatic mutation retry.
 
+## Local operation
+
+Conversations, preferences, objectives, tasks, schedules, and native traces persist in `.data/assistant.db` without automatic expiration. `ASSISTANT_DATA_DIR` changes the directory, relative to the template root or an absolute path. Keep your database private; deleting it removes the installation's stored context. Hosted production uses remote Turso storage instead, as described below.
+
 For a built local server, run `npm run build` and then `npm start`. Both use the same configured local database as development.
 
 ## Mastra Platform operation
 
-Hosted configuration is available for an authorized Platform project; deployment, remote persistence, hosted Studio recovery, and live connected examples still require validation on your target. A local build or fixture test does not establish hosted readiness.
+Follow the [Mastra Platform deployment guide](https://mastra.ai/docs/mastra-platform/deploy) to deploy this assistant, and apply the configuration below. Validate remote persistence, Studio recovery, and connected examples on your target.
 
 - Configure a remote **[Turso database](https://mastra.ai/docs/mastra-platform/system-environment-variables)** with `TURSO_DATABASE_URL` (`libsql://<database>.turso.io` or HTTPS, without URL credentials or query options) and `TURSO_AUTH_TOKEN`. Set `ASSISTANT_RUNTIME=hosted` and a private `ASSISTANT_API_TOKEN` of at least 32 characters. Keep `ASSISTANT_OWNER_ID` stable. Hosted mode listens on `0.0.0.0` and refuses missing remote storage or owner authentication.
 - Set `MASTRA_PLATFORM_STUDIO_AUTH=disabled` as documented in [Platform Studio authentication](https://mastra.ai/docs/mastra-platform/studio). This preserves this assistant's native SimpleAuth instead of replacing it with organization-wide access. Authenticate API requests with `Authorization: Bearer <ASSISTANT_API_TOKEN>`. In Studio, select **Sign in**, enter your email, and use `ASSISTANT_API_TOKEN` in the password field. SimpleAuth identifies the owner by the token; the email field does not select an account. Confirm this flow on your deployed target before using personal data.
@@ -64,6 +67,6 @@ Before using a hosted installation, verify unauthenticated requests are rejected
 
 ## About Mastra templates
 
-This template is being developed in the [Mastra monorepo](https://github.com/mastra-ai/mastra). It is currently available from this local checkout.
+This is an official Mastra template. Official templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are synchronized to standalone repositories.
 
-[Want to contribute?](./CONTRIBUTING.md)
+[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/templates/template-personal-assistant/CONTRIBUTING.md)
