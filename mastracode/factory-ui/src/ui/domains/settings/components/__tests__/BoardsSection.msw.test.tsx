@@ -20,6 +20,7 @@ import { storedWorkBoard } from './fixtures/work-board';
 
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/boards/work`;
 const CATALOG_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/boards`;
+const ROUTES_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/intake-routes`;
 const SKILLS_URL = `${TEST_BASE_URL}/web/factory/skills`;
 const EFFORT_LOW = {
   operator: 'AND',
@@ -40,6 +41,7 @@ function serve(board: StoredBoardResponse | (() => StoredBoardResponse)) {
     }),
     http.get(SKILLS_URL, () => HttpResponse.json(skills)),
     http.get(CATALOG_URL, () => HttpResponse.json({ boards: [] })),
+    http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: [], canEdit: true })),
   );
   return read;
 }
@@ -340,11 +342,16 @@ describe('BoardsSection', () => {
     };
 
     /** A project holding Work and whatever a test creates, validating a new board the way the server does. */
-    function serveProject({ canEdit = true, stored = [] as StoredBoardResponse[] } = {}) {
+    function serveProject({ canEdit = true, work = true, stored = [] as StoredBoardResponse[] } = {}) {
       const boards = new Map(stored.map(response => [response.board.key, response]));
       const created = vi.fn<(body: CreateBoardBody) => void>();
       server.use(
-        http.get(BOARD_URL, () => HttpResponse.json(storedWorkBoard({}, canEdit))),
+        http.get(ROUTES_URL, () => HttpResponse.json({ intakeRoutes: [], canEdit })),
+        http.get(BOARD_URL, () =>
+          work
+            ? HttpResponse.json(storedWorkBoard({}, canEdit))
+            : HttpResponse.json({ error: 'board_not_found', message: 'Board not found.' }, { status: 404 }),
+        ),
         http.get(`${CATALOG_URL}/:key`, ({ params }) => {
           const board = boards.get(String(params.key));
           return board
@@ -354,7 +361,10 @@ describe('BoardsSection', () => {
         http.get(SKILLS_URL, () => HttpResponse.json(skills)),
         http.get(CATALOG_URL, () =>
           HttpResponse.json({
-            boards: [workBoardInfo, ...[...boards.values()].map(({ board }) => catalogInfo(compileStoredBoard(board)))],
+            boards: [
+              ...(work ? [workBoardInfo] : []),
+              ...[...boards.values()].map(({ board }) => catalogInfo(compileStoredBoard(board))),
+            ],
           }),
         ),
         http.post(CATALOG_URL, async ({ request }) => {
@@ -592,6 +602,48 @@ describe('BoardsSection', () => {
       expect(screen.queryByRole('region', { name: 'New board' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Add phase' })).not.toBeInTheDocument();
       expect(created).not.toHaveBeenCalled();
+    });
+
+    describe('a project without a Work board', () => {
+      const docs: StoredBoardResponse = { ...bugs, board: { ...bugs.board, key: 'docs', name: 'Docs' } };
+
+      it('opens on its first board and lets an admin create another', async () => {
+        serveProject({ work: false, stored: [bugs] });
+        const user = userEvent.setup();
+        renderSection();
+
+        expect(await screen.findByRole('region', { name: 'Reported phase' })).toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'New board' }));
+        expect(await screen.findByRole('region', { name: 'New board' })).toBeInTheDocument();
+      });
+
+      it('shows a board that is left, and closes Settings to it, after a delete', async () => {
+        const gone = { deleted: false };
+        serveProject({ work: false, stored: [bugs, docs] });
+        server.use(
+          http.delete(`${CATALOG_URL}/bugs`, () => {
+            gone.deleted = true;
+            return new HttpResponse(null, { status: 204 });
+          }),
+          http.get(`${CATALOG_URL}/bugs`, () =>
+            gone.deleted
+              ? HttpResponse.json({ error: 'board_not_found', message: 'Board not found.' }, { status: 404 })
+              : HttpResponse.json(bugs),
+          ),
+        );
+        const user = userEvent.setup();
+        renderSection('', '/factories/fp-1/boards/bugs');
+
+        await user.click(await screen.findByRole('button', { name: 'Delete board' }));
+        await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete board' }));
+
+        await waitFor(() => expect(location()).toHaveTextContent('?board=docs'));
+        expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Docs');
+        expect(screen.getByRole('status', { name: 'Closes to' })).toHaveTextContent(
+          /^\/factories\/fp-1\/boards\/docs$/,
+        );
+      });
     });
 
     describe('a board the project created', () => {

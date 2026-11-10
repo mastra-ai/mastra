@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Pencil } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { useCanEditBoards } from '../../../../hooks/useBoardEditor';
+import { useCanEditBoards } from '../../../../hooks/useIntakeRoutes';
 import { boardSettingsPath } from '../../settings/services/boardDraft';
 
 /** Opens the board's editor in Settings → Boards. Shown to organization admins, who may edit boards. */

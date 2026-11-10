@@ -31,6 +31,9 @@ function stubFactory({ admin }: { admin: boolean }) {
       }),
     ),
     // The server says who may change boards: organization admins.
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake-routes`, () =>
+      HttpResponse.json({ intakeRoutes: [], canEdit: admin }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards/work`, () =>
       HttpResponse.json(storedWorkBoard({}, admin)),
     ),

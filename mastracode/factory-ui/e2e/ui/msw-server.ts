@@ -1,7 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
-import { storedWorkBoard } from '../../src/ui/domains/settings/components/__tests__/fixtures/work-board';
 import { builtinBoardCatalog } from './board-catalog';
 
 /**
@@ -29,9 +28,9 @@ export const server = setupServer(
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
-  // The sidebar and the board page read the Work board to learn whether the caller may change
+  // The sidebar and the board page read the intake routes to learn whether the caller may change
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
-  http.get('*/web/factory/projects/:id/boards/work', () => HttpResponse.json(storedWorkBoard({}, false))),
+  http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   // A server without the JIRA_* env group mounts no Jira routes; the ambient
   // 404 mirrors that and the Jira service degrades to a disabled status.

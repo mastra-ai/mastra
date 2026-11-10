@@ -5,7 +5,7 @@ import type { LoaderFunctionArgs } from 'react-router';
 import type { ApiConfig } from '../api/config';
 import { activeRunsQueryOptions } from '../hooks/useActiveRunResources';
 import { boardCatalogQueryOptions } from '../hooks/useBoardCatalog';
-import { storedBoardQueryOptions } from '../hooks/useBoardEditor';
+import { intakeRoutesQueryOptions } from '../hooks/useIntakeRoutes';
 import { defaultModelQueryOptions } from '../hooks/use-default-model';
 import { providersQueryOptions } from '../hooks/use-providers';
 import { factoriesQueryOptions } from '../hooks/useFactories';
@@ -84,7 +84,7 @@ export const prefetchSidebar: Prefetch = (services, { params, request }) => {
   void queryClient.query(serverFeaturesQueryOptions(api.client)).catch(noop);
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.
-  void queryClient.query(storedBoardQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(intakeRoutesQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(boardQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   prefetchSessionRuns(services, factoryId);

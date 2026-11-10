@@ -18,7 +18,6 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import {
   storedBoardQueryOptions,
   useBoardQuery,
-  useCanEditBoards,
   useCreateBoardMutation,
   useDeleteBoardMutation,
   useResetBoardMutation,
@@ -26,6 +25,7 @@ import {
 } from '../../../../hooks/useBoardEditor';
 import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
+import { useCanEditBoards } from '../../../../hooks/useIntakeRoutes';
 import { boardPath, orderedBoards } from '../../factory/boardCatalog';
 import { draftOf, keyFromName, keyProblem, starterBoard } from '../services/boardDraft';
 import type { BoardDraft } from '../services/boardDraft';
@@ -352,14 +352,22 @@ function NewBoardForm({
  */
 export function BoardsSection({ factoryId }: { factoryId?: string }) {
   const [params, setParams] = useSearchParams();
-  const selected = params.get('board') ?? DEFAULT_BOARD_ID;
   const catalog = useBoardCatalog(factoryId);
+  const boards = orderedBoards(catalog.data ?? []);
+  // The Work board unless the project has none: then its first board.
+  const first = (without?: string) =>
+    boards.find(board => board.id === DEFAULT_BOARD_ID && board.id !== without)?.id ??
+    boards.find(board => board.id !== without)?.id ??
+    DEFAULT_BOARD_ID;
+  const picked = params.get('board');
+  const selected = picked ?? first();
   const canEdit = useCanEditBoards(factoryId);
   // A link to the new-board form shows the Work board to someone who may not create one.
   const creating = canEdit && params.has('new');
-  const query = useBoardQuery(creating ? undefined : factoryId, selected);
+  // Which board to open with is not known until the boards are.
+  const waiting = creating || (picked === null && catalog.isPending);
+  const query = useBoardQuery(waiting ? undefined : factoryId, selected);
   const data = query.data;
-  const boards = orderedBoards(catalog.data ?? []);
   const id = useId();
   const location = useLocation();
   // Closing Settings returns to the page it was opened from, which the location's state carries.
@@ -367,13 +375,12 @@ export function BoardsSection({ factoryId }: { factoryId?: string }) {
     setParams(target.new ? { new: '1' } : target.board ? { board: target.board } : {}, { replace: true, state });
   const showAfterDelete = (deleted: string) => {
     const from = (location.state as { from?: Location } | null)?.from;
-    // The page Settings was opened from is gone with the board: return to the Work board instead.
+    // The page Settings was opened from is gone with the board: return to a board that is left instead.
     const gone = factoryId !== undefined && from?.pathname === boardPath(factoryId, deleted);
+    const next = first(deleted);
     show(
-      {},
-      gone
-        ? { from: { ...from, pathname: boardPath(factoryId, DEFAULT_BOARD_ID), search: '', hash: '' } }
-        : location.state,
+      next === DEFAULT_BOARD_ID ? {} : { board: next },
+      gone ? { from: { ...from, pathname: boardPath(factoryId, next), search: '', hash: '' } } : location.state,
     );
   };
 

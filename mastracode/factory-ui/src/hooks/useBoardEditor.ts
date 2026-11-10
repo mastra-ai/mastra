@@ -74,14 +74,6 @@ export function storedBoardQueryOptions(
   });
 }
 
-/**
- * Whether the caller may create, edit and delete this project's boards (an organization admin).
- * Read off the Work board, which every project stores; the server enforces it on every write.
- */
-export function useCanEditBoards(factoryProjectId: string | undefined): boolean {
-  return useBoardQuery(factoryProjectId, DEFAULT_BOARD_ID).data?.canEdit ?? false;
-}
-
 function useBoardWrite<Input>(
   factoryProjectId: string | undefined,
   boardKey: string,

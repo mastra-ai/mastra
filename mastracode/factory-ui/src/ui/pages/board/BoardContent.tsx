@@ -14,7 +14,7 @@ import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/bo
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
 import { EditBoardButton } from '../../domains/factory/components/EditBoardButton';
-import { useCanEditBoards } from '../../../hooks/useBoardEditor';
+import { useCanEditBoards } from '../../../hooks/useIntakeRoutes';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';

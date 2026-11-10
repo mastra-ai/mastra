@@ -6,7 +6,7 @@ import type { Location } from 'react-router';
 
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useCanEditBoards } from '../../../../hooks/useBoardEditor';
+import { useCanEditBoards } from '../../../../hooks/useIntakeRoutes';
 import { boardSettingsPath } from '../../settings/services/boardDraft';
 import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
