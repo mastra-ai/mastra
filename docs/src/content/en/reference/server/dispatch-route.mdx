@@ -115,7 +115,7 @@ function dispatchRoute(
     name: 'context.routePrefix',
     type: 'string',
     description:
-      'The prefix of the server adapter whose paths apply, such as `/api`. Required when more than one adapter, or none, serves the Mastra instance.',
+      'The prefix of the server adapter whose paths apply, such as `/api`. Required when no adapter is registered, or when several are and the request context comes from none of them.',
     isOptional: true,
   },
 ]}
@@ -156,7 +156,7 @@ A `DispatchRouteResult`, which is one of two shapes:
 
 - **Authentication isn't re-run.** When server or Studio auth is configured, the request context must already carry the user Mastra server auth resolved. Otherwise `dispatchRoute()` returns `401`, unless the route's path is public.
 - **Authorization hooks see the HTTP path.** `authorize()`, `authorizeUser()`, and `rules` receive the route's method and the path it's served under: the adapter's prefix plus the route path with path parameters filled in.
-- **The adapter's prefix must be known.** With one server adapter created for the Mastra instance, its prefix is used. With more than one, set `context.routePrefix`. If the prefix can't be told, or no adapter serves `routePrefix`, `dispatchRoute()` returns `401` for a caller without a user and throws otherwise.
+- **The serving adapter's paths and checks apply.** Each adapter records itself in the request contexts it creates, so a route dispatched with that request context gets that adapter's prefix and overrides, even when another adapter serves the same Mastra instance under the same prefix. Outside a request, the only adapter serving the Mastra instance (or `context.routePrefix`) is used. If the adapter can't be told, or no adapter serves `routePrefix`, `dispatchRoute()` returns `401` for a caller without a user and throws otherwise. It never picks one of several adapters on its own.
 - **Path parameters are checked like a URL.** A missing, empty, non-string, `.`, or `..` value returns `400`. An optional `:param?` can be left out.
 - **Path parameters win.** A body or query field with the same name as a path parameter is overridden, so authorization and the handler act on the resource named in the path.
 - **Protected patterns don't open other paths.** With auth configured, a route needs a user unless its path is declared public, even when it's outside your `protected` patterns.
@@ -166,12 +166,15 @@ A `DispatchRouteResult`, which is one of two shapes:
 
 ## Custom adapters
 
-Adapters that extend `MastraServer` tell `dispatchRoute()` where they serve routes. An adapter that doesn't must register itself:
+Adapters that extend `MastraServer` tell `dispatchRoute()` where they serve routes. An adapter that doesn't must register itself, and record the returned handle in each request context it creates:
 
 ```typescript
-import { registerDispatchAdapter } from '@mastra/server/server-adapter'
+import { MASTRA_DISPATCH_ADAPTER_KEY, registerDispatchAdapter } from '@mastra/server/server-adapter'
 
-registerDispatchAdapter(mastra, { prefix: '/api' })
+const handle = registerDispatchAdapter(mastra, { prefix: '/api' })
+
+// For each request:
+requestContext.set(MASTRA_DISPATCH_ADAPTER_KEY, handle)
 ```
 
 An adapter that doesn't extend `MastraServer` can run the route permission and FGA checks of the built-in adapters with `authorizeRoute()`, after authenticating the request and validating its parameters. It resolves to `null` when the call is allowed, or to a `403` error to send back. `checkRouteRBAC()` runs the permission check alone.
