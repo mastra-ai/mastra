@@ -581,6 +581,8 @@ export function createBuiltinMCPToolsetsTestSuite(config: BuiltinMCPToolsetsTest
           expect(viaHttp.status).toBe(200);
           expect(payload(await callTool('alice', 'list_metric_names', args))).toEqual(viaHttp.body);
         }
+        // Bad arguments are a 400, like a route rejecting its input.
+        expect(outcome(await callTool('alice', 'list_metric_names', { labelKey: 'status' }))).toBe(400);
       });
 
       it('offers no observability tools without observability:read, and every op route answers 403', async () => {

@@ -36,6 +36,7 @@ import {
 } from '../../handlers/observability-new-endpoints';
 import type { ServerRoute } from '../../server-adapter';
 import type { Args, CatalogueKit } from '../catalogue';
+import { toolError } from '../catalogue';
 import { fitRows } from '../result-size';
 import { compact, hoistRepeated, object, str, toJSONSchema } from '../schema';
 
@@ -237,7 +238,7 @@ export function addObservabilityTools(kit: CatalogueKit) {
       addCombined(Object.values(routes), hoistRepeated(analyzeSchema(routes)), (args, signal) => {
         const { op, ...body } = args;
         const route = typeof op === 'string' && Object.hasOwn(routes, op) ? routes[op as Op] : undefined;
-        if (!route) throw new Error(`Unknown op "${String(op)}". Use one of: ${OPS.join(', ')}.`);
+        if (!route) throw toolError(400, `Unknown op "${String(op)}". Use one of: ${OPS.join(', ')}.`);
         return call(route, { body }, signal);
       });
     analyze({
@@ -269,7 +270,7 @@ export function addObservabilityTools(kit: CatalogueKit) {
       }),
       (args, signal) => {
         const { metricName, labelKey, prefix, limit } = args;
-        if (labelKey && !metricName) throw new Error('labelKey needs metricName.');
+        if (labelKey && !metricName) throw toolError(400, 'labelKey needs metricName.');
         if (metricName && labelKey) {
           return call(GET_METRIC_LABEL_VALUES, { query: { metricName, labelKey, prefix, limit } }, signal);
         }
