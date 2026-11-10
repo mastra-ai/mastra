@@ -9,6 +9,7 @@ import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import {
   ensureLocalBranch,
+  fastForwardRemoteBranch,
   isCheckoutOf,
   pushRepositoryBranch,
   refreshMergeRequestCheckout,
@@ -23,7 +24,13 @@ import type {
   SourceControlSession,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
-import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import {
+  mergeRequestNumberFromBranch,
+  workItemBranch,
+  workItemBranchSource,
+  workItemNumber,
+} from '../work-item-branch.js';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.js';
 import { updateSessionEnvironmentRepository } from './environment-state-processor.js';
 
@@ -46,6 +53,7 @@ interface SessionTarget {
   repository: SourceControlRepository;
   orgId: string;
   userId: string;
+  factoryProjectId: string;
   /** True when the target is the link the session is filed under, the default. */
   ownRepository: boolean;
 }
@@ -157,6 +165,7 @@ async function resolveSessionTarget(
       repository: match.repository,
       orgId,
       userId,
+      factoryProjectId: ownConnection.factoryProjectId,
       ownRepository: match.link.id === ownRepository.id,
     };
   }
@@ -171,6 +180,7 @@ async function resolveSessionTarget(
     repository,
     orgId,
     userId,
+    factoryProjectId: ownConnection.factoryProjectId,
     ownRepository: true,
   };
 }
@@ -231,6 +241,7 @@ async function emitAgentAudit(
 export const FACTORY_TEST_CHECK_NAME = 'Factory Review / tests';
 
 const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
+const pushBranchSchema = repositorySchema.extend({ workItem: z.string().trim().min(1).optional() });
 const changeRequestSchema = repositorySchema.extend({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
 });
@@ -242,6 +253,7 @@ export async function createSourceControlTools({
   testChecksEnabled,
   selfReviewApprovedHead,
   boundChangeRequestId,
+  workItems,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
@@ -259,6 +271,8 @@ export async function createSourceControlTools({
    * When provided, sessions that are not Review-bound (it resolves `undefined`) cannot publish.
    */
   boundChangeRequestId?: () => Promise<string | undefined>;
+  /** Resolves the work items a session follows or is bound to, so it can push to their branches. */
+  workItems?: Pick<WorkItemsStorage, 'listSessionSubscriptions' | 'findActiveRunBindingForSession' | 'getForProject'>;
 }): Promise<IntegrationTools> {
   if (!requestContext || typeof (requestContext as { get?: unknown }).get !== 'function') return {};
   const controller = requestContext.get('controller') as
@@ -273,6 +287,39 @@ export async function createSourceControlTools({
   const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
     withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
+  // Only a followed or bound work item's own branch, derived server-side, is ever pushable.
+  const followedWorkItemBranch = async (
+    target: SessionTarget,
+    reference: string,
+  ): Promise<{ id: string; branch: string }> => {
+    if (!workItems) throw new Error('Pushing to a work item branch is not available in this Factory.');
+    const scope = {
+      orgId: target.orgId,
+      factoryProjectId: target.factoryProjectId,
+      sessionId: target.session.sessionId,
+    };
+    const [follows, binding] = await Promise.all([
+      workItems.listSessionSubscriptions(scope),
+      workItems.findActiveRunBindingForSession(scope),
+    ]);
+    const ids = new Set([...follows.map(follow => follow.workItemId), ...(binding ? [binding.workItemId] : [])]);
+    const number = /^#?([1-9]\d*)$/.exec(reference)?.[1];
+    for (const id of ids) {
+      const item = await workItems.getForProject(target.orgId, target.factoryProjectId, id);
+      if (!item) continue;
+      const branchInput = {
+        id: item.id,
+        source: workItemBranchSource(item.externalSource),
+        metadata: item.workItem.metadata,
+      };
+      if (item.id !== reference && (number === undefined || String(workItemNumber(branchInput)) !== number)) continue;
+      if (item.externalSource?.type === 'pull-request') {
+        throw new Error(`Work item ${reference} is a pull-request review card; its branch is local to its session.`);
+      }
+      return { id: item.id, branch: workItemBranch(branchInput) };
+    }
+    throw new Error(`Work item ${reference} is not followed by or bound to this session.`);
+  };
   const reference = async (target: SessionTarget) => ({
     ...(await target.provider.versionControl.getRepositoryTarget({
       orgId: target.orgId,
@@ -318,8 +365,8 @@ export async function createSourceControlTools({
     }),
     source_control_push_branch: createTool({
       id: 'source_control_push_branch',
-      description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. ${repositoryArgument}`,
-      inputSchema: repositorySchema,
+      description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. Optional \`workItem\` (a work item id or #number this session follows or is bound to) instead fast-forwards that work item's existing branch, such as its pull request branch, to the checkout's HEAD; it refuses when that branch has commits HEAD lacks. ${repositoryArgument}`,
+      inputSchema: pushBranchSchema,
       execute: async (input, { workspace }) => {
         const target = await targetFor(input);
         const sandbox = executableSandbox(workspace?.sandbox);
@@ -333,6 +380,21 @@ export async function createSourceControlTools({
         // a session that booted single-repository has no siblings at all.
         if (!target.ownRepository && !(await isCheckoutOf(sandbox, workdir, access.cloneUrl))) {
           throw new Error(`There is no checkout of ${target.repository.slug} in this session.`);
+        }
+        if (input.workItem !== undefined) {
+          const { id: workItemId, branch } = await followedWorkItemBranch(target, input.workItem);
+          await fastForwardRemoteBranch(sandbox, workdir, branch, access, target.repository.slug);
+          await emitAgentAudit(audit, requestContext, {
+            action: 'factory.agent.push',
+            targets: [{ type: 'repository', id: target.repository.slug }],
+            metadata: {
+              branch,
+              provider: target.provider.id,
+              repository: target.repository.slug,
+              workItemId,
+            },
+          });
+          return { pushed: true, branch, repository: target.repository.slug };
         }
         const branch = target.session.branch;
         // Materialize the session branch at the active HEAD without discarding
