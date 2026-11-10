@@ -8,6 +8,8 @@ export interface SearchResult {
   title: string
   heading: string
   url: string
+  /** The page as Markdown. Absent for pages that have no Markdown version. */
+  markdownUrl?: string
   excerpt: string
 }
 
@@ -84,7 +86,7 @@ export async function registerSearchTool(
       name: TOOL_NAME,
       title: 'Search Mastra documentation',
       description:
-        'Search the Mastra documentation (guides, reference, integrations, models). Returns matching sections with their page title, heading, absolute URL and a plain-text excerpt.',
+        'Search the Mastra documentation (guides, reference, integrations, models). Returns matching sections with their page title, heading, absolute URL, a plain-text excerpt and, when available, markdownUrl. Excerpts are short and some results only match a heading, so fetch markdownUrl to read the full page as Markdown.',
       inputSchema,
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       async execute(input: unknown, options?: { signal?: AbortSignal }): Promise<SearchResponse> {
@@ -94,7 +96,10 @@ export async function registerSearchTool(
           search ??= loadSearch().then(({ createSearch }) => createSearch(config))
           const run = await search
           options?.signal?.throwIfAborted()
-          return { results: await run(parsed) }
+          const results = await run(parsed)
+          // The Algolia client can't be cancelled, so drop results that arrive after a cancel.
+          options?.signal?.throwIfAborted()
+          return { results }
         } catch (error) {
           // A cancelled call stays cancelled; everything else is reported to the agent.
           if (options?.signal?.aborted) throw error

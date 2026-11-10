@@ -264,13 +264,15 @@ describe('search', () => {
           title: 'Working memory',
           heading: 'Example',
           url: 'https://mastra.ai/docs/memory/working-memory#example',
+          markdownUrl: 'https://mastra.ai/docs/memory/working-memory.md',
           excerpt: 'Working memory keeps facts across turns.',
         },
         {
           title: 'Memory',
           heading: 'Memory',
           url: 'https://mastra.ai/reference/memory/memory-class',
-          excerpt: '',
+          markdownUrl: 'https://mastra.ai/reference/memory/memory-class.md',
+          excerpt: 'Reference > Memory',
         },
       ],
     })
@@ -297,7 +299,18 @@ describe('search', () => {
     await expect(tool.execute({ query: 'agents' })).resolves.toMatchObject({ results: [{ title: 'Memory' }] })
   })
 
-  it('rejects when the caller cancels', async () => {
+  it('rejects when the caller cancels while Algolia is responding', async () => {
+    const controller = new AbortController()
+    // Like the real client, the request ignores the signal and still resolves.
+    searchForHits.mockImplementation(async () => {
+      controller.abort()
+      return algoliaResponse(hits)
+    })
+    const tool = await registeredTool()
+    await expect(tool.execute({ query: 'agents' }, { signal: controller.signal })).rejects.toThrow()
+  })
+
+  it('rejects when the caller cancels and the request fails', async () => {
     const controller = new AbortController()
     searchForHits.mockImplementation(async () => {
       controller.abort()
@@ -319,6 +332,21 @@ describe('mapHit', () => {
     expect(mapHit({ url: null }, config.siteUrl)).toBeUndefined()
     expect(mapHit({ url: 'javascript:alert(1)' }, config.siteUrl)).toBeUndefined()
     expect(mapHit({ url: 'https://evil.example/docs' }, config.siteUrl)).toBeUndefined()
+  })
+
+  it('links the Markdown version of the page', () => {
+    const markdownUrl = (url: string) => mapHit({ url }, config.siteUrl)?.markdownUrl
+    expect(markdownUrl('/docs/agents/overview#tools')).toBe('https://mastra.ai/docs/agents/overview.md')
+    expect(markdownUrl('/docs/?q=1')).toBe('https://mastra.ai/docs.md')
+    expect(markdownUrl('/')).toBe('https://mastra.ai/index.md')
+    // The course has no Markdown version.
+    expect(markdownUrl('/learn/deploy-to-mastra-platform')).toBeUndefined()
+    expect(mapHit({ url: '/learn' }, config.siteUrl)).not.toHaveProperty('markdownUrl')
+  })
+
+  it('uses the heading path as the excerpt when the record has no content', () => {
+    const hit = { url: '/docs', content: '  ', hierarchy: { lvl0: 'Docs', lvl1: 'Memory', lvl2: 'Working memory' } }
+    expect(mapHit(hit, config.siteUrl)?.excerpt).toBe('Docs > Memory > Working memory')
   })
 
   it('caps the excerpt at 1000 characters', () => {
