@@ -506,8 +506,11 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   async applyBoardMigrations(
     scope: StoredBoardScope,
     migrations: readonly StoredBoardMigration[],
-    /** Read once, before the transaction, and only when a migration is still pending. */
-    context: () => Promise<BoardMigrationContext> = async () => EMPTY_MIGRATION_CONTEXT,
+    /**
+     * Read through the transaction's `ops`, again on every retry, and only when a migration is still
+     * pending, so what it reports is as fresh as the boards the migrations rewrite.
+     */
+    context: (ops: FactoryStorageOps) => Promise<BoardMigrationContext> = async () => EMPTY_MIGRATION_CONTEXT,
   ): Promise<AppliedBoardMigration[]> {
     if (migrations.length === 0) return [];
     const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
@@ -515,12 +518,12 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       return [];
     }
     await ensureVersionRow(this.ops, scope);
-    const project = await context();
     return this.#transact(async ops => {
       const current = (await ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope)))!;
       const applied = current.applied_migrations ?? [];
       const pending = migrations.filter(({ key }) => !applied.includes(key));
       if (pending.length === 0) return [];
+      const project = await context(ops);
       const changed: AppliedBoardMigration[] = [];
       for (const migration of pending) {
         const rows =

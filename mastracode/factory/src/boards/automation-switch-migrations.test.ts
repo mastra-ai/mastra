@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { FactoryStorageOps } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -8,7 +9,7 @@ import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } f
 import { occupiedPhasesOf, ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
 import { boardDefinitionOf } from './stored-board.js';
-import { workSeedWithSelfReview } from './work-migrations.js';
+import { BOARD_MIGRATIONS, workSeedWithSelfReview } from './work-migrations.js';
 import { workBoard } from './work.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -39,22 +40,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const scope: StoredBoardScope = { orgId: 'org-1', factoryProjectId: project.id };
       if (stored.length > 0) await seed.boards.seedBoards(scope, stored);
       const warn = vi.fn();
-      /** A Factory process loading the project, wired as MastraFactory wires its board cache. */
-      const load = () =>
+      /**
+       * A Factory process loading the project, wired as MastraFactory wires its board cache;
+       * `cards: false` stands for a process whose work-items domain isn't ready yet.
+       */
+      const load = (options: { cards?: boolean } = {}) =>
         new ProjectBoardCache({
           codeRegistry: createBoardRegistry(),
           storage: seed.boards,
           projects: seed.projects,
-          occupiedPhases: occupiedPhasesOf(seed.workItems),
+          ...(options.cards === false ? {} : { occupiedPhases: occupiedPhasesOf(seed.workItems) }),
           warn,
         }).load(scope);
-      const card = (stage: string) =>
+      const card = (stage: string, board = 'work') =>
         seed.workItems.upsert({
           orgId: 'org-1',
           userId: 'user-1',
           factoryProjectId: project.id,
           input: {
-            board: 'work',
+            board,
             externalSource: { integrationId: 'github', type: 'issue', externalId: `github-issue:${randomUUID()}` },
             title: 'Fix issue',
             stages: [stage],
@@ -171,6 +175,119 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await load();
         expect(warn).not.toHaveBeenCalled();
       });
+
+      /** A stored board of the project's own with a self-review phase, as a custom loop might have it. */
+      const shipBoard = (buildMoves: string[]): StoredBoardInput => ({
+        key: 'ship',
+        name: 'Ship',
+        phases: [
+          { key: 'inbox', name: 'Inbox', kind: 'resting', nextPhases: ['build'] },
+          { key: 'build', name: 'Build', kind: 'working', runner: { context: 'work' }, nextPhases: buildMoves },
+          {
+            key: 'check',
+            name: 'Check',
+            kind: 'working',
+            runner: { skill: 'factory-self-review', context: 'review' },
+            tools: ['factory_record_review_verdict'],
+            nextPhases: ['build', 'pr'],
+          },
+          {
+            key: 'pr',
+            name: 'Pull request',
+            kind: 'working',
+            runner: { skill: 'factory-review', context: 'review' },
+            tools: ['factory_review_source', 'factory_record_review_verdict'],
+            nextPhases: ['build', 'shipped'],
+          },
+          { key: 'shipped', name: 'Shipped', kind: 'terminal' },
+        ],
+      });
+
+      it('removes the self-review phase from every board the project stored, not only Work', async () => {
+        const {
+          load,
+          boards: stored,
+          scope,
+        } = await setup({ self_review_enabled: false }, [OLDER_WORK, shipBoard(['check', 'pr'])]);
+
+        const boards = await load();
+
+        const ship = (await stored.get(scope, 'ship'))!;
+        expect(ship.phases.map(phase => phase.key)).toEqual(['inbox', 'build', 'pr', 'shipped']);
+        expect(ship.phases.find(phase => phase.key === 'build')!.nextPhases).toEqual(['pr']);
+        expect(boards.get('ship')!.phases).not.toHaveProperty('check');
+      });
+
+      it("keeps a self-review phase the build phase can't get past without, and says why", async () => {
+        const {
+          load,
+          boards: stored,
+          scope,
+          warn,
+        } = await setup({ self_review_enabled: false }, [shipBoard(['check'])]);
+        const before = await stored.get(scope, 'ship');
+
+        await load();
+
+        expect(await stored.get(scope, 'ship')).toEqual(before);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('keeps its self-review phase "check"'));
+      });
+
+      it("waits for a load that can read the project's cards before removing the phase", async () => {
+        const { load, work, warn } = await setup({ self_review_enabled: false }, [OLDER_WORK]);
+        const before = await work();
+
+        await load({ cards: false });
+
+        expect(await work()).toEqual(before);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("the project's cards can't be read yet"));
+
+        await load();
+
+        expect((await work())!.phases.map(phase => phase.key)).not.toContain('review');
+      });
+
+      it.skipIf(backend === 'libsql')(
+        'reads which phases hold cards again when a concurrent write makes it retry',
+        async () => {
+          // LibSQL holds its single writer for the whole migration, so no card move lands in between.
+          const {
+            scope,
+            card,
+            work,
+            workItems,
+            boards: stored,
+            projects,
+            storage,
+          } = await setup({ self_review_enabled: false }, [OLDER_WORK]);
+          let reads = 0;
+          const context = async (ops: FactoryStorageOps) => {
+            const occupiedPhases = await occupiedPhasesOf(workItems)(scope, ops);
+            if (reads++ === 0) {
+              // Another replica moves a card into self-review and writes the boards after this read.
+              await card('review');
+              await storage.ops.updateMany(
+                'factory_board_definition_versions',
+                { org_id: scope.orgId, factory_project_id: scope.factoryProjectId },
+                { version: randomUUID() },
+              );
+            }
+            return {
+              retiredSettings: await projects.retiredAutomationSettings(
+                { orgId: scope.orgId, id: scope.factoryProjectId },
+                ops,
+              ),
+              occupiedPhases,
+              warn: () => {},
+            };
+          };
+
+          await stored.applyBoardMigrations(scope, BOARD_MIGRATIONS, context);
+
+          expect(reads).toBe(2);
+          expect((await work())!.phases.map(phase => phase.key)).toContain('review');
+        },
+      );
 
       it("seeds a project that stored no boards with today's Work, which has no self-review phase", async () => {
         const { load, work } = await setup({ self_review_enabled: true });

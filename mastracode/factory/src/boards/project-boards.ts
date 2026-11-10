@@ -1,4 +1,5 @@
 import type { InlineSkill } from '@mastra/core/skills';
+import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { findBoardSkillProblems } from '../skills/app-skills.js';
 import type {
@@ -112,10 +113,16 @@ export interface ProjectBoardCacheOptions {
    */
   projects?: {
     listAll(): Promise<readonly { orgId: string; id: string }[]>;
-    retiredAutomationSettings?(project: { orgId: string; id: string }): Promise<RetiredAutomationSettings | null>;
+    retiredAutomationSettings?(
+      project: { orgId: string; id: string },
+      ops: FactoryStorageOps,
+    ): Promise<RetiredAutomationSettings | null>;
   };
   /** The phases cards sit in on each of the project's boards, which a board migration must not remove. */
-  occupiedPhases?: (scope: StoredBoardScope) => Promise<ReadonlyMap<string, ReadonlySet<string>>>;
+  occupiedPhases?: (
+    scope: StoredBoardScope,
+    ops: FactoryStorageOps,
+  ) => Promise<ReadonlyMap<string, ReadonlySet<string>>>;
   codeSkills?: readonly InlineSkill[];
   /**
    * Whether the project still uses the retired Review board (an open card is stored on it). Such
@@ -132,10 +139,10 @@ function scopeKey(scope: StoredBoardScope): string {
 }
 
 /** Reads the phases cards sit in on each of a project's boards, for `occupiedPhases`. */
-export function occupiedPhasesOf(workItems: Pick<WorkItemsStorage, 'list'>) {
-  return async (scope: StoredBoardScope): Promise<ReadonlyMap<string, ReadonlySet<string>>> => {
+export function occupiedPhasesOf(workItems: Pick<WorkItemsStorage, 'listWith'>) {
+  return async (scope: StoredBoardScope, ops: FactoryStorageOps): Promise<ReadonlyMap<string, ReadonlySet<string>>> => {
     const occupied = new Map<string, Set<string>>();
-    for (const item of await workItems.list(scope)) {
+    for (const item of await workItems.listWith(ops, scope)) {
       const board = boardForWorkItem(item);
       const phases = occupied.get(board) ?? new Set<string>();
       for (const stage of item.stages) phases.add(stage);
@@ -334,18 +341,22 @@ export class ProjectBoardCache implements ProjectBoardSource {
       const code = this.codeRegistry.get(migration.boardKey);
       return code !== undefined && defaultBoards.includes(code);
     });
-    const changed = await this.#storage.applyBoardMigrations(scope, migrations, () => this.#migrationContext(scope));
+    const changed = await this.#storage.applyBoardMigrations(scope, migrations, ops =>
+      this.#migrationContext(scope, ops),
+    );
     if (changed.length === 0) return;
     const filled = changed.map(({ boardKey, filled }) => `${boardKey}: ${filled.join(', ')}`).join('; ');
     console.info(`[factory] Migrated the boards of project ${scope.factoryProjectId} (${filled}).`);
   }
 
-  async #migrationContext(scope: StoredBoardScope): Promise<BoardMigrationContext> {
+  /** Read through the migration transaction's `ops`, so card moves can't slip in unseen on LibSQL. */
+  async #migrationContext(scope: StoredBoardScope, ops: FactoryStorageOps): Promise<BoardMigrationContext> {
     const retiredSettings =
-      (await this.#projects?.retiredAutomationSettings?.({ orgId: scope.orgId, id: scope.factoryProjectId })) ?? null;
+      (await this.#projects?.retiredAutomationSettings?.({ orgId: scope.orgId, id: scope.factoryProjectId }, ops)) ??
+      null;
     return {
       retiredSettings,
-      occupiedPhases: retiredSettings && this.#occupiedPhases ? await this.#occupiedPhases(scope) : null,
+      occupiedPhases: retiredSettings && this.#occupiedPhases ? await this.#occupiedPhases(scope, ops) : null,
       warn: message =>
         this.#warnOnce(`migration:${scopeKey(scope)}:${message}`, `${message} (project ${scope.factoryProjectId})`),
     };

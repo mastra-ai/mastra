@@ -627,10 +627,14 @@ describe('bundled Factory skill assets', () => {
     // request itself, unless the card's board has a self-review phase: no project setting decides it.
     const build = await read('factory-build');
     expect(build).toContain('only with `ask_user`');
-    expect(build).toContain('do not open a pull or merge request. Move the card to its `self-review` phase');
-    // The phase's own moves pick the hand-off: a move to self-review means no change request is opened.
+    expect(build).toContain('Do not open a pull or merge request. Move the card to its `self-review` phase');
+    // The phase's own moves pick the hand-off: a move to self-review means no change request is
+    // opened, even where the board also allows the move to pull request review.
     expect(build).toContain(
-      '- **The board has a self-review phase** (`Board phases by part:` names a `self-review` phase and it is in `Next phases`): do not open a pull or merge request.',
+      '- **The board has a self-review phase** (`Board phases by part:` names a `self-review` phase and it is in `Next phases`): this path comes first, even when the `pull request review` phase is in `Next phases` too',
+    );
+    expect(build).toContain(
+      'it needs the `pull request review` phase in `Next phases`, and no `self-review` phase there',
     );
     expect(build).not.toContain('Self-review: on');
     expect(build).not.toContain('whatever the setting says');

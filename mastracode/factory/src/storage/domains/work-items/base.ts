@@ -2002,6 +2002,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItem);
   }
 
+  /** The project's cards as {@link list} reads them, uncached, through `ops`: a transaction's, to read them in it. */
+  async listWith(ops: FactoryStorageOps, { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) {
+    return this.#listWithOps(ops, orgId, factoryProjectId);
+  }
+
   /**
    * List the org's work items for a project, newest first. Ordered on `created_at` with an id
    * tiebreak so the order is stable: `updated_at` moves under every write, which makes it useless

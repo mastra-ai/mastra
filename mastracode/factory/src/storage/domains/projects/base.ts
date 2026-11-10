@@ -149,7 +149,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     // Retired project switch: no longer read or written. The review skill decides whether to publish its test check.
     review_test_checks_enabled: { type: 'boolean', default: false },
     // Retired project switch: no longer written. A board self-reviews when it has a self-review
-    // phase; the `work-self-review-switch-v1` board migration reads it once to carry it into Work.
+    // phase; the `self-review-switch-v1` board migration reads it once to carry it into its boards.
     self_review_enabled: { type: 'boolean', default: false },
     /** Set once the source-control domain has backfilled repository positions and environment membership. */
     environment_backfilled_at: { type: 'timestamp', nullable: true },
@@ -288,14 +288,12 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
    * The retired automation switches as the project last stored them, read only by the one-time
    * board migrations that carry them into its boards. Null when the project doesn't exist.
    */
-  async retiredAutomationSettings({
-    orgId,
-    id,
-  }: {
-    orgId: string;
-    id: string;
-  }): Promise<RetiredAutomationSettings | null> {
-    const row = await this.#db.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
+  async retiredAutomationSettings(
+    { orgId, id }: { orgId: string; id: string },
+    /** A transaction's ops, to read it inside that transaction. */
+    ops: FactoryStorageOps = this.#db,
+  ): Promise<RetiredAutomationSettings | null> {
+    const row = await ops.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
     if (!row) return null;
     return { autoRunEnabled: Boolean(row.auto_run_enabled), selfReviewEnabled: Boolean(row.self_review_enabled) };
   }

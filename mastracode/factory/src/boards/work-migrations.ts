@@ -233,41 +233,59 @@ export const WORK_PHASE_RUNNERS_MIGRATION: StoredBoardMigration = {
 };
 
 /**
- * The key of the board's self-review phase as {@link boardFlow} finds it: the first working phase
- * in the review seat that grants `factory_record_review_verdict` and not `factory_review_source`.
+ * The board's review phases as {@link boardFlow} finds them: `pullRequestReview` is the first
+ * review-seat phase granting `factory_review_source`; `selfReview` the first other one granting
+ * `factory_record_review_verdict` and not `factory_review_source`; `build` the last other working
+ * phase that moves into self-review.
  */
-function selfReviewPhase(board: StoredBoardRecord): string | undefined {
+function reviewPhases(board: StoredBoardRecord) {
   const grants = (phase: StoredPhaseRecord, tool: FactoryPhaseTool) =>
     phase.kind === 'working' && phase.runner?.context === REVIEW_CONTEXT && (phase.tools ?? []).includes(tool);
-  const pullRequestReview = board.phases.find(phase => grants(phase, 'factory_review_source'))?.key;
-  return board.phases.find(
+  const pullRequestReview = board.phases.find(phase => grants(phase, 'factory_review_source'));
+  const selfReview = board.phases.find(
     phase =>
-      phase.key !== pullRequestReview &&
+      phase !== pullRequestReview &&
       grants(phase, 'factory_record_review_verdict') &&
       !grants(phase, 'factory_review_source'),
-  )?.key;
+  );
+  const build = selfReview
+    ? board.phases.findLast(
+        phase =>
+          phase.kind === 'working' &&
+          phase !== pullRequestReview &&
+          phase !== selfReview &&
+          (phase.nextPhases ?? []).includes(selfReview.key),
+      )
+    : undefined;
+  return { pullRequestReview, selfReview, build };
 }
 
 /**
- * Carries a project's retired self-review switch into its Work board: with the switch off, a card
- * went past Work's self-review phase, so the phase goes, with every move into it. A board whose
- * self-review phase holds cards is left as it is, with a warning, rather than strand them.
+ * Carries a project's retired self-review switch into its boards: with the switch off, a card went
+ * past any board's self-review phase, so the phase goes, with every move into it. A board is left
+ * as it is, with a warning, when cards sit in the phase (removing it would strand them) or when its
+ * build phase could only reach the pull request review through it.
  */
 export function migrateSelfReviewSwitch(
   board: StoredBoardRecord,
   context: BoardMigrationContext,
 ): { board: Omit<StoredBoardInput, 'key'>; filled: string[] } | undefined {
   if (!context.retiredSettings || context.retiredSettings.selfReviewEnabled) return undefined;
-  const phase = selfReviewPhase(board);
-  if (!phase) return undefined;
+  const { pullRequestReview, selfReview, build } = reviewPhases(board);
+  if (!selfReview) return undefined;
+  const phase = selfReview.key;
   // Without the cards it could strand some in the phase: the project's next load runs it again.
   if (!context.occupiedPhases) throw new Error("the project's cards can't be read yet");
-  if (context.occupiedPhases.get(board.key)?.has(phase)) {
+  const keep = (reason: string) => {
     context.warn(
-      `Board "${board.key}" keeps its self-review phase "${phase}": cards sit in it. The project's self-review ` +
-        'setting was off; move those cards and remove the phase to keep skipping self-review.',
+      `Board "${board.key}" keeps its self-review phase "${phase}": ${reason}. The project's self-review ` +
+        'setting was off; remove the phase to keep skipping self-review.',
     );
     return undefined;
+  };
+  if (context.occupiedPhases.get(board.key)?.has(phase)) return keep('cards sit in it, move them first');
+  if (build && !(pullRequestReview && (build.nextPhases ?? []).includes(pullRequestReview.key))) {
+    return keep(`"${build.key}" can't move to a pull request review without it, add that move first`);
   }
   const phases = board.phases
     .filter(record => record.key !== phase)
@@ -300,9 +318,9 @@ export function migrateAutoRunSwitch(
   return { board: { name: board.name, description: board.description, phases }, filled };
 }
 
-export const WORK_SELF_REVIEW_MIGRATION: StoredBoardMigration = {
-  key: 'work-self-review-switch-v1',
-  boardKey: workBoard.id,
+export const SELF_REVIEW_MIGRATION: StoredBoardMigration = {
+  key: 'self-review-switch-v1',
+  boardKey: null,
   migrate: migrateSelfReviewSwitch,
 };
 
@@ -315,6 +333,6 @@ export const AUTO_RUN_MIGRATION: StoredBoardMigration = {
 /** The board migrations each project gets once, in order. */
 export const BOARD_MIGRATIONS: readonly StoredBoardMigration[] = [
   WORK_PHASE_RUNNERS_MIGRATION,
-  WORK_SELF_REVIEW_MIGRATION,
+  SELF_REVIEW_MIGRATION,
   AUTO_RUN_MIGRATION,
 ];
