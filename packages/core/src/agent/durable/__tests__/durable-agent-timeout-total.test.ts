@@ -767,14 +767,33 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
-  it.each(['toModelOutput', 'processToolResult'] as const)(
-    'saves a tool call still in %s at the total deadline as cut off',
-    async stage => {
+  it.each([
+    ['toModelOutput', false],
+    ['processToolResult', false],
+    ['toModelOutput', true],
+    ['processToolResult', true],
+  ] as const)(
+    'saves a tool call still in %s at the total deadline as cut off (slow claim handover: %s)',
+    async (stage, slowHandover) => {
       const storage = new InMemoryStore();
       const memory = new MockMemory({ storage });
-      const runId = `timeout-slow-${stage}-run`;
-      const threadId = `timeout-slow-${stage}-thread`;
+      const runId = `timeout-slow-${stage}-${slowHandover}-run`;
+      const threadId = `timeout-slow-${stage}-${slowHandover}-thread`;
       let pendingAtDeadline = false;
+      let handoverPending = false;
+      let returnedDuringHandover = false;
+      if (slowHandover) {
+        // The deadline fences the old claim out before its replacement is in place; hold that handover
+        // so the call returns from the slow stage inside it.
+        const memoryStore = (await storage.getStore('memory'))!;
+        const raiseRunFence = memoryStore.raiseRunFence!.bind(memoryStore);
+        vi.spyOn(memoryStore, 'raiseRunFence').mockImplementation(async fence => {
+          handoverPending = true;
+          await new Promise(resolve => setTimeout(resolve, 200));
+          handoverPending = false;
+          return raiseRunFence(fence);
+        });
+      }
       // Returns inside the grace window the save waits for, after the deadline took the run.
       const waitPastDeadline = async () => {
         const signal = globalRunRegistry.get(runId)?.abortSignal;
@@ -791,6 +810,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
           );
         });
         await new Promise(resolve => setTimeout(resolve, 50));
+        returnedDuringHandover = handoverPending;
       };
       const agent = createDurableAgent({
         agent: new Agent({
@@ -841,6 +861,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
         const chunks = await drain(result.fullStream);
         expect(findTimeoutErrorChunk(chunks)).toBeDefined();
         expect(pendingAtDeadline).toBe(true);
+        expect(returnedDuringHandover).toBe(slowHandover);
         await vi.waitFor(async () => {
           const { messages } = await memory.recall({ threadId });
           expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);

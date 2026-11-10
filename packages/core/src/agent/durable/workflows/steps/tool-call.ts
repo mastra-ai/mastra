@@ -21,6 +21,7 @@ import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/s
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
+import { isMastraTimeoutError } from '../../../../loop/timeout';
 import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
@@ -2416,10 +2417,15 @@ export function createDurableToolCallStep() {
         };
       } catch (error) {
         // The deadline took the run while a call that returned in time was still being mapped or
-        // processed: save it as cut off, never with its unprocessed result or as a failure.
+        // processed: save it as cut off, never with its unprocessed result or as a failure. The run's
+        // abort reason marks the deadline before `deadlineError` does: that is set only once the
+        // replacement claim is in place, and the call can return while it is still being acquired.
+        const deadlineReason = registryEntry?.abortSignal?.reason;
         if (
+          registryEntry &&
           recordedAtStepEnd &&
-          registryEntry?.executionFence?.deadlineError &&
+          (registryEntry.executionFence?.deadlineError ||
+            (isMastraTimeoutError(deadlineReason) && deadlineReason.timeoutType === 'total')) &&
           ownership?.isLost() &&
           !registryEntry.settledToolResults?.some(settled => settled.toolCallId === toolCallId)
         ) {
