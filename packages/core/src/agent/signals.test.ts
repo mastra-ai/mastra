@@ -155,7 +155,8 @@ describe('signal contents', () => {
     createSignal({ type: 'reactive', tagName, attributes: { name: 'a&"<b>' }, contents }).toLLMMessage().content;
 
   it('reaches the model as written inside its tag', () => {
-    const contents = 'Run `pnpm build && pnpm test 2>&1`.\n\n<work-item-feed>\nfeed\n</work-item-feed>';
+    const contents =
+      'Run `pnpm build && pnpm test 2>&1`.\n\n<work-item-description>\ndescription\n</work-item-description>';
     expect(skill(contents)).toBe(`<skill name="a&amp;&quot;&lt;b&gt;">${contents}</skill>`);
   });
 

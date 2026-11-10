@@ -33,8 +33,7 @@ const PROJECTED_COLUMNS = new Set([
   'external_source',
   'source_key',
   'title',
-  'comment_count',
-  'feed_activity_at',
+  'description',
 ]);
 const ID_BATCH = 500;
 const LEGACY = WORK_ITEMS_SCHEMA.name;
@@ -62,7 +61,7 @@ export type CardInsert = Pick<
   | 'created_by'
   | 'created_at'
   | 'updated_at'
->;
+> & { description?: string | null };
 
 export function splitCardRows(card: WorkItemDbRow, options: { workItemId: string; revision?: number }) {
   const rows = splitLegacyWorkItem(card, options);
@@ -112,6 +111,7 @@ function joinCard(
       claim_key: null,
       parent_work_item_id: board.parent_board_item_id,
       title: work.title,
+      description: work.description ?? null,
       stages: board.stages,
       stage_history: board.stage_history as WorkItemDbRow['stage_history'],
       sessions: board.sessions as WorkItemDbRow['sessions'],
@@ -120,8 +120,6 @@ function joinCard(
       autonomy_armed_at: board.autonomy_armed_at ?? null,
       plans_preapproved_at: board.plans_preapproved_at ?? null,
       accepted_at: board.accepted_at ?? null,
-      comment_count: board.comment_count ?? 0,
-      feed_activity_at: board.feed_activity_at ?? null,
       revision: board.revision,
       created_by: board.created_by,
       created_at: board.created_at,
@@ -318,8 +316,7 @@ export class Cards {
         autonomy_armed_at: null,
         plans_preapproved_at: null,
         accepted_at: null,
-        comment_count: 0,
-        feed_activity_at: null,
+        description: null,
         ...card,
         id: randomUUID(),
       },
@@ -368,9 +365,12 @@ export class Cards {
         const split = splitCardRows(next, { workItemId: row.work_item_id });
         columns.metadata = split.boardItem.metadata;
       }
-      if (patch.title !== undefined && patch.title !== current.title) {
+      const titleChanged = patch.title !== undefined && patch.title !== current.title;
+      const descriptionChanged = patch.description !== undefined && patch.description !== current.description;
+      if (titleChanged || descriptionChanged) {
         await this.ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: row.work_item_id }, work => ({
-          title: patch.title,
+          ...(titleChanged ? { title: patch.title } : {}),
+          ...(descriptionChanged ? { description: patch.description } : {}),
           revision: work.revision + 1,
           updated_at: new Date(),
         }));
@@ -408,9 +408,10 @@ export class Cards {
         } else if (next) await this.ops.insertOne(SOURCES, next);
         else if (previous) await this.ops.deleteMany(SOURCES, { id: previous.id });
       }
-      const nativeTitleChanged = !current.external_source && patch.title !== undefined && patch.title !== current.title;
+      const nativeTitleChanged = !current.external_source && titleChanged;
       const boardChanged =
         nativeTitleChanged ||
+        descriptionChanged ||
         Object.entries(columns).some(
           ([key, value]) =>
             !['revision', 'updated_at'].includes(key) && JSON.stringify(row[key]) !== JSON.stringify(value),

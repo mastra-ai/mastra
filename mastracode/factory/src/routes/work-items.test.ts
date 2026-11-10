@@ -91,7 +91,6 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       boardRegistry,
-      comments: seed.comments,
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({
         configVersion: 'factory-config-v1',
