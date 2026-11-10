@@ -19,6 +19,7 @@ import {
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
+  diffResponseMessages,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   getRunRegistryEntry,
@@ -32,6 +33,7 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableToolCallInput,
+  ResponseMessagesCursor,
 } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
@@ -468,16 +470,26 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           state.deferredStepFinishChunk = undefined;
           if (deferredChunk && pubsub) {
             // Carry the step's response messages so `onStepFinish(event).response.messages` and
-            // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
+            // `output.steps[i].response.messages` match the regular loop (#26780), as core does:
+            // only the part that changed since the previous step-finish, which readers rebuild. The
+            // diff is computed from the memoized state, so every replay of this predicate computes
+            // the same one, and the cursor travels with the iteration state.
+            let nextCursor: ResponseMessagesCursor | undefined;
             try {
               const list = new MessageList({}).deserialize(state.messageListState);
-              deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+              const { diff, cursor } = diffResponseMessages(
+                state.responseMessagesCursor ?? { producer: `inngest:${state.runId}` },
+                list.get.response.aiV5.model(),
+              );
+              deferredChunk.payload._durableResponseMessagesDiff = diff;
+              nextCursor = cursor;
             } catch (error) {
               mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
             }
             await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
               await emitChunkEvent(pubsub, state.runId, deferredChunk);
             });
+            if (nextCursor) state.responseMessagesCursor = nextCursor;
           }
         };
 

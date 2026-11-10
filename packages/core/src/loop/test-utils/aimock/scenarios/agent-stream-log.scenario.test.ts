@@ -149,13 +149,8 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
       const resentBeforeLast = stepFinishes
         .slice(1, TOOL_STEPS - 1)
         .filter(event => event.data.payload._durableResponseMessagesDiff?.from === 0).length;
-      if (engine === 'inngest') {
-        // Known gap: the Inngest durable agent still sends the whole list on every step.
-        expect(first).toBeGreaterThan(last + 2);
-      } else {
-        expect(resentBeforeLast).toBeLessThanOrEqual(3);
-        expect(first).toBe(last + resentBeforeLast);
-      }
+      expect(resentBeforeLast).toBeLessThanOrEqual(3);
+      expect(first).toBe(last + resentBeforeLast);
     } finally {
       run.cleanup?.();
       if (engine !== 'inngest') await mastra.shutdown();

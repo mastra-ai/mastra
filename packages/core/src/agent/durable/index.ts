@@ -132,6 +132,9 @@ export { createRunAbortController, type RunAbortController } from './run-abort';
 // Run bus + replay cache resolution, shared with durable-agent integrations outside core
 export { AgentStreamBus } from '../streams/bus';
 
+// Step-finish response message diffs, shared with durable-agent integrations outside core
+export { diffResponseMessages, type ResponseMessagesCursor } from '../streams/response-messages';
+
 // Stream adapter for pubsub-based streaming
 export {
   createDurableAgentStream,

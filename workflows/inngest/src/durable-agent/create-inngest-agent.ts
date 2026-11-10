@@ -2007,6 +2007,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         pubsub: getPubsub(),
         runId,
         offset: resumeOffset,
+        // Step-finish events carry only the response messages that changed; start from the full list.
+        replayResponseMessagesBeforeOffset: true,
         initialToolCalls,
         messageId: crypto.randomUUID(),
         resumedText,
@@ -2269,6 +2271,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
+        replayResponseMessagesBeforeOffset: true,
         idleTimeoutMs: observeOptions?.idleTimeoutMs,
         isAlive: observeOptions?.isAlive,
         structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
