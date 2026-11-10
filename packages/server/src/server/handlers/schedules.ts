@@ -2,6 +2,7 @@ import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { AgentSchedule, AnySchedule, WorkflowSchedule } from '@mastra/core/schedules';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   createScheduleBodySchema,
@@ -17,7 +18,7 @@ import {
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredAgentAccess } from './agent-access';
-import { assertExecuteAccess, assertReadAccess } from './authorship';
+import { assertExecuteAccess, assertReadAccess, getCallerAuthorId, hasAdminBypass } from './authorship';
 import { getPublicWorkflowById } from './utils';
 
 type RunSummary = {
@@ -125,8 +126,12 @@ async function canAccessScheduleAgent(
     if (record) {
       const check = access === 'read' ? assertReadAccess : assertExecuteAccess;
       check({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
+      return true;
     }
-    return true;
+    // Neither registered nor stored: the agent was deleted, and nothing says who could see it. Only admins and
+    // setups without auth keep seeing its schedules.
+    const authenticated = getCallerAuthorId(requestContext) !== null || !!requestContext.get(MASTRA_USER_KEY);
+    return !authenticated || hasAdminBypass(requestContext, 'stored-agents');
   } catch (error) {
     if (error instanceof HTTPException && error.status === 404) return false;
     throw error;

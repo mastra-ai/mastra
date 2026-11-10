@@ -15,7 +15,7 @@ Fixed private stored agents being visible to and usable by other users outside `
 
 - Lists that search across agents (for example tools, workspaces and processor details) skip agents you can't see.
 - The `/api/workspaces/:workspaceId/*` routes treat a private stored agent's workspace as missing for other users.
-- Agent schedules follow the visibility of the agent they run. `GET /api/schedules` hides schedules of stored agents you can't see, and reading, updating, pausing, resuming, firing or deleting one of them returns 404.
+- Agent schedules follow the visibility of the agent they run. `GET /api/schedules` hides schedules of stored agents you can't see, and reading, updating, pausing, resuming, firing or deleting one of them returns 404. Schedules of a deleted agent are only shown to admins.
 
 **Cloning**
 
