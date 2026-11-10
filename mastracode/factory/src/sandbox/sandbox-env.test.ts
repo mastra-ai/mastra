@@ -10,12 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { runSetupCommand, SetupCommandError } from '../integrations/github/sandbox.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import { SandboxEnvsStorage } from '../storage/domains/sandbox-envs/base.js';
-import {
-  attachSandboxEnvRefresh,
-  cachedSandboxEnvRevision,
-  resolveSandboxEnv,
-  sandboxBuildContext,
-} from './sandbox-env.js';
+import { attachSandboxEnvRefresh, resolveSandboxEnv, sandboxBuildContext } from './sandbox-env.js';
 import { createSessionSetupHook } from './session-sandbox.js';
 
 const ORG = 'org-1';
@@ -308,36 +303,6 @@ describe('sandbox env on a real LocalSandbox', () => {
       await expect(fs.stat(path.join(dir, 'repo/.git'))).resolves.toBeDefined();
       await expect(fs.stat(path.join(dir, 'repo', 'setup-saw.txt'))).rejects.toThrow();
     });
-  });
-});
-
-describe('cachedSandboxEnvRevision', () => {
-  it('reads storage at most once a second per Factory', async () => {
-    const revisions = vi.fn(async () => ({ revision: 'r1', buildRevision: 'b1' }));
-    const store = { revisions };
-    let now = 0;
-    const read = () => cachedSandboxEnvRevision(store, SCOPE, () => now);
-
-    expect(await read()).toBe('r1');
-    now = 999;
-    await read();
-    expect(revisions).toHaveBeenCalledTimes(1);
-    now = 1000;
-    await read();
-    expect(revisions).toHaveBeenCalledTimes(2);
-    await cachedSandboxEnvRevision(store, { orgId: ORG, projectId: 'other' }, () => now);
-    expect(revisions).toHaveBeenCalledTimes(3);
-  });
-
-  it('never caches a failed read', async () => {
-    const revisions = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('down'))
-      .mockResolvedValue({ revision: 'r2', buildRevision: '' });
-    const store = { revisions };
-    await expect(cachedSandboxEnvRevision(store, SCOPE, () => 0)).rejects.toThrow('down');
-    await Promise.resolve();
-    expect(await cachedSandboxEnvRevision(store, SCOPE, () => 0)).toBe('r2');
   });
 });
 

@@ -83,41 +83,6 @@ export function maskSandboxEnvValues(text: string, env: Record<string, string> |
   return masked;
 }
 
-const REVISION_CACHE_MS = 1000;
-const revisionCaches = new WeakMap<object, Map<string, { at: number; revision: Promise<string> }>>();
-
-/**
- * Drop the cached revision after a write in this process, so the next command
- * in any of the Factory's sandboxes here reads the new one. Writes from
- * another process are seen once the cached read is a second old.
- */
-export function forgetSandboxEnvRevision(store: object, scope: { orgId: string; projectId: string }): void {
-  revisionCaches.get(store)?.delete(`${scope.orgId}\u0000${scope.projectId}`);
-}
-
-/**
- * The Factory's current revision, read at most once a second per Factory so a
- * burst of commands across its sandboxes costs one storage read.
- */
-export function cachedSandboxEnvRevision(
-  store: Pick<SandboxEnvStore, 'revisions'>,
-  scope: { orgId: string; projectId: string },
-  now: () => number = Date.now,
-): Promise<string> {
-  let cache = revisionCaches.get(store);
-  if (!cache) revisionCaches.set(store, (cache = new Map()));
-  const key = `${scope.orgId}\u0000${scope.projectId}`;
-  const hit = cache.get(key);
-  if (hit && now() - hit.at < REVISION_CACHE_MS) return hit.revision;
-  const revision = store.revisions(scope.orgId, scope.projectId).then(row => row?.revision ?? '');
-  cache.set(key, { at: now(), revision });
-  // A failed read is never served from the cache.
-  revision.catch(() => {
-    if (cache.get(key)?.revision === revision) cache.delete(key);
-  });
-  return revision;
-}
-
 type EnvOverlay = Record<string, string | undefined>;
 
 export interface RefreshableSandbox {

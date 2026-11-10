@@ -44,7 +44,6 @@ import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
   attachSandboxEnvRefresh,
-  cachedSandboxEnvRevision,
   resolveSandboxEnv,
   resolveSandboxEnvOrEmpty,
   sandboxBuildContext,
@@ -1042,7 +1041,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (envScope && sandboxEnv) {
             attachSandboxEnvRefresh(sandbox, {
               initial: sandboxEnv,
-              revision: () => cachedSandboxEnvRevision(sandboxEnvs!, envScope),
+              revision: async () => (await sandboxEnvs!.revisions(envScope.orgId, envScope.projectId))?.revision ?? '',
               load: () => resolveSandboxEnv(sandboxEnvs!, envScope),
             });
           }
