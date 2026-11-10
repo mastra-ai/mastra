@@ -154,7 +154,25 @@ export function createAgentStreamPublisher({
    * The response messages published so far. Each step-finish sends only what changed; a run
    * resumed in a new publisher starts over with the full list.
    */
-  let responseMessagesCursor: ResponseMessagesCursor | undefined;
+  let responseMessagesCursor: ResponseMessagesCursor | { producer: string } = { producer: publisherId };
+  /** The next diff holds the whole list; its `seq` still follows on, so readers don't take it for a late copy. */
+  const forgetSentResponseMessages = () => {
+    if ('fingerprints' in responseMessagesCursor)
+      responseMessagesCursor = { ...responseMessagesCursor, fingerprints: [] };
+  };
+  const diffStepResponseMessages = (messages: ResponseMessagesDiff['messages'] | undefined) => {
+    if (!messages) return undefined;
+    try {
+      const { diff, cursor } = diffResponseMessages(responseMessagesCursor, messages);
+      responseMessagesCursor = cursor;
+      return diff;
+    } catch (error) {
+      // Readers report no messages for this step; publishing must not fail the run.
+      logger?.warn?.(`[AgentStream:${runId}] failed to diff response messages`, { error });
+      forgetSentResponseMessages();
+      return undefined;
+    }
+  };
   const readStepContent = (messageList: MessageList | undefined, toolCallIds: string[]) => {
     try {
       return messageList?.get.response.aiV5.modelContent(-1, toolCallIds);
@@ -250,15 +268,17 @@ export function createAgentStreamPublisher({
               ? undefined
               : readStepContent(messageList, stepToolCallIds);
           stepToolCallIds = [];
-          let responseMessages: ResponseMessagesDiff | undefined;
-          if (chunk.payload?.messages) {
-            ({ diff: responseMessages, cursor: responseMessagesCursor } = diffResponseMessages(
-              responseMessagesCursor,
-              chunk.payload.messages.nonUser,
-            ));
-          }
+          const responseMessages = diffStepResponseMessages(chunk.payload?.messages?.nonUser);
           const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content, responseMessages));
-          void enqueue(() => emitChunkEvent(pubsub, runId, published));
+          void enqueue(async () => {
+            try {
+              await emitChunkEvent(pubsub, runId, published);
+            } catch (error) {
+              // Readers that missed this diff can't place the next ones: resend the whole list.
+              if (responseMessages) forgetSentResponseMessages();
+              throw error;
+            }
+          });
           return;
         }
         case 'tool-output':

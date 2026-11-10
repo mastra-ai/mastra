@@ -126,26 +126,72 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
 
   // Technical: every step-finish carried the run's response messages so far, so the first tool's
   // output was stored once per later step. Step-finish events now send only what changed.
-  // DurableAgent and EventedAgent still send the full list on every step.
-  const itOnPlainAgentsForMessages = isDurableEngineVariant(engine) ? it.fails : it;
-  itOnPlainAgentsForMessages(
-    'stores an early tool result as often as the last one',
-    async () => {
-      const llm = getMock();
-      scriptToolLoop(llm);
-      const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup } });
-      const run: any = await agent.stream('Look it all up.', { maxSteps: 10 });
-      try {
-        await (run.output ?? run).consumeStream();
-        const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
-        expect(occurrences(log, 'RESULT-0')).toBe(occurrences(log, `RESULT-${TOOL_STEPS - 1}`));
-      } finally {
-        run.cleanup?.();
-        if (engine !== 'inngest') await mastra.shutdown();
+  it('stores an early tool result as often as the last one', async () => {
+    const llm = getMock();
+    scriptToolLoop(llm);
+    const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup } });
+    const run: any = await agent.stream('Look it all up.', { maxSteps: 10 });
+    try {
+      await (run.output ?? run).consumeStream();
+      const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
+      const first = occurrences(log, 'RESULT-0');
+      const last = occurrences(log, `RESULT-${TOOL_STEPS - 1}`);
+      if (isDurableEngineVariant(engine)) {
+        // Known gap: DurableAgent and EventedAgent still send the whole list on every step.
+        expect(first).toBeGreaterThan(last);
+      } else {
+        expect(first).toBe(last);
       }
-    },
-    30_000,
-  );
+    } finally {
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
+
+  // Technical: approving a suspended tool call resumes the run in a new publisher on the same
+  // topic, which numbers its diffs from scratch and starts with the whole list.
+  it('replays the response messages of a run suspended for approval and resumed', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_approve', name: 'lookup', arguments: { q: 'approved' } }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Approved and done.' });
+    const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup } });
+    const run: any = await agent.stream('Look it up.', { requireToolApproval: true, maxSteps: 5 });
+    let resumed: any;
+    try {
+      let toolCallId: string | undefined;
+      for await (const chunk of run.fullStream) {
+        if (chunk.type === 'tool-call-approval') {
+          toolCallId = chunk.payload.toolCallId;
+          break;
+        }
+      }
+      resumed = await agent.approveToolCall({ runId: run.runId, toolCallId: toolCallId! });
+      const resumedOutput = resumed.output ?? resumed;
+      await resumedOutput.consumeStream();
+      expect(await resumedOutput.text).toBe('Approved and done.');
+      const liveMessages = JSON.parse(JSON.stringify((await resumedOutput.steps).at(-1).response.messages));
+      await waitForTerminal(runBus(agent), run.runId);
+
+      const observed: any[] = [];
+      const observation: any = await agent.observe(run.runId, {
+        onStepFinish: (step: any) => {
+          observed.push(step);
+        },
+      });
+      for await (const _chunk of observation.fullStream) {
+        // drain
+      }
+      expect(JSON.stringify(liveMessages)).toContain('RESULT-approved');
+      expect(observed.at(-1).response.messages).toEqual(liveMessages);
+    } finally {
+      resumed?.cleanup?.();
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
 
   // Technical: an observer that starts at an offset skips the step-finish events that carried the
   // earlier response messages; it rebuilds them from the run's log before following it.

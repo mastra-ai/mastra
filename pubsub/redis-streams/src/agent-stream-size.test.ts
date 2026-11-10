@@ -19,7 +19,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { createClient } from 'redis';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { nodeRedisPreset, RedisServerCache } from '../../../stores/redis/src/cache';
@@ -140,11 +140,19 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
         await run.consumeStream();
         expect(await run.text).toBe('All done.');
 
-        const log = await storedRunLog(run.runId);
+        // The publisher appends after the caller's stream ends; wait for the run's finish event.
+        let log = '';
+        await vi.waitFor(async () => {
+          log = await storedRunLog(run.runId);
+          expect(log).toMatch(/\\?"type\\?":\\?"finish\\?"/);
+        });
         // The finish event carries the conversation once (`messages.all` and `messages.user`); the
         // stream key and the replay list each keep a copy of the log.
         const copies = cache === 'redis' ? 2 : 1;
         expect(log.split(PROMPT_MARKER).length - 1).toBeLessThanOrEqual(2 * copies);
+        // Each step-finish sends only the response messages that changed, so the first tool result
+        // is stored no more often than the last one.
+        expect(log.split('RESULT-0').length).toBe(log.split(`RESULT-${TOOL_STEPS - 1}`).length);
 
         const observed: any[] = [];
         const observation = await agent.observe(run.runId, { onStepFinish: step => void observed.push(step) });

@@ -50,6 +50,8 @@ export interface AgentStreamStepFinishPayload {
    * messages rather than a partial list.
    */
   _durableResponseMessagesDiff?: ResponseMessagesDiff;
+  /** The whole list, from producers that don't send diffs (DurableAgent and EventedAgent). */
+  _durableResponseMessages?: NonNullable<StepFinishPayload['messages']>['nonUser'];
 }
 
 /** The `step-start` data to publish: everything but the provider request and prompt. */

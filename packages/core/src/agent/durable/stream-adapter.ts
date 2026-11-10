@@ -27,6 +27,7 @@ import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
 import { applyResponseMessages, replayResponseMessages } from '../streams/response-messages';
 import type { ResponseMessagesReplay } from '../streams/response-messages';
+import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, shouldRejectStream } from './constants';
 import type {
@@ -386,6 +387,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Experimental transforms applied whenever the returned full stream is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /**
+   * With a numeric `offset`, first rebuild the run's response messages from the
+   * events before it. Needed for producers whose step-finish events carry only
+   * the messages that changed (the plain Agent's publisher).
+   */
+  replayResponseMessagesBeforeOffset?: boolean;
+  /**
    * Optional external MessageList to use instead of creating a fresh empty one.
    * When provided (e.g. the registry's live MessageList), MastraModelOutput can
    * resolve step content from messages added during the workflow execution.
@@ -467,6 +474,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     experimentalTransform,
     hideSignals,
     messageList: externalMessageList,
+    replayResponseMessagesBeforeOffset,
   } = options;
 
   // Helper to log errors (uses logger if available, falls back to console)
@@ -628,6 +636,32 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   /** The run's response messages, rebuilt from the step-finish events this reader has seen. */
   let responseMessagesReplay: ResponseMessagesReplay = { messages: [] };
+  // Step-finish events carry only the response messages that changed, so a reader starting
+  // mid-log first rebuilds the list from the events it skips. Events wait for that read
+  // (bounded, so a stalled cache can't hold the stream); the subscription doesn't.
+  let skippedEventsReplayed: Promise<void> | undefined;
+  if (replayResponseMessagesBeforeOffset && typeof offset === 'number' && offset > 0 && pubsub.supportsOffsets) {
+    const topic = AGENT_STREAM_TOPIC(runId);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    skippedEventsReplayed = Promise.race([
+      pubsub.getHistory(topic, 0).then(history => {
+        responseMessagesReplay = replayResponseMessages(
+          history.filter(event => typeof event.index === 'number' && event.index < offset),
+        );
+      }),
+      new Promise<void>(resolve => {
+        timer = setTimeout(resolve, LOGGED_EVENT_DELIVERY_TIMEOUT_MS);
+        timer.unref?.();
+      }),
+    ])
+      .catch(error => {
+        logError(`[DurableAgentStream] Failed to read ${topic} history before offset ${offset}:`, error);
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        skippedEventsReplayed = undefined;
+      });
+  }
 
   let pendingRejection: Error | undefined;
   // Ends this reader's stream with an error, then fires onError once.
@@ -659,6 +693,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   let activityVersion = 0;
 
   const handleEvent = async (event: Event) => {
+    // Deliveries resume in arrival order once the skipped events are folded.
+    if (skippedEventsReplayed) await skippedEventsReplayed;
     // After a terminal event the stream is closed and its callbacks have fired.
     // A later duplicate (a replayed pre-crash FINISH plus the recovered one)
     // must not fire onFinish/onError again.
@@ -710,7 +746,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           }
           if (chunk.type === 'step-finish' && chunk.payload) {
             // The event is shared with other readers and the replay cache: rewrite a copy.
-            const { _durableResponseMessagesDiff, ...payload } = chunk.payload as Record<string, any>;
+            const published = chunk.payload as unknown as AgentStreamStepFinishPayload;
+            const { _durableResponseMessagesDiff, ...payload } = published;
             const metadata = payload.metadata;
             // A JSON-serializing pubsub delivers the response timestamp as an ISO string.
             if (typeof metadata?.timestamp === 'string') {
@@ -718,7 +755,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
             // Rebuild the run's response messages so far; when this reader missed an earlier part,
             // fall back to the messages it has (a durable caller's live list) rather than guess.
-            const responseMessages = applyResponseMessages(responseMessagesReplay, chunk.payload as any);
+            const responseMessages = applyResponseMessages(responseMessagesReplay, published);
             if (_durableResponseMessagesDiff || responseMessages) {
               payload._durableResponseMessages = responseMessages ?? messageList.get.response.aiV5.model();
             }
@@ -1060,28 +1097,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       // Use indexed replay when supported. Transports without numeric offsets
       // must live-tail so resume/recovery does not replay pre-resume events.
       const topic = AGENT_STREAM_TOPIC(runId);
-      // Step-finish events carry only the response messages that changed, so a reader starting
-      // mid-log first rebuilds the list from the events it skips.
-      const replaySkipped =
-        typeof offset === 'number' && offset > 0 && pubsub.supportsOffsets
-          ? pubsub
-              .getHistory(topic, 0)
-              .then(history => {
-                responseMessagesReplay = replayResponseMessages(
-                  history.filter(event => typeof event.index === 'number' && event.index < offset),
-                );
-              })
-              .catch(error => {
-                logError(`[DurableAgentStream] Failed to read ${topic} history before offset ${offset}:`, error);
-              })
-          : Promise.resolve();
-      const subscribePromise = replaySkipped.then(() =>
+      const subscribePromise =
         offset === undefined
           ? pubsub.subscribeWithReplay(topic, subscribedCallback)
           : offset === 'latest' || !pubsub.supportsOffsets
             ? pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' })
-            : pubsub.subscribeFromOffset(topic, offset, subscribedCallback),
-      );
+            : pubsub.subscribeFromOffset(topic, offset, subscribedCallback);
 
       subscribePromise
         .then(() => {

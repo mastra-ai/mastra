@@ -3,55 +3,70 @@ import type { StepFinishPayload } from '../../stream/types';
 type ResponseMessage = NonNullable<StepFinishPayload['messages']>['nonUser'][number];
 
 /**
+ * Every this many step-finish events, a producer sends its whole list
+ * (`from: 0`), so a reader that missed a diff (a lost delivery, a live-only
+ * transport that joined mid-run) recovers within that many steps.
+ */
+export const RESPONSE_MESSAGES_FULL_LIST_INTERVAL = 8;
+
+/**
  * A step's response messages as published on a run's stream topic: the run's
  * list from index `from` on, replacing whatever a reader holds from there.
  * Earlier entries can change between steps (a step's assistant message grows,
  * a retried attempt is rolled back), so this is not just the new messages.
  */
 export interface ResponseMessagesDiff {
-  from: number;
-  /** Increases by one per published step-finish of the producer that sent it. */
+  /** Identifies the publisher; each producer (e.g. each resumed segment of a run) numbers its own diffs. */
+  producer: string;
+  /** Increases by one per published step-finish of the producer. */
   seq: number;
+  from: number;
   messages: ResponseMessage[];
 }
 
 /** What a producer remembers about the response messages it has published. */
 export interface ResponseMessagesCursor {
-  fingerprints: string[];
+  producer: string;
   seq: number;
+  fingerprints: string[];
 }
 
 /**
  * The diff to publish for `messages`, the run's response messages so far, and
- * the cursor to keep for the next one. Without a cursor the diff is the whole
- * list from index 0.
+ * the cursor to keep for the next one. The first diff of a producer, and every
+ * {@link RESPONSE_MESSAGES_FULL_LIST_INTERVAL}th one, holds the whole list.
  */
 export function diffResponseMessages(
-  cursor: ResponseMessagesCursor | undefined,
+  cursor: ResponseMessagesCursor | { producer: string },
   messages: ResponseMessage[],
 ): { diff: ResponseMessagesDiff; cursor: ResponseMessagesCursor } {
   const fingerprints = messages.map(fingerprint);
-  const sent = cursor?.fingerprints ?? [];
+  const seq = 'seq' in cursor ? cursor.seq + 1 : 0;
   let from = 0;
-  while (from < sent.length && from < fingerprints.length && sent[from] === fingerprints[from]) from++;
-  const seq = cursor ? cursor.seq + 1 : 0;
-  return { diff: { from, seq, messages: messages.slice(from) }, cursor: { fingerprints, seq } };
+  if ('seq' in cursor && seq % RESPONSE_MESSAGES_FULL_LIST_INTERVAL !== 0) {
+    const sent = cursor.fingerprints;
+    while (from < sent.length && from < fingerprints.length && sent[from] === fingerprints[from]) from++;
+  }
+  const { producer } = cursor;
+  return { diff: { producer, seq, from, messages: messages.slice(from) }, cursor: { producer, seq, fingerprints } };
 }
 
 /** The response messages a reader rebuilt from the diffs it applied. */
 export interface ResponseMessagesReplay {
   messages: ResponseMessage[];
-  /** `seq` of the last diff applied; undefined when the next diff must start at index 0. */
+  /** Producer and `seq` of the last diff applied; unset when the next diff must hold the whole list. */
+  producer?: string;
   seq?: number;
 }
 
 /**
  * Apply a step-finish payload's response messages to what a reader holds.
- * Returns the step's full list, or undefined when the payload can't be applied
- * because the reader missed an earlier diff (no history, a lost or reordered
- * delivery). The reader then waits for the next full list instead of guessing.
- * Payloads from producers that publish the full list
- * (`_durableResponseMessages`) replace what the reader holds.
+ * Returns the step's full list, or undefined when the payload can't be applied:
+ * the reader missed an earlier diff (no history, a lost or reordered delivery)
+ * or got a late copy of one it already applied. A reader that missed a diff
+ * waits for the producer's next whole list instead of guessing. Payloads from
+ * producers that publish the whole list (`_durableResponseMessages`) replace
+ * what the reader holds.
  */
 export function applyResponseMessages(
   replay: ResponseMessagesReplay,
@@ -60,18 +75,20 @@ export function applyResponseMessages(
   const diff = payload._durableResponseMessagesDiff;
   if (!diff) {
     if (!Array.isArray(payload._durableResponseMessages)) return undefined;
-    replay.messages = payload._durableResponseMessages;
-    replay.seq = undefined;
+    Object.assign(replay, { messages: payload._durableResponseMessages, producer: undefined, seq: undefined });
     return replay.messages;
   }
+  const sameProducer = replay.producer === diff.producer && replay.seq !== undefined;
+  // A late or repeated delivery of a diff this reader is already past.
+  if (sameProducer && diff.seq <= replay.seq!) return undefined;
   if (diff.from === 0) {
-    replay.messages = diff.messages;
-    replay.seq = diff.seq;
+    Object.assign(replay, { messages: [...diff.messages], producer: diff.producer, seq: diff.seq });
     return replay.messages;
   }
-  // A step-finish delivered twice.
-  if (replay.seq !== undefined && diff.seq <= replay.seq) return replay.messages;
-  if (replay.seq === undefined || diff.seq !== replay.seq + 1 || diff.from > replay.messages.length) {
+  // A diff of a producer whose whole list this reader hasn't seen (e.g. the previous segment's
+  // publisher, delivered late) says nothing about the list it holds.
+  if (replay.producer !== diff.producer) return undefined;
+  if (!sameProducer || diff.seq !== replay.seq! + 1 || diff.from > replay.messages.length) {
     replay.seq = undefined;
     return undefined;
   }
@@ -80,7 +97,10 @@ export function applyResponseMessages(
   return replay.messages;
 }
 
-/** Fold the step-finish events of a run log, in order, into a reader's starting state. */
+/**
+ * Fold the step-finish events of a run log, in order, into a reader's starting
+ * state. It doesn't filter by claim generation: plain Agent logs carry none.
+ */
 export function replayResponseMessages(events: { type?: string; data?: unknown }[]): ResponseMessagesReplay {
   const replay: ResponseMessagesReplay = { messages: [] };
   for (const event of events) {
