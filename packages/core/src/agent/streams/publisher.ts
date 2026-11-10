@@ -6,6 +6,7 @@ import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/prod
 import type { ChunkType } from '../../stream/types';
 import { createRunAbortController } from '../durable/run-abort';
 import type { AgentSuspendedEventData } from '../durable/types';
+import { whenRunStepsSettle } from '../run-lease-fence';
 import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
 import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
@@ -105,7 +106,9 @@ export function createAgentStreamPublisher({
       logger?.warn?.('[AgentStream:' + runId + '] failed to listen for abort requests', { error });
     });
   const stopAbortListener = async () => {
-    detach();
+    // A segment that ends on a suspension can leave a sibling tool call of the same step running. Keep forwarding the
+    // caller's abort until it settles, so aborting the run (e.g. at shutdown) still reaches that tool.
+    whenRunStepsSettle(callerSignal, detach);
     const pending = listening;
     listening = undefined;
     await pending;
