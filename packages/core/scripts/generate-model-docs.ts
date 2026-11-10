@@ -121,6 +121,8 @@ const GATEWAY_PROVIDERS = ['netlify', 'neon', 'openrouter', 'vercel', 'azure-ope
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
+// Gateways that aren't in `defaultGateways` and must be passed to `new Mastra({ gateways })`
+const OPT_IN_GATEWAYS = ['azure-openai'];
 const MANUAL_ENV_VARS: Record<string, string[]> = {
   'azure-openai': [
     'AZURE_API_KEY',
@@ -1206,22 +1208,20 @@ Gateway providers aggregate multiple model providers and add features like cachi
 
 Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/gateways/custom-gateways) for implementation details.
 
+## Gateways you register yourself
+
+These gateways aren't registered by default. Pass them to \`new Mastra({ gateways })\`. Their model IDs only resolve for agents registered on that instance.
+
+- [Azure OpenAI](/models/gateways/azure-openai): Private Azure OpenAI deployments, registered with \`AzureOpenAIGateway\`
+
 ## Built-in gateways
 
 <CardGrid>
 ${gatewaysList
+  .filter(g => !OPT_IN_GATEWAYS.includes(g))
   .map(g => {
     // Custom descriptions for manually documented gateways
     if (MANUALLY_DOCUMENTED_GATEWAYS.includes(g)) {
-      if (g === 'azure-openai') {
-        return `    <CardGridItem
-      title="Azure OpenAI"
-      description="Private Azure OpenAI deployments"
-      href="/models/gateways/${g}"
-      logo="${getLogoUrl(g)}"
-    />`;
-      }
-
       if (g === 'mastra') {
         return `    <CardGridItem
       title="Mastra"
@@ -1315,6 +1315,12 @@ function generateProvidersSidebarItems(grouped: GroupedProviders, aiSdkProviders
   return [...popularProviders, ...otherProviders];
 }
 
+// Extra guidance for AI SDK providers whose names collide with model IDs from other providers
+const AI_SDK_PROVIDER_NOTES: Record<string, string> = {
+  'amazon-bedrock': `The \`aws-bedrock/*\` model IDs that can appear in editor autocomplete belong to [LLM Gateway](/models/providers/llmgateway-providers). Use them with the \`llmgateway-providers/\` prefix, for example \`llmgateway-providers/aws-bedrock/claude-opus-4-6\`.`,
+  azure: `The \`azure/*\` model IDs that can appear in editor autocomplete belong to [LLM Gateway](/models/providers/llmgateway-providers). Use them with the \`llmgateway-providers/\` prefix, for example \`llmgateway-providers/azure/gpt-5.4\`. To use your own Azure OpenAI deployments through the model router, register the [Azure OpenAI gateway](/models/gateways/azure-openai).`,
+};
+
 async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
   const packageName = provider.npm;
   const logoUrl = getLogoUrl(provider.id);
@@ -1336,6 +1342,8 @@ ${getGeneratedComment()}
 # <img src="${logoUrl}" alt="${provider.name} logo" className="${logoClass}" />${provider.name}
 
 ${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.${aiSdkDocsText}
+
+${provider.name} isn't a model router provider, so model strings like \`${provider.id}/<model>\` don't resolve. Pass a model instance from \`${packageName}\` to the agent's \`model\` option instead.${AI_SDK_PROVIDER_NOTES[provider.id] ? `\n\n${AI_SDK_PROVIDER_NOTES[provider.id]}` : ''}
 
 To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
 
