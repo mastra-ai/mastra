@@ -787,4 +787,43 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       expect(testExporter.getIncompleteSpans()).toHaveLength(0);
     },
   );
+
+  // A processor that drops `step-finish` must not leave the model call span open:
+  // MODEL_INFERENCE waits for the processed step-finish, so the run's finish settles it.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    '%s agent: every model call span ends when an output processor drops step-finish',
+    async variant => {
+      class DropStepFinishProcessor implements Processor {
+        readonly id = 'drop-step-finish';
+        readonly name = 'Drop step-finish';
+        async processOutputStream({ part }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+          return part.type === 'step-finish' ? null : part;
+        }
+      }
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'use the tool',
+        model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
+        tools: { get_weather: weatherTool },
+        outputProcessors: [new DropStepFinishProcessor()],
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      if (variant === 'plain') {
+        await (await wrapped.stream('weather in paris?')).consumeStream();
+        await settle(testExporter);
+      } else {
+        await runToCompletion(wrapped, 'weather in paris?', testExporter);
+      }
+
+      const inferences = testExporter.getSpansByType('model_inference' as any) as any[];
+      expect(inferences).toHaveLength(2);
+      for (const inference of inferences) {
+        expect(inference.endTime).toBeDefined();
+        expect(inference.attributes?.usage).toBeDefined();
+      }
+      const openInferences = testExporter.getIncompleteSpans().filter((s: any) => s.span?.type === 'model_inference');
+      expect(openInferences).toHaveLength(0);
+    },
+  );
 });

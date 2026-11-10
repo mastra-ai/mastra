@@ -578,10 +578,13 @@ export class ModelSpanTracker {
       }
     }
 
+    // Only the final inference can still be held here (earlier ones end at their
+    // step-finish or when the next model call starts); end it with its provider data.
+    this.#settlePendingInference();
+
     // Cancellation and deadlines terminate work that is still active. A loop
     // limit such as max_steps must not relabel a completed logical step.
     if (spanOptions.outcome === 'abort' || spanOptions.stopReason === 'timeout') {
-      this.#settlePendingInference();
       const termination = {
         outcome: spanOptions.outcome,
         stopReason: spanOptions.stopReason,
@@ -1406,6 +1409,9 @@ export class ModelSpanTracker {
         }
 
         case 'finish':
+          // The run is done. A held inference whose processed step-finish never
+          // arrived (an output processor dropped it) ends with its provider data.
+          this.#settlePendingInference();
           break;
 
         // Infrastructure chunks - skip creating spans for these
