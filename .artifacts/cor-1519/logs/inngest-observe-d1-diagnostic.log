@@ -1,0 +1,805 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vitest.config.ts:5:30). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+Testing types with tsc and vue-tsc is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (../../workflows/inngest/vitest.config.ts:5:30). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+`resolve.alias` contains an alias with `customResolver` option. This is deprecated and will be removed in Vite 9. Please use a custom plugin with a resolveId hook and `enforce: 'pre'` instead.
+
+ RUN  v5.1.0 /workspace/mastra/workflows/inngest
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > closes an observation of a run that never existed 22ms
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > replays a finished run, then closes 788ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > replays a run that ended in a provider error, then closes
+Error processing LLM stream {
+  error: APICallError [AI_APICallError]: Provider down
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIResponsesLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:4378:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:41141/v1/responses',
+    requestBodyValues: {
+      model: 'gpt-4o-mini',
+      input: [Array],
+      temperature: undefined,
+      top_p: undefined,
+      max_output_tokens: undefined,
+      conversation: undefined,
+      max_tool_calls: undefined,
+      metadata: undefined,
+      parallel_tool_calls: undefined,
+      previous_response_id: undefined,
+      store: undefined,
+      user: undefined,
+      instructions: undefined,
+      service_tier: undefined,
+      include: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      top_logprobs: undefined,
+      truncation: undefined,
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:31:02 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-Q3il2biXL9KfXwfl'
+    },
+    responseBody: '{"error":{"message":"Provider down","type":"invalid_request_error","param":null,"code":null}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '863fd8cc-2342-48d1-8725-7701036261e9'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > replays a run that ended in a provider error, then closes 735ms
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > stays open through a slow first token and receives the finish 3312ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > stays open while a slow tool runs between steps and receives the finish
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > stays open while a slow tool runs between steps and receives the finish 3743ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing across an approval suspend and follows the approved run to its finish
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing across an approval suspend and follows the approved run to its finish 5710ms
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing a suspended run after an abort request and closes on the abort finish 3122ms
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > an observer that aborts a run parked on approval releases it, so the approval is rejected 505ms
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps the run log for the run-log TTL while the run waits for approval 5441ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging 2167ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging 2397ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging 2256ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging 2243ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts > AIMock loop scenario: observe across approval and resume [inngest] > follows the approved run to its finish and replays both segments
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts > AIMock loop scenario: observe across approval and resume [inngest] > follows the approved run to its finish and replays both segments 2236ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:36249/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:31:37 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-25vQCOYQZB66RNdi'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"context_length_exceeded"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '1e63da7b-cf4a-4736-a73e-60e2b53c927e',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '70b7b9218f96d577e1c64d06e72f69b0',
+  span_id: 'bd371218df7c7af4'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '70b7b9218f96d577e1c64d06e72f69b0',
+  span_id: '5a3d20056db6bd68'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort
+[WORKFLOW] Error executing step workflow.aimock-loop-scenario-agent-15-input-processor.step.processor:observational-memory: TripWire: Encountered error during memory observation: Provider rejected observer input: HTTP 400
+    at abort (/workspace/mastra/packages/core/src/workflows/workflow.ts:1012:15)
+    at /workspace/mastra/packages/memory/src/processors/observational-memory/processor.ts:440:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at /workspace/mastra/packages/core/src/workflows/workflow.ts:1472:30
+    at executePhaseWithSpan (/workspace/mastra/packages/core/src/workflows/workflow.ts:1353:26)
+    at engine.executeStepWithRetry.retries.retries (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:622:22)
+    at DefaultExecutionEngine.executeStepWithRetry (/workspace/mastra/packages/core/src/workflows/default.ts:547:24)
+    at executeStep (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:393:27)
+    at executeEntryBody (/workspace/mastra/packages/core/src/workflows/handlers/entry.ts:484:11)
+    at DefaultExecutionEngine.execute (/workspace/mastra/packages/core/src/workflows/default.ts:1174:24) {
+  trace_id: '70b7b9218f96d577e1c64d06e72f69b0',
+  span_id: '71b6474b2c907a4d'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort
+Streaming input processor tripwire triggered {
+  reason: 'Encountered error during memory observation: Provider rejected observer input: HTTP 400',
+  processorId: 'observational-memory',
+  retry: undefined
+} {
+  trace_id: '70b7b9218f96d577e1c64d06e72f69b0',
+  span_id: '71b6474b2c907a4d'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort 1162ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:36249/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:31:38 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-O8XkbGSUT-OHpxdv'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"content_filter"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '02829a27-3c22-4642-acb6-f37764d43ebe',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: 'f5709504af346b203230444ebe37348d',
+  span_id: '93aaaa3f2681c775'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: 'f5709504af346b203230444ebe37348d',
+  span_id: 'c7b9447a7c3b5ddd'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort
+[WORKFLOW] Error executing step workflow.aimock-loop-scenario-agent-16-input-processor.step.processor:observational-memory: TripWire: Encountered error during memory observation: Provider rejected observer input: HTTP 400
+    at abort (/workspace/mastra/packages/core/src/workflows/workflow.ts:1012:15)
+    at /workspace/mastra/packages/memory/src/processors/observational-memory/processor.ts:440:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at /workspace/mastra/packages/core/src/workflows/workflow.ts:1472:30
+    at executePhaseWithSpan (/workspace/mastra/packages/core/src/workflows/workflow.ts:1353:26)
+    at engine.executeStepWithRetry.retries.retries (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:622:22)
+    at DefaultExecutionEngine.executeStepWithRetry (/workspace/mastra/packages/core/src/workflows/default.ts:547:24)
+    at executeStep (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:393:27)
+    at executeEntryBody (/workspace/mastra/packages/core/src/workflows/handlers/entry.ts:484:11)
+    at DefaultExecutionEngine.execute (/workspace/mastra/packages/core/src/workflows/default.ts:1174:24) {
+  trace_id: 'f5709504af346b203230444ebe37348d',
+  span_id: '50bf4d2638717855'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort
+Streaming input processor tripwire triggered {
+  reason: 'Encountered error during memory observation: Provider rejected observer input: HTTP 400',
+  processorId: 'observational-memory',
+  retry: undefined
+} {
+  trace_id: 'f5709504af346b203230444ebe37348d',
+  span_id: '50bf4d2638717855'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort 770ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:36249/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:31:38 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-HKfcDWGgGsxq65XY'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"provider_failure"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: 'c9a8ff94-3d55-458c-bce0-151b08916eeb',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '7b636fac9c16d493513c7cde8c4a7656',
+  span_id: '234763dcec4fc5bc'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '7b636fac9c16d493513c7cde8c4a7656',
+  span_id: '175c44b6b5b16df3'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort
+[WORKFLOW] Error executing step workflow.aimock-loop-scenario-agent-17-input-processor.step.processor:observational-memory: TripWire: Encountered error during memory observation: Provider rejected observer input: HTTP 400
+    at abort (/workspace/mastra/packages/core/src/workflows/workflow.ts:1012:15)
+    at /workspace/mastra/packages/memory/src/processors/observational-memory/processor.ts:440:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at /workspace/mastra/packages/core/src/workflows/workflow.ts:1472:30
+    at executePhaseWithSpan (/workspace/mastra/packages/core/src/workflows/workflow.ts:1353:26)
+    at engine.executeStepWithRetry.retries.retries (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:622:22)
+    at DefaultExecutionEngine.executeStepWithRetry (/workspace/mastra/packages/core/src/workflows/default.ts:547:24)
+    at executeStep (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:393:27)
+    at executeEntryBody (/workspace/mastra/packages/core/src/workflows/handlers/entry.ts:484:11)
+    at DefaultExecutionEngine.execute (/workspace/mastra/packages/core/src/workflows/default.ts:1174:24) {
+  trace_id: '7b636fac9c16d493513c7cde8c4a7656',
+  span_id: 'bc11dbd5593d6325'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort
+Streaming input processor tripwire triggered {
+  reason: 'Encountered error during memory observation: Provider rejected observer input: HTTP 400',
+  processorId: 'observational-memory',
+  retry: undefined
+} {
+  trace_id: '7b636fac9c16d493513c7cde8c4a7656',
+  span_id: 'bc11dbd5593d6325'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort 751ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=continue
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:36249/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:31:39 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-VIcHWW-RX1I3pjca'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"context_length_exceeded"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: 'ed5babae-081e-4d57-b69c-31cbbda13f4f',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '61ee2ad5aae4e2c43b04e135942e2717',
+  span_id: '678cd7f93207ad42'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=continue
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '61ee2ad5aae4e2c43b04e135942e2717',
+  span_id: '0c9ab212691a00b1'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=continue 871ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=continue
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:36249/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:31:40 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-tDM7Yna3qdAdVg0Z'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"content_filter"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '14c0a127-8c82-49d8-a02a-ec3d675d7066',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '8fca92b55a833a403b70b9e3c336db53',
+  span_id: '619ee307db14341f'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=continue
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '8fca92b55a833a403b70b9e3c336db53',
+  span_id: 'ecc3279bb4bd168e'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=continue 1049ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=continue
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:36249/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:31:41 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-Y_9xRPGvRUwmhBZT'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"provider_failure"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: 'bbfd3f43-ade0-4e31-a0d3-133c348e0d31',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: 'd01d9cc8626c4d74af2b1adfa91ddf54',
+  span_id: '276c0645af64d9a3'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=continue
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: 'd01d9cc8626c4d74af2b1adfa91ddf54',
+  span_id: 'e13ad7ab85309818'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=continue 746ms
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-frames.scenario.test.ts > AIMock loop scenario: observe frames [inngest] > delivers one reply and one finish, including replay on engines with observe() 733ms
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-replay-snapshot.scenario.test.ts > AIMock loop scenario: replay snapshots published events [inngest] > replays step-finish payloads as they were published
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-replay-snapshot.scenario.test.ts > AIMock loop scenario: replay snapshots published events [inngest] > replays published payloads even when the cache append lands after resume
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-state.scenario.test.ts > AIMock loop scenario: observer ownership and state [inngest] > rejects a foreign live observer without breaking the owning observer
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-state.scenario.test.ts > AIMock loop scenario: observer ownership and state [inngest] > preserves live call-time processors and scoring data on another wrapper
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-state.scenario.test.ts > AIMock loop scenario: observer ownership and state [inngest] > restores persisted observer state on a fresh host and rejects foreign readers
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-state.scenario.test.ts > AIMock loop scenario: observer ownership and state [inngest] > refreshes cold observer scoring output after an approval resume
+
+ Test Files  5 passed | 2 skipped (7)
+      Tests  20 passed | 1 expected fail | 6 skipped (27)
+   Start at  05:30:55
+   Duration  47.23s (tests 91%, transform 4%, setup 4%)
+

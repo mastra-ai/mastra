@@ -1,0 +1,1113 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vitest.config.ts:5:30). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+Testing types with tsc and vue-tsc is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (../../workflows/inngest/vitest.config.ts:5:30). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+`resolve.alias` contains an alias with `customResolver` option. This is deprecated and will be removed in Vite 9. Please use a custom plugin with a resolveId hook and `enforce: 'pre'` instead.
+
+ RUN  v5.1.0 /workspace/mastra/workflows/inngest
+
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > closes an observation of a run that never existed 34ms
+   → Cannot read private member #options from an object whose class did not declare it
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > replays a finished run, then closes 791ms
+   → Cannot read private member #options from an object whose class did not declare it
+stderr | src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > replays a run that ended in a provider error, then closes
+Error processing LLM stream {
+  error: APICallError [AI_APICallError]: Provider down
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIResponsesLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:4378:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:33681/v1/responses',
+    requestBodyValues: {
+      model: 'gpt-4o-mini',
+      input: [Array],
+      temperature: undefined,
+      top_p: undefined,
+      max_output_tokens: undefined,
+      conversation: undefined,
+      max_tool_calls: undefined,
+      metadata: undefined,
+      parallel_tool_calls: undefined,
+      previous_response_id: undefined,
+      store: undefined,
+      user: undefined,
+      instructions: undefined,
+      service_tier: undefined,
+      include: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      top_logprobs: undefined,
+      truncation: undefined,
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:29:52 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-HQqaZNSYinZmxFQk'
+    },
+    responseBody: '{"error":{"message":"Provider down","type":"invalid_request_error","param":null,"code":null}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: 'dab15280-c404-46bd-9718-aadcc014c9a0'
+}
+
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > replays a run that ended in a provider error, then closes 748ms
+   → Cannot read private member #options from an object whose class did not declare it
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > stays open through a slow first token and receives the finish 13ms
+   → Cannot read private member #options from an object whose class did not declare it
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > stays open while a slow tool runs between steps and receives the finish 500ms
+   → Cannot read private member #options from an object whose class did not declare it
+stderr | src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing across an approval suspend and follows the approved run to its finish
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing across an approval suspend and follows the approved run to its finish
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing across an approval suspend and follows the approved run to its finish 3080ms
+   → Cannot read private member #options from an object whose class did not declare it
+stderr | src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing a suspended run after an abort request and closes on the abort finish
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing a suspended run after an abort request and closes on the abort finish 3012ms
+   → expected true to be false // Object.is equality
+(node:8116) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 635)
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > an observer that aborts a run parked on approval releases it, so the approval is rejected 484ms
+   → Cannot read private member #options from an object whose class did not declare it
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps the run log for the run-log TTL while the run waits for approval 5429ms
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging 2474ms
+   → Cannot read private member #options from an object whose class did not declare it
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging 2239ms
+   → Cannot read private member #options from an object whose class did not declare it
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging 2254ms
+   → Cannot read private member #options from an object whose class did not declare it
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging
+Duplicate step ID "workflow.inngest:durable-agentic-loop.step.inngest:durable-agentic-execution" detected across parallel chains
+{
+  code: 'AUTOMATIC_PARALLEL_INDEXING',
+  explanation: 'Using the same ID for steps in different parallel chains can cause unexpected behaviour. Your function is still running.',
+  action: 'Use a unique ID for each step, especially those in parallel.'
+}
+
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging 2248ms
+   → Cannot read private member #options from an object whose class did not declare it
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:44973/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:30:15 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-telAYlZPq7jeHFAy'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"context_length_exceeded"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '66c9b951-d602-4b60-b78d-99181f541c60',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '5868e14edb0e9ec962ff1f07d551eaee',
+  span_id: 'f9c410504e3081fd'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '5868e14edb0e9ec962ff1f07d551eaee',
+  span_id: 'a859d3cb470cd043'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort
+[WORKFLOW] Error executing step workflow.aimock-loop-scenario-agent-14-input-processor.step.processor:observational-memory: TripWire: Encountered error during memory observation: Provider rejected observer input: HTTP 400
+    at abort (/workspace/mastra/packages/core/src/workflows/workflow.ts:1012:15)
+    at /workspace/mastra/packages/memory/src/processors/observational-memory/processor.ts:440:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at /workspace/mastra/packages/core/src/workflows/workflow.ts:1472:30
+    at executePhaseWithSpan (/workspace/mastra/packages/core/src/workflows/workflow.ts:1353:26)
+    at engine.executeStepWithRetry.retries.retries (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:622:22)
+    at DefaultExecutionEngine.executeStepWithRetry (/workspace/mastra/packages/core/src/workflows/default.ts:547:24)
+    at executeStep (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:393:27)
+    at executeEntryBody (/workspace/mastra/packages/core/src/workflows/handlers/entry.ts:484:11)
+    at DefaultExecutionEngine.execute (/workspace/mastra/packages/core/src/workflows/default.ts:1174:24) {
+  trace_id: '5868e14edb0e9ec962ff1f07d551eaee',
+  span_id: '9b10d2e6fe7ffe2d'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort
+Streaming input processor tripwire triggered {
+  reason: 'Encountered error during memory observation: Provider rejected observer input: HTTP 400',
+  processorId: 'observational-memory',
+  retry: undefined
+} {
+  trace_id: '5868e14edb0e9ec962ff1f07d551eaee',
+  span_id: '9b10d2e6fe7ffe2d'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=abort 1102ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:44973/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:30:16 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-NtczJXydX4pW2wUF'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"content_filter"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '7109de55-0a94-4ae7-a3c5-d59c2eca52e1',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '756176f1b437365a082e638ebd99c5d3',
+  span_id: 'abebe581dc473f36'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '756176f1b437365a082e638ebd99c5d3',
+  span_id: '7d5b8b20d5e05cca'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort
+[WORKFLOW] Error executing step workflow.aimock-loop-scenario-agent-15-input-processor.step.processor:observational-memory: TripWire: Encountered error during memory observation: Provider rejected observer input: HTTP 400
+    at abort (/workspace/mastra/packages/core/src/workflows/workflow.ts:1012:15)
+    at /workspace/mastra/packages/memory/src/processors/observational-memory/processor.ts:440:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at /workspace/mastra/packages/core/src/workflows/workflow.ts:1472:30
+    at executePhaseWithSpan (/workspace/mastra/packages/core/src/workflows/workflow.ts:1353:26)
+    at engine.executeStepWithRetry.retries.retries (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:622:22)
+    at DefaultExecutionEngine.executeStepWithRetry (/workspace/mastra/packages/core/src/workflows/default.ts:547:24)
+    at executeStep (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:393:27)
+    at executeEntryBody (/workspace/mastra/packages/core/src/workflows/handlers/entry.ts:484:11)
+    at DefaultExecutionEngine.execute (/workspace/mastra/packages/core/src/workflows/default.ts:1174:24) {
+  trace_id: '756176f1b437365a082e638ebd99c5d3',
+  span_id: '615a339a654a7d3a'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort
+Streaming input processor tripwire triggered {
+  reason: 'Encountered error during memory observation: Provider rejected observer input: HTTP 400',
+  processorId: 'observational-memory',
+  retry: undefined
+} {
+  trace_id: '756176f1b437365a082e638ebd99c5d3',
+  span_id: '615a339a654a7d3a'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=abort 1079ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:44973/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:30:17 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-Chqm1TpEq9XLVncN'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"provider_failure"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '702e3ac2-041b-45cd-b1d5-76b35548680a',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '206e67775a2c7a0c67df0d6e11dc7355',
+  span_id: '1aa8b48128c84192'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '206e67775a2c7a0c67df0d6e11dc7355',
+  span_id: 'f7b4e021b459ae6f'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort
+[WORKFLOW] Error executing step workflow.aimock-loop-scenario-agent-16-input-processor.step.processor:observational-memory: TripWire: Encountered error during memory observation: Provider rejected observer input: HTTP 400
+    at abort (/workspace/mastra/packages/core/src/workflows/workflow.ts:1012:15)
+    at /workspace/mastra/packages/memory/src/processors/observational-memory/processor.ts:440:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at /workspace/mastra/packages/core/src/workflows/workflow.ts:1472:30
+    at executePhaseWithSpan (/workspace/mastra/packages/core/src/workflows/workflow.ts:1353:26)
+    at engine.executeStepWithRetry.retries.retries (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:622:22)
+    at DefaultExecutionEngine.executeStepWithRetry (/workspace/mastra/packages/core/src/workflows/default.ts:547:24)
+    at executeStep (/workspace/mastra/packages/core/src/workflows/handlers/step.ts:393:27)
+    at executeEntryBody (/workspace/mastra/packages/core/src/workflows/handlers/entry.ts:484:11)
+    at DefaultExecutionEngine.execute (/workspace/mastra/packages/core/src/workflows/default.ts:1174:24) {
+  trace_id: '206e67775a2c7a0c67df0d6e11dc7355',
+  span_id: '81ea1121c7a8c2da'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort
+Streaming input processor tripwire triggered {
+  reason: 'Encountered error during memory observation: Provider rejected observer input: HTTP 400',
+  processorId: 'observational-memory',
+  retry: undefined
+} {
+  trace_id: '206e67775a2c7a0c67df0d6e11dc7355',
+  span_id: '81ea1121c7a8c2da'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=abort 759ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=continue
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:44973/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:30:18 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-0F5BTf3IYQvkMXCD'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"context_length_exceeded"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '22bb5131-9368-4e36-bf1c-51f01a46f0bc',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: 'f06a97a696d4a085ea9fa83c21c928b9',
+  span_id: '113c3bea6fb38c66'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=continue
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: 'f06a97a696d4a085ea9fa83c21c928b9',
+  span_id: '9f5ab2c2d4977f90'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer context_length_exceeded with failurePolicy=continue 1003ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=continue
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:44973/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:30:19 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-AyYAWCvWzX45wfwI'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"content_filter"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: 'd45642bb-35f3-4568-8c31-41f4ae9a5bcf',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '0bce20a5d2002c8b89779a25e8fee9b2',
+  span_id: '5f79129fce8c2b7e'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=continue
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '0bce20a5d2002c8b89779a25e8fee9b2',
+  span_id: '7e8c50dcabf73bf4'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer content_filter with failurePolicy=continue 750ms
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=continue
+[AGENT] Upstream LLM API error {
+  error: APICallError [AI_APICallError]: Provider rejected observer input
+      at file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1481:14
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async postToApi (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/provider-utils/3.0.43/d40f58e93e43a0a7cd7dc05aa46b05acd9db3eb68a3d7605bcd13ae600907b87/node_modules/@ai-sdk/provider-utils/dist/index.mjs:1258:28)
+      at async OpenAIChatLanguageModel.doStream (file:///home/user/.local/share/pnpm/store/v11/links/@ai-sdk/openai/2.0.139/27b4c671dce04170b760e83bfadc0e348e3426471b7f9e1c6f548690864c38f9/node_modules/@ai-sdk/openai/dist/index.mjs:1030:50)
+      at AISDKV5LanguageModel.doStream (/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts:122:12) {
+    cause: undefined,
+    url: 'http://127.0.0.1:44973/v1/chat/completions',
+    requestBodyValues: {
+      model: 'observer-model',
+      logit_bias: undefined,
+      logprobs: undefined,
+      top_logprobs: undefined,
+      user: undefined,
+      parallel_tool_calls: undefined,
+      max_tokens: undefined,
+      temperature: undefined,
+      top_p: undefined,
+      frequency_penalty: undefined,
+      presence_penalty: undefined,
+      response_format: undefined,
+      stop: undefined,
+      seed: undefined,
+      verbosity: undefined,
+      max_completion_tokens: undefined,
+      store: undefined,
+      metadata: undefined,
+      prediction: undefined,
+      reasoning_effort: undefined,
+      service_tier: undefined,
+      prompt_cache_key: undefined,
+      prompt_cache_options: undefined,
+      prompt_cache_retention: undefined,
+      safety_identifier: undefined,
+      messages: [Array],
+      tools: undefined,
+      tool_choice: undefined,
+      stream: true,
+      stream_options: [Object]
+    },
+    statusCode: 400,
+    responseHeaders: {
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': 'X-Total-Count, X-Request-Id',
+      connection: 'keep-alive',
+      'content-type': 'application/json',
+      date: 'Tue, 10 Nov 2026 05:30:19 GMT',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      'x-request-id': 'req-00oPLL-acKpVmpjv'
+    },
+    responseBody: '{"error":{"message":"Provider rejected observer input","type":"invalid_request_error","param":null,"code":"provider_failure"}}',
+    isRetryable: false,
+    data: { error: [Object] },
+    [Symbol(vercel.ai.error)]: true,
+    [Symbol(vercel.ai.error.AI_APICallError)]: true
+  },
+  runId: '6d62acc5-51ba-4044-ae35-a7a89e55075f',
+  provider: 'openai.chat',
+  modelId: 'observer-model'
+} {
+  trace_id: '4501969176dbbd6261322903d3d2bf6b',
+  span_id: '34084f94ca91bd6a'
+}
+
+stderr | src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=continue
+OM observer provider call failed {
+  diagnostic: 'Provider rejected observer input: HTTP 400',
+  model: 'openai.chat/observer-model',
+  inputTokens: 429,
+  threadId: 'observer-inngest',
+  observedMessageCount: 1,
+  providerOptionProviders: [ 'google' ],
+  hasRequestContext: true,
+  aborted: false
+} {
+  trace_id: '4501969176dbbd6261322903d3d2bf6b',
+  span_id: '1f6d7e8298de09fe'
+}
+
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts > observer execution outcomes (OBS-724) [inngest] > preserves observer provider_failure with failurePolicy=continue 754ms
+ ×  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts > AIMock loop scenario: observe across approval and resume [inngest] > follows the approved run to its finish and replays both segments 464ms
+   → Cannot read private member #options from an object whose class did not declare it
+ ✓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-frames.scenario.test.ts > AIMock loop scenario: observe frames [inngest] > delivers one reply and one finish, including replay on engines with observe() 994ms
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-replay-snapshot.scenario.test.ts > AIMock loop scenario: replay snapshots published events [inngest] > replays step-finish payloads as they were published
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-replay-snapshot.scenario.test.ts > AIMock loop scenario: replay snapshots published events [inngest] > replays published payloads even when the cache append lands after resume
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-state.scenario.test.ts > AIMock loop scenario: observer ownership and state [inngest] > rejects a foreign live observer without breaking the owning observer
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-state.scenario.test.ts > AIMock loop scenario: observer ownership and state [inngest] > preserves live call-time processors and scoring data on another wrapper
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-state.scenario.test.ts > AIMock loop scenario: observer ownership and state [inngest] > restores persisted observer state on a fresh host and rejects foreign readers
+ ↓  e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-state.scenario.test.ts > AIMock loop scenario: observer ownership and state [inngest] > refreshes cold observer scoring output after an approval resume
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts > AIMock loop scenario: observe across approval and resume [inngest] > follows the approved run to its finish and replays both segments
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts:97:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > closes an observation of a run that never existed
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:76:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > replays a finished run, then closes
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:89:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > replays a run that ended in a provider error, then closes
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:109:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > stays open through a slow first token and receives the finish
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:129:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > stays open while a slow tool runs between steps and receives the finish
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:166:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing across an approval suspend and follows the approved run to its finish
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:215:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > keeps observing a suspended run after an abort request and closes on the abort finish
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:261:24
+    259|         expect(agent.abortRunStream(run.runId)).toBe(true);
+    260|         await new Promise(resolve => setTimeout(resolve, SILENCE_MS));
+    261|         expect(closed).toBe(false);
+       |                        ^
+    262|
+    263|         // The abort fenced the run (#27617): the approval is rejected…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts > AIMock loop scenario: observe lifecycle [inngest] > an observer that aborts a run parked on approval releases it, so the approval is rejected
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:320:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > reconnect: an independent observer replays or closes without hanging
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > offset: an independent observer replays or closes without hanging
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts:87:54
+ ❯ src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts:94:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > late: an independent observer replays or closes without hanging
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts:115:59
+ ❯ src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts:116:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL   e2e:workflows/inngest:aimock  src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts > Reattaching preserves the run without repeating effects (COR-1409) [inngest] > dead: an independent observer replays or closes without hanging
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream src/stream/base/output.ts:2443:30
+    2441|   get fullStream() {
+    2442|     const stream = this.__getUnfilteredFullStream();
+    2443|     const hideSignals = this.#options.hideSignals;
+       |                              ^
+    2444|     if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.len…
+    2445|     return stream.pipeThrough(
+ ❯ MastraModelOutput.get ../../workflows/inngest/src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get src/stream/base/output.ts:107:37
+ ❯ src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts:115:59
+ ❯ src/loop/test-utils/aimock/scenarios/observe-reattach.scenario.test.ts:116:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 5 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream ../../packages/core/src/stream/base/output.ts:2443:30
+ ❯ MastraModelOutput.get src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get ../../packages/core/src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:210:27
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:103:5
+ ❯ ../../../../home/user/.local/share/pnpm/store/v11/links/@/vitest/5.1.0/7c9d24f43c74497df2dba3bb9782ea87897fa2a56357709824fc53fa2926275c/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:20
+
+This error originated in "../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "keeps observing across an approval suspend and follows the approved run to its finish". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream ../../packages/core/src/stream/base/output.ts:2443:30
+ ❯ MastraModelOutput.get src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get ../../packages/core/src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:255:27
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:103:5
+ ❯ ../../../../home/user/.local/share/pnpm/store/v11/links/@/vitest/5.1.0/7c9d24f43c74497df2dba3bb9782ea87897fa2a56357709824fc53fa2926275c/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:20
+
+This error originated in "../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "keeps observing a suspended run after an abort request and closes on the abort finish". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream ../../packages/core/src/stream/base/output.ts:2443:30
+ ❯ MastraModelOutput.get src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get ../../packages/core/src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:54:43
+ ❯ ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts:320:27
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:103:5
+ ❯ ../../../../home/user/.local/share/pnpm/store/v11/links/@/vitest/5.1.0/7c9d24f43c74497df2dba3bb9782ea87897fa2a56357709824fc53fa2926275c/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:20
+
+This error originated in "../../packages/core/src/loop/test-utils/aimock/scenarios/observe-lifecycle.scenario.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "an observer that aborts a run parked on approval releases it, so the approval is rejected". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream ../../packages/core/src/stream/base/output.ts:2443:30
+ ❯ MastraModelOutput.get src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get ../../packages/core/src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts:29:43
+ ❯ ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts:71:21
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:103:5
+ ❯ ../../../../home/user/.local/share/pnpm/store/v11/links/@/vitest/5.1.0/7c9d24f43c74497df2dba3bb9782ea87897fa2a56357709824fc53fa2926275c/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:20
+
+This error originated in "../../packages/core/src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "follows the approved run to its finish and replays both segments". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+TypeError: Cannot read private member #options from an object whose class did not declare it
+ ❯ Proxy.get fullStream ../../packages/core/src/stream/base/output.ts:2443:30
+ ❯ MastraModelOutput.get src/durable-agent/create-inngest-agent.ts:2292:42
+ ❯ Object.get ../../packages/core/src/stream/base/output.ts:107:37
+ ❯ Object.get fullStream [as fullStream] src/durable-agent/create-inngest-agent.ts:2341:25
+ ❯ drain ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts:29:43
+ ❯ ../../packages/core/src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts:94:32
+ ❯ process.processTicksAndRejections node:internal/process/task_queues:103:5
+ ❯ ../../../../home/user/.local/share/pnpm/store/v11/links/@/vitest/5.1.0/7c9d24f43c74497df2dba3bb9782ea87897fa2a56357709824fc53fa2926275c/node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:20
+
+This error originated in "../../packages/core/src/loop/test-utils/aimock/scenarios/observe-approval-resume.scenario.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "follows the approved run to its finish and replays both segments". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  3 failed | 2 passed | 2 skipped (7)
+      Tests  13 failed | 7 passed | 1 expected fail | 6 skipped (27)
+     Errors  5 errors
+   Start at  05:29:44
+   Duration  36.82s (tests 88%, transform 6%, setup 5%)
+

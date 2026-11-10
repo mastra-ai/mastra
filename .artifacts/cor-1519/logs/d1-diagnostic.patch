@@ -1,0 +1,13 @@
+diff --git a/workflows/inngest/src/durable-agent/create-inngest-agent.ts b/workflows/inngest/src/durable-agent/create-inngest-agent.ts
+index c9fa86c2..34441c89 100644
+--- a/workflows/inngest/src/durable-agent/create-inngest-agent.ts
++++ b/workflows/inngest/src/durable-agent/create-inngest-agent.ts
+@@ -2289,7 +2289,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
+       Object.defineProperty(output, 'fullStream', {
+         configurable: true,
+         get() {
+-          const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
++          const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
+           return new ReadableStream<ChunkType<TOutput>>({
+             async pull(controller) {
+               let result: Awaited<ReturnType<typeof reader.read>>;

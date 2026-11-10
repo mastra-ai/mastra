@@ -1,0 +1,80 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.1.0 [39m[90m/workspace/mastra/pubsub/redis-streams[39m
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mplain agent, default server cache[2m > [22m[2mcaller and observers keep every frame through a 3s stall
+[22m[39m[COR-1519 stall] plain/default: stream() returned 4ms, caller closed 16ms, live observer closed 3062ms, replay 1ms (pause 3000ms); frames caller=20 live=20 replay=20 reference=20/20
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mplain agent, default server cache[2m > [22m[2ma stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[22m[39m[COR-1519 cold stall] plain/default: {"caller":"closed 17ms text=full tail=step-finish,finish","replay":"text=full tail=step-finish,finish","after":"caller=true replay=true"}
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mplain agent, default server cache[2m > [22m[2mread-back survives a stall longer than the 10s event-delivery wait on a connected bus
+[22m[39m[COR-1519 long stall] plain/default: caller closed 11ms (pause 12000ms), frames caller=20 replay=20; caller tail=text-end,step-finish,finish
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mplain agent, redis server cache[2m > [22m[2mcaller and observers keep every frame through a 3s stall
+[22m[39m[COR-1519 stall] plain/redis: stream() returned 3058ms, caller closed 3072ms, live observer closed 3099ms, replay 0ms (pause 3000ms); frames caller=20 live=20 replay=20 reference=20/20
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mplain agent, redis server cache[2m > [22m[2ma stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[22m[39m[COR-1519 cold stall] plain/redis: {"caller":"closed 7044ms text=full tail=step-finish,finish","replay":"text=full tail=step-finish,finish","after":"caller=true replay=true"}
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mplain agent, redis server cache[2m > [22m[2mread-back survives a stall longer than the 10s event-delivery wait on a connected bus
+[22m[39m[COR-1519 long stall] plain/redis: caller closed 12053ms (pause 12000ms), frames caller=20 replay=20; caller tail=text-end,step-finish,finish
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mdurable agent, default server cache[2m > [22m[2mcaller and observers keep every frame through a 3s stall
+[22m[39m[COR-1519 stall] durable/default: stream() returned 1ms, caller closed 3092ms, live observer closed 3092ms, replay 1ms (pause 3000ms); frames caller=20 live=20 replay=20 reference=20/20
+
+[90mstderr[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mdurable agent, default server cache[2m > [22m[2ma stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[22m[39m[DurableAgentStream] Failed to subscribe to agent.stream.e3158567-2359-4f92-b998-fc84e11a99fc: Error: redis-streams: write client did not connect to Redis within 5000ms (socket.connectTimeout); the server is unreachable or not responding
+    at Timeout.<anonymous> [90m(/workspace/mastra/pubsub/redis-streams/[39msrc/index.ts:171:9[90m)[39m
+[90m    at listOnTimeout (node:internal/timers:585:17)[39m
+[90m    at process.processTimers (node:internal/timers:521:7)[39m
+
+[90mstderr[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mdurable agent, default server cache[2m > [22m[2ma stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[22m[39mconsumeStream error Error: redis-streams: write client did not connect to Redis within 5000ms (socket.connectTimeout); the server is unreachable or not responding
+    at Timeout.<anonymous> [90m(/workspace/mastra/pubsub/redis-streams/[39msrc/index.ts:171:9[90m)[39m
+[90m    at listOnTimeout (node:internal/timers:585:17)[39m
+[90m    at process.processTimers (node:internal/timers:521:7)[39m
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mdurable agent, default server cache[2m > [22m[2ma stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[22m[39m[COR-1519 cold stall] durable/default: {"caller":"threw 5010ms: redis-streams: write client did not connect to Redis within 5000ms (socket.connectTimeout); the server is unreachable or not responding","replay":"text=\"\" tail=error","after":"caller=true replay=true"}
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mdurable agent, default server cache[2m > [22m[2mread-back survives a stall longer than the 10s event-delivery wait on a connected bus
+[22m[39m[COR-1519 long stall] durable/default: caller closed 12067ms (pause 12000ms), frames caller=20 replay=20; caller tail=text-end,step-finish,finish
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mdurable agent, redis server cache[2m > [22m[2mcaller and observers keep every frame through a 3s stall
+[22m[39m[COR-1519 stall] durable/redis: stream() returned 3059ms, caller closed 3104ms, live observer closed 3104ms, replay 1ms (pause 3000ms); frames caller=20 live=20 replay=20 reference=20/20
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mdurable agent, redis server cache[2m > [22m[2ma stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[22m[39m[COR-1519 cold stall] durable/redis: {"caller":"closed 7091ms text=full tail=step-finish,finish","replay":"text=full tail=step-finish,finish","after":"caller=true replay=true"}
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mdurable agent, redis server cache[2m > [22m[2mread-back survives a stall longer than the 10s event-delivery wait on a connected bus
+[22m[39m[COR-1519 long stall] durable/redis: caller closed 12081ms (pause 12000ms), frames caller=20 replay=20; caller tail=text-end,step-finish,finish
+
+[90mstdout[2m | src/agent-stream-bus-stall.test.ts[2m > [22m[2magent run-stream bus stalled by CLIENT PAUSE (COR-1519)[2m > [22m[2mplain agents: publish backlog while stalled[2m > [22m[2m10 concurrent runs during a 5000ms stall: callers finish, backlog drains after unpause
+[22m[39m[COR-1519 backlog] 10 plain runs, pause 5000ms: callers done 119ms (slowest 119ms) with 200 frames; at that point bus publishes started=10 acked=0 (inferred backlog >= 200); peak concurrent publishes 10; heapUsed delta -765KiB (GC-noisy); drained 5161ms, total started=200 acked=200
+
+ [32m✓[39m [30m[46m e2e:pubsub/redis-streams [49m[39m src/agent-stream-bus-stall.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 100393[2mms[22m[39m
+   [32m✓[39m agent run-stream bus stalled by CLIENT PAUSE (COR-1519) [2m(13)[22m
+     [32m✓[39m plain agent, default server cache [2m(3)[22m
+       [33m[2m✓[22m[39m caller and observers keep every frame through a 3s stall[33m 3486[2mms[22m[39m
+       [33m[2m✓[22m[39m a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame[33m 7756[2mms[22m[39m
+       [33m[2m✓[22m[39m read-back survives a stall longer than the 10s event-delivery wait on a connected bus[33m 12375[2mms[22m[39m
+     [32m✓[39m plain agent, redis server cache [2m(3)[22m
+       [33m[2m✓[22m[39m caller and observers keep every frame through a 3s stall[33m 3427[2mms[22m[39m
+       [33m[2m✓[22m[39m a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame[33m 7844[2mms[22m[39m
+       [33m[2m✓[22m[39m read-back survives a stall longer than the 10s event-delivery wait on a connected bus[33m 12401[2mms[22m[39m
+     [32m✓[39m durable agent, default server cache [2m(3)[22m
+       [33m[2m✓[22m[39m caller and observers keep every frame through a 3s stall[33m 3426[2mms[22m[39m
+       [33m[2m✓[22m[39m a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame[33m 7848[2mms[22m[39m
+       [33m[2m✓[22m[39m read-back survives a stall longer than the 10s event-delivery wait on a connected bus[33m 12378[2mms[22m[39m
+     [32m✓[39m durable agent, redis server cache [2m(3)[22m
+       [33m[2m✓[22m[39m caller and observers keep every frame through a 3s stall[33m 3421[2mms[22m[39m
+       [33m[2m✓[22m[39m a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame[33m 7956[2mms[22m[39m
+       [33m[2m✓[22m[39m read-back survives a stall longer than the 10s event-delivery wait on a connected bus[33m 12395[2mms[22m[39m
+     [32m✓[39m plain agents: publish backlog while stalled [2m(1)[22m
+       [33m[2m✓[22m[39m 10 concurrent runs during a 5000ms stall: callers finish, backlog drains after unpause[33m 5641[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m   Start at [22m 05:25:37
+[2m   Duration [22m 102.20s[2m (tests 98%, import 1%)[22m
+

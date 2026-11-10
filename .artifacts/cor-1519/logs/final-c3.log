@@ -1,0 +1,40 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vitest.config.ts:5:53). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+Testing types with tsc and vue-tsc is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vitest.config.ts:5:53). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vitest.config.ts:5:53). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.1.0 /workspace/mastra/packages/core
+
+stdout | src/agent/streams/__tests__/supervisor-subagent-runs.test.ts > COR-1519: streaming supervisor delegating to a plain sub-agent > publishes each run once on its own topic and never mixes their frames
+[COR-1519 supervisor plain] parent=00000000-0000-4000-8000-000000000001 topics=[{"t":"parent","n":24,"finish":1,"text":"Supervisor says: order 42 has shipped."},{"t":"agent.stream.00000000-0000-4000-8000-00000000003c","n":8,"finish":1,"text":"Worker says: order 42 shipped yesterday."}]
+
+stdout | src/agent/streams/__tests__/supervisor-subagent-runs.test.ts > COR-1519: streaming supervisor delegating to a durable sub-agent > publishes each run once on its own topic and never mixes their frames
+[COR-1519 supervisor durable] parent=00000000-0000-4000-8000-000000000001 topics=[{"t":"parent","n":24,"finish":1,"text":"Supervisor says: order 42 has shipped."},{"t":"agent.stream.00000000-0000-4000-8000-00000000003c","n":9,"finish":1,"text":"Worker says: order 42 shipped yesterday."}]
+
+stdout | src/agent/streams/__tests__/supervisor-subagent-runs.test.ts > COR-1519: streaming supervisor delegating to a evented sub-agent > publishes each run once on its own topic and never mixes their frames
+[COR-1519 supervisor evented] parent=00000000-0000-4000-8000-000000000001 topics=[{"t":"parent","n":24,"finish":1,"text":"Supervisor says: order 42 has shipped."},{"t":"agent.stream.00000000-0000-4000-8000-00000000003c","n":9,"finish":1,"text":"Worker says: order 42 shipped yesterday."}]
+
+stdout | src/agent/streams/__tests__/supervisor-subagent-runs.test.ts > COR-1519: streaming supervisor resuming a suspended plain sub-agent > keeps the worker and supervisor continuations on their own runs after approval
+[COR-1519 resumed supervisor plain] parent=00000000-0000-4000-8000-000000000001 approvalRunId=00000000-0000-4000-8000-000000000001 resumedRunId=00000000-0000-4000-8000-000000000001 topics=[{"t":"parent","before":16,"after":20,"types":["chunk","step-start","suspended","finish"],"finish":1,"text":"Supervisor says: order 42 has shipped."},{"t":"agent.stream.00000000-0000-4000-8000-00000000005c","before":8,"after":10,"types":["chunk","step-start","suspended","finish"],"finish":1,"text":"Worker says: order 42 shipped yesterday."}]
+
+stdout | src/agent/streams/__tests__/supervisor-subagent-runs.test.ts > COR-1519: streaming supervisor resuming a suspended durable sub-agent > keeps the worker and supervisor continuations on their own runs after approval
+[COR-1519 resumed supervisor durable] parent=00000000-0000-4000-8000-000000000001 approvalRunId=00000000-0000-4000-8000-000000000001 resumedRunId=00000000-0000-4000-8000-000000000001 topics=[{"t":"parent","before":16,"after":20,"types":["chunk","step-start","suspended","finish"],"finish":1,"text":"Supervisor says: order 42 has shipped."},{"t":"agent.stream.00000000-0000-4000-8000-00000000005b","before":8,"after":12,"types":["chunk","step-start","suspended","iteration-complete","finish"],"finish":1,"text":"Worker says: order 42 shipped yesterday."}]
+
+stdout | src/agent/streams/__tests__/supervisor-subagent-runs.test.ts > COR-1519: streaming supervisor resuming a suspended evented sub-agent > keeps the worker and supervisor continuations on their own runs after approval
+[COR-1519 resumed supervisor evented] parent=00000000-0000-4000-8000-000000000001 approvalRunId=00000000-0000-4000-8000-000000000001 resumedRunId=00000000-0000-4000-8000-000000000001 topics=[{"t":"parent","before":16,"after":20,"types":["chunk","step-start","suspended","finish"],"finish":1,"text":"Supervisor says: order 42 has shipped."},{"t":"agent.stream.00000000-0000-4000-8000-00000000005b","before":8,"after":12,"types":["chunk","step-start","suspended","iteration-complete","finish"],"finish":1,"text":"Worker says: order 42 shipped yesterday."}]
+
+ ✓  unit:packages/core  src/agent/streams/__tests__/supervisor-subagent-runs.test.ts (6 tests) 853ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+Type Errors  no errors
+   Start at  05:34:08
+   Duration  4.12s (transform 41%, import 38%, tests 21%)
+

@@ -1,0 +1,10 @@
+
+ RUN  v5.1.0 /workspace/mastra/server-adapters/hono
+
+ ✓  unit:server-adapters/hono  src/__tests__/browser-stop-reload.test.ts (6 tests) 805ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  05:34:08
+   Duration  3.53s (import 49%, transform 27%, tests 24%)
+

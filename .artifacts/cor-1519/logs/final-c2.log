@@ -1,0 +1,80 @@
+
+ RUN  v5.1.0 /workspace/mastra/pubsub/redis-streams
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > plain agent, default server cache > caller and observers keep every frame through a 3s stall
+[COR-1519 stall] plain/default: stream() returned 3ms, caller closed 14ms, live observer closed 3032ms, replay 1ms (pause 3000ms); frames caller=20 live=20 replay=20 reference=20/20
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > plain agent, default server cache > a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[COR-1519 cold stall] plain/default: {"caller":"closed 16ms text=full tail=step-finish,finish","replay":"text=full tail=step-finish,finish","after":"caller=true replay=true"}
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > plain agent, default server cache > read-back survives a stall longer than the 10s event-delivery wait on a connected bus
+[COR-1519 long stall] plain/default: caller closed 12ms (pause 12000ms), frames caller=20 replay=20; caller tail=text-end,step-finish,finish
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > plain agent, redis server cache > caller and observers keep every frame through a 3s stall
+[COR-1519 stall] plain/redis: stream() returned 3068ms, caller closed 3081ms, live observer closed 3105ms, replay 1ms (pause 3000ms); frames caller=20 live=20 replay=20 reference=20/20
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > plain agent, redis server cache > a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[COR-1519 cold stall] plain/redis: {"caller":"closed 7063ms text=full tail=step-finish,finish","replay":"text=full tail=step-finish,finish","after":"caller=true replay=true"}
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > plain agent, redis server cache > read-back survives a stall longer than the 10s event-delivery wait on a connected bus
+[COR-1519 long stall] plain/redis: caller closed 12055ms (pause 12000ms), frames caller=20 replay=20; caller tail=text-end,step-finish,finish
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > durable agent, default server cache > caller and observers keep every frame through a 3s stall
+[COR-1519 stall] durable/default: stream() returned 1ms, caller closed 3087ms, live observer closed 3087ms, replay 0ms (pause 3000ms); frames caller=20 live=20 replay=20 reference=20/20
+
+stderr | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > durable agent, default server cache > a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[DurableAgentStream] Failed to subscribe to agent.stream.d7380e3b-78f9-4e9c-ade7-7a30fadfb4c9: Error: redis-streams: write client did not connect to Redis within 5000ms (socket.connectTimeout); the server is unreachable or not responding
+    at Timeout.<anonymous> (/workspace/mastra/pubsub/redis-streams/src/index.ts:171:9)
+    at listOnTimeout (node:internal/timers:585:17)
+    at process.processTimers (node:internal/timers:521:7)
+
+stderr | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > durable agent, default server cache > a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+consumeStream error Error: redis-streams: write client did not connect to Redis within 5000ms (socket.connectTimeout); the server is unreachable or not responding
+    at Timeout.<anonymous> (/workspace/mastra/pubsub/redis-streams/src/index.ts:171:9)
+    at listOnTimeout (node:internal/timers:585:17)
+    at process.processTimers (node:internal/timers:521:7)
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > durable agent, default server cache > a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[COR-1519 cold stall] durable/default: {"caller":"threw 5010ms: redis-streams: write client did not connect to Redis within 5000ms (socket.connectTimeout); the server is unreachable or not responding","replay":"text=\"\" tail=error","after":"caller=true replay=true"}
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > durable agent, default server cache > read-back survives a stall longer than the 10s event-delivery wait on a connected bus
+[COR-1519 long stall] durable/default: caller closed 12063ms (pause 12000ms), frames caller=20 replay=20; caller tail=text-end,step-finish,finish
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > durable agent, redis server cache > caller and observers keep every frame through a 3s stall
+[COR-1519 stall] durable/redis: stream() returned 3055ms, caller closed 3099ms, live observer closed 3099ms, replay 1ms (pause 3000ms); frames caller=20 live=20 replay=20 reference=20/20
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > durable agent, redis server cache > a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame
+[COR-1519 cold stall] durable/redis: {"caller":"closed 7087ms text=full tail=step-finish,finish","replay":"text=full tail=step-finish,finish","after":"caller=true replay=true"}
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > durable agent, redis server cache > read-back survives a stall longer than the 10s event-delivery wait on a connected bus
+[COR-1519 long stall] durable/redis: caller closed 12048ms (pause 12000ms), frames caller=20 replay=20; caller tail=text-end,step-finish,finish
+
+stdout | src/agent-stream-bus-stall.test.ts > agent run-stream bus stalled by CLIENT PAUSE (COR-1519) > plain agents: publish backlog while stalled > 10 concurrent runs during a 5000ms stall: callers finish, backlog drains after unpause
+[COR-1519 backlog] 10 plain runs, pause 5000ms: callers done 101ms (slowest 101ms) with 200 frames; at that point bus publishes started=10 acked=0 (inferred backlog >= 200); peak concurrent publishes 10; heapUsed delta 748KiB (GC-noisy); drained 5127ms, total started=200 acked=200
+
+ ✓  e2e:pubsub/redis-streams  src/agent-stream-bus-stall.test.ts (13 tests) 100207ms
+   ✓ agent run-stream bus stalled by CLIENT PAUSE (COR-1519) (13)
+     ✓ plain agent, default server cache (3)
+       ✓ caller and observers keep every frame through a 3s stall 3399ms
+       ✓ a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame 7753ms
+       ✓ read-back survives a stall longer than the 10s event-delivery wait on a connected bus 12386ms
+     ✓ plain agent, redis server cache (3)
+       ✓ caller and observers keep every frame through a 3s stall 3420ms
+       ✓ a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame 7851ms
+       ✓ read-back survives a stall longer than the 10s event-delivery wait on a connected bus 12392ms
+     ✓ durable agent, default server cache (3)
+       ✓ caller and observers keep every frame through a 3s stall 3421ms
+       ✓ a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame 7760ms
+       ✓ read-back survives a stall longer than the 10s event-delivery wait on a connected bus 12393ms
+     ✓ durable agent, redis server cache (3)
+       ✓ caller and observers keep every frame through a 3s stall 3424ms
+       ✓ a stall longer than the 5s connect timeout on a cold bus either waits it out or fails the run with an error frame 7955ms
+       ✓ read-back survives a stall longer than the 10s event-delivery wait on a connected bus 12377ms
+     ✓ plain agents: publish backlog while stalled (1)
+       ✓ 10 concurrent runs during a 5000ms stall: callers finish, backlog drains after unpause 5634ms
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  05:34:13
+   Duration  102.09s (tests 98%, import 1%, transform 1%)
+
