@@ -5,7 +5,7 @@ import { boardForWorkItem, pullRequestSourceNumber, workItemPhaseSemantics } fro
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
-import { hasRecordedVerdict, reviewedChangeRequest } from '../boards/semantics.js';
+import { cardBoardFlow, hasRecordedVerdict, reviewedChangeRequest } from '../boards/semantics.js';
 import type { ReviewedChangeRequest } from '../boards/semantics.js';
 import { getFactorySessionCoordinates } from '../rules/binding-context.js';
 import { authorTrusted, SELF_REVIEW_ROUND_LIMIT } from '../rules/types.js';
@@ -138,7 +138,9 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
     if (!item) return;
     const boards = await this.#boards.load(binding);
     if (!workItemPhaseSemantics(boards, item)) return;
-    const selfReview = await this.#selfReviewEnabled(binding);
+    // The setting means nothing to a card whose board has no self-review phase.
+    const selfReview =
+      cardBoardFlow(boards, item).selfReview === undefined ? undefined : await this.#selfReviewEnabled(binding);
     const cacheKey = cacheKeyOf([
       item.id,
       item.revision,

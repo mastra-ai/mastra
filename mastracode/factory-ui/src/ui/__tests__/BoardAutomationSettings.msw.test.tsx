@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { builtinBoardCatalog, shipBoard } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -69,9 +70,10 @@ function stubBoard({ items, factory }: { items: unknown[]; factory: Record<strin
   );
 }
 
-function renderBoard(board: 'work' | 'review') {
+function renderBoard(board: 'work' | 'review' | 'ship') {
+  const path = board === 'ship' ? `boards/${board}` : board;
   const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/${board}`],
+    initialEntries: [`/factories/${FACTORY_ID}/${path}`],
   });
   return renderWithProviders(<RouterProvider router={router} />);
 }
@@ -115,10 +117,15 @@ describe('Board automation settings', () => {
     expect(await screen.findByRole('switch', { name: 'Publish review test checks' })).toBeChecked();
   });
 
-  it('turns self-review on, defaulting to off for older projects', async () => {
+  it('turns self-review on, defaulting to off, on a board that has a self-review phase', async () => {
     stubBoard({ items: [], factory: project() });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [...builtinBoardCatalog.boards, shipBoard] }),
+      ),
+    );
     const user = userEvent.setup();
-    const { client } = renderBoard('work');
+    const { client } = renderBoard('ship');
 
     await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
     const selfReview = await screen.findByRole('switch', { name: 'Self-review before pull requests' });
@@ -128,6 +135,16 @@ describe('Board automation settings', () => {
     await waitForMutationsIdle(client);
     expect(patchBodies).toEqual([{ selfReviewEnabled: true }]);
     expect(await screen.findByRole('switch', { name: 'Self-review before pull requests' })).toBeChecked();
+  });
+
+  it('offers no self-review switch on the default Work board, which has no self-review phase', async () => {
+    stubBoard({ items: [], factory: project({ selfReviewEnabled: true }) });
+    const user = userEvent.setup();
+    renderBoard('work');
+
+    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
+    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Self-review before pull requests' })).not.toBeInTheDocument();
   });
 
   it('keeps the automation switches separate', async () => {
@@ -140,7 +157,6 @@ describe('Board automation settings', () => {
 
     await waitForMutationsIdle(client);
     expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
-    expect(screen.getByRole('switch', { name: 'Self-review before pull requests' })).not.toBeChecked();
     expect(screen.getByRole('switch', { name: 'Publish review test checks' })).not.toBeChecked();
   });
 });

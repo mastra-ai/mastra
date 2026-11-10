@@ -3,7 +3,7 @@ import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 
 /**
- * A change request tracked on its own card never attaches to this one, so PR review refuses the card and
+ * A change request tracked on its own card never attaches to this one, so Review refuses the card and
  * the builder leaves it in Building: the goal counts that hand-off as done rather than looping on it.
  */
 export const OWN_CARD_HAND_OFF =
@@ -18,21 +18,13 @@ export const BUILD_OBJECTIVE =
   'Build the plan approved in Planning for this work item. Done when every step of that plan is implemented on ' +
   "the work branch; the plan's verification gates (the tests, typecheck and lint it names, else the narrowest " +
   'relevant ones) were run on the final head and passed; the branch is pushed; and the card was moved on with ' +
-  "factory_transition_work_item out of Building (to Review or PR review as the builder's hand-off says, or back to " +
+  'factory_transition_work_item out of Building (to Review after opening the change request, or back to ' +
   "Planning if the plan proved wrong); the builder's latest message names the move and the pushed head. " +
   OWN_CARD_HAND_OFF +
   ' Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot ' +
   'answer from the repository.';
 
-export type WorkBoardPhase =
-  | 'intake'
-  | 'triage'
-  | 'planning'
-  | 'execute'
-  | 'review'
-  | 'pr-review'
-  | 'done'
-  | 'canceled';
+export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'pr-review' | 'done' | 'canceled';
 
 export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: DEFAULT_BOARD_ID,
@@ -43,8 +35,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     intake: {
       name: 'Intake',
       kind: 'resting',
-      // Never straight to Building or Review: a plan comes first, and Review is self-review of a
-      // build. PR review takes a pull request's own card; Done is where a completed source closes it.
+      // Never straight to Building: a plan comes first. Review takes a pull request's own card;
+      // Done is where a completed source closes it.
       nextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
     },
     triage: {
@@ -67,29 +59,17 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       name: 'Building',
       kind: 'working',
       runner: { skill: 'factory-build', context: 'work', goal: { objective: BUILD_OBJECTIVE, maxRuns: 20 } },
-      // Review with self-review on; PR review once the builder opened the change request with it
-      // off; Planning again when the build shows the plan was wrong.
-      nextPhases: ['review', 'pr-review', 'planning', 'done', 'canceled'],
-    },
-    review: {
-      name: 'Review',
-      // An independent reviewer tests the builder's pushed branch in its own review seat
-      // (self-review); on approve it opens the change request and moves the card to PR review.
-      kind: 'working',
-      runner: { skill: 'factory-self-review', context: 'review' },
-      // A card re-entering Review with its change request already open waits for a person.
-      autoStart: true,
-      autoStartWhen: { operator: 'AND', conditions: [{ field: 'item.pullRequest', operator: 'not_exists' }] },
-      tools: ['factory_record_review_verdict'],
-      // Self-review sends the card back to Building, or parks it in Intake at its round limit.
-      // A maintainer's review request takes its open pull request to PR review.
-      nextPhases: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
+      // Review once the builder opened the change request; Planning again when the build shows
+      // the plan was wrong.
+      nextPhases: ['pr-review', 'planning', 'done', 'canceled'],
     },
     'pr-review': {
-      name: 'PR review',
+      // Keyed `pr-review`: projects stored before Work dropped its self-review phase hold a
+      // `review` phase for it, and the retired Review board's cards read as `pr-review`.
+      name: 'Review',
       // A card's pull request is reviewed here by the independent reviewer, in its own
-      // review seat on the pull request's branch. Kept apart from Review, the builder's
-      // self-review of its own branch.
+      // review seat on the pull request's branch. Work has no self-review phase; a board that
+      // wants one adds a review-context phase granting only factory_record_review_verdict.
       kind: 'working',
       runner: { skill: 'factory-review', context: 'review' },
       tools: ['factory_record_review_verdict', 'factory_review_source'],

@@ -273,8 +273,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         'triage:Triage',
         'planning:Planning',
         'execute:Building',
-        'review:Review',
-        'pr-review:PR review',
+        'pr-review:Review',
         'done:Done',
         'canceled:Canceled',
       ]);

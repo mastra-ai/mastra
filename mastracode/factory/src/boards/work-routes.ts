@@ -21,11 +21,11 @@ export const DEFAULT_INTAKE_ROUTE: StoredIntakeRouteInput = {
 };
 
 /**
- * Pull requests are reviewed in Work › PR review. It comes after `DEFAULT_INTAKE_ROUTE`, so a
+ * Pull requests are reviewed in Work › Review. It comes after `DEFAULT_INTAKE_ROUTE`, so a
  * pull request from outside the write-access circle still waits in Intake for a person.
  */
 export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
-  name: 'Pull requests go to PR review',
+  name: 'Pull requests go to Review',
   when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
@@ -72,7 +72,7 @@ export const PULL_REQUEST_CLOSED_ROUTE: StoredIntakeRouteInput = {
 };
 
 /**
- * An issue card in PR review whose last open pull request was closed unmerged goes back to
+ * An issue card in Review whose last open pull request was closed unmerged goes back to
  * Intake: the issue is still open.
  */
 export const PULL_REQUEST_CLOSED_ISSUE_ROUTE: StoredIntakeRouteInput = {
@@ -82,7 +82,7 @@ export const PULL_REQUEST_CLOSED_ISSUE_ROUTE: StoredIntakeRouteInput = {
   target: { boardKey: 'work', phaseKey: 'intake' },
 };
 
-/** A push to a pull request in review restarts its review in PR review. */
+/** A push to a pull request in review restarts its review in Review. */
 export const PULL_REQUEST_UPDATED_ROUTE: StoredIntakeRouteInput = {
   name: 'Pushes to a reviewed pull request re-review it',
   on: ['pull_request.synchronized'],
@@ -90,9 +90,9 @@ export const PULL_REQUEST_UPDATED_ROUTE: StoredIntakeRouteInput = {
   allowWorkingPhase: true,
 };
 
-/** A maintainer asking Factory to review a pull request again sends it to PR review. */
+/** A maintainer asking Factory to review a pull request again sends it to Review. */
 export const PULL_REQUEST_REVIEW_REQUESTED_ROUTE: StoredIntakeRouteInput = {
-  name: 'Requested reviews go to PR review',
+  name: 'Requested reviews go to Review',
   on: ['pull_request.review_requested'],
   target: { boardKey: 'work', phaseKey: 'pr-review' },
   allowWorkingPhase: true,
@@ -100,8 +100,8 @@ export const PULL_REQUEST_REVIEW_REQUESTED_ROUTE: StoredIntakeRouteInput = {
 
 /**
  * A pull request from someone with write access that closes an issue nobody has started work on
- * joins that issue's card, which goes to PR review. Once the issue has left Intake, the pull request
- * gets its own card in PR review instead; projects can widen the phases. Its condition stands on its
+ * joins that issue's card, which goes to Review. Once the issue has left Intake, the pull request
+ * gets its own card in Review instead; projects can widen the phases. Its condition stands on its
  * own, so it is tried first.
  */
 export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {

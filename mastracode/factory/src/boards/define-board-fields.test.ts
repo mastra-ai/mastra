@@ -80,12 +80,12 @@ describe('defineBoard phase fields', () => {
   it('accepts a defined board phase back as a declaration, as fixtures that extend a board do', () => {
     const copy = defineBoard({ id: 'copy', name: 'Copy', initialPhase: 'intake', phases: workBoard.phases });
     expect(copy.transitions).toEqual(workBoard.transitions);
-    expect(copy.phases.review).toMatchObject({
+    expect(copy.phases['pr-review']).toMatchObject({
       kind: 'working',
       runner: { context: 'review' },
-      tools: ['factory_record_review_verdict'],
+      tools: ['factory_record_review_verdict', 'factory_review_source'],
     });
-    expect(copy.phases.review).toMatchObject({ role: 'review' });
+    expect(copy.phases['pr-review']).toMatchObject({ role: 'review' });
   });
 
   it('lists each next phase once when several outcomes lead to it', () => {

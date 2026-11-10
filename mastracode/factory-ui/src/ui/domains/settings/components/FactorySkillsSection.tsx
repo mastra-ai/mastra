@@ -26,7 +26,7 @@ interface DisplayedSkill {
   title: string;
 }
 
-// The default board runs every built-in skill: its PR review lane took over from the retired Review board.
+// The default board runs every built-in skill: its Review lane (`pr-review`) took over from the retired Review board.
 const DISPLAYED_SKILLS: DisplayedSkill[] = [
   { name: 'factory-triage', title: 'Triage' },
   { name: 'factory-plan', title: 'Planning' },

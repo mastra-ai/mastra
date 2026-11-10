@@ -128,13 +128,13 @@ function renderReviewBoard() {
 }
 
 describe('Review card action lifecycle', () => {
-  it.each([true, false])('keeps PR review busy from Intake through kickoff (candidate: %s)', async candidate => {
+  it.each([true, false])('keeps Review busy from Intake through kickoff (candidate: %s)', async candidate => {
     const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard(candidate);
     const user = userEvent.setup();
     const { client } = renderReviewBoard();
     await user.click(await screen.findByRole('button', { name: 'Review' }));
 
-    const reviewing = screen.getByRole('region', { name: 'PR review' });
+    const reviewing = screen.getByRole('region', { name: 'Review' });
     await waitFor(() => expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled());
     expect(within(reviewing).queryByRole('button', { name: 'Review' })).toBeNull();
 

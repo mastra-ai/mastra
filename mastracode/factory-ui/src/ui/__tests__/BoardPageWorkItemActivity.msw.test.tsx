@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
+import { selfReviewWorkBoardInfo } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import {
@@ -579,9 +580,13 @@ describe('Board work-item activity', () => {
     expect(within(row).getByText('Changes requested')).toBeVisible();
   });
 
-  it('keeps the full self-review verdict on hover when a narrow row truncates it', async () => {
+  it("keeps the full self-review verdict on hover when a narrow row truncates it, in an older project's Work", async () => {
     stubBoardEndpoints();
     server.use(
+      // Work as a project stored it while Work still had its self-review phase.
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [selfReviewWorkBoardInfo], problems: [] }),
+      ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({
           workItems: [

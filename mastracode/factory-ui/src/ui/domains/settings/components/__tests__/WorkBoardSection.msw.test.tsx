@@ -147,7 +147,7 @@ describe('WorkBoardSection', () => {
     expect(phase('Building').getByLabelText('Goal')).toHaveValue(
       storedWorkBoard().board.phases.find(p => p.key === 'execute')!.runner!.goal!.objective,
     );
-    expect(phase('PR review').getByRole('checkbox', { name: 'PR review: Record a review verdict' })).toBeChecked();
+    expect(phase('Review').getByRole('checkbox', { name: 'Review: Record a review verdict' })).toBeChecked();
     // The agent or a tool moves the card after the exit tool; nothing is set per phase for it.
     expect(phase('Planning').queryByRole('combobox', { name: 'Planning: after submit_plan' })).not.toBeInTheDocument();
     expect(phase('Planning').queryByRole('switch', { name: /only people move cards here/ })).not.toBeInTheDocument();
@@ -157,9 +157,7 @@ describe('WorkBoardSection', () => {
     await user.click(phase('Triage').getByLabelText('Goal'));
     await user.paste('Done when the card is labelled.');
     await user.type(phase('Triage').getByLabelText('Goal runs'), '3');
-    await user.click(
-      phase('PR review').getByRole('checkbox', { name: 'PR review: Review the source of a change request' }),
-    );
+    await user.click(phase('Review').getByRole('checkbox', { name: 'Review: Review the source of a change request' }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));

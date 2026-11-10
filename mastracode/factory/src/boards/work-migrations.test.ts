@@ -12,9 +12,7 @@ import type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from '../st
 import { defineBoard } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
-import { boardDefinitionOf } from './stored-board.js';
-import { WORK_PHASE_RUNNERS_MIGRATION } from './work-migrations.js';
-import { workBoard } from './work.js';
+import { WORK_PHASE_RUNNERS_MIGRATION, workSeedWithSelfReview } from './work-migrations.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -70,7 +68,11 @@ const OLD_WORK: StoredBoardInput = {
   ],
 };
 
-const SEED = boardDefinitionOf(workBoard);
+/**
+ * What the migration fills from: Work as it was while it had its self-review phase, which every
+ * row holding the old seed still has. Today's seed dropped that phase.
+ */
+const SEED = workSeedWithSelfReview();
 
 function seedPhase(key: string): StoredPhaseInput {
   return SEED.phases.find(phase => phase.key === key)!;
@@ -147,6 +149,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     }
     expect(registry.get('work')!.phases.execute).toMatchObject({
       runner: { skill: 'factory-build', context: 'work', goal: { maxRuns: 20 } },
+    });
+    // Work's seed has no self-review phase any more; a row stored before still has one, and runs it.
+    expect(registry.get('work')!.phases.execute!.nextPhases).toContain('review');
+    expect(registry.get('work')!.phases.review).toMatchObject({
+      kind: 'working',
+      runner: { skill: 'factory-self-review', context: 'review' },
+      tools: ['factory_record_review_verdict'],
     });
     expect(info).toHaveBeenCalledTimes(1);
     expect(info.mock.calls[0]![0]).toContain('triage.runner');
@@ -310,7 +319,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
 
     await firstLoad(boards, scope);
 
-    expect((await boards.get(scope, 'work'))!.revision).toBe(1);
+    const fresh = (await boards.get(scope, 'work'))!;
+    expect(fresh.revision).toBe(1);
+    // A new project's Work has no self-review phase: Building hands its change request to Review.
+    expect(fresh.phases.map(stored => stored.key)).toEqual([
+      'intake',
+      'triage',
+      'planning',
+      'execute',
+      'pr-review',
+      'done',
+      'canceled',
+    ]);
+    expect(fresh.phases.find(stored => stored.key === 'execute')!.nextPhases).toEqual([
+      'pr-review',
+      'planning',
+      'done',
+      'canceled',
+    ]);
+    expect(fresh.phases.find(stored => stored.key === 'pr-review')!.name).toBe('Review');
     // Recorded: old values written now stay, as on any project the migration already ran on.
     const { key: _key, ...old } = OLD_WORK;
     await boards.replace(scope, 'work', old, { expectedRevision: 1, actor: 'user-1' });
