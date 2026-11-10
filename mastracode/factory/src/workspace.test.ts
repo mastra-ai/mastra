@@ -866,10 +866,13 @@ describe('bundled Factory skill assets', () => {
     expect(security).toContain('do not run them');
     expect(security).toContain('a suggested fix is a finding to evaluate, not a commit to make on your branch');
     const phase3 = section('## Phase 3: Quality Gate', '## Phase 4');
-    expect(phase3).toContain('Report red, missing, and still-running CI as advisory findings');
+    expect(phase3).toContain('Report red, missing, and still-running CI as non-blocking findings');
     expect(phase3).toContain('CI status alone cannot block approval or create a requested change');
     expect(phase3).toContain(
-      'only a defect you confirm or a failed verification you run yourself can block the verdict',
+      'only a defect you confirm in the code or a failed verification you run yourself can block the verdict',
+    );
+    expect(phase3).toContain(
+      'checks on PR metadata or process (issue reference, title format, labels, required reviews, DCO, and similar) are never verdict inputs',
     );
     expect(phase3).toContain('After the pre-execution inspection from the security section clears the diff');
     expect(phase3).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm --filter <pkg> test');
@@ -1091,10 +1094,13 @@ describe('bundled Factory skill assets', () => {
     );
 
     const qualityGate = section('## Phase 4: Quality Gate', '## Phase 5');
-    expect(qualityGate).toContain('Report red, missing, and still-running CI as advisory findings');
+    expect(qualityGate).toContain('Report red, missing, and still-running CI as non-blocking findings');
     expect(qualityGate).toContain('CI status alone cannot block approval or create a requested change');
     expect(qualityGate).toContain(
-      'only a defect you confirm or a failed verification you run yourself can block the verdict',
+      'only a defect you confirm in the code or a failed verification you run yourself can block the verdict',
+    );
+    expect(qualityGate).toContain(
+      'checks on PR metadata or process (issue reference, title format, labels, required reviews, DCO, and similar) are never verdict inputs',
     );
     expect(qualityGate).toContain('Model-provider behavior requires integration-level verification');
     expect(qualityGate).toContain('unit tests with mocked SDK responses are not enough');
