@@ -4,7 +4,7 @@ TUI: build deps with `pnpm build:mastracode`; test SDK+TUI with `pnpm test:mastr
 
 Focused TUI test: `pnpm --filter ./mastracode/tui exec vitest run <test-file> --reporter=dot --bail 1`.
 
-Factory (`mastracode/factory`, `@mastra/factory`): the full suite is too slow for a foreground sandbox command, so verify with focused runs. Run the colocated test files for what you changed in the foreground: `pnpm --filter ./mastracode/factory exec vitest run <test-files> --reporter=dot --bail 1` (a single file takes a few seconds). Broad runs, like the full `test` script, whole `src/integrations`/`src/rules` directories, `vitest related`, or `vitest run --changed`, can fan out to most of the suite, so run them as a background process and poll, or leave them to CI. Typecheck with `pnpm --filter ./mastracode/factory check`.
+Factory: full suite is too slow for foreground runs; see "Development" in `mastracode/factory/README.md` for focused tests.
 
 Factory UI is the independent React SPA and CLI UI artifact; see `mastracode/factory-ui/AGENTS.md`.
 
