@@ -99,7 +99,13 @@ export async function findWorkItem(
   const items = await workItems.listShared(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
   // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
-  const match = matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0];
+  const workCards = matches.filter(item => item.externalSource?.type !== 'pull-request');
+  // Hand-filed card numbers and issue numbers from several repositories can repeat; refuse to guess.
+  if (workCards.length > 1) {
+    const candidates = workCards.map(item => `${item.id} (${item.title})`).join(', ');
+    throw new Error(`#${number} matches more than one work item; use its id instead: ${candidates}.`);
+  }
+  const match = workCards[0] ?? matches[0];
   return match ? structuredClone(match) : null;
 }
 

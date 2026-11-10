@@ -381,6 +381,20 @@ describe('factory_inspect_work_item', () => {
     await expect(run('factory_inspect_work_item', { workItem: '#8' })).rejects.toThrow('in this Factory');
   });
 
+  it('refuses a #number that a card filed by hand shares with an issue card', async () => {
+    const manual = item({ id: 'manual', title: 'Filed by hand', externalSource: null, metadata: { cardNumber: 3 } });
+    const issue = item({ id: 'issue', title: 'From GitHub', metadata: { number: 3 } });
+    for (const items of [
+      [manual, issue],
+      [issue, manual],
+    ]) {
+      const { run } = setup({ items });
+      await expect(run('factory_inspect_work_item', { workItem: '#3' })).rejects.toThrow(
+        '#3 matches more than one work item; use its id instead: ',
+      );
+    }
+  });
+
   it('rejects a ref that is neither a UUID nor a number before it reaches storage', async () => {
     const { run, deps } = setup({ items: [target] });
     await expect(run('factory_inspect_work_item', { workItem: 'not-an-id' })).resolves.toMatchObject({ error: true });
