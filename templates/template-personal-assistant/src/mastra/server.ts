@@ -71,16 +71,17 @@ export function createAssistantServer(
     z.literal(1),
     z.object({ limit: z.literal(1), strategy: z.literal('called').optional() }).strict(),
   ]);
+  const auth = new SimpleAuth({
+    tokens: { [config.runtime.ownerToken]: { id: config.ownerId } },
+    mapUserToResourceId: () => config.ownerId,
+  });
   const ownerBearer = Buffer.from(`Bearer ${config.runtime.ownerToken}`);
   let requestWindow = Date.now();
   let requests = 0;
   return {
     host: config.runtime.mode === 'local' ? '127.0.0.1' : '0.0.0.0',
     bodySizeLimit: 1048576,
-    auth: new SimpleAuth({
-      tokens: { [config.runtime.ownerToken]: { id: config.ownerId } },
-      mapUserToResourceId: () => config.ownerId,
-    }),
+    auth,
     middleware: [
       async (c, next) => {
         if (!c.req.path.startsWith('/api/')) return next();
@@ -91,13 +92,18 @@ export function createAssistantServer(
           if (c.req.header('sec-fetch-site') !== 'same-origin' || c.req.header('origin') !== new URL(c.req.url).origin)
             return c.json({ error: 'A bearer token or same-origin authenticated Studio request is required.' }, 401);
         }
-        const now = Date.now();
-        if (now - requestWindow >= 60000) {
-          requestWindow = now;
-          requests = 0;
+        // Match the native adapter's token precedence and delegate cookie/header validation to SimpleAuth.
+        const token = c.req.header('authorization')?.replace('Bearer ', '') || c.req.query('apiKey') || '';
+        const authenticated = validBearer || (await auth.authenticateToken(token, c.req.raw))?.id === config.ownerId;
+        if (authenticated) {
+          const now = Date.now();
+          if (now - requestWindow >= 60000) {
+            requestWindow = now;
+            requests = 0;
+          }
+          if (++requests > config.limits.requestsPerMinute)
+            return c.json({ error: 'Assistant request capacity exhausted.' }, 429, { 'Retry-After': '60' });
         }
-        if (++requests > config.limits.requestsPerMinute)
-          return c.json({ error: 'Assistant request capacity exhausted.' }, 429, { 'Retry-After': '60' });
         await next();
       },
       { path: '/api/tools/:toolId/execute', handler: protectDirectExecution },

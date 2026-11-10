@@ -1040,3 +1040,90 @@ test('HTTP model overrides cannot bypass shared execution limits', { timeout: 30
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test(
+  'unauthenticated traffic preserves the owner bearer and Studio request allowance',
+  { timeout: 90000 },
+  async () => {
+    for (const mode of ['local', 'hosted']) {
+      for (const ownerAccess of ['bearer', 'cookie']) {
+        const fixture = await modelFixture();
+        const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-authenticated-capacity-'));
+        let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+        const token = 'example-owner-token-at-least-32-characters';
+        try {
+          app = await startAssistant(dataDir, fixture.url, {
+            ASSISTANT_MAX_REQUESTS_PER_MINUTE: '3',
+            ...(mode === 'hosted'
+              ? {
+                  ASSISTANT_RUNTIME: 'hosted',
+                  TURSO_DATABASE_URL: 'libsql://assistant-example.turso.io',
+                  TURSO_AUTH_TOKEN: 'example-database-token',
+                  ASSISTANT_API_TOKEN: token,
+                  MASTRA_PLATFORM_STUDIO_AUTH: 'disabled',
+                  TEST_AUTH_DATABASE_URL: `file:${join(dataDir, 'assistant.db')}`,
+                }
+              : {}),
+          });
+          let cookie: string | undefined;
+          if (ownerAccess === 'cookie') {
+            const signedIn = await fetch(`${app.url}/api/auth/credentials/sign-in`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', origin: app.url, 'sec-fetch-site': 'same-origin' },
+              body: JSON.stringify({ email: 'owner@example.test', password: token }),
+            });
+            assert.equal(signedIn.status, 200);
+            cookie = signedIn.headers.get('set-cookie')!.split(';')[0]!;
+            assert.ok(cookie.startsWith('mastra-token='));
+          }
+          for (let attempt = 0; attempt < 3; attempt++)
+            assert.equal(
+              (await app.request('/agents', 'GET', undefined, { authorization: 'Bearer wrong' })).status,
+              401,
+            );
+          const credentials = cookie ? { cookie } : app.headers;
+          assert.equal(
+            (await app.request('/agents', 'GET', undefined, credentials)).status,
+            200,
+            `${mode} ${ownerAccess}: unauthenticated traffic must not lock out the owner.`,
+          );
+          for (const invalid of [{}, { cookie: 'mastra-token=wrong' }, { 'x-playground-access': 'wrong' }] as Record<
+            string,
+            string
+          >[])
+            assert.equal((await app.request('/agents', 'GET', undefined, invalid)).status, 401);
+          assert.equal((await app.request('/agents?apiKey=wrong', 'GET', undefined, {})).status, 401);
+          if (mode === 'local' && cookie) {
+            const denied = await app.request(
+              `/memory/threads?agentId=${agent}`,
+              'POST',
+              { threadId: 'forged-studio' },
+              {
+                cookie,
+                authorization: 'Bearer wrong',
+                origin: 'https://attacker.example',
+                'sec-fetch-site': 'cross-site',
+              },
+            );
+            assert.equal(denied.status, 401, 'An invalid bearer must not exempt an ambient cookie from CSRF checks.');
+          }
+          assert.equal((await app.request('/agents', 'GET', undefined, { 'x-playground-access': token })).status, 200);
+          assert.equal((await app.request(`/agents?apiKey=${token}`, 'GET', undefined, {})).status, 200);
+          const exhausted = await app.request(
+            '/agents',
+            'GET',
+            undefined,
+            cookie ? { cookie, authorization: 'Bearer wrong' } : credentials,
+          );
+          assert.equal(exhausted.status, 429, 'All native owner credentials share the same authenticated allowance.');
+          assert.equal(exhausted.headers.get('retry-after'), '60');
+          assert.equal(fixture.requests.length, 0);
+        } finally {
+          await app?.stop();
+          await fixture.close();
+          await rm(dataDir, { recursive: true, force: true });
+        }
+      }
+    }
+  },
+);
