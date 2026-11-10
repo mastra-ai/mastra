@@ -24,7 +24,7 @@ Building your own assistant lets you shape how it works around your preferences 
    - Run `cp .env.example .env` and fill in the values described under Prerequisites.
 3. **Start the dev server**
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
-   - Local Studio requires no username or password. Select **Personal Assistant** and send “Help me plan a focused morning.” The assistant should suggest a practical plan in the conversation.
+   - The CLI creates a private `.data/owner-token` file (or uses `ASSISTANT_API_TOKEN`). Select **Sign in**, enter any email and paste that token as the password. Select **Personal Assistant** and send “Help me plan a focused morning.” The assistant should suggest a practical plan in the conversation.
 
 ## Try it out
 
@@ -38,7 +38,7 @@ Building your own assistant lets you shape how it works around your preferences 
 - Open the project in your coding agent and describe a change, such as “Adapt the assistant to help me prepare weekly learning plans. Explore the code and propose a plan before making changes.”
 - Edit instructions and native agent behavior in `src/mastra/agents/personal-assistant.ts`, and the working-memory template in `src/mastra/runtime.ts`. The goal judge defaults to the selected chat model. Set `ASSISTANT_JUDGE_MODEL` to override it with an OpenAI or Mastra gateway model (a direct OpenAI model still requires `OPENAI_API_KEY`) and `ASSISTANT_MAX_GOAL_EVALUATIONS` (1–20, default 5) to bound each requested allowance. The judge uses at most three steps per evaluation. These execution limits are not a monetary cap. An exhausted objective pauses; resuming extends its budget without resetting prior usage. No objective starts on boot. Optional `.env` settings include `ASSISTANT_OWNER_ID` (default `local-owner`), `ASSISTANT_MAX_STEPS` (1–20, default 20), and `ASSISTANT_TIMEZONE` (an IANA timezone). Keep the owner ID stable to retain access to existing context.
 
-Optional `ASSISTANT_MAX_OUTPUT_TOKENS` (1–32768) sets the default output limit for assistant responses, including scheduled checks. `ASSISTANT_MODEL_MAX_RETRIES` (0–5) sets each native model/provider and processor retry limit; zero disables both, while positive limits can compound. For a bounded scheduled analysis that needs a read and a later answer step, set `ASSISTANT_MAX_STEPS=6`, `ASSISTANT_MAX_OUTPUT_TOKENS=1024`, and `ASSISTANT_MODEL_MAX_RETRIES=0`. The ordinary step default remains 20. When output and retry settings are unset, native defaults remain in effect. Connect's own HTTP read retries are separate. These settings do not bound the separate goal judge or total spending; explicit request options can override defaults.
+Optional `ASSISTANT_MAX_OUTPUT_TOKENS` (1–32768, default 4096) caps output for every model attempt, including scheduled checks and the goal judge. `ASSISTANT_MODEL_MAX_RETRIES` (0–5) sets each native model/provider and processor retry limit; zero disables both, while positive limits can compound. For a bounded scheduled analysis that needs a read and a later answer step, set `ASSISTANT_MAX_STEPS=6`, `ASSISTANT_MAX_OUTPUT_TOKENS=1024`, and `ASSISTANT_MODEL_MAX_RETRIES=0`. The ordinary step default remains 20. When retry settings are unset, native retry defaults remain in effect; every dispatched retry consumes the shared model allowance. Connect's own HTTP read retries are separate. Request options can lower the configured output cap, and execution options must be supplied in the validated body rather than query parameters.
 
 To enable connected tools, follow the linked Connect setup, add the Connect credentials to `.env`, and authorize the services you need. `ASSISTANT_CONNECT_PROVIDERS` accepts a JSON array of provider IDs and defaults to `["google-mail","google-docs","notion","jira"]`. `ASSISTANT_CONNECT_TOOLS` optionally restricts the available exact tool keys; it does not change provider OAuth permissions. Optional `MASTRA_ORG_ID` and `MASTRA_PLATFORM_REGION` follow the native Connect configuration.
 
@@ -49,6 +49,12 @@ Approval decisions apply to the pending run and stored arguments. Return to the 
 ## Local operation
 
 Conversations, preferences, objectives, tasks, schedules, and native traces persist in `.data/assistant.db` without automatic expiration. `ASSISTANT_DATA_DIR` changes the directory, relative to the template root or an absolute path. Keep your database private; deleting it removes the installation's stored context. Hosted production uses remote Turso storage instead, as described below.
+
+Both local and hosted APIs require owner authentication. Use `Authorization: Bearer <owner token>` for API clients. Studio uses native sign-in; cookie-based local mutations also require matching Origin and `Sec-Fetch-Site: same-origin`. Keep the token private. The local CLI reuses it across restarts; programmatic consumers should configure `ASSISTANT_API_TOKEN` explicitly.
+
+The server accepts at most 1 MiB per request and defaults to 240 API requests per minute. Chat, goal judging, native retries and scheduled checks share a process budget of 120 model attempts per hour and two concurrent model attempts. Each attempt reserves serialized input bytes plus the configured output allowance against `ASSISTANT_MAX_MODEL_TOKENS_PER_HOUR` (default 10,000,000); inputs over 256 KiB are rejected. Reservations are conservative text-work allowances, not measured token usage or a monetary spending cap. They reset after one hour or process restart and are not shared across server replicas. Set provider-side spending controls for a monetary limit. Adjust these bounds through the matching variables in `.env.example`.
+
+Keep at most ten active or paused schedules by default (`ASSISTANT_MAX_SCHEDULES`). Recurring schedules use minute granularity or a fixed seconds field; sub-minute cadence is rejected on creation, update, resume and dispatch. Cancelling a schedule frees capacity; an identified creation replay preserves the existing schedule even when capacity is full.
 
 For a built local server, run `npm run build` and then `npm start`. Both use the same configured local database as development.
 

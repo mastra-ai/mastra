@@ -1014,6 +1014,7 @@ test('scheduled model defaults bound output and disable provider retries', { tim
   try {
     app = await startAssistant(dataDir, fixture.modelUrl, {
       ASSISTANT_MAX_STEPS: '1',
+      ASSISTANT_MAX_MODEL_CALLS_PER_HOUR: '2',
       ASSISTANT_MAX_OUTPUT_TOKENS: '512',
       ASSISTANT_MODEL_MAX_RETRIES: '0',
     });
@@ -1052,7 +1053,7 @@ test('scheduled model defaults bound output and disable provider retries', { tim
     await json(
       await fetch(`${app.url}/api/agents/${agent}/generate`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { ...app.headers, 'content-type': 'application/json' },
         body: JSON.stringify({
           messages: [{ role: 'user', content: 'Exercise a synthetic transient provider failure.' }],
           memory: { thread: 'bounded-provider-failure' },
@@ -1061,6 +1062,16 @@ test('scheduled model defaults bound output and disable provider retries', { tim
       500,
     );
     assert.equal(fixture.models.length, beforeFailure + 1, 'Configured zero retries makes one provider attempt.');
+    await dueNow(app, schedule.id);
+    await eventually(
+      () => Promise.resolve(app!.output),
+      text => text.includes('capacity exhausted'),
+    );
+    assert.equal(
+      fixture.models.length,
+      beforeFailure + 1,
+      'Scheduled wakes must share the exhausted chat/provider allowance.',
+    );
   } finally {
     await app?.stop();
     await fixture.close();
@@ -1431,6 +1442,56 @@ test('schedule lists preserve ownership and failure semantics after read reuse',
     if (hidden) database?.exec('ALTER TABLE mastra_schedules_list_fault RENAME TO mastra_schedules');
     database?.close();
     await mastra.shutdown();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('schedule capacity and cadence limits preserve existing owner schedules', { timeout: 60000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-capacity-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, { ...fixture.env, ASSISTANT_MAX_SCHEDULES: '1' });
+    const first = await createMonitor(app, 'capacity-first', 'first');
+    const count = (await schedules(app)).length;
+    const rejected = await scheduleTurn(app, 'capacity-second', {
+      action: 'create',
+      requestId: 'second',
+      name: 'Too many schedules',
+      prompt: 'Wait.',
+      timing: recurring,
+    });
+    assert.match(rejected.text, /at most 1 active or paused schedules/);
+    assert.equal((await schedules(app)).length, count);
+    await scheduleTurn(app, 'capacity-first', { action: 'pause', scheduleId: first.id });
+    const paused = await scheduleTurn(app, 'capacity-second', {
+      action: 'create',
+      requestId: 'second',
+      name: 'Paused still counts',
+      prompt: 'Wait.',
+      timing: recurring,
+    });
+    assert.match(paused.text, /at most 1 active or paused schedules/);
+    const fast = await scheduleTurn(app, 'capacity-first', {
+      action: 'update',
+      scheduleId: first.id,
+      timing: { kind: 'cron', cron: '* * * * * *', timezone: 'UTC' },
+    });
+    assert.match(fast.text, /at least 60 seconds/);
+    assert.equal((await nativeSchedule<Schedule>(app, 'row', { id: first.id })).cron, recurring.cron);
+    await scheduleTurn(app, 'capacity-first', { action: 'cancel', scheduleId: first.id, reason: 'owner-request' });
+    await scheduleTurn(app, 'capacity-second', {
+      action: 'create',
+      requestId: 'second',
+      name: 'Capacity released',
+      prompt: 'Wait.',
+      timing: recurring,
+    });
+    assert.equal((await schedules(app)).length, 1);
+    assert.notEqual((await schedules(app))[0]!.id, first.id);
+  } finally {
+    await app?.stop();
+    await fixture.close();
     await rm(dataDir, { recursive: true, force: true });
   }
 });

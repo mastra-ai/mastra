@@ -354,7 +354,10 @@ test('incomplete objectives wait for information and preserve approvals', { time
     const form = new FormData();
     form.set('message', 'Do work');
     form.set('ifIdle', JSON.stringify({ behavior: 'wake', streamOptions: { toolCallConcurrency: 3 } }));
-    await json(await fetch(`${app.url}/api/agents/${agent}/send-message`, { method: 'POST', body: form }), 400);
+    await json(
+      await fetch(`${app.url}/api/agents/${agent}/send-message`, { method: 'POST', headers: app.headers, body: form }),
+      400,
+    );
     assert.equal(fixture.models.length, calls);
     for (const options of [{ hooks: { beforeToolCall: null } }, { eagerToolExecution: true }]) {
       const deniedOverride: Response = await app.request(`/agents/${agent}/generate`, 'POST', {
@@ -494,6 +497,31 @@ test('resuming a paused objective extends its remaining evaluation allowance', {
     app = undefined;
     app = await startAssistant(dataDir, fixture.modelUrl);
     assert.deepEqual((await progressState(dataDir, 'remaining-budget')).objective, after);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('goal judging consumes the same process model allowance as chat', { timeout: 30000 }, async () => {
+  const { progressFixture, progressState, progressTurn } = await import('./progress');
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-shared-judge-capacity-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, {
+      ASSISTANT_MAX_MODEL_CALLS_PER_HOUR: '2',
+      ASSISTANT_MODEL_MAX_RETRIES: '0',
+    });
+    await progressTurn(app, 'shared-judge-capacity', {
+      calls: [[{ name: 'objective', args: { action: 'set', objective: 'Wait for owner verification.' } }]],
+    });
+    assert.equal(fixture.models.length, 2);
+    assert.equal(fixture.judges.length, 0, 'The judge must not dispatch after chat consumed the shared allowance.');
+    const objective = (await progressState(dataDir, 'shared-judge-capacity')).objective!;
+    assert.equal(objective.status, 'paused');
+    assert.equal(objective.runsUsed, 0);
   } finally {
     await app?.stop();
     await fixture.close();

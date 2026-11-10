@@ -1,3 +1,5 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -16,6 +18,20 @@ if (!['dev', 'build', 'start'].includes(command ?? '')) {
   throw new Error('Expected dev, build, or start.');
 }
 
+const dataDir = resolve(root, process.env.ASSISTANT_DATA_DIR || '.data');
+if (command !== 'build' && process.env.ASSISTANT_RUNTIME !== 'hosted' && !process.env.ASSISTANT_API_TOKEN) {
+  const tokenFile = resolve(dataDir, 'owner-token');
+  await mkdir(dataDir, { recursive: true, mode: 0o700 });
+  try {
+    await writeFile(tokenFile, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST'))
+      throw new Error('Could not prepare the local owner token. Check ASSISTANT_DATA_DIR permissions.');
+  }
+  process.env.ASSISTANT_API_TOKEN = (await readFile(tokenFile, 'utf8')).trim();
+  console.log(`Local Studio: sign in with any email and the token in ${tokenFile} as the password.`);
+}
+
 // The CLI changes its execution directory in built output. Resolve state before starting it.
 const child = spawn(
   process.execPath,
@@ -25,7 +41,7 @@ const child = spawn(
     stdio: 'inherit',
     env: {
       ...process.env,
-      ASSISTANT_DATA_DIR: resolve(root, process.env.ASSISTANT_DATA_DIR || '.data'),
+      ASSISTANT_DATA_DIR: dataDir,
     },
   },
 );

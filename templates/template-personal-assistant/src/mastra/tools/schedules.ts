@@ -53,6 +53,7 @@ export const scheduleTiming = timingInput.transform((input, context) => {
   try {
     if (input.kind === 'cron') {
       validateCron(input.cron, input.timezone);
+      requireSafeCadence(input.cron);
       return { cron: input.cron, timezone: input.timezone };
     }
     const instant = Date.parse(input.date);
@@ -89,6 +90,13 @@ export const scheduleTiming = timingInput.transform((input, context) => {
     return z.NEVER;
   }
 });
+
+function requireSafeCadence(cron: string) {
+  const fields = cron.trim().split(/\s+/);
+  // Native five-field cron already has minute granularity. A fixed seconds field preserves it.
+  if (fields.length >= 6 && !/^\d{1,2}$/.test(fields[0]!))
+    throw new Error('Recurring schedules require at least 60 seconds between occurrences; use a fixed seconds field.');
+}
 
 function requireFuture(timing: z.output<typeof scheduleTiming>) {
   try {
@@ -220,12 +228,29 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
       detail,
     };
   }
+  async function requireCapacity(excludeId?: string) {
+    const all = await Promise.all(
+      ['active', 'paused'].map(status =>
+        mastra().schedules.list({
+          agentId: getAgent().id,
+          resourceId: config.ownerId,
+          status: status as AgentSchedule['status'],
+        }),
+      ),
+    );
+    if (all.flat().filter(value => value.id !== excludeId).length >= config.limits.schedules)
+      throw new Error(
+        `Keep at most ${config.limits.schedules} active or paused schedules. Cancel an existing schedule first.`,
+      );
+  }
+  let mutation = Promise.resolve();
   const hooks: ScheduleHooks<Mastra> = {
     async prepare({ schedule, agentId, trigger }) {
       if (agentId !== getAgent().id) return null;
       try {
         const value = await owned(await mastra().schedules.get(schedule.id));
         if (!value) return null;
+        requireSafeCadence(value.cron);
         const suspended = await getAgent().listSuspendedRuns({ threadId: value.threadId, resourceId: config.ownerId });
         if (suspended.runs.length) return null;
         return {
@@ -265,89 +290,104 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
     description: `Manage native schedules for owner conversations: create, list, inspect, update, pause, resume, cancel, run-now. Use a stable requestId for an identified creation request and an explicit IANA timezone. Resolve natural language before calling. One-time dates require seconds and an explicit matching UTC offset. Cancel only on explicit owner request or confirmed responsibility completion. Run-now publishes immediately and preserves cadence; the native active/discard rule can discard it during this very tool call. ${detail}`,
     inputSchema: schema,
     execute: async (input, context) => {
-      const currentThread = await thread(context?.agent?.threadId, context?.agent?.resourceId);
-      const service = mastra().schedules;
-      if (input.action === 'list') {
-        try {
-          const all = await Promise.all(
-            ['active', 'paused', 'completed'].map(status =>
-              service.list({
-                agentId: getAgent().id,
-                resourceId: config.ownerId,
-                status: status as AgentSchedule['status'],
-              }),
-            ),
-          );
-          const schedules: AgentSchedule[] = [];
-          const threads = new Map<string, Promise<string | null>>();
-          threads.set(currentThread, Promise.resolve(currentThread));
-          for (const value of all.flat()) {
-            const visible = await owned(value, threads);
-            if (visible) schedules.push(visible);
+      const previous = mutation;
+      let release!: () => void;
+      mutation = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      await previous;
+      try {
+        const currentThread = await thread(context?.agent?.threadId, context?.agent?.resourceId);
+        const service = mastra().schedules;
+        if (input.action === 'list') {
+          try {
+            const all = await Promise.all(
+              ['active', 'paused', 'completed'].map(status =>
+                service.list({
+                  agentId: getAgent().id,
+                  resourceId: config.ownerId,
+                  status: status as AgentSchedule['status'],
+                }),
+              ),
+            );
+            const schedules: AgentSchedule[] = [];
+            const threads = new Map<string, Promise<string | null>>();
+            threads.set(currentThread, Promise.resolve(currentThread));
+            for (const value of all.flat()) {
+              const visible = await owned(value, threads);
+              if (visible) schedules.push(visible);
+            }
+            return { schedules, detail };
+          } catch {
+            throw new Error('Schedule storage is unavailable.');
           }
-          return { schedules, detail };
-        } catch {
-          throw new Error('Schedule storage is unavailable.');
         }
-      }
-      if (input.action === 'create') {
-        const scheduleId = `agent_${createHash('sha256')
-          .update(JSON.stringify([config.ownerId, currentThread, input.requestId]))
-          .digest('hex')}`;
-        const existing = await service.get(scheduleId);
-        if (existing)
+        if (input.action === 'create') {
+          const scheduleId = `agent_${createHash('sha256')
+            .update(JSON.stringify([config.ownerId, currentThread, input.requestId]))
+            .digest('hex')}`;
+          const existing = await service.get(scheduleId);
+          if (existing)
+            return {
+              ...(await inspect(existing)),
+              detail: `Existing identified request preserved. Use update to change it. ${detail}`,
+            };
+          requireFuture(input.timing);
+          await requireCapacity();
+          const { cron, timezone, ...timing } = input.timing;
+          return inspect(
+            await service.create({
+              id: scheduleId,
+              agentId: getAgent().id,
+              threadId: currentThread,
+              resourceId: config.ownerId,
+              prompt: input.prompt,
+              name: input.name,
+              cron,
+              timezone,
+              ifActive: { behavior: 'discard' },
+              ifIdle: { behavior: 'wake' },
+              metadata: { personalAssistant: true, ...timing },
+            }),
+          );
+        }
+        const value = await requireOwned(await service.get(input.scheduleId));
+        if (input.action === 'inspect') return inspect(value);
+        if (input.action === 'cancel') {
+          await service.delete(value.id);
           return {
-            ...(await inspect(existing)),
-            detail: `Existing identified request preserved. Use update to change it. ${detail}`,
+            scheduleId: value.id,
+            deleted: true,
+            reason: input.reason,
+            detail:
+              'Future scheduling stopped. Deletion does not roll back dispatched work or external effects; native trigger history is deleted. Preserve existing result references in this conversation.',
           };
+        }
+        if (input.action === 'run-now')
+          return {
+            ...(await service.run(value.id)),
+            detail: `Manual publication requested; this is not a completed check. Inspect native occurrences for discarded, skipped or failed dispatch and conversation results for actual effects. ${detail}`,
+          };
+        if (input.action === 'pause') return inspect(await service.pause(value.id));
+        if (input.action === 'resume') {
+          requireSafeCadence(value.cron);
+          await requireCapacity(value.id);
+          return inspect(await service.resume(value.id));
+        }
         requireFuture(input.timing);
         const { cron, timezone, ...timing } = input.timing;
         return inspect(
-          await service.create({
-            id: scheduleId,
-            agentId: getAgent().id,
-            threadId: currentThread,
-            resourceId: config.ownerId,
-            prompt: input.prompt,
-            name: input.name,
+          await service.update(value.id, {
             cron,
             timezone,
-            ifActive: { behavior: 'discard' },
-            ifIdle: { behavior: 'wake' },
+            ...(input.name === undefined ? {} : { name: input.name }),
+            ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
             metadata: { personalAssistant: true, ...timing },
           }),
         );
+      } finally {
+        release();
       }
-      const value = await requireOwned(await service.get(input.scheduleId));
-      if (input.action === 'inspect') return inspect(value);
-      if (input.action === 'cancel') {
-        await service.delete(value.id);
-        return {
-          scheduleId: value.id,
-          deleted: true,
-          reason: input.reason,
-          detail:
-            'Future scheduling stopped. Deletion does not roll back dispatched work or external effects; native trigger history is deleted. Preserve existing result references in this conversation.',
-        };
-      }
-      if (input.action === 'run-now')
-        return {
-          ...(await service.run(value.id)),
-          detail: `Manual publication requested; this is not a completed check. Inspect native occurrences for discarded, skipped or failed dispatch and conversation results for actual effects. ${detail}`,
-        };
-      if (input.action === 'pause') return inspect(await service.pause(value.id));
-      if (input.action === 'resume') return inspect(await service.resume(value.id));
-      requireFuture(input.timing);
-      const { cron, timezone, ...timing } = input.timing;
-      return inspect(
-        await service.update(value.id, {
-          cron,
-          timezone,
-          ...(input.name === undefined ? {} : { name: input.name }),
-          ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
-          metadata: { personalAssistant: true, ...timing },
-        }),
-      );
     },
   });
   return { tool, hooks, canRead };

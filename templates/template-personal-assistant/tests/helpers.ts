@@ -124,6 +124,7 @@ export async function startAssistant(dataDir: string, modelUrl: string, extraEnv
     env: {
       ...isolatedEnv(),
       OPENAI_API_KEY: 'example-key',
+      ASSISTANT_API_TOKEN: 'example-owner-token-at-least-32-characters',
       ASSISTANT_DATA_DIR: dataDir,
       TEST_MODEL_URL: modelUrl,
       // Deterministic tests must never inherit live Connect credentials or tool policy.
@@ -161,13 +162,17 @@ export async function startAssistant(dataDir: string, modelUrl: string, extraEnv
   } finally {
     clearTimeout(timer!);
   }
+  const headersForOwner = {
+    authorization: `Bearer ${extraEnv.ASSISTANT_API_TOKEN ?? 'example-owner-token-at-least-32-characters'}`,
+  };
   return {
     child,
+    headers: headersForOwner,
     get output() {
       return output;
     },
     url: `http://127.0.0.1:${port}`,
-    async request(path: string, method = 'GET', body?: unknown, headers: Record<string, string> = {}) {
+    async request(path: string, method = 'GET', body?: unknown, headers: Record<string, string> = headersForOwner) {
       const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
         method,
         headers: { 'content-type': 'application/json', ...headers },

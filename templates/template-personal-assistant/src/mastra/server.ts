@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { SimpleAuth } from '@mastra/core/server';
 import type { MiddlewareHandler, ServerConfig } from '@mastra/core/server';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
@@ -67,19 +68,45 @@ export function createAssistantServer(
     z.literal(1),
     z.object({ limit: z.literal(1), strategy: z.literal('called').optional() }).strict(),
   ]);
+  const ownerBearer = Buffer.from(`Bearer ${config.runtime.ownerToken}`);
+  let requestWindow = Date.now();
+  let requests = 0;
   return {
     host: config.runtime.mode === 'local' ? '127.0.0.1' : '0.0.0.0',
-    ...(config.runtime.mode === 'hosted'
-      ? {
-          auth: new SimpleAuth({ tokens: { [config.runtime.ownerToken]: { id: config.ownerId } } }),
-        }
-      : {}),
+    bodySizeLimit: 1048576,
+    auth: new SimpleAuth({
+      tokens: { [config.runtime.ownerToken]: { id: config.ownerId } },
+      mapUserToResourceId: () => config.ownerId,
+    }),
     middleware: [
+      async (c, next) => {
+        if (!c.req.path.startsWith('/api/')) return next();
+        const supplied = Buffer.from(c.req.header('authorization') ?? '');
+        const validBearer = supplied.length === ownerBearer.length && timingSafeEqual(supplied, ownerBearer);
+        // Cookies are ambient credentials. Require same-origin browser evidence for cookie mutations.
+        if (config.runtime.mode === 'local' && !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !validBearer) {
+          if (c.req.header('sec-fetch-site') !== 'same-origin' || c.req.header('origin') !== new URL(c.req.url).origin)
+            return c.json({ error: 'A bearer token or same-origin authenticated Studio request is required.' }, 401);
+        }
+        const now = Date.now();
+        if (now - requestWindow >= 60000) {
+          requestWindow = now;
+          requests = 0;
+        }
+        if (++requests > config.limits.requestsPerMinute)
+          return c.json({ error: 'Assistant request capacity exhausted.' }, 429, { 'Retry-After': '60' });
+        await next();
+      },
       { path: '/api/tools/:toolId/execute', handler: protectDirectExecution },
       { path: '/api/agents/:agentId/tools/:toolId/execute', handler: protectDirectExecution },
       async (c, next) => {
         // Native handlers honor this server-owned value over request bodies and headers.
         c.get('requestContext').set(MASTRA_RESOURCE_ID_KEY, config.ownerId);
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && /\/agents\/[^/]+\/models?(?:\/|$)/.test(c.req.path))
+          return c.json(
+            { error: 'Configure models on the server so all execution uses the shared model budget.' },
+            403,
+          );
         const schedulePath = c.req.path.match(/\/schedules(?:\/(.*))?$/);
         if (schedulePath) {
           try {
@@ -116,6 +143,12 @@ export function createAssistantServer(
         }
         if (c.req.method === 'POST' && c.req.path.includes('/agents/')) {
           const executionOptions = new Set([
+            'model',
+            'structuredOutput',
+            'memory',
+            'memoryConfig',
+            'inputProcessors',
+            'outputProcessors',
             'maxSteps',
             'hooks',
             'toolCallConcurrency',
@@ -138,6 +171,12 @@ export function createAssistantServer(
               const fields: Record<string, unknown> = {};
               // Native Hono JSON-decodes form fields and uses the last duplicate value.
               for (const key of [
+                'model',
+                'structuredOutput',
+                'memory',
+                'memoryConfig',
+                'inputProcessors',
+                'outputProcessors',
                 'maxSteps',
                 'hooks',
                 'toolCallConcurrency',
@@ -186,13 +225,22 @@ export function createAssistantServer(
             options.some(
               option =>
                 option &&
-                (option.autoResumeSuspendedTools === true ||
+                (option.model !== undefined ||
+                  asObject(option.structuredOutput)?.model !== undefined ||
+                  asObject(option.memory)?.options !== undefined ||
+                  option.memoryConfig !== undefined ||
+                  option.inputProcessors !== undefined ||
+                  option.outputProcessors !== undefined ||
+                  option.autoResumeSuspendedTools === true ||
                   option.toolsets !== undefined ||
                   option.clientTools !== undefined ||
                   option.hooks !== undefined),
             )
           ) {
-            return c.json({ error: 'Tool injection and automatic approval recovery are not allowed.' }, 400);
+            return c.json(
+              { error: 'Model/processor overrides, tool injection and automatic approval recovery are not allowed.' },
+              400,
+            );
           }
           if (
             options.some(

@@ -23,7 +23,7 @@ test('direct tool execution routes cannot bypass native approval', { timeout: 12
     const fixture = await connectedFixture();
     const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-direct-tools-'));
     const token = 'example-owner-token-at-least-32-characters';
-    const headers: Record<string, string> = mode === 'hosted' ? { authorization: `Bearer ${token}` } : {};
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
     let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
     try {
       app = await startAssistant(dataDir, fixture.modelUrl, {
@@ -240,7 +240,10 @@ test('ordinary execution limits protect native message and approval options', { 
       { method: 'POST' },
       { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'native operation' },
     ]) {
-      const native = await json(await fetch(abortUrl, options), 501);
+      const native = await json(
+        await fetch(abortUrl, { ...options, headers: { ...app.headers, ...options.headers } }),
+        501,
+      );
       assert.match(JSON.stringify(native), /durable/i);
     }
     const multipart = new FormData();
@@ -252,6 +255,7 @@ test('ordinary execution limits protect native message and approval options', { 
     const multipartDenied = await json(
       await fetch(`${app.url}/api/agents/${agent}/send-message`, {
         method: 'POST',
+        headers: app.headers,
         body: multipart,
       }),
       400,
@@ -353,6 +357,7 @@ test('ordinary execution limits protect native message and approval options', { 
     const sent = await json(
       await fetch(`${app.url}/api/agents/${agent}/send-message`, {
         method: 'POST',
+        headers: app.headers,
         body: allowedForm,
       }),
     );
@@ -522,7 +527,7 @@ test('invalid configuration and conflicting identity leave state unchanged', { t
     // Owner reads and writes remain available despite hostile resource/header/context claims.
     const ownerResponse = await fetch(
       `${app.url}/api/memory/threads/owner-thread${query}&requestContext=${encodeURIComponent(JSON.stringify({ mastra__resourceId: 'foreign-owner', mastra__scopes: ['resource:foreign-owner'] }))}`,
-      { headers: { 'x-resource-id': 'foreign-owner' } },
+      { headers: { ...app.headers, 'x-resource-id': 'foreign-owner' } },
     );
     assert.equal((await json(ownerResponse)).resourceId, 'local-owner');
     const ownerUpdate = await json(
@@ -823,5 +828,215 @@ test('assistant handles both examples and an unseen responsibility', { timeout: 
     await app?.stop();
     await fixture.close();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test(
+  'local API rejects cross-site multipart runs and schedule creation without credentials',
+  { timeout: 30000 },
+  async () => {
+    const { progressFixture } = await import('./progress');
+    const fixture = await progressFixture();
+    const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-local-auth-'));
+    let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+    try {
+      app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+      for (const route of ['generate', 'stream', 'send-message']) {
+        const form = new FormData();
+        form.set(
+          'messages',
+          JSON.stringify([
+            {
+              role: 'user',
+              content: JSON.stringify({
+                calls: [
+                  [
+                    {
+                      name: 'schedule',
+                      args: {
+                        action: 'create',
+                        requestId: 'cross-site',
+                        name: 'Unauthorized work',
+                        prompt: 'Run repeatedly.',
+                        timing: { kind: 'cron', cron: '* * * * *', timezone: 'UTC' },
+                      },
+                    },
+                  ],
+                ],
+              }),
+            },
+          ]),
+        );
+        form.set('memory', JSON.stringify({ thread: 'cross-site' }));
+        form.set('threadId', 'cross-site');
+        form.set('resourceId', 'local-owner');
+        form.set('message', 'Start work.');
+        const response: Response = await fetch(`${app.url}/api/agents/${agent}/${route}`, {
+          method: 'POST',
+          body: form,
+          headers: { origin: 'https://attacker.example', 'sec-fetch-site': 'cross-site' },
+        });
+        assert.equal(response.status, 401);
+      }
+      assert.equal(
+        (await fetch(`${app.url}/api/schedules`, { method: 'POST', headers: { origin: 'null' } })).status,
+        401,
+      );
+      assert.equal((await fetch(`${app.url}/api/agents`)).status, 401);
+      assert.equal(fixture.models.length, 0);
+      assert.deepEqual((await json(await app.request('/schedules'))).schedules, []);
+    } finally {
+      await app?.stop();
+      await fixture.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test('model reservations bound repeated calls tokens output and concurrent work', { timeout: 60000 }, async () => {
+  const { progressFixture } = await import('./progress');
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-model-capacity-'));
+  let native: ReturnType<typeof createAssistant> | undefined;
+  let release: (() => void) | undefined;
+  const selection = { id: 'openai/gpt-6-luna' as const, url: fixture.modelUrl, apiKey: 'example' };
+  try {
+    const config = loadConfig({
+      OPENAI_API_KEY: 'example',
+      ASSISTANT_DATA_DIR: dataDir,
+      ASSISTANT_MAX_MODEL_CALLS_PER_HOUR: '2',
+      ASSISTANT_MAX_OUTPUT_TOKENS: '32',
+      ASSISTANT_MODEL_MAX_RETRIES: '0',
+    });
+    native = createAssistant(config, selection, { ...selection, url: `${fixture.modelUrl}/judge` });
+    const assistant = native.getAgent(agent);
+    await assistant.generate('A short answer.', {
+      modelSettings: { maxOutputTokens: 999 },
+      memory: { thread: 'call-cap', resource: 'local-owner' },
+    });
+    assert.equal(fixture.models.at(-1)!.max_tokens, 32);
+    await assistant.generate('One more.', { memory: { thread: 'call-cap', resource: 'local-owner' } });
+    const boundary = fixture.models.length;
+    await assert.rejects(
+      assistant.generate('Capacity is exhausted.', { memory: { thread: 'call-cap', resource: 'local-owner' } }),
+      /capacity exhausted/,
+    );
+    assert.equal(fixture.models.length, boundary);
+    await native.shutdown();
+    native = createAssistant(
+      loadConfig({
+        OPENAI_API_KEY: 'example',
+        ASSISTANT_DATA_DIR: dataDir,
+        ASSISTANT_MAX_MODEL_TOKENS_PER_HOUR: '1',
+        ASSISTANT_MODEL_MAX_RETRIES: '0',
+      }),
+      selection,
+    );
+    await assert.rejects(
+      native
+        .getAgent(agent)
+        .generate('Do not dispatch over budget.', { memory: { thread: 'tokens-cap', resource: 'local-owner' } }),
+      /capacity exhausted/,
+    );
+    assert.equal(fixture.models.length, boundary);
+    await native.shutdown();
+    native = createAssistant(
+      loadConfig({
+        OPENAI_API_KEY: 'example',
+        ASSISTANT_DATA_DIR: dataDir,
+        ASSISTANT_MAX_CONCURRENT_MODELS: '1',
+        ASSISTANT_MODEL_MAX_RETRIES: '0',
+      }),
+      selection,
+    );
+    fixture.state.responseGate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const first = native
+      .getAgent(agent)
+      .generate('Hold this answer.', { memory: { thread: 'concurrent-first', resource: 'local-owner' } });
+    for (let attempt = 0; attempt < 200 && fixture.models.length === boundary; attempt++) await delay(10);
+    assert.equal(fixture.models.length, boundary + 1);
+    await assert.rejects(
+      native
+        .getAgent(agent)
+        .generate('Reject concurrent work.', { memory: { thread: 'concurrent-second', resource: 'local-owner' } }),
+      /capacity exhausted/,
+    );
+    assert.equal(fixture.models.length, boundary + 1);
+    release!();
+    await first;
+    fixture.state.responseGate = undefined;
+    await native
+      .getAgent(agent)
+      .generate('Capacity was released.', { memory: { thread: 'concurrent-second', resource: 'local-owner' } });
+    assert.equal(fixture.models.length, boundary + 2);
+  } finally {
+    release?.();
+    await native?.shutdown();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('HTTP request limits reject repeated requests before model dispatch', { timeout: 30000 }, async () => {
+  const fixture = await modelFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-request-capacity-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.url, { ASSISTANT_MAX_REQUESTS_PER_MINUTE: '2' });
+    await json(await app.request('/agents'));
+    await json(await app.request('/agents'));
+    const denied = await app.request(`/agents/${agent}/generate`, 'POST', { messages: 'Do not start.' });
+    assert.equal(denied.status, 429);
+    assert.equal(denied.headers.get('retry-after'), '60');
+    assert.equal(fixture.requests.length, 0);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('HTTP model overrides cannot bypass shared execution limits', { timeout: 30000 }, async () => {
+  const fixture = await modelFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-model-overrides-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.url);
+    const model = 'invalid-review-model';
+    for (const mode of ['generate', 'stream', 'send-message', 'send-tool-approval', 'approve-tool-call-generate']) {
+      for (const options of [
+        { model },
+        { streamOptions: { model } },
+        { ifIdle: { behavior: 'wake', streamOptions: { model } } },
+        { structuredOutput: { schema: {}, model } },
+        { memory: { thread: 'alternate-title', options: { generateTitle: { model } } } },
+        { memoryConfig: { generateTitle: { model } } },
+      ]) {
+        const denied = await app.request(`/agents/${agent}/${mode}`, 'POST', { messages: 'No dispatch.', ...options });
+        assert.equal(denied.status, 400);
+        assert.match(await denied.text(), /overrides/);
+      }
+      assert.equal(
+        (await app.request(`/agents/${agent}/${mode}?model=${model}`, 'POST', { messages: 'No dispatch.' })).status,
+        400,
+      );
+      const form = new FormData();
+      form.set('messages', '"No dispatch."');
+      form.set('model', JSON.stringify(model));
+      assert.equal(
+        (await fetch(`${app.url}/api/agents/${agent}/${mode}`, { method: 'POST', headers: app.headers, body: form }))
+          .status,
+        400,
+      );
+    }
+    for (const route of ['model', 'model/reset', 'models/reorder', 'models/default'])
+      assert.equal((await app.request(`/agents/${agent}/${route}`, 'POST', { model })).status, 403);
+    assert.equal(fixture.requests.length, 0);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
   }
 });

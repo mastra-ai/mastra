@@ -1,19 +1,19 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AgentConfig } from '@mastra/core/agent';
+import type { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { AssistantLogger, createObservability } from './observability';
 import type { AssistantConfig } from './config';
-import type { JudgeModel } from './tools/objectives';
+import { createExecutionBudget } from './execution';
 import { createPersonalAssistant } from './agents/personal-assistant';
 import { createAssistantServer } from './server';
 
 export function createAssistant(
   config: AssistantConfig,
-  model: AgentConfig['model'] = { id: config.model },
-  judge: JudgeModel = { id: config.judgeModel },
+  model: ConstructorParameters<typeof ModelRouterLanguageModel>[0] = { id: config.model },
+  judge: ConstructorParameters<typeof ModelRouterLanguageModel>[0] = { id: config.judgeModel },
 ) {
   let storage: LibSQLStore;
   try {
@@ -45,7 +45,13 @@ export function createAssistant(
       },
     },
   });
-  const { personalAssistant, schedules } = createPersonalAssistant(config, memory, model, judge);
+  const budget = createExecutionBudget(config);
+  const { personalAssistant, schedules } = createPersonalAssistant(
+    config,
+    memory,
+    budget.model(model),
+    budget.model(judge),
+  );
   return new Mastra({
     logger: new AssistantLogger(),
     agents: { personalAssistant },

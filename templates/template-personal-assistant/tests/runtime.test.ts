@@ -58,11 +58,13 @@ async function run(directory: string, command: string, env: NodeJS.ProcessEnv) {
   };
 }
 
-async function waitForServer(url: string, process: Awaited<ReturnType<typeof run>>) {
+async function waitForServer(url: string, process: Awaited<ReturnType<typeof run>>, directory: string) {
   for (let attempt = 0; attempt < 240; attempt++) {
     if (process.child.exitCode !== null) throw new Error(`Runtime exited before startup: ${process.output()}`);
     try {
-      const response = await fetch(`${url}/api/agents`);
+      const response = await fetch(`${url}/api/agents`, {
+        headers: { authorization: `Bearer ${await readFile(join(directory, 'state/owner-token'), 'utf8')}` },
+      });
       if (response.ok) return await response.json();
     } catch {}
     await delay(250);
@@ -109,7 +111,11 @@ test(
 
       let url = `http://127.0.0.1:${await availablePort()}`;
       runtime = await run(directory, 'dev', { ...env, PORT: new URL(url).port });
-      const agents = await waitForServer(url, runtime);
+      const agents = await waitForServer(url, runtime, directory);
+      const token = await readFile(join(directory, 'state/owner-token'), 'utf8');
+      const headers = { authorization: `Bearer ${token}` };
+      assert.equal((await stat(join(directory, 'state/owner-token'))).mode & 0o777, 0o600);
+      assert.equal((await fetch(`${url}/api/agents`)).status, 401);
       assert.equal(agents['personal-assistant'].id, 'personal-assistant');
       assert.equal(agents['personal-assistant'].supportsMemory, true);
       assert.equal(agents['personal-assistant'].modelId, 'gpt-6-luna');
@@ -125,7 +131,7 @@ test(
       const status = await json(
         await fetch(`${url}/api/agents/personal-assistant/tools/connection-status/execute`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { ...headers, 'content-type': 'application/json' },
           body: JSON.stringify({ data: {} }),
         }),
       );
@@ -137,7 +143,7 @@ test(
       const created = await json(
         await fetch(`${url}/api/memory/threads${query}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { ...headers, 'content-type': 'application/json' },
           body: JSON.stringify({
             threadId: 'runtime-thread',
             resourceId: 'ignored-client-owner',
@@ -149,7 +155,7 @@ test(
       await json(
         await fetch(`${url}/api/memory/threads/runtime-thread/working-memory${query}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { ...headers, 'content-type': 'application/json' },
           body: JSON.stringify({ workingMemory: 'Prefer short morning plans.' }),
         }),
       );
@@ -168,11 +174,14 @@ test(
       }
       url = `http://127.0.0.1:${await availablePort()}`;
       runtime = await run(directory, 'start', { ...env, PORT: new URL(url).port });
-      await waitForServer(url, runtime);
-      const restored = await json(await fetch(`${url}/api/memory/threads/runtime-thread${query}`));
+      await waitForServer(url, runtime, directory);
+      assert.equal(await readFile(join(directory, 'state/owner-token'), 'utf8'), token);
+      const restored = await json(await fetch(`${url}/api/memory/threads/runtime-thread${query}`, { headers }));
       assert.equal(restored.title, 'Runtime persistence');
       assert.equal(restored.resourceId, 'smoke-owner');
-      const working = await json(await fetch(`${url}/api/memory/threads/runtime-thread/working-memory${query}`));
+      const working = await json(
+        await fetch(`${url}/api/memory/threads/runtime-thread/working-memory${query}`, { headers }),
+      );
       assert.match(working.workingMemory, /Prefer short morning plans/);
       assert.equal((await stat(join(directory, 'state/assistant.db'))).ino, database.ino);
       await assert.rejects(stat(join(directory, '.mastra/output/.data/assistant.db')), {

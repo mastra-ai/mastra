@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
@@ -29,6 +30,11 @@ const configuration = z.object({
   ASSISTANT_MODEL: modelId.default('openai/gpt-6-luna'),
   ASSISTANT_JUDGE_MODEL: modelId.optional(),
   ASSISTANT_MAX_GOAL_EVALUATIONS: z.coerce.number().int().min(1).max(20).default(5),
+  ASSISTANT_MAX_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(10000).default(240),
+  ASSISTANT_MAX_CONCURRENT_MODELS: z.coerce.number().int().min(1).max(16).default(2),
+  ASSISTANT_MAX_MODEL_CALLS_PER_HOUR: z.coerce.number().int().min(1).max(10000).default(120),
+  ASSISTANT_MAX_MODEL_TOKENS_PER_HOUR: z.coerce.number().int().min(1).max(100000000).default(10000000),
+  ASSISTANT_MAX_SCHEDULES: z.coerce.number().int().min(1).max(100).default(10),
   ASSISTANT_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(20),
   ASSISTANT_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).max(32768).optional(),
   ASSISTANT_MODEL_MAX_RETRIES: z.coerce.number().int().min(0).max(5).optional(),
@@ -108,7 +114,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
         ASSISTANT_RUNTIME: z.literal('local'),
         TURSO_DATABASE_URL: z.never().optional(),
         TURSO_AUTH_TOKEN: z.never().optional(),
-        ASSISTANT_API_TOKEN: z.never().optional(),
+        ASSISTANT_API_TOKEN: z.string().trim().min(32).optional(),
         ASSISTANT_PLATFORM_TRACING: z.literal('false'),
       }),
       z.object({
@@ -148,7 +154,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const runtimeValue = runtimeSettings.data;
   const runtime =
     runtimeValue.ASSISTANT_RUNTIME === 'local'
-      ? { mode: 'local' as const, databasePath: resolve(value.ASSISTANT_DATA_DIR || '.data', 'assistant.db') }
+      ? {
+          mode: 'local' as const,
+          databasePath: resolve(value.ASSISTANT_DATA_DIR || '.data', 'assistant.db'),
+          ownerToken: value.ASSISTANT_API_TOKEN ?? randomBytes(32).toString('hex'),
+        }
       : {
           mode: 'hosted' as const,
           databaseUrl: runtimeValue.TURSO_DATABASE_URL,
@@ -176,6 +186,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       : undefined,
     model: model as `openai/${string}` | `mastra/${string}/${string}`,
     maxSteps: value.ASSISTANT_MAX_STEPS,
+    limits: {
+      requestsPerMinute: value.ASSISTANT_MAX_REQUESTS_PER_MINUTE,
+      concurrentModels: value.ASSISTANT_MAX_CONCURRENT_MODELS,
+      modelCallsPerHour: value.ASSISTANT_MAX_MODEL_CALLS_PER_HOUR,
+      modelTokensPerHour: value.ASSISTANT_MAX_MODEL_TOKENS_PER_HOUR,
+      schedules: value.ASSISTANT_MAX_SCHEDULES,
+    },
     modelSettings:
       value.ASSISTANT_MAX_OUTPUT_TOKENS === undefined
         ? undefined

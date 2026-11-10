@@ -444,7 +444,6 @@ test('hosted configuration refuses local fallback insecure storage and ambiguous
   for (const override of [
     { TURSO_DATABASE_URL: hosted.TURSO_DATABASE_URL },
     { TURSO_AUTH_TOKEN: hosted.TURSO_AUTH_TOKEN },
-    { ASSISTANT_API_TOKEN: hosted.ASSISTANT_API_TOKEN },
     { ASSISTANT_PLATFORM_TRACING: 'true' },
   ])
     assert.throws(() => loadConfig({ OPENAI_API_KEY: 'example-key', ...override }), /ASSISTANT_RUNTIME/);
