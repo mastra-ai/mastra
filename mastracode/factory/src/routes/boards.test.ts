@@ -1012,6 +1012,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     it('stays hidden, with no problem reported, where an earlier release left its seeded row untouched', async () => {
       const { a, scope, base, replicaA } = await setup();
+      // The earlier release stored Work beside it, and Factory adds Work only to a project with no boards.
+      await replicaA.send('GET', base);
       await a.boards.insertIfMissing(scope, boardDefinitionOf(reviewBoard), 'factory');
       const { item } = await a.workItems.upsert({ ...scope, userId: ADMIN, input: pullRequestCard('done') });
 
