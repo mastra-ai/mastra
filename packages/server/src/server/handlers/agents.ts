@@ -1195,10 +1195,12 @@ export async function getAgentFromSystem({
   }
 
   // If still not found, try to get stored agent
+  let fromStore = false;
   if (!agent) {
     logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
       agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
+      fromStore = !!agent;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -1208,7 +1210,7 @@ export async function getAgentFromSystem({
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
 
-  assertStoredAgentAccess({ agent, agentId, requestContext, access });
+  assertStoredAgentAccess({ agent, agentId, requestContext, access, fromStore });
 
   return agent;
 }

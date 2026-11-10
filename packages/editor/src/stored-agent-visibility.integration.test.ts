@@ -442,6 +442,43 @@ describe('stored agent visibility on /api/agents', () => {
     }
   });
 
+  it('bob racing alice on the first load of her private agent still gets 404 on every request', async () => {
+    // A fresh server has nothing hydrated yet, so every request below takes the cold stored-agent path at once.
+    const cold = await startServer(
+      new Mastra({
+        logger: false,
+        storage,
+        editor: new MastraEditor(),
+        server: {
+          auth: new SimpleAuth<User>({ tokens: USERS, mapUserToResourceId: user => user.id }),
+          rbac: new StaticRBACProvider<User>({ roles: ROLES, getUserRoles: user => [user.role] }),
+        },
+      }),
+    );
+    // Model a networked store (e.g. Postgres) so the concurrent hydrations overlap; local-file LibSQL is too fast.
+    const agentsStore = (await storage.getStore('agents'))!;
+    const getByIdResolved = agentsStore.getByIdResolved.bind(agentsStore);
+    agentsStore.getByIdResolved = async (...args) => {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      return getByIdResolved(...args);
+    };
+    try {
+      reply();
+      const [aliceRead, ...bobCalls] = await Promise.all([
+        http('alice', 'GET', `/agents/${PRIVATE}`, undefined, cold.url),
+        ...Array.from({ length: 10 }, () => http('bob', 'GET', `/agents/${PRIVATE}`, undefined, cold.url)),
+        ...Array.from({ length: 5 }, () => generate('bob', PRIVATE, cold.url)),
+      ]);
+      expect(aliceRead!.status).toBe(200);
+      expect(bobCalls.map(call => call.status)).toEqual(bobCalls.map(() => 404));
+      expect(bobCalls.map(call => call.text).join()).not.toContain('Be brief.');
+      expect(llm.getRequests()).toHaveLength(0);
+    } finally {
+      agentsStore.getByIdResolved = getByIdResolved;
+      await cold.close();
+    }
+  });
+
   it('without auth configured, every stored agent stays listable and callable', async () => {
     const open = await startServer(new Mastra({ logger: false, storage, editor: new MastraEditor() }));
     try {

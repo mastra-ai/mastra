@@ -15,13 +15,16 @@ export function assertStoredAgentAccess({
   agentId,
   requestContext,
   access,
+  fromStore = false,
 }: {
   agent: Pick<Agent, 'source' | 'toRawConfig'>;
   agentId: string;
   requestContext: RequestContext | undefined;
   access: 'read' | 'execute';
+  /** The agent was just hydrated from storage, so it is a stored agent whatever its `source` says. */
+  fromStore?: boolean;
 }): void {
-  if (!requestContext || agent.source !== 'stored') return;
+  if (!requestContext || (!fromStore && agent.source !== 'stored')) return;
   const record = (agent.toRawConfig() ?? {}) as OwnedRecord;
   const assertAccess = access === 'read' ? assertReadAccess : assertExecuteAccess;
   assertAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
