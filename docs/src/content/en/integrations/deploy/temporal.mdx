@@ -243,15 +243,15 @@ Run state, step results, and events stay in Temporal and aren't written to Mastr
 
 ### Workflow methods
 
-The worker build reads each workflow chain statically, so step and condition arguments must be identifiers that resolve to top-level declarations.
+The worker build reads each workflow chain statically, so arguments must be resolvable at build time. A step can be an identifier or an inline `createStep()` call whose `id` is a string literal. Conditions for `.branch()`, `.dowhile()`, and `.dountil()` must be identifiers.
 
 | Method | Supported arguments |
 | - | - |
-| `.then()` | A step or workflow identifier. Inline `createStep()` calls aren't supported |
-| `.parallel()` | An array literal of step or workflow identifiers |
-| `.branch()` | An array literal of `[condition, step]` pairs, both identifiers |
-| `.dowhile()`, `.dountil()` | A step identifier and a condition identifier |
-| `.foreach()` | A step identifier and an optional options object |
+| `.then()` | A step or workflow |
+| `.parallel()` | An array literal of steps or workflows |
+| `.branch()` | An array literal of `[condition, step]` pairs |
+| `.dowhile()`, `.dountil()` | A step and a condition |
+| `.foreach()` | A step and an optional options object |
 | `.sleep()` | A numeric literal or a function identifier |
 | `.sleepUntil()` | A `new Date(...)` expression, a string or number literal, or a function identifier |
 | `.map()` | An inline function or a top-level function identifier. Declarative object mappings aren't supported |
@@ -262,8 +262,8 @@ Nested workflows passed to `.then()` or `.parallel()` run as Temporal child work
 An unsupported construct stops the worker build with an error that names the workflow and file:
 
 ```ts
-// Build error: .then() must take a step or workflow identifier (inline createStep calls are not supported)
-workflow.then(createStep({ id: 'inline', inputSchema, outputSchema, execute }))
+// Build error: .map() does not yet support declarative object mappings; use a callback mapping
+workflow.map({ city: { step: fetchWeather, path: 'city' } })
 ```
 
 ### Step execution context
@@ -277,7 +277,7 @@ Each step runs as a Temporal activity. Its `execute` function receives:
 - `suspend()`
 - `mastra`, when the step's module can import the Mastra instance
 
-Other `execute` parameters, such as `state`, `setState()`, `getStepResult()`, `bail()`, `abort()`, `writer`, and `tracingContext`, aren't available. Steps in a nested workflow receive the parent's `runId`.
+Other `execute` parameters, such as `state`, `setState()`, `getStepResult()`, `bail()`, `abort()`, `writer`, and `tracingContext`, aren't available. Steps in a nested workflow receive the parent's `runId`, `workflowId`, `resourceId`, and request context.
 
 ### Bundling and worker operation
 
