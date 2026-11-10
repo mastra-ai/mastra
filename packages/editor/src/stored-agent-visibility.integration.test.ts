@@ -14,6 +14,7 @@ import { Hono } from 'hono';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { MastraEditor } from './index';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 
 type User = { id: string; role: string };
 
@@ -631,6 +632,63 @@ describe('stored agent visibility on /api/agents', () => {
       expect((await http('admin', 'GET', '/stored/agents/nameless-copy')).status).toBe(404);
     } finally {
       await nameless.close();
+    }
+  });
+
+  it("deleting a code agent's stored override keeps the code agent's own workspace", async () => {
+    const overrideStorage = new LibSQLStore({
+      id: 'code-agent-override',
+      url: `file:${join(dir, 'code-agent-override.db')}`,
+    });
+    const workspace = new Workspace({
+      id: 'code-ws',
+      name: 'code-ws',
+      filesystem: new LocalFilesystem({ basePath: join(dir, 'code-ws') }),
+    });
+    const open = await startServer(
+      new Mastra({
+        logger: false,
+        storage: overrideStorage,
+        editor: new MastraEditor(),
+        agents: {
+          support: new Agent({
+            id: 'support',
+            name: 'support',
+            instructions: 'test',
+            model: 'openai/gpt-4o-mini',
+            workspace,
+          }),
+        },
+      }),
+    );
+    try {
+      const listed = async () =>
+        ((await http(null, 'GET', '/workspaces', undefined, open.url)).json.workspaces as { id: string }[]).map(
+          w => w.id,
+        );
+      expect(await listed()).toContain('code-ws');
+
+      const override = await http(
+        null,
+        'POST',
+        '/stored/agents',
+        {
+          id: 'support',
+          name: 'support',
+          instructions: 'Overridden.',
+          model: { provider: 'openai', name: 'gpt-4o-mini' },
+        },
+        open.url,
+      );
+      expect(override.status, override.text).toBe(200);
+      const deleted = await http(null, 'DELETE', '/stored/agents/support', undefined, open.url);
+      expect(deleted.status, deleted.text).toBe(200);
+
+      expect(await listed()).toContain('code-ws');
+      const byId = await http(null, 'GET', '/workspaces/code-ws', undefined, open.url);
+      expect(byId.status, byId.text).toBe(200);
+    } finally {
+      await open.close();
     }
   });
 

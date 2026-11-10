@@ -53,6 +53,11 @@ describe('getAgentFromSystem callers', () => {
           "assertStoredAgentAccess before scheduling, and in canAccessScheduleAgent for existing schedules' agents",
       },
       'scores.ts': { count: 1, reason: 'scorer listing is author-filtered before hydration' },
+      'stored-agents.ts': {
+        count: 1,
+        reason:
+          'DELETE only reads the registered agent to tell a code agent override apart; nothing is returned or run',
+      },
       'workspace.ts': {
         count: 1,
         reason: "isAgentWorkspaceVisible applies assertStoredAgentAccess to the workspace's agent",
