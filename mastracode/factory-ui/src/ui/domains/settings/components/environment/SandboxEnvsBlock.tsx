@@ -7,7 +7,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -20,7 +20,7 @@ const APPLIES_TO: { value: SandboxEnvAppliesTo; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-const MASK = '••••••';
+const MASK = '••••••••••••';
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -28,7 +28,7 @@ function errorMessage(error: unknown, fallback: string): string {
 
 /**
  * The Factory's sandbox environment variables. Values are write-only: the list
- * holds names and where each applies, and a value can only be replaced.
+ * holds names and where each applies; editing sets a new value without showing the old one.
  */
 export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
   const envsQuery = useSandboxEnvsQuery(factoryId);
@@ -98,17 +98,23 @@ function AppliesToSelect({
 }
 
 function SandboxEnvRow({ env, disabled, mutations }: { env: SandboxEnv; disabled: boolean; mutations: Mutations }) {
-  const [replacement, setReplacement] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
 
-  const replace = (event: FormEvent) => {
+  const close = () => {
+    setEditing(false);
+    setValue('');
+  };
+
+  const save = (event: FormEvent) => {
     event.preventDefault();
-    if (!replacement) return;
+    if (!value) return;
     mutations.set.mutate(
-      { name: env.name, value: replacement, appliesTo: env.appliesTo },
+      { name: env.name, value, appliesTo: env.appliesTo },
       {
         onSuccess: () => {
-          setReplacement('');
-          toast.success(`Replaced ${env.name}`);
+          close();
+          toast.success(`Saved ${env.name}`);
         },
         onError: error => toast.error(errorMessage(error, 'Failed to save the variable')),
       },
@@ -116,72 +122,90 @@ function SandboxEnvRow({ env, disabled, mutations }: { env: SandboxEnv; disabled
   };
 
   return (
-    <SettingsRow
-      label={<span className="font-mono">{env.name}</span>}
-      description={
-        <Txt as="span" variant="caption" tone="muted" aria-label={`${env.name} value hidden`}>
-          {MASK}
-        </Txt>
-      }
-    >
-      <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
-        <AppliesToSelect
-          label={`Where ${env.name} applies`}
-          value={env.appliesTo}
-          disabled={disabled}
-          onChange={appliesTo =>
-            mutations.updateAppliesTo.mutate(
-              { name: env.name, appliesTo },
-              { onError: error => toast.error(errorMessage(error, 'Failed to update the variable')) },
-            )
-          }
-        />
-        <form className="flex items-center gap-2" onSubmit={replace}>
+    <SettingsRow label={<span className="font-mono">{env.name}</span>}>
+      {editing ? (
+        <form className="flex w-full flex-wrap items-center gap-2 lg:justify-end" onSubmit={save}>
           <Input
-            type="password"
             size="sm"
             autoComplete="off"
-            className="w-40 font-mono"
-            aria-label={`Replace value of ${env.name}`}
-            placeholder="Replace value"
-            value={replacement}
-            disabled={disabled}
-            onChange={event => setReplacement(event.target.value)}
+            spellCheck={false}
+            autoFocus
+            className="w-64 font-mono"
+            aria-label={`New value for ${env.name}`}
+            placeholder="New value"
+            value={value}
+            onChange={event => setValue(event.target.value)}
           />
-          <Button type="submit" variant="ghost" size="sm" disabled={disabled || !replacement}>
-            Replace
+          <Button type="submit" size="sm" disabled={!value || mutations.set.isPending}>
+            Save
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={close}>
+            Cancel
           </Button>
         </form>
-        <AlertDialog>
-          <AlertDialog.Trigger
-            render={
-              <Button variant="ghost" size="sm" icon={<Trash2 />} aria-label={`Delete ${env.name}`}>
-                Delete
-              </Button>
+      ) : (
+        <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
+          <Txt
+            as="span"
+            variant="ui-sm"
+            tone="muted"
+            className="w-40 font-mono"
+            aria-label={`${env.name} value hidden`}
+          >
+            {MASK}
+          </Txt>
+          <AppliesToSelect
+            label={`Where ${env.name} applies`}
+            value={env.appliesTo}
+            disabled={disabled}
+            onChange={appliesTo =>
+              mutations.updateAppliesTo.mutate(
+                { name: env.name, appliesTo },
+                { onError: error => toast.error(errorMessage(error, 'Failed to update the variable')) },
+              )
             }
           />
-          <AlertDialog.Content>
-            <AlertDialog.Header>
-              <AlertDialog.Title>Delete {env.name}?</AlertDialog.Title>
-              <AlertDialog.Description>
-                New commands and builds stop seeing it. Its value can't be recovered.
-              </AlertDialog.Description>
-            </AlertDialog.Header>
-            <AlertDialog.Footer>
-              <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-              <AlertDialog.Action
-                onClick={() =>
-                  mutations.remove.mutate(env.name, {
-                    onError: error => toast.error(errorMessage(error, 'Failed to delete the variable')),
-                  })
-                }
-              >
-                Delete
-              </AlertDialog.Action>
-            </AlertDialog.Footer>
-          </AlertDialog.Content>
-        </AlertDialog>
-      </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Pencil />}
+            aria-label={`Edit ${env.name}`}
+            disabled={disabled}
+            onClick={() => setEditing(true)}
+          >
+            Edit
+          </Button>
+          <AlertDialog>
+            <AlertDialog.Trigger
+              render={
+                <Button variant="ghost" size="sm" icon={<Trash2 />} aria-label={`Delete ${env.name}`}>
+                  Delete
+                </Button>
+              }
+            />
+            <AlertDialog.Content>
+              <AlertDialog.Header>
+                <AlertDialog.Title>Delete {env.name}?</AlertDialog.Title>
+                <AlertDialog.Description>
+                  New commands and builds stop seeing it. Its value can't be recovered.
+                </AlertDialog.Description>
+              </AlertDialog.Header>
+              <AlertDialog.Footer>
+                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+                <AlertDialog.Action
+                  onClick={() =>
+                    mutations.remove.mutate(env.name, {
+                      onError: error => toast.error(errorMessage(error, 'Failed to delete the variable')),
+                    })
+                  }
+                >
+                  Delete
+                </AlertDialog.Action>
+              </AlertDialog.Footer>
+            </AlertDialog.Content>
+          </AlertDialog>
+        </div>
+      )}
     </SettingsRow>
   );
 }
@@ -228,10 +252,10 @@ function AddSandboxEnv({ envs, disabled, mutations }: { envs: SandboxEnv[]; disa
           onChange={event => setName(event.target.value)}
         />
         <Input
-          type="password"
           size="sm"
           autoComplete="off"
-          className="w-40 font-mono"
+          spellCheck={false}
+          className="w-64 font-mono"
           aria-label="Variable value"
           placeholder="Value"
           value={value}

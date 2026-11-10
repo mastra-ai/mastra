@@ -95,7 +95,8 @@ describe('Environment variables settings', () => {
     const vars = await section();
     expect(await vars.findByText('DATABASE_URL')).toBeInTheDocument();
     expect(vars.getByText('NPM_TOKEN')).toBeInTheDocument();
-    expect(vars.getByLabelText('DATABASE_URL value hidden')).toHaveTextContent('••••••');
+    expect(vars.getByLabelText('DATABASE_URL value hidden')).toHaveTextContent('••••••••••••');
+    expect(vars.queryByRole('button', { name: /reveal|show/i })).not.toBeInTheDocument();
     expect(vars.getByRole('combobox', { name: 'Where NPM_TOKEN applies' })).toHaveTextContent('Build');
     expect(vars.getByRole('textbox', { name: 'Variable name' })).toBeInTheDocument();
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
@@ -110,7 +111,10 @@ describe('Environment variables settings', () => {
 
     const vars = await section();
     await user.type(await vars.findByRole('textbox', { name: 'Variable name' }), 'API_KEY');
-    await user.type(vars.getByLabelText('Variable value'), 'sk-123');
+    const valueInput = vars.getByRole('textbox', { name: 'Variable value' });
+    await user.type(valueInput, 'sk-123');
+    // A textbox, not a password field: what you type is visible until it's saved.
+    expect(valueInput).toHaveValue('sk-123');
     await pickAppliesTo(user, vars.getByRole('combobox', { name: 'Where the new variable applies' }), 'Both');
     await user.click(vars.getByRole('button', { name: 'Add' }));
 
@@ -118,6 +122,8 @@ describe('Environment variables settings', () => {
       expect(requests).toEqual([{ method: 'PUT', name: 'API_KEY', body: { value: 'sk-123', appliesTo: 'both' } }]),
     );
     expect(await vars.findByText('API_KEY')).toBeInTheDocument();
+    expect(vars.getByLabelText('API_KEY value hidden')).toHaveTextContent('••••••••••••');
+    expect(vars.queryByText('sk-123')).not.toBeInTheDocument();
     expect(vars.getByRole('textbox', { name: 'Variable name' })).toHaveValue('');
     expect(vars.getByLabelText('Variable value')).toHaveValue('');
   });
@@ -160,22 +166,41 @@ describe('Environment variables settings', () => {
     );
   });
 
-  it('replaces a value with PUT, never showing the old one', async () => {
+  it('edits a value with PUT from an empty field, then masks it again', async () => {
     const requests = useSandboxEnvsServer([env('API_KEY', 'both')]);
     const user = userEvent.setup();
 
     renderSettings();
 
     const vars = await section();
-    const replace = await vars.findByLabelText('Replace value of API_KEY');
-    expect(replace).toHaveValue('');
-    await user.type(replace, 'rotated');
-    await user.click(vars.getByRole('button', { name: 'Replace' }));
+    await user.click(await vars.findByRole('button', { name: 'Edit API_KEY' }));
+    const input = vars.getByRole('textbox', { name: 'New value for API_KEY' });
+    expect(input).toHaveValue('');
+    await user.type(input, 'rotated');
+    await user.click(vars.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(requests).toEqual([{ method: 'PUT', name: 'API_KEY', body: { value: 'rotated', appliesTo: 'both' } }]),
     );
-    await waitFor(() => expect(replace).toHaveValue(''));
+    await waitFor(() => expect(vars.queryByRole('textbox', { name: 'New value for API_KEY' })).not.toBeInTheDocument());
+    expect(vars.getByLabelText('API_KEY value hidden')).toHaveTextContent('••••••••••••');
+    expect(vars.queryByText('rotated')).not.toBeInTheDocument();
+  });
+
+  it('cancels an edit without sending anything', async () => {
+    const requests = useSandboxEnvsServer([env('API_KEY', 'runtime')]);
+    const user = userEvent.setup();
+
+    renderSettings();
+
+    const vars = await section();
+    await user.click(await vars.findByRole('button', { name: 'Edit API_KEY' }));
+    await user.type(vars.getByRole('textbox', { name: 'New value for API_KEY' }), 'draft');
+    await user.click(vars.getByRole('button', { name: 'Cancel' }));
+
+    expect(vars.queryByRole('textbox', { name: 'New value for API_KEY' })).not.toBeInTheDocument();
+    expect(vars.getByLabelText('API_KEY value hidden')).toBeInTheDocument();
+    expect(requests).toEqual([]);
   });
 
   it('deletes after confirmation', async () => {
@@ -203,7 +228,7 @@ describe('Environment variables settings', () => {
     expect(await vars.findByText(/can't be saved until a credential encryption key is configured/)).toBeInTheDocument();
     expect(vars.getByRole('textbox', { name: 'Variable name' })).toBeDisabled();
     expect(vars.getByLabelText('Variable value')).toBeDisabled();
-    expect(vars.getByLabelText('Replace value of API_KEY')).toBeDisabled();
+    expect(vars.getByRole('button', { name: 'Edit API_KEY' })).toBeDisabled();
     expect(vars.getByRole('combobox', { name: 'Where API_KEY applies' })).toBeDisabled();
     expect(vars.getByRole('button', { name: 'Add' })).toBeDisabled();
   });
