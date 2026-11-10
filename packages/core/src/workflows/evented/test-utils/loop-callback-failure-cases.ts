@@ -10,7 +10,7 @@ import { Mastra } from '../../../mastra';
 import type { MastraStorage } from '../../../storage';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import { createStep, createWorkflow } from '..';
-import { markFrameworkCondition } from '../../utils';
+import { markFrameworkCondition } from '../../framework-condition';
 import { RedeliveryDriver } from './redelivery-driver';
 
 const schema = z.object({ n: z.number() });
@@ -136,11 +136,9 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
 
         expect(result.status).toBe('failed');
         expect((result as any).state).toEqual({ n: 42 });
-        // With the failure publish rejected, only a guarded store has written the step record.
-        if (!rejectStepEnd || store.supportsWorkflowStepGuards()) {
-          const snapshot = await store.loadWorkflowSnapshot({ workflowName: 'throwing-condition-state', runId });
-          expect(snapshot?.context.__state).toEqual({ n: 42 });
-        }
+        const snapshot = await store.loadWorkflowSnapshot({ workflowName: 'throwing-condition-state', runId });
+        expect(snapshot?.context.__state).toEqual({ n: 42 });
+        expect(snapshot?.context.charge).toMatchObject({ status: 'failed' });
       },
     );
 
@@ -175,36 +173,43 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
       expect(await runStatuses(store, childId)).toEqual(['success']);
     });
 
-    it('fails the run once when a foreach concurrency resolver throws', async () => {
-      const body = { calls: 0 };
-      let resolverCalls = 0;
-      const { result, failEvents } = await runToEnd({
-        storage: getStorage(),
-        build: () =>
-          createWorkflow({ id: 'throwing-foreach', inputSchema: schema, outputSchema: z.any() })
-            .then(
-              createStep({
-                id: 'list',
-                inputSchema: schema,
-                outputSchema: z.array(schema),
-                execute: async () => [{ n: 1 }, { n: 2 }],
-              }),
-            )
-            .foreach(countingStep(body), {
-              concurrency: () => {
-                resolverCalls++;
-                throw new Error('concurrency boom');
-              },
-            })
-            .commit(),
-      });
+    // With the first workflow.fail rejected, the failure is reported on a redelivery
+    // that must not call the concurrency function again.
+    it.each([false, true])(
+      'fails the run once when a foreach concurrency resolver throws (failure publish rejected: %s)',
+      async rejectFail => {
+        const body = { calls: 0 };
+        let resolverCalls = 0;
+        const { result, failEvents, rejected } = await runToEnd({
+          storage: getStorage(),
+          rejectPublish: (event, rejectedSoFar) => rejectFail && rejectedSoFar === 0 && event.type === 'workflow.fail',
+          build: () =>
+            createWorkflow({ id: 'throwing-foreach', inputSchema: schema, outputSchema: z.any() })
+              .then(
+                createStep({
+                  id: 'list',
+                  inputSchema: schema,
+                  outputSchema: z.array(schema),
+                  execute: async () => [{ n: 1 }, { n: 2 }],
+                }),
+              )
+              .foreach(countingStep(body), {
+                concurrency: () => {
+                  resolverCalls++;
+                  throw new Error('concurrency boom');
+                },
+              })
+              .commit(),
+        });
 
-      expect(result.status).toBe('failed');
-      expect((result as any).error?.message).toBe('concurrency boom');
-      expect(resolverCalls).toBe(1);
-      expect(body.calls).toBe(0);
-      expect(failEvents).toHaveLength(1);
-    });
+        expect(rejected).toBe(rejectFail ? 1 : 0);
+        expect(result.status).toBe('failed');
+        expect((result as any).error?.message).toBe('concurrency boom');
+        expect(resolverCalls).toBe(1);
+        expect(body.calls).toBe(0);
+        expect(failEvents).toHaveLength(1);
+      },
+    );
 
     // The loop's failed step.end and the first workflow.fail are both rejected, so the
     // failure reaches the loop's run through a redelivery that must not rerun user code.
@@ -245,12 +250,11 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
         if (bodyKind === 'nested workflow') {
           expect(await runStatuses(store, `${loopId}-child`)).toEqual(['success']);
         }
-        if (store.supportsWorkflowStepGuards()) {
-          // The failed step.end never published, so the step record comes from the guarded commit.
-          const leafId = bodyKind === 'step' ? 'charge' : `${loopId}-child`;
-          const snapshot = await store.loadWorkflowSnapshot({ workflowName: loopId, runId });
-          expect(snapshot?.context[leafId]).toMatchObject({ status: 'failed', error: { message: 'condition boom' } });
-        }
+        // The failed step.end never published, yet the stored step must not stay running.
+        const leafId = bodyKind === 'step' ? 'charge' : `${loopId}-child`;
+        const snapshot = await store.loadWorkflowSnapshot({ workflowName: loopId, runId });
+        expect(snapshot?.status).toBe('failed');
+        expect(snapshot?.context[leafId]).toMatchObject({ status: 'failed', error: { message: 'condition boom' } });
       },
     );
 

@@ -11,6 +11,7 @@ import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
+import { isFrameworkCondition } from '../framework-condition';
 import { buildStepResultAccessors } from '../run-journal';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getEntryId } from '../step-entry';
@@ -35,7 +36,6 @@ import {
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
-  isFrameworkCondition,
   omitPriorCompletionFields,
   resolveForeachConcurrency,
 } from '../utils';

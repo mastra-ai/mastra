@@ -2251,8 +2251,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: args.runId,
           error: publishError,
         });
+        await this.#recordFailedLoopStep(args, getEntryId(step.step), failed, bodyState);
         const { workflow: _workflow, ...run } = args;
-        // handle() then fails the loop's run directly. Only a guarded store keeps the failed step record.
+        // handle() then fails the loop's run directly.
         throw markNonRedeliverable(
           new RunFailure(conditionError, {
             ...run,
@@ -2262,6 +2263,38 @@ export class WorkflowEventProcessor extends EventProcessor {
           }),
         );
       }
+    }
+  }
+
+  /**
+   * Records a loop step that failed while its step end could not be published. Guarded stores
+   * committed it already; on others the step would stay `running` under the failed run.
+   */
+  async #recordFailedLoopStep(
+    args: ProcessorArgs,
+    leafId: string,
+    failed: StepResult<any, any, any, any>,
+    state: Record<string, any>,
+  ) {
+    try {
+      const store = await this.mastra.getStorage()?.getStore('workflows');
+      if (!store || store.supportsWorkflowStepGuards()) return;
+      const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
+      // Only replace this iteration's running record, never a newer result.
+      if (snapshot?.context[leafId]?.status !== 'running') return;
+      await store.updateWorkflowResults({
+        workflowName: args.workflowId,
+        runId: args.runId,
+        stepId: leafId,
+        result: failed,
+        requestContext: withoutAuthToken(args.requestContext),
+        state,
+      });
+    } catch (error) {
+      // Best effort: the run still fails through RunFailure.
+      this.mastra
+        .getLogger()
+        ?.warn('Failed to record the failed loop step', { workflowId: args.workflowId, runId: args.runId, error });
     }
   }
 
