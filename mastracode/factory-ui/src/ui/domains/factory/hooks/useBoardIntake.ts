@@ -11,6 +11,7 @@ import {
   useIntakeConfigQuery,
   useIntakeLabelRoutesQuery,
 } from '../../../../hooks/useIntakeConfig';
+import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { useIncidentioIssuesQuery, useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraIssuesQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
@@ -199,8 +200,6 @@ export function useBoardIntake({
   const routesFailed = !gitlabRepository && labelRoutesQuery.isError;
   const routesSettled = gitlabRepository || labelRoutesQuery.isSuccess;
 
-  // Whether the project has any issue source connected at all. A board's own feed may still be
-  // empty: the project's intake routes file cards onto any board, whatever feeds it browses.
   // Provider sources are shared across factories, so one counts only once it is bound to one
   // of this project's boards; until bindings load (or when they fail) the setup prompt waits.
   const boundToProject = (integrationId: string, sourceIds: readonly string[] | null | undefined) =>
@@ -213,12 +212,18 @@ export function useBoardIntake({
         Boolean(binding.board) &&
         (sourceIds?.includes(binding.sourceId) ?? false),
     );
-  const connected =
+  const sourceConnected =
     (!gitlabRepository && githubEnabled && githubSelected) ||
     (gitlabEligible && boundToProject('gitlab', config?.gitlab.sourceIds)) ||
     (linearEligible && boundToProject('linear', config?.linear.sourceIds)) ||
     (jiraEligible && boundToProject('jira', config?.jira.sourceIds)) ||
     (incidentioEligible && boundToProject('incidentio', config?.incidentio?.sourceIds));
+  // A connected source files onto the default board, and onto another board only through an
+  // intake route that targets it. Until routes load (or when they fail) the setup prompt waits.
+  const intakeRoutesQuery = useIntakeRoutesQuery(defaultBoard || !sourceConnected ? undefined : factoryProjectId);
+  const routeTargetsBoard =
+    !intakeRoutesQuery.isSuccess ||
+    intakeRoutesQuery.data.some(route => route.enabled && route.target.boardKey === kind);
   const githubIntakeActive =
     !gitlabRepository && (defaultBoard || routedHere || routesFailed) && githubEnabled && githubSelected;
   const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
@@ -229,6 +234,8 @@ export function useBoardIntake({
     ...(jiraReady ? (['jira'] as const) : []),
     ...(incidentioReady ? (['incidentio'] as const) : []),
   ];
+  // Whether anything files onto this board: a feed it browses, or a connected source routed here.
+  const fed = available.length > 0 || (sourceConnected && (defaultBoard || routeTargetsBoard));
   // The default board also lists the pull requests of its linked repositories, but they are
   // not an issue source: a default board without one still asks to connect one.
   const feedSources: IntakeSource[] = browsesPullRequests && repository ? [...available, pullRequestSource] : available;
@@ -356,7 +363,7 @@ export function useBoardIntake({
   return {
     active: failedSource ?? browsedSources[0],
     available,
-    connected,
+    fed,
     candidates,
     alreadyMaterialized,
     participantCandidates,
