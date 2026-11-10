@@ -5,7 +5,7 @@
 **Smaller agent run streams**
 
 - Fixed agent run streams growing with every step. A registered Agent publishes each run so it can be observed and resumed, and each step used to repeat the whole prompt and every earlier step. Long runs no longer store either on every event.
-- A delegated agent's streamed steps are reduced the same way.
+- On a plain Agent, a delegated agent's streamed steps are reduced the same way. DurableAgent and EventedAgent still publish them in full ([#29035](https://github.com/mastra-ai/mastra/issues/29035)).
 
 **Observer improvements**
 

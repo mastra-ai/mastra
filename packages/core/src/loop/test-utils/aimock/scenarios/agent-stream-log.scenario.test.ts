@@ -128,6 +128,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
   // step-start / step-finish / finish carried its prompt like the parent's did.
   // Durable engines still publish them as-is: their callers read their own run back from the
   // topic, so slimming there would change what the caller sees. Not yet fixed for them.
+  // Tracked in #29035; this flips to `it` once durable engines slim delegated chunks.
   const itOnPlainAgents = isDurableEngineVariant(engine) ? it.fails : it;
   itOnPlainAgents(
     "keeps a delegated agent's prompt off the log",
@@ -210,7 +211,9 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
         expect(observed.map(stepView)).toEqual(live.map(stepView));
         // Each tool step's content holds its own call and result.
         expect(JSON.stringify(observed[2].content)).toContain('RESULT-2');
-        // The provider request stays with the caller; observers never get it.
+        // The provider request stays with the caller; observers never get it. DurableAgent callers
+        // read their run back from the topic too, so only a plain Agent's caller sees it per step.
+        if (!isDurableEngineVariant(engine)) expect(live.every(step => step.request?.body)).toBe(true);
         expect(observed.every(step => step.request?.body === undefined)).toBe(true);
         expect(observedFinish.text).toBe('All done.');
         expect(observedFinish.steps).toHaveLength(TOOL_STEPS + 1);
