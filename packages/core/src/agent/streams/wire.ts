@@ -1,4 +1,4 @@
-import type { MastraStepResult, StepFinishPayload, StepStartPayload } from '../../stream/types';
+import type { ChunkType, MastraStepResult, StepFinishPayload, StepStartPayload } from '../../stream/types';
 import type { AgentFinishEventData } from '../durable/types';
 
 /**
@@ -91,35 +91,50 @@ export function toStreamStepFinish(
 }
 
 /** The `finish` data to publish: the run's result, with each step stripped of its prompt and messages. */
-export function toStreamFinish(payload: Record<string, any>): AgentFinishEventData {
-  const { output = {}, stepResult, messages, textRewritten } = payload;
+export function toStreamFinish(payload: Extract<ChunkType<any>, { type: 'finish' }>['payload']): AgentFinishEventData {
+  const { output = {} as typeof payload.output, stepResult, messages, textRewritten } = payload ?? {};
+  const { text, object } = output as { text?: string; object?: unknown };
   return {
     output: {
-      text: output.text,
+      text,
       usage: output.usage,
       steps: (output.steps ?? []).map(toStreamStep),
-      ...(output.object !== undefined ? { object: output.object } : {}),
+      ...(object !== undefined ? { object } : {}),
     },
     stepResult,
     ...(messages ? { messages } : {}),
-    ...(textRewritten ? { textRewritten } : {}),
+    ...(textRewritten ? { textRewritten: true } : {}),
   } as AgentFinishEventData;
 }
+
+type ContentPart = MastraStepResult<any>['content'][number];
 
 /**
  * A finished step without its provider request and response messages. Readers
  * take each step's response messages from its `step-finish` event instead.
- * The loop's step objects compute `text` on access, so it is copied as a value
- * to survive JSON transports. Tool calls and results stay in `content`: readers
- * take them from the run's tool chunks.
+ * The loop's step objects compute `text`, `toolCalls` and `toolResults` on
+ * access, so those are copied as values to survive JSON transports, with tool
+ * calls and results in the record shape DurableAgent publishes them in.
  */
 function toStreamStep(step: MastraStepResult<any>) {
   if (!step || typeof step !== 'object') return step;
   const { id, timestamp, modelId, headers } = (step.response ?? {}) as Record<string, any>;
+  const content = step.content ?? [];
+  const toolRecord = (part: Extract<ContentPart, { type: 'tool-call' | 'tool-result' }>) => ({
+    toolCallId: part.toolCallId,
+    toolName: part.toolName,
+    args: part.input,
+    ...(part.providerExecuted !== undefined ? { providerExecuted: part.providerExecuted } : {}),
+    ...('providerMetadata' in part && part.providerMetadata ? { providerMetadata: part.providerMetadata } : {}),
+  });
   return {
-    content: step.content ?? [],
+    content,
     text: step.text,
     ...(step.reasoningText !== undefined ? { reasoningText: step.reasoningText } : {}),
+    toolCalls: content.filter(part => part.type === 'tool-call').map(toolRecord),
+    toolResults: content
+      .filter(part => part.type === 'tool-result')
+      .map(part => ({ ...toolRecord(part), result: part.output })),
     finishReason: step.finishReason,
     usage: step.usage,
     warnings: step.warnings ?? [],

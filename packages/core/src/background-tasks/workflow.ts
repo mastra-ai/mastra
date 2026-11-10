@@ -34,8 +34,6 @@ const bodyOutputSchema = z.object({
 
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
-export { slimProgressChunk };
-
 /**
  * Builds the per-task workflow that owns executor + retries.
  *

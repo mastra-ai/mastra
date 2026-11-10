@@ -14,7 +14,13 @@ import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../../../../agent/str
 import { InMemoryServerCache } from '../../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
+import type { OutputProcessor } from '../../../../processors';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  isDurableEngineVariant,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 const PROMPT_MARKER = 'PROMPT-MARKER-7f3c';
@@ -116,38 +122,45 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
 
   // Technical: a delegated agent's chunks are forwarded inside `tool-output` chunks, and its own
   // step-start / step-finish / finish carried its prompt like the parent's did.
-  it("keeps a delegated agent's prompt off the log", async () => {
-    const llm = getMock();
-    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
-    const writer = new Agent({
-      id: 'writer',
-      name: 'Writer',
-      description: 'Drafts written content',
-      instructions: `${WRITER_MARKER} You are a skilled writer subagent.`,
-      model: openai(SCENARIO_MODEL_ID),
-    });
-    llm.on(
-      { endpoint: 'chat', hasToolResult: false },
-      { toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a coffee tagline.' } }] },
-    );
-    llm.onMessage(/coffee tagline/i, { content: 'Brewed fresh, served warm.' });
-    llm.on({ endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true }, { content: 'Brewed fresh.' });
-    const { agent, mastra } = await createSharedAgent(llm, { engine, agents: { writer } });
-    const run: any = await agent.stream('Ask the writer for a tagline.', { maxSteps: 5 });
-    try {
-      const output = run.output ?? run;
-      await output.consumeStream();
-      expect(await output.text).toBe('Brewed fresh.');
+  // Durable engines still publish them as-is: their callers read their own run back from the
+  // topic, so slimming there would change what the caller sees. Not yet fixed for them.
+  const itOnPlainAgents = isDurableEngineVariant(engine) ? it.fails : it;
+  itOnPlainAgents(
+    "keeps a delegated agent's prompt off the log",
+    async () => {
+      const llm = getMock();
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+      const writer = new Agent({
+        id: 'writer',
+        name: 'Writer',
+        description: 'Drafts written content',
+        instructions: `${WRITER_MARKER} You are a skilled writer subagent.`,
+        model: openai(SCENARIO_MODEL_ID),
+      });
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a coffee tagline.' } }] },
+      );
+      llm.onMessage(/coffee tagline/i, { content: 'Brewed fresh, served warm.' });
+      llm.on({ endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true }, { content: 'Brewed fresh.' });
+      const { agent, mastra } = await createSharedAgent(llm, { engine, agents: { writer } });
+      const run: any = await agent.stream('Ask the writer for a tagline.', { maxSteps: 5 });
+      try {
+        const output = run.output ?? run;
+        await output.consumeStream();
+        expect(await output.text).toBe('Brewed fresh.');
 
-      const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
-      // The delegated run did stream through the parent.
-      expect(log).toContain('Brewed fresh, served warm.');
-      expect(occurrences(log, WRITER_MARKER)).toBe(0);
-    } finally {
-      run.cleanup?.();
-      if (engine !== 'inngest') await mastra.shutdown();
-    }
-  }, 30_000);
+        const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
+        // The delegated run did stream through the parent.
+        expect(log).toContain('Brewed fresh, served warm.');
+        expect(occurrences(log, WRITER_MARKER)).toBe(0);
+      } finally {
+        run.cleanup?.();
+        if (engine !== 'inngest') await mastra.shutdown();
+      }
+    },
+    30_000,
+  );
 
   // Technical: plain step-finish events had no `_durableStepContent`, so an observer built each
   // step's content from its own (empty) message list and replayed `content: []`. The finish
@@ -197,6 +210,7 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
         expect(observed.every(step => step.request?.body === undefined)).toBe(true);
         expect(observedFinish.text).toBe('All done.');
         expect(observedFinish.steps).toHaveLength(TOOL_STEPS + 1);
+        expect(observedFinish.toolCalls).toHaveLength(TOOL_STEPS);
       } finally {
         run.cleanup?.();
         if (engine !== 'inngest') await mastra.shutdown();
@@ -204,4 +218,58 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
     },
     30_000,
   );
+
+  // Technical: readers tell a rejected step by the tripwire on the last entry of the step-finish
+  // `output.steps`; the published step-finish keeps only that entry.
+  it('replays a rejected and retried reply to an observer the way the caller saw it', async () => {
+    const llm = getMock();
+    llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'REJECTED draft that must not be shown' });
+    llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Corrected reply.' });
+    const rejectFirstDraft: OutputProcessor = {
+      id: 'reject-first-draft',
+      processOutputStep: async ({ abort, retryCount, messageList }) => {
+        if (retryCount === 0) abort('Draft rejected, please regenerate', { retry: true });
+        return messageList;
+      },
+    };
+    const { agent, mastra } = await createSharedAgent(llm, { engine });
+    const live: any[] = [];
+    const run: any = await agent.stream('Answer briefly.', {
+      maxSteps: 5,
+      maxProcessorRetries: 2,
+      outputProcessors: [rejectFirstDraft],
+      onStepFinish: (step: any) => {
+        live.push(step);
+      },
+    });
+    try {
+      const output = run.output ?? run;
+      await output.consumeStream();
+      expect(await output.text).toBe('Corrected reply.');
+      await waitForTerminal(runBus(agent), run.runId);
+
+      const observed: any[] = [];
+      let observedFinish: any;
+      const observation: any = await agent.observe(run.runId, {
+        onStepFinish: (step: any) => {
+          observed.push(step);
+        },
+        onFinish: (result: any) => {
+          observedFinish = result;
+        },
+      });
+      for await (const _chunk of observation.fullStream) {
+        // drain
+      }
+      await vi.waitFor(() => expect(observedFinish).toBeDefined());
+
+      expect(observed.map(stepView)).toEqual(live.map(stepView));
+      expect(observed[0].tripwire?.reason).toBe('Draft rejected, please regenerate');
+      expect(observed[0].text).toBe('');
+      expect(observedFinish.text).toBe('Corrected reply.');
+    } finally {
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
 });

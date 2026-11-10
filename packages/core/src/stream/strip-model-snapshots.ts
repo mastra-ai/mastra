@@ -74,3 +74,12 @@ export function slimProgressChunk<T>(chunk: T, depth = 0): T {
 
   return from === 'AGENT' ? stripModelSnapshots(chunk) : chunk;
 }
+
+/**
+ * Like {@link slimProgressChunk}, but only for the agent chunks nested in a
+ * `tool-output` / `workflow-step-output` chunk; any other chunk is returned as-is.
+ */
+export function slimNestedAgentChunks<T>(chunk: T): T {
+  const type = chunk && typeof chunk === 'object' ? (chunk as { type?: unknown }).type : undefined;
+  return typeof type === 'string' && PROGRESS_WRAPPER_TYPES.has(type) ? slimProgressChunk(chunk) : chunk;
+}

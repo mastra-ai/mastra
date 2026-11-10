@@ -2,6 +2,7 @@ import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
+import { slimNestedAgentChunks } from '../../stream/strip-model-snapshots';
 import type { ChunkType } from '../../stream/types';
 import { createRunAbortController } from '../durable/run-abort';
 import type { AgentSuspendedEventData } from '../durable/types';
@@ -72,6 +73,8 @@ export interface CreateAgentStreamPublisherOptions {
  *   `finish`, each reduced to what readers need (see `wire.ts`); readers
  *   rebuild the `abort` chunk from the finish reason, so the loop's own
  *   `abort` chunk is not published
+ * - `tool-output` / `workflow-step-output` → `chunk`, with a delegated agent's
+ *   nested chunks stripped of their prompts and steps
  * - `tool-call-approval` / `tool-call-suspended` → `chunk`, then `suspended`
  *   once the run's snapshot is persisted (when the loop closes)
  * - anything else → `chunk`, with errors serialized so they survive JSON transports
@@ -145,6 +148,15 @@ export function createAgentStreamPublisher({
   let finished = false;
   /** Tool calls of the step in progress, which the run's messages need to tell its content apart. */
   let stepToolCallIds: string[] = [];
+  const readStepContent = (messageList: MessageList | undefined, toolCallIds: string[]) => {
+    try {
+      return messageList?.get.response.aiV5.modelContent(-1, toolCallIds);
+    } catch (error) {
+      // Readers fall back to their own messages; publishing must not fail the run.
+      logger?.warn?.(`[AgentStream:${runId}] failed to read step content`, { error });
+      return undefined;
+    }
+  };
   let suspended: AgentSuspendedEventData | undefined;
   let lastError: unknown;
 
@@ -224,10 +236,21 @@ export function createAgentStreamPublisher({
           break;
         case 'step-finish': {
           // The same content the caller's output reports for this step, read now, while the
-          // run's messages still end with it.
-          const content = messageList?.get.response.aiV5.modelContent(-1, stepToolCallIds);
+          // run's messages still end with it. A retried attempt was rolled back, and readers
+          // report no content for it.
+          const content =
+            (chunk.payload?.stepResult?.reason as string) === 'retry'
+              ? undefined
+              : readStepContent(messageList, stepToolCallIds);
           stepToolCallIds = [];
           const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content));
+          void enqueue(() => emitChunkEvent(pubsub, runId, published));
+          return;
+        }
+        case 'tool-output':
+        case 'workflow-step-output': {
+          // A delegated agent's chunks arrive wrapped here, with their own prompts and steps.
+          const published = slimNestedAgentChunks(chunk);
           void enqueue(() => emitChunkEvent(pubsub, runId, published));
           return;
         }
