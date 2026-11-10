@@ -12,6 +12,8 @@ import { ConditionRows } from './ConditionRows';
 import { CARD_FACTS, describeRule } from './conditionFields';
 import type { Facts } from './conditionFields';
 
+const UNFINISHED = 'Finish or remove unfinished conditions to save.';
+
 /**
  * A rule, edited as condition rows or as raw JSON. Unset means "every card".
  * Reports a rule the server would refuse, so the form can hold back the save.
@@ -28,6 +30,7 @@ export function RuleEditor({
   schema,
   json,
   onChange,
+  onUnfinished,
 }: {
   label: string;
   description: string;
@@ -40,6 +43,8 @@ export function RuleEditor({
   /** The JSON being typed, unset while the conditions show. */
   json?: { text: string | undefined; onChange: (text: string | undefined) => void };
   onChange: (rule: RuleGroup | null, problem: string | undefined) => void;
+  /** Whether a condition row is half filled in, which the form should treat as a problem until it isn't. */
+  onUnfinished?: (unfinished: boolean) => void;
 }) {
   const [ownRaw, setOwnRaw] = useState<string | undefined>(undefined);
   const raw = json ? json.text : ownRaw;
@@ -96,9 +101,12 @@ export function RuleEditor({
             rule={rule}
             facts={facts}
             options={options}
-            onChange={(next, incomplete) =>
-              onChange(next, incomplete ? "Unfinished conditions aren't saved." : ruleProblem(schema, next))
-            }
+            onChange={(next, incomplete) => {
+              onUnfinished?.(incomplete);
+              // A half-filled row keeps the last whole rule, so saving never quietly drops a condition.
+              if (incomplete) onChange(rule ?? null, UNFINISHED);
+              else onChange(next, ruleProblem(schema, next));
+            }}
           />
         </div>
       )}

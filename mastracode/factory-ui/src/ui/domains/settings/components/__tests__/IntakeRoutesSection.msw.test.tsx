@@ -133,6 +133,10 @@ const namesIn = (list: HTMLElement) =>
 
 const routeNames = () => namesIn(screen.getByRole('list', { name: 'Intake routes' }));
 
+/** The row of the route named `name`. */
+const routeRow = (name: string) =>
+  screen.getAllByRole('listitem').find(item => within(item).queryByDisplayValue(name) !== null)!;
+
 const renderSection = () =>
   renderWithProviders(
     <MemoryRouter>
@@ -278,6 +282,56 @@ describe('IntakeRoutesSection', () => {
     expect(phases).toEqual(['Inbox', 'Think', 'Make', 'Pr']);
   });
 
+  it("lets a pull request join its issue's card in any unfinished phase, since that card is already on the board", async () => {
+    serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByRole('list', { name: 'Intake routes' });
+    const joining = routeRow('Pull requests that close a waiting issue join its card');
+    await user.click(within(joining).getByRole('combobox', { name: 'Phase' }));
+
+    const phases = (await screen.findAllByRole('option')).map(option => option.textContent);
+    expect(phases).toEqual(workBoardInfo.phases.filter(phase => phase.kind !== 'terminal').map(phase => phase.name));
+  });
+
+  it('adds a route once however fast Add is pressed, and takes it back from the toast', async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Releases');
+    await addCondition(user, draft, 'Title', 'release');
+    await user.dblClick(within(draft).getByRole('button', { name: 'Add route' }));
+    await waitFor(() => expect(routeNames()).toContain('Releases'));
+    expect(state.requests.filter(({ method }) => method === 'POST')).toHaveLength(1);
+
+    await user.click(await screen.findByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(state.routes.some(route => route.name === 'Releases')).toBe(false));
+    expect(routeNames()).not.toContain('Releases');
+  });
+
+  it('keeps the board picker on a route whose board was removed, so an admin can point it elsewhere', async () => {
+    const routes = seededRoutes().map(route =>
+      route.id === 'outside-authors' ? { ...route, target: { ...route.target, boardKey: 'retired' } } : route,
+    );
+    const state = serveRoutes({ routes });
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByRole('list', { name: 'Intake routes' });
+    const row = routeRow('Outside authors wait in Intake');
+    const board = within(row).getByRole('combobox', { name: 'Board' });
+    expect(board).toHaveTextContent('retired (not installed)');
+    expect(within(row).queryByRole('combobox', { name: 'Phase' })).toBeNull();
+    await user.click(board);
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+
+    await waitFor(() =>
+      expect(state.routes.find(route => route.id === 'outside-authors')?.target).toMatchObject({ boardKey: 'ship' }),
+    );
+  });
+
   it('sends one repository to another board, picking the repository from the fields a route can test', async () => {
     const state = serveRoutes();
     const user = userEvent.setup();
@@ -389,6 +443,10 @@ describe('IntakeRoutesSection', () => {
         value: false,
       }),
     );
+    // The rows show the undone condition too, not the one that was just taken back.
+    const undone = screen.getByRole('group', { name: 'Outside authors wait in Intake conditions' });
+    expect(within(undone).getByRole('radio', { name: 'Trusted' })).not.toBeChecked();
+    expect(within(undone).getByRole('radio', { name: 'Outside author' })).toBeChecked();
     expect(state.requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
       'PATCH outside-authors',
       'PATCH outside-authors',
@@ -426,6 +484,29 @@ describe('IntakeRoutesSection', () => {
 
     await waitFor(() => expect(state.routes.find(route => route.id === 'mine')?.target.boardKey).toBe('ship'));
     expect(state.routes.find(route => route.id === 'everything-else')?.target.boardKey).toBe('work');
+  });
+
+  it('takes back sending new cards elsewhere from the toast, removing the routes it copied', async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByLabelText('Board for new cards'));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await waitFor(() =>
+      expect(state.routes.find(route => route.id === 'everything-else')?.target.boardKey).toBe('ship'),
+    );
+    const copies = state.routes.filter(route => route.createdBy === 'admin').map(route => route.id);
+    expect(copies.length).toBeGreaterThan(0);
+
+    await user.click(await screen.findByRole('button', { name: 'Undo' }));
+    await waitFor(() =>
+      expect(state.routes.find(route => route.id === 'everything-else')).toMatchObject({
+        name: 'Everything else goes to Work › Intake',
+        target: { boardKey: 'work', phaseKey: 'intake' },
+      }),
+    );
+    expect(state.routes.map(route => route.id)).toEqual(seededRoutes().map(route => route.id));
   });
 
   it('says where cards land when no route takes every new card, and lets admins pick that board', async () => {
@@ -553,6 +634,26 @@ describe('CardMovesSection', () => {
     expect(await screen.findByText('No card moves on this board.')).toBeInTheDocument();
   });
 
+  it('narrows a move with several triggers to the one picked, even when it was listed first', async () => {
+    const routes = seededRoutes().map(route =>
+      route.id === 'pull-request-merged'
+        ? { ...route, on: ['pull_request.merged', 'pull_request.closed'] as IntakeRouteInfo['on'] }
+        : route,
+    );
+    const state = serveRoutes({ routes });
+    const user = userEvent.setup();
+    renderWithProviders(<CardMovesSection factoryId="fp-1" boardId="work" />);
+
+    await screen.findByRole('list', { name: 'Card moves' });
+    const row = routeRow('Merged pull requests go to Done');
+    await user.click(within(row).getByRole('combobox', { name: 'When' }));
+    await user.click(await screen.findByRole('option', { name: 'A pull request is merged' }));
+
+    await waitFor(() =>
+      expect(state.routes.find(route => route.id === 'pull-request-merged')?.on).toEqual(['pull_request.merged']),
+    );
+  });
+
   it('adds a move on this board for the change picked', async () => {
     const state = serveRoutes();
     const user = userEvent.setup();
@@ -580,7 +681,7 @@ describe('NewCardsHere', () => {
       </MemoryRouter>,
     );
 
-  it('counts the routes that can land new cards on this board, not its card moves or routes the catch-all hides', async () => {
+  it('counts the routes that can land new cards on this board, not card moves, issue joins, or routes the catch-all hides', async () => {
     const base = seededRoutes()[0];
     const route = (id: string, extra: Partial<IntakeRouteInfo>): IntakeRouteInfo => ({
       ...base,
@@ -594,6 +695,7 @@ describe('NewCardsHere', () => {
     serveRoutes({
       routes: [
         route('Issues', {}),
+        route('Joins its issue', { target: { boardKey: 'work', phaseKey: 'review', joinClosedIssue: true } }),
         route('Off', { enabled: false }),
         route('Elsewhere', { target: { boardKey: 'ship', phaseKey: null, joinClosedIssue: false } }),
         route('Reopened', { on: ['work_item.reopened'], when: null }),

@@ -20,7 +20,8 @@ export function NewCardsHere({ factoryId, board }: { factoryId: string; board: I
   const arrivals = (query.data?.intakeRoutes ?? []).filter(route => route.enabled && placesNewCards(route));
   const catchAllIndex = arrivals.findIndex(catchesEveryArrival);
   const reachable = catchAllIndex === -1 ? arrivals : arrivals.slice(0, catchAllIndex + 1);
-  const count = reachable.filter(route => route.target.boardKey === board.id).length;
+  // A route joining a pull request to its issue's card adds no card, so it isn't counted.
+  const count = reachable.filter(route => !route.target.joinClosedIssue && route.target.boardKey === board.id).length;
   const defaultBoard = boards.find(candidate => candidate.id === DEFAULT_BOARD_ID) ?? boards[0];
   const takesLeftovers = catchAllIndex === -1 && defaultBoard?.id === board.id;
 

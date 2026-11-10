@@ -79,20 +79,36 @@ export function BoardConfigEditor({
   });
 
   const readOnly = !canEdit || !board.editable;
-  // JSON typed into a rule editor counts as an edit even before it parses: leaving would lose it.
-  const changed = !readOnly && (draftChanged(draft, board) || Object.keys(rawRules).length > 0);
-  const phasesToFix = draft.phases.filter(phase => phaseHasProblem(phase, rawRules));
+  const phase = phaseKey ? draft.phases.find(candidate => candidate.key === phaseKey) : undefined;
+  // Condition rows live in the phase page's editors, so a half-filled row only counts until that page closes.
+  const phasePage = phase && `${phase.key}:${board.revision ?? 'code'}:${discards}`;
+  const [unfinished, setUnfinished] = useState<{ page: string | undefined; fields: RuleField[] }>({
+    page: phasePage,
+    fields: [],
+  });
+  if (unfinished.page !== phasePage) setUnfinished({ page: phasePage, fields: [] });
+  const unfinishedFields = unfinished.page === phasePage ? unfinished.fields : [];
+  const markUnfinished = (field: RuleField, value: boolean) =>
+    setUnfinished(current => {
+      const fields = current.fields.filter(other => other !== field);
+      return { ...current, fields: value ? [...fields, field] : fields };
+    });
+  // JSON typed into a rule editor, or a half-filled condition, counts as an edit: leaving would lose it.
+  const changed =
+    !readOnly && (draftChanged(draft, board) || Object.keys(rawRules).length > 0 || unfinishedFields.length > 0);
+  const phasesToFix = draft.phases.filter(
+    candidate => phaseHasProblem(candidate, rawRules) || (candidate === phase && unfinishedFields.length > 0),
+  );
   const nameMissing = draft.name.trim() === '';
   const stale = save.error?.code === 'revision_mismatch';
 
   const blocker = useBlocker(({ nextLocation }) => {
     if (!changed || deleted.current) return false;
     const next = parseBoardConfigPath(nextLocation.pathname);
-    // The skills page has no save bar, so leaving for it counts as leaving the board's settings.
-    return next?.factoryId !== factory.id || next.boardId !== boardId || next.skills === true;
+    // The skills and card moves pages have no save bar, so leaving for them counts as leaving the board's settings.
+    return next?.factoryId !== factory.id || next.boardId !== boardId || next.skills === true || next.moves === true;
   });
 
-  const phase = phaseKey ? draft.phases.find(candidate => candidate.key === phaseKey) : undefined;
   const generalPath = boardConfigPath(factory.id, boardId);
 
   let body: ReactNode;
@@ -111,7 +127,7 @@ export function BoardConfigEditor({
     body = (
       <PhaseConfig
         // Each phase gets its own editors, so state one phase's editors hold never shows on another's page.
-        key={`${phase.key}:${board.revision ?? 'code'}:${discards}`}
+        key={phasePage}
         phase={phase}
         phases={draft.phases}
         requiredNextPhases={board.codeBehaviour?.[phase.key]?.requiredNextPhases ?? []}
@@ -124,7 +140,12 @@ export function BoardConfigEditor({
           autoStartWhen: rawRules[rawRuleKey(phase.key, 'autoStartWhen')],
           autoApproveWhen: rawRules[rawRuleKey(phase.key, 'autoApproveWhen')],
         }}
-        onRawRule={(field, text) => setRawRule(rawRuleKey(phase.key, field), text)}
+        onRawRule={(field, text) => {
+          setRawRule(rawRuleKey(phase.key, field), text);
+          // The rows go away for JSON or a switched-off rule, and come back built from the last whole rule.
+          markUnfinished(field, false);
+        }}
+        onUnfinished={markUnfinished}
         onRemove={
           readOnly || locked || !canRemovePhase(draft.phases, phase.key, board.codeBehaviour)
             ? undefined

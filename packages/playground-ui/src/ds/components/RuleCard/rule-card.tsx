@@ -50,7 +50,7 @@ export function RuleCardDragHandle({ className, ...props }: RuleCardDragHandlePr
       type="button"
       data-slot="rule-card-drag-handle"
       className={cn(
-        'absolute top-1/2 left-0 flex h-control-sm w-4 -translate-y-1/2 cursor-grab items-center justify-center rounded-sm text-muted-foreground hover:text-foreground active:cursor-grabbing',
+        'absolute top-1/2 left-0 flex h-control-sm w-4 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground hover:text-foreground active:cursor-grabbing',
         'opacity-0 group-hover/rule-card:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
         focusRing,
         className,

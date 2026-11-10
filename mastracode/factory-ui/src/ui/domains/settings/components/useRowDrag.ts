@@ -3,6 +3,8 @@ import type { KeyboardEvent, PointerEvent } from 'react';
 
 export type RowDrag = { from: number; to: number; offset: number };
 
+const middleOf = (row: DOMRect) => row.top + row.height / 2;
+
 function swallow(event: MouseEvent) {
   event.preventDefault();
   event.stopPropagation();
@@ -47,11 +49,12 @@ export function useRowDrag({
       const first = rows[min];
       const last = rows[max];
       if (!self || !first || !last) return;
-      const offset = Math.min(Math.max(raw, first.top - self.top), last.bottom - self.bottom);
-      const center = self.top + self.height / 2 + offset;
+      // Bounded by the end rows' middles, not their edges, so a tall row can still pass a short one at either end.
+      const offset = Math.min(Math.max(raw, middleOf(first) - middleOf(self)), middleOf(last) - middleOf(self));
+      const center = middleOf(self) + offset;
       let to = from;
       rows.forEach((row, index) => {
-        const middle = row.top + row.height / 2;
+        const middle = middleOf(row);
         if (index > from && index <= max && center >= middle) to = index;
         if (index >= min && index < from && center <= middle) to = Math.min(to, index);
       });

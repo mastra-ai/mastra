@@ -170,6 +170,20 @@ describe('Board configuration', () => {
     expect(configNav().getByRole('link', { name: 'Planning' })).toBeInTheDocument();
   });
 
+  it('asks before leaving unsaved board changes for Card moves, which has no save bar', async () => {
+    stubFactory();
+    serveBoard(storedWorkBoard());
+    const user = userEvent.setup();
+    const { router } = renderAt(`/factories/${FACTORY_ID}/work/config`);
+
+    await user.type(await screen.findByRole('textbox', { name: 'Board name' }), ' board');
+    await user.click(configNav().getByRole('link', { name: 'Card moves' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Discard changes to Work?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/moves`));
+  });
+
   it('sends old Settings › Skills links to the skills beside the Work board settings', async () => {
     stubFactory();
     serveBoard(storedWorkBoard());
@@ -380,6 +394,35 @@ describe('Board configuration', () => {
     expect(await screen.findByLabelText('Planning: start only when JSON')).toHaveValue(unfinished);
     expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  it('holds the save while a condition is half filled in, and never drops the saved rule for it', async () => {
+    stubFactory();
+    const bugs: NonNullable<StoredPhaseInfo['autoStartWhen']> = {
+      operator: 'AND',
+      conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }],
+    };
+    const work = storedWorkBoard();
+    serveBoard(
+      storedWorkBoard({
+        phases: work.board.phases.map(phase =>
+          phase.key === 'triage' ? { ...phase, autoStart: true, autoStartWhen: bugs } : phase,
+        ),
+      }),
+    );
+    renderAt(`/factories/${FACTORY_ID}/work/config`);
+
+    const user = await openPhase('Triage');
+    await user.click(screen.getByRole('button', { name: 'Add condition' }));
+    expect(await screen.findByText('Fix Triage to save.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+    // Leaving the phase drops the half-filled row; the saved rule is still whole, so nothing is left to save.
+    await user.click(configNav().getByRole('link', { name: 'Planning' }));
+    await user.click(configNav().getByRole('link', { name: 'Triage' }));
+    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
+    expect(screen.getAllByRole('combobox', { name: 'Field' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
   it("puts a phase's saved conditions back on Discard", async () => {

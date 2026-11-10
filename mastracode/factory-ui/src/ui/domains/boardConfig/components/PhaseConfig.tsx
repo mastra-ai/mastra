@@ -137,6 +137,7 @@ export function PhaseConfig({
   rawRules,
   onChange,
   onRawRule,
+  onUnfinished,
   onRemove,
 }: {
   phase: StoredPhaseInfo;
@@ -154,6 +155,8 @@ export function PhaseConfig({
   rawRules: Partial<Record<RuleField, string>>;
   onChange: (phase: StoredPhaseInfo) => void;
   onRawRule: (field: RuleField, text: string | undefined) => void;
+  /** A rule editor has a half-filled condition row, which holds the save. */
+  onUnfinished: (field: RuleField, unfinished: boolean) => void;
   /** Unset when the phase can't be removed. */
   onRemove?: () => void;
 }) {
@@ -232,6 +235,7 @@ export function PhaseConfig({
                   schema={cardRuleGroupSchema}
                   disabled={disabled}
                   json={json('autoStartWhen')}
+                  onUnfinished={unfinished => onUnfinished('autoStartWhen', unfinished)}
                   onChange={rule => onChange({ ...phase, autoStartWhen: rule })}
                 />
               </div>
@@ -451,6 +455,7 @@ export function PhaseConfig({
                     schema={cardRuleGroupSchema}
                     disabled={disabled}
                     json={json('autoApproveWhen')}
+                    onUnfinished={unfinished => onUnfinished('autoApproveWhen', unfinished)}
                     onChange={rule =>
                       onChange({
                         ...phase,

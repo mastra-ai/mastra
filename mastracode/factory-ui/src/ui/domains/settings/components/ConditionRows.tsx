@@ -129,7 +129,7 @@ export function ConditionRows({
       />
       {toRule(root).incomplete && (
         <Txt as="p" variant="caption" tone="muted">
-          Unfinished conditions aren't saved.
+          Finish or remove unfinished conditions to save.
         </Txt>
       )}
     </div>

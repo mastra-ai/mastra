@@ -82,11 +82,15 @@ function inScope(route: IntakeRouteInfo, scope: RouteScope): boolean {
   return !placesNewCards(route) && route.target.boardKey === scope.board.id;
 }
 
-/** The phases a route can send cards to: a route placing new cards can't land them in a finished phase. */
-/** Phases a route may aim at. New cards start in the first phase, so they can only land where it can move them. */
-function targetPhases(board: InstalledBoardInfo | undefined, placesNew: boolean) {
+/**
+ * Phases a route may aim at. New cards can't land in a finished phase, and start in the first phase, so they can
+ * only land where it can move them. A pull request joining its issue's card moves that card, so only the first rule
+ * holds there.
+ */
+function targetPhases(board: InstalledBoardInfo | undefined, placesNew: boolean, joining: boolean) {
   const phases = board?.phases ?? [];
   if (!placesNew) return phases;
+  if (joining) return phases.filter(phase => phase.kind !== 'terminal');
   const first = phases.find(phase => phase.id === board?.initialPhase);
   return phases.filter(
     phase =>
@@ -156,14 +160,21 @@ function useRouteSaves(factoryId: string) {
     queryClient.setQueryData<IntakeRouteListResponse>(key, data =>
       data ? { ...data, intakeRoutes: change(data.intakeRoutes) } : data,
     );
+  /** Queues `task` after the earlier saves; resolves to whether it went through. */
   const save = (task: (send: (changes: RouteWrite[]) => Promise<IntakeRouteInfo[]>) => Promise<void>) => {
-    queue.current = queue.current
+    const done = queue.current
       .then(() => task(changes => writes.mutateAsync(changes)))
-      .catch((error: unknown) => {
-        setFailures(count => count + 1);
-        toast.error(saveFailureMessage(error));
-        return queryClient.invalidateQueries({ queryKey: key });
-      });
+      .then(
+        () => true,
+        async (error: unknown) => {
+          setFailures(count => count + 1);
+          toast.error(saveFailureMessage(error));
+          await queryClient.invalidateQueries({ queryKey: key });
+          return false;
+        },
+      );
+    queue.current = done.then(() => undefined);
+    return done;
   };
   return { latest, show, save, failures };
 }
@@ -223,7 +234,7 @@ function BoardPicker({
     <Select value={value} onValueChange={key => key && key !== value && onChange(key)}>
       <SelectTrigger variant="ghost" size="sm" aria-label={label} className="w-fit">
         <Txt as="span" variant="caption">
-          {board ? boardName(board) : value}
+          {board ? boardName(board) : `${value} (not installed)`}
         </Txt>
       </SelectTrigger>
       <SelectContent>
@@ -253,12 +264,15 @@ function PhasePicker({
   board,
   value,
   placesNew,
+  joining = false,
   label,
   onChange,
 }: {
   board: InstalledBoardInfo;
   value: string;
   placesNew: boolean;
+  /** The route joins a pull request to its issue's card, which already sits on the board. */
+  joining?: boolean;
   label: string;
   onChange: (phaseKey: string) => void;
 }) {
@@ -268,7 +282,7 @@ function PhasePicker({
         <PhaseLabel board={board} phaseKey={value} />
       </SelectTrigger>
       <SelectContent>
-        {targetPhases(board, placesNew).map(phase => (
+        {targetPhases(board, placesNew, joining).map(phase => (
           <SelectItem key={phase.id} value={phase.id}>
             <PhaseLabel board={board} phaseKey={phase.id} />
           </SelectItem>
@@ -288,7 +302,7 @@ function EventPicker({
   return (
     <Select
       value={value.length === 1 ? value[0] : null}
-      onValueChange={event => event && event !== value[0] && onChange([event])}
+      onValueChange={event => event && !(value.length === 1 && value[0] === event) && onChange([event])}
     >
       <SelectTrigger size="sm" aria-label="When" className="w-fit">
         <Txt as="span" variant="caption" className="font-medium">
@@ -347,6 +361,19 @@ function RouteConditions({
   onSave: (when: RuleGroup | null) => void;
 }) {
   const [problem, setProblem] = useState<string>();
+  // The rows keep their own unfinished edits, so they only start over when the saved conditions change to
+  // something these rows didn't write: an Undo, or another admin's edit.
+  const [seen, setSeen] = useState(() => json(route.when));
+  const [written, setWritten] = useState(seen);
+  const [resets, setResets] = useState(0);
+  if (json(route.when) !== seen) {
+    setSeen(json(route.when));
+    if (json(route.when) !== written) {
+      setWritten(json(route.when));
+      setResets(resets + 1);
+      setProblem(undefined);
+    }
+  }
   if (readOnly) {
     return (
       <RuleLines>
@@ -362,6 +389,7 @@ function RouteConditions({
   return (
     <div className="flex flex-col gap-1.5">
       <ConditionRows
+        key={resets}
         label={`${route.name} conditions`}
         rule={route.when}
         facts={intakeRouteFacts(route.on)}
@@ -372,7 +400,9 @@ function RouteConditions({
           if (incomplete || (needsOne && when === null)) return setProblem(undefined);
           const next = whenProblem(route.on, when);
           setProblem(next);
-          if (!next && json(when) !== json(route.when)) onSave(when);
+          if (next || json(when) === json(route.when)) return;
+          setWritten(json(when));
+          onSave(when);
         }}
       />
       {problem && (
@@ -489,7 +519,7 @@ function RouteCard({
         </RuleCardBody>
       )}
       <RuleCardOutcome label={destinationLabel}>
-        {readOnly || !board ? (
+        {readOnly ? (
           <Badge size="sm">
             {scope.kind === 'moves' && board ? (phaseName(board, phaseKey) ?? phaseKey) : describeTarget(route, boards)}
           </Badge>
@@ -498,7 +528,7 @@ function RouteCard({
             {scope.kind === 'arrivals' && (
               <>
                 <BoardPicker
-                  value={board.id}
+                  value={route.target.boardKey}
                   boards={boards}
                   label={isCatchAll ? 'Board for new cards' : 'Board'}
                   onChange={boardKey => {
@@ -507,18 +537,23 @@ function RouteCard({
                     if (next) setTarget({ boardKey, phaseKey: next.initialPhase });
                   }}
                 />
-                <Txt as="span" variant="caption" tone="muted" aria-hidden>
-                  ›
-                </Txt>
+                {board && (
+                  <Txt as="span" variant="caption" tone="muted" aria-hidden>
+                    ›
+                  </Txt>
+                )}
               </>
             )}
-            <PhasePicker
-              board={board}
-              value={phaseKey}
-              placesNew={placesNew}
-              label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
-              onChange={next => setTarget({ phaseKey: next })}
-            />
+            {board && (
+              <PhasePicker
+                board={board}
+                value={phaseKey}
+                placesNew={placesNew}
+                joining={route.target.joinClosedIssue === true}
+                label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
+                onChange={next => setTarget({ phaseKey: next })}
+              />
+            )}
           </>
         )}
       </RuleCardOutcome>
@@ -547,7 +582,8 @@ function NewRoute({
   scope: RouteScope;
   boards: InstalledBoardInfo[];
   initialBoard: InstalledBoardInfo | undefined;
-  onAdd: (route: NewRouteValue) => void;
+  /** Resolves to whether the route was added. */
+  onAdd: (route: NewRouteValue) => Promise<boolean>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState('');
@@ -565,8 +601,15 @@ function NewRoute({
   );
   const problem = whenProblem(on, when);
   const needsCondition = scope.kind === 'arrivals' && when === null;
+  const [adding, setAdding] = useState(false);
   const ready =
-    name.trim() !== '' && board !== undefined && phaseKey !== '' && !incomplete && !problem && !needsCondition;
+    !adding &&
+    name.trim() !== '' &&
+    board !== undefined &&
+    phaseKey !== '' &&
+    !incomplete &&
+    !problem &&
+    !needsCondition;
   const label = scope.kind === 'moves' ? 'Add card move' : 'Add route';
 
   return (
@@ -641,10 +684,18 @@ function NewRoute({
           <Button
             size="sm"
             disabled={!ready}
-            onClick={() =>
-              board &&
-              onAdd({ name: name.trim(), on, when, target: { boardKey: board.id, phaseKey, joinClosedIssue: false } })
-            }
+            onClick={async () => {
+              if (!board) return;
+              setAdding(true);
+              const added = await onAdd({
+                name: name.trim(),
+                on,
+                when,
+                target: { boardKey: board.id, phaseKey, joinClosedIssue: false },
+              });
+              // An added route closes this form; a failed one leaves it to try again.
+              if (!added) setAdding(false);
+            }}
           >
             {label}
           </Button>
@@ -755,14 +806,37 @@ function RouteList({
 
   const sendTo = (boardKey: string) =>
     save(async send => {
-      await send(sendNewCardsTo(latest(), boards, boardKey));
+      const before = latest().find(catchesEveryArrival);
+      const created = await send(sendNewCardsTo(latest(), boards, boardKey));
       const board = boards.find(candidate => candidate.id === boardKey);
-      announce('catch-all', `New cards no route takes now go to ${board ? boardName(board) : boardKey}`);
+      announce('catch-all', `New cards no route takes now go to ${board ? boardName(board) : boardKey}`, () =>
+        unsendTo(before, created),
+      );
+    });
+
+  /** Points the catch-all back where it was and deletes the routes sending new cards elsewhere created. */
+  const unsendTo = (before: IntakeRouteInfo | undefined, created: IntakeRouteInfo[]) =>
+    save(async send => {
+      const revisionOf = (route: IntakeRouteInfo) =>
+        latest().find(entry => entry.id === route.id)?.revision ?? route.revision;
+      await send([
+        ...(before
+          ? [
+              {
+                kind: 'update' as const,
+                id: before.id,
+                patch: { name: before.name, target: before.target, expectedRevision: revisionOf(before) },
+              },
+            ]
+          : []),
+        ...created.map(route => ({ kind: 'delete' as const, id: route.id, expectedRevision: revisionOf(route) })),
+      ]);
+      announce('catch-all', 'Change undone');
     });
 
   const add = (route: NewRouteValue) =>
     save(async send => {
-      await send([
+      const [created] = await send([
         {
           kind: 'create',
           route: {
@@ -774,7 +848,7 @@ function RouteList({
         },
       ]);
       setAdding(false);
-      announce('new', `Added ${route.name}`);
+      announce('new', `Added ${route.name}`, created ? () => remove(created) : undefined);
     });
 
   const drag = useRowDrag({
