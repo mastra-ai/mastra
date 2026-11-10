@@ -84,6 +84,9 @@ export class GraphRAG {
     if (!this.nodes.has(edge.source) || !this.nodes.has(edge.target)) {
       throw new Error('Both source and target nodes must exist');
     }
+    if (!Number.isFinite(edge.weight)) {
+      throw new Error('Edge weight must be a finite number');
+    }
     this.edges.push(edge);
     if (edge.source !== edge.target) {
       // Add reverse edge
@@ -169,6 +172,9 @@ export class GraphRAG {
       }
       if (!graph.nodes.has(edge.target)) {
         throw new Error(`Edge references unknown node: ${edge.target}`);
+      }
+      if (!Number.isFinite(edge.weight)) {
+        throw new Error('Edge weight must be a finite number');
       }
     }
 
