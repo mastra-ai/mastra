@@ -80,6 +80,33 @@ describe('NestJS built-in MCP OAuth challenge and audience', () => {
     expect(otherRoute.headers['www-authenticate']).toBeUndefined();
   });
 
+  it('serves the metadata document at the URL the challenge advertises, and at the root well-known path', async () => {
+    await start({ auth: new AudienceAuth(), mcp: { oauth: { authorizationServers: ['https://as.example.com'] } } });
+
+    const challenge = (await postMCP()).headers['www-authenticate'] as string;
+    const advertised = new URL(/resource_metadata="([^"]+)"/.exec(challenge)![1]!);
+
+    for (const path of [advertised.pathname, '/.well-known/oauth-protected-resource']) {
+      const res = await executeExpressRequest(expressApp, { method: 'GET', path, headers: { host: 'localhost:4111' } });
+      expect(res.status, path).toBe(200);
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.body).toEqual({
+        resource: 'http://localhost:4111/api/mcp',
+        authorization_servers: ['https://as.example.com'],
+        bearer_methods_supported: ['header'],
+      });
+    }
+  });
+
+  it('does not serve the metadata while the built-in MCP server is disabled', async () => {
+    await start({ auth: new AudienceAuth(), mcp: { enabled: false } });
+    const res = await executeExpressRequest(expressApp, {
+      method: 'GET',
+      path: '/.well-known/oauth-protected-resource/api/mcp',
+    });
+    expect(res.status).toBe(404);
+  });
+
   it('enforces the token audience only when server.mcp.oauth.resource is set', async () => {
     await start({ auth: new AudienceAuth(), mcp: { oauth: { resource: RESOURCE } } });
 

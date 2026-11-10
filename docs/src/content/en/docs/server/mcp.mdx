@@ -216,8 +216,6 @@ claude mcp add --transport http mastra https://my-app.example.com/api/mcp \
 
 The endpoint doesn't return `403` with `error="insufficient_scope"` yet. A caller without `mcp:read` gets a plain `403`, because Mastra permissions aren't OAuth scopes a client could request.
 
-The NestJS adapter sends the `WWW-Authenticate` header and checks the token audience, but doesn't serve the `/.well-known/oauth-protected-resource` routes. Add a controller that returns the metadata at those paths if your clients need discovery.
-
 ## Limitations
 
 - Workflows run synchronously within the MCP request. Long-running workflows are bounded by your server's request timeout.
