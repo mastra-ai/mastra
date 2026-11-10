@@ -407,13 +407,6 @@ export class PlatformGithubEventWorker extends MastraWorker {
     }
   }
 
-  /**
-   * Configured `(installation, repository)` pairs — the same set the
-   * reconciler sweeps — resolved to the numeric ids and slug the poll
-   * addresses GitHub with. Repositories not linked to any factory project
-   * cannot produce work for Factory, so polling and reconciling them is
-   * wasted `/events` bandwidth and platform load.
-   */
   async #linkedRepositories(): Promise<Repository[]> {
     const now = this.#now();
     if (!this.#repositories || now - this.#repositoriesReadAt >= REPOSITORY_REFRESH_MS) {
@@ -423,6 +416,13 @@ export class PlatformGithubEventWorker extends MastraWorker {
     return this.#repositories;
   }
 
+  /**
+   * Configured `(installation, repository)` pairs — the same set the
+   * reconciler sweeps — resolved to the numeric ids and slug the poll
+   * addresses GitHub with. Repositories not linked to any factory project
+   * cannot produce work for Factory, so polling and reconciling them is
+   * wasted `/events` bandwidth and platform load.
+   */
   async #discoverRepositories(): Promise<Repository[]> {
     const keys = await this.#sourceControl.projectRepositories.listConfiguredExternalKeys();
     const repositories = new Map<number, Repository>();
