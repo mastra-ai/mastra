@@ -34,8 +34,6 @@ import { BoardDefinitionFields, draftIsComplete, useRuleProblems } from './Board
 import { SettingsSubsection } from './SettingsSubsection';
 
 const STARTER = '__starter__';
-/** The refusals of a create that are about the key, shown on the key field. */
-const KEY_REFUSALS = new Set(['code_board', 'board_exists']);
 
 function errorText(error: BoardRequestError): string {
   return error.conflicts.length > 0 ? error.conflicts.join('\n') : error.message;
@@ -236,7 +234,8 @@ function NewBoardForm({
   // The key follows the name until it is typed by hand.
   const key = typedKey ?? keyFromName(draft.name);
   const untouched = typedKey === undefined && draft.name.trim() === '';
-  const refusedKey = create.error && KEY_REFUSALS.has(create.error.code ?? '') ? create.error.message : undefined;
+  // A create the server answers with a conflict is about the key, whatever holds it: shown on the key field.
+  const refusedKey = create.error?.status === 409 ? create.error.message : undefined;
   const invalidKey = untouched
     ? undefined
     : keyProblem(

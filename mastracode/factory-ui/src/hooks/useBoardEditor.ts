@@ -117,7 +117,7 @@ export function useResetBoardMutation(factoryProjectId: string | undefined, boar
 }
 
 /**
- * Create a board of the project's own. Refused with `code_board` for a key
+ * Create a board of the project's own. Refused with a 409 when the key is taken: `code_board` for a key
  * Factory keeps, and `board_exists` for one the project already uses.
  */
 export function useCreateBoardMutation(factoryProjectId: string | undefined) {
