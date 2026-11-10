@@ -1,6 +1,7 @@
-import { File, Folder } from 'lucide-react';
 import * as React from 'react';
 import { useTreeDepth } from './tree-context';
+import { IconFileBend } from '@/ds/icons/central/IconFileBend';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -59,7 +60,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
       e.currentTarget.select();
     }, []);
 
-    const Icon = type === 'folder' ? Folder : File;
+    const Icon = type === 'folder' ? IconFolder1 : IconFileBend;
 
     return (
       <li

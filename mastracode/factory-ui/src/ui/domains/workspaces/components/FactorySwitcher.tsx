@@ -2,10 +2,13 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Check, ChevronDown, Factory as FactoryIcon, Plus } from 'lucide-react';
+import { Factory as FactoryIcon } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 export function FactorySwitcher() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -46,7 +49,7 @@ export function FactorySwitcher() {
             {activeFactory?.name ?? 'Select a factory…'}
           </Txt>
         )}
-        <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+        <IconChevronBottom size={14} className="text-muted-foreground shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (
@@ -55,13 +58,13 @@ export function FactorySwitcher() {
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{factory.name}</span>
             </span>
-            {factory.id === activeFactory?.id && <Check aria-label="Active factory" />}
+            {factory.id === activeFactory?.id && <IconCheckmark1 aria-label="Active factory" />}
           </DropdownMenu.Item>
         ))}
 
         {factories.length > 0 && <DropdownMenu.Separator />}
         <DropdownMenu.Item disabled={!createFactoryFrom} onSelect={openCreateFactory}>
-          <Plus />
+          <IconPlusLarge />
           <span>Create factory</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>

@@ -1,5 +1,4 @@
 import { useWorkspaceSearch } from '@mastra/react/hooks/workspace';
-import { XIcon } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
@@ -10,6 +9,7 @@ import { Metadata } from '@/ds/components/Metadata';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 import { FileIcon, Icon, SearchIcon, SkillIcon } from '@/ds/icons';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 /** Icon button that swaps the tree for the search panel, like VS Code's search view. */
@@ -75,7 +75,7 @@ function SearchInput() {
         }}
       />
       <Button variant="ghost" size="icon-sm" tooltip="Close search" onClick={() => setSearching(false)}>
-        <XIcon />
+        <IconCrossMedium />
       </Button>
     </div>
   );

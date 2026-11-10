@@ -1,4 +1,3 @@
-import { X, Eye } from 'lucide-react';
 import { getSignalColor } from './signal-colors';
 import { signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
@@ -6,6 +5,8 @@ import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 
 function filterSummary({
   selections,
@@ -84,7 +85,7 @@ export function ThemeFilterBanner({
                 <Metadata.Item>{selectionName}</Metadata.Item>
               </Metadata>
             </Txt>
-            <X aria-hidden="true" className="size-3.5" />
+            <IconCrossMedium aria-hidden="true" className="size-3.5" />
           </button>
         );
       })}
@@ -93,7 +94,7 @@ export function ThemeFilterBanner({
       </Txt>
       {!isUnavailable && filteredTraceCount !== undefined && latestSelection ? (
         <Button
-          icon={<Eye />}
+          icon={<IconEyeOpen />}
           aria-label={
             latestSelection.kind === 'theme'
               ? `View theme details for ${latestSelection.label}`
@@ -108,7 +109,7 @@ export function ThemeFilterBanner({
         </Button>
       ) : null}
       {selections.length > 1 ? (
-        <Button icon={<X />} onClick={onClear} size="sm" type="button" variant="ghost">
+        <Button icon={<IconCrossMedium />} onClick={onClear} size="sm" type="button" variant="ghost">
           Clear all
         </Button>
       ) : null}

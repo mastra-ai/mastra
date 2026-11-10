@@ -1,4 +1,3 @@
-import { Brain } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
@@ -15,6 +14,7 @@ import { MODEL_DEFAULTS_ICONS, MODEL_DEFAULTS_TONES } from './models/routing/mod
 import type { ModelDefaults } from './models/routing/model-routes';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 
 export function MemorySettings({
   factoryId,
@@ -33,7 +33,7 @@ export function MemorySettings({
     return (
       <EmptyState
         as="h2"
-        iconSlot={<Brain />}
+        iconSlot={<IconBrain />}
         titleSlot="No models configured"
         descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
         actionSlot={

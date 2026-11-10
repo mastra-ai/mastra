@@ -1,7 +1,8 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
-import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import {
   MENU_SIDE_OFFSET,
@@ -73,7 +74,7 @@ const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubT
         </span>
       )}
       <span className={cn(menuItemTrailingIconClass, hint != null && 'ml-0')}>
-        <ChevronDown className="-rotate-90" />
+        <IconChevronBottom className="-rotate-90" />
       </span>
     </MenuPrimitive.SubmenuTrigger>
   ),
@@ -260,7 +261,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.
     <MenuPrimitive.CheckboxItem ref={ref} className={cn(menuItemClass, className)} checked={checked} {...props}>
       {children}
       <MenuPrimitive.CheckboxItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark1 />
       </MenuPrimitive.CheckboxItemIndicator>
     </MenuPrimitive.CheckboxItem>
   ),
@@ -272,7 +273,7 @@ const DropdownMenuRadioItem = React.forwardRef<HTMLDivElement, MenuPrimitive.Rad
     <MenuPrimitive.RadioItem ref={ref} className={cn(menuItemClass, className)} {...props}>
       {children}
       <MenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark1 />
       </MenuPrimitive.RadioItemIndicator>
     </MenuPrimitive.RadioItem>
   ),

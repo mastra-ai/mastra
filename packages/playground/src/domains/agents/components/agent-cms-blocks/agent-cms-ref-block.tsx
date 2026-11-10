@@ -6,18 +6,22 @@ import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/c
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
-import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-
 import type { InstructionBlock, RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { DisplayConditionsDialog } from '@/domains/cms';
 import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
@@ -121,7 +125,7 @@ const RefBlockContent = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Icon>
-                  <GripVertical />
+                  <IconDotGrid2x3 />
                 </Icon>
               </TooltipTrigger>
               <TooltipContent side="left">Drag to reorder</TooltipContent>
@@ -178,7 +182,7 @@ const RefBlockContent = ({
                       )}
                     >
                       <Icon className="h-3! w-3!">
-                        <ChevronDown />
+                        <IconChevronBottom />
                       </Icon>
                     </button>
                   </PopoverTrigger>
@@ -203,7 +207,7 @@ const RefBlockContent = ({
                         )}
                       >
                         <Icon className="h-3.5! w-3.5! text-muted-foreground">
-                          <ExternalLink />
+                          <IconSquareArrowTopRight />
                         </Icon>
                         <Txt as="span" variant="meta" className="block">
                           Open original
@@ -222,7 +226,7 @@ const RefBlockContent = ({
                           )}
                         >
                           <Icon className="h-3.5! w-3.5! text-muted-foreground">
-                            <X />
+                            <IconCrossMedium />
                           </Icon>
                           <Txt as="span" variant="meta" className="block">
                             De-reference block
@@ -236,7 +240,7 @@ const RefBlockContent = ({
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
-                            <X />
+                            <IconCrossMedium />
                           </Icon>
                           <Txt as="span" variant="meta" className="block">
                             Remove block
@@ -265,7 +269,7 @@ const RefBlockContent = ({
 
             {(isDraft || hasUnpublishedEdits) && (
               <div className="flex items-start gap-1.5 px-1 pb-1 text-warning-foreground">
-                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <IconExclamationTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <Txt as="span" variant="meta">
                   {isDraft
                     ? 'This block is skipped at runtime until it is published.'

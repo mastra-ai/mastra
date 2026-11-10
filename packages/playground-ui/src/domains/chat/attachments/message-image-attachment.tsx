@@ -1,7 +1,7 @@
-import { FileImage } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { ImagePreviewDialog } from './attachment-preview-dialog';
 import { AttachmentCard } from '@/ds/components/AttachmentCard';
+import { IconImages1 } from '@/ds/icons/central/IconImages1';
 
 export function MessageImageAttachment({ src, name, typeLabel }: { src: string; name: string; typeLabel: string }) {
   const [open, setOpen] = useState(false);
@@ -13,7 +13,7 @@ export function MessageImageAttachment({ src, name, typeLabel }: { src: string; 
         buttonRef={triggerRef}
         name={name}
         typeLabel={failed ? `${typeLabel} (preview unavailable)` : typeLabel}
-        icon={<FileImage className="size-5" />}
+        icon={<IconImages1 className="size-5" />}
         onClick={failed || !src ? undefined : () => setOpen(true)}
         href={failed && /^https?:\/\//.test(src) ? src : undefined}
         preview={

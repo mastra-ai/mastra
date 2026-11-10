@@ -1,15 +1,6 @@
 import { describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability';
 import type { UsageStats } from '@mastra/core/observability';
-import {
-  BracesIcon,
-  CircleXIcon,
-  ExternalLinkIcon,
-  EyeIcon,
-  FileInputIcon,
-  FileOutputIcon,
-  InfoIcon,
-  MessageSquareReplyIcon,
-} from 'lucide-react';
+import { MessageSquareReplyIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SpanRecord, SpanTab } from '../types';
@@ -46,6 +37,13 @@ import { Notice } from '@/ds/components/Notice';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
+import { IconCircleX } from '@/ds/icons/central/IconCircleX';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@/ds/icons/central/IconFileArrowRightOut';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
 import { formatTimestampPrecise } from '@/utils/date-format';
@@ -119,9 +117,9 @@ export function SpanDataPanelView({
   };
 
   const tabs: Array<{ value: SpanTab; name: string; icon: ReactNode; attention?: boolean; badge?: ReactNode }> = [
-    { value: 'details', name: 'Details', icon: <InfoIcon /> },
-    { value: 'input', name: 'Input', icon: <FileInputIcon /> },
-    { value: 'output', name: 'Output', icon: <FileOutputIcon />, attention: span?.error != null },
+    { value: 'details', name: 'Details', icon: <IconCircleInfo /> },
+    { value: 'input', name: 'Input', icon: <IconFileArrowRightIn /> },
+    { value: 'output', name: 'Output', icon: <IconFileArrowRightOut />, attention: span?.error != null },
     ...(feedbackTabSlot
       ? [{ value: 'feedback' as const, name: 'Feedback', icon: <MessageSquareReplyIcon />, badge: feedbackTabBadge }]
       : []),
@@ -157,7 +155,7 @@ export function SpanDataPanelView({
               className="shrink-0"
               onClick={() => onShowTrace({ traceId, spanId })}
             >
-              <ExternalLinkIcon />
+              <IconSquareArrowTopRight />
             </Button>
           )}
           {(onPrevious || onNext) && (
@@ -453,7 +451,7 @@ function SpanProblem({ span }: { span: SpanRecord }) {
   if (outcome?.tone !== 'error' && outcome?.tone !== 'warning') return null;
   if (span.error != null) {
     return (
-      <Notice variant="destructive" icon={<CircleXIcon />} title={<h3>{outcome.headline}</h3>}>
+      <Notice variant="destructive" icon={<IconCircleX />} title={<h3>{outcome.headline}</h3>}>
         <SpanErrorDetails span={span} />
       </Notice>
     );
@@ -462,7 +460,7 @@ function SpanProblem({ span }: { span: SpanRecord }) {
   const tripwire = describeProcessorPipeline(asCoreSpan(span))?.tripwireAbort;
   if (!tripwire) return <SpanOutcomeSummary outcome={outcome} showDetail />;
   return (
-    <Notice variant="destructive" icon={<CircleXIcon />} title={<h3>{outcome.headline}</h3>}>
+    <Notice variant="destructive" icon={<IconCircleX />} title={<h3>{outcome.headline}</h3>}>
       {tripwire.reason && <p className="break-words whitespace-pre-wrap">{tripwire.reason}</p>}
       {tripwire.retry !== undefined && (
         <Txt as="p" variant="body-sm" tone="muted">
@@ -586,7 +584,7 @@ function Payload({
             tooltip={view === 'raw' ? `Show ${label.toLowerCase()} preview` : `Show ${label.toLowerCase()} as JSON`}
             onClick={() => onViewChange(view === 'raw' ? 'rich' : 'raw')}
           >
-            {view === 'raw' ? <EyeIcon /> : <BracesIcon />}
+            {view === 'raw' ? <IconEyeOpen /> : <IconCodeBrackets />}
           </Button>
         )}
         <CopyButton

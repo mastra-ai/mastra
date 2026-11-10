@@ -5,6 +5,9 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -12,7 +15,6 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useAgents } from '@mastra/react/hooks/agents';
 import { useScorer, useScoresByScorerId } from '@mastra/react/hooks/scores';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
-import { MoreVertical, Pencil, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -196,12 +198,12 @@ export default function Scorer() {
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
         <Button size="icon-lg" aria-label="Scorer actions menu">
-          <MoreVertical />
+          <IconDotGrid1x3Vertical />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-48">
         <DropdownMenu.Item onSelect={() => void navigate(`/cms/scorers/${scorerId}/edit`)}>
-          <Pencil /> Edit scorer
+          <IconPencil /> Edit scorer
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
@@ -267,7 +269,7 @@ export default function Scorer() {
           </ActionRow.Start>
           <ActionRow.End>
             <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
-            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Plus />}>
+            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<IconPlusLarge />}>
               New experiment
             </Button>
             {scorerActionsMenu}

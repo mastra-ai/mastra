@@ -1,6 +1,5 @@
 import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { SpanDataPanelView } from '../span-data-panel-view';
 import { SpanDetailsView } from '../span-details-view';
@@ -13,6 +12,8 @@ import { SpanOutputRenderer } from './span-output-renderers';
 import { asCoreSpan } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
 import { SpanProcessorMutations } from './span-processor-mutations';
+import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@/ds/icons/central/IconFileArrowRightOut';
 import { cn } from '@/lib/utils';
 
 type FixtureName = keyof typeof ALL_SPAN_FIXTURES;
@@ -50,7 +51,7 @@ export const InputRenderers: StoryObj = {
           <Cell key={name} title={name} tag={describeSpanInput(asCoreSpan(span))?.type}>
             <SpanPayloadSection
               title="Input"
-              icon={<FileInputIcon />}
+              icon={<IconFileArrowRightIn />}
               raw={span.input}
               hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
             >
@@ -72,7 +73,7 @@ export const OutputRenderers: StoryObj = {
           <Cell key={name} title={name} tag={describeSpanOutput(asCoreSpan(span))?.type}>
             <SpanPayloadSection
               title="Output"
-              icon={<FileOutputIcon />}
+              icon={<IconFileArrowRightOut />}
               raw={span.output}
               hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
             >
@@ -105,7 +106,7 @@ function Both({ span }: { span: SpanRecord }) {
     <div className="flex max-w-3xl flex-col gap-3">
       <SpanPayloadSection
         title="Input"
-        icon={<FileInputIcon />}
+        icon={<IconFileArrowRightIn />}
         raw={span.input}
         hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
       >
@@ -113,7 +114,7 @@ function Both({ span }: { span: SpanRecord }) {
       </SpanPayloadSection>
       <SpanPayloadSection
         title="Output"
-        icon={<FileOutputIcon />}
+        icon={<IconFileArrowRightOut />}
         raw={span.output}
         hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
       >

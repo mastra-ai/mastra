@@ -1,12 +1,12 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
-import { InfoIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { DataList } from '@/ds/components/DataList';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 
 export type TraceScoresListProps = {
@@ -101,7 +101,7 @@ function TraceScoreLine({ score, onSelect }: { score: ClientScoreRowData; onSele
                 />
               }
             >
-              <InfoIcon />
+              <IconCircleInfo />
             </HoverCardTrigger>
             <HoverCardContent side="left" align="start" className="max-h-80 max-w-100 overflow-y-auto">
               <MarkdownRenderer>{reason}</MarkdownRenderer>

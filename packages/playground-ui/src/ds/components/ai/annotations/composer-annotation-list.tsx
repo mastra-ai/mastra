@@ -1,4 +1,3 @@
-import { TextQuote, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { rangeFromSource } from './annotatable-selection';
@@ -7,6 +6,8 @@ import { visibleComment } from './chat-annotations';
 import type { ChatAnnotation } from './chat-annotations';
 import { Button } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconOpenQuote1 } from '@/ds/icons/central/IconOpenQuote1';
 import { focusRing } from '@/ds/primitives/transitions';
 import { pluralize } from '@/lib/string';
 import { cn } from '@/lib/utils';
@@ -30,7 +31,7 @@ export function ComposerAnnotationList({ annotations, onRemove }: ComposerAnnota
     <div data-slot="composer-annotations" className="flex px-2 pt-2">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger type="button" size="sm">
-          <TextQuote aria-hidden="true" />
+          <IconOpenQuote1 aria-hidden="true" />
           {pluralize(annotations.length, 'annotation')}
         </PopoverTrigger>
         <PopoverContent
@@ -70,7 +71,7 @@ export function ComposerAnnotationList({ annotations, onRemove }: ComposerAnnota
                     tooltip={`Remove annotation ${index + 1}`}
                     onClick={() => onRemove(annotation.id)}
                   >
-                    <X />
+                    <IconCrossMedium />
                   </Button>
                 </li>
               );

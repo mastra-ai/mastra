@@ -1,9 +1,12 @@
-import { Ellipsis, Eye, Pencil, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ComposerAttachmentContext } from './composer-attachment-context';
 import { Button } from '@/ds/components/Button/Button';
 import { ContextMenu } from '@/ds/components/ContextMenu/context-menu';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/utils/cn';
 
@@ -151,7 +154,7 @@ export function ComposerAttachment({
             aria-label={`Remove ${name}`}
             title={`Remove ${name}`}
           >
-            <X />
+            <IconCrossMedium />
           </Button>
           {onEdit && (
             <Button
@@ -163,7 +166,7 @@ export function ComposerAttachment({
               aria-label={`Edit ${name}`}
               title={`Edit ${name}`}
             >
-              <Pencil />
+              <IconPencil />
             </Button>
           )}
         </div>
@@ -177,25 +180,25 @@ export function ComposerAttachment({
           aria-expanded={menuOpen}
           onClick={event => openMenu(event.currentTarget)}
         >
-          <Ellipsis />
+          <IconDotGrid1x3Horizontal />
         </Button>
       </ContextMenu.Trigger>
       <ContextMenu.Content ref={menuContentRef} anchor={menuAnchor} collisionPadding={8} finalFocus={returnFocus}>
         {onPreview && (
           <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(onPreview)}>
-            <Eye />
+            <IconEyeOpen />
             <span>Preview</span>
           </ContextMenu.Item>
         )}
         {onEdit && (
           <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(onEdit)}>
-            <Pencil />
+            <IconPencil />
             <span>Edit</span>
           </ContextMenu.Item>
         )}
         {(onPreview || onEdit) && <ContextMenu.Separator />}
         <ContextMenu.Item className="min-h-11" variant="destructive" onSelect={() => runMenuAction(onRemove)}>
-          <X />
+          <IconCrossMedium />
           <span>Remove</span>
         </ContextMenu.Item>
       </ContextMenu.Content>

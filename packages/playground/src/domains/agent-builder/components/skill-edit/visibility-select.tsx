@@ -1,7 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Globe, LockIcon } from 'lucide-react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
 
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { useFormContext, useWatch } from 'react-hook-form';
 import { useVisibilityChange } from '../../hooks/use-visibility-change-skill';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
 
@@ -24,7 +25,7 @@ export function VisibilitySelect({ skillId }: VisibilitySelectProps) {
           variant="default"
           onClick={() => requestChange('public')}
           data-testid="skill-builder-visibility-add"
-          icon={<Globe />}
+          icon={<IconGlobe />}
         >
           Add to library
         </Button>
@@ -34,7 +35,7 @@ export function VisibilitySelect({ skillId }: VisibilitySelectProps) {
           variant="ghost"
           onClick={() => requestChange('private')}
           data-testid="skill-builder-visibility-remove"
-          icon={<LockIcon />}
+          icon={<IconLock />}
         >
           Remove from library
         </Button>

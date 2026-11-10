@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
@@ -11,6 +10,7 @@ import { isConnectToolsOffError, MASTRA_PLATFORM_URL } from '../../factory/servi
 import type { ConnectToolConnection } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 const SECTION_LABEL = 'Mastra Connect';
 
@@ -80,7 +80,7 @@ function ManageLink() {
   return (
     <Button
       size="sm"
-      iconEnd={<ExternalLink />}
+      iconEnd={<IconSquareArrowTopRight />}
       render={<a href={MASTRA_PLATFORM_URL} target="_blank" rel="noreferrer" />}
     >
       Manage in Mastra Platform

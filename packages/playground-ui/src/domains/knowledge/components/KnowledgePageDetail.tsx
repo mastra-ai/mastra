@@ -1,4 +1,3 @@
-import { Pin } from 'lucide-react';
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
@@ -25,6 +24,7 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Metadata } from '@/ds/components/Metadata';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
 import { Txt } from '@/ds/components/Txt';
+import { IconPin } from '@/ds/icons/central/IconPin';
 
 const ACTIVITY_LABELS: Record<KnowledgeActivityAction, string> = {
   'scope-created': 'Scope created',
@@ -372,7 +372,7 @@ export function KnowledgePageDetail({
               {kind}
             </Badge>
             {pin ? (
-              <Badge variant="warning" size="sm" icon={<Pin size={10} aria-hidden />}>
+              <Badge variant="warning" size="sm" icon={<IconPin size={10} aria-hidden />}>
                 {pin.audience.length > 0 ? `Pinned for ${pin.audience.join(', ')}` : 'Pinned'}
               </Badge>
             ) : null}

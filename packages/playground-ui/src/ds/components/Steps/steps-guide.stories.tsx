@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUpRightIcon, KeyRoundIcon } from 'lucide-react';
 import { Steps } from './steps';
 import { Button } from '@/ds/components/Button';
 import { CodeBlock } from '@/ds/components/CodeBlock';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
+import { IconKey1 } from '@/ds/icons/central/IconKey1';
 
 const meta: Meta<typeof Steps> = {
   title: 'Navigation/Steps/Guide',
@@ -30,7 +31,7 @@ export const Default: Story = {
       <Steps.Step title="Create an API key">
         <div>
           <Button variant="primary" size="md">
-            <KeyRoundIcon />
+            <IconKey1 />
             Create API key
           </Button>
         </div>
@@ -55,7 +56,7 @@ export const InProgress: Story = {
         title="Connect your project"
         description="Paste this into your coding agent, or copy the snippet for your stack."
         action={
-          <Button size="sm" iconEnd={<ArrowUpRightIcon />}>
+          <Button size="sm" iconEnd={<IconArrowUpRight />}>
             Docs
           </Button>
         }

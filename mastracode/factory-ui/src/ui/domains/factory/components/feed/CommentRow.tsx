@@ -14,7 +14,6 @@ import {
 } from '@mastra/playground-ui/components/Comment';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useMutation } from '@tanstack/react-query';
-import { Link2, Pencil, Quote, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Ref } from 'react';
 
@@ -24,6 +23,10 @@ import type { WorkItemComment } from '../../services/commentsWire';
 import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconOpenQuote1 } from '@mastra/playground-ui/icons/central/IconOpenQuote1';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 // A hand-picked passage is quoted as picked; quoting a whole comment gets more
 // room, since the reader has no highlight to tell them what mattered.
@@ -196,22 +199,22 @@ export function CommentRow({
         <CommentItemActions>
           {onQuote ? (
             <RowAction label="Quote reply" onClick={quoteReply} onMouseDown={event => event.preventDefault()}>
-              <Quote aria-hidden />
+              <IconOpenQuote1 aria-hidden />
             </RowAction>
           ) : null}
           {commentUrl ? (
             <RowAction label="Copy link" onClick={() => void navigator.clipboard.writeText(commentUrl)}>
-              <Link2 aria-hidden />
+              <IconChainLink1 aria-hidden />
             </RowAction>
           ) : null}
           {own ? (
             <RowAction label="Edit comment" onClick={() => setEditing(true)}>
-              <Pencil aria-hidden />
+              <IconPencil aria-hidden />
             </RowAction>
           ) : null}
           {own && onDelete ? (
             <RowAction label="Delete comment" onClick={onDelete}>
-              <Trash2 aria-hidden />
+              <IconTrashCan aria-hidden />
             </RowAction>
           ) : null}
         </CommentItemActions>

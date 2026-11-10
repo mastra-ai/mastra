@@ -1,4 +1,3 @@
-import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentProps } from 'react';
 import type { SidebarState } from '../root/sidebar-context';
@@ -7,6 +6,7 @@ import { navItemClasses, navItemLayoutClasses, navRowSurfaceClasses } from './si
 import type { SidebarNavItemSize } from './sidebar-nav-item-classes';
 import { SidebarNavLabel } from './sidebar-nav-label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -118,7 +118,7 @@ function navInteractiveRow({
   // "you are here", and a fill says nothing to a screen reader.
   const current = isActive ? ('page' as const) : undefined;
   const caret =
-    link?.opensView && state !== 'collapsed' ? <ChevronRightIcon aria-hidden="true" className="!size-3.5" /> : null;
+    link?.opensView && state !== 'collapsed' ? <IconChevronRight aria-hidden="true" className="!size-3.5" /> : null;
 
   if (render || asChild) {
     const slotted = render ?? children;

@@ -2,9 +2,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
-import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { CopySkillDialog } from '@/domains/agent-builder/components/skill-list/copy-skill-dialog';
@@ -69,7 +70,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           tooltip="Skills list"
           data-testid="skill-view-back-button"
         >
-          <ArrowLeftIcon />
+          <IconArrowLeft />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Txt as="p" variant="body" tone="ink" data-testid="skill-view-title" className="min-w-0 truncate">
@@ -85,7 +86,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
               size="md"
               onClick={() => setCopyOpen(true)}
               data-testid="skill-view-copy-button"
-              icon={<PlusIcon />}
+              icon={<IconPlusLarge />}
             >
               Copy to my skills
             </Button>

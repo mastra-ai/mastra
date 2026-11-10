@@ -1,12 +1,13 @@
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Volume2Icon, VolumeXIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { DONE_SOUND_OPTIONS } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconVolumeFull } from '@mastra/playground-ui/icons/central/IconVolumeFull';
+import { IconVolumeOff } from '@mastra/playground-ui/icons/central/IconVolumeOff';
 
 const AUDIBLE_SOUNDS = DONE_SOUND_OPTIONS.filter(option => option.value !== 'none');
 
@@ -35,7 +36,7 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         )}
         onClick={() => onChange(muted ? lastAudible : 'none')}
       >
-        {muted ? <VolumeXIcon aria-hidden className="size-4" /> : <Volume2Icon aria-hidden className="size-4" />}
+        {muted ? <IconVolumeOff aria-hidden className="size-4" /> : <IconVolumeFull aria-hidden className="size-4" />}
       </button>
 
       <Select

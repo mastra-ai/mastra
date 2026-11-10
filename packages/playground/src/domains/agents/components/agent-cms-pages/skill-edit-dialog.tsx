@@ -5,7 +5,17 @@ import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -13,20 +23,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useAuthCapabilities } from '@mastra/react/hooks/auth';
 import { useWorkspaceInfo, useStoredWorkspaces } from '@mastra/react/hooks/workspace';
-import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronRight,
-  CopyIcon,
-  Globe,
-  LockIcon,
-  Pencil,
-  Settings2,
-  Check,
-} from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-
 import { useCreateSkill } from '../../hooks/use-create-skill';
 import { useUpdateSkill } from '../../hooks/use-update-skill';
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -278,7 +276,7 @@ export function SkillEditDialog({
               <TooltipTrigger asChild>
                 <span className="shrink-0 text-muted-foreground" aria-label="Private skill">
                   <Icon size="xs">
-                    <LockIcon />
+                    <IconLock />
                   </Icon>
                 </span>
               </TooltipTrigger>
@@ -288,14 +286,14 @@ export function SkillEditDialog({
         </SideDialog.Heading>
         <div className="mr-6 flex items-center gap-2">
           {isViewMode && isOwner && (
-            <Button size="sm" onClick={() => setIsEditing(true)} icon={<Pencil />}>
+            <Button size="sm" onClick={() => setIsEditing(true)} icon={<IconPencil />}>
               Edit
             </Button>
           )}
           {isViewMode && !isOwner && onCopy && skill && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="sm" onClick={() => onCopy(skill)} icon={<CopyIcon />}>
+                <Button size="sm" onClick={() => onCopy(skill)} icon={<IconSquareBehindSquare1 />}>
                   Copy
                 </Button>
               </TooltipTrigger>
@@ -312,13 +310,13 @@ export function SkillEditDialog({
                   <SelectContent>
                     <SelectItem value="private">
                       <span className="flex items-center gap-2">
-                        <LockIcon className="h-3.5 w-3.5" />
+                        <IconLock className="h-3.5 w-3.5" />
                         Private
                       </span>
                     </SelectItem>
                     <SelectItem value="public">
                       <span className="flex items-center gap-2">
-                        <Globe className="h-3.5 w-3.5" />
+                        <IconGlobe className="h-3.5 w-3.5" />
                         Public
                       </span>
                     </SelectItem>
@@ -326,7 +324,7 @@ export function SkillEditDialog({
                 </Select>
               )}
               <Button
-                icon={isExistingSkill ? <Check /> : <SkillIcon />}
+                icon={isExistingSkill ? <IconCheckmark1 /> : <SkillIcon />}
                 variant="primary"
                 size="sm"
                 onClick={handleSave}
@@ -374,7 +372,7 @@ export function SkillEditDialog({
                   onClick={() => setShowForm(false)}
                   className={cn('mb-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                 >
-                  <ChevronDown className="h-3 w-3" />
+                  <IconChevronBottom className="h-3 w-3" />
                   <Txt as="span" variant="caption" className="block">
                     Hide skill details
                   </Txt>
@@ -382,7 +380,7 @@ export function SkillEditDialog({
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
                   <div className="mb-4 flex items-start gap-2 rounded-lg bg-warning-subtle p-3 text-warning-subtle-foreground">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <IconExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <Txt as="span" variant="caption">
                       {!workspaceId
                         ? 'No workspace available. The skill will be saved to the database only.'
@@ -422,11 +420,11 @@ export function SkillEditDialog({
                         }}
                         className={cn('mt-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                       >
-                        <Settings2 className="h-3.5 w-3.5" />
+                        <IconSettingsSliderHor className="h-3.5 w-3.5" />
                         <Txt as="span" variant="caption" className="block">
                           Advanced mode
                         </Txt>
-                        <ChevronRight className="h-3 w-3" />
+                        <IconChevronRight className="h-3 w-3" />
                       </button>
                     )}
                   </>
@@ -444,11 +442,11 @@ export function SkillEditDialog({
                         }}
                         className={cn('mb-3 flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <IconPencil className="h-3.5 w-3.5" />
                         <Txt as="span" variant="caption" className="block">
                           Simple mode
                         </Txt>
-                        <ChevronRight className="h-3 w-3" />
+                        <IconChevronRight className="h-3 w-3" />
                       </button>
                     )}
                     <SkillFolder
@@ -468,7 +466,7 @@ export function SkillEditDialog({
                   onClick={() => setShowForm(true)}
                   className={cn('flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}
                 >
-                  <ChevronRight className="h-3 w-3" />
+                  <IconChevronRight className="h-3 w-3" />
                   <Txt as="span" variant="caption" className="block">
                     {hasFields ? 'Show skill details' : 'or fill in manually'}
                   </Txt>

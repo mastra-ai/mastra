@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { RefreshCwIcon } from 'lucide-react';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { useLiveKitRecording } from '../hooks/use-livekit-recording';
 import { LiveKitRecordingState } from './livekit-recording-state';
 
@@ -9,7 +9,7 @@ export function LiveKitRecordingContent({ traceId }: { traceId: string }) {
     <div className="flex flex-col gap-4">
       <LiveKitRecordingState data={data} isFetching={isFetching} isError={isError} dataUpdatedAt={dataUpdatedAt} />
       <Button size="sm" disabled={isFetching} onClick={() => void refetch()}>
-        <RefreshCwIcon />
+        <IconArrowRotateClockwise />
         Refresh recording
       </Button>
     </div>

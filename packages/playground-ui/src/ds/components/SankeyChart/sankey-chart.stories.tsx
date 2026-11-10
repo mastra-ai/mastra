@@ -1,13 +1,13 @@
 import type { DraggableProvided, DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 import { SankeyChart } from './sankey-chart';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Field, FieldLabel } from '@/ds/components/Field';
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -98,7 +98,7 @@ function UserLandControls() {
                         className={cn('rounded-sm text-muted-foreground', focusRing)}
                         aria-label={`Reorder ${column.label}`}
                       >
-                        <GripVertical className="size-3.5" aria-hidden="true" />
+                        <IconDotGrid2x3 className="size-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   )}

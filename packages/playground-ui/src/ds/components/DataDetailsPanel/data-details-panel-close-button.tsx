@@ -1,5 +1,5 @@
-import { XIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
 export interface DataDetailsPanelCloseButtonProps {
   onClick: () => void;
@@ -14,7 +14,7 @@ export function DataDetailsPanelCloseButton({
 }: DataDetailsPanelCloseButtonProps) {
   return (
     <Button size="icon-md" onClick={onClick} aria-label="Close panel" tooltip={tooltip} className={className}>
-      <XIcon />
+      <IconCrossMedium />
     </Button>
   );
 }

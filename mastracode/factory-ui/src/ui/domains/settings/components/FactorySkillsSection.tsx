@@ -6,7 +6,6 @@ import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureCh
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Code as CodeIcon, FileText, Pencil } from 'lucide-react';
 import { createContext, useContext, useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -16,6 +15,9 @@ import { orderedBoards } from '../../factory/boardCatalog';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { FactorySkillEditorDialog } from './FactorySkillEditorDialog';
 import { SettingsSubsection } from './SettingsSubsection';
+import { IconCode } from '@mastra/playground-ui/icons/central/IconCode';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 
 /** Which Factory's copy of each skill the cards edit, and whether the viewer may. */
 const SkillEditingContext = createContext<{ factoryId?: string; canEdit: boolean }>({ canEdit: false });
@@ -62,7 +64,7 @@ function SkillContent({ content }: { content: string }) {
         onClick={() => setRaw(shown => !shown)}
         className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
-        {raw ? <FileText /> : <CodeIcon />}
+        {raw ? <IconFileText /> : <IconCode />}
       </Button>
     </div>
   );
@@ -106,7 +108,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
           </CollapsibleTrigger>
           <Button
             size="sm"
-            icon={editable ? <Pencil /> : <FileText />}
+            icon={editable ? <IconPencil /> : <IconFileText />}
             aria-label={`${editable ? 'Edit' : 'View'} ${skill.name}`}
             onClick={() => setEditing(true)}
           >

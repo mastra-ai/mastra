@@ -1,5 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
+import { CirclePause } from 'lucide-react';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parse } from 'superjson';
@@ -13,6 +13,9 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowDownLeft } from '@/ds/icons/central/IconArrowDownLeft';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
@@ -145,7 +148,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
         <div className="space-y-2">
           <Txt as="p" variant="caption" tone="muted" className="flex items-center gap-2">
             <Icon>
-              <MoveDownLeft />
+              <IconArrowDownLeft />
             </Icon>
             The step is asking
           </Txt>
@@ -186,7 +189,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
       <div className="space-y-3">
         <Txt as="p" variant="caption" tone="muted" className="flex items-center gap-2">
           <Icon>
-            <MoveUpRight />
+            <IconArrowUpRight />
           </Icon>
           Your response
         </Txt>
@@ -197,7 +200,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
             isSubmitLoading={isResuming}
             submitButtonLabel="Resume"
             submitButtonVariant="primary"
-            submitButtonIcon={<Play />}
+            submitButtonIcon={<IconPlay />}
             submitButtonFullWidth
             collapsible={false}
             hideHeading

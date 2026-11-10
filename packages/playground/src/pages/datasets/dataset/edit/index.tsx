@@ -4,9 +4,9 @@ import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { IconServer1 } from '@mastra/playground-ui/icons/central/IconServer1';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useDataset } from '@mastra/react/hooks/datasets';
-import { DatabaseIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -75,7 +75,7 @@ function EditDatasetPage() {
           <MainHeader className="mb-6 p-0">
             <MainHeader.Column>
               <MainHeader.Title>
-                <DatabaseIcon /> Edit dataset
+                <IconServer1 /> Edit dataset
               </MainHeader.Title>
               <MainHeader.Description>{dataset.name}</MainHeader.Description>
             </MainHeader.Column>

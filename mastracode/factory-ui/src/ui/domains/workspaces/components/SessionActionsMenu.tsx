@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { MoreHorizontal } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 
 export function SessionActionsMenu({
   name,
@@ -26,7 +26,7 @@ export function SessionActionsMenu({
             disabled={disabled}
             className="group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex pointer-fine:hidden"
           >
-            <MoreHorizontal />
+            <IconDotGrid1x3Horizontal />
           </Button>
         }
       />

@@ -1,6 +1,5 @@
 import { NotificationActivity } from '@mastra/playground-ui/components/ai/activity';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Bell, CircleDot } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
@@ -8,6 +7,8 @@ import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
+import { IconBell } from '@mastra/playground-ui/icons/central/IconBell';
+import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
 
 /** Where a notification's "Open on …" link points; GitHub and GitLab name the provider. */
 export function notificationLinkLabel(entry: Pick<NotificationEntry, 'source'>): string {
@@ -47,9 +48,9 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
     return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
   }
   if (action === 'opened' || action === 'reopened') {
-    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-success-indicator' };
+    return { state: 'open', icon: <IconCircleRecord size={13} />, className: 'text-success-indicator' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning-foreground' };
+  return { state: 'notification', icon: <IconBell size={13} />, className: 'text-warning-foreground' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {

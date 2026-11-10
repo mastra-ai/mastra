@@ -1,4 +1,3 @@
-import { RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area,
@@ -32,6 +31,7 @@ import {
   toMessageData,
   toSelectedT,
 } from './flame-graph-data';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
 import { formatDate } from '@/utils/date-format';
 
 export interface ZoomRange {
@@ -367,7 +367,7 @@ function ZoomTrack({
           Zoom
         </Txt>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
-          <RotateCcw className="size-3" />
+          <IconArrowRotateCounterClockwise className="size-3" />
         </Button>
       </div>
       <div

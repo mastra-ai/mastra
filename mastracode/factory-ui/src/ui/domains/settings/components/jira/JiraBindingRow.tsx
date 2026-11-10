@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
@@ -9,6 +8,7 @@ import { BoardPicker } from '../IntakeSourceRouting';
 import { JiraLabelEditor } from './JiraLabelEditor';
 import { RoutingNote } from './RoutingNote';
 import { routingGap } from './routing';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 
 const ALL_ISSUES = 'all';
 const LABELLED = 'labelled';
@@ -86,7 +86,7 @@ export function JiraBindingRow({
           onClick={onRemove}
           className="ml-auto"
         >
-          <X />
+          <IconCrossMedium />
         </Button>
       </div>
       {labelled && <JiraLabelEditor factory={factory} labels={labels} onChange={onLabelsChange} />}

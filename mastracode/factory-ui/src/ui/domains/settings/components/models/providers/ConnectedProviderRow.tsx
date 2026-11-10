@@ -5,8 +5,6 @@ import type { StatusPresentation } from '@mastra/playground-ui/components/Status
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box, MoreHorizontal } from 'lucide-react';
-
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import {
   useRemoveProviderKey,
@@ -16,6 +14,8 @@ import {
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import { signInRequest } from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
+import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 
 export interface ProviderConnection {
   provider: ProviderInfo;
@@ -98,7 +98,7 @@ export function ConnectedProviderRow({
 
   return (
     <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
+      <ProviderBrandIcon provider={provider.provider} fallback={<IconBox className="text-muted-foreground size-4" />} />
       <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate">
         {displayName}
       </Txt>
@@ -148,7 +148,7 @@ function CredentialMenu({
       <DropdownMenu.Trigger
         render={
           <Button variant="ghost" size="icon-sm" aria-label={`${displayName} actions`} disabled={disabled}>
-            <MoreHorizontal />
+            <IconDotGrid1x3Horizontal />
           </Button>
         }
       />

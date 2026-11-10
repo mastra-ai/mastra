@@ -1,6 +1,5 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Link2, RotateCcw } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
@@ -10,6 +9,8 @@ import { connectSlackUrl } from '../services/channelAccounts';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 import { IntegrationLabel } from './IntegrationLabel';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
 
 const slackLabel = <IntegrationLabel provider="slack" name="Slack" />;
 
@@ -49,7 +50,7 @@ export function ConnectedAccountsSection() {
           accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'
         }
       >
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void accountsQuery.refetch()}>
+        <Button size="sm" icon={<IconArrowRotateCounterClockwise />} onClick={() => void accountsQuery.refetch()}>
           Retry
         </Button>
       </SettingsRow>
@@ -66,7 +67,7 @@ export function ConnectedAccountsSection() {
         label={slackLabel}
         description={canConnect ? undefined : 'Slack sign-in is not configured on this server.'}
       >
-        <Button size="sm" icon={<Link2 />} disabled={!canConnect} onClick={connectSlack}>
+        <Button size="sm" icon={<IconChainLink1 />} disabled={!canConnect} onClick={connectSlack}>
           Connect Slack
         </Button>
       </SettingsRow>

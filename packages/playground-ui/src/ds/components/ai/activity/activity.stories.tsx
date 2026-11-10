@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bell, Brain, FileText, Layers, Sparkles, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import {
@@ -15,6 +14,12 @@ import {
   ActivityTrigger,
 } from './activity';
 import { Badge } from '@/ds/components/Badge';
+import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconBrain } from '@/ds/icons/central/IconBrain';
+import { IconConsole } from '@/ds/icons/central/IconConsole';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconSparklesTwo } from '@/ds/icons/central/IconSparklesTwo';
 
 const Code = ({ children }: { children: string }) => (
   <pre className="m-0 max-h-60 overflow-auto rounded-md bg-sidebar px-3 py-2 font-mono text-caption whitespace-pre-wrap text-muted-foreground">
@@ -26,7 +31,7 @@ const meta = {
   title: 'AI/Activity',
   component: ActivityItem,
   args: {
-    icon: <FileText aria-hidden />,
+    icon: <IconFileText aria-hidden />,
     label: 'Read file',
     detail: 'src/agent.ts',
     'aria-label': 'Tool: read file',
@@ -79,7 +84,7 @@ export const Inline: Story = {
 
 export const WithoutBody: Story = {
   args: {
-    icon: <Sparkles aria-hidden />,
+    icon: <IconSparklesTwo aria-hidden />,
     label: 'Thinking',
     detail: undefined,
     status: 'running',
@@ -91,7 +96,7 @@ export const WithoutBody: Story = {
 };
 
 export const Running: Story = {
-  args: { icon: <Terminal aria-hidden />, label: 'Running command', detail: 'pnpm test', status: 'running' },
+  args: { icon: <IconConsole aria-hidden />, label: 'Running command', detail: 'pnpm test', status: 'running' },
 };
 
 export const Failed: Story = {
@@ -127,21 +132,26 @@ export const EveryKind: Story = {
   },
   render: () => (
     <div className="flex flex-col gap-1">
-      <ActivityItem icon={<Brain aria-hidden />} label="Reasoning" aria-label="Reasoning">
+      <ActivityItem icon={<IconBrain aria-hidden />} label="Reasoning" aria-label="Reasoning">
         <Code>The user wants the config read before any change.</Code>
       </ActivityItem>
-      <ActivityItem icon={<FileText aria-hidden />} label="Read file" detail="src/config.ts" aria-label="Tool: view">
+      <ActivityItem
+        icon={<IconFileText aria-hidden />}
+        label="Read file"
+        detail="src/config.ts"
+        aria-label="Tool: view"
+      >
         <Code>{'export const config = {};'}</Code>
       </ActivityItem>
       <ActivityItem
-        icon={<Layers className="text-badge-purple-indicator" aria-hidden />}
+        icon={<IconLayersTwo className="text-badge-purple-indicator" aria-hidden />}
         label="factory-phase"
         badges={<Badge size="xs">delta</Badge>}
         detail="Stage: building → review"
         aria-label="Signal: factory-phase"
       />
       <ActivityItem
-        icon={<Bell className="text-warning-foreground" aria-hidden />}
+        icon={<IconBell className="text-warning-foreground" aria-hidden />}
         label="github / issue-opened"
         badges={
           <Badge size="xs" variant="orange">
@@ -151,7 +161,7 @@ export const EveryKind: Story = {
         detail="Opening a workflow shows a blank page."
         aria-label="Notification: github / issue-opened"
       />
-      <ActivityItem icon={<Sparkles aria-hidden />} label="Thinking" status="running" aria-label="Thinking" />
+      <ActivityItem icon={<IconSparklesTwo aria-hidden />} label="Thinking" status="running" aria-label="Thinking" />
     </div>
   ),
 };

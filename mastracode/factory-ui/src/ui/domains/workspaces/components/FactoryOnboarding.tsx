@@ -24,7 +24,6 @@ import {
 import type { OnboardingDraft, OnboardingModelScope, OnboardingStep as Step } from '../services/onboardingFlow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft } from 'lucide-react';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
 import { companyAccountNeedsAdmin, useProviderConnection } from '../hooks/useProviderConnection';
@@ -37,6 +36,7 @@ import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { OnboardingReviewStep } from './onboarding/OnboardingReviewStep';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 
 interface StepPreview {
   modelScope?: OnboardingModelScope;
@@ -121,7 +121,7 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
                     aria-label="Go back to previous step"
                     disabled={complete.isPending}
                   >
-                    <ArrowLeft aria-hidden="true" />
+                    <IconArrowLeft aria-hidden="true" />
                     Back
                   </Button>
                 )}

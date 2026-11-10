@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { TooltipProvider } from '../Tooltip';
 import type { SchemaField } from './types';
 import { createField } from './types';
 import { JSONSchemaForm } from './index';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof JSONSchemaForm.Root> = {
@@ -73,7 +73,7 @@ function RecursiveFieldRenderer({
           )}
         </JSONSchemaForm.FieldList>
         <JSONSchemaForm.AddField className="mt-2">
-          <PlusIcon />
+          <IconPlusLarge />
           Add nested property
         </JSONSchemaForm.AddField>
       </JSONSchemaForm.NestedFields>
@@ -94,7 +94,7 @@ export const Default: Story = {
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField className="mt-4">
-            <PlusIcon className="mr-2 size-4" />
+            <IconPlusLarge className="mr-2 size-4" />
             Add property
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
@@ -139,7 +139,7 @@ export const WithDefaultValues: Story = {
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField className="mt-4">
-            <PlusIcon />
+            <IconPlusLarge />
             Add property
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
@@ -210,7 +210,7 @@ export const NestedObjects: Story = {
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField className="mt-4">
-            <PlusIcon />
+            <IconPlusLarge />
             Add property
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>
@@ -256,7 +256,7 @@ export const CustomStyling: Story = {
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField variant="primary" size="lg" className="w-full">
-            <PlusIcon className="mr-2 size-4" />
+            <IconPlusLarge className="mr-2 size-4" />
             Add New Property
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.Root>

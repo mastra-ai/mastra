@@ -3,10 +3,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Settings2 } from 'lucide-react';
 import type { UseMutationResult } from '@tanstack/react-query';
 
 import { useSetFactoryAutomationMutation } from '../../../../hooks/useFactoryAutomation';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 function AutomationSwitch({
   label,
@@ -53,7 +53,7 @@ export function BoardAutomationSettings({
   return (
     <Popover>
       <PopoverTrigger variant="default" size="icon-sm" aria-label="Automation settings" tooltip="Automation settings">
-        <Settings2 aria-hidden />
+        <IconSettingsSliderHor aria-hidden />
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)]" aria-label="Automation settings">
         <div className="flex flex-col gap-5">

@@ -3,18 +3,7 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  CheckCircle2,
-  CircleDashed,
-  CircleDot,
-  CircleX,
-  ClipboardCheck,
-  Eye,
-  GitPullRequest,
-  Hammer,
-  Play,
-  Search,
-} from 'lucide-react';
+import { ClipboardCheck } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 import type { WorkItemSource } from '../services/workItems';
@@ -22,18 +11,27 @@ import { boardStage, stageTone } from '../stages';
 import type { BuiltinStageId, StageTone } from '../stages';
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
+import { IconCheckCircle2 } from '@mastra/playground-ui/icons/central/IconCheckCircle2';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
+import { IconCircleX } from '@mastra/playground-ui/icons/central/IconCircleX';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconHammer } from '@mastra/playground-ui/icons/central/IconHammer';
 
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-foreground' },
-  'github-pr': { icon: GitPullRequest, className: 'text-badge-green-indicator' },
+  'github-pr': { icon: IconPullRequest, className: 'text-badge-green-indicator' },
   'gitlab-issue': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'gitlab-pr': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
   'linear-issue': { icon: LinearIcon, className: 'text-badge-blue-indicator' },
   'jira-issue': { icon: JiraIcon, className: 'text-badge-blue-indicator' },
   'incidentio-follow-up': { icon: IncidentIoIcon, className: 'text-badge-red-indicator' },
   'slack-thread': { icon: SlackIcon, className: '' },
-  manual: { icon: CircleDot, className: 'text-muted-foreground' },
+  manual: { icon: IconCircleRecord, className: 'text-muted-foreground' },
 };
 
 export function SourceIcon({ source, className }: { source: WorkItemSource; className?: string }) {
@@ -43,14 +41,14 @@ export function SourceIcon({ source, className }: { source: WorkItemSource; clas
 
 /** Icon for each known run-action label; `Play` is the fallback for anything else. */
 const ACTION_ICONS: Record<string, ComponentType> = {
-  Investigate: Search,
-  Build: Hammer,
+  Investigate: IconMagnifyingGlass,
+  Build: IconHammer,
   'Prepare approval': ClipboardCheck,
-  Review: Eye,
+  Review: IconEyeOpen,
 };
 
 export function actionIcon(label: string) {
-  const Icon = ACTION_ICONS[label] ?? Play;
+  const Icon = ACTION_ICONS[label] ?? IconPlay;
   return <Icon aria-hidden />;
 }
 
@@ -170,11 +168,11 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
       return <MaskedArt source="/factory-stage-icons/review.svg" className={className} />;
     case 'done':
     case 'terminal':
-      return <CheckCircle2 width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCheckCircle2 width={16} height={16} aria-hidden className={lucideClassName} />;
     case 'canceled':
-      return <CircleX width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCircleX width={16} height={16} aria-hidden className={lucideClassName} />;
     case 'resting':
-      return <CircleDashed width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCircleDashed width={16} height={16} aria-hidden className={lucideClassName} />;
   }
 }
 

@@ -1,21 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  Cloud,
-  CreditCard,
-  LifeBuoy,
-  LogOut,
-  Mail,
-  MessageSquare,
-  Plus,
-  Settings,
-  Trash2,
-  User,
-  UserPlus,
-  Users,
-} from 'lucide-react';
 import { useState } from 'react';
 import { ContextMenu } from './context-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
+import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
+import { IconCloud } from '@/ds/icons/central/IconCloud';
+import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
+import { IconEmail1 } from '@/ds/icons/central/IconEmail1';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { IconUser } from '@/ds/icons/central/IconUser';
+import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
+import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
 import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof ContextMenu> = {
@@ -76,17 +74,17 @@ export const WithIconsAndShortcuts: Story = {
         <ContextMenu.Group>
           <ContextMenu.Label>My Account</ContextMenu.Label>
           <ContextMenu.Item>
-            <User />
+            <IconUser />
             <span>Profile</span>
             <ContextMenu.Shortcut>Ctrl+P</ContextMenu.Shortcut>
           </ContextMenu.Item>
           <ContextMenu.Item>
-            <CreditCard />
+            <IconCreditCard1 />
             <span>Billing</span>
             <ContextMenu.Shortcut>Ctrl+B</ContextMenu.Shortcut>
           </ContextMenu.Item>
           <ContextMenu.Item>
-            <Settings />
+            <IconSettingsGear1 />
             <span>Settings</span>
             <ContextMenu.Shortcut>Ctrl+S</ContextMenu.Shortcut>
           </ContextMenu.Item>
@@ -95,17 +93,17 @@ export const WithIconsAndShortcuts: Story = {
         <ContextMenu.Group>
           <ContextMenu.Label>Team</ContextMenu.Label>
           <ContextMenu.Item>
-            <Users />
+            <IconUserDuo />
             <span>Team</span>
           </ContextMenu.Item>
           <ContextMenu.Item>
-            <UserPlus />
+            <IconUserAdd />
             <span>Invite users</span>
           </ContextMenu.Item>
         </ContextMenu.Group>
         <ContextMenu.Separator />
         <ContextMenu.Item>
-          <LogOut />
+          <IconArrowBoxLeft />
           <span>Log out</span>
           <ContextMenu.Shortcut>Ctrl+Q</ContextMenu.Shortcut>
         </ContextMenu.Item>
@@ -168,38 +166,38 @@ export const WithSubMenu: Story = {
       <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
       <ContextMenu.Content className="w-56">
         <ContextMenu.Item>
-          <Mail />
+          <IconEmail1 />
           <span>Email</span>
         </ContextMenu.Item>
         <ContextMenu.Item>
-          <MessageSquare />
+          <IconBubble2 />
           <span>Message</span>
         </ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Sub>
           <ContextMenu.SubTrigger>
-            <UserPlus />
+            <IconUserAdd />
             <span>Invite users</span>
           </ContextMenu.SubTrigger>
           <ContextMenu.SubContent>
             <ContextMenu.Item>
-              <Mail />
+              <IconEmail1 />
               <span>Email</span>
             </ContextMenu.Item>
             <ContextMenu.Item>
-              <MessageSquare />
+              <IconBubble2 />
               <span>Message</span>
             </ContextMenu.Item>
             <ContextMenu.Separator />
             <ContextMenu.Item>
-              <Plus />
+              <IconPlusLarge />
               <span>More...</span>
             </ContextMenu.Item>
           </ContextMenu.SubContent>
         </ContextMenu.Sub>
         <ContextMenu.Separator />
         <ContextMenu.Item>
-          <LifeBuoy />
+          <IconRescueRing />
           <span>Support</span>
         </ContextMenu.Item>
       </ContextMenu.Content>
@@ -213,16 +211,16 @@ export const States: Story = {
       <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
       <ContextMenu.Content className="w-56">
         <ContextMenu.Item>
-          <User />
+          <IconUser />
           <span>Default item</span>
         </ContextMenu.Item>
         <ContextMenu.Item disabled>
-          <Cloud />
+          <IconCloud />
           <span>Disabled item</span>
         </ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Item variant="destructive">
-          <Trash2 />
+          <IconTrashCan />
           <span>Destructive item</span>
         </ContextMenu.Item>
       </ContextMenu.Content>
@@ -242,12 +240,12 @@ export const KitchenSink: Story = {
           <ContextMenu.Label>Account</ContextMenu.Label>
           <ContextMenu.Item>Plain item</ContextMenu.Item>
           <ContextMenu.Item>
-            <User />
+            <IconUser />
             <span>With icon</span>
             <ContextMenu.Shortcut>⇧⌘P</ContextMenu.Shortcut>
           </ContextMenu.Item>
           <ContextMenu.Item disabled>
-            <CreditCard />
+            <IconCreditCard1 />
             <span>Disabled</span>
           </ContextMenu.Item>
           <ContextMenu.Separator />
@@ -261,23 +259,23 @@ export const KitchenSink: Story = {
           <ContextMenu.Separator />
           <ContextMenu.Sub>
             <ContextMenu.SubTrigger>
-              <UserPlus />
+              <IconUserAdd />
               <span>Sub menu</span>
             </ContextMenu.SubTrigger>
             <ContextMenu.SubContent>
               <ContextMenu.Item>
-                <Mail />
+                <IconEmail1 />
                 <span>Email</span>
               </ContextMenu.Item>
               <ContextMenu.Item>
-                <MessageSquare />
+                <IconBubble2 />
                 <span>Message</span>
               </ContextMenu.Item>
             </ContextMenu.SubContent>
           </ContextMenu.Sub>
           <ContextMenu.Separator />
           <ContextMenu.Item variant="destructive">
-            <Trash2 />
+            <IconTrashCan />
             <span>Destructive</span>
           </ContextMenu.Item>
         </ContextMenu.Content>

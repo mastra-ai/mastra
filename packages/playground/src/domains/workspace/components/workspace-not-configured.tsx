@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ExternalLinkIcon } from 'lucide-react';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 export const WorkspaceNotConfigured = () => (
   <EmptyState
@@ -16,7 +16,7 @@ export const WorkspaceNotConfigured = () => (
         variant="ghost"
         render={<a href="https://mastra.ai/en/docs/workspace/overview" target="_blank" rel="noopener noreferrer" />}
 
-        icon={<ExternalLinkIcon />}
+        icon={<IconSquareArrowTopRight />}
       >
         Workspaces documentation
       </Button>

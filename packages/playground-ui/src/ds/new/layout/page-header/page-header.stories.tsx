@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowLeftIcon, BotIcon } from 'lucide-react';
-
 import { PageHeader } from './page-header';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
 
 function StoryFrame({ children }: { children: React.ReactNode }) {
   return <div className="w-[min(42rem,calc(100vw-7rem))] py-10">{children}</div>;
@@ -37,7 +37,7 @@ function PageHeaderStory({
       <PageHeader>
         {showIcon && (
           <PageHeader.Icon>
-            <BotIcon strokeWidth={2.5} />
+            <IconRobot />
           </PageHeader.Icon>
         )}
         {showTitle && <PageHeader.Title isLoading={isLoading}>{title}</PageHeader.Title>}
@@ -135,7 +135,7 @@ export const MetaBesideLargeIcon: Story = {
       <PageHeader>
         <PageHeader.Icon>
           <span className="grid size-8 place-items-center">
-            <BotIcon />
+            <IconRobot />
           </span>
         </PageHeader.Icon>
         <PageHeader.Title>Frontend Notion</PageHeader.Title>
@@ -155,7 +155,7 @@ export const EyebrowBackLink: Story = {
       <PageHeader>
         <PageHeader.Eyebrow>
           <a href="#alerts">
-            <ArrowLeftIcon aria-hidden />
+            <IconArrowLeft aria-hidden />
             Back to alerts
           </a>
         </PageHeader.Eyebrow>
@@ -174,12 +174,12 @@ export const EverySlotWrapping: Story = {
       <PageHeader>
         <PageHeader.Eyebrow>
           <a href="#agents">
-            <ArrowLeftIcon aria-hidden />
+            <IconArrowLeft aria-hidden />
             Back to agents
           </a>
         </PageHeader.Eyebrow>
         <PageHeader.Icon>
-          <BotIcon strokeWidth={2.5} />
+          <IconRobot />
         </PageHeader.Icon>
         <PageHeader.Title>Customer support escalation agent</PageHeader.Title>
         <PageHeader.Meta beside>
@@ -230,7 +230,7 @@ export const IconOnly: Story = {
     <StoryFrame>
       <PageHeader>
         <PageHeader.Icon>
-          <BotIcon strokeWidth={2.5} />
+          <IconRobot />
         </PageHeader.Icon>
       </PageHeader>
     </StoryFrame>

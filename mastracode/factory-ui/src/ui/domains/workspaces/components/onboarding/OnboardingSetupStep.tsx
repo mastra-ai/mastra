@@ -2,10 +2,13 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight, Blend, Building2, Users } from 'lucide-react';
+import { Blend } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { OnboardingModelScope } from '../../services/onboardingFlow';
 import { SETUP_DETAILS, SETUP_LABELS } from '../../services/onboardingSteps';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 
 interface SetupOption {
   scope: OnboardingModelScope;
@@ -16,7 +19,7 @@ interface SetupOption {
 const SETUP_OPTIONS: SetupOption[] = [
   {
     scope: 'factory',
-    icon: <Building2 />,
+    icon: <IconBuildings />,
     needsCompanyAccount: true,
   },
   {
@@ -26,7 +29,7 @@ const SETUP_OPTIONS: SetupOption[] = [
   },
   {
     scope: 'user',
-    icon: <Users />,
+    icon: <IconUserDuo />,
     needsCompanyAccount: false,
   },
 ];
@@ -69,7 +72,7 @@ export function OnboardingSetupStep({
       </RadioGroup>
       <div>
         <Button variant="primary" size="lg" onClick={onContinue}>
-          Continue <ArrowRight aria-hidden="true" />
+          Continue <IconArrowRight aria-hidden="true" />
         </Button>
       </div>
     </section>

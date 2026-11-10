@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUpRight, Bot, Columns3, Ellipsis } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Badge } from '../Badge';
@@ -25,6 +24,10 @@ import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/P
 import { SkeletonText } from '@/ds/components/Skeleton/skeleton-text';
 import { Switch } from '@/ds/components/Switch/switch';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
+import { IconColumns3 } from '@/ds/icons/central/IconColumns3';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { formatFullNumber } from '@/lib/cost';
 import { cn } from '@/lib/utils';
 
@@ -151,13 +154,13 @@ export const WithEntryCell: Story = {
         </Thead>
         <Tbody>
           <Row>
-            <EntryCell name="Customer Support Agent" description="Handles customer inquiries" icon={<Bot />} />
+            <EntryCell name="Customer Support Agent" description="Handles customer inquiries" icon={<IconRobot />} />
             <Cell>
               <Badge variant="success">Online</Badge>
             </Cell>
           </Row>
           <Row>
-            <EntryCell name="Data Analysis Agent" description="Processes analytics data" icon={<Bot />} />
+            <EntryCell name="Data Analysis Agent" description="Processes analytics data" icon={<IconRobot />} />
             <Cell>
               <Badge>Idle</Badge>
             </Cell>
@@ -335,7 +338,7 @@ function formatCreditAmount(value: number) {
 
 function BillingPortalLink() {
   return (
-    <Button variant="link" size="sm" iconEnd={<ArrowUpRight />} render={<a href="#billing-portal" />}>
+    <Button variant="link" size="sm" iconEnd={<IconArrowUpRight />} render={<a href="#billing-portal" />}>
       Open billing portal
     </Button>
   );
@@ -597,7 +600,7 @@ export const InsetLinkedRows: Story = {
               <Table.Cell align="end">{project.price}</Table.Cell>
               <Table.Cell align="end">
                 <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${project.id}`} tooltip="More">
-                  <Ellipsis />
+                  <IconDotGrid1x3Horizontal />
                 </Button>
               </Table.Cell>
             </Table.Row>
@@ -970,7 +973,7 @@ export const InsetColumnPicker: Story = {
             <DropdownMenu>
               <DropdownMenu.Trigger
                 render={
-                  <Button variant="ghost" size="md" icon={<Columns3 />}>
+                  <Button variant="ghost" size="md" icon={<IconColumns3 />}>
                     Columns
                   </Button>
                 }

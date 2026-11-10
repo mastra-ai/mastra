@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
 import { useCompareExperiments } from '@mastra/react/hooks/datasets';
-import { Columns3Icon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { CompareMetricKey } from './use-compare-metric-preferences';
 import { useCompareMetricPreferences } from './use-compare-metric-preferences';
@@ -47,7 +47,7 @@ export function CompareMetricsMenu({ datasetId, baselineId, contenderIds }: Comp
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button variant="ghost" size="md" icon={<Columns3Icon aria-hidden />}>
+          <Button variant="ghost" size="md" icon={<IconColumns3 aria-hidden />}>
             Metrics
           </Button>
         }

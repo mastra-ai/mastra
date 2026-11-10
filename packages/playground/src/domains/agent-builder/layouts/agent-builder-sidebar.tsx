@@ -2,9 +2,12 @@ import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { SidebarLink } from '@mastra/playground-ui/components/Sidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconBlocks } from '@mastra/playground-ui/icons/central/IconBlocks';
+import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
+import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
-import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
+import { ServerCogIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
@@ -21,19 +24,19 @@ const agentsLink: SidebarLink = {
 const favoritesLink: SidebarLink = {
   name: 'Favorites',
   url: '/agent-builder/favorite',
-  icon: <StarIcon />,
+  icon: <IconStar />,
 };
 
 const libraryLink: SidebarLink = {
   name: 'Library',
   url: '/agent-builder/library',
-  icon: <LibraryIcon />,
+  icon: <IconLibrary />,
 };
 
 const skillsLink: SidebarLink = {
   name: 'Skills',
   url: '/agent-builder/skills',
-  icon: <Blocks className="h-4 w-4" />,
+  icon: <IconBlocks className="h-4 w-4" />,
 };
 
 const infrastructureLink: SidebarLink = {

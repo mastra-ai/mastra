@@ -13,7 +13,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
-import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
@@ -29,6 +28,9 @@ import { settingsSectionPath } from '../../../settings/settingsSections';
 import { LockedModelButton } from './LockedModelButton';
 import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
@@ -124,7 +126,7 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }
         title={selectedModelId}
       >
         {children}
-        <ChevronDown aria-hidden size={12} />
+        <IconChevronBottom aria-hidden size={12} />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
         <Command loop>
@@ -151,7 +153,7 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }
                         Default
                       </Badge>
                     ) : null}
-                    {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
+                    {model.id === selectedModelId ? <IconCheckmark1 aria-hidden className="ml-auto shrink-0" /> : null}
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -164,7 +166,7 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }
                   keywords={['reset', 'default', 'model']}
                   onSelect={() => choose(defaultModelId)}
                 >
-                  <RotateCcw aria-hidden />
+                  <IconArrowRotateCounterClockwise aria-hidden />
                   <span>Reset to your default</span>
                 </CommandItem>
               </CommandGroup>

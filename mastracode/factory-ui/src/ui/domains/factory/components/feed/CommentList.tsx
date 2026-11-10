@@ -5,7 +5,6 @@ import { Comment, CommentArrival } from '@mastra/playground-ui/components/Commen
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { CommentListSkeleton } from './CommentListSkeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageCircle, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
@@ -22,6 +21,8 @@ import { ActivityEvent } from '../WorkItemActivity';
 import { CommentRow } from './CommentRow';
 import type { CommentQuoteDraft } from './quoteDraft';
 import { useCentreInViewport } from './useCentreInViewport';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconBubble5 } from '@mastra/playground-ui/icons/central/IconBubble5';
 
 const CONTINUATION_WINDOW_MS = 5 * 60_000;
 // Stable defaults: a fresh `[]` per render would read as new input downstream.
@@ -203,14 +204,14 @@ export function CommentList({
                   Unable to load comments.
                 </Txt>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
-                  <RefreshCw aria-hidden />
+                  <IconArrowRotateClockwise aria-hidden />
                   Try again
                 </Button>
               </div>
             ) : null}
             {!showSkeleton && !comments.isError && rows.length === 0 ? (
               <div className="text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
-                <MessageCircle size={14} aria-hidden />
+                <IconBubble5 size={14} aria-hidden />
                 <Txt as="span" variant="caption">
                   No activity yet
                 </Txt>

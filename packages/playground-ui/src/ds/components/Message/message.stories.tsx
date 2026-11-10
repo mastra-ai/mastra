@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { AudioLinesIcon, FocusIcon, StopCircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { Avatar } from '../Avatar';
@@ -8,6 +7,9 @@ import { MarkdownRenderer } from '../MarkdownRenderer';
 import { Message, MessageActions, MessageMetadata } from './message';
 import { MessageCopyButton } from './message-copy-button';
 import { MessageTimestamp } from './message-timestamp';
+import { IconFocusSquare } from '@/ds/icons/central/IconFocusSquare';
+import { IconStopCircle } from '@/ds/icons/central/IconStopCircle';
+import { IconVoiceHigh } from '@/ds/icons/central/IconVoiceHigh';
 
 const question = 'Can you review the keyboard behavior before we ship this change?';
 const answer =
@@ -99,7 +101,7 @@ function StudioConversation() {
               tooltip={speaking ? 'Stop' : 'Read aloud'}
               onClick={() => setSpeaking(!speaking)}
             >
-              {speaking ? <StopCircleIcon /> : <AudioLinesIcon />}
+              {speaking ? <IconStopCircle /> : <IconVoiceHigh />}
             </Button>
             <MessageCopyButton text={answer} />
             <MessageActions>
@@ -111,7 +113,7 @@ function StudioConversation() {
                 tooltip="Highlight spans"
                 onClick={() => setHighlighted(!highlighted)}
               >
-                <FocusIcon />
+                <IconFocusSquare />
               </Button>
             </MessageActions>
           </MessageActions>

@@ -1,4 +1,3 @@
-import { TimerIcon } from 'lucide-react';
 import { TIMELINE_TRACK_PADDING } from '../utils/span-timeline';
 import type { TimelineMarkersLayout, TimelineTimingBar } from '../utils/timeline-markers';
 import { TimelineGridlines } from './span-timeline-row';
@@ -6,6 +5,7 @@ import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_PAD_Y } from './span-tree-r
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/duration';
 
@@ -56,7 +56,7 @@ function TimingRow({ name, bar }: { name: string; bar: TimelineTimingBar }) {
           className="flex shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-3.5"
           style={{ width: SPAN_TREE_INDENT, height: SPAN_TREE_LINE }}
         >
-          <TimerIcon />
+          <IconStopwatch />
         </span>
         <Txt as="span" variant="body-sm" tone="muted" className="min-w-0 truncate px-2">
           {name}

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { EllipsisVerticalIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
@@ -11,6 +10,8 @@ import {
   ThreadListNewItem,
   ThreadListSeparator,
 } from './thread-list';
+import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 
 const initialThreads = [
   'Compare vector databases for semantic search',
@@ -36,7 +37,7 @@ function ThreadListPreview({ embedded = false }: { embedded?: boolean }) {
     <div className="h-96 w-80">
       <ThreadList embedded={embedded}>
         <ThreadListNewItem render={<a href="#new" />}>
-          <PlusIcon />
+          <IconPlusLarge />
           New thread
         </ThreadListNewItem>
         <ThreadListSeparator />
@@ -95,7 +96,7 @@ export const WithActions: Story = {
               actions={
                 <DropdownMenu>
                   <DropdownMenu.Trigger aria-label={`Actions for ${thread}`}>
-                    <EllipsisVerticalIcon />
+                    <IconDotGrid1x3Vertical />
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Content align="end">
                     <DropdownMenu.Item>Rename</DropdownMenu.Item>

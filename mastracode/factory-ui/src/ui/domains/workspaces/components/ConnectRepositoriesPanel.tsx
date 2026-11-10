@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Drawer, DrawerTrigger } from '@mastra/playground-ui/components/Drawer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
-import { RotateCcw } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
@@ -15,6 +14,7 @@ import { useEnvironmentSave } from '../../settings/components/environment/useEnv
 import { SettingsAddRow } from '../../settings/components/common/SettingsAddRow';
 import type { FactoryProject } from '../services/github';
 import { AddRepositoryPicker } from './AddRepositoryPicker';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const sidePanel = useSidePanelDrawer();
@@ -49,7 +49,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<RotateCcw />}
+                icon={<IconArrowRotateCounterClockwise />}
                 disabled={environmentQuery.isFetching}
                 onClick={() => void environmentQuery.refetch()}
               >

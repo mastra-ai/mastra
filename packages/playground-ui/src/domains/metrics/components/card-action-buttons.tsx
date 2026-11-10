@@ -1,6 +1,8 @@
-import { ListTreeIcon, LogsIcon, MessagesSquareIcon } from 'lucide-react';
+import { LogsIcon } from 'lucide-react';
 import { Button } from '../../../ds/components/Button/Button';
 import { TraceIcon } from '../../../ds/icons/TraceIcon';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 
 type CardActionButtonProps = {
   onClick: () => void;
@@ -47,7 +49,7 @@ export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
 export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
   return (
     <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in spans" aria-label="View in spans">
-      <ListTreeIcon />
+      <IconCodeTree />
     </Button>
   );
 }
@@ -57,7 +59,7 @@ export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
 export function OpenInThreadsButton({ onClick }: CardActionButtonProps) {
   return (
     <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in threads" aria-label="View in threads">
-      <MessagesSquareIcon />
+      <IconChatBubbles />
     </Button>
   );
 }

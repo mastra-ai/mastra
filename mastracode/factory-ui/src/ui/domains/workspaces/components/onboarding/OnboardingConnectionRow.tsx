@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 
 export function OnboardingConnectionRow({
   icon,
@@ -34,7 +34,7 @@ export function OnboardingConnectionRow({
       <div className="min-w-0 flex-1 basis-40">
         <Txt as="h2" variant="caption" className="flex items-center gap-2">
           {name}
-          {connected && <Check className="text-success-indicator size-4" role="img" aria-label="Connected" />}
+          {connected && <IconCheckmark1 className="text-success-indicator size-4" role="img" aria-label="Connected" />}
         </Txt>
         <Txt variant={compact ? 'meta' : 'caption'} tone="muted" className="mt-1">
           {description}

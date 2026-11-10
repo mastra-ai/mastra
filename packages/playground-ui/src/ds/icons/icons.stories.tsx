@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bell, Check, ChevronDown, Copy, Folder, Play, Plus, Search, Settings, Trash2, X } from 'lucide-react';
 import * as centralIconModules from './central';
 import { Icon } from './Icon';
 import type { IconSize } from './Icon';
@@ -73,6 +72,17 @@ import {
   ZaiIcon,
 } from './index';
 import { Button } from '@/ds/components/Button';
+import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { Sizes } from '@/ds/tokens/sizes';
 
 const meta: Meta<typeof Icon> = {
@@ -90,13 +100,13 @@ const centralIcons = Object.entries(centralIconModules);
 
 export const CentralIcons: Story = {
   render: () => (
-    <div className="grid w-200 grid-cols-6 gap-4">
+    <div className="grid w-200 grid-cols-4 gap-4">
       {centralIcons.map(([name, CentralIcon]) => (
-        <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <div key={name} className="flex min-w-0 flex-col items-center gap-2 rounded-lg bg-card p-3">
           <Icon size="lg" className="text-foreground">
             <CentralIcon />
           </Icon>
-          <span className="text-caption text-muted-foreground">{name}</span>
+          <span className="max-w-full truncate text-caption text-muted-foreground">{name.replace(/^Icon/, '')}</span>
         </div>
       ))}
     </div>
@@ -337,7 +347,18 @@ export const BrandIcons: Story = {
   ),
 };
 
-const strokeGlyphs = [Plus, Search, Settings, ChevronDown, Trash2, Copy, X, Check, Folder, Bell];
+const strokeGlyphs = [
+  IconPlusLarge,
+  IconMagnifyingGlass,
+  IconSettingsGear1,
+  IconChevronBottom,
+  IconTrashCan,
+  IconSquareBehindSquare1,
+  IconCrossMedium,
+  IconCheckmark1,
+  IconFolder1,
+  IconBell,
+];
 
 // Every lucide icon draws its line from `--icon-stroke-width`, however it is sized.
 // Use this story for before/after shots of a stroke change.
@@ -368,27 +389,27 @@ export const Stroke: Story = {
         </div>
       ))}
       <div className="flex items-center gap-3">
-        <Button size="sm" icon={<Plus />}>
+        <Button size="sm" icon={<IconPlusLarge />}>
           Add header
         </Button>
-        <Button size="md" icon={<Plus />}>
+        <Button size="md" icon={<IconPlusLarge />}>
           Add header
         </Button>
-        <Button size="lg" icon={<Play />}>
+        <Button size="lg" icon={<IconPlay />}>
           Run
         </Button>
         <Button size="icon-md" tooltip="Copy">
-          <Copy />
+          <IconSquareBehindSquare1 />
         </Button>
       </div>
       <div className="flex items-center gap-3 text-muted-foreground">
         <span className="w-16 text-caption">Unwrapped</span>
-        <Search className="size-3" />
-        <Search className="size-3.5" />
-        <Search className="size-4" />
-        <Search className="size-5" />
+        <IconMagnifyingGlass className="size-3" />
+        <IconMagnifyingGlass className="size-3.5" />
+        <IconMagnifyingGlass className="size-4" />
+        <IconMagnifyingGlass className="size-5" />
         <span className="flex items-center [&>svg]:size-3.5">
-          <Folder />
+          <IconFolder1 />
         </span>
       </div>
     </div>

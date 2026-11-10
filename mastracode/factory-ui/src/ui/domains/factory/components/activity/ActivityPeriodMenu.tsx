@@ -2,10 +2,9 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown } from 'lucide-react';
-
 import { ACTIVITY_PERIOD_LABELS } from '../../periodActivity';
 import type { ActivityPeriod } from '../../periodActivity';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 
 const PERIOD_OPTIONS = (['today', 'week', 'month'] as const).map(value => ({
   value,
@@ -34,7 +33,7 @@ export function ActivityPeriodMenu({
         }
       >
         {ACTIVITY_PERIOD_LABELS[period]}
-        <ChevronDown aria-hidden className="size-3.5" />
+        <IconChevronBottom aria-hidden className="size-3.5" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end">
         <DropdownMenu.RadioOptions

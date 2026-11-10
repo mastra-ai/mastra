@@ -1,4 +1,3 @@
-import { SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { Button } from '../../Button';
@@ -7,6 +6,8 @@ import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
 import { fieldErrorId } from '../block/field-error-id';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
@@ -75,7 +76,7 @@ export function SearchFieldBlock({
             disabled={disabled}
             onClick={() => onMinimizedChange?.(false)}
           >
-            <SearchIcon />
+            <IconMagnifyingGlass />
           </Button>
         </TooltipTrigger>
         <TooltipContent>{label || 'Search'}</TooltipContent>
@@ -118,7 +119,7 @@ export function SearchFieldBlock({
               aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
               className={cn(size === 'sm' && 'px-8', (!size || size === 'md') && 'px-9', size === 'lg' && 'px-10')}
             />
-            <SearchIcon
+            <IconMagnifyingGlass
               aria-hidden="true"
               className={cn(
                 'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
@@ -142,7 +143,7 @@ export function SearchFieldBlock({
                 }}
                 className="absolute top-1/2 right-0 -translate-y-1/2"
               >
-                <XIcon />
+                <IconCrossMedium />
               </Button>
             )}
           </div>

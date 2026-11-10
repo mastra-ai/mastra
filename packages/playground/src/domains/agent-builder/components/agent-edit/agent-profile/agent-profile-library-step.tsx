@@ -1,6 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ArrowRightIcon, CheckIcon, LibraryIcon, Plus } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -35,7 +38,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
         <Button onClick={handleContinue} disabled={isStreaming}>
           Continue{' '}
           <Icon>
-            <ArrowRightIcon />
+            <IconArrowRight />
           </Icon>
         </Button>
       }
@@ -45,18 +48,18 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
         data-testid="agent-builder-library-step"
       >
         <Icon size="lg" className="text-muted-foreground">
-          <LibraryIcon />
+          <IconLibrary />
         </Icon>
         {isInLibrary ? (
           <p className="flex items-center gap-2 text-placeholder" data-testid="agent-builder-library-added">
             <Icon>
-              <CheckIcon />
+              <IconCheckmark1 />
             </Icon>
             Added to your library
           </p>
         ) : (
           <Button
-            icon={<Plus />}
+            icon={<IconPlusLarge />}
             variant="primary"
             onClick={() => requestChange('public')}
             disabled={isStreaming}

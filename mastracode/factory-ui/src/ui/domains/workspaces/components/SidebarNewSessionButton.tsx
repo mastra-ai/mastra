@@ -1,9 +1,9 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Plus } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 export function SidebarNewSessionButton() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -18,7 +18,7 @@ export function SidebarNewSessionButton() {
       <Sidebar.NavLink
         render={
           <button type="button" onClick={() => openNewUserSession(factoryId)}>
-            <Plus />
+            <IconPlusLarge />
             <Sidebar.NavLabel>New session</Sidebar.NavLabel>
           </button>
         }

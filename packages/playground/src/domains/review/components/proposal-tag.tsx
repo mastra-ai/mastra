@@ -1,8 +1,10 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Pencil, Check, X } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
 export function ProposalTag({
@@ -62,7 +64,7 @@ export function ProposalTag({
           }}
           className={cn(quietTextHover, 'p-0.5')}
         >
-          <Check className="h-3 w-3" />
+          <IconCheckmark1 className="h-3 w-3" />
         </button>
       </span>
     );
@@ -82,7 +84,7 @@ export function ProposalTag({
         className={cn(quietTextHover, 'p-0.5 opacity-0 transition-opacity group-hover:opacity-100')}
         title="Edit tag"
       >
-        <Pencil className="h-3 w-3" />
+        <IconPencil className="h-3 w-3" />
       </button>
       <button
         type="button"
@@ -90,7 +92,7 @@ export function ProposalTag({
         className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-foreground"
         title="Remove tag"
       >
-        <X className="h-3 w-3" />
+        <IconCrossMedium className="h-3 w-3" />
       </button>
     </span>
   );

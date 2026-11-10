@@ -3,8 +3,9 @@ import { EmptyState, EmptyStateIllustration } from '@mastra/playground-ui/compon
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Lock, Users } from 'lucide-react';
 import { useId } from 'react';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 
 /** Private-session entry point shared by the sidebar and session header. */
 export function SessionSharingPopover({
@@ -34,10 +35,10 @@ export function SessionSharingPopover({
             disabled={disabled}
           >
             {inHeader ? (
-              <Lock />
+              <IconLock />
             ) : (
               <Icon size="xs">
-                <Lock />
+                <IconLock />
               </Icon>
             )}
             {inHeader ? 'Private' : null}
@@ -56,7 +57,7 @@ export function SessionSharingPopover({
           actionSlot={
             onShare ? (
               <Button onClick={onShare} disabled={disabled || sharing} aria-busy={sharing}>
-                {sharing ? <Spinner size="sm" aria-hidden /> : <Users />}
+                {sharing ? <Spinner size="sm" aria-hidden /> : <IconUserDuo />}
                 Share with organization
               </Button>
             ) : undefined

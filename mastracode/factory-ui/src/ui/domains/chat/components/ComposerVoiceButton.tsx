@@ -1,11 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Loader2, Mic, MicOff, Square } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
 import { VOICE_INPUT_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
 import { voiceDictationSupported } from './useVoiceDictation';
 import type { VoiceDictation, VoiceDictationState } from './useVoiceDictation';
+import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
+import { IconMicrophoneOff } from '@mastra/playground-ui/icons/central/IconMicrophoneOff';
+import { IconStop } from '@mastra/playground-ui/icons/central/IconStop';
 
 const TOOLTIPS: Record<VoiceDictationState, string> = {
   idle: 'Dictate',
@@ -21,10 +24,10 @@ interface ComposerVoiceButtonProps {
 }
 
 function VoiceIcon({ state }: { state: VoiceDictationState }) {
-  if (state === 'recording') return <Square size={14} />;
+  if (state === 'recording') return <IconStop size={14} />;
   if (state === 'transcribing')
     return <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />;
-  return <Mic size={14} />;
+  return <IconMicrophone size={14} />;
 }
 
 function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProps) {
@@ -44,7 +47,7 @@ function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProp
           navigate(settingsSectionPath(factoryId, 'models', VOICE_INPUT_ANCHOR), { state: { from: location } })
         }
       >
-        <MicOff size={14} />
+        <IconMicrophoneOff size={14} />
       </Button>
     );
   }

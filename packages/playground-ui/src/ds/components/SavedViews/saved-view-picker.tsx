@@ -1,4 +1,4 @@
-import { CopyIcon, EllipsisIcon, LayersIcon, LayersPlusIcon, TextCursorInputIcon, Trash2Icon } from 'lucide-react';
+import { LayersPlusIcon, TextCursorInputIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { FormEvent, ReactNode, RefObject } from 'react';
 import { MAX_SAVED_VIEW_NAME_CHARS } from './saved-view-schema';
@@ -20,6 +20,10 @@ import { Field, FieldError } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Txt } from '@/ds/components/Txt';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { cn } from '@/lib/utils';
 
 export type SavedViewPickerProps<TSettings> = {
@@ -105,7 +109,7 @@ export function SavedViewPicker<TSettings>({
         >
           <ComboboxTrigger
             size="sm"
-            icon={<LayersIcon />}
+            icon={<IconLayersTwo />}
             aria-label={`View: ${selected?.label}${activeUnsaved ? ', unsaved changes' : ''}`}
             className="max-w-60"
           >
@@ -133,7 +137,7 @@ export function SavedViewPicker<TSettings>({
         {activeView && !creating && (editable || canCreate) && (
           <DropdownMenu>
             <DropdownMenu.Trigger variant="ghost" size="icon-sm" tooltip="View actions" className="shrink-0">
-              <EllipsisIcon />
+              <IconDotGrid1x3Horizontal />
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
               {editable && (
@@ -144,7 +148,7 @@ export function SavedViewPicker<TSettings>({
               )}
               {canCreate && (
                 <DropdownMenu.Item onClick={() => views.duplicate(activeView.id)}>
-                  <CopyIcon aria-hidden />
+                  <IconSquareBehindSquare1 aria-hidden />
                   Duplicate
                 </DropdownMenu.Item>
               )}
@@ -152,7 +156,7 @@ export function SavedViewPicker<TSettings>({
                 <>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item variant="destructive" onClick={() => views.remove(activeView.id)}>
-                    <Trash2Icon aria-hidden />
+                    <IconTrashCan aria-hidden />
                     Delete view
                   </DropdownMenu.Item>
                 </>

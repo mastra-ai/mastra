@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { EllipsisVertical, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
 import { useParams, useSearchParams } from 'react-router';
@@ -20,6 +19,8 @@ import { CardDetailsPanel } from './CardDetailsPanel';
 import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemExternalLink } from './WorkItemExternalLink';
 import { WorkItemTray } from './WorkItemTray';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconMinimize45 } from '@mastra/playground-ui/icons/central/IconMinimize45';
 
 export function WorkItemDetailsPanel({
   item,
@@ -87,13 +88,13 @@ export function WorkItemDetailsPanel({
                 aria-label={`Collapse ${item.title}`}
                 onClick={morph.closeDetails}
               >
-                <Minimize2 size={13} aria-hidden />
+                <IconMinimize45 size={13} aria-hidden />
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
                     <Button type="button" variant="ghost" size="icon-sm" aria-label={`All actions for ${item.title}`}>
-                      <EllipsisVertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical size={13} aria-hidden />
                     </Button>
                   }
                 />

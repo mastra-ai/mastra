@@ -1,4 +1,3 @@
-import { ListFilterIcon } from 'lucide-react';
 import { Children, isValidElement, useContext } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import './tabbed-container.css';
@@ -17,6 +16,7 @@ import { Tab } from '@/ds/components/Tabs/tabs-tab';
 import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { cn } from '@/lib/utils';
 
 export type TabbedContainerSearchProps = Pick<
@@ -79,7 +79,7 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div data-slot="tabbed-container-filter" data-active={filterCount > 0 || undefined}>
-                    <ListFilterIcon aria-hidden="true" />
+                    <IconFilter2 aria-hidden="true" />
                     {filterCount > 0 ? (
                       <Txt as="span" variant="meta" aria-hidden="true" data-slot="tabbed-container-filter-count">
                         {filterCount}

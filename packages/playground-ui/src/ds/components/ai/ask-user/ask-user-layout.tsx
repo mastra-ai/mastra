@@ -1,4 +1,3 @@
-import { Check, MessageCircleQuestion } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useOptionalAskUserContext } from './ask-user-context';
 import type { AskUserResult } from './ask-user-types';
@@ -7,6 +6,8 @@ import { Button } from '@/ds/components/Button';
 import { FieldItem, FieldLabel } from '@/ds/components/Field';
 import type { FieldLabelProps } from '@/ds/components/Field';
 import { Txt } from '@/ds/components/Txt';
+import { IconBubbleQuestion } from '@/ds/icons/central/IconBubbleQuestion';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -22,7 +23,7 @@ export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>)
 export const AskUserLabel = ({ children = 'Question', className, ...props }: ComponentProps<'div'>) => (
   <div data-slot="ask-user-label" className={cn('flex min-h-10 items-center gap-2 px-4 pt-3', className)} {...props}>
     <Icon size="xs" className="text-muted-foreground">
-      <MessageCircleQuestion />
+      <IconBubbleQuestion />
     </Icon>
     <Txt as="span" variant="caption" tone="muted">
       {children}
@@ -37,7 +38,7 @@ export const AskUserBody = ({ className, ...props }: ComponentProps<'div'>) => (
 const AskUserQuestionTitle = ({ children }: { children: ReactNode }) => (
   <span className="flex items-start gap-2">
     <Icon size="xs" className={cn('mt-1 shrink-0', 'text-muted-foreground')} aria-hidden>
-      <MessageCircleQuestion />
+      <IconBubbleQuestion />
     </Icon>
     <span className="min-w-0">{children}</span>
   </span>
@@ -99,7 +100,7 @@ export const AskUserOptionRow = ({
 export type AskUserSubmitButtonProps = Omit<ComponentProps<typeof Button>, 'children'> & { children?: ReactNode };
 
 export const AskUserSubmitButton = ({ children = 'Submit answer', ...props }: AskUserSubmitButtonProps) => (
-  <Button icon={<Check />} type="button" size="sm" variant="primary" {...props}>
+  <Button icon={<IconCheckmark1 />} type="button" size="sm" variant="primary" {...props}>
     {children}
   </Button>
 );

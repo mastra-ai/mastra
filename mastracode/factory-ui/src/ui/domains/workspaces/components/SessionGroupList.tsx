@@ -1,6 +1,5 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDashed, GitPullRequest, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Fragment, startTransition, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -8,18 +7,23 @@ import { flushSync } from 'react-dom';
 import { collapsedRowsKeepingActive, nestCardSessions } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
 import type { SessionListRow } from '../services/sessionRows';
+import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 
 const GROUP_ROW_INCREMENT = 20;
 
 type ToggleName = 'more' | 'less';
 
 const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
-  board: <SquareKanban />,
-  review: <GitPullRequest />,
-  user: <MessageSquare />,
-  slack: <MessageSquare />,
-  status: <CircleDashed />,
-  owner: <UserRound />,
+  board: <IconKanbanView />,
+  review: <IconPullRequest />,
+  user: <IconBubble2 />,
+  slack: <IconBubble2 />,
+  status: <IconCircleDashed />,
+  owner: <IconUser />,
   all: null,
 };
 

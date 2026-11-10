@@ -1,6 +1,6 @@
-import { ChevronDownIcon } from 'lucide-react';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import type { DropdownMenuRadioOption } from '@/ds/components/DropdownMenu';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { cn } from '@/lib/utils';
 
 export type MetricsCardTitleMenuProps<V extends string> = {
@@ -41,7 +41,7 @@ export function MetricsCardTitleMenu<V extends string>({
           }
         >
           {title}
-          <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+          <IconChevronBottom className="size-3.5 text-muted-foreground" />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start">
           <DropdownMenu.RadioOptions options={options} value={value} onValueChange={onValueChange} closeOnSelect />

@@ -1,7 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useMatch, useParams } from 'react-router';
 
@@ -22,6 +21,7 @@ import { isPullRequestSource } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
@@ -219,7 +219,7 @@ function WorkItemActions({
               key={related.id}
               className="text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
             >
-              <Link2 size={13} aria-hidden />
+              <IconChainLink1 size={13} aria-hidden />
               <Txt as="span" variant="caption" className="block">
                 {label}
               </Txt>
@@ -235,7 +235,7 @@ function WorkItemActions({
             aria-label={`Open ${label}: ${related.title}`}
             render={<Link to={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`} />}
           >
-            <Link2 size={13} aria-hidden />
+            <IconChainLink1 size={13} aria-hidden />
             {label}
           </Button>
         );

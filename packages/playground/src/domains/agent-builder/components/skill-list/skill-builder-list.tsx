@@ -2,8 +2,10 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { CopyIcon, DownloadIcon, LockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillFavoriteButton } from './skill-favorite-button';
 import { getSkillOrigin } from '@/domains/agent-builder/utils/skill-origin';
@@ -53,7 +55,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                         data-testid="skill-builder-private-visibility-icon"
                       >
                         <Icon size="xs">
-                          <LockIcon />
+                          <IconLock />
                         </Icon>
                       </span>
                     </TooltipTrigger>
@@ -75,7 +77,11 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                           aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
                           data-testid="skill-builder-origin-badge"
                         >
-                          {isCopy ? <CopyIcon className="h-2.5 w-2.5" /> : <DownloadIcon className="h-2.5 w-2.5" />}
+                          {isCopy ? (
+                            <IconSquareBehindSquare1 className="h-2.5 w-2.5" />
+                          ) : (
+                            <IconArrowInbox className="h-2.5 w-2.5" />
+                          )}
                           {origin.type === 'skills-sh' ? 'skills.sh' : isCopy ? 'copied' : 'imported'}
                         </Txt>
                       </TooltipTrigger>

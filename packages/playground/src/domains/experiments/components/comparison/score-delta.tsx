@@ -1,6 +1,7 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { IconArrowDownRight } from '@mastra/playground-ui/icons/central/IconArrowDownRight';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 
 interface ScoreDeltaProps {
   /** Difference between values (B - A) */
@@ -33,7 +34,7 @@ export function ScoreDelta({ delta, format = formatScore, higherIsBetter = true,
       {sign}
       {showPercent ? `${((Math.abs(delta) / Math.abs(baseline)) * 100).toFixed(1)}%` : format(Math.abs(delta))}
       <span aria-hidden className="inline-flex size-3.5 shrink-0 [&>svg]:size-3.5">
-        {delta > 0 ? <ArrowUpRightIcon /> : delta < 0 ? <ArrowDownRightIcon /> : null}
+        {delta > 0 ? <IconArrowUpRight /> : delta < 0 ? <IconArrowDownRight /> : null}
       </span>
     </>
   );

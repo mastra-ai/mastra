@@ -1,7 +1,6 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Trash2 } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
@@ -10,6 +9,7 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { EnvironmentSection } from './EnvironmentSection';
 import { SettingsSubsection } from './SettingsSubsection';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 export function FactoryManagementSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -40,7 +40,7 @@ export function FactoryManagementSection() {
                     disabled={deleteMutation.isPending}
                     aria-label={`Delete ${factory.name}`}
                   >
-                    <Trash2 size={14} />
+                    <IconTrashCan size={14} />
                     Delete
                   </Button>
                 }

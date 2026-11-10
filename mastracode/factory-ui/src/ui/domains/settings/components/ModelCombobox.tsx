@@ -1,13 +1,14 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxSingleProps } from '@mastra/playground-ui/components/Combobox';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
-import { Box, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { DEFAULT_SOURCE_LABELS } from '../../chat/services/thinkingLevels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 
 /** Value the picker reports when the caller's `auto` choice is picked. */
 const AUTO_VALUE = 'auto';
@@ -24,7 +25,7 @@ function modelOption(id: string, provider: string): ComboboxOption {
     label: name,
     // The full id tells apart models that share a name across providers (e.g. OpenAI and OpenAI Codex).
     description: id,
-    start: <ProviderBrandIcon provider={provider} fallback={<Box className="text-muted-foreground size-4" />} />,
+    start: <ProviderBrandIcon provider={provider} fallback={<IconBox className="text-muted-foreground size-4" />} />,
     keywords: provider ? [id, providerDisplayName(provider)] : [id],
   };
 }
@@ -38,7 +39,7 @@ function autoOption(effectiveModelId: string | null | undefined): ComboboxOption
     displayLabel: effectiveName ? `Auto (${effectiveName})` : 'Auto',
     start: (
       <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
-        <Sparkles className="text-muted-foreground size-4" />
+        <IconSparklesTwo className="text-muted-foreground size-4" />
       </span>
     ),
     keywords: ['automatic', 'default', ...(effectiveModelId ? [effectiveModelId] : [])],

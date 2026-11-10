@@ -8,9 +8,11 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
-import { CheckCircleIcon, UserIcon, WrenchIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { FormEvent, SyntheticEvent } from 'react';
 import { useSearchParams } from 'react-router';
@@ -93,7 +95,7 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
       {
         id: 'status',
         label: 'Status',
-        icon: CheckCircleIcon,
+        icon: IconCircleCheck,
         color: hueAccentColor('orange'),
         operators: ['is'],
         strict: true,
@@ -102,7 +104,7 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
       {
         id: 'surface',
         label: 'Surface',
-        icon: WrenchIcon,
+        icon: IconMaintenance,
         color: hueAccentColor('blue'),
         operators: ['is'],
         strict: true,
@@ -111,7 +113,7 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
       {
         id: 'client',
         label: 'Client',
-        icon: UserIcon,
+        icon: IconUser,
         color: hueAccentColor('purple'),
         operators: ['is'],
         suggestions: clients.map(([value, label]) => ({ value, label })),

@@ -1,11 +1,10 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Trash2 } from 'lucide-react';
-
 import type { LinearWorkspaceConnection } from '../../factory/services/linear';
 import type { LinearReconnectResult } from '../hooks/useLinearReconnectResult';
 import { LinearWorkspaceControl } from './LinearWorkspaceControl';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 export function PausedLinearWorkspace({
   workspace,
@@ -43,7 +42,7 @@ export function PausedLinearWorkspace({
         <Button
           size="sm"
           variant="ghost"
-          icon={<Trash2 />}
+          icon={<IconTrashCan />}
           aria-label={`Remove sources from ${workspace.name}`}
           onClick={onRemove}
         >

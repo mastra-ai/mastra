@@ -1,6 +1,5 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
@@ -9,6 +8,7 @@ import { externalLinkLabel } from '../boardItems';
 import { CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 
 // The card and its open copy draw these same rows, so opening moves nothing.
 export function CandidateCardRows({
@@ -53,7 +53,7 @@ export function CandidateCardRows({
             aria-label={externalLinkLabel(candidate.source)}
             className={cn('text-muted-foreground hover:text-foreground relative shrink-0', REVEAL_ON_CARD_HOVER)}
           >
-            <ArrowUpRight size={12} aria-hidden />
+            <IconArrowUpRight size={12} aria-hidden />
           </a>
         </div>
       </div>

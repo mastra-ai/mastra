@@ -1,4 +1,3 @@
-import { ChevronLeft } from 'lucide-react';
 import { useTraceInsight } from './hooks';
 import { signalLabel } from './signal-formatting';
 import type { TraceInsightResponse } from './types';
@@ -6,6 +5,7 @@ import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
+import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { textStyle } from '@/ds/primitives/text';
@@ -23,7 +23,7 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
   return (
     <div className="grid content-start gap-6">
       <div className="flex items-center justify-between gap-3">
-        <Button icon={<ChevronLeft />} size="sm" onClick={onBack}>
+        <Button icon={<IconChevronLeft />} size="sm" onClick={onBack}>
           Back to examples
         </Button>
         <Button icon={<TraceIcon />} render={<LinkComponent href={getTraceHref(traceId)} />} size="sm">

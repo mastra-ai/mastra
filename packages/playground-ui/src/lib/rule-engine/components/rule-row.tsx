@@ -1,4 +1,3 @@
-import { X } from 'lucide-react';
 import * as React from 'react';
 
 import type { ConditionOperator } from '../types';
@@ -10,6 +9,7 @@ import { getFieldOptionAtPath } from './schema-utils';
 import type { RuleRowProps } from './types';
 
 import { Button } from '@/ds/components/Button';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'boolean', 'integer']);
@@ -99,7 +99,7 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
       </div>
 
       <Button type="button" onClick={onRemove} tooltip="Remove rule" size="icon-sm" variant="ghost">
-        <X />
+        <IconCrossMedium />
       </Button>
     </div>
   );

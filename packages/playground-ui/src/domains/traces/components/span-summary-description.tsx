@@ -1,6 +1,7 @@
-import { CalendarClockIcon, TimerIcon } from 'lucide-react';
 import { getSpanDurationMs } from '../utils/span-utils';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
@@ -24,12 +25,12 @@ export function SpanSummaryDescription({ span }: SpanSummaryDescriptionProps) {
   return (
     <DataPanel.Metadata>
       {startedAt && exactStartedAt && (
-        <DataPanel.Meta icon={<CalendarClockIcon />} tooltip={`Started at ${exactStartedAt}`}>
+        <DataPanel.Meta icon={<IconCalendarClock />} tooltip={`Started at ${exactStartedAt}`}>
           {startedAt}
         </DataPanel.Meta>
       )}
       {duration && exactDuration && (
-        <DataPanel.Meta icon={<TimerIcon />} tooltip={`Duration ${exactDuration}`}>
+        <DataPanel.Meta icon={<IconStopwatch />} tooltip={`Duration ${exactDuration}`}>
           {duration}
         </DataPanel.Meta>
       )}

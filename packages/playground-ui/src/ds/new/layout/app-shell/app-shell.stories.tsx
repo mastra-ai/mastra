@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Search, Settings, Workflow } from 'lucide-react';
+import { Workflow } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
@@ -10,6 +10,9 @@ import { LogoWithoutText } from '@/ds/components/Logo';
 import { PageLayout } from '@/ds/components/PageLayout';
 import { Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -22,13 +25,13 @@ function DemoSidebar() {
       </Sidebar.Header>
       <Sidebar.Nav>
         <Sidebar.NavList>
-          <Sidebar.NavLink link={{ name: 'Agents', url: '#agents', icon: <Bot /> }} isActive />
+          <Sidebar.NavLink link={{ name: 'Agents', url: '#agents', icon: <IconRobot /> }} isActive />
           <Sidebar.NavLink link={{ name: 'Workflows', url: '#workflows', icon: <Workflow /> }} />
         </Sidebar.NavList>
       </Sidebar.Nav>
       <Sidebar.Footer>
         <Sidebar.NavList>
-          <Sidebar.NavLink link={{ name: 'Settings', url: '#settings', icon: <Settings /> }} />
+          <Sidebar.NavLink link={{ name: 'Settings', url: '#settings', icon: <IconSettingsGear1 /> }} />
         </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
@@ -43,7 +46,7 @@ function MobileHeader() {
         <span className="text-subheading text-foreground">Workspace</span>
       </span>
       <button type="button" aria-label="Search">
-        <Search className="size-5" />
+        <IconMagnifyingGlass className="size-5" />
       </button>
     </div>
   );
@@ -51,7 +54,7 @@ function MobileHeader() {
 
 const crumbs = (
   <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
-    <Crumb as="span" isCurrent icon={<Bot />}>
+    <Crumb as="span" isCurrent icon={<IconRobot />}>
       Research agent
     </Crumb>
   </Breadcrumb>
@@ -63,7 +66,7 @@ function MainContent({ withHeader = true }: { withHeader?: boolean }) {
       <div className="grid gap-4">
         <PageHeader>
           <PageHeader.Icon>
-            <Bot />
+            <IconRobot />
           </PageHeader.Icon>
           <PageHeader.Title>Research agent</PageHeader.Title>
           <PageHeader.Description>Configuration and recent activity.</PageHeader.Description>

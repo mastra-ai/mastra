@@ -7,7 +7,6 @@ import { InfoTooltip, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/pl
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, GripVertical, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import type {
@@ -19,6 +18,9 @@ import { SettingsActionRow } from '../common/SettingsActionRow';
 import { settingsRowLayout } from '../common/settings-row-layout';
 import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 // Number every link 1..n (dead links last) and send only ids + positions so concurrent edits survive.
 export function reorderPatch(ordered: FactoryEnvironmentRepository[]): FactoryEnvironmentRepositoryPatch[] {
@@ -137,7 +139,7 @@ function DeadRepositoryRow({
         <Button
           variant="ghost"
           size="sm"
-          icon={<Trash2 />}
+          icon={<IconTrashCan />}
           aria-label={`Remove ${UNAVAILABLE_LABEL}`}
           disabled={disabled}
           onClick={onRemove}
@@ -211,7 +213,7 @@ function RepositoryRow({
                 </Badge>
               )}
             </span>
-            <ChevronDown aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
+            <IconChevronBottom aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
           </span>
         </SettingsActionRow>
         {/* Native buttons block @hello-pangea/dnd drags. */}
@@ -229,7 +231,7 @@ function RepositoryRow({
                 aria-disabled={disabled}
                 tabIndex={disabled ? -1 : dragHandleProps?.tabIndex}
               >
-                <GripVertical className="size-4 shrink-0" aria-hidden />
+                <IconDotGrid2x3 className="size-4 shrink-0" aria-hidden />
               </span>
             }
           />
@@ -239,7 +241,7 @@ function RepositoryRow({
           <Button
             variant="ghost"
             size="sm"
-            icon={<Trash2 />}
+            icon={<IconTrashCan />}
             aria-label={`Remove ${label}`}
             disabled={disabled}
             onClick={onRemove}

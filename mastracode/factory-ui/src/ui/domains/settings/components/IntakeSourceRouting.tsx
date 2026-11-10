@@ -3,13 +3,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { RotateCcw } from 'lucide-react';
-
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
 import type { IntakeSourceBinding } from '../../factory/services/intake';
 import { SourcePicker, sourcePickerItemText } from './IntakeSourcePicker';
 import type { SourcePickerItem, SourcePickerProps } from './IntakeSourcePicker';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 const UNROUTED = '__unrouted__';
 const NO_BOARD = '__no_board__';
@@ -63,7 +62,12 @@ export function RoutedSourcePicker({
       />
       {bindingsQuery.isError && (
         <SettingsRow label="Routing is unavailable" description="Your source routes could not be loaded.">
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void bindingsQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void bindingsQuery.refetch()}
+          >
             Retry
           </Button>
         </SettingsRow>

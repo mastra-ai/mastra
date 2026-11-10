@@ -1,8 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowRight } from 'lucide-react';
-
 import { useOpenNewUserSession } from '../../workspaces/hooks/useOpenNewUserSession';
 import { useChatModelScope } from '../context/useChatModelScope';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 export function NewSessionAction() {
   const { factoryId } = useChatModelScope();
@@ -13,7 +12,7 @@ export function NewSessionAction() {
       variant="ghost"
       size="sm"
       onClick={() => openNewUserSession(factoryId)}
-      iconEnd={<ArrowRight aria-hidden="true" />}
+      iconEnd={<IconArrowRight aria-hidden="true" />}
     >
       New session
     </Button>

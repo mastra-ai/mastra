@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { EyeIcon, LogsIcon } from 'lucide-react';
+import { LogsIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button/Button';
 import { MetricsLineChart } from '../MetricsLineChart';
@@ -10,6 +10,7 @@ import { Txt } from '../Txt';
 import { MetricsCard } from './metrics-card';
 import { count, ms, percent, percentileSeries, requestsByHour, routeStats, statusSeries } from './metrics-story-data';
 import type { RouteStat } from './metrics-story-data';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 
 const meta: Meta<typeof MetricsCard> = {
   title: 'Metrics/MetricsCard',
@@ -243,7 +244,7 @@ export const ActionsOnHover: Story = {
           <MetricsCard.Title>Latency</MetricsCard.Title>
           <MetricsCard.Actions reveal="hover">
             <Button variant="ghost" size="icon-md" tooltip="View in traces">
-              <EyeIcon />
+              <IconEyeOpen />
             </Button>
             <Button variant="ghost" size="icon-md" tooltip="View errors in logs">
               <LogsIcon />

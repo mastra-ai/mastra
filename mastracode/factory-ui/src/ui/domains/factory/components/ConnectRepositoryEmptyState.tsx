@@ -1,16 +1,16 @@
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { GitBranch } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { settingsSectionPath } from '../../settings/settingsSections';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 
 export function ConnectRepositoryEmptyState({ factoryId, review }: { factoryId: string; review: boolean }) {
   return (
     <EmptyState
       variant="fill"
       as="h2"
-      iconSlot={<GitBranch />}
+      iconSlot={<IconBranch />}
       titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
       descriptionSlot={
         review

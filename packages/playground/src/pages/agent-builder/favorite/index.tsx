@@ -7,13 +7,13 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useStoredAgents, useStoredSkills } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
-import { StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -123,7 +123,7 @@ export default function AgentBuilderFavoritePage() {
               <ActionRow.Start>
                 <PageHeader>
                   <PageHeader.Title>
-                    <StarIcon /> Favorites
+                    <IconStar /> Favorites
                   </PageHeader.Title>
                   <PageHeader.Description>
                     {tab === 'agents'

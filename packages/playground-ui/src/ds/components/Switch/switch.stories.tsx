@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { GlobeIcon, LockKeyhole, ZapIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Field, FieldContent, FieldDescription, FieldLabel } from '../Field';
 import type { SwitchProps } from './switch';
 import { Switch } from './switch';
+import { IconGlobe } from '@/ds/icons/central/IconGlobe';
+import { IconLock } from '@/ds/icons/central/IconLock';
+import { IconZap } from '@/ds/icons/central/IconZap';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
   { token: 'sidebar', label: 'sidebar · the recessed shell', className: 'bg-sidebar' },
@@ -16,8 +18,8 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 type SwitchIconProps = Pick<SwitchProps, 'checkedIcon' | 'icon' | 'uncheckedIcon'>;
 
 const visibilityIcons: SwitchIconProps = {
-  checkedIcon: <LockKeyhole />,
-  uncheckedIcon: <GlobeIcon />,
+  checkedIcon: <IconLock />,
+  uncheckedIcon: <IconGlobe />,
 };
 
 const withIconSource = `import { Switch } from '@mastra/playground-ui/components/Switch';
@@ -155,7 +157,7 @@ export const DisabledChecked: Story = {
 
 export const WithIcon: Story = {
   args: {
-    icon: <ZapIcon />,
+    icon: <IconZap />,
   },
   parameters: {
     docs: {

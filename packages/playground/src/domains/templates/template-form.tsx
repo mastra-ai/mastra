@@ -4,8 +4,9 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';
 import { Container } from './shared';
@@ -50,7 +51,7 @@ export function TemplateForm({
           tone="muted"
           className={cn('flex items-center gap-2', '[&_svg]:h-[1.2em] [&_svg]:opacity-70 [&>svg]:w-[1.2em]')}
         >
-          Install Template <PackageOpenIcon />
+          Install Template <IconPackage />
         </Txt>
         <Field orientation="horizontal">
           <FieldLabel>Template AI Model Provider</FieldLabel>
@@ -156,7 +157,7 @@ export function TemplateForm({
               </>
             ) : (
               <>
-                Install <ArrowRightIcon />
+                Install <IconArrowRight />
               </>
             )}
           </Button>

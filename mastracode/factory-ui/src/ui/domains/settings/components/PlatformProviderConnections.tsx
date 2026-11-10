@@ -13,7 +13,6 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Link2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -25,6 +24,7 @@ import { MASTRA_PLATFORM_URL, PLATFORM_CONNECT_PROVIDERS } from '../../factory/s
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { IntegrationLabel } from './IntegrationLabel';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
 
 const platformIcons = {
   gitlab: 'gitlab',
@@ -164,7 +164,7 @@ export function PlatformConnectButton({ provider }: { provider: PlatformConnectP
       provider={provider}
       label={`Connect ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
       buttonLabel="Connect"
-      icon={<Link2 />}
+      icon={<IconChainLink1 />}
     />
   );
 }
@@ -182,7 +182,7 @@ export function PlatformReconnectButton({
       reconnectConnectionId={connectionId}
       label={`Reconnect ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
       buttonLabel="Reconnect"
-      icon={<Link2 />}
+      icon={<IconChainLink1 />}
     />
   );
 }
@@ -221,7 +221,7 @@ export function AddPlatformAccountRow({ provider }: { provider: PlatformConnectP
         provider={provider}
         label={`Connect another ${PLATFORM_CONNECT_PROVIDERS[provider].displayName} account`}
         buttonLabel="Connect"
-        icon={<Link2 />}
+        icon={<IconChainLink1 />}
       />
     </SettingsRow>
   );

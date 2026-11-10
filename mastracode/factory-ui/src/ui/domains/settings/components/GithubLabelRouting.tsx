@@ -5,7 +5,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -15,6 +14,8 @@ import {
   useSaveIntakeLabelRouteMutation,
 } from '../../../../hooks/useIntakeConfig';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 const NO_BOARD = '__no_board__';
 
@@ -132,7 +133,7 @@ export function GithubLabelRouting({
               <Button
                 size="sm"
                 variant="ghost"
-                icon={<Trash2 />}
+                icon={<IconTrashCan />}
                 aria-label={`Remove route for ${existing.label}`}
                 onClick={() => save.mutate({ integrationId: 'github', label: existing.label, board: null })}
               >
@@ -165,7 +166,7 @@ export function GithubLabelRouting({
           />
           <Button
             size="sm"
-            icon={<Plus />}
+            icon={<IconPlusLarge />}
             disabled={add.isPending || !trimmed || !draftBoard || duplicate}
             onClick={() =>
               add.mutate(

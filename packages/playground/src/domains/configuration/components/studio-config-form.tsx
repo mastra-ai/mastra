@@ -3,9 +3,9 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { SaveIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
@@ -111,7 +111,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
           )}
         </FieldsContainer>
 
-        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-4 ml-auto'} icon={<SaveIcon />}>
+        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-4 ml-auto'} icon={<IconFloppyDisk1 />}>
           Save configuration
         </Button>
       </Form>

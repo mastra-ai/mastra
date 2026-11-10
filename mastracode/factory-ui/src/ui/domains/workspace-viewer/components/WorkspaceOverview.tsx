@@ -1,12 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
-import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
+import { FileDiff } from 'lucide-react';
 
 import type { WorkspaceChanges } from '../../../../api/types';
 import { RecreateSandboxAction } from './RecreateSandboxAction';
 import type { RecreateSandboxTarget } from './RecreateSandboxAction';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
+import { IconNotepad } from '@mastra/playground-ui/icons/central/IconNotepad';
 
 interface WorkspaceOverviewProps {
   changes?: WorkspaceChanges;
@@ -65,12 +67,12 @@ export function WorkspaceOverview({
         </Txt>
       </Button>
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowFiles}>
-        <NotepadText />
+        <IconNotepad />
         <span>Files</span>
       </Button>
       {onShowComments ? (
         <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
-          <MessageSquare />
+          <IconBubble2 />
           <span>Comments</span>
           <Txt as="span" variant="meta" tone="muted" className="ml-auto">
             {commentCount === 0 ? 'None yet' : commentCount}

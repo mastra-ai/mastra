@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '../Button';
@@ -10,6 +9,7 @@ import { ThinkingLevelPicker } from './thinking-level-picker';
 import { ThinkingLevelRamp } from './thinking-level-ramp';
 import { ThinkingLevelSlider } from './thinking-level-slider';
 import type { ThinkingLevelOption } from './use-thinking-level-stop';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 
 type Level = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -128,7 +128,7 @@ function GroupedWithModel({ model, options, initial, unavailableReason }: Groupe
     <ButtonsGroup size="sm" aria-label="Model and thinking">
       <Button variant="ghost" size="sm">
         {model}
-        <ChevronDown aria-hidden size={12} />
+        <IconChevronBottom aria-hidden size={12} />
       </Button>
       <ThinkingLevelPicker
         options={options}

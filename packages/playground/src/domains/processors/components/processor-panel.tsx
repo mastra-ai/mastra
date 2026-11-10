@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import type {
   ProcessorDetail,
@@ -17,7 +18,6 @@ import type {
 } from '@mastra/react/hooks/processors';
 import { useProcessor, useExecuteProcessor } from '@mastra/react/hooks/processors';
 import CodeMirror from '@uiw/react-codemirror';
-import { Play } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export interface ProcessorPanelProps {
@@ -188,7 +188,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </Field>
 
           <Button
-            icon={<Play />}
+            icon={<IconPlay />}
             onClick={handleExecute}
             disabled={executeProcessor.isPending || selectedPhase === 'outputStream' || selectedPhase === 'llmRequest'}
             className="w-full"

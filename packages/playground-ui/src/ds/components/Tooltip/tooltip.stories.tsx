@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Info, SaveIcon } from 'lucide-react';
 import { Button } from '../Button';
 import { InfoTooltip } from './info-tooltip';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
 
 const meta: Meta<typeof Tooltip> = {
   title: 'Elements/Tooltip',
@@ -44,7 +45,7 @@ export const WithKeyboardShortcut: Story = {
     <Tooltip>
       <TooltipTrigger asChild>
         <Button size="icon-md" aria-label="Save changes">
-          <SaveIcon />
+          <IconFloppyDisk1 />
         </Button>
       </TooltipTrigger>
       <TooltipContent>
@@ -60,7 +61,7 @@ export const WithIcon: Story = {
     <Tooltip>
       <TooltipTrigger asChild>
         <button className="rounded p-1 hover:bg-fill-subtle" aria-label="More information">
-          <Info className="size-4 text-muted-foreground" />
+          <IconCircleInfo className="size-4 text-muted-foreground" />
         </button>
       </TooltipTrigger>
       <TooltipContent>More information</TooltipContent>

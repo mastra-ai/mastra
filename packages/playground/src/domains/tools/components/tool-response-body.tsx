@@ -2,7 +2,7 @@ import { Code } from '@mastra/playground-ui/components/Code';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { SendIcon } from 'lucide-react';
+import { IconSend } from '@mastra/playground-ui/icons/central/IconSend';
 import type { ToolRun } from '../utils/tool-run';
 import { getRunCode } from '../utils/tool-run';
 
@@ -21,7 +21,7 @@ export function ToolResponseBody({ isRunning, lastRun }: ToolResponseBodyProps) 
   if (!lastRun) {
     return (
       <EmptyState
-        iconSlot={<SendIcon />}
+        iconSlot={<IconSend />}
         titleSlot="No response yet"
         descriptionSlot="Run the tool to see its output here."
       />

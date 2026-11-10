@@ -8,7 +8,6 @@ import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { Braces } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
@@ -19,6 +18,7 @@ import { variableHighlight } from './variable-highlight-extension';
 import { Button } from '@/ds/components/Button';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useFieldControlAria } from '@/ds/components/Field/field-control-aria';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { formatJSON } from '@/lib/formatting';
 import type { JsonSchema } from '@/lib/json-schema';
@@ -310,7 +310,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
                 aria-label="Format JSON"
                 onClick={handleFormat}
               >
-                <Braces />
+                <IconCodeBrackets />
               </Button>
             )}
             {showCopyButton && <CopyButton content={formattedCode} />}

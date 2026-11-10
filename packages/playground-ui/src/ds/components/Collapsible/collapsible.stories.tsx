@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUpRight } from 'lucide-react';
 import { Button } from '../Button';
 import { DisclosureChevron } from '../DisclosureChevron';
 import { Meter } from '../Meter';
@@ -7,6 +6,7 @@ import { ScrollArea } from '../ScrollArea';
 import { Table } from '../Table';
 import { Txt } from '../Txt';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
 import { SettingsContainer } from '@/ds/new/settings';
 
 const meta: Meta<typeof Collapsible> = {
@@ -256,7 +256,7 @@ function AllowanceRow({ allowance }: { allowance: AllowanceUsage }) {
             ))}
             <Table.Row>
               <Table.Cell colSpan={3}>
-                <Button variant="link" size="sm" iconEnd={<ArrowUpRight />} render={<a href="#usage-by-project" />}>
+                <Button variant="link" size="sm" iconEnd={<IconArrowUpRight />} render={<a href="#usage-by-project" />}>
                   View {noun} by project
                 </Button>
               </Table.Cell>

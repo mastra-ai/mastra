@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { Check } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
@@ -31,7 +31,7 @@ function CreateLayoutWrapper() {
       ) : (
         <>
           <Icon>
-            <Check />
+            <IconCheckmark1 />
           </Icon>
           Create agent
         </>

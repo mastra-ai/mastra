@@ -8,7 +8,6 @@ import {
   ComposerSuggestions,
 } from '@mastra/playground-ui/components/Composer';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUp } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
@@ -18,6 +17,7 @@ import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
 import { useMentionAutocomplete } from './useMentionAutocomplete';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
 
 export function CommentComposer({
   workItemId,
@@ -143,7 +143,7 @@ export function CommentComposer({
             aria-label="Send comment"
             disabled={draft.trim().length === 0 || createComment.isPending}
           >
-            <ArrowUp aria-hidden />
+            <IconArrowUp aria-hidden />
           </Button>
         </ComposerActions>
       </ComposerBox>

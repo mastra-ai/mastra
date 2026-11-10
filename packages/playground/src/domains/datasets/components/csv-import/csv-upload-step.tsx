@@ -4,9 +4,9 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Upload } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
 export interface CSVUploadStepProps {
@@ -116,7 +116,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         ) : (
           <>
             <Icon className="text-muted-foreground">
-              <Upload className="h-8 w-8" />
+              <IconArrowOutOfBox className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
               <Txt as="span" variant="subheading" tone="faint">

@@ -1,5 +1,4 @@
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
-import { ArrowDownToLine, ArrowUpFromLine, Braces, Database } from 'lucide-react';
 import { useState } from 'react';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { CodeEditor } from '@/ds/components/CodeEditor';
@@ -7,6 +6,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/compon
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowUpWall } from '@/ds/icons/central/IconArrowUpWall';
+import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
 
 type RunDataTab = 'input' | 'output' | 'execution';
 
@@ -37,7 +40,7 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
   return (
     <Collapsible className="border-t border-border" data-testid="workflow-run-data">
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 px-5 py-3 text-caption text-muted-foreground">
-        <Database aria-hidden className="size-3.5 text-muted-foreground" />
+        <IconServer1 aria-hidden className="size-3.5 text-muted-foreground" />
         <span>Run data</span>
         <DisclosureChevron direction="right" className="ml-auto size-4 text-muted-foreground" />
       </CollapsibleTrigger>
@@ -45,17 +48,17 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
         <Tabs defaultTab={tab} value={tab} onValueChange={setSelectedTab} className="min-w-0 px-5 pb-4">
           <TabList variant="pill" className="mb-3">
             <Tab value="input">
-              <ArrowDownToLine aria-hidden className="size-3.5" />
+              <IconArrowWallDown aria-hidden className="size-3.5" />
               Input
             </Tab>
             {hasOutput && (
               <Tab value="output">
-                <ArrowUpFromLine aria-hidden className="size-3.5" />
+                <IconArrowUpWall aria-hidden className="size-3.5" />
                 Output
               </Tab>
             )}
             <Tab value="execution">
-              <Braces aria-hidden className="size-3.5" />
+              <IconCodeBrackets aria-hidden className="size-3.5" />
               Execution
             </Tab>
           </TabList>

@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { RotateCcw } from 'lucide-react';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
@@ -18,6 +17,7 @@ import { AddLinearWorkspaceRow } from './LinearConnectionControls';
 import { LinearIntakeSection } from './LinearIntakeSection';
 import { AddPlatformAccountRow } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 type SourceListing = 'connected' | 'unavailable' | 'available';
 
@@ -41,7 +41,12 @@ export function IntakeSection() {
   if (!configQuery.data) {
     return (
       <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
-        <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<IconArrowRotateCounterClockwise />}
+          onClick={() => void configQuery.refetch()}
+        >
           Retry
         </Button>
       </SettingsRow>

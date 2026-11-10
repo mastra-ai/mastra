@@ -94,9 +94,9 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 
 ### Central Icons
 
-New interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use one for any new glyph instead of `lucide-react`. Lucide icons are replaced as screens are touched.
+New interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `CirclePause`, for the `Loader2` spinner, and for filled stars, which would need a second Central style. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
 
-Each icon is its own module under `@mastra/playground-ui/icons/central/`. Wrap it in `Icon` for the standard sizes, the same as any other icon. Icons are decorative by default (`aria-hidden`). Label the button or link that contains them.
+Each icon is its own module under `@mastra/playground-ui/icons/central/`. Wrap it in `Icon` for the standard sizes, the same as any other icon. Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
 
 ```tsx
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -111,7 +111,7 @@ The **Icons/All Icons** Storybook story shows every icon available.
 
 #### Adding an icon
 
-The icons are committed to this package, so installing and building need no license key. Adding one requires Mastra's Central Icons license key.
+The icons are committed to this package, so installing and building need no license key. Adding one requires Mastra's Central Icons license key, from the `CENTRAL MASTRA` item in 1Password.
 
 1. Find the name in Central's [icon list](https://iconists.co/central) or in the Central Figma library, for example `IconArrowRight`.
 2. From `packages/playground-ui`, run the generator with the key and the names to add:

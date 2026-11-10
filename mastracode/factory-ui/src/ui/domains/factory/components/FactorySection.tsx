@@ -1,5 +1,4 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, GitPullRequest, SquareKanban } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
@@ -9,6 +8,9 @@ import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -35,7 +37,7 @@ export function FactorySection() {
               <FactoryLink
                 key={board.id}
                 to={rememberedBoardPath(factoryId, board.id)}
-                icon={board.id === 'review' ? GitPullRequest : SquareKanban}
+                icon={board.id === 'review' ? IconPullRequest : IconKanbanView}
                 label={board.title}
               />
             ))
@@ -44,7 +46,7 @@ export function FactorySection() {
       </section>
       {features.data?.knowledge ? (
         <Sidebar.NavList>
-          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
+          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={IconBrain} label="Knowledge" />
         </Sidebar.NavList>
       ) : null}
     </nav>

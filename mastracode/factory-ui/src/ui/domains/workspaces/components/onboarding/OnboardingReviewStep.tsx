@@ -2,7 +2,6 @@ import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Building2, GitBranch, Sparkles, UserRound } from 'lucide-react';
 import { CONNECTION_METHOD_LABEL } from '../../hooks/useProviderConnection';
 import { SETUP_LABELS } from '../../services/onboardingSteps';
 import { isGitLabRepository } from '../../services/github';
@@ -11,6 +10,10 @@ import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from '../.
 
 import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 function sharedModelDetail(scope: OnboardingModelScope | undefined, local: boolean) {
   if (local) return ['Factory default', 'local connection'];
@@ -42,7 +45,7 @@ export function OnboardingReviewStep({
     <section aria-label="Review factory setup" className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 sm:gap-4">
         <OnboardingReviewRow
-          icon={<GitBranch />}
+          icon={<IconBranch />}
           label="Codebase"
           value={repo?.fullName ?? 'Choose a repository'}
           detail={
@@ -59,7 +62,7 @@ export function OnboardingReviewStep({
         <OnboardingWorkReviewRow disabled={pending} onEdit={() => onEdit('project-management')} />
         {!local && (
           <OnboardingReviewRow
-            icon={<Building2 />}
+            icon={<IconBuildings />}
             label="Setup"
             value={draft.modelScope ? SETUP_LABELS[draft.modelScope] : 'Choose a setup'}
             detail="Applies to this Factory"
@@ -69,7 +72,7 @@ export function OnboardingReviewStep({
         )}
         {shared ? (
           <OnboardingReviewRow
-            icon={<Sparkles />}
+            icon={<IconSparklesTwo />}
             label="Model"
             value={draft.model?.modelId ?? 'Choose a model'}
             detail={
@@ -84,7 +87,7 @@ export function OnboardingReviewStep({
           />
         ) : (
           <OnboardingReviewRow
-            icon={<Sparkles />}
+            icon={<IconSparklesTwo />}
             label="Model"
             value={personal?.modelId ?? 'Choose a model'}
             detail={
@@ -101,7 +104,7 @@ export function OnboardingReviewStep({
         )}
         {draft.modelScope === 'hybrid' && (
           <OnboardingReviewRow
-            icon={<UserRound />}
+            icon={<IconUser />}
             label="Personal model"
             value={personal?.modelId ?? 'Choose your session model'}
             detail={

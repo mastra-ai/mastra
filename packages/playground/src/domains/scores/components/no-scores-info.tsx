@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ExternalLinkIcon, Plus } from 'lucide-react';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void }) => (
   <EmptyState
@@ -9,7 +10,7 @@ export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void
     actionSlot={
       <div className="flex flex-col items-center gap-2">
         {onRunExperiment && (
-          <Button variant="primary" onClick={onRunExperiment} icon={<Plus />}>
+          <Button variant="primary" onClick={onRunExperiment} icon={<IconPlusLarge />}>
             New experiment
           </Button>
         )}
@@ -17,7 +18,7 @@ export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void
           variant="ghost"
           render={<a href="https://mastra.ai/en/docs/evals/overview" target="_blank" rel="noopener noreferrer" />}
 
-          icon={<ExternalLinkIcon />}
+          icon={<IconSquareArrowTopRight />}
         >
           Scorers documentation
         </Button>

@@ -1,7 +1,8 @@
 import { Collapsible } from '@base-ui/react/collapsible';
-import { ArrowLeft, Check } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { ScrollArea, ScrollAreaViewport } from '../../ScrollArea';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
 import { cn } from '@/lib/utils';
 
 export interface ComposerSuggestionItem {
@@ -49,7 +50,7 @@ export function ComposerSuggestions({
                 onMouseDown={event => event.preventDefault()}
                 onClick={onBack}
               >
-                <ArrowLeft size={14} aria-hidden />
+                <IconArrowLeft size={14} aria-hidden />
                 <span>{contextLabel}</span>
               </button>
             </div>
@@ -88,7 +89,7 @@ export function ComposerSuggestions({
                         )}
                         {item.active && (
                           <span className="flex shrink-0 items-center gap-1">
-                            <Check size={13} aria-hidden />
+                            <IconCheckmark1 size={13} aria-hidden />
                             Current
                           </span>
                         )}

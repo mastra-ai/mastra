@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SquareArrowRight, SquareDot, SquarePlus } from 'lucide-react';
+import { SquareDot } from 'lucide-react';
 import { DiffStat } from '../DiffStat';
 import type { DiffStatProps } from '../DiffStat';
 import { Txt } from '../Txt';
 import { CodeDiff } from './code-diff';
 import { CodeDiffList } from './code-diff-list';
+import { IconArrowRightSquare } from '@/ds/icons/central/IconArrowRightSquare';
+import { IconSquarePlus } from '@/ds/icons/central/IconSquarePlus';
 
 const meta: Meta<typeof CodeDiff> = {
   title: 'Elements/CodeDiff',
@@ -130,7 +132,7 @@ export const FileList: Story = {
         patch={guidePatch}
         header={{
           path: 'docs/guide.md',
-          icon: <SquarePlus role="img" aria-label="Added" className="text-success-indicator" />,
+          icon: <IconSquarePlus role="img" aria-label="Added" className="text-success-indicator" />,
           meta: <LineCounts additions={3} deletions={0} />,
         }}
       />
@@ -138,7 +140,7 @@ export const FileList: Story = {
         header={{
           path: '.agents/skills/react-best-practices/rules/bundle-barrel-imports.md',
           previousPath: '.agents/skills/react/rules/bundle-barrel-imports.md',
-          icon: <SquareArrowRight role="img" aria-label="Renamed" className="text-info-indicator" />,
+          icon: <IconArrowRightSquare role="img" aria-label="Renamed" className="text-info-indicator" />,
         }}
       />
       <CodeDiff

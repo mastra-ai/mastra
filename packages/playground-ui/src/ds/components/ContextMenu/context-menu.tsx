@@ -1,8 +1,9 @@
 import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu';
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
-import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import {
   menuItemCheckClass,
@@ -139,7 +140,7 @@ const ContextMenuCheckboxItem = React.forwardRef<HTMLDivElement, ContextMenuPrim
     <ContextMenuPrimitive.CheckboxItem ref={ref} checked={checked} className={cn(menuItemClass, className)} {...props}>
       {children}
       <ContextMenuPrimitive.CheckboxItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark1 />
       </ContextMenuPrimitive.CheckboxItemIndicator>
     </ContextMenuPrimitive.CheckboxItem>
   ),
@@ -151,7 +152,7 @@ const ContextMenuRadioItem = React.forwardRef<HTMLDivElement, ContextMenuPrimiti
     <ContextMenuPrimitive.RadioItem ref={ref} className={cn(menuItemClass, className)} {...props}>
       {children}
       <ContextMenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark1 />
       </ContextMenuPrimitive.RadioItemIndicator>
     </ContextMenuPrimitive.RadioItem>
   ),
@@ -190,7 +191,7 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
     >
       {children}
       <span className={menuItemTrailingIconClass}>
-        <ChevronDown className="-rotate-90" />
+        <IconChevronBottom className="-rotate-90" />
       </span>
     </ContextMenuPrimitive.SubmenuTrigger>
   ),

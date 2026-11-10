@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BotIcon, CoinsIcon, HashIcon } from 'lucide-react';
 import { MetricsKpiCard } from '../MetricsKpiCard';
 import { MetricsCardGroup } from './metrics-card-group';
+import { IconCoins } from '@/ds/icons/central/IconCoins';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
 
 const meta: Meta<typeof MetricsCardGroup> = {
   title: 'Metrics/MetricsCardGroup',
@@ -41,7 +43,7 @@ export const MixedStates: Story = {
   render: args => (
     <MetricsCardGroup {...args}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconRobot />}>Agent runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>12.3k</MetricsKpiCard.Value>
           <MetricsKpiCard.Change comparison="vs previous 24h" changePct={15.3} prevValue="10.7k" />
@@ -49,13 +51,13 @@ export const MixedStates: Story = {
         <MetricsKpiCard.Footer detail="41 runs today" prevValue="10.7k" />
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<CoinsIcon />}>Model cost</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconCoins />}>Model cost</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Loading />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<HashIcon />}>Tokens</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconHashtag />}>Tokens</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>8.2M</MetricsKpiCard.Value>
         </MetricsKpiCard.ValueRow>

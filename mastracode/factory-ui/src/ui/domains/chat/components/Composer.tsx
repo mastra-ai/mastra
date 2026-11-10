@@ -20,7 +20,6 @@ import {
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ImagePlus } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
@@ -53,6 +52,7 @@ import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 import { useVoiceDictation } from './useVoiceDictation';
+import { IconAddImage } from '@mastra/playground-ui/icons/central/IconAddImage';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
@@ -334,7 +334,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 aria-label="Attach image"
                 tooltip="Images only"
               >
-                <ImagePlus size={14} />
+                <IconAddImage size={14} />
               </Button>
               {factoryId && (
                 <ComposerVoiceButton

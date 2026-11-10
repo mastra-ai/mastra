@@ -4,8 +4,9 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-
-import { CloudUpload, Link, PlusIcon } from 'lucide-react';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconCloudUpload } from '@mastra/playground-ui/icons/central/IconCloudUpload';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useComposerAttachments } from './composer-attachments';
@@ -69,7 +70,7 @@ export const AttachFilePopover = () => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon-md" type="button" tooltip="Add attachment">
-          <PlusIcon />
+          <IconPlusLarge />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -87,7 +88,7 @@ export const AttachFilePopover = () => {
             <FieldLabel>Public URL</FieldLabel>
             <div className="flex gap-2">
               <Input name="url-attachment" type="url" placeholder="https://placehold.co/600x400/png" />
-              <Button type="submit" className="h-8!" variant="default" icon={<Link />}>
+              <Button type="submit" className="h-8!" variant="default" icon={<IconChainLink1 />}>
                 Add
               </Button>
             </div>
@@ -106,7 +107,7 @@ export const AttachFilePopover = () => {
             onClick={openFilePicker}
             className="flex h-28 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-muted-foreground hover:bg-fill-subtle active:bg-fill"
           >
-            <CloudUpload className="size-8" />
+            <IconCloudUpload className="size-8" />
             <Txt variant="heading">Add a local file</Txt>
           </button>
         </div>

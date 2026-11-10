@@ -8,9 +8,9 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { NoWorkflowsInfo } from '@mastra/playground-ui/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@mastra/playground-ui/domains/workflows/components/workflows-list/workflows-list';
 import type { WorkflowsSort } from '@mastra/playground-ui/domains/workflows/components/workflows-list/workflows-sort';
+import { IconCalendarClock } from '@mastra/playground-ui/icons/central/IconCalendarClock';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
-import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -70,7 +70,7 @@ function Workflows() {
             </div>
           </ActionRow.Start>
           <ActionRow.End>
-            <Button render={<Link to="/workflows/schedules" />} variant="primary" icon={<CalendarClockIcon />}>
+            <Button render={<Link to="/workflows/schedules" />} variant="primary" icon={<IconCalendarClock />}>
               Schedules
             </Button>
           </ActionRow.End>

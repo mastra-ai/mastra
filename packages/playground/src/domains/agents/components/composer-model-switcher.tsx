@@ -3,9 +3,10 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
-import { Lock, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
@@ -59,7 +60,7 @@ export const ComposerModelSwitcher = () => {
   if (policy.active && policy.pickerVisible === false) {
     const lockedLabel = selectedProvider && selectedModel ? `${selectedProvider}/${selectedModel}` : 'Locked by admin';
     return (
-      <Badge icon={<Lock />} data-testid="composer-model-locked">
+      <Badge icon={<IconLock />} data-testid="composer-model-locked">
         {lockedLabel}
       </Badge>
     );
@@ -131,7 +132,7 @@ export const ComposerModelWarning = () => {
           data-testid="composer-model-stale-warning"
           role="alert"
         >
-          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+          <IconExclamationTriangle className="mt-0.5 h-3 w-3 shrink-0" />
           <Txt as="span" variant="caption" className="min-w-0 break-words">
             {modelWarning || (
               <>
@@ -146,7 +147,7 @@ export const ComposerModelWarning = () => {
       )}
       {showProviderWarning && (
         <div className="flex max-w-full min-w-0 items-start gap-1 text-warning-foreground">
-          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+          <IconExclamationTriangle className="mt-0.5 h-3 w-3 shrink-0" />
           <Txt as="span" variant="caption" className="min-w-0 break-words">
             Set{' '}
             <code className="rounded bg-warning-subtle px-1 py-0.5 break-all text-warning-subtle-foreground">

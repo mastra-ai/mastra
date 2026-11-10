@@ -1,10 +1,12 @@
-import { Hash, ToggleLeft, Type } from 'lucide-react';
 import * as React from 'react';
 
 import type { RuleValueInputProps } from './types';
 import { Input } from '@/ds/components/Input/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
 import { Icon } from '@/ds/icons';
+import { IconFontStyle } from '@/ds/icons/central/IconFontStyle';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconToggle } from '@/ds/icons/central/IconToggle';
 import { cn } from '@/lib/utils';
 
 /**
@@ -91,7 +93,7 @@ const BooleanValueInput: React.FC<BaseInputProps> = ({ value, onChange, classNam
         size="xs"
         className="pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2 text-muted-foreground"
       >
-        <ToggleLeft />
+        <IconToggle />
       </Icon>
       <Select value={stringValue} onValueChange={handleChange}>
         <SelectTrigger className="bg-muted pl-7" size="sm">
@@ -128,7 +130,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
   return (
     <div className={cn('relative', className)}>
       <Icon size="xs" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground">
-        <Hash />
+        <IconHashtag />
       </Icon>
       <Input
         type="number"
@@ -158,7 +160,7 @@ const TextValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholder
   return (
     <div className={cn('relative', className)}>
       <Icon size="xs" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground">
-        <Type />
+        <IconFontStyle />
       </Icon>
       <Input
         value={displayValue}

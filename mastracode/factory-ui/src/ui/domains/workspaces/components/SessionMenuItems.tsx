@@ -1,11 +1,17 @@
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLink, Lock, Pin, PinOff, RefreshCw, Trash2, Users } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import type { SessionExternalLink } from '../services/sessionRows';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { IconUnpin } from '@mastra/playground-ui/icons/central/IconUnpin';
+import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 
 export function SessionMenuItems({
   menu,
@@ -37,7 +43,7 @@ export function SessionMenuItems({
   return (
     <>
       <Menu.Item render={<Link to={url} target="_blank" rel="noopener noreferrer" />}>
-        <ExternalLink />
+        <IconSquareArrowTopRight />
         Open in new tab
       </Menu.Item>
       {externalLinks.map(link => (
@@ -48,12 +54,12 @@ export function SessionMenuItems({
       ))}
       <Menu.Separator />
       <Menu.Item onClick={() => onPinChange(!pinned)}>
-        {pinned ? <PinOff /> : <Pin />}
+        {pinned ? <IconUnpin /> : <IconPin />}
         {pinned ? 'Unpin' : 'Pin session'}
       </Menu.Item>
       {onRegenerateTitle ? (
         <Menu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
-          <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
+          <IconArrowRotateClockwise className={cn(regeneratingTitle && 'animate-spin')} />
           Regenerate title
         </Menu.Item>
       ) : null}
@@ -62,13 +68,13 @@ export function SessionMenuItems({
           disabled={changingVisibility}
           onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}
         >
-          {visibility === 'private' ? <Users /> : <Lock />}
+          {visibility === 'private' ? <IconUserDuo /> : <IconLock />}
           {visibility === 'private' ? 'Share with organization' : 'Make private'}
         </Menu.Item>
       ) : null}
       {onDelete ? (
         <Menu.Item variant="destructive" onClick={onDelete}>
-          <Trash2 />
+          <IconTrashCan />
           Delete
         </Menu.Item>
       ) : null}

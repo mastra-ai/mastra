@@ -8,14 +8,16 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
-import { Check, Plus, PlusIcon, Save } from 'lucide-react';
+
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
-
 import type { PromptBlockFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
 
@@ -54,7 +56,7 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField className="mt-2" size="sm">
-            <PlusIcon />
+            <IconPlusLarge />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -163,7 +165,7 @@ export function PromptBlockEditSidebar({
 
             <div className="p-2">
               <JSONSchemaForm.AddField>
-                <Plus />
+                <IconPlusLarge />
                 Add variable
               </JSONSchemaForm.AddField>
             </div>
@@ -208,7 +210,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <Save />
+                  <IconFloppyDisk1 />
                   Save
                 </>
               )}
@@ -226,7 +228,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <Check />
+                  <IconCheckmark1 />
                   Publish
                 </>
               )}
@@ -241,7 +243,7 @@ export function PromptBlockEditSidebar({
               </>
             ) : (
               <>
-                <Check />
+                <IconCheckmark1 />
                 Create prompt block
               </>
             )}

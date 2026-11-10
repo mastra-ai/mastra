@@ -1,9 +1,9 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCircleInfo } from '@mastra/playground-ui/icons/central/IconCircleInfo';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { InfoIcon } from 'lucide-react';
 
 const sectionAccentIcon = {
   amber: 'text-badge-amber-indicator',
@@ -72,7 +72,7 @@ export const AgentMetadataSection = ({
                     className="opacity-0 group-focus-within/metadata:opacity-100 group-hover/metadata:opacity-100 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:opacity-100"
                   >
                     <Icon className="text-muted-foreground" size="xs">
-                      {hint.icon || <InfoIcon />}
+                      {hint.icon || <IconCircleInfo />}
                     </Icon>
                   </Link>
                 </TooltipTrigger>

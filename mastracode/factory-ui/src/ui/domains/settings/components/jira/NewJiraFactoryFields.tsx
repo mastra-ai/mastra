@@ -1,12 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import { BoardPicker } from '../IntakeSourceRouting';
 import { RoutingNote } from './RoutingNote';
 import { parseLabels } from './routing';
 import type { Factory } from './routing';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 /** `labels` empty: the factory takes all issues. */
 export type NewJiraRoute = { factoryProjectId: string; board: string; labels: string[] };
@@ -66,7 +66,12 @@ export function NewJiraFactoryFields({
           disabled={adding}
           className="w-56 max-w-full"
         />
-        <Button size="sm" icon={<Plus />} disabled={adding || board === undefined || !labelsReady} onClick={add}>
+        <Button
+          size="sm"
+          icon={<IconPlusLarge />}
+          disabled={adding || board === undefined || !labelsReady}
+          onClick={add}
+        >
           {adding ? 'Adding…' : 'Add'}
         </Button>
       </div>

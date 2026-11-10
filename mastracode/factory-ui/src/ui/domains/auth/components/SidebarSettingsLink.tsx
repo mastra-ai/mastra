@@ -2,13 +2,13 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Settings2 } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { FactoryAuthState } from '../services/auth';
 import { useSettingsOpen } from '../../settings/hooks/useSettingsOpen';
 import { settingsSectionPath } from '../../settings/settingsSections';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 export function SidebarSettingsLink() {
   const auth = useFactoryAuth();
@@ -56,14 +56,14 @@ export function SidebarSettingsLink() {
           {userName ? (
             <Avatar src={account?.user?.avatarUrl} name={userName} size="inline" />
           ) : (
-            <Settings2 aria-hidden="true" />
+            <IconSettingsSliderHor aria-hidden="true" />
           )}
           <Sidebar.NavLabel>
             <Txt as="span" variant="label" tone="ink">
               {userName ?? 'Settings'}
             </Txt>
           </Sidebar.NavLabel>
-          {userName && sidebarState !== 'collapsed' && <Settings2 aria-hidden="true" />}
+          {userName && sidebarState !== 'collapsed' && <IconSettingsSliderHor aria-hidden="true" />}
         </Link>
       }
     />

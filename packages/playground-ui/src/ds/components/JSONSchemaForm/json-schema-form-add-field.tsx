@@ -1,9 +1,9 @@
-import { Plus } from 'lucide-react';
 import * as React from 'react';
 import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormNestedContext } from './json-schema-form-nested-context';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 
 export type JSONSchemaFormAddFieldProps = Omit<ButtonProps, 'onClick'>;
 
@@ -19,7 +19,7 @@ export function AddField({ children, ...props }: JSONSchemaFormAddFieldProps) {
   }, [addField, parentPath]);
 
   return (
-    <Button icon={<Plus />} type="button" {...props} onClick={handleClick}>
+    <Button icon={<IconPlusLarge />} type="button" {...props} onClick={handleClick}>
       {children || 'Add field'}
     </Button>
   );

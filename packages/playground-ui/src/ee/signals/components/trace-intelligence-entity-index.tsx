@@ -1,5 +1,4 @@
 import type { SignalCatalogEntry, ThemeLearningEntity } from '@mastra/client-js';
-import { Columns2, List } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -19,6 +18,8 @@ import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ListSearch } from '@/ds/components/ListSearch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { IconLayoutColumn } from '@/ds/icons/central/IconLayoutColumn';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
 
 export type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
@@ -104,7 +105,7 @@ function EntityIndexControls({
             aria-pressed={view === 'list'}
             onClick={() => onViewChange('list')}
           >
-            <List />
+            <IconListBullets />
           </Button>
           <Button
             type="button"
@@ -114,7 +115,7 @@ function EntityIndexControls({
             aria-pressed={view === 'compact'}
             onClick={() => onViewChange('compact')}
           >
-            <Columns2 />
+            <IconLayoutColumn />
           </Button>
         </ButtonsGroup>
       </div>

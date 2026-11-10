@@ -2,6 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconFork } from '@mastra/playground-ui/icons/central/IconFork';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -14,7 +16,6 @@ import {
   useMemoryWithOMStatus,
   useThread,
 } from '@mastra/react/hooks/memory';
-import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
@@ -140,7 +141,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 Create a copy of this conversation
               </Txt>
             </div>
-            <Button onClick={handleCloneThread} disabled={isCloning} icon={<GitFork />}>
+            <Button onClick={handleCloneThread} disabled={isCloning} icon={<IconFork />}>
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
           </div>
@@ -215,7 +216,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 <Txt as="span" variant="body" className="block">
                   Learn about semantic recall
                 </Txt>
-                <ExternalLink className="h-3 w-3" />
+                <IconSquareArrowTopRight className="h-3 w-3" />
               </a>
             </div>
           )}

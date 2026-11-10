@@ -1,9 +1,10 @@
 import type { FilterBarField, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
+import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
+import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
 import { useAgents } from '@mastra/react/hooks/agents';
 import { useProcessors } from '@mastra/react/hooks/processors';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
-import { BoxIcon, FingerprintIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { DATASET_TARGET_TYPES, isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
@@ -81,7 +82,7 @@ export function useTargetFilterFields(targetType: DatasetTargetType | ''): Filte
       {
         id: TARGET_TYPE_FIELD_ID,
         label: 'Target type',
-        icon: BoxIcon,
+        icon: IconBox,
         color: hueAccentColor('purple'),
         operators: ['is'],
         strict: true,
@@ -90,7 +91,7 @@ export function useTargetFilterFields(targetType: DatasetTargetType | ''): Filte
       {
         id: TARGET_ID_FIELD_ID,
         label: targetType ? TARGET_TYPE_LABELS[targetType] : 'Target',
-        icon: FingerprintIcon,
+        icon: IconFingerPrint1,
         color: hueAccentColor('pink'),
         operators: ['is'],
         strict: true,

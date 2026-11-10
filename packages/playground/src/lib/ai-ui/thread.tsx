@@ -32,13 +32,14 @@ import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
 import { useReadAloud } from '@mastra/react/hooks/voice';
-import type { MessageFactoryPart } from '@mastra/react/ui';
-import { ArrowUp, Mic } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { MessageFactoryPart } from '@mastra/react/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
@@ -523,7 +524,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start(onTranscript))}
     >
-      {isListening ? <CircleStopIcon /> : <Mic />}
+      {isListening ? <CircleStopIcon /> : <IconMicrophone />}
     </Button>
   );
 };
@@ -628,7 +629,7 @@ const ComposerSendButton = ({
       tooltip={canExecute ? 'Send' : 'No permission to execute'}
       disabled={!canExecute || isEmpty || isAddingAttachments}
     >
-      <ArrowUp />
+      <IconArrowUp />
     </Button>
   );
 };

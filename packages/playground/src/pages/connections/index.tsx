@@ -8,10 +8,10 @@ import {
   useDisconnectUserConnection,
   useUserConnections,
 } from '@mastra/playground-ui/domains/connect';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { PlusIcon } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
 
+import { useCallback, useMemo, useState } from 'react';
 import { AddConnectionDialog } from './components/add-connection-dialog';
 import { ConnectionsTable } from './components/connections-table';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -137,7 +137,7 @@ export default function ConnectionsPage() {
           {surface.data?.status === 'ready' ? (
             <PageHeader.Action>
               <Button variant="primary" size="sm" onClick={() => setAddOpen(true)}>
-                <PlusIcon aria-hidden /> Add connection
+                <IconPlusLarge aria-hidden /> Add connection
               </Button>
             </PageHeader.Action>
           ) : null}

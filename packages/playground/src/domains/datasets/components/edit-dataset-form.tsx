@@ -4,9 +4,10 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { Check, X } from 'lucide-react';
 import { useReducer } from 'react';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
 import { ScorerSelector } from './experiment-trigger/scorer-selector';
@@ -180,11 +181,11 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
       ) : null}
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button icon={<X />} type="button" onClick={onCancel}>
+        <Button icon={<IconCrossMedium />} type="button" onClick={onCancel}>
           Cancel
         </Button>
         <Button
-          icon={<Check />}
+          icon={<IconCheckmark1 />}
           type="submit"
           variant="primary"
           disabled={updateDataset.isPending || !formState.name.trim()}

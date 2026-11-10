@@ -2,12 +2,11 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { ArrowRight } from 'lucide-react';
-
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../../hooks/useLinearData';
 import { isLinearReauthError } from '../../../factory/services/linear';
 import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 export interface CreateFactoryLinearRowsProps {
   query: string;
@@ -26,7 +25,7 @@ export function CreateFactoryLinearRows({ query, onConnect, onSelectProject, onS
 
   const skipRow = matches('Skip for now') && (
     <CommandPaletteItem
-      icon={<ArrowRight />}
+      icon={<IconArrowRight />}
       title="Skip for now"
       subtitle="This Factory takes its work from GitHub only"
       value="skip-linear"

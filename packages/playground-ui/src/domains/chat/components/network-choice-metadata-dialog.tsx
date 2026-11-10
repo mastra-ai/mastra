@@ -1,4 +1,3 @@
-import { Share2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '../../../ds/components/Button';
@@ -12,6 +11,7 @@ import {
   DialogBody,
 } from '../../../ds/components/Dialog';
 import { Txt } from '../../../ds/components/Txt';
+import { IconShareAndroid } from '@/ds/icons/central/IconShareAndroid';
 
 interface NetworkChoiceMetadataProps {
   selectionReason: string;
@@ -72,7 +72,7 @@ export const NetworkChoiceMetadataDialogTrigger = ({
   return (
     <>
       <Button variant="default" size="icon-md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
-        <Share2 className="size-5 text-muted-foreground" />
+        <IconShareAndroid className="size-5 text-muted-foreground" />
       </Button>
 
       <NetworkChoiceMetadata

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Sun } from 'lucide-react';
 import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Field, FieldLabel } from '../Field';
 import { SegmentedControl, SegmentedControlItem } from './segmented-control';
+import { IconSun } from '@/ds/icons/central/IconSun';
 
 // Base UI synthesizes a PointerEvent on click, which jsdom does not implement.
 
@@ -101,7 +101,7 @@ describe('SegmentedControl', () => {
       render(
         <SegmentedControl aria-label="Theme" iconOnly value="light" onValueChange={() => {}}>
           <SegmentedControlItem value="light" aria-label="Light">
-            <Sun />
+            <IconSun />
           </SegmentedControlItem>
         </SegmentedControl>,
       );
@@ -118,7 +118,7 @@ describe('SegmentedControl', () => {
           <SegmentedControl aria-label="Delivery" value="sound" onValueChange={() => {}}>
             <SegmentedControlItem value="sound">Sound</SegmentedControlItem>
             <SegmentedControlItem value="badge" aria-label="Badge only">
-              <Sun />
+              <IconSun />
             </SegmentedControlItem>
           </SegmentedControl>
         </Field>,

@@ -5,14 +5,13 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { History } from 'lucide-react';
-
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -158,7 +157,7 @@ export function WorkItemActivity({
       >
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <History size={14} className="text-muted-foreground" aria-hidden />
+            <IconHistory size={14} className="text-muted-foreground" aria-hidden />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <Txt as="span" variant="column" tone="ink">
                 Activity

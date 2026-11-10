@@ -2,7 +2,6 @@ import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -20,6 +19,9 @@ import { ProviderConnectControl } from '../../settings/components/PlatformProvid
 import { GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { OnboardingConnectionRow } from './onboarding/OnboardingConnectionRow';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 
 type SourceControlView = 'github' | 'gitlab' | 'providers';
 
@@ -135,7 +137,7 @@ export function VcsFactoryStep({
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Check className="text-muted-foreground size-3.5" aria-hidden="true" />
+              <IconCheckmark1 className="text-muted-foreground size-3.5" aria-hidden="true" />
               <ProviderHeading>{`${HOST_NAMES[selectedProvider]} connected`}</ProviderHeading>
             </div>
             <Button
@@ -191,7 +193,7 @@ export function VcsFactoryStep({
             >
               Continue
               <span className="flex size-4 shrink-0 items-center justify-center">
-                <ArrowRight
+                <IconArrowRight
                   className="size-3.5 motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-action:translate-x-0.5"
                   aria-hidden="true"
                 />
@@ -209,7 +211,7 @@ export function VcsFactoryStep({
                   disabled={refreshRepos.isPending}
                   onClick={() => refreshRepos.mutate()}
                 >
-                  <RefreshCw
+                  <IconArrowRotateClockwise
                     className={refreshRepos.isPending ? 'size-3.5 animate-spin' : 'size-3.5'}
                     aria-hidden="true"
                   />

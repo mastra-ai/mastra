@@ -1,4 +1,3 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import {
   ORDERING_LABELS,
   STEP_TYPE_OPTIONS,
@@ -17,6 +16,10 @@ import { Input } from '@/ds/components/Input';
 import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 
 const ORDERING_HINTS = {
   strict: 'Steps must run exactly in this order, with nothing in between.',
@@ -95,7 +98,11 @@ export function TrajectoryEditor({
       )}
 
       <div>
-        <Button size="sm" icon={<Plus />} onClick={() => onStepsChange(current => [...current, newTrajectoryStep()])}>
+        <Button
+          size="sm"
+          icon={<IconPlusLarge />}
+          onClick={() => onStepsChange(current => [...current, newTrajectoryStep()])}
+        >
           Add step
         </Button>
       </div>
@@ -191,7 +198,7 @@ function TrajectoryStepItem({
             disabled={isFirst}
             onClick={onMoveUp}
           >
-            <ArrowUp />
+            <IconArrowUp />
           </Button>
           <Button
             variant="ghost"
@@ -200,10 +207,10 @@ function TrajectoryStepItem({
             disabled={isLast}
             onClick={onMoveDown}
           >
-            <ArrowDown />
+            <IconArrowDown />
           </Button>
           <Button variant="ghost" size="icon-sm" aria-label={`Remove ${label.toLowerCase()}`} onClick={onRemove}>
-            <Trash2 />
+            <IconTrashCan />
           </Button>
         </div>
       </div>

@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
 import { ComposerModeStates, ComposerPreview } from '../../../../.storybook/fixtures/composer';
 
 import { Button } from '../Button';
 import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from './composer';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 
 const meta: Meta<typeof Composer> = {
   title: 'AI/Composer',
@@ -31,7 +31,7 @@ export const Empty: Story = {
         <ComposerActions>
           <span />
           <Button type="submit" size="icon-md" aria-label="Send message" disabled>
-            <ArrowUp />
+            <IconArrowUp />
           </Button>
         </ComposerActions>
       </ComposerBox>
@@ -63,7 +63,7 @@ const RingStory = ({ busy }: { busy: boolean }) => (
         <ComposerActions>
           <span />
           <Button type="submit" size="icon-md" aria-label="Send message">
-            <ArrowUp />
+            <IconArrowUp />
           </Button>
         </ComposerActions>
       </ComposerBox>

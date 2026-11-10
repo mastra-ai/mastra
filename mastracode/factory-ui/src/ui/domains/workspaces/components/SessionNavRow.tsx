@@ -3,7 +3,6 @@ import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/Ho
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Pin, User } from 'lucide-react';
 import { useRef } from 'react';
 import { Link } from 'react-router';
 import type { Location } from 'react-router';
@@ -19,6 +18,8 @@ import { SessionMenuItems } from './SessionMenuItems';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
+import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -119,7 +120,7 @@ export function SessionNavRow({
       {source ? <SessionSourceIcon source={source} /> : null}
       <Sidebar.NavLabel>{label ?? name}</Sidebar.NavLabel>
       {pinned && !loading ? (
-        <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
     </Link>
   );
@@ -210,7 +211,7 @@ export function SessionNavRow({
 
 function SessionSourceIcon({ source }: { source: SessionSource }) {
   if (source === 'user') {
-    return <User data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+    return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
   }
   return <SourceIcon source={source} className="size-3.5" />;
 }

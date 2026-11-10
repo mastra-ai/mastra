@@ -6,12 +6,14 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDisconnectConnection } from '@mastra/react/hooks/tool-providers';
-import { ChevronLeft, Link2, Unplug } from 'lucide-react';
-import { useState } from 'react';
 
+import { Unplug } from 'lucide-react';
+import { useState } from 'react';
 import { titleize } from './titleize';
 import { useDebouncedConnectionRename } from './use-debounced-connection-rename';
 
@@ -69,7 +71,7 @@ export const ManageConnectionForm = ({
             aria-label="Back to connections"
             data-testid={`${testIdPrefix}-back`}
             className="-mt-1 -ml-1.5 w-fit text-muted-foreground"
-            icon={<ChevronLeft />}
+            icon={<IconChevronLeft />}
           >
             Connections
           </Button>
@@ -80,7 +82,7 @@ export const ManageConnectionForm = ({
               <img src={iconUrl} alt="" className="size-8 object-contain" />
             ) : (
               <Icon size="lg" className="text-muted-foreground">
-                <Link2 />
+                <IconChainLink1 />
               </Icon>
             )}
           </div>

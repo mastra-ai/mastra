@@ -1,5 +1,6 @@
-import { ExternalLinkIcon, Link2Icon } from 'lucide-react';
 import { dataKeysAndValuesValueStyles } from './shared';
+import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -32,7 +33,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
       <dd className={cn(dataKeysAndValuesValueStyles, className)}>
         <a href={href} target="_blank" rel="noopener noreferrer" className={linkClassName}>
           <span>{children}</span>
-          <ExternalLinkIcon />
+          <IconSquareArrowTopRight />
         </a>
       </dd>
     );
@@ -42,7 +43,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
     <dd className={cn(dataKeysAndValuesValueStyles, className)}>
       <Component {...navigationProps} className={linkClassName}>
         <span>{children}</span>
-        <Link2Icon />
+        <IconChainLink1 />
       </Component>
     </dd>
   );

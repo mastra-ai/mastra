@@ -11,14 +11,14 @@ describe('NoTracesInfo', () => {
 
     expect(screen.getByRole('heading', { name: 'No traces yet' })).toBeTruthy();
     expect(screen.getByText('Traces will appear here once agents, workflows, or tools are executed.')).toBeTruthy();
-    expect(container.querySelector('svg.lucide-circle-slash')).toBeTruthy();
+    expect(container.querySelector('svg[data-central-icon="IconCircleBanSign"]')).toBeTruthy();
 
     rerender(<NoTracesInfo datePreset="last-24h" />);
 
     expect(screen.getByRole('heading', { name: 'No traces for the last 24 hours' })).toBeTruthy();
     expect(screen.getByText('Pick a wider time range. Older traces may fall outside the current window.')).toBeTruthy();
     expect(screen.queryByText('No traces yet')).toBeNull();
-    expect(container.querySelector('svg.lucide-circle-slash')).toBeTruthy();
+    expect(container.querySelector('svg[data-central-icon="IconCircleBanSign"]')).toBeTruthy();
   });
 
   it('names spans when it stands for a span list', () => {

@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, MessageSquare, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import { queryKeys } from '../../../../../api/keys';
@@ -10,6 +9,9 @@ import type { WorkItem } from '../../services/workItems';
 import { CommentComposer } from './CommentComposer';
 import { CommentList } from './CommentList';
 import type { CommentQuoteDraft } from './quoteDraft';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
 
 /** Thread-surface feed view; chrome mirrors WorkspaceChangesPanel. */
 export function WorkItemFeedPanel({
@@ -35,9 +37,9 @@ export function WorkItemFeedPanel({
     >
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
         <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
-          <ArrowLeft />
+          <IconArrowLeft />
         </Button>
-        <MessageSquare className="text-muted-foreground" size={14} />
+        <IconBubble2 className="text-muted-foreground" size={14} />
         <Txt tone="ink" as="h2" variant="column">
           Comments
         </Txt>
@@ -50,7 +52,7 @@ export function WorkItemFeedPanel({
           aria-label="Refresh comments"
           onClick={() => void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(item.id) })}
         >
-          <RefreshCw />
+          <IconArrowRotateClockwise />
         </Button>
       </div>
       <CommentList

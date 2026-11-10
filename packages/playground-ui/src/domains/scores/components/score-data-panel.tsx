@@ -1,11 +1,15 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ScoreAsItemDialog } from './score-as-item-dialog';
 import { Button } from '@/ds/components/Button';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Txt } from '@/ds/components/Txt';
+import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@/ds/icons/central/IconFileArrowRightOut';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconReceiptBill } from '@/ds/icons/central/IconReceiptBill';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { formatTimestampPrecise } from '@/utils/date-format';
@@ -111,7 +115,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
               </DataKeysAndValues>
 
               <div className="my-6 flex justify-end">
-                <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
+                <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<IconFloppyDisk1 />}>
                   Save as dataset item
                 </Button>
               </div>
@@ -124,7 +128,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                     '[&>svg]:size-5 [&>svg]:translate-y-1',
                   )}
                 >
-                  <GaugeIcon />
+                  <IconGauge />
                   <Txt as="span" variant="body">
                     Score:
                   </Txt>
@@ -144,41 +148,41 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
               <div className="grid gap-4">
                 <DataPanel.CodeSection
                   title="Input"
-                  dialogTitle={buildDialogTitle('Input', <FileInputIcon />, score)}
-                  icon={<FileInputIcon />}
+                  dialogTitle={buildDialogTitle('Input', <IconFileArrowRightIn />, score)}
+                  icon={<IconFileArrowRightIn />}
                   codeStr={JSON.stringify(score.input ?? null, null, 2)}
                 />
                 <DataPanel.CodeSection
                   title="Output"
-                  dialogTitle={buildDialogTitle('Output', <FileOutputIcon />, score)}
-                  icon={<FileOutputIcon />}
+                  dialogTitle={buildDialogTitle('Output', <IconFileArrowRightOut />, score)}
+                  icon={<IconFileArrowRightOut />}
                   codeStr={JSON.stringify(score.output ?? null, null, 2)}
                 />
                 <DataPanel.CodeSection
                   title="Preprocess Prompt"
-                  dialogTitle={buildDialogTitle('Preprocess Prompt', <ReceiptText />, score)}
-                  icon={<ReceiptText />}
+                  dialogTitle={buildDialogTitle('Preprocess Prompt', <IconReceiptBill />, score)}
+                  icon={<IconReceiptBill />}
                   codeStr={score.preprocessPrompt || naText}
                   simplified
                 />
                 <DataPanel.CodeSection
                   title="Analyze Prompt"
-                  dialogTitle={buildDialogTitle('Analyze Prompt', <ReceiptText />, score)}
-                  icon={<ReceiptText />}
+                  dialogTitle={buildDialogTitle('Analyze Prompt', <IconReceiptBill />, score)}
+                  icon={<IconReceiptBill />}
                   codeStr={score.analyzePrompt || naText}
                   simplified
                 />
                 <DataPanel.CodeSection
                   title="Generate Score Prompt"
-                  dialogTitle={buildDialogTitle('Generate Score Prompt', <ReceiptText />, score)}
-                  icon={<ReceiptText />}
+                  dialogTitle={buildDialogTitle('Generate Score Prompt', <IconReceiptBill />, score)}
+                  icon={<IconReceiptBill />}
                   codeStr={score.generateScorePrompt || naText}
                   simplified
                 />
                 <DataPanel.CodeSection
                   title="Generate Reason Prompt"
-                  dialogTitle={buildDialogTitle('Generate Reason Prompt', <ReceiptText />, score)}
-                  icon={<ReceiptText />}
+                  dialogTitle={buildDialogTitle('Generate Reason Prompt', <IconReceiptBill />, score)}
+                  icon={<IconReceiptBill />}
                   codeStr={score.generateReasonPrompt || naText}
                   simplified
                 />

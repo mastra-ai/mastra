@@ -1,4 +1,3 @@
-import { X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -23,6 +22,7 @@ import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { Unwatched } from '@/ds/components/Arrival';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 export interface ActivityFoldProps {
@@ -121,7 +121,12 @@ export function ActivityFold({
                   </ActivityLabel>
                 )}
                 {failed && (
-                  <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
+                  <IconCrossMedium
+                    size={13}
+                    role="img"
+                    aria-label="Failed"
+                    className="shrink-0 text-destructive-foreground"
+                  />
                 )}
                 {outcomeLabel && (
                   <Txt

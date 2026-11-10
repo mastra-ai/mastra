@@ -1,9 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-
-import { ArrowRightIcon } from 'lucide-react';
 import { useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { Models } from './models';
@@ -50,7 +49,7 @@ export const AgentProfileModelStep = () => {
         <Button onClick={handleContinue} disabled={isStreaming}>
           Continue{' '}
           <Icon>
-            <ArrowRightIcon />
+            <IconArrowRight />
           </Icon>
         </Button>
       }

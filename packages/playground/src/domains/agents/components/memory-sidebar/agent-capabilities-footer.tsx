@@ -3,16 +3,21 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+
 import { useAgent, useAgentVersions } from '@mastra/react/hooks/agents';
 import { useMemory } from '@mastra/react/hooks/memory';
-import { Bot, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
+import { WorkflowIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 
 type CapabilityTone = 'purple' | 'amber' | 'emerald' | 'sky' | 'cyan' | 'orange';
@@ -131,7 +136,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
           {description}
         </Txt>
       </span>
-      <ExternalLink
+      <IconSquareArrowTopRight
         className={cn(
           'mt-0.5 size-3 shrink-0 text-muted-foreground group-hover/capability-row:text-foreground',
           controlStateColorTransition,
@@ -207,7 +212,7 @@ function EditorCapability({ agentId, view }: AgentCapabilityProps) {
       docsHref="https://mastra.ai/docs/editor/overview"
       enabled={enabled}
       tone="amber"
-      icon={<Pencil />}
+      icon={<IconPencil />}
     />
   );
 }
@@ -229,7 +234,7 @@ function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
       docsHref="https://mastra.ai/docs/agents/using-tools-and-mcp"
       enabled={count > 0}
       tone="emerald"
-      icon={<Wrench />}
+      icon={<IconMaintenance />}
     />
   );
 }
@@ -279,7 +284,7 @@ function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
       docsHref="https://mastra.ai/docs/agents/supervisor-agents"
       enabled={count > 0}
       tone="cyan"
-      icon={<Bot />}
+      icon={<IconRobot />}
     />
   );
 }
@@ -305,7 +310,7 @@ function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
       docsHref="https://mastra.ai/docs/agents/processors"
       enabled={count > 0}
       tone="orange"
-      icon={<SlidersHorizontal />}
+      icon={<IconSettingsSliderHor />}
     />
   );
 }

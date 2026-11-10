@@ -7,11 +7,14 @@ import {
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Menu, Share, Smartphone, SquarePlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { IosBrowser } from './platform';
 import { detectIosBrowser } from './platform';
+import { IconBarsThree } from '@mastra/playground-ui/icons/central/IconBarsThree';
+import { IconPhone } from '@mastra/playground-ui/icons/central/IconPhone';
+import { IconSquarePlus } from '@mastra/playground-ui/icons/central/IconSquarePlus';
+import { IconShareOs } from '@mastra/playground-ui/icons/central/IconShareOs';
 
 interface PwaInstallInstructionsProps {
   open: boolean;
@@ -23,7 +26,7 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
   switch (browser) {
     case 'chrome':
       return {
-        icon: <Share className="size-4" aria-hidden="true" />,
+        icon: <IconShareOs className="size-4" aria-hidden="true" />,
         label: (
           <>
             Tap the{' '}
@@ -38,7 +41,7 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
     case 'edge':
     case 'opera':
       return {
-        icon: <Menu className="size-4" aria-hidden="true" />,
+        icon: <IconBarsThree className="size-4" aria-hidden="true" />,
         label: (
           <>
             Open the browser menu and tap{' '}
@@ -50,7 +53,7 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
       };
     case 'safari':
       return {
-        icon: <Share className="size-4" aria-hidden="true" />,
+        icon: <IconShareOs className="size-4" aria-hidden="true" />,
         label: (
           <>
             Tap the{' '}
@@ -66,7 +69,7 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
 
 const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
   {
-    icon: <SquarePlus className="size-4" aria-hidden="true" />,
+    icon: <IconSquarePlus className="size-4" aria-hidden="true" />,
     label: (
       <>
         Scroll down and tap{' '}
@@ -77,7 +80,7 @@ const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
     ),
   },
   {
-    icon: <Smartphone className="size-4" aria-hidden="true" />,
+    icon: <IconPhone className="size-4" aria-hidden="true" />,
     label: (
       <>
         Tap{' '}
@@ -99,7 +102,7 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
         <DrawerHeader>
           <div className="flex items-center gap-3">
             <div className="border-border bg-fill text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg border">
-              <Smartphone className="size-5" aria-hidden="true" />
+              <IconPhone className="size-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <DrawerTitle>Install this app</DrawerTitle>

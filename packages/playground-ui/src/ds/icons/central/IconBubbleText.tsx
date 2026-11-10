@@ -1,0 +1,11 @@
+import { createCentralIcon } from './create-central-icon';
+
+export const IconBubbleText = createCentralIcon('IconBubbleText', () => (
+  <path
+    d="M14.9998 9H8.99976M14.9998 13H8.99976M11.9977 20.5358L14.7377 18.2657C14.9171 18.1171 15.1427 18.0358 15.3757 18.0358L18.002 18.0358C19.1065 18.0357 20.002 17.1403 20.002 16.0358V6C20.002 4.89543 19.1065 4 18.0019 4L6.00195 4.00002C4.89738 4.00002 4.00195 4.89545 4.00195 6.00002V16.0358C4.00195 17.1403 4.89738 18.0358 6.00195 18.0358H8.65157C8.8865 18.0358 9.11393 18.1185 9.29398 18.2694L11.9977 20.5358Z"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  />
+));

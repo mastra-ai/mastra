@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, KeyRound, LogIn, ServerCog } from 'lucide-react';
+import { ServerCog } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
@@ -11,6 +11,9 @@ import { CustomProviderForm } from '../../settings/components/CustomProviderForm
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
+import { IconArrowBoxRight } from '@mastra/playground-ui/icons/central/IconArrowBoxRight';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconKey1 } from '@mastra/playground-ui/icons/central/IconKey1';
 
 type ProviderPickerTab = ProviderConnectionMethod | 'custom';
 
@@ -69,11 +72,11 @@ export function ModelProviderPicker({
       >
         <TabList variant="pill-ghost" size="sm">
           <Tab value="api_key">
-            <KeyRound aria-hidden="true" />
+            <IconKey1 aria-hidden="true" />
             {CONNECTION_METHOD_LABEL.api_key}
           </Tab>
           <Tab value="oauth">
-            <LogIn aria-hidden="true" />
+            <IconArrowBoxRight aria-hidden="true" />
             {CONNECTION_METHOD_LABEL.oauth}
           </Tab>
           <Tab value="custom">
@@ -108,7 +111,7 @@ export function ModelProviderPicker({
                 >
                   <ProviderBrandIcon provider={provider.provider} />
                   {providerDisplayName(provider.provider)}
-                  {connection.isConfigured(provider, 'api_key') && <Check aria-hidden="true" />}
+                  {connection.isConfigured(provider, 'api_key') && <IconCheckmark1 aria-hidden="true" />}
                 </Button>
               ))}
             </div>

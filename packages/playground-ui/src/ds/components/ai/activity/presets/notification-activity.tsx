@@ -1,10 +1,11 @@
-import { Bell, ExternalLink } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ActivityItem } from '../activity';
 import { messagePreview, messagePreviewShowsAll } from './message-preview';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
+import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 
 export interface NotificationActivityProps {
   label: string;
@@ -48,7 +49,7 @@ export function NotificationActivity({
     <ActivityItem
       label={label}
       detail={messagePreview(message)}
-      icon={icon ?? <Bell className="text-warning-foreground" aria-hidden />}
+      icon={icon ?? <IconBell className="text-warning-foreground" aria-hidden />}
       badges={
         hasBadges && (
           <>
@@ -102,7 +103,7 @@ function NotificationLink({
       className="flex w-fit items-center gap-1 text-meta text-muted-foreground hover:text-foreground"
     >
       {link.label}
-      <ExternalLink size={12} aria-hidden />
+      <IconSquareArrowTopRight size={12} aria-hidden />
     </a>
   );
 }

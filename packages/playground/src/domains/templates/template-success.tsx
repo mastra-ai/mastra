@@ -1,8 +1,8 @@
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import type { KeyValueListItemData } from '@mastra/playground-ui/components/KeyValueList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { PackageOpenIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { Container } from './shared';
 
@@ -16,7 +16,7 @@ type TemplateSuccessProps = {
 export function TemplateSuccess({ name, installedEntities }: TemplateSuccessProps) {
   return (
     <Container className={cn('grid content-center items-center justify-items-center gap-4', '[&>svg]:h-8 [&>svg]:w-8')}>
-      <PackageOpenIcon />
+      <IconPackage />
       <Txt as="h2" variant="heading">
         Done!
       </Txt>

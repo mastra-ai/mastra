@@ -2,13 +2,13 @@ import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleto
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import type { CustomProviderInfo } from '../../../../api/types';
 import { useCustomProvidersQuery, useRemoveCustomProvider } from '../../../../hooks/use-custom-providers';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { CustomProviderForm } from './CustomProviderForm';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 /**
  * Organization-scoped OpenAI-compatible endpoint definitions. Keys are
@@ -42,7 +42,7 @@ export function CustomProvidersSection() {
         </Txt>
         {!draft && (
           <Button size="sm" onClick={() => setDraft('new')} disabled={busy}>
-            <Plus size={13} /> Add provider
+            <IconPlusLarge size={13} /> Add provider
           </Button>
         )}
       </div>

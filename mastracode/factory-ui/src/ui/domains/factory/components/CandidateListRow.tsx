@@ -1,6 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
@@ -11,6 +10,7 @@ import type { CardMorph } from '../hooks/useCardMorph';
 import { CardKey, CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { BoardListRow } from './BoardListRow';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 
 export function CandidateListRow({
   candidate,
@@ -52,7 +52,7 @@ export function CandidateListRow({
               onClick={event => event.stopPropagation()}
               className={cn('text-muted-foreground hover:text-foreground shrink-0', REVEAL_ON_CARD_HOVER)}
             >
-              <ArrowUpRight size={12} aria-hidden />
+              <IconArrowUpRight size={12} aria-hidden />
             </a>
           </span>
         ),

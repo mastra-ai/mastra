@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function accessDescription(reason: string | undefined, name: string): string | undefined {
   if (reason === 'auth_required') return 'Sign in to manage organization connections.';
@@ -12,7 +12,7 @@ export function accessDescription(reason: string | undefined, name: string): str
 export function RetryRow({ label, errorMsg, onRetry }: { label: ReactNode; errorMsg: string; onRetry: () => void }) {
   return (
     <SettingsRow label={label} errorMsg={errorMsg}>
-      <Button size="sm" icon={<RotateCcw />} onClick={onRetry}>
+      <Button size="sm" icon={<IconArrowRotateCounterClockwise />} onClick={onRetry}>
         Retry
       </Button>
     </SettingsRow>

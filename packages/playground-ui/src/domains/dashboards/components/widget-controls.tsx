@@ -1,5 +1,5 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
-import { BellPlusIcon, PinIcon, PinOffIcon } from 'lucide-react';
+import { BellPlusIcon } from 'lucide-react';
 import { useId } from 'react';
 import {
   OpenErrorsInLogsButton,
@@ -14,6 +14,8 @@ import type { DashboardAlert, DashboardAlertAction, WidgetPin } from '../widget-
 import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconPin } from '@/ds/icons/central/IconPin';
+import { IconUnpin } from '@/ds/icons/central/IconUnpin';
 
 /**
  * Opens the host's alert editor for a view (`href`), or, disabled, says why the view can't become
@@ -133,7 +135,7 @@ export function PinAction({ isPinned, onPin, name }: WidgetPin) {
   const label = `${isPinned ? 'Unpin' : 'Pin'} ${name}`;
   return (
     <Button variant="ghost" size="icon-sm" tooltip={label} aria-label={label} onClick={() => onPin(!isPinned)}>
-      {isPinned ? <PinOffIcon /> : <PinIcon />}
+      {isPinned ? <IconUnpin /> : <IconPin />}
     </Button>
   );
 }

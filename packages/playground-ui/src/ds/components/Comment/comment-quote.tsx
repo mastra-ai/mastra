@@ -1,7 +1,6 @@
-import { X } from 'lucide-react';
-
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 export interface CommentQuoteProps {
@@ -39,7 +38,7 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
           onClick={onDismiss}
           className="shrink-0"
         >
-          <X size={12} aria-hidden />
+          <IconCrossMedium size={12} aria-hidden />
         </Button>
       ) : null}
     </blockquote>

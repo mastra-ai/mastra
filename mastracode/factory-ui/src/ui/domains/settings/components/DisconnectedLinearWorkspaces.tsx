@@ -2,13 +2,13 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Link2, Trash2 } from 'lucide-react';
-
 import { useApiConfig } from '../../../../api/config';
 import { connectLinear } from '../../factory/services/linear';
 import type { DisconnectedLinearWorkspace } from './intakeSourceGroups';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { settingsRowLayout } from './common/settings-row-layout';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 /**
  * Saved Linear sources from workspaces that are no longer connected. Their
@@ -50,13 +50,13 @@ export function DisconnectedLinearWorkspaces({
               </div>
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <Button size="sm" variant="ghost" icon={<Link2 />} onClick={() => connectLinear(baseUrl)}>
+              <Button size="sm" variant="ghost" icon={<IconChainLink1 />} onClick={() => connectLinear(baseUrl)}>
                 Reconnect
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                icon={<Trash2 />}
+                icon={<IconTrashCan />}
                 aria-label={`Remove ${name}`}
                 onClick={() => onRemove(workspace.sourceIds)}
               >

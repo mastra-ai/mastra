@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Plus } from 'lucide-react';
 import { Button } from '../Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { Switch } from '../Switch';
 import { Section } from './section';
 import type { SectionVariant } from './section';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 
 type SectionPlaygroundProps = {
   variant: SectionVariant;
@@ -84,7 +84,7 @@ export const WithAction: Story = {
       <Section.Header inset={inset}>
         <Section.Heading>Agents</Section.Heading>
         <Button size="md">
-          <Plus className="size-4" />
+          <IconPlusLarge className="size-4" />
           Add agent
         </Button>
       </Section.Header>

@@ -1,13 +1,5 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import {
-  ArrowDownWideNarrow,
-  ArrowUpDown,
-  ArrowUpNarrowWide,
-  Funnel,
-  History,
-  LayersPlus,
-  UserRoundPen,
-} from 'lucide-react';
+import { LayersPlus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
@@ -18,12 +10,18 @@ import type { BoardView } from '../hooks/useBoardView';
 import { BoardFilterSubmenu } from './BoardFilterSubmenu';
 import { boardFilterSummary } from './boardFilterFields';
 import type { BoardFilterField } from './boardFilterFields';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
+import { IconSortArrowUpDown } from '@mastra/playground-ui/icons/central/IconSortArrowUpDown';
+import { IconFilter1 } from '@mastra/playground-ui/icons/central/IconFilter1';
+import { IconFilterAsc } from '@mastra/playground-ui/icons/central/IconFilterAsc';
+import { IconFilterDesc } from '@mastra/playground-ui/icons/central/IconFilterDesc';
+import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
 
 const SORT_ICONS: Record<BoardSort, LucideIcon> = {
-  recent: History,
-  'recent-mine': UserRoundPen,
-  'created-newest': ArrowDownWideNarrow,
-  'created-oldest': ArrowUpNarrowWide,
+  recent: IconHistory,
+  'recent-mine': IconUserEdit,
+  'created-newest': IconFilterDesc,
+  'created-oldest': IconFilterAsc,
 };
 
 export function BoardPropertiesMenu({
@@ -47,14 +45,14 @@ export function BoardPropertiesMenu({
     <PropertiesMenu
       label="Board properties"
       variant="default"
-      icon={<Funnel size={15} aria-hidden />}
+      icon={<IconFilter1 size={15} aria-hidden />}
       changedCount={changes.length}
       changes={changes}
       onReset={view.resetProperties}
     >
       <DropdownMenu.RadioSub
         label="Sort"
-        icon={<ArrowUpDown aria-hidden />}
+        icon={<IconSortArrowUpDown aria-hidden />}
         options={boardSortOptions(currentUserId).map(option => {
           const Icon = SORT_ICONS[option.value];
           return { ...option, icon: <Icon aria-hidden /> };

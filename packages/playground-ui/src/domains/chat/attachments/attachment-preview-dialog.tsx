@@ -1,10 +1,12 @@
-import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
+import { FileAudio, FileVideo } from 'lucide-react';
 import type { RefObject } from 'react';
 import { ComposerAttachmentEntry } from './composer-attachment-entry';
 import { useAttachmentPreview } from './use-attachment-preview';
 import type { AttachmentPreviewProps } from './use-attachment-preview';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '@/ds/components/Dialog';
+import { IconFileBend } from '@/ds/icons/central/IconFileBend';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { cn } from '@/utils/cn';
 
 interface PdfEntryProps extends AttachmentPreviewProps {
@@ -23,7 +25,7 @@ export const PdfEntry = ({ data, url, ...previewProps }: PdfEntryProps) => {
     return (
       <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener">
         <ComposerAttachmentEntry>
-          <FileText className={fileTypeIconClassName} aria-label="View PDF" />
+          <IconFileText className={fileTypeIconClassName} aria-label="View PDF" />
         </ComposerAttachmentEntry>
       </a>
     );
@@ -33,7 +35,7 @@ export const PdfEntry = ({ data, url, ...previewProps }: PdfEntryProps) => {
     <>
       <button ref={triggerRef} onClick={() => setOpen(true)} className={ctaClassName} type="button">
         <ComposerAttachmentEntry>
-          <FileText className={fileTypeIconClassName} aria-label="View PDF" />
+          <IconFileText className={fileTypeIconClassName} aria-label="View PDF" />
         </ComposerAttachmentEntry>
       </button>
 
@@ -93,8 +95,8 @@ const iconForContentType = (contentType?: string) => {
   if (contentType?.startsWith('video/')) return { Icon: FileVideo, label: 'Video file' };
   if (contentType?.startsWith('audio/')) return { Icon: FileAudio, label: 'Audio file' };
   if (contentType?.startsWith('text/') || contentType === 'application/pdf')
-    return { Icon: FileText, label: 'Document file' };
-  return { Icon: FileIcon, label: 'File' };
+    return { Icon: IconFileText, label: 'Document file' };
+  return { Icon: IconFileBend, label: 'File' };
 };
 export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) => {
   const { Icon, label } = iconForContentType(contentType);
@@ -191,7 +193,7 @@ export const TxtEntry = ({ data, name, ...previewProps }: TxtEntryProps) => {
         title={filename}
       >
         <ComposerAttachmentEntry name={filename}>
-          <FileText className={fileTypeIconClassName} aria-hidden="true" />
+          <IconFileText className={fileTypeIconClassName} aria-hidden="true" />
         </ComposerAttachmentEntry>
       </button>
       <TxtPreviewDialog

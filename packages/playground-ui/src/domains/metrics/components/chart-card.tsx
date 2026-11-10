@@ -1,4 +1,3 @@
-import { Maximize2Icon } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type {
@@ -6,6 +5,7 @@ import type {
   MetricsCardTitleMenuProps,
   MetricsCardTotalPart,
 } from '@/ds/components/MetricsCard';
+import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import type { LinkComponentProps } from '@/lib/framework';
 
@@ -276,7 +276,7 @@ function ChartCardTitleLink({
       )}
     >
       {children}
-      <Maximize2Icon aria-hidden className="size-3.5 text-muted-foreground" />
+      <IconExpand45 aria-hidden className="size-3.5 text-muted-foreground" />
     </Anchor>
   );
 }
