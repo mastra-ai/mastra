@@ -292,6 +292,10 @@ function SendNewCardsTo({
         </Button>
       </div>
       <Txt as="p" variant="caption" tone="muted">
+        This changes the route that takes every new card no route above it takes. Routes above it still apply: by
+        default, outside authors' items wait in Work › Intake and pull requests go to Work › Review.
+      </Txt>
+      <Txt as="p" variant="caption" tone="muted">
         To send only one repository, team or project there, add a route that applies when Source › Repository, team or
         project is, for example, <code>acme/app</code> (a GitHub or GitLab repository), <code>ENG</code> (a Linear team)
         or <code>OPS</code> (a Jira project).

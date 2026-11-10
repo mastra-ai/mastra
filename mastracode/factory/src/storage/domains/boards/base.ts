@@ -565,7 +565,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return row ? toIntakeRouteRecord(row) : null;
   }
 
-  /** Adds a route after the project's last one, or just ahead of it when the last one catches every new card. */
+  /**
+   * Adds a route after the project's last one. A route that places new cards goes just ahead of the
+   * first route that takes every new card instead, since after it it would never place one.
+   */
   async createIntakeRoute(
     scope: StoredBoardScope,
     input: StoredIntakeRouteInput,
@@ -582,14 +585,15 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           `A project can have at most ${MAX_INTAKE_ROUTES} intake routes; delete one first.`,
         );
       }
-      let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
-      // A route after the default catch-all would never place a card, so a new one goes ahead of it.
-      const last = rows.toSorted((a, b) => a.position - b.position).at(-1);
-      if (last && isDefaultCatchAll(last)) {
-        await updateIntakeRouteRow(ops, last, { position, updated_by: actor });
-        position = last.position;
-      }
+      const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       await insertIntakeRoute(ops, scope, { id, input, position, actor });
+      const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
+        ? rows.findIndex(catchesEveryNewCard)
+        : -1;
+      if (ahead >= 0) {
+        const added = (await readIntakeRoutes(ops, scope)).find(row => row.id === id)!;
+        await placeIntakeRoutes(ops, rows.toSpliced(ahead, 0, added), actor);
+      }
     });
     return (await this.getIntakeRoute(scope, id))!;
   }
@@ -903,13 +907,9 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
   };
 }
 
-/**
- * Whether `row` is the "Everything else" route Factory seeded, still placing every new card
- * that reaches it. A route the project added itself keeps the plain append order.
- */
-function isDefaultCatchAll(row: IntakeRouteRow): boolean {
+/** Whether `row` places every new card that reaches it, as the seeded "Everything else" route does. */
+function catchesEveryNewCard(row: IntakeRouteRow): boolean {
   return (
-    row.created_by === DEFAULT_INTAKE_ROUTE_ACTOR &&
     row.enabled &&
     row.when_condition === null &&
     (row.on_events ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created') &&

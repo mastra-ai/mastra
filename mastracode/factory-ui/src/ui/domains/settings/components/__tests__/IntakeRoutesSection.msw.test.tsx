@@ -9,6 +9,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { IntakeRouteInfo } from '../../../../../api/types';
 import { IntakeRoutesSection } from '../IntakeRoutesSection';
+import { catchesEveryArrival } from '../intakeRoutes';
 
 const ROUTES_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/intake-routes`;
 
@@ -38,7 +39,8 @@ function seededRoutes(): IntakeRouteInfo[] {
 
 /**
  * The project's intake routes behind the real route API's rules: writes check the revision they
- * name, and a new route goes just ahead of the seeded catch-all, bumping its revision.
+ * name, and a route that places new cards goes just ahead of the first route taking every new card,
+ * bumping the revision of each route it moves down.
  */
 function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
   const state = { routes, requests: [] as { method: string; path: string; body?: unknown }[] };
@@ -67,17 +69,18 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
         allowWorkingPhase: body.allowWorkingPhase ?? false,
         createdBy: 'admin',
       };
-      const last = state.routes.at(-1);
-      const catchAll = last?.createdBy === 'factory' && last.when === null && last.enabled;
-      // Moving the catch-all down a slot is a write to it, so its revision goes up, as in storage.
-      state.routes = catchAll
-        ? [
-            ...state.routes.slice(0, -1),
-            { ...route, position: last.position },
-            { ...last, position: last.position + 1, revision: last.revision + 1 },
-          ]
-        : [...state.routes, { ...route, position: state.routes.length }];
-      return HttpResponse.json({ intakeRoute: route }, { status: 201 });
+      // A route that places new cards goes ahead of the first route taking every new card. Each
+      // route that moves down a slot is a write to it, so its revision goes up, as in storage.
+      const ahead = route.on.includes('work_item.created') ? state.routes.findIndex(catchesEveryArrival) : -1;
+      state.routes = (ahead < 0 ? [...state.routes, route] : state.routes.toSpliced(ahead, 0, route)).map(
+        (entry, position) =>
+          entry === route
+            ? { ...entry, position }
+            : entry.position === position
+              ? entry
+              : { ...entry, position, revision: entry.revision + 1 },
+      );
+      return HttpResponse.json({ intakeRoute: state.routes.find(entry => entry.id === route.id) }, { status: 201 });
     }),
     http.patch<{ id: string }>(`${ROUTES_URL}/:id`, async ({ params, request }) => {
       const body = (await request.json()) as Partial<IntakeRouteInfo> & { expectedRevision: number };
@@ -168,7 +171,7 @@ describe('IntakeRoutesSection', () => {
     await user.click(await screen.findByRole('option', { name: 'Ship' }));
     await user.click(screen.getByRole('button', { name: 'Apply' }));
 
-    await waitFor(() => expect(routeNames().at(-1)).toBe('Everything else goes to Ship › Inbox'));
+    await waitFor(() => expect(state.requests.filter(request => request.method === 'POST')).toHaveLength(8));
     const byName = (name: string) => state.routes.find(route => route.name === name);
     expect(byName('Everything else goes to Ship › Inbox')).toMatchObject({
       id: 'everything-else',
@@ -189,8 +192,12 @@ describe('IntakeRoutesSection', () => {
       allowWorkingPhase: true,
       target: { boardKey: 'ship', phaseKey: 'pr' },
     });
-    // The copies sit ahead of the catch-all, and Work keeps its own event routes for its cards.
-    expect(state.routes.at(-1)?.id).toBe('everything-else');
+    // The copies only move existing cards, so they go after the catch-all, which never takes a
+    // status event; Work keeps its own event routes for its cards.
+    const names = state.routes.map(route => route.name);
+    expect(names.indexOf('Closed issues go to Done on Ship')).toBeGreaterThan(
+      names.indexOf('Everything else goes to Ship › Inbox'),
+    );
     expect(byName('Closed issues go to Done')?.target.boardKey).toBe('work');
   });
 

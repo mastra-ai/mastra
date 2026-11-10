@@ -347,7 +347,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         body: { error },
       });
     }
-    const route = (await replicaA.send('POST', base, { name: 'Ok', target: { boardKey: 'work' } })).body
+    const route = (await replicaA.send('POST', base, { name: 'Ok', when: DOCS, target: { boardKey: 'work' } })).body
       .intakeRoute as Route;
     expect(route.target).toEqual({ boardKey: 'work', phaseKey: null, joinClosedIssue: false });
     // A card a pull request joins moves to any phase its board allows from where it is, so a

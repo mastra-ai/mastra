@@ -55,6 +55,13 @@ function route(name: string, overrides: Partial<StoredIntakeRouteInput> = {}): S
   return { name, target: { boardKey: 'work' }, ...overrides };
 }
 
+/** A route for items labelled `name`: it places some new cards, so routes added after it still can too. */
+function labelled(name: string): StoredIntakeRouteInput {
+  return route(name, {
+    when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: name }] },
+  });
+}
+
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes on %s', backend => {
   /** One storage client; on libsql a shared `file:` database lets a second client act as another replica. */
   async function open(url: string) {
@@ -225,7 +232,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect(await names(boards, scope)).toEqual([...DEFAULT_NAMES.slice(0, -1), 'Mine', CATCH_ALL_INTAKE_ROUTE.name]);
   });
 
-  it('appends after the catch-all once it no longer takes every new card, and after a catch-all the project added', async () => {
+  it('puts a new route ahead of the first route that takes every new card, whoever added it', async () => {
     const { boards, scope } = await setup({ seeded: true });
     const catchAll = (await boards.listIntakeRoutes(scope)).at(-1)!;
     await boards.updateIntakeRoute(
@@ -234,14 +241,31 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       { enabled: false },
       { expectedRevision: catchAll.revision, actor: 'u' },
     );
-    await boards.createIntakeRoute(scope, route('Everything else, mine'), 'u');
-    await boards.createIntakeRoute(scope, route('Never reached'), 'u');
+    // With the seeded catch-all off, nothing takes every new card, so this one goes at the end.
+    const mine = await boards.createIntakeRoute(scope, route('Everything else, mine'), 'u');
+    const docs = await boards.createIntakeRoute(
+      scope,
+      route('Docs', {
+        when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+      }),
+      'u',
+    );
 
     expect((await names(boards, scope)).slice(-3)).toEqual([
       CATCH_ALL_INTAKE_ROUTE.name,
+      'Docs',
       'Everything else, mine',
-      'Never reached',
     ]);
+    const moved = (await boards.listIntakeRoutes(scope)).find(row => row.id === mine.id)!;
+    expect(moved.revision).toBe(mine.revision + 1);
+    expect(docs.position).toBe(moved.position - 1);
+  });
+
+  it('adds a route that only moves existing cards at the end, since the catch-all never takes a status event', async () => {
+    const { boards, scope } = await setup({ seeded: true });
+    await boards.createIntakeRoute(scope, route('Merged docs', { on: ['pull_request.merged'] }), 'u');
+
+    expect((await names(boards, scope)).slice(-2)).toEqual([CATCH_ALL_INTAKE_ROUTE.name, 'Merged docs']);
   });
 
   it('seeds the default routes once when two clients read a new project at once', async () => {
@@ -748,13 +772,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
   it('appends new routes, closes the gap a delete leaves, and reorders', async () => {
     const { boards, scope } = await setup();
     const created = [];
-    for (const name of ['a', 'b', 'c', 'd']) created.push(await boards.createIntakeRoute(scope, route(name), 'u'));
+    for (const name of ['a', 'b', 'c', 'd']) created.push(await boards.createIntakeRoute(scope, labelled(name), 'u'));
     expect(await names(boards, scope)).toEqual(['a', 'b', 'c', 'd']);
 
     await boards.deleteIntakeRoute(scope, created[1]!.id, { expectedRevision: 1 });
     expect(await names(boards, scope)).toEqual(['a', 'c', 'd']);
 
-    await boards.createIntakeRoute(scope, route('e'), 'u');
+    await boards.createIntakeRoute(scope, labelled('e'), 'u');
     const current = await boards.listIntakeRoutes(scope);
     const reordered = await boards.reorderIntakeRoutes(
       scope,
@@ -774,7 +798,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
 
   it('refuses an order that misses, repeats or invents a route, and changes nothing', async () => {
     const { boards, scope } = await setup();
-    for (const name of ['a', 'b', 'c']) await boards.createIntakeRoute(scope, route(name), 'u');
+    for (const name of ['a', 'b', 'c']) await boards.createIntakeRoute(scope, labelled(name), 'u');
     const before = await boards.listIntakeRoutes(scope);
     const [a, b, c] = before.map(row => row.id) as [string, string, string];
 
@@ -805,7 +829,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
   it('ends in one of the two orders when two clients reorder at once', async () => {
     const { boards, scope, secondClient } = await setup();
     const other = await secondClient();
-    for (const name of ['a', 'b', 'c', 'd']) await boards.createIntakeRoute(scope, route(name), 'u');
+    for (const name of ['a', 'b', 'c', 'd']) await boards.createIntakeRoute(scope, labelled(name), 'u');
     const ids = (await boards.listIntakeRoutes(scope)).map(row => row.id);
     const reversed = [...ids].reverse();
     const rotated = [...ids.slice(1), ids[0]!];
@@ -825,12 +849,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
   it('keeps positions whole when clients add, delete and reorder routes at once', async () => {
     const { boards, scope, secondClient } = await setup();
     const other = await secondClient();
-    for (const name of ['a', 'b', 'c']) await boards.createIntakeRoute(scope, route(name), 'u');
+    for (const name of ['a', 'b', 'c']) await boards.createIntakeRoute(scope, labelled(name), 'u');
     const [a, b] = await boards.listIntakeRoutes(scope);
 
     await Promise.all([
       ...['x', 'y', 'z', 'w'].map((name, index) =>
-        (index % 2 ? other : boards).createIntakeRoute(scope, route(name), 'u'),
+        (index % 2 ? other : boards).createIntakeRoute(scope, labelled(name), 'u'),
       ),
       other.deleteIntakeRoute(scope, b!.id, { expectedRevision: 1 }),
       boards.updateIntakeRoute(scope, a!.id, { name: 'a2' }, { expectedRevision: 1, actor: 'u' }),
