@@ -3962,7 +3962,7 @@ describe('FactoryDecisionDispatcher', () => {
 
   // Trust decides only where a card arrives (the default intake route keeps outside work in Intake).
   // Once a person has armed a card, its runs start like any other card's.
-  it('runs an externally authored card a person armed, with auto-run on', async () => {
+  it('runs an externally authored card a person armed, on a board whose phases start on their own', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({
@@ -4070,7 +4070,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
-  it('runs a GitHub card missing its trust stamp a person armed, with auto-run on', async () => {
+  it('runs a GitHub card missing its trust stamp a person armed, on a board whose phases start on their own', async () => {
     // Cards created before arrival stamps existed carry no `authorTrusted`; the default intake
     // route treats that as untrusted at arrival, and a person's arming releases it like any card.
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -4127,7 +4127,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
-  it("lets the Factory's own pull request run under auto-run despite its untrusted bot author", async () => {
+  it("lets the Factory's own pull request run where the phase starts on its own, despite its untrusted bot author", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({

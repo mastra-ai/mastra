@@ -328,7 +328,7 @@ describe('intake routes placing linked cards', () => {
       { sourceKey: 'github-issue:5', metadata: { factoryAuthored: true } },
       { sourceKey: 'linear-issue:ENG-6', source: 'linear-issue' as const, metadata: {} },
     ]) {
-      const card = await deliver({ ...arrival, board: 'docs', stage: 'inbox' });
+      const card = await deliver({ ...arrival });
       expect(placed(card), arrival.sourceKey).toEqual({ board: 'work', stages: ['intake'] });
       expect(card?.metadata).toMatchObject({ intakeRouteId: catchAll.id });
     }
@@ -938,22 +938,80 @@ describe('intake routes moving existing cards on status events', () => {
     expect(await runs(card.id)).toEqual(['proposed']);
   });
 
-  it('starts the run of a working phase a route moves a card into when the project auto-runs', async () => {
-    const { route, deliver, deliverEvent, putAt, runs } = await setup({ autoRun: true });
+  it("starts a route-moved card's run only where the phase's autoStartWhen matches the card", async () => {
+    const { boards, scope, route, deliver, deliverEvent, putAt, runs } = await setup();
+    await boards.create(
+      scope,
+      {
+        ...docsBoard,
+        phases: docsBoard.phases.map(phase =>
+          phase.key === 'writing'
+            ? {
+                ...phase,
+                runner: { context: 'work', skill: 'write-docs' },
+                autoStart: true,
+                autoStartWhen: {
+                  operator: 'AND',
+                  conditions: [{ field: 'item.title', operator: 'contains', value: 'urgent' }],
+                },
+              }
+            : phase,
+        ),
+      },
+      'admin',
+    );
     await route({
-      name: 'Reopened back to Triage',
+      name: 'Reopened back to Writing',
       on: ['work_item.reopened'],
-      target: { boardKey: 'work', phaseKey: 'triage' },
+      target: { boardKey: 'docs', phaseKey: 'writing' },
     });
-    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
-    await putAt(card.id, 'done');
+    // New cards land where a route puts them, so one files these on the docs board.
+    await route({ name: 'Docs', when: null, target: { boardKey: 'docs', phaseKey: 'inbox' } });
+    const urgent = (await deliver({
+      sourceKey: 'github-issue:1',
+      title: 'urgent fix',
+    }))!;
+    const routine = (await deliver({ sourceKey: 'github-issue:2', title: 'typo' }))!;
+    await putAt(urgent.id, 'published');
+    await putAt(routine.id, 'published');
 
-    const moved = (await deliverEvent(card.id, { type: 'work_item.reopened' })).card;
-    expect(moved).toMatchObject({ stages: ['triage'], autonomyArmedAt: null });
-    // Triage has no autoStart, but the project's auto-run lets its run start without a person.
-    const started = await runs(card.id);
+    await deliverEvent(urgent.id, { type: 'work_item.reopened' });
+    await deliverEvent(routine.id, { type: 'work_item.reopened' });
+    // No project setting can start the second: the board's condition alone decides.
+    const started = await runs(urgent.id);
     expect(started).toHaveLength(1);
     expect(started).not.toContain('proposed');
+    expect(await runs(routine.id)).toEqual(['proposed']);
+  });
+
+  it('re-reviews a pull request Factory opened when a route moves it back into review, and asks a person for any other', async () => {
+    const { route, deliver, deliverEvent, putAt, runs } = await setup();
+    await route({
+      name: 'Reopened back to review',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+    });
+    const pullRequest = (n: number, factoryAuthored: boolean) =>
+      deliver({
+        sourceKey: `github-pr:${n}`,
+        source: 'github-pr',
+        title: `PR ${n}`,
+        metadata: { authorTrusted: true, state: 'open', factoryAuthored },
+      });
+    const own = (await pullRequest(1, true))!;
+    const theirs = (await pullRequest(2, false))!;
+    await putAt(own.id, 'done');
+    await putAt(theirs.id, 'done');
+
+    expect((await deliverEvent(own.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['pr-review'] });
+    expect((await deliverEvent(theirs.id, { type: 'work_item.reopened' })).card).toMatchObject({
+      stages: ['pr-review'],
+    });
+    // Work's review phase doesn't start on its own: only Factory's own code goes back for review unasked.
+    const started = await runs(own.id);
+    expect(started).toHaveLength(1);
+    expect(started).not.toContain('proposed');
+    expect(await runs(theirs.id)).toEqual(['proposed']);
   });
 
   it('starts the run of a working phase a route moves a card into when that phase starts on its own', async () => {
@@ -980,7 +1038,6 @@ describe('intake routes moving existing cards on status events', () => {
     const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
     expect(card).toMatchObject({ board: 'docs', stages: ['inbox'] });
     await putAt(card.id, 'published');
-
     expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['writing'] });
     const started = await runs(card.id);
     expect(started).toHaveLength(1);

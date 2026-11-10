@@ -4247,7 +4247,7 @@ describe('GithubRules with outside work in Intake', () => {
     ['a maintainer', { authorTrusted: true }],
   ] as const;
 
-  /** A card already on the board, real GitHub rules, and a dispatcher with auto-run on. */
+  /** A card already on the board, real GitHub rules, and a dispatcher over boards whose working phases start on their own. */
   async function setupCard(input: {
     permission: string;
     source: 'issue' | 'pull-request';

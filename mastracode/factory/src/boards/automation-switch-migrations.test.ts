@@ -96,7 +96,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
               runner: { context: 'work' },
               // Auto-run started a run whatever the phase's own condition said.
               autoStart: true,
-              autoStartWhen: { all: [{ fact: 'item.labels', operator: 'contains', value: 'docs' }] },
+              autoStartWhen: {
+                operator: 'AND',
+                conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }],
+              },
               nextPhases: ['published'],
             },
             { key: 'published', name: 'Published', kind: 'terminal' },
