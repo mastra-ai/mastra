@@ -14,15 +14,44 @@ Unlike other providers that have fixed model names, Azure uses **deployment name
 
 ## Usage
 
-```typescript
+The Azure OpenAI gateway isn't registered by default. Register it on your Mastra instance, and register the agents that use it on the same instance. Otherwise `azure-openai/...` model IDs fail with `Could not find config for provider azure-openai`.
+
+Reference your Azure deployment name in the agent's model ID:
+
+```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
-const agent = new Agent({
+export const myAgent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "azure-openai/my-gpt-5-4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
+  model: "azure-openai/my-gpt-5-4-deployment", // Use your Azure deployment name (autocompleted in dev mode)
 });
+```
+
+Register the gateway and the agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+import { myAgent } from "./agents/my-agent";
+
+export const mastra = new Mastra({
+  gateways: {
+    "azure-openai": new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      deployments: ["my-gpt-5-4-deployment"],
+    }),
+  },
+  agents: { myAgent },
+});
+```
+
+Get the agent from the Mastra instance and call it:
+
+```typescript
+const agent = mastra.getAgent("myAgent");
 
 // Generate a response
 const response = await agent.generate("Hello!");
@@ -33,6 +62,8 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
+
+See [Configuration](#configuration) for other authentication and deployment discovery options.
 
 Check [Azure OpenAI model availability](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for region-specific options.
 

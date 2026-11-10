@@ -8,7 +8,7 @@ import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/to
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
 import {
@@ -17,6 +17,7 @@ import {
   createLifecycleTestRegistry,
   createTestBoard,
   selfReviewWorkBoard,
+  createTriageWorkRegistry,
 } from '../boards/test-utils.js';
 import { BUILD_OBJECTIVE } from '../boards/work.js';
 import { publishReviewStatus } from '../integrations/github/review-status.js';
@@ -2345,11 +2346,11 @@ describe('FactoryDecisionDispatcher', () => {
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
-        boards: autoStartingBoards(),
+        boards: autoStartingBoards(createTriageWorkRegistry()),
         transitionService: new FactoryTransitionService({
           storage,
           configVersion: 'rules-v1',
-          boards: createBoardRegistry(),
+          boards: createTriageWorkRegistry(),
         }),
         storage,
         intakeRoutes: seed.boards,
@@ -3869,7 +3870,7 @@ describe('FactoryDecisionDispatcher', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     // Work is not installed here, so `work/canceled` has no declared semantics: fail closed and ask.
-    const boards = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
+    const boards = boardRegistryOf([createTestBoard()]);
     const transitionService = new FactoryTransitionService({
       configVersion: 'rules-v1',
       boards,
@@ -5470,7 +5471,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      boards: autoStartingBoards(),
+      boards: autoStartingBoards(boards),
       transitionService: recoveringTransition,
       storage,
       ownerId: 'worker-1',
@@ -5873,7 +5874,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
-      boards: autoStartingBoards(),
+      boards: autoStartingBoards(boards),
       transitionService,
       storage,
       ownerId: 'worker-1',
@@ -6529,7 +6530,7 @@ describe('custom-board deferred targets', () => {
         shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
-    const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+    const boards = boardRegistryOf([board]);
     await persist(storage, { ...linkedDecision, stage: 'shipping' });
     const dispatcher = dispatcherFor(storage, boards);
     await dispatcher.runOnce();
@@ -6561,7 +6562,7 @@ describe('custom-board deferred targets', () => {
         shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
-    const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+    const boards = boardRegistryOf([board]);
     await persist(storage, { ...linkedDecision, idempotencyKey: 'skip-linked', stage: 'shipping', skipRules: true });
 
     await dispatcherFor(storage, boards).runOnce();
@@ -6883,7 +6884,7 @@ describe('custom-board deferred targets', () => {
       { type: 'transition', idempotencyKey: 'missing-transition', board: 'release', stage: 'shipping' },
       item.id,
     );
-    await dispatcherFor(storage, createBoardRegistry({ includeDefaultBoards: false })).runOnce();
+    await dispatcherFor(storage, boardRegistryOf([])).runOnce();
     expect(await storage.get({ orgId: 'org-1', id: item.id })).toEqual(item);
     expect(await decisionByKey(storage, 'missing-transition')).toMatchObject({
       status: 'retry',
@@ -6894,24 +6895,21 @@ describe('custom-board deferred targets', () => {
   it('does not mistake a committed linked initial entry for a completed destination after uninstall', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
-    const boards = createBoardRegistry({
-      includeDefaultBoards: false,
-      boards: [
-        defineBoard({
-          id: 'release',
-          title: 'Release',
-          initialPhase: 'queued',
-          phases: {
-            queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
-            shipping: {
-              title: 'Shipping',
-              kind: 'working',
-              runner: { skill: 'publish-release', context: 'publisher' },
-            },
+    const boards = boardRegistryOf([
+      defineBoard({
+        id: 'release',
+        title: 'Release',
+        initialPhase: 'queued',
+        phases: {
+          queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+          shipping: {
+            title: 'Shipping',
+            kind: 'working',
+            runner: { skill: 'publish-release', context: 'publisher' },
           },
-        }),
-      ],
-    });
+        },
+      }),
+    ]);
     await persist(storage, { ...linkedDecision, stage: 'shipping' });
     const service = new FactoryTransitionService({ storage, boards, configVersion: 'custom-v1' });
     const transition = service.transition.bind(service);
@@ -6937,9 +6935,7 @@ describe('custom-board deferred targets', () => {
       expect.objectContaining({ work_item_id: before[0]!.id, expected_revision: 1, outcome: 'accepted' }),
     ]);
     expect(await runKeys(storage)).toEqual([]);
-    await dispatcherFor(storage, createBoardRegistry({ includeDefaultBoards: false }), 'replacement-v2').runOnce(
-      new Date(Date.now() + 60_000),
-    );
+    await dispatcherFor(storage, boardRegistryOf([]), 'replacement-v2').runOnce(new Date(Date.now() + 60_000));
     expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
       status: 'retry',
       lastError: 'Factory decision target board is not installed.',
@@ -6954,7 +6950,7 @@ describe('custom-board deferred targets', () => {
     async type => {
       const seed = await createFactoryStorageForTests();
       const storage = seed.workItems;
-      const original = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
+      const original = boardRegistryOf([createTestBoard()]);
       expect(original.get('release')?.phases.shipping).toBeDefined();
       const { item } = await storage.upsert({
         orgId: 'org-1',
@@ -6974,27 +6970,24 @@ describe('custom-board deferred targets', () => {
           ? { type, idempotencyKey: 'removed-phase', board: 'release', stage: 'shipping' }
           : { ...linkedDecision, idempotencyKey: 'removed-phase', stage: 'shipping' };
       await persist(storage, decision, item.id);
-      const replacement = createBoardRegistry({
-        includeDefaultBoards: false,
-        boards: [
-          defineBoard({
-            id: 'release',
-            title: 'Release',
-            initialPhase: 'queued',
-            phases: {
-              queued: { title: 'Queued', kind: 'resting' },
-            },
-          }),
-          defineBoard({
-            id: 'other',
-            title: 'Other',
-            initialPhase: 'shipping',
-            phases: {
-              shipping: { title: 'Shipping', kind: 'resting' },
-            },
-          }),
-        ],
-      });
+      const replacement = boardRegistryOf([
+        defineBoard({
+          id: 'release',
+          title: 'Release',
+          initialPhase: 'queued',
+          phases: {
+            queued: { title: 'Queued', kind: 'resting' },
+          },
+        }),
+        defineBoard({
+          id: 'other',
+          title: 'Other',
+          initialPhase: 'shipping',
+          phases: {
+            shipping: { title: 'Shipping', kind: 'resting' },
+          },
+        }),
+      ]);
       const before = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
       const evaluations = await seed.storage.ops.findMany('factory_rule_evaluations', {});
       const upsert = vi.spyOn(storage, 'upsert');
@@ -7015,7 +7008,7 @@ describe('custom-board deferred targets', () => {
     async type => {
       const seed = await createFactoryStorageForTests();
       const storage = seed.workItems;
-      const boards = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
+      const boards = boardRegistryOf([createTestBoard()]);
       if (type === 'transition') {
         const { item } = await storage.upsert({
           orgId: 'org-1',
@@ -7044,9 +7037,7 @@ describe('custom-board deferred targets', () => {
       expect(evaluations.length).toBeGreaterThan(1);
       expect(evaluations.every(row => row.rule_set_version === 'custom-v1')).toBe(true);
       complete.mockRestore();
-      await dispatcherFor(storage, createBoardRegistry({ includeDefaultBoards: false }), 'replacement-v2').runOnce(
-        new Date(Date.now() + 60_000),
-      );
+      await dispatcherFor(storage, boardRegistryOf([]), 'replacement-v2').runOnce(new Date(Date.now() + 60_000));
       expect(await decisionByKey(storage, 'custom-replay')).toMatchObject({ status: 'succeeded' });
       expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual(before);
       expect(await seed.storage.ops.findMany('factory_rule_evaluations', {})).toEqual(evaluations);

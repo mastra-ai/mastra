@@ -11,7 +11,7 @@ import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from '../storage/domains/boards/base.js';
 import { defineBoard } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
-import { createBoardRegistry } from './registry.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import { WORK_PHASE_RUNNERS_MIGRATION, workSeedWithSelfReview } from './work-migrations.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -234,7 +234,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
       },
     });
     const cache = new ProjectBoardCache({
-      codeRegistry: createBoardRegistry({ includeDefaultBoards: false, boards: [appWork] }),
+      codeRegistry: boardRegistryOf([appWork]),
       storage: boards,
       warn: () => {},
     });

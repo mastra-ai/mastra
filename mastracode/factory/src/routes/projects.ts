@@ -202,7 +202,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
   /** The per-project boards; loading a new project stores its copies of the code boards. */
-  boards?: Pick<ProjectBoardCache, 'describe'>;
+  boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
 }
 
 /**
@@ -596,8 +596,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
-          // The project's first board load retries anything this misses.
-          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+          // A new project gets today's Work, without Triage; a project that existed before keeps the
+          // Work it had. The project's first board load retries anything this misses, with Work as
+          // it was for older projects, as this one can't be told apart from them by then.
+          await this.deps.boards?.seedNewProject({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
             console.warn('[factory] could not store the boards of a new project:', error);
           });
           return context.json({ project }, 201);

@@ -7,6 +7,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -48,6 +49,7 @@ describe('governed automation moves', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage: workItems,
+      boards: createTriageWorkRegistry(),
     });
 
     const result = await service.transition(automationRequest(created.item));
@@ -68,6 +70,7 @@ describe('governed automation moves', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage: workItems,
+      boards: createTriageWorkRegistry(),
     });
 
     const result = await service.transition(automationRequest(created.item, { orgId: 'org2' }));

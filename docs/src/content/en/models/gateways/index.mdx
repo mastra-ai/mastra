@@ -16,15 +16,15 @@ Gateway providers aggregate multiple model providers and add features like cachi
 
 Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/gateways/custom-gateways) for implementation details.
 
+## Gateways you register yourself
+
+These gateways aren't registered by default. Pass them to `new Mastra({ gateways })`. Their model IDs only resolve for agents registered on that instance.
+
+- [Azure OpenAI](/models/gateways/azure-openai): Private Azure OpenAI deployments, registered with `AzureOpenAIGateway`
+
 ## Built-in gateways
 
 <CardGrid>
-    <CardGridItem
-      title="Azure OpenAI"
-      description="Private Azure OpenAI deployments"
-      href="/models/gateways/azure-openai"
-      logo="https://models.dev/logos/azure-openai.svg"
-    />
     <CardGridItem
       title="Mastra"
       description="Built-in Observational Memory"

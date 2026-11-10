@@ -1,7 +1,7 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 
-import { createBoardRegistry } from '../boards/index.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { LiveSession } from '../session/live-sessions.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
@@ -162,7 +162,7 @@ function setup({
     },
     comments: { listRecent: vi.fn(async () => comments) },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createBoardRegistry(),
+    boards: createTriageWorkRegistry(),
     ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
