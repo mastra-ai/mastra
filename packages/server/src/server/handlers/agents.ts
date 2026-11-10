@@ -1129,7 +1129,7 @@ export function extractVersionOptions(
  * agents. Stored agents are owner/visibility scoped like `/stored/agents`: a caller without `access` to a private
  * stored agent gets the same 404 as for a missing agent. Code agents are visible to every caller.
  *
- * Route handlers must pass the caller's `requestContext`; without it there is no caller to check.
+ * `requestContext` is required: without the caller's context there is no one to check, so a missing one fails closed.
  */
 export async function getAgentFromSystem({
   mastra,
@@ -1141,7 +1141,7 @@ export async function getAgentFromSystem({
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
   /** `read` for routes that only describe the agent; `execute` (default) for anything that runs or changes it. */
   access?: 'read' | 'execute';
 }): Promise<Agent> {

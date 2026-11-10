@@ -19,12 +19,12 @@ export function assertStoredAgentAccess({
 }: {
   agent: Pick<Agent, 'source' | 'toRawConfig'>;
   agentId: string;
-  requestContext: RequestContext | undefined;
+  requestContext: RequestContext;
   access: 'read' | 'execute';
   /** The agent was just hydrated from storage, so it is a stored agent whatever its `source` says. */
   fromStore?: boolean;
 }): void {
-  if (!requestContext || (!fromStore && agent.source !== 'stored')) return;
+  if (!fromStore && agent.source !== 'stored') return;
   const record = (agent.toRawConfig() ?? {}) as OwnedRecord;
   const assertAccess = access === 'read' ? assertReadAccess : assertExecuteAccess;
   assertAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
@@ -33,7 +33,7 @@ export function assertStoredAgentAccess({
 /** `mastra.listAgents()` without the hydrated stored agents the caller can't read. */
 export function listAgentsVisibleTo<TAgent extends Pick<Agent, 'source' | 'toRawConfig'>>(
   agents: Record<string, TAgent> | undefined,
-  requestContext: RequestContext | undefined,
+  requestContext: RequestContext,
 ): Record<string, TAgent> {
   return Object.fromEntries(
     Object.entries(agents ?? {}).filter(([id, agent]) => {

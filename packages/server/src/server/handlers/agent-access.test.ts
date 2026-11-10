@@ -30,7 +30,7 @@ describe('listAgentsVisibleTo', () => {
   });
   mastra.addAgent(storedAgent('public', { authorId: 'alice', visibility: 'public' }), 'public', { source: 'stored' });
   mastra.addAgent(storedAgent('legacy', {}), 'legacy', { source: 'stored' });
-  const visible = (ctx?: RequestContext) => Object.keys(listAgentsVisibleTo(mastra.listAgents(), ctx)).sort();
+  const visible = (ctx: RequestContext) => Object.keys(listAgentsVisibleTo(mastra.listAgents(), ctx)).sort();
 
   it("hides another user's private stored agent", () => {
     expect(visible(caller('bob'))).toEqual(['code', 'legacy', 'public']);
@@ -44,6 +44,10 @@ describe('listAgentsVisibleTo', () => {
 
   it('is unrestricted without auth', () => {
     expect(visible(new RequestContext())).toEqual(['code', 'legacy', 'private', 'public']);
-    expect(visible(undefined)).toEqual(['code', 'legacy', 'private', 'public']);
+  });
+
+  // A caller (e.g. an in-process MCP tool) that forgets the request context must not be treated as "no auth".
+  it('fails closed when the caller passes no request context', () => {
+    expect(() => visible(undefined as unknown as RequestContext)).toThrow();
   });
 });
