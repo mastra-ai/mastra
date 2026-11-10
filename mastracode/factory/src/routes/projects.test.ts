@@ -5,6 +5,8 @@ import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/w
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
+import { boardDefinitionOf } from '../boards/stored-board.js';
+import { workBoard } from '../boards/work.js';
 import { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { scheduleIdFor } from '../environment/build-schedule.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../environment/build-workflow.js';
@@ -134,7 +136,46 @@ describe('ProjectRoutes', () => {
     expect(updated).not.toHaveProperty('slackWorkItemsEnabled');
   });
 
-  it('accepts and ignores the retired autoApprovePlans switch from an old client', async () => {
+  it('accepts and ignores the retired automation switches from an old client, and changes no board', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await seed.boards.insertIfMissing(scope, boardDefinitionOf(workBoard), 'factory');
+    const boardBefore = await seed.boards.get(scope, 'work');
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const patch = (body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // An old Board settings toggle still gets a 200, so it does not show an error; the board's
+    // phases own automation now, so nothing is stored or returned.
+    for (const field of ['autoApprovePlans', 'autoRunEnabled', 'selfReviewEnabled']) {
+      const alone = await patch({ [field]: true });
+      expect(alone.status, field).toBe(200);
+      expect(((await alone.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty(field);
+
+      const mixed = await patch({ name: `Renamed ${field}`, [field]: true });
+      expect(mixed.status, field).toBe(200);
+      const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
+      expect(updated.name).toBe(`Renamed ${field}`);
+      expect(updated).not.toHaveProperty(field);
+    }
+    expect(await seed.projects.retiredAutomationSettings({ orgId: 'org-1', id: project.id })).toEqual({
+      autoRunEnabled: false,
+      selfReviewEnabled: false,
+    });
+    expect(await seed.boards.get(scope, 'work')).toEqual(boardBefore);
+  });
+
+  it('accepts and ignores the retired reviewTestChecksEnabled switch from an old client', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
     const app = new Hono();
@@ -150,19 +191,20 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify(body),
       });
 
-    // An old Board settings toggle still gets a 200, so it does not show an error; plans
-    // are approved per board now, so nothing is stored or returned.
-    const alone = await patch({ autoApprovePlans: true });
+    // The review skill decides whether to publish its test check, so the old toggle
+    // gets a 200 and changes nothing.
+    const alone = await patch({ reviewTestChecksEnabled: true });
     expect(alone.status).toBe(200);
     expect(((await alone.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty(
-      'autoApprovePlans',
+      'reviewTestChecksEnabled',
     );
 
-    const mixed = await patch({ name: 'Renamed', autoApprovePlans: true });
+    const mixed = await patch({ name: 'Renamed', reviewTestChecksEnabled: false });
     expect(mixed.status).toBe(200);
     const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
     expect(updated.name).toBe('Renamed');
-    expect(updated).not.toHaveProperty('autoApprovePlans');
+    expect(updated).not.toHaveProperty('reviewTestChecksEnabled');
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).not.toHaveProperty('reviewTestChecksEnabled');
   });
 
   it('requires an organization and scopes project access by organization', async () => {

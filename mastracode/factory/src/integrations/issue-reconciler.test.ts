@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { createTestBoard } from '../boards/test-utils.js';
+import { autoStartingBoards, createTestBoard } from '../boards/test-utils.js';
 import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -487,13 +487,12 @@ describe('issue reconcilers', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
@@ -535,13 +534,12 @@ describe('issue reconcilers', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
@@ -661,13 +659,12 @@ describe('issue reconcilers', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     const sweep = async (labels: string[], version: string, tick: string) => {

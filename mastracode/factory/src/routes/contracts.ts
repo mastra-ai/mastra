@@ -114,11 +114,6 @@ const intakeRouteFields = {
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     }),
 };
-/**
- * @deprecated Ignored and never stored: a route moves a card into any phase, and the phase's own
- * `autoStart` decides whether its run starts. Accepted for one release so older clients keep working.
- */
-const ignoredAllowWorkingPhase = z.boolean().optional();
 export const intakeRouteInputSchema = z
   .object({
     name: intakeRouteFields.name,
@@ -126,7 +121,6 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: ignoredAllowWorkingPhase,
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -137,7 +131,6 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
-    allowWorkingPhase: ignoredAllowWorkingPhase,
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -236,10 +229,13 @@ export const updateProjectBodySchema = z
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
+    /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
+    /** @deprecated Ignored. The review skill decides whether to publish its test check. */
     reviewTestChecksEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. A card is self-reviewed when its board has a self-review phase. */
     selfReviewEnabled: z.boolean().optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });

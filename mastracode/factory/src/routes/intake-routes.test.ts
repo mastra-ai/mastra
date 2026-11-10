@@ -35,6 +35,7 @@ const SIGNED_OUT = 'signed-out';
 const TRUSTED = { operator: 'AND', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] };
 const DOCS = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] };
 const WORK = { boardKey: 'work' };
+const TRIAGE = { boardKey: 'work', phaseKey: 'triage' };
 
 const docsBoard = {
   key: 'docs',
@@ -191,7 +192,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       { on: ['pull_request.synchronized'], target: { phaseKey: 'pr-review' }, problems: [] },
       { on: ['pull_request.review_requested'], target: { phaseKey: 'pr-review' }, problems: [] },
     ]);
-    for (const event of events) expect(event).not.toHaveProperty('allowWorkingPhase');
     expect(events).toHaveLength(8);
     expect(closesIssue).toMatchObject({
       name: CLOSES_ISSUE_INTAKE_ROUTE.name,
@@ -454,40 +454,27 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
   });
 
-  it('accepts and ignores the retired allowWorkingPhase on create and edit, and never sends it back', async () => {
+  it('refuses allowWorkingPhase like any other field a route does not have, and changes nothing', async () => {
     const { base, replicaA } = await setup();
-    const created = await replicaA.send('POST', base, {
-      name: 'Reopened back to Triage',
-      on: ['work_item.reopened'],
-      target: { boardKey: 'work', phaseKey: 'triage' },
-      allowWorkingPhase: true,
-    });
+    const refused = { status: 422, body: { error: 'invalid_intake_route' } };
+    const reopened = { name: 'Reopened back to Triage', on: ['work_item.reopened'], target: TRIAGE };
+    expect(await replicaA.send('POST', base, { ...reopened, allowWorkingPhase: true })).toMatchObject(refused);
+
+    const created = await replicaA.send('POST', base, reopened);
     expect(created).toMatchObject({ status: 201, body: { intakeRoute: { revision: 1 } } });
-    expect(created.body.intakeRoute).not.toHaveProperty('allowWorkingPhase');
     const route = created.body.intakeRoute as Route;
-
-    // Sent alone it changes nothing: the route comes back at the same revision.
-    const alone = await replicaA.send('PATCH', `${base}/${route.id}`, {
-      allowWorkingPhase: false,
-      expectedRevision: 1,
-    });
-    expect(alone).toMatchObject({ status: 200, body: { intakeRoute: { id: route.id, revision: 1 } } });
-    expect(alone.body.intakeRoute).not.toHaveProperty('allowWorkingPhase');
-    expect(
-      await replicaA.send('PATCH', `${base}/${route.id}`, { allowWorkingPhase: true, expectedRevision: 7 }),
-    ).toMatchObject({ status: 409, body: { error: 'revision_mismatch' } });
-
-    const renamed = await replicaA.send('PATCH', `${base}/${route.id}`, {
-      name: 'Reopened issues are triaged again',
-      allowWorkingPhase: true,
-      expectedRevision: 1,
-    });
-    expect(renamed).toMatchObject({
-      status: 200,
-      body: { intakeRoute: { name: 'Reopened issues are triaged again', revision: 2 } },
-    });
-    expect(renamed.body.intakeRoute).not.toHaveProperty('allowWorkingPhase');
-    for (const listed of await list(replicaA.send, base)) expect(listed).not.toHaveProperty('allowWorkingPhase');
+    for (const patch of [
+      { allowWorkingPhase: false },
+      { name: 'Reopened issues are triaged again', allowWorkingPhase: true },
+    ]) {
+      expect(
+        await replicaA.send('PATCH', `${base}/${route.id}`, { ...patch, expectedRevision: 1 }),
+        JSON.stringify(patch),
+      ).toMatchObject(refused);
+    }
+    expect(await list(replicaA.send, base)).toContainEqual(
+      expect.objectContaining({ id: route.id, name: 'Reopened back to Triage', revision: 1 }),
+    );
   });
 
   it('refuses a route that joins pull requests to their issue on any event but an arrival', async () => {
@@ -524,7 +511,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       { on: ['work_item.closed', 'work_item.closed'] },
       { on: ['work_item.commented'] },
       { on: 'work_item.closed' },
-      { allowWorkingPhase: 'yes' },
     ];
     for (const body of bodies) {
       expect(

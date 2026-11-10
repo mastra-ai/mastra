@@ -223,7 +223,7 @@ describe('custom board public runtime', () => {
         const settingsResponse = await app.request(`/web/factory/projects/${project.id}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ autoRunEnabled: true, defaultModelId: 'openai/gpt-5.6-sol' }),
+          body: JSON.stringify({ defaultModelId: 'openai/gpt-5.6-sol' }),
         });
         expect(settingsResponse.status).toBe(200);
         const sourceControl = github.sourceControlStorage;

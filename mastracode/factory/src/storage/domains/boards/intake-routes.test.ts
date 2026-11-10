@@ -153,8 +153,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       target: { boardKey: 'work', phaseKey: 'done' },
       createdBy: 'factory',
     });
-    // A route moves a card into any phase; there is no per-route permission to read back.
-    expect(closedCompleted).not.toHaveProperty('allowWorkingPhase');
     expect(closedCanceled).toMatchObject({
       name: CLOSED_CANCELED_ROUTE.name,
       position: 4,

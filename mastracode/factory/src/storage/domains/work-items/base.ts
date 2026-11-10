@@ -549,8 +549,8 @@ export interface BoardItemRow {
   triageType: FactoryTriageType | null;
   /**
    * When a person first committed this item to the Factory, by starting a run
-   * on it or releasing one that was proposed. Projects that withhold auto-run
-   * are asking to decide what the Factory picks up, not to approve each step of
+   * on it or releasing one that was proposed. Boards whose phases don't start
+   * on their own are asking to decide what the Factory picks up, not to approve each step of
    * work they already asked for, so runs on an armed item skip the gate.
    */
   autonomyArmedAt: Date | null;
@@ -2000,6 +2000,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     return rows.map(toWorkItem);
+  }
+
+  /** The project's cards as {@link list} reads them, uncached, through `ops`: a transaction's, to read them in it. */
+  async listWith(ops: FactoryStorageOps, { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) {
+    return this.#listWithOps(ops, orgId, factoryProjectId);
   }
 
   /**
