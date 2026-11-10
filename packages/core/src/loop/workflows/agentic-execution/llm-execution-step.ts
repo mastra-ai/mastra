@@ -98,7 +98,7 @@ import {
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
-import { collectBackgroundResultTaskIds } from '../../shared/background-result-task-ids';
+import { backgroundOutcomesInPrompt, snapshotBackgroundOutcomes } from '../../shared/background-outcomes';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
@@ -1992,6 +1992,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : currentStep.model?.specificationVersion === 'v3'
               ? messageList.get.all.aiV6.llmPrompt
               : messageList.get.all.aiV5.llmPrompt;
+        // `skipBgTaskWait` marks an `untilIdle` inner run, the only reader of these outcomes. Taken
+        // before the prompt is built so an outcome that lands meanwhile is never counted as sent.
+        const backgroundOutcomes = readScoped(scopeCtx, SKIP_BG_TASK_WAIT_KEY, 'skipBgTaskWait')
+          ? snapshotBackgroundOutcomes(messageList)
+          : undefined;
         let downloadError: MastraError | undefined;
         let inputMessages = await llmPromptForModel(messageListPromptArgs).catch(error => {
           if (!isDownloadAssetsError(error)) {
@@ -2097,6 +2102,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : inputMessages;
           writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
         }
+        const backgroundResultTaskIds = backgroundOutcomes
+          ? backgroundOutcomesInPrompt(backgroundOutcomes, inputMessages)
+          : [];
 
         if (downloadError) {
           // Use the existing error-processor and model-fallback path without calling
@@ -2125,11 +2133,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               for (const chunk of replayChunks) {
                 // Reattach per-run metadata that was stripped at cache time. A cached
                 // step-start timestamp belongs to the original provider call, so omit it
-                // rather than reporting stale inference timing for the replay.
+                // rather than reporting stale inference timing for the replay. Cached background
+                // task ids belong to the original run; report this request's instead.
                 let replayChunk = chunk;
                 if (chunk.type === 'step-start' && chunk.payload && typeof chunk.payload === 'object') {
-                  const { startedAt: _startedAt, ...payload } = chunk.payload as Record<string, unknown>;
-                  replayChunk = { ...chunk, payload };
+                  const {
+                    startedAt: _startedAt,
+                    backgroundResultTaskIds: _cachedTaskIds,
+                    ...payload
+                  } = chunk.payload as Record<string, unknown>;
+                  replayChunk = {
+                    ...chunk,
+                    payload: {
+                      ...payload,
+                      ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
+                    },
+                  };
                 }
                 controller.enqueue({
                   ...replayChunk,
@@ -2178,10 +2197,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             provider: currentStep.model.provider,
           });
           const inferenceStartedAt = Date.now();
-          // Only an `untilIdle` stream's inner run reads this; it runs with the in-loop wait skipped.
-          const backgroundResultTaskIds = readScoped(scopeCtx, SKIP_BG_TASK_WAIT_KEY, 'skipBgTaskWait')
-            ? collectBackgroundResultTaskIds(messageList, inputMessages)
-            : [];
 
           modelResult = executeWithContextSync({
             span: modelSpanTracker?.getTracingContext()?.currentSpan,

@@ -338,7 +338,8 @@ export interface StepStartPayload {
   warnings?: LanguageModelV2CallWarning[];
   /**
    * @internal Background tasks whose outcome this request carries. Set only on the inner runs of
-   * an `untilIdle` stream, which removes it before the caller sees the chunk.
+   * an `untilIdle` stream, which removes it before the caller sees the chunk. Observing such an
+   * inner run directly (durable `observe`) still shows it.
    */
   backgroundResultTaskIds?: string[];
   [key: string]: unknown;

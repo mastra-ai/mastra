@@ -32,8 +32,16 @@ const ADOPT_LOOKUP_TIMEOUT_MS = 5_000;
 /** Inner-run chunks after which the run is parked, waiting to be resumed. */
 const PARKING_CHUNKS = new Set(['tool-call-approval', 'tool-call-suspended']);
 
-/** Step outcomes where the model may not have read the request, so its background results still need a follow-up. */
-const UNREAD_STEP_REASONS = new Set(['error', 'tripwire', 'retry', 'abort']);
+/** Step finish reasons after which the model may not have answered the background results it was sent. */
+const UNANSWERED_STEP_REASONS = new Set([
+  'tool-calls',
+  'error',
+  'tripwire',
+  'retry',
+  'abort',
+  'length',
+  'content-filter',
+]);
 
 export const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
@@ -457,10 +465,12 @@ export async function runIdleLoop<
   /** Tasks whose terminal bg chunk this wrapper already saw — the startup
    * adoption lookup must not re-add them from a stale storage snapshot. */
   const settledTaskIds = new Set<string>();
-  /** Tasks whose outcome a finished model request already carried, so no follow-up is sent for them. */
+  /** Tasks whose outcome the model already answered in this stream, so no follow-up is sent for them. */
   const deliveredTaskIds = new Set<string>();
   /** Tasks whose outcome the inner run's current model request carries, until its step finishes. */
   let requestTaskIds: string[] = [];
+  /** Whether the current step made a client tool call or reported an error. */
+  let requestUnanswered = false;
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -571,8 +581,8 @@ export async function runIdleLoop<
   };
 
   /**
-   * Records that a finished model request carried these tasks' outcomes, and drops their queued
-   * completions. The completion usually arrives before the request that reports it, while the
+   * Records that the model answered with these tasks' outcomes in its prompt, and drops their
+   * queued completions. The completion usually arrives before the request that reports it, while the
    * turn is still running.
    */
   const markDelivered = (taskIds: string[]) => {
@@ -585,23 +595,39 @@ export async function runIdleLoop<
   };
 
   /**
-   * Tracks which background outcomes reached the model. The inner run lists them on `step-start`;
-   * they count once the same step finishes without an error. The list is internal, so it is
-   * removed before the chunk reaches the caller.
+   * Tracks which background outcomes the model answered. The inner run lists them on `step-start`.
+   * They count only when that step ends in a final reply: no error, no client tool call and none of
+   * {@link UNANSWERED_STEP_REASONS}. After a tool call the run can hit its step limit before the
+   * model answers, even when the provider reports `stop`, and an errored, filtered or cut off reply
+   * may be unusable. The list is internal, so it is removed before the chunk reaches the caller.
    *
    * @returns The chunk to forward to the caller.
    */
   const trackDelivery = (value: any) => {
-    if (value?.type === 'step-start') {
-      const { backgroundResultTaskIds, ...payload } = value.payload ?? {};
-      requestTaskIds = Array.isArray(backgroundResultTaskIds) ? backgroundResultTaskIds : [];
-      return backgroundResultTaskIds === undefined ? value : { ...value, payload };
+    switch (value?.type) {
+      case 'step-start': {
+        const { backgroundResultTaskIds, ...payload } = value.payload ?? {};
+        requestTaskIds = Array.isArray(backgroundResultTaskIds) ? backgroundResultTaskIds : [];
+        requestUnanswered = false;
+        return backgroundResultTaskIds === undefined ? value : { ...value, payload };
+      }
+      case 'tool-call':
+        // Provider-executed calls (e.g. web search) run inside the same reply.
+        if (!value.payload?.providerExecuted) requestUnanswered = true;
+        return value;
+      case 'error':
+        requestUnanswered = true;
+        return value;
+      case 'step-finish':
+        if (!requestUnanswered && !UNANSWERED_STEP_REASONS.has(value.payload?.stepResult?.reason)) {
+          markDelivered(requestTaskIds);
+        }
+        requestTaskIds = [];
+        requestUnanswered = false;
+        return value;
+      default:
+        return value;
     }
-    if (value?.type === 'step-finish') {
-      if (!UNREAD_STEP_REASONS.has(value.payload?.stepResult?.reason)) markDelivered(requestTaskIds);
-      requestTaskIds = [];
-    }
-    return value;
   };
 
   // --- Stream plumbing ---

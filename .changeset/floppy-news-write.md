@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed `untilIdle` streams answering twice when a background tool's result already reached the model. This happened with an awaited background tool, and with a deferred task that finished while the run was still going. Tasks whose result the model hasn't seen yet still get their follow-up turn.
+Fixed `untilIdle` streams answering twice when the model had already answered with a background tool's result. This happened with an awaited background tool and with a deferred task that finished while the run was still going. A task whose result the model hasn't answered yet still gets its follow-up turn.
