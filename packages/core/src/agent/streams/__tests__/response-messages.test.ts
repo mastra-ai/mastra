@@ -134,4 +134,24 @@ describe('response message diffs', () => {
     expect(diffs[2]!.from).toBeGreaterThan(0);
     expect(read(replay, diffs[2]!)).toEqual(steps[2]);
   });
+
+  it('skips other events and step-finishes of a superseded execution when rebuilding', () => {
+    const [current] = publish([steps[1]!], 'execution-2');
+    const [stale] = publish([steps[0]!], 'execution-1');
+    const stepFinish = (diff: ResponseMessagesDiff, generation?: number) => ({
+      type: 'chunk',
+      ...(generation === undefined ? {} : { generation }),
+      data: { type: 'step-finish', payload: { _durableResponseMessagesDiff: diff } },
+    });
+    const replay = replayResponseMessages([
+      { type: 'chunk', data: { type: 'text-delta', payload: { _durableResponseMessagesDiff: stale } } },
+      { type: 'finish', data: { payload: { _durableResponseMessagesDiff: stale } } },
+      stepFinish(current!, 2),
+      // Still publishing after the newer claim took the run over.
+      stepFinish(stale!, 1),
+    ]);
+    expect(replay.messages).toEqual(steps[1]);
+    // Unfenced runs carry no generation; their events always apply.
+    expect(replayResponseMessages([stepFinish(current!), stepFinish(stale!)]).messages).toEqual(steps[0]);
+  });
 });
