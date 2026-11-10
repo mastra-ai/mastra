@@ -7,7 +7,8 @@ import { autoStartingBoards, createTestBoard, createTriageWorkRegistry, selfRevi
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import type { FactoryGithubRuleContext } from '../../rules/types.js';
+import { FACTORY_GITHUB_EVENTS } from '../../rules/types.js';
+import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
@@ -3901,6 +3902,131 @@ describe('GithubRules', () => {
     await service.ingest(issueOpened('multi-tenant'));
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
     expect(await workItems.listDeferredDecisions('org-2', second.id)).toHaveLength(1);
+  });
+});
+
+describe('GithubRules and the shared board list', () => {
+  // The rules resolve a delivery's card from the board list the storage keeps cached for every
+  // reader in the process. A rule may write to the card it is handed (its context is typed
+  // mutable), so a card leaked from that cache would corrupt every later read of the board.
+  it('hands every event kind its own copy of the card, leaving the cached board list untouched', async () => {
+    const seen = new Map<FactoryGithubEventName, FactoryRuleItemContext[]>();
+    const mutateItem = (event: FactoryGithubEventName) => (context: Readonly<FactoryGithubRuleContext>) => {
+      if (!context.item) return;
+      seen.set(event, [...(seen.get(event) ?? []), context.item]);
+      context.item.workItem.title = `mutated by ${event}`;
+      context.item.workItem.metadata = { ...context.item.workItem.metadata, mutatedBy: event };
+      if (context.item.metadata) context.item.metadata.mutatedBy = event;
+    };
+    const overrides = Object.fromEntries(FACTORY_GITHUB_EVENTS.map(event => [event, mutateItem(event)]));
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', overrides);
+    const work = await createLinkedIssue(workItems, project.id);
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: { reviewVerdict: 'approve' },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createTriageWorkRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    const pullRequestEvent = (action: string, deliveryId: string, extra: Record<string, unknown> = {}) => {
+      const delivery = pullRequest('opened', deliveryId);
+      return {
+        ...delivery,
+        payload: {
+          ...delivery.payload,
+          action,
+          sender: { login: 'maintainer' },
+          ...extra,
+          pull_request: {
+            ...delivery.payload.pull_request,
+            user: { login: 'maintainer' },
+            body: 'Closes #42',
+            head: { ref: 'feature', sha: 'abc123' },
+            ...(extra.pull_request as object | undefined),
+          },
+        },
+      };
+    };
+    const deliveries: Array<[FactoryGithubEventName, { event: string; deliveryId: string; payload: object }]> = [
+      ['issueOpened', issueOpened('shared-issue-opened')],
+      ['issueEdited', issueEdited('shared-issue-edited')],
+      ['issueClosed', issueClosed('shared-issue-closed', 'completed')],
+      [
+        'issueReopened',
+        { ...issueOpened('shared-issue-reopened'), payload: { ...issueOpened().payload, action: 'reopened' } },
+      ],
+      ['issueCommentCreated', issueComment('created', 'shared-comment-created')],
+      ['issueCommentEdited', issueComment('edited', 'shared-comment-edited')],
+      ['issueCommentDeleted', issueComment('deleted', 'shared-comment-deleted')],
+      // A trusted author's pull request that closes the issue looks for the card it belongs on.
+      [
+        'pullRequestOpened',
+        pullRequestEvent('opened', 'shared-pr-opened-new', { pull_request: { number: 18 } }),
+      ],
+      ['pullRequestOpened', pullRequestEvent('opened', 'shared-pr-opened')],
+      ['pullRequestUpdated', pullRequestEvent('synchronize', 'shared-pr-updated')],
+      // Feedback on the pull request follows the Review card's parent link to the authoring item.
+      ['pullRequestCommentCreated', pullRequestComment('shared-pr-comment', { body: 'Looks good to me' })],
+      [
+        'pullRequestReviewRequested',
+        pullRequestEvent('review_requested', 'shared-pr-review-requested', {
+          requested_reviewer: { login: 'factory-app[bot]' },
+        }),
+      ],
+      [
+        'pullRequestReviewSubmitted',
+        pullRequestEvent('submitted', 'shared-pr-review-submitted', {
+          review: {
+            id: 99,
+            state: 'changes_requested',
+            body: 'Please fix',
+            html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+            user: { login: 'maintainer' },
+          },
+        }),
+      ],
+      // A closed pull request settles both linked cards: the Review card and its authoring item.
+      ['pullRequestClosed', pullRequestEvent('closed', 'shared-pr-closed', { pull_request: { state: 'closed' } })],
+      [
+        'pullRequestMerged',
+        pullRequestEvent('closed', 'shared-pr-merged', { pull_request: { state: 'closed', merged: true } }),
+      ],
+    ];
+    expect(new Set(deliveries.map(([event]) => event))).toEqual(new Set(FACTORY_GITHUB_EVENTS));
+
+    for (const [event, delivery] of deliveries) {
+      const shared = await workItems.listShared({ orgId: 'org-1', factoryProjectId: project.id });
+      const before = structuredClone(shared);
+      await service.ingest(
+        event === 'pullRequestReviewSubmitted' ? { ...delivery, event: 'pull_request_review' } : delivery,
+      );
+      expect(shared, `${event} wrote to the cached board list`).toEqual(before);
+      for (const item of seen.get(event) ?? []) {
+        expect(shared.some(card => card.workItem === item.workItem || card.metadata === item.metadata)).toBe(false);
+      }
+    }
+    // Every event kind resolved a card, so each one exercised the shared read.
+    expect([...seen.keys()].sort()).toEqual([...FACTORY_GITHUB_EVENTS].sort());
   });
 });
 
