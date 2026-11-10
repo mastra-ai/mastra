@@ -19,7 +19,8 @@ const SIGNATURE_KEY = 'modelOutputSignature';
 const processKey = randomBytes(32);
 
 type ToolPart = {
-  toolInvocation?: { toolCallId?: string; toolName?: string };
+  providerExecuted?: boolean;
+  toolInvocation?: { toolCallId?: string; toolName?: string; state?: string; result?: unknown; isError?: boolean };
   providerMetadata?: Record<string, unknown>;
 };
 
@@ -27,17 +28,25 @@ function mappingOf(part: ToolPart): Record<string, unknown> | undefined {
   const mastra = part.providerMetadata?.mastra;
   if (!mastra || typeof mastra !== 'object' || Array.isArray(mastra)) return undefined;
   const record = mastra as Record<string, unknown>;
-  return 'modelOutput' in record || record.modelOutputComputed ? record : undefined;
+  return record.modelOutput != null ? record : undefined;
 }
 
+// Bind the mapping to the raw result and every field that decides whether a
+// mapping applies, so a signed mapping cannot be moved onto other content.
 function sign(part: ToolPart, mastra: Record<string, unknown>): string {
+  const invocation = part.toolInvocation;
   return createHmac('sha256', processKey)
     .update(
       JSON.stringify([
-        part.toolInvocation?.toolCallId ?? null,
-        part.toolInvocation?.toolName ?? null,
-        mastra.modelOutput ?? null,
-        !!mastra.modelOutputComputed,
+        invocation?.toolCallId ?? null,
+        invocation?.toolName ?? null,
+        invocation?.state ?? null,
+        invocation?.result ?? null,
+        !!invocation?.isError,
+        !!part.providerExecuted,
+        mastra.backgroundTask ?? null,
+        mastra.toolPayloadTransform ?? mastra.toolPayloadProjection ?? null,
+        mastra.modelOutput,
       ]),
     )
     .digest('base64url');
@@ -46,7 +55,8 @@ function sign(part: ToolPart, mastra: Record<string, unknown>): string {
 /** Sign the mapping markers on a server-produced tool part, if it has any. */
 export function signServerMapping(part: ToolPart): void {
   const mastra = mappingOf(part);
-  if (!mastra) return;
+  // The server never maps provider-executed results; such markers are not its own.
+  if (!mastra || part.providerExecuted || part.toolInvocation?.state !== 'result') return;
   mastra[SIGNATURE_KEY] = sign(part, mastra);
 }
 

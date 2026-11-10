@@ -2608,13 +2608,6 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
-    // Mapping markers the server writes on its own response parts are signed so
-    // they are still trusted when the caller passes them back as history.
-    if (messageSource === 'response') {
-      for (const part of messageV2.content.parts ?? []) {
-        if (part.type === 'tool-invocation') signServerMapping(part);
-      }
-    }
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)

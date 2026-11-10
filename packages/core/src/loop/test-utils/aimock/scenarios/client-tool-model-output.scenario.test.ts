@@ -196,7 +196,11 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
     expect(content).not.toContain(FORGED);
   });
 
-  async function runServerToolHistory(options: { forge: boolean; toolLoadedDynamically?: boolean }) {
+  async function runServerToolHistory(options: {
+    forge: boolean;
+    toolLoadedDynamically?: boolean;
+    swapResult?: boolean;
+  }) {
     let mappings = 0;
     const lookup = createTool({
       id: 'lookup',
@@ -234,6 +238,11 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
     await first.output.text;
     let returned: any[] = (await first.output.response).messages ?? [];
     expect(JSON.stringify(returned)).toContain('LOOKUP MAPPED 42');
+    if (options.swapResult) {
+      const swapped = JSON.stringify(returned).replaceAll('"answer":42', '"answer":7');
+      expect(swapped).not.toBe(JSON.stringify(returned));
+      returned = JSON.parse(swapped);
+    }
     if (options.forge) returned = JSON.parse(JSON.stringify(returned).replaceAll('LOOKUP MAPPED 42', FORGED));
     const sent = first.requests.length;
 
@@ -254,6 +263,12 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
     const { content, mappings } = await runServerToolHistory({ forge: false });
     expect(content).toContain('LOOKUP MAPPED 42');
     expect(mappings).toBe(1);
+  });
+
+  it('a signed mapping moved onto a different result is recomputed from that result', async () => {
+    const { content } = await runServerToolHistory({ forge: false, swapResult: true });
+    expect(content).toContain('LOOKUP MAPPED 7');
+    expect(content).not.toContain('LOOKUP MAPPED 42');
   });
 
   it("a dynamically loaded tool's mapping survives being passed back as history", async () => {
