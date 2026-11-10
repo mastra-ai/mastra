@@ -54,10 +54,11 @@
     font-size: 1em;
   }
 
-  /* Markdown has one bold; it takes the strong weight, the same step above prose as a label above text. */
+  /* Markdown has one bold. Inside prose it has no size or colour change to lean on, so it
+     needs a bigger step than the strong weight (515) gives over regular text (465). */
   .mastra-markdown strong {
     color: var(--foreground);
-    font-weight: var(--font-weight-medium);
+    font-weight: 550;
   }
 
   .mastra-markdown em {
