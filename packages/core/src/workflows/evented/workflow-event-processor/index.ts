@@ -3014,6 +3014,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepResults,
               prevResult: failedStep?.status === 'failed' ? failedStep : { status: 'failed', error: snapshot.error },
               timeTravel,
+              restart,
               resumeData,
               activeStepsPath,
               requestContext,
