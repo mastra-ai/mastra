@@ -9,11 +9,13 @@ export const serverComputedParts = new WeakSet<object>();
 
 /**
  * Provenance for mapping markers that leave the process (e.g. in
- * `response.messages`) and come back as input. The server signs the markers it
- * writes on response parts with a per-process key; a returned part is trusted
- * only if its signature still matches its tool call, tool name and mapping. A
- * client cannot produce a valid signature, and history from another process
- * (or edited after signing) simply fails verification.
+ * `response.messages`) and come back as input. When a tool result the server
+ * executed is committed, the stored part's mapping is signed with a per-process
+ * key over the tool call, tool name, state, raw result, error flag, provider
+ * execution, background task, payload transform and the mapping itself. A
+ * returned part is trusted only if that signature still matches. A client
+ * cannot produce one; history from another process, or changed after signing,
+ * fails verification and is stripped and recomputed instead.
  */
 const SIGNATURE_KEY = 'modelOutputSignature';
 const processKey = randomBytes(32);
@@ -45,7 +47,8 @@ function sign(part: ToolPart, mastra: Record<string, unknown>): string {
         !!invocation?.isError,
         !!part.providerExecuted,
         mastra.backgroundTask ?? null,
-        mastra.toolPayloadTransform ?? mastra.toolPayloadProjection ?? null,
+        mastra.toolPayloadTransform ?? null,
+        mastra.toolPayloadProjection ?? null,
         mastra.modelOutput,
       ]),
     )
@@ -57,7 +60,11 @@ export function signServerMapping(part: ToolPart): void {
   const mastra = mappingOf(part);
   // The server never maps provider-executed results; such markers are not its own.
   if (!mastra || part.providerExecuted || part.toolInvocation?.state !== 'result') return;
-  mastra[SIGNATURE_KEY] = sign(part, mastra);
+  try {
+    mastra[SIGNATURE_KEY] = sign(part, mastra);
+  } catch {
+    // Unserializable result: leave it unsigned, it is recomputed on the way back in.
+  }
 }
 
 /** Whether a part's mapping markers carry a valid signature from this process. */
@@ -65,7 +72,12 @@ export function hasValidServerMapping(part: ToolPart): boolean {
   const mastra = mappingOf(part);
   const signature = mastra?.[SIGNATURE_KEY];
   if (typeof signature !== 'string') return false;
-  const expected = Buffer.from(sign(part, mastra!));
+  let expected: Buffer;
+  try {
+    expected = Buffer.from(sign(part, mastra!));
+  } catch {
+    return false;
+  }
   const actual = Buffer.from(signature);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }

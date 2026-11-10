@@ -1896,7 +1896,6 @@ export class MessageList {
       return false;
     }
     const toolCallId = inputPart.toolInvocation.toolCallId;
-    signServerMapping(inputPart);
 
     // Pass 1: exact toolCallId match. Covers client tools and well-behaved
     // providers where the call and result share an id.
@@ -1908,6 +1907,7 @@ export class MessageList {
         const part = msg.content.parts[i];
         if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
           this.mergeToolResultIntoPart(msg, i, inputPart, metadata);
+          signServerMapping(msg.content.parts[i]!);
           return true;
         }
       }
@@ -1941,6 +1941,7 @@ export class MessageList {
           const previousToolCallId = candidate.toolInvocation.toolCallId;
           candidate.toolInvocation.toolCallId = toolCallId;
           this.mergeToolResultIntoPart(msg, i, inputPart, metadata, previousToolCallId);
+          signServerMapping(msg.content.parts[i]!);
           return true;
         }
       }
