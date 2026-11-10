@@ -102,7 +102,11 @@ export function createObjectiveTool(config: AssistantConfig, getAgent: () => Age
           status: 'active',
           ...(input.additionalEvaluations === undefined
             ? {}
-            : { maxRuns: current.runsUsed + input.additionalEvaluations }),
+            : {
+                maxRuns:
+                  Math.max(current.runsUsed, current.maxRuns ?? config.maxGoalEvaluations) +
+                  input.additionalEvaluations,
+              }),
         }),
       };
     },

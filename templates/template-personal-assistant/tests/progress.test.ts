@@ -468,3 +468,35 @@ test('incomplete objectives wait for information and preserve approvals', { time
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test('resuming a paused objective extends its remaining evaluation allowance', { timeout: 120000 }, async () => {
+  const { progressFixture, progressState, progressTurn } = await import('./progress');
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-goal-extension-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl);
+    await progressTurn(app, 'remaining-budget', {
+      calls: [[{ name: 'objective', args: { action: 'set', objective: 'Wait for owner input.', maxEvaluations: 5 } }]],
+    });
+    await progressTurn(app, 'remaining-budget', { calls: [[{ name: 'objective', args: { action: 'pause' } }]] });
+    const before = (await progressState(dataDir, 'remaining-budget')).objective!;
+    assert.equal(before.status, 'paused');
+    assert.ok(before.runsUsed < before.maxRuns!);
+    await progressTurn(app, 'remaining-budget', {
+      calls: [[{ name: 'objective', args: { action: 'resume', additionalEvaluations: 1 } }]],
+    });
+    const after = (await progressState(dataDir, 'remaining-budget')).objective!;
+    assert.equal(after.id, before.id);
+    assert.equal(after.maxRuns, before.maxRuns! + 1);
+    assert.equal(after.runsUsed, before.runsUsed + 1);
+    await app.stop();
+    app = undefined;
+    app = await startAssistant(dataDir, fixture.modelUrl);
+    assert.deepEqual((await progressState(dataDir, 'remaining-budget')).objective, after);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
