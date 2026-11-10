@@ -453,6 +453,8 @@ transitionPolicy: context => {
 nextPhases: ['build'],
 ```
 
+The built-in Work and Review boards no longer declare a transition policy, so `workBoard.transitionPolicy` and `reviewBoard.transitionPolicy` are `undefined`. A board that wraps either one and calls its policy (for example `context => workBoard.transitionPolicy!(context)`) throws `transitionPolicy is not a function` on every transition, recorded as a `rule_error`. Drop the delegating call; keep only your own checks, or move them to `nextPhases` and `exitTool`.
+
 Rule contexts still carry `acceptedAt`, deprecated: it is the stamp on older cards and `null` for cards since.
 
 ### Board phase semantics
