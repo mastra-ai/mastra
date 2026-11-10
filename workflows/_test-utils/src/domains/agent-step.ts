@@ -8,7 +8,6 @@ import { z } from 'zod';
 // @ts-ignore
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
 import { createTextStreamModel } from '../mock-models';
 import { stepsOf } from '../steps';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
@@ -448,7 +447,7 @@ export function createAgentStepWorkflows(ctx: WorkflowCreatorContext) {
 }
 
 export function createAgentStepTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
-  const { execute, skipTests } = ctx;
+  const { execute, skipTests, Mastra } = ctx;
 
   describe('Agent as step', () => {
     it('should execute workflow with step that simulates agent behavior', async () => {

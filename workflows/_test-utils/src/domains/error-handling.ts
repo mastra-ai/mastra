@@ -8,7 +8,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '@mastra/core/error';
-import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import type { WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
@@ -503,7 +502,7 @@ export function createErrorHandlingWorkflows(ctx: WorkflowCreatorContext) {
  * Create tests for error handling.
  */
 export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
-  const { execute, skipTests } = ctx;
+  const { execute, skipTests, Mastra } = ctx;
 
   describe('Error Handling', () => {
     it.skipIf(skipTests.errorMessageFormat)('should handle step execution errors', async () => {

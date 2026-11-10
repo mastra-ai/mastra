@@ -11,7 +11,6 @@ import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { Mastra } from '@mastra/core/mastra';
 // @ts-ignore - module resolution for test utilities
 import type { StreamEvent } from '@mastra/core/workflows';
 import { describe, it, expect, onTestFinished, vi } from 'vitest';
@@ -666,7 +665,7 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
 }
 
 export function createStreamingTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
-  const { execute, skipTests } = ctx;
+  const { execute, skipTests, Mastra } = ctx;
 
   describe('Streaming', () => {
     it('should execute workflow that could be streamed', async () => {

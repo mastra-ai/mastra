@@ -370,6 +370,11 @@ export type CreateStepFn = typeof import('@mastra/core/workflows').createStep;
 export type AgentClass = typeof import('@mastra/core/agent').Agent;
 
 /**
+ * Mastra class type for hosting workflows in tests
+ */
+export type MastraClass = typeof import('@mastra/core/mastra').Mastra;
+
+/**
  * Function type for creating a workflow
  */
 export type CreateWorkflowFn = typeof import('@mastra/core/workflows').createWorkflow;
@@ -699,6 +704,7 @@ export interface WorkflowTestConfig {
     createStep: CreateStepFn;
     createTool?: CreateToolFn;
     Agent?: AgentClass;
+    Mastra?: MastraClass;
   };
 
   /**
@@ -934,6 +940,13 @@ export interface WorkflowCreatorContext {
    * Agent class for creating agent steps (optional - for agent tests)
    */
   Agent?: AgentClass;
+
+  /**
+   * Mastra class for hosting workflows in tests. Engines whose step code comes from a
+   * different copy of core than the `@mastra/core` package must provide their own,
+   * otherwise checks like `instanceof TripWire` fail across the two copies.
+   */
+  Mastra: MastraClass;
 }
 
 /**
