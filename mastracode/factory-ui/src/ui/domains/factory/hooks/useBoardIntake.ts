@@ -218,12 +218,6 @@ export function useBoardIntake({
     (linearEligible && boundToProject('linear', config?.linear.sourceIds)) ||
     (jiraEligible && boundToProject('jira', config?.jira.sourceIds)) ||
     (incidentioEligible && boundToProject('incidentio', config?.incidentio?.sourceIds));
-  // A connected source files onto the default board, and onto another board only through an
-  // intake route that targets it. Until routes load (or when they fail) the setup prompt waits.
-  const intakeRoutesQuery = useIntakeRoutesQuery(defaultBoard || !sourceConnected ? undefined : factoryProjectId);
-  const routeTargetsBoard =
-    !intakeRoutesQuery.isSuccess ||
-    intakeRoutesQuery.data.some(route => route.enabled && route.target.boardKey === kind);
   const githubIntakeActive =
     !gitlabRepository && (defaultBoard || routedHere || routesFailed) && githubEnabled && githubSelected;
   const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
@@ -234,8 +228,25 @@ export function useBoardIntake({
     ...(jiraReady ? (['jira'] as const) : []),
     ...(incidentioReady ? (['incidentio'] as const) : []),
   ];
+  // A connected source files onto the default board, and onto another board only through an
+  // intake route that places its new cards there: enabled, run on `work_item.created`, and not
+  // one that only joins a pull request to an existing card (the server's `resolveIntakeRoute`).
+  const readsIntakeRoutes = !defaultBoard && sourceConnected && available.length === 0;
+  const intakeRoutesQuery = useIntakeRoutesQuery(readsIntakeRoutes ? factoryProjectId : undefined);
+  const intakeRoutesPending = readsIntakeRoutes && intakeRoutesQuery.isPending;
+  const intakeRoutesFailed = readsIntakeRoutes && intakeRoutesQuery.isError;
+  const routePlacesCardsHere = (intakeRoutesQuery.data ?? []).some(
+    route =>
+      route.enabled &&
+      route.on.includes('work_item.created') &&
+      !route.target.joinClosedIssue &&
+      route.target.boardKey === kind,
+  );
   // Whether anything files onto this board: a feed it browses, or a connected source routed here.
-  const fed = available.length > 0 || (sourceConnected && (defaultBoard || routeTargetsBoard));
+  // While routes load the column stays pending, and a failed load reports the error with a retry.
+  const fed =
+    available.length > 0 ||
+    (sourceConnected && (defaultBoard || intakeRoutesPending || intakeRoutesFailed || routePlacesCardsHere));
   // The default board also lists the pull requests of its linked repositories, but they are
   // not an issue source: a default board without one still asks to connect one.
   const feedSources: IntakeSource[] = browsesPullRequests && repository ? [...available, pullRequestSource] : available;
@@ -341,7 +352,14 @@ export function useBoardIntake({
     incidentio: incidentioFeed,
   };
   const failedSource = browsedSources.find(source => browsed[source].error);
-  const feed = combineIntakeFeeds(browsedSources.map(source => browsed[source]));
+  const feed = intakeRoutesFailed
+    ? {
+        error: intakeRoutesQuery.error,
+        isPending: false,
+        fetchNextPage: () => undefined,
+        refetch: () => intakeRoutesQuery.refetch(),
+      }
+    : combineIntakeFeeds(browsedSources.map(source => browsed[source]));
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
     [initialPhase]: feed,
@@ -355,7 +373,8 @@ export function useBoardIntake({
     ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending) ||
     ((config?.incidentio?.enabled ?? false) && incidentioStatusQuery.isPending) ||
     bindingsPending ||
-    routesPending;
+    routesPending ||
+    intakeRoutesPending;
   const isConfigurationPending = configQuery.isPending;
   const isRoutingPending = browsesGithub && routesPending;
   const isPending = isConfigurationPending || discoveringSources || isRoutingPending || Boolean(feed?.isPending);
