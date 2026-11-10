@@ -3361,6 +3361,9 @@ export class AgentThreadStreamRuntime {
       // wait out the rest of its window so retries stay paced.
       const unusedMs = attemptMs - (Date.now() - attemptStartedAt);
       if (unusedMs > 0) await new Promise(resolve => setTimeout(resolve, unusedMs));
+      // Stop when this window ran to the deadline. Rereading Date.now() here can come up a
+      // millisecond short, since timers can fire just before it reaches their due time.
+      if (attemptStartedAt + attemptMs >= deadline) return undefined;
       attemptTimeoutMs *= 2;
     }
   }
@@ -3796,7 +3799,7 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     const abortController = new AbortController();
     const upstreamAbortSignal = options.abortSignal;
-    const abort = () => abortController.abort();
+    const abort = () => abortController.abort(upstreamAbortSignal?.reason);
     if (upstreamAbortSignal?.aborted) {
       abort();
     } else {

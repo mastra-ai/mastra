@@ -574,7 +574,7 @@ The object form can return any combination of these properties:
 
 When multiple processors implement `processInputStep`, they run in order and changes chain through:
 
-```
+```text
 Processor 1: receives { model: 'gpt-5.4' } → returns { model: 'gpt-5.4-mini' }
 Processor 2: receives { model: 'gpt-5.4-mini' } → returns { toolChoice: 'none' }
 Final: model = 'gpt-5.4-mini', toolChoice = 'none'

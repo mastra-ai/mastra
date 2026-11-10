@@ -32,7 +32,7 @@ export const factory = new MastraFactory({
 
 | Class | Package | Settings | Builds |
 | - | - | - | - |
-| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get` |
+| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes`, `publicPorts` | `start`, `get` |
 | `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` |
 | `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | `start`, `get` |
 | `LocalFactorySandbox` | `@mastra/factory` | None | No |
@@ -76,7 +76,7 @@ When you omit the `sandbox` option and Platform credentials (`MASTRA_PLATFORM_AC
 
 An explicit `sandbox` option always takes precedence. Without Platform credentials and without a `sandbox` option, repository sandboxes are off.
 
-For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, a top-level `idleTimeoutMinutes` option also applies when `defaults` doesn't set one. The schema's `default` values show the effective defaults.
+For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, top-level `idleTimeoutMinutes` and `publicPorts` options also apply when `defaults` doesn't set them. `publicPorts` is off by default: when on, anyone with a port's URL can open it without signing in. It applies to sandboxes created after it changes. The schema's `default` values show the effective defaults.
 
 Platform polls a build through the builder that started it. After a host restart, an earlier build reads as `unknown`.
 

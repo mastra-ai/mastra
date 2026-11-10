@@ -32,6 +32,7 @@ import { SessionSharingPopover } from './SessionSharingPopover';
  */
 export function SessionNavRow({
   name,
+  label,
   title,
   url,
   externalLinks,
@@ -54,6 +55,8 @@ export function SessionNavRow({
   changingVisibility,
 }: {
   name: string;
+  /** Visible text when it differs from `name`, such as a card session's context under the card's heading. */
+  label?: string;
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
@@ -96,7 +99,7 @@ export function SessionNavRow({
       to={url}
       state={from ? { from } : undefined}
       aria-current={active ? 'page' : undefined}
-      aria-label={name}
+      aria-label={label ? `${label}: ${name}` : name}
       aria-disabled={disabled || loading || undefined}
       tabIndex={disabled || loading ? -1 : undefined}
       onClick={event => {
@@ -114,7 +117,7 @@ export function SessionNavRow({
       title={preview ? undefined : title}
     >
       {source ? <SessionSourceIcon source={source} /> : null}
-      <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
+      <Sidebar.NavLabel>{label ?? name}</Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
