@@ -34,6 +34,7 @@ import { z } from 'zod/v4';
 import {
   MASTRA_IS_STUDIO_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   WORKSPACE_TOOLS,
   resolveToolConfig,
@@ -1694,11 +1695,18 @@ export const CLONE_AGENT_ROUTE = createRoute({
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
 
+      // Like POST /stored/agents, the clone belongs to the authenticated caller and any body-provided authorId is
+      // ignored. Without auth there is no caller, so the body's authorId is kept.
+      const callerAuthorId = getCallerAuthorId(requestContext);
+      const authenticated = callerAuthorId !== null || requestContext.get(MASTRA_USER_KEY) != null;
+      const ownerId = authenticated ? (callerAuthorId ?? undefined) : authorId;
+
       const result = await editor.agent.clone(agent, {
         newId: cloneId,
         newName,
         metadata,
-        authorId,
+        authorId: ownerId,
+        ...(authenticated && ownerId ? { visibility: 'private' as const } : {}),
         requestContext,
       });
 

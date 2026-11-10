@@ -392,6 +392,27 @@ describe('stored agent visibility on /api/agents', () => {
     });
   });
 
+  // A clone is a new stored agent, so like POST /stored/agents it belongs to the caller, never to a body-supplied id.
+  describe('POST /agents/:id/clone', () => {
+    it("alice's clone of her private agent is owned by her and stays private to bob", async () => {
+      const clone = await http('alice', 'POST', `/agents/${PRIVATE}/clone`, { newId: 'alice-private-copy' });
+      expect(clone.status, clone.text).toBe(200);
+      expect(clone.json).toMatchObject({ id: 'alice-private-copy', authorId: 'alice', visibility: 'private' });
+
+      expect((await http('bob', 'GET', '/agents/alice-private-copy')).status).toBe(404);
+      expect((await http('bob', 'GET', '/stored/agents/alice-private-copy')).status).toBe(404);
+      expect(Object.keys((await http('bob', 'GET', '/agents')).json)).not.toContain('alice-private-copy');
+      expect((await http('alice', 'GET', '/agents/alice-private-copy')).status).toBe(200);
+    });
+
+    it("bob can't assign his clone to alice by passing her authorId", async () => {
+      const clone = await http('bob', 'POST', `/agents/${PUBLIC}/clone`, { newId: 'bob-copy', authorId: 'alice' });
+      expect(clone.status, clone.text).toBe(200);
+      expect(clone.json).toMatchObject({ id: 'bob-copy', authorId: 'bob', visibility: 'private' });
+      expect((await http('alice', 'GET', '/stored/agents/bob-copy')).status).toBe(404);
+    });
+  });
+
   // Handlers that search across every registered agent (here: the workspace list) must skip hidden stored agents too.
   it("bob's GET /workspaces does not surface the workspace of alice's private agent after she used it", async () => {
     reply();
@@ -430,6 +451,17 @@ describe('stored agent visibility on /api/agents', () => {
       const result = await generate(null, PRIVATE, open.url);
       expect(result.status).toBe(200);
       expect(result.json.text).toBe(REPLY);
+
+      // With no caller to own it, a clone keeps the body-supplied authorId as before.
+      const clone = await http(
+        null,
+        'POST',
+        `/agents/${PUBLIC}/clone`,
+        { newId: 'open-copy', authorId: 'someone' },
+        open.url,
+      );
+      expect(clone.status, clone.text).toBe(200);
+      expect(clone.json.authorId).toBe('someone');
     } finally {
       await open.close();
     }
