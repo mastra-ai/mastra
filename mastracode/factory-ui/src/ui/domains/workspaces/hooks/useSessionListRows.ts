@@ -10,11 +10,14 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { buildFactorySessionRow, buildUserSessionRow, oneRowPerCard } from '../services/sessionRows';
-import type { SessionListRow } from '../services/sessionRows';
+import type { OneRowPerCardOptions, SessionListRow } from '../services/sessionRows';
 import { sessionWorkItemIndex } from '../services/sessionWorkItems';
 import { usePinnedSessions } from './usePinnedSessions';
 
-export function useSessionListRows(factoryId: string | undefined): {
+export function useSessionListRows(
+  factoryId: string | undefined,
+  options: OneRowPerCardOptions = {},
+): {
   rows: SessionListRow[];
   hasRepositories: boolean;
   loaded: boolean;
@@ -86,5 +89,5 @@ export function useSessionListRows(factoryId: string | undefined): {
     });
   });
 
-  return { rows: [...oneRowPerCard(factoryRows, catalog.data), ...userRows], ...loadState };
+  return { rows: [...oneRowPerCard(factoryRows, catalog.data, options), ...userRows], ...loadState };
 }

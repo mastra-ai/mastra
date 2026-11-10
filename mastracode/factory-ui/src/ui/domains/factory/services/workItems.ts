@@ -22,7 +22,8 @@ export type WorkItemSource =
   | 'slack-thread'
   | 'manual';
 
-export function isPullRequestSource(source: WorkItemSource): boolean {
+/** Takes any source string so callers holding a wider union (a user session's `'user'`) need no guard. */
+export function isPullRequestSource(source: string): source is 'github-pr' | 'gitlab-pr' {
   return source === 'github-pr' || source === 'gitlab-pr';
 }
 
