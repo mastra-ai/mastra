@@ -104,7 +104,12 @@ describe('external links', () => {
 });
 
 describe('oneRowPerCard', () => {
-  const ref = (sessionId: string) => ({ sessionId, branch: `factory/${sessionId}`, threadId: `${sessionId}-thread` });
+  const ref = (sessionId: string) => ({
+    sessionId,
+    branch: `factory/${sessionId}`,
+    threadId: `${sessionId}-thread`,
+    startedBy: 'user-1',
+  });
   const item = testWorkItem({
     stages: ['execute'],
     sessions: { triage: ref('triage'), work: ref('work'), review: ref('review') },
