@@ -1,4 +1,4 @@
-import { MastraAuthProvider } from '@mastra/core/server';
+import { CompositeAuth, MastraAuthProvider, SimpleAuth } from '@mastra/core/server';
 import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import type { INestApplication } from '@nestjs/common';
@@ -148,5 +148,25 @@ describe('NestJS built-in MCP OAuth challenge and audience', () => {
     expect(wrongAudience.headers['www-authenticate']).toContain('error="invalid_token"');
     expect(wrongAudience.headers['www-authenticate']).not.toContain('resource_metadata');
     expect((await postMCP(`aud=${resource}`)).status).toBe(200);
+  });
+  it('serves a provider that cannot check the audience by default, and rejects it with requireAudience', async () => {
+    const apiKeyAuth = () => new SimpleAuth({ tokens: { 'api-key': { id: 'key-user' } } });
+    await start({ auth: apiKeyAuth(), mcp: { oauth: { resource: RESOURCE } } });
+    expect((await postMCP('api-key')).status).toBe(200);
+    await app.close();
+
+    await start({ auth: apiKeyAuth(), mcp: { oauth: { resource: RESOURCE, requireAudience: true } } });
+    const rejected = await postMCP('api-key');
+    expect(rejected.status).toBe(401);
+    expect(rejected.headers['www-authenticate']).toContain('error="invalid_token"');
+  });
+
+  it('with requireAudience, rejects only the CompositeAuth providers that cannot check the audience', async () => {
+    await start({
+      auth: new CompositeAuth([new AudienceAuth(), new SimpleAuth({ tokens: { 'api-key': { id: 'key-user' } } })]),
+      mcp: { oauth: { resource: RESOURCE, requireAudience: true } },
+    });
+    expect((await postMCP(`aud=${RESOURCE}`)).status).toBe(200);
+    expect((await postMCP('api-key')).status).toBe(401);
   });
 });

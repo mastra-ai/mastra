@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { MastraJwtAuth } from '@mastra/auth';
 import { StaticRBACProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
+import { CompositeAuth, SimpleAuth } from '@mastra/core/server';
 import type { ServerConfig, ServerMCPOAuthConfig } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -201,6 +202,57 @@ export function createBuiltinMCPOAuthTestSuite(config: BuiltinMCPOAuthTestSuiteC
           await fetch(`${server.url}/.well-known/oauth-protected-resource/api/mcp`)
         ).json()) as Record<string, unknown>;
         expect(document.resource).toBe(resource);
+      });
+    });
+
+    // SimpleAuth has no verifyAudience, so it cannot tell which API a credential was issued for.
+    describe('providers that cannot check the audience (server.mcp.oauth.requireAudience)', () => {
+      const resource = 'https://mcp.example.com/api/mcp';
+      const apiKeyAuth = () => new SimpleAuth({ tokens: { 'api-key': { id: 'key-user' } } });
+      const jwtAuth = () => new MastraJwtAuth({ jwksUri: jwks.jwksUri, issuer: ISSUER });
+
+      it('serves an API key without oauth.resource', async () => {
+        const server = await serve({ auth: apiKeyAuth(), mcp: {} });
+        expect(await listTools(server.url, 'api-key')).toContain('mastra_tool_echo');
+      });
+
+      it('serves an API key with oauth.resource by default', async () => {
+        const server = await serve({ auth: apiKeyAuth(), mcp: { oauth: { resource } } });
+        expect(await listTools(server.url, 'api-key')).toContain('mastra_tool_echo');
+      });
+
+      it('rejects an API key with 401 invalid_token when requireAudience is on', async () => {
+        const server = await serve({ auth: apiKeyAuth(), mcp: { oauth: { resource, requireAudience: true } } });
+        const response = await postMCP(server.url, 'api-key');
+        expect(response.status).toBe(401);
+        expect(response.headers.get('www-authenticate')).toContain('error="invalid_token"');
+        // Other routes keep accepting the key.
+        const tools = await fetch(`${server.url}/api/tools`, { headers: { authorization: 'Bearer api-key' } });
+        expect(tools.status).toBe(200);
+      });
+
+      it('still serves a JWT issued for the resource when requireAudience is on', async () => {
+        const server = await serve({ auth: jwtAuth(), mcp: { oauth: { resource, requireAudience: true } } });
+        expect(await listTools(server.url, await jwks.sign({ aud: resource }))).toContain('mastra_tool_echo');
+        const wrongAudience = await postMCP(server.url, await jwks.sign({ aud: 'https://other-api.example.com' }));
+        expect(wrongAudience.status).toBe(401);
+      });
+
+      it('rejects a CompositeAuth provider that cannot check the audience when requireAudience is on', async () => {
+        const server = await serve({
+          auth: new CompositeAuth([jwtAuth(), apiKeyAuth()]),
+          mcp: { oauth: { resource, requireAudience: true } },
+        });
+        expect(await listTools(server.url, await jwks.sign({ aud: resource }))).toContain('mastra_tool_echo');
+        expect((await postMCP(server.url, 'api-key')).status).toBe(401);
+      });
+
+      it('serves a CompositeAuth provider that cannot check the audience by default', async () => {
+        const server = await serve({
+          auth: new CompositeAuth([jwtAuth(), apiKeyAuth()]),
+          mcp: { oauth: { resource } },
+        });
+        expect(await listTools(server.url, 'api-key')).toContain('mastra_tool_echo');
       });
     });
 

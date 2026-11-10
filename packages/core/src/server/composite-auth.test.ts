@@ -202,6 +202,14 @@ describe('CompositeAuth OAuth hooks', () => {
     expect(await unchecked.verifyAudience({ token: 'b' }, 'https://mcp')).toBe(true);
   });
 
+  it('reports which provider authenticated a user', async () => {
+    const a = new TokenAuth('a');
+    const b = new TokenAuth('b');
+    const composite = new CompositeAuth([a, b]);
+    expect(composite.getAuthenticatedProvider(await composite.authenticateToken('b', req))).toBe(b);
+    expect(composite.getAuthenticatedProvider({ token: 'b' })).toBeUndefined();
+  });
+
   it('exposes inner providers in order', () => {
     const a = new TokenAuth('a');
     const b = new TokenAuth('b');

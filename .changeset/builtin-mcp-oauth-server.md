@@ -18,4 +18,10 @@ export const mastra = new Mastra({
 });
 ```
 
+Auth providers that can't check the audience, such as `SimpleAuth` API keys, are still accepted, and a warning is logged at startup. Set `requireAudience: true` to reject them on `/api/mcp`, including inside `CompositeAuth`:
+
+```ts
+mcp: { oauth: { resource: 'https://my-app.example.com/api/mcp', requireAudience: true } },
+```
+
 See the [built-in MCP server docs](https://mastra.ai/docs/server/mcp#oauth-discovery).

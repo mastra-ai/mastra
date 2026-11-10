@@ -134,8 +134,21 @@ describe('warnOnUnenforcedMCPAudience', () => {
     warnOnUnenforcedMCPAudience(mastra);
     warnOnUnenforcedMCPAudience(mastra);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]![0]).toContain('token audience is NOT enforced for opaque');
+    expect(warn.mock.calls[0]![0]).toContain('opaque cannot check the token audience');
+    expect(warn.mock.calls[0]![0]).toContain('accepted for any audience');
     expect(warn.mock.calls[0]![0]).not.toContain('jwt');
+  });
+
+  it('says the requests are rejected when requireAudience is on', () => {
+    const mastra = mastraWith({
+      mcp: { oauth: { ...oauth, requireAudience: true } },
+      auth: new TestAuth('opaque'),
+    });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    warnOnUnenforcedMCPAudience(mastra);
+    expect(warn.mock.calls[0]![0]).toContain(
+      'requireAudience is on, so MCP requests authenticated by them are rejected',
+    );
   });
 
   it('stays quiet when every provider checks the audience or no resource is set', () => {

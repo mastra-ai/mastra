@@ -125,19 +125,37 @@ export function mcpWWWAuthenticate(
   return `Bearer ${quoted.join(', ')}`;
 }
 
+type CompositeProvider = IMastraAuthProvider & {
+  getProviders?: () => readonly IMastraAuthProvider[];
+  getAuthenticatedProvider?: (user: unknown) => IMastraAuthProvider | undefined;
+};
+
+/** The innermost provider that authenticated `user`, looking through `CompositeAuth`. Undefined when unknown. */
+function authenticatingLeaf(provider: IMastraAuthProvider, user: unknown): IMastraAuthProvider | undefined {
+  const composite = provider as CompositeProvider;
+  if (typeof composite.getAuthenticatedProvider !== 'function') return provider;
+  const inner = composite.getAuthenticatedProvider(user);
+  return inner && authenticatingLeaf(inner, user);
+}
+
 /**
- * When `server.mcp.oauth.resource` is set, the token's audience must include it.
- * Returns false only when the provider can check the audience and it does not match.
+ * When `server.mcp.oauth.resource` is set, the token's audience must include it. A provider that can't check the
+ * audience is accepted, unless `requireAudience` is on: then the request is rejected.
  */
 export async function checkMCPAudience(mastra: Mastra, user: unknown): Promise<boolean> {
-  const { resource } = getOAuthConfig(mastra);
+  const { resource, requireAudience } = getOAuthConfig(mastra);
+  if (resource === undefined) return true;
   const provider = getAuthProvider(mastra);
-  if (resource === undefined || typeof provider?.verifyAudience !== 'function') return true;
+  if (requireAudience) {
+    const leaf = provider && authenticatingLeaf(provider, user);
+    if (typeof leaf?.verifyAudience !== 'function') return false;
+  }
+  if (typeof provider?.verifyAudience !== 'function') return true;
   return provider.verifyAudience(user, resource);
 }
 
 function leafProviders(provider: IMastraAuthProvider): IMastraAuthProvider[] {
-  const inner = (provider as { getProviders?: () => readonly IMastraAuthProvider[] }).getProviders?.();
+  const inner = (provider as CompositeProvider).getProviders?.();
   return inner ? inner.flatMap(leafProviders) : [provider];
 }
 
@@ -154,11 +172,13 @@ export function warnOnUnenforcedMCPAudience(mastra: Mastra): void {
         .map(p => p.name || 'server.auth')
     : ['server.auth'];
   if (!unenforced.length) return;
+  const consequence = getOAuthConfig(mastra).requireAudience
+    ? 'requireAudience is on, so MCP requests authenticated by them are rejected.'
+    : 'MCP requests authenticated by them are accepted for any audience. Set server.mcp.oauth.requireAudience to reject them.';
   mastra
     .getLogger()
     ?.warn(
-      `server.mcp.oauth.resource is set, but token audience is NOT enforced for ${unenforced.join(', ')}: ` +
-        'these auth providers cannot check the token audience, so MCP requests authenticated by them are accepted for any audience.',
+      `server.mcp.oauth.resource is set, but ${unenforced.join(', ')} cannot check the token audience: ${consequence}`,
     );
 }
 
