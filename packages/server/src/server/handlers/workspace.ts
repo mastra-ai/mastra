@@ -8,6 +8,7 @@
  */
 
 import { coreFeatures } from '@mastra/core/features';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { Workspace, WorkspaceSkills, WorkspaceFilesystem, CompositeFilesystem } from '@mastra/core/workspace';
 
 import { HTTPException } from '../http-exception';
@@ -59,7 +60,7 @@ import {
   skillsShUpdateResponseSchema,
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { listAgentsVisibleTo } from './agent-access';
+import { assertStoredAgentAccess, listAgentsVisibleTo } from './agent-access';
 import { assertReadAccess } from './authorship';
 import { handleError } from './error';
 
@@ -149,7 +150,11 @@ function requireWorkspaceV1Support(): void {
  * Backwards compatible: Falls back to searching through agents if
  * mastra.getWorkspaceById() is not available (older @mastra/core versions).
  */
-async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace | undefined> {
+async function getWorkspaceById(
+  mastra: any,
+  workspaceId: string,
+  requestContext: RequestContext,
+): Promise<Workspace | undefined> {
   requireWorkspaceV1Support();
 
   // Check if the global workspace matches
@@ -160,16 +165,23 @@ async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Works
 
   // Try direct registry lookup if available (newer @mastra/core versions)
   if (typeof mastra.getWorkspaceById === 'function') {
+    let workspace: Workspace | undefined;
     try {
-      return mastra.getWorkspaceById(workspaceId);
+      workspace = mastra.getWorkspaceById(workspaceId);
     } catch {
       // Workspace not found in registry
       return undefined;
     }
+    // A stored agent's workspace is as private as the agent: treat it as missing for callers who can't see the agent.
+    const entry = typeof mastra.listWorkspaces === 'function' ? mastra.listWorkspaces()[workspaceId] : undefined;
+    if (entry?.source === 'agent' && entry.agentId) {
+      if (!(await isAgentWorkspaceVisible(mastra, entry.agentId, requestContext))) return undefined;
+    }
+    return workspace;
   }
 
   // Fallback: Search through agents for the workspace (older @mastra/core versions)
-  const agents = mastra.listAgents?.() ?? {};
+  const agents = listAgentsVisibleTo(mastra.listAgents?.(), requestContext);
   for (const agent of Object.values(agents)) {
     if ((agent as any).hasOwnWorkspace?.()) {
       const agentWorkspace = await (agent as any).getWorkspace?.();
@@ -186,9 +198,41 @@ async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Works
  * Get skills from a specific workspace by ID.
  * Note: getWorkspaceById already checks for workspace v1 support.
  */
-async function getSkillsById(mastra: any, workspaceId: string): Promise<WorkspaceSkills | undefined> {
-  const workspace = await getWorkspaceById(mastra, workspaceId);
+async function getSkillsById(
+  mastra: any,
+  workspaceId: string,
+  requestContext: RequestContext,
+): Promise<WorkspaceSkills | undefined> {
+  const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
   return workspace?.skills;
+}
+
+/**
+ * Agents register their workspace once used, so a registered workspace can belong to a stored agent the caller can't
+ * see. Editing a stored agent unregisters it from Mastra but leaves its workspace registered, so an agent that isn't
+ * registered is checked against its stored record. Lookup errors hide the workspace.
+ */
+async function isAgentWorkspaceVisible(mastra: any, agentId: string, requestContext: RequestContext): Promise<boolean> {
+  try {
+    let agent;
+    try {
+      agent = mastra.getAgentById(agentId);
+    } catch {
+      agent = undefined;
+    }
+    if (agent) {
+      assertStoredAgentAccess({ agent, agentId, requestContext, access: 'read' });
+      return true;
+    }
+    const agentsStore = await mastra.getStorage()?.getStore('agents');
+    const record = await agentsStore?.getById(agentId);
+    if (record) {
+      assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -275,23 +319,6 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
       // Dynamic workspaces get lazily registered during agent execution (stream/generate).
       if (typeof mastra.listWorkspaces === 'function') {
         const registeredWorkspaces = mastra.listWorkspaces();
-        const allAgents = mastra.listAgents?.() ?? {};
-        const visibleAgents = listAgentsVisibleTo(allAgents, requestContext);
-        // Editing a stored agent unregisters it from Mastra but leaves its workspace registered, so an agent that
-        // isn't registered is checked against its stored record. Lookup errors hide the entry.
-        const isAgentWorkspaceVisible = async (agentId: string): Promise<boolean> => {
-          if (agentId in allAgents) return agentId in visibleAgents;
-          try {
-            const agentsStore = await mastra.getStorage()?.getStore('agents');
-            const record = await agentsStore?.getById(agentId);
-            if (record) {
-              assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
-            }
-            return true;
-          } catch {
-            return false;
-          }
-        };
 
         for (const [, entry] of Object.entries(registeredWorkspaces)) {
           // Newer @mastra/core returns { workspace, source, agentId?, agentName? }.
@@ -301,7 +328,9 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
           const agentId: string | undefined = (entry as any).agentId;
           const agentName: string | undefined = (entry as any).agentName;
           // Agents register their workspace here once used; skip those of stored agents the caller can't see.
-          if (source === 'agent' && agentId && !(await isAgentWorkspaceVisible(agentId))) continue;
+          if (source === 'agent' && agentId && !(await isAgentWorkspaceVisible(mastra, agentId, requestContext))) {
+            continue;
+          }
 
           workspaces.push({
             id: ws.id,
@@ -405,9 +434,9 @@ export const GET_WORKSPACE_ROUTE = createRoute({
   summary: 'Get workspace info',
   description: 'Returns information about a specific workspace and its capabilities',
   tags: ['Workspace'],
-  handler: async ({ mastra, workspaceId }) => {
+  handler: async ({ mastra, requestContext, workspaceId }) => {
     try {
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
 
       if (!workspace) {
         return {
@@ -504,7 +533,7 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
   summary: 'Read file content',
   description: 'Returns the content of a file at the specified path',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, encoding, workspaceId }) => {
+  handler: async ({ mastra, requestContext, path, encoding, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -512,7 +541,7 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Path is required' });
       }
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
@@ -550,7 +579,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   summary: 'Write file content',
   description: 'Writes content to a file at the specified path. Supports base64 encoding for binary files.',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, content, encoding, recursive, workspaceId }) => {
+  handler: async ({ mastra, requestContext, path, content, encoding, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -558,7 +587,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Path and content are required' });
       }
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
@@ -597,7 +626,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
   summary: 'List directory contents',
   description: 'Returns a list of files and directories at the specified path',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, recursive, workspaceId }) => {
+  handler: async ({ mastra, requestContext, path, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -605,7 +634,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Path is required' });
       }
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace?.filesystem) {
         return {
           path,
@@ -643,7 +672,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
   summary: 'Delete file or directory',
   description: 'Deletes a file or directory at the specified path',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, recursive, force, workspaceId }) => {
+  handler: async ({ mastra, requestContext, path, recursive, force, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -651,7 +680,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Path is required' });
       }
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
@@ -697,7 +726,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
   summary: 'Create directory',
   description: 'Creates a directory at the specified path',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, recursive, workspaceId }) => {
+  handler: async ({ mastra, requestContext, path, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -705,7 +734,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Path is required' });
       }
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
@@ -738,7 +767,7 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
   summary: 'Get file/directory info',
   description: 'Returns metadata about a file or directory',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, workspaceId }) => {
+  handler: async ({ mastra, requestContext, path, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -746,7 +775,7 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Path is required' });
       }
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
@@ -788,7 +817,7 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
   summary: 'Search workspace content',
   description: 'Searches across indexed workspace content using BM25, vector, or hybrid search',
   tags: ['Workspace'],
-  handler: async ({ mastra, query, topK, mode, minScore, workspaceId }) => {
+  handler: async ({ mastra, requestContext, query, topK, mode, minScore, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -796,7 +825,7 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Search query is required' });
       }
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace) {
         return {
           results: [],
@@ -860,7 +889,7 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
   summary: 'Index content for search',
   description: 'Indexes content for later search operations',
   tags: ['Workspace'],
-  handler: async ({ mastra, path, content, metadata, workspaceId }) => {
+  handler: async ({ mastra, requestContext, path, content, metadata, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -868,7 +897,7 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Path and content are required' });
       }
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace) {
         throw new HTTPException(404, { message: 'No workspace configured' });
       }
@@ -910,7 +939,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
     try {
       requireWorkspaceV1Support();
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       const skills = workspace?.skills;
       if (!skills) {
         return { skills: [], isSkillsConfigured: false };
@@ -986,7 +1015,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ?? skillName;
 
-      const skills = await getSkillsById(mastra, workspaceId);
+      const skills = await getSkillsById(mastra, workspaceId, requestContext);
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
@@ -1039,7 +1068,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ?? skillName;
 
-      const skills = await getSkillsById(mastra, workspaceId);
+      const skills = await getSkillsById(mastra, workspaceId, requestContext);
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
@@ -1081,7 +1110,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = skillPath ?? skillName;
 
-      const skills = await getSkillsById(mastra, workspaceId);
+      const skills = await getSkillsById(mastra, workspaceId, requestContext);
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
@@ -1138,7 +1167,7 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Search query is required' });
       }
 
-      const skills = await getSkillsById(mastra, workspaceId);
+      const skills = await getSkillsById(mastra, workspaceId, requestContext);
       if (!skills) {
         return {
           results: [],
@@ -1433,11 +1462,11 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
   summary: 'Install skill from Skills API',
   description: 'Installs a skill by fetching files from the Skills API and writing to workspace filesystem.',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, workspaceId, owner, repo, skillName, mount }) => {
+  handler: async ({ mastra, requestContext, workspaceId, owner, repo, skillName, mount }) => {
     try {
       requireWorkspaceV1Support();
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace) {
         throw new HTTPException(404, { message: 'Workspace not found' });
       }
@@ -1549,11 +1578,11 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
   summary: 'Remove an installed skill',
   description: 'Removes an installed skill by deleting its directory. Does not require sandbox.',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, workspaceId, skillName }) => {
+  handler: async ({ mastra, requestContext, workspaceId, skillName }) => {
     try {
       requireWorkspaceV1Support();
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace) {
         throw new HTTPException(404, { message: 'Workspace not found' });
       }
@@ -1622,11 +1651,11 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
   description:
     'Updates installed skills by re-fetching from GitHub. Specify skillName to update one, or omit to update all.',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, workspaceId, skillName }) => {
+  handler: async ({ mastra, requestContext, workspaceId, skillName }) => {
     try {
       requireWorkspaceV1Support();
 
-      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId, requestContext);
       if (!workspace) {
         throw new HTTPException(404, { message: 'Workspace not found' });
       }

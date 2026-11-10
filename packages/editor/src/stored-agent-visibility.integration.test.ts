@@ -461,6 +461,32 @@ describe('stored agent visibility on /api/agents', () => {
     expect(theirs.text).not.toContain(PRIVATE_WS);
     expect(theirs.text).not.toContain('alice-secret-workspace');
 
+    // The by-id routes read and write the workspace's files, so knowing its id must not be enough either.
+    const workspaceId = (mine.json.workspaces as Array<{ id: string; agentId?: string }>).find(
+      w => w.agentId === PRIVATE_WS,
+    )!.id;
+    // Bob gets exactly what a workspace id that doesn't exist gets.
+    const byId = [
+      ['GET', (id: string) => `/workspaces/${id}`],
+      ['GET', (id: string) => `/workspaces/${id}/fs/list?path=.`],
+      ['GET', (id: string) => `/workspaces/${id}/fs/stat?path=.`],
+      ['POST', (id: string) => `/workspaces/${id}/fs/write`, { path: '/bob.txt', content: 'hi' }],
+      ['GET', (id: string) => `/workspaces/${id}/skills`],
+    ] as const;
+    const expectHidden = async () => {
+      for (const [method, path, body] of byId) {
+        const real = await http('bob', method, path(workspaceId), body);
+        const missing = await http('bob', method, path('inline-000000000000'), body);
+        expect({ status: real.status, json: real.json }, `${method} ${path(workspaceId)}`).toEqual({
+          status: missing.status,
+          json: missing.json,
+        });
+      }
+      const own = await http('alice', 'GET', `/workspaces/${workspaceId}/fs/list?path=.`);
+      expect(own.status, own.text).toBe(200);
+    };
+    await expectHidden();
+
     // Editing the agent unregisters it from Mastra, but its workspace stays in the workspace registry.
     expect((await http('alice', 'PATCH', `/stored/agents/${PRIVATE_WS}`, { description: 'edited' })).status).toBe(200);
     const afterEdit = await http('bob', 'GET', '/workspaces');
@@ -468,6 +494,7 @@ describe('stored agent visibility on /api/agents', () => {
     expect(afterEdit.text).not.toContain(PRIVATE_WS);
     expect(afterEdit.text).not.toContain('alice-secret-workspace');
     expect((await http('alice', 'GET', '/workspaces')).text).toContain(PRIVATE_WS);
+    await expectHidden();
 
     // Deleting the agent leaves no stored record to check its registered workspace against.
     expect((await http('alice', 'DELETE', `/stored/agents/${PRIVATE_WS}`)).status).toBe(200);
