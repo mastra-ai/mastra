@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
+import { createBoardRegistry } from '../../boards/index.js';
 import { ProjectBoardCache } from '../../boards/project-boards.js';
 
 import { createTriageWorkRegistry } from '../../boards/test-utils.js';
@@ -201,7 +202,14 @@ async function harness(
     // The project's Work row as Factory stored it back then: its row is its board from then on.
     await seeded.boards.insertIfMissing(scope, workSeedWithSelfReview(), 'factory');
   }
+  // Ship runs with Factory's own registry, as production does; the Work loops walk Work as stored.
+  const codeRegistry = loop.board === 'ship' ? createBoardRegistry() : createTriageWorkRegistry();
+  const boards = new ProjectBoardCache({ codeRegistry, storage: seeded.boards, recheckMs: 0 });
   if (loop.board === 'ship') {
+    // An admin adds Ship to a project that already stored Factory's boards: the board API
+    // stores them before a project's first board of its own, so Work sits beside Ship.
+    await boards.load(scope);
+    expect(await seeded.boards.get(scope, 'work')).not.toBeNull();
     // The board goes in through the same write path the API and the UI use, and the
     // project's routes send its issues and pull requests there, ahead of Work's defaults.
     await seeded.boards.create(scope, ship, 'admin');
@@ -235,7 +243,6 @@ async function harness(
     );
   }
 
-  const boards = new ProjectBoardCache({ codeRegistry: createTriageWorkRegistry(), storage: seeded.boards, recheckMs: 0 });
   const configVersion = 'any-board-pr-loop-v1';
   const transitionService = new FactoryTransitionService({ storage: workItems, configVersion, boards });
   const rules = new GithubRules({

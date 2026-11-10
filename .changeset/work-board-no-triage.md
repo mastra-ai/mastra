@@ -18,4 +18,4 @@ await factory.prepare();
 await factory.upsertBoard(ourWorkBoardDefinition, { projects: 'all' });
 ```
 
-Passing a board of your own with the `work` ID in `boards` now throws, since Work is always installed.
+Passing a board of your own with the `work` ID in `boards` now throws, since Work is always installed: apps that set `includeDefaultBoards: false` and passed their own `work` board must move it to `upsertBoard` as shown above.

@@ -449,7 +449,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
    * Reads one row when every key was stored before. Returns the keys it inserted.
    *
    * A key in `onlyIntoEmpty` is inserted only into a project that has no boards at all: one that
-   * already has any board, such as one an app stored under that key, is left as it is. The
+   * already has any board, such as one an app stored under that key, is left as it is. The key
+   * is still recorded as stored, so it never goes in later, even after the project's boards are
+   * deleted: that project chose its boards, and Work is never added beside or after them. The
    * `intoEmpty` boards (an app's, for every project) go first into a project with no boards, so
    * Factory's own under the same key, or in `onlyIntoEmpty`, then stay out. `actor` is recorded
    * as the inserted boards' creator.
