@@ -670,6 +670,47 @@ describe('SourceControlStorage', () => {
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-2' } });
   });
 
+  // A rule-started session borrows its owner's credentials, and labeling its GitHub writes with
+  // that owner credits someone who never asked for them.
+  it('keeps a session nobody asked for unattributed until a person takes it over', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000035',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      unattributed: true,
+      branch: 'factory/issue-35',
+      baseBranch: 'main',
+    });
+    expect(session.unattributed).toBe(true);
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ unattributed: true });
+
+    await expect(
+      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
+    ).resolves.toMatchObject({ status: 'updated', session: { userId: 'user-2', unattributed: false } });
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ unattributed: false });
+  });
+
+  it('reads a session as asked for by its owner when it is created without saying, or predates the column', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000036',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000036',
+      baseBranch: 'main',
+    });
+    expect(session.unattributed).toBe(false);
+
+    // Simulate a legacy row from before the column existed.
+    await backend.ops.updateMany('source_control_sessions', { session_id: session.sessionId }, { unattributed: null });
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ unattributed: false });
+  });
+
   it('transfers a legacy shared session whose visibility was never written', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

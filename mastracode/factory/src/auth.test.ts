@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   FACTORY_INTERACTIVE_KEY,
-  getFactoryActingUserId,
+  getFactoryCallerId,
   createFactoryInteractiveMarker,
   ensureFactoryAuthUser,
   factoryUserOrgId,
@@ -466,7 +466,7 @@ describe('mountFactoryAuth gate (enabled)', () => {
       const requestContext = c.get('requestContext' as never) as RequestContext;
       return {
         interactive: requestContext.get(FACTORY_INTERACTIVE_KEY) === true,
-        actingUserId: getFactoryActingUserId(requestContext) ?? null,
+        actingUserId: getFactoryCallerId(requestContext) ?? null,
       };
     };
     app.get('/web/whoami', c => c.json(turn(c)));

@@ -6,29 +6,31 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { FACTORY_ACTING_USER_KEY } from '../auth.js';
+import { FACTORY_CALLER_KEY } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { ensureFactorySourceSession } from './factory-session.js';
 import { selfReviewApprovedHead } from './self-review-gate.js';
 import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.js';
 
-/** `userId` is whose credentials run the turn; `actingUserId` is the person it is for, `null` when nobody. */
+/** `userId` is whose credentials run the turn; `callerId` is the person present on it, `null` when nobody is. */
 function requestContext({
   orgId = 'org-1',
   userId = 'user-1',
-  actingUserId = userId,
-}: { orgId?: string; userId?: string; actingUserId?: string | null } = {}) {
+  callerId = userId,
+  sessionId = 'session-1',
+}: { orgId?: string; userId?: string; callerId?: string | null; sessionId?: string } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
-  if (actingUserId) requestContext.set(FACTORY_ACTING_USER_KEY, actingUserId);
+  if (callerId) requestContext.set(FACTORY_CALLER_KEY, callerId);
   requestContext.set('controller', {
     // The session runs under its Factory, so only its session id names the source-control session.
-    sessionId: 'session-1',
+    sessionId,
     resourceId: 'project-1',
     threadId: 'thread-1',
-    session: { id: 'session-1', ownerId: userId },
+    session: { id: sessionId, ownerId: userId },
     getState: () => ({ factoryProjectId: 'project-1', projectRepositoryId: 'repo-link-1' }),
   } as unknown as AgentControllerRequestContext);
   return requestContext;
@@ -200,16 +202,15 @@ describe('createSourceControlTools', () => {
     });
   });
 
-  // The turn runs on the session owner's credentials (`user-1`, who also connected the
-  // repository), so naming that owner labels the write with someone who never asked for it.
+  // `user-1` connected the repository and owns `session-1`. A turn in that session runs on their
+  // credentials whoever sent the message, so naming them credits a write someone else asked for.
   it.each([
-    { who: 'the teammate', turn: 'they drive the session from Slack', actingUserId: 'teammate-1' },
-    { who: 'the approver', turn: 'a run they released opens it', actingUserId: 'approver-1' },
-    { who: 'nobody', turn: 'a rule-triggered run opens it', actingUserId: null },
-  ])('names $who on a change request when $turn', async ({ actingUserId }) => {
+    { who: 'the teammate', when: 'they drive the session from Slack', callerId: 'teammate-1', named: 'teammate-1' },
+    { who: 'the owner', when: 'the session works on with nobody present', callerId: null, named: 'user-1' },
+  ])('names $who on a change request when $when', async ({ callerId, named }) => {
     const setup = await fixture();
     const tools = await createSourceControlTools({
-      requestContext: requestContext({ actingUserId }),
+      requestContext: requestContext({ callerId }),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });
@@ -219,11 +220,47 @@ describe('createSourceControlTools', () => {
     expect(setup.createPullRequest).toHaveBeenCalledWith({
       connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
       sourceId: 'acme/repo',
-      ...(actingUserId ? { actingUserId } : {}),
+      actingUserId: named,
       title: 'Ship it',
       body: 'Body',
       baseBranch: 'main',
       headBranch: 'factory/issue-1',
+    });
+  });
+
+  // A session a rule starts has no person behind it and borrows the credentials of whoever
+  // connected the repository (`user-1`). Its comments, reviews and change requests were labeled
+  // with that connector, and the change requests assigned to them.
+  it.each([
+    { who: 'nobody', when: 'a rule started the session', releasedBy: undefined },
+    { who: 'the person who released it', when: 'a person released the run', releasedBy: 'approver-1' },
+  ])('names $who on a change request when $when', async ({ releasedBy }) => {
+    const setup = await fixture();
+    const session = await ensureFactorySourceSession({
+      sourceControl: setup.storage,
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      branch: 'factory/issue-2',
+      ...(releasedBy ? { attributeToUserId: releasedBy } : {}),
+    });
+    const tools = await createSourceControlTools({
+      // A dispatcher turn: the session owner's credentials run it and nobody is present.
+      requestContext: requestContext({ userId: session.userId, sessionId: session.sessionId, callerId: null }),
+      providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+
+    await (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it', body: 'Body' });
+
+    expect(session.userId).toBe(releasedBy ?? 'user-1');
+    expect(setup.createPullRequest).toHaveBeenCalledWith({
+      connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
+      sourceId: 'acme/repo',
+      actingUserId: releasedBy,
+      title: 'Ship it',
+      body: 'Body',
+      baseBranch: 'main',
+      headBranch: 'factory/issue-2',
     });
   });
 

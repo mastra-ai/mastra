@@ -5,10 +5,10 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
 import {
-  getFactoryActingUserId,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
+  getFactoryCallerId,
 } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
@@ -278,15 +278,12 @@ export async function createSourceControlTools({
   const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
     withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
-  // Who the turn's writes are for. Not `target.userId`: that is whose credentials
-  // run the turn, often whoever connected the repository.
-  const actingUserId = getFactoryActingUserId(requestContext);
-  const reference = async (target: SessionTarget) => ({
-    ...(await target.provider.versionControl.getRepositoryTarget({
-      orgId: target.orgId,
-      repositoryId: target.repository.id,
-    })),
-    actingUserId,
+  // Who a write is for: the person present on the turn, else the session's owner,
+  // unless nobody asked for the session and its owner only lends credentials.
+  const callerId = getFactoryCallerId(requestContext);
+  const reference = async ({ provider, orgId, repository, session }: SessionTarget) => ({
+    ...(await provider.versionControl.getRepositoryTarget({ orgId, repositoryId: repository.id })),
+    actingUserId: callerId ?? (session.unattributed ? undefined : session.userId),
   });
 
   return {

@@ -14,7 +14,7 @@ import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
-import { FACTORY_ACTING_USER_KEY, FACTORY_INTERACTIVE_KEY } from '../../auth.js';
+import { FACTORY_CALLER_KEY, FACTORY_INTERACTIVE_KEY } from '../../auth.js';
 import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
@@ -916,7 +916,7 @@ async function gateDispatch(
       // must act as the authenticated Slack sender, not the session owner.
       ctx.requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: sender.link.userId, orgId: sender.link.orgId });
       ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
-      ctx.requestContext.set(FACTORY_ACTING_USER_KEY, sender.link.userId);
+      ctx.requestContext.set(FACTORY_CALLER_KEY, sender.link.userId);
     }
     const { runFactory } = ownerContext;
     const factoryId =

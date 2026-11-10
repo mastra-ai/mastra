@@ -298,6 +298,8 @@ export function createFactorySessionTools(
         branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
         // Bills the caller: the credential tenant follows the row's user.
         attributeToUserId: scope.userId,
+        // A session nobody asked for starts side sessions nobody asked for either.
+        unattributed: parent.unattributed && !scope.interactive,
         // Same repository as the session that started it.
         ...(parent.projectRepositoryId ? { projectRepositoryId: parent.projectRepositoryId } : {}),
         visibility: parent.visibility,

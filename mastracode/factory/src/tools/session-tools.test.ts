@@ -36,7 +36,7 @@ vi.mock('../routes/tenant-credentials.js', async importOriginal => ({
 
 const prime = vi.mocked(primeTenantCredentialsForTenant);
 
-async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'org') {
+async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'org', unattributedParent = false) {
   const seed = await createFactoryStorageForTests();
   const sourceControl = seed.sourceControl.forIntegration('github');
   const created = await seed.projects.create({ orgId: 'org-1', userId: 'owner', input: { name: 'Mastra' } });
@@ -74,6 +74,7 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
     branch: 'user/session-parent-session',
     baseBranch: 'main',
     visibility: parentVisibility,
+    unattributed: unattributedParent,
   });
   const sessions = createSourceControlSessionLookup([sourceControl]);
   const scope: FactoryToolScope = {
@@ -206,9 +207,12 @@ async function setup(
     deploymentProviders,
     tenantCredentials = false,
     interactive = true,
+    unattributedParent = false,
   }: {
     /** False for a turn nobody signed in started: a notification wake, webhook, or rule notice. */
     interactive?: boolean;
+    /** True when a rule started the parent session, so nobody asked for it. */
+    unattributedParent?: boolean;
     coordinator?: 'real' | 'none';
     wrapPrepare?: (prepare: Prepare) => Prepare;
     /** Deployed mode: model switches check the target session's stored credentials. */
@@ -216,7 +220,7 @@ async function setup(
     deploymentProviders?: ReadonlySet<string>;
   } = {},
 ) {
-  const seeded = await seedFactory(parentVisibility);
+  const seeded = await seedFactory(parentVisibility, unattributedParent);
   const calls: string[] = [];
   prime.mockImplementation(async () => void calls.push('prime'));
   // Every session gets the run-report listener, as the Factory's session-created hook attaches it.
@@ -588,6 +592,23 @@ describe('factory_start_session in side mode', () => {
     expect(result.title).toBe('Investigation');
     await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ visibility: 'private' });
   });
+
+  // A rule-started session runs on the repository connector's credentials, and the side session it
+  // starts is billed to that same owner. Unmarked, it would label its GitHub writes with the connector.
+  it.each([
+    { asked: 'nobody', turn: 'a turn nobody is present on', interactive: false, unattributed: true },
+    { asked: 'the person', turn: 'a turn a person asks for it on', interactive: true, unattributed: false },
+  ])(
+    'records that $asked asked for a side session a rule-started session starts on $turn',
+    async ({ interactive, unattributed }) => {
+      const { start, sessions } = await setup('org', { interactive, unattributedParent: true });
+      const result = (await start({ prompt: 'Look into it.' })) as { sessionId: string };
+      await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({
+        userId: 'user-1',
+        unattributed,
+      });
+    },
+  );
 
   it("runs a private side session on its owner's memory resource, not the Factory's", async () => {
     const { start, created, scope } = await setup('private');
