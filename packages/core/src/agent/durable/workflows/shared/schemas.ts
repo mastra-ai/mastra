@@ -214,6 +214,10 @@ export const baseIterationStateSchema = z.object({
   // Set when onIterationComplete returns { continue: false, feedback } — allows
   // one more LLM turn with the feedback, then stops on the next predicate eval.
   pendingFeedbackStop: z.boolean().optional(),
+  // The response messages the run's step-finish events have sent (see agent/streams/response-messages.ts)
+  responseMessagesCursor: z
+    .object({ producer: z.string(), seq: z.number(), fingerprints: z.array(z.string()) })
+    .optional(),
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),

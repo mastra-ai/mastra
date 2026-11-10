@@ -14,6 +14,7 @@ import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
+import { currentRunGeneration } from '../../../storage/run-fencing';
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
@@ -22,6 +23,8 @@ import { markFrameworkCondition } from '../../../workflows/framework-condition';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
+import { diffResponseMessages } from '../../streams/response-messages';
+import type { ResponseMessagesCursor } from '../../streams/response-messages';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
 import {
   isExecutionFenceError,
@@ -695,18 +698,28 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         if (!deferredChunk) return;
 
         // Carry the step's response messages so `onStepFinish(event).response.messages` and
-        // `output.steps[i].response.messages` match the regular loop (#26780).
+        // `output.steps[i].response.messages` match the regular loop (#26780). Only the part that
+        // changed since the previous step-finish is sent; readers rebuild the list. The cursor
+        // travels with the iteration state, so a step on another worker continues it, and each
+        // claim generation starts over with the whole list.
+        let nextCursor: ResponseMessagesCursor | undefined;
         try {
           const list = createRunMessageList({ mastra: rt.mastra }).deserialize(
             (transcript ?? (await openMessageListState(params, state))).read(),
           );
-          deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+          const producer = `${state.runId}:${currentRunGeneration(state.runId) ?? 0}`;
+          const cursor =
+            state.responseMessagesCursor?.producer === producer ? state.responseMessagesCursor : { producer };
+          const { diff, cursor: next } = diffResponseMessages(cursor, list.get.response.aiV5.model());
+          deferredChunk.payload._durableResponseMessagesDiff = diff;
+          nextCursor = next;
         } catch (error) {
           rt.logger?.warn?.(`[DurableAgent] Could not rebuild step-finish messages: ${error}`);
         }
 
         try {
           await this.emitChunk(rt, deferredChunk);
+          if (nextCursor) state.responseMessagesCursor = nextCursor;
         } catch (error) {
           rt.logger?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }
