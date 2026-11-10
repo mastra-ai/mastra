@@ -1,5 +1,4 @@
 import { z } from 'zod/v4';
-import { observabilityTextSearchSchema } from './text-search';
 import {
   defaultDeltaLimit,
   deltaCursorSchema,
@@ -8,6 +7,7 @@ import {
   paginationArgsSchema,
   paginationInfoSchema,
 } from '../shared';
+import { observabilityTextSearchSchema } from './text-search';
 import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
