@@ -29,6 +29,12 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
+To use Mastra's product fonts, Mona Sans for text and Commit Mono for code, add `fonts.css`. It loads both as woff2 split by script, so a page only downloads the characters it renders, and points the font tokens at them. Without it, text uses the system font stacks.
+
+```css
+@import '@mastra/playground-ui/fonts.css';
+```
+
 ### Metadata
 
 Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows.
@@ -507,9 +513,9 @@ Mono pairs with the text roles: `body` for logs, `body-sm` for values in tables 
 
 Product code never writes the `font-mono` class, and lint rejects it outside the design system. Use `Txt font="mono"` for identifiers, timestamps, and durations, `InlineCode` or `CodeBlock` for code, and `tabular-nums` for numbers. A raw `<pre>` or `<code>` element is already monospace.
 
-`--font-mono` defaults to the system monospace stack. Override it in an unlayered rule in your own CSS to use a product face, and every mono value follows.
+`--font-mono` defaults to the system monospace stack, and `fonts.css` points it at Commit Mono. To use another face, override it in an unlayered rule in your own CSS, and every mono value follows.
 
-At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `0.508` is Mona Sans. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
+At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `fonts.css` sets `0.508` for Mona Sans. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
 
 ```css
 :root {

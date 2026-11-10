@@ -1,0 +1,31 @@
+/*
+ * Mastra's product fonts, for apps built on this design system: Mona Sans for
+ * display and body text, Commit Mono for code. Opt in with one import next to
+ * the package's other stylesheets:
+ *
+ *   @import '@mastra/playground-ui/fonts.css';
+ *
+ * Both faces are SIL OFL and come from Fontsource as woff2, split by script
+ * through `unicode-range`, so a page only downloads the scripts it renders.
+ * Their licences ship inside the @fontsource packages.
+ *
+ * Mona Sans uses its default letterforms, the same ones GitHub and Google Fonts
+ * show; no stylistic sets are switched on.
+ */
+
+@import '@fontsource-variable/mona-sans/standard.css';
+@import '@fontsource-variable/mona-sans/standard-italic.css';
+@import '@fontsource/commit-mono/400.css';
+@import '@fontsource/commit-mono/700.css';
+
+/* Unlayered, so these win over the system-stack defaults in theme/typography.css. */
+:root {
+  --font-display:
+    'Mona Sans Variable', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-body: var(--font-display);
+  --font-mono:
+    'Commit Mono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+  /* Commit Mono's lowercase is taller than Mona Sans's; scale mono text to Mona Sans's x-height. */
+  --font-mono-size-adjust: ex-height 0.508;
+}

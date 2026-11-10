@@ -12,15 +12,17 @@ import type { Plugin } from 'vite';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Resolve the mona-sans font package root. In the monorepo workspace the
- * package is a pnpm symlink into the virtual store; in the standalone web
- * host (linked via `link:`) it sits in the host's node_modules. realpathSync
- * resolves the symlink so Vite can serve font files in dev without exposing
- * the entire pnpm store.
+ * The product fonts come from `@mastra/playground-ui/fonts.css`, which imports
+ * them from Playground UI's own Fontsource dependencies. pnpm links those into
+ * its store, outside the workspace root, so Vite may only serve their font files
+ * once each package's real folder is allowed. Resolving through Playground UI
+ * keeps the rest of the store out of reach.
  */
-const monaSansEntry = resolve(here, '../node_modules/@fontsource-variable/mona-sans');
-const monaSansPackageRoot = realpathSync(monaSansEntry);
-const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
+const playgroundUiRoot = realpathSync(resolve(here, '../node_modules/@mastra/playground-ui'));
+const fontPackageRoots = ['@fontsource-variable/mona-sans', '@fontsource/commit-mono'].map(name =>
+  realpathSync(resolve(playgroundUiRoot, 'node_modules', name)),
+);
+const fsAllow = [searchForWorkspaceRoot(here), ...fontPackageRoots];
 
 /**
  * Dev-proxy target for the API server and the UI dev-server port. Overridable
