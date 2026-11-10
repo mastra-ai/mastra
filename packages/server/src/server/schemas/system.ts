@@ -37,6 +37,8 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       'Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead.',
     ),
+  traceQueryTextSearch: z.boolean().describe('Literal substring search across any span in a trace'),
+  spanQueryTextSearch: z.boolean().describe('Literal substring search within individual spans'),
   traceQueryRootDuration: z.boolean().describe('`durationMs` predicates in trace and thread queries'),
   traceQueryContextIds: z
     .boolean()

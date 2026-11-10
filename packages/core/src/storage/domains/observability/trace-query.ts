@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { observabilityTextSearchSchema } from './text-search';
 import {
   defaultDeltaLimit,
   deltaCursorSchema,
@@ -342,6 +343,7 @@ const pageSchema = z
 
 const traceQueryRequestObjectSchema = z
   .object({
+    textSearch: observabilityTextSearchSchema.optional(),
     timeRange: traceQueryTimeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
     /**
@@ -371,7 +373,7 @@ const traceQueryRequestObjectSchema = z
   .strict()
   .superRefine((request, context) => {
     if (request.mode === 'delta') {
-      for (const field of ['page', 'pagination', 'group', 'orderBy'] as const) {
+      for (const field of ['page', 'pagination', 'group', 'orderBy', 'textSearch'] as const) {
         if (request[field] !== undefined) {
           context.addIssue({ code: 'custom', path: [field], message: `Delta trace queries do not support ${field}` });
         }
@@ -858,6 +860,8 @@ export interface TraceQueryTenantScope {
 
 export interface TrustedTraceQueryBasePlan {
   timeRange: { from: string; to: string };
+  /** Literal substring search; a trace matches any indexed span, including nested spans. */
+  textSearch?: string;
   where?: TrustedTraceQueryPredicate;
   scope?: TraceQueryTenantScope;
 }

@@ -2251,3 +2251,41 @@ describe('trace-query responses and storage capability', () => {
     ).rejects.toMatchObject({ id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED' });
   });
 });
+
+describe('trace text search', () => {
+  it.each(['', '   ', 'ab', '😀😀', 'x'.repeat(1025), null, 123])('rejects invalid search input: %j', textSearch => {
+    expect(() => parsed({ ...baseRequest, textSearch })).toThrow(TraceQueryValidationError);
+  });
+
+  it('carries normalized search through keyset, page, and grouped plans', () => {
+    for (const fields of [{}, { pagination: { page: 0, perPage: 20 } }, { group: { by: ['threadId'] } }]) {
+      expect(planTraceQuery(parsed({ ...baseRequest, ...fields, textSearch: '  ERROR  50%_  ' }))).toMatchObject({
+        textSearch: 'error  50%_',
+      });
+    }
+  });
+
+  it('binds trace and group cursors to search', () => {
+    for (const group of [undefined, { by: ['threadId'] }]) {
+      const plan = planTraceQuery(parsed({ ...baseRequest, group, textSearch: ' ERROR ' }));
+      if (plan.paginationMode !== 'keyset') throw new Error('Expected keyset plan');
+      const values =
+        plan.result === 'groups'
+          ? { result: 'groups' as const, threadId: 'thread-1' }
+          : { result: 'traces' as const, traceId: 'trace-1', sortValue: '2026-08-15T00:00:00.000Z' };
+      const after = encodeTraceQueryCursor(plan, values);
+      expect(planTraceQuery(parsed({ ...baseRequest, group, textSearch: 'error', page: { after } }))).toMatchObject({
+        binding: plan.binding,
+      });
+      for (const textSearch of ['timeout', undefined]) {
+        expect(() => planTraceQuery(parsed({ ...baseRequest, group, textSearch, page: { after } }))).toThrow(
+          TraceQueryCursorError,
+        );
+      }
+    }
+  });
+
+  it('rejects text search in delta mode because root updates cannot track matching child arrivals', () => {
+    expect(() => parsed({ ...baseRequest, textSearch: 'error', mode: 'delta' })).toThrow(TraceQueryValidationError);
+  });
+});
