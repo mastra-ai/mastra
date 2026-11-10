@@ -263,14 +263,20 @@ export function createBuiltinMCPOAuthTestSuite(config: BuiltinMCPOAuthTestSuiteC
       expect((await fetch(`${server.url}/.well-known/oauth-protected-resource/api/mcp`)).status).toBe(404);
     });
 
-    it('turns discovery and audience checks off for an invalid resource instead of failing requests', async () => {
-      const server = await serveWithJwt({ resource: 'mcp.example.com/api/mcp' });
+    it('keeps enforcing the audience for an invalid resource, but turns discovery off', async () => {
+      const resource = 'http://mcp.example.com/api/mcp';
+      const server = await serveWithJwt({ resource });
       const anonymous = await postMCP(server.url);
       expect(anonymous.status).toBe(401);
-      expect(anonymous.headers.get('www-authenticate')).toBeNull();
+      expect(resourceMetadataUrl(anonymous.headers.get('www-authenticate'))).toBeUndefined();
       expect((await fetch(`${server.url}/.well-known/oauth-protected-resource`)).status).toBe(404);
-      const tools = await listTools(server.url, await jwks.sign({ aud: 'https://other-api.example.com' }));
-      expect(tools).toContain('mastra_tool_echo');
+
+      const wrongAudience = await postMCP(server.url, await jwks.sign({ aud: 'https://other-api.example.com' }));
+      expect(wrongAudience.status).toBe(401);
+      expect(wrongAudience.headers.get('www-authenticate')).toContain('error="invalid_token"');
+      expect(resourceMetadataUrl(wrongAudience.headers.get('www-authenticate'))).toBeUndefined();
+
+      expect(await listTools(server.url, await jwks.sign({ aud: resource }))).toContain('mastra_tool_echo');
     });
 
     it('serves no discovery routes without server.auth', async () => {

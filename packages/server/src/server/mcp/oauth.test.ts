@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   checkMCPAudience,
   createMCPOAuthMetadataRoutes,
+  isMCPAudienceEnforced,
   isMCPOAuthDiscoveryEnabled,
   mcpResourceMetadataUrl,
   mcpWWWAuthenticate,
@@ -83,7 +84,7 @@ describe('metadata URL and challenge', () => {
   });
 
   it('builds a Bearer challenge with optional error parameters', async () => {
-    const mastra = mastraWith({});
+    const mastra = mastraWith({ auth: new TestAuth('jwt') });
     expect(await mcpWWWAuthenticate(mastra, '/api', REQUEST_URL)).toBe(
       'Bearer resource_metadata="http://localhost:4111/.well-known/oauth-protected-resource/api/mcp"',
     );
@@ -164,13 +165,22 @@ describe('server.mcp.oauth.resource validation', () => {
     'http://mcp.example.com/api/mcp',
     'https://mcp.example.com/api/mcp#frag',
     'ftp://mcp.example.com/api/mcp',
-  ])('rejects %s: logs one error and turns off discovery and audience checks', async resource => {
+  ])('rejects %s: logs one error and turns off discovery, but keeps the audience check', async resource => {
     const mastra = withResource(resource);
     const error = vi.spyOn(mastra.getLogger(), 'error');
     expect(isMCPOAuthDiscoveryEnabled(mastra)).toBe(false);
     expect(isMCPOAuthDiscoveryEnabled(mastra)).toBe(false);
-    expect(await checkMCPAudience(mastra, { aud: 'other' })).toBe(true);
+    expect(isMCPAudienceEnforced(mastra)).toBe(true);
+    expect(await checkMCPAudience(mastra, { aud: 'other' })).toBe(false);
+    expect(await checkMCPAudience(mastra, { aud: resource })).toBe(true);
     expect(error).toHaveBeenCalledTimes(1);
     expect(error.mock.calls[0]![0]).toContain('server.mcp.oauth.resource');
+  });
+
+  it('omits resource_metadata from the challenge when discovery is off', () => {
+    const mastra = withResource('http://mcp.example.com/api/mcp');
+    expect(mcpWWWAuthenticate(mastra, '/api', REQUEST_URL, { error: 'invalid_token' })).toBe(
+      'Bearer error="invalid_token"',
+    );
   });
 });

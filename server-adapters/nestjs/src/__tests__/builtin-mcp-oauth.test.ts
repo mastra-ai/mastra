@@ -137,11 +137,16 @@ describe('NestJS built-in MCP OAuth challenge and audience', () => {
     expect((await postMCP()).headers['www-authenticate']).toBeUndefined();
   });
 
-  it('turns the challenge and audience checks off for an invalid resource instead of failing requests', async () => {
-    await start({ auth: new AudienceAuth(), mcp: { oauth: { resource: 'mcp.example.com/api/mcp' } } });
+  it('keeps enforcing the audience for an invalid resource, without advertising metadata', async () => {
+    const resource = 'http://mcp.example.com/api/mcp';
+    await start({ auth: new AudienceAuth(), mcp: { oauth: { resource } } });
     const anonymous = await postMCP();
     expect(anonymous.status).toBe(401);
     expect(anonymous.headers['www-authenticate']).toBeUndefined();
-    expect((await postMCP('aud=https://other.example.com')).status).toBe(200);
+    const wrongAudience = await postMCP('aud=https://other.example.com');
+    expect(wrongAudience.status).toBe(401);
+    expect(wrongAudience.headers['www-authenticate']).toContain('error="invalid_token"');
+    expect(wrongAudience.headers['www-authenticate']).not.toContain('resource_metadata');
+    expect((await postMCP(`aud=${resource}`)).status).toBe(200);
   });
 });

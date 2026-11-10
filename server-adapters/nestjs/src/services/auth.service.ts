@@ -7,6 +7,7 @@ import {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   checkMCPAudience,
+  isMCPAudienceEnforced,
   isMCPOAuthDiscoveryEnabled,
   isStudioClientTypeHeader,
   mcpWWWAuthenticate,
@@ -143,7 +144,7 @@ export class AuthService {
       }
     }
 
-    if (bearerOnly && isMCPOAuthDiscoveryEnabled(this.mastra)) {
+    if (bearerOnly && (isMCPOAuthDiscoveryEnabled(this.mastra) || isMCPAudienceEnforced(this.mastra))) {
       await this.applyBearerChallenge(request, webRequest.url, requestContext, result, options.response);
     }
 
@@ -175,6 +176,7 @@ export class AuthService {
   ): Promise<void> {
     const prefix = this.options.prefix ?? '/api';
     if (result.action === 'error' && result.status === 401) {
+      if (!isMCPOAuthDiscoveryEnabled(this.mastra)) return;
       // RFC 6750 §3: no error code when the request carried no credentials.
       const error = request.headers.authorization?.trim() ? { error: 'invalid_token' } : undefined;
       response?.setHeader('WWW-Authenticate', mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error));

@@ -46,6 +46,7 @@ export { isZodError, type ZodErrorLike } from '../handlers/error';
 import {
   checkMCPAudience,
   createMCPOAuthMetadataRoutes,
+  isMCPAudienceEnforced,
   isMCPOAuthDiscoveryEnabled,
   mcpWWWAuthenticate,
   warnOnUnenforcedMCPAudience,
@@ -66,6 +67,7 @@ export { BUILTIN_MCP_HTTP_ROUTE, resolveServerRoute } from '../mcp/route';
 export {
   checkMCPAudience,
   createMCPOAuthMetadataRoutes,
+  isMCPAudienceEnforced,
   isMCPOAuthDiscoveryEnabled,
   mcpWWWAuthenticate,
 } from '../mcp/oauth';
@@ -946,11 +948,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       },
     );
 
-    if (!isMCPOAuthDiscoveryEnabled(this.mastra)) return result;
+    const discovery = isMCPOAuthDiscoveryEnabled(this.mastra);
+    if (!discovery && !isMCPAudienceEnforced(this.mastra)) return result;
 
     const requestUrl = context.request?.url ?? `http://localhost${context.path}`;
     const prefix = this.prefix ?? '';
     if (result?.status === 401) {
+      if (!discovery) return result;
       // RFC 6750 §3: no error code when the request carried no credentials.
       const error = authorization?.trim() ? { error: 'invalid_token' } : undefined;
       const challenge = mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error);
@@ -1658,8 +1662,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     // OAuth discovery for the built-in MCP endpoint lives at the server root, outside the API prefix.
+    if (isMCPAudienceEnforced(this.mastra)) warnOnUnenforcedMCPAudience(this.mastra);
     if (isMCPOAuthDiscoveryEnabled(this.mastra)) {
-      warnOnUnenforcedMCPAudience(this.mastra);
       for (const route of createMCPOAuthMetadataRoutes(this.mastra, this.prefix ?? '')) {
         await this.registerRoute(this.app, route, { prefix: '' });
       }

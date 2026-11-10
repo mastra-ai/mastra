@@ -48,19 +48,32 @@ function hasValidResource(mastra: Mastra): boolean {
         .getLogger()
         ?.error(
           `server.mcp.oauth.resource "${resource}" is not an absolute https URL without a fragment ` +
-            '(http is only allowed for localhost). OAuth discovery and token audience checks for the built-in MCP server are disabled.',
+            '(http is only allowed for localhost). OAuth discovery for the built-in MCP server is disabled. ' +
+            'Token audience checks still use this value, so MCP requests are rejected unless the token audience matches it exactly.',
         );
     }
   }
   return valid;
 }
 
+function isBuiltinMCPAuthenticated(mastra: Mastra): boolean {
+  return Boolean(mastra.getServer()?.auth) && isBuiltinMCPEnabled(mastra);
+}
+
 /**
  * Whether OAuth discovery applies: the built-in MCP endpoint is on, requires auth, and any configured
- * `server.mcp.oauth.resource` is valid. Gates the well-known routes, the 401 challenge, and audience checks.
+ * `server.mcp.oauth.resource` is valid. Gates the well-known routes and the `resource_metadata` challenge.
  */
 export function isMCPOAuthDiscoveryEnabled(mastra: Mastra): boolean {
-  return Boolean(mastra.getServer()?.auth) && isBuiltinMCPEnabled(mastra) && hasValidResource(mastra);
+  return isBuiltinMCPAuthenticated(mastra) && hasValidResource(mastra);
+}
+
+/**
+ * Whether the built-in MCP endpoint checks token audience: `server.mcp.oauth.resource` is set. An invalid value
+ * only turns discovery off; the audience is still checked against it, so a config typo fails closed.
+ */
+export function isMCPAudienceEnforced(mastra: Mastra): boolean {
+  return isBuiltinMCPAuthenticated(mastra) && getOAuthConfig(mastra).resource !== undefined;
 }
 
 /** Canonical URL of the MCP endpoint: `server.mcp.oauth.resource`, else derived from the request. */
@@ -90,14 +103,22 @@ export function resolveMCPResourceMetadata(mastra: Mastra, prefix: string, reque
   };
 }
 
-/** `WWW-Authenticate` value for a 401 from the built-in MCP endpoint (RFC 6750 §3 auth-params, quoted and escaped). */
+/**
+ * `WWW-Authenticate` value for a 401 from the built-in MCP endpoint (RFC 6750 §3 auth-params, quoted and escaped).
+ * `resource_metadata` is only included while discovery is enabled.
+ */
 export function mcpWWWAuthenticate(
   mastra: Mastra,
   prefix: string,
   requestUrl: string,
   error?: { error: string; error_description?: string },
 ): string {
-  const params = { resource_metadata: mcpResourceMetadataUrl(mastra, prefix, requestUrl), ...error };
+  const params = {
+    ...(isMCPOAuthDiscoveryEnabled(mastra)
+      ? { resource_metadata: mcpResourceMetadataUrl(mastra, prefix, requestUrl) }
+      : {}),
+    ...error,
+  };
   const quoted = Object.entries(params)
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => `${key}="${value!.replace(/[\\"]/g, '\\$&')}"`);
@@ -105,13 +126,13 @@ export function mcpWWWAuthenticate(
 }
 
 /**
- * D5: when `server.mcp.oauth.resource` is set, the token's audience must include it.
+ * When `server.mcp.oauth.resource` is set, the token's audience must include it.
  * Returns false only when the provider can check the audience and it does not match.
  */
 export async function checkMCPAudience(mastra: Mastra, user: unknown): Promise<boolean> {
   const { resource } = getOAuthConfig(mastra);
   const provider = getAuthProvider(mastra);
-  if (!resource || !hasValidResource(mastra) || typeof provider?.verifyAudience !== 'function') return true;
+  if (resource === undefined || typeof provider?.verifyAudience !== 'function') return true;
   return provider.verifyAudience(user, resource);
 }
 
@@ -122,7 +143,7 @@ function leafProviders(provider: IMastraAuthProvider): IMastraAuthProvider[] {
 
 /** Warns once when `server.mcp.oauth.resource` is set but some provider cannot check token audience. */
 export function warnOnUnenforcedMCPAudience(mastra: Mastra): void {
-  if (warnedAudience.has(mastra) || !getOAuthConfig(mastra).resource || !hasValidResource(mastra)) return;
+  if (warnedAudience.has(mastra) || getOAuthConfig(mastra).resource === undefined) return;
   warnedAudience.add(mastra);
   const auth = mastra.getServer()?.auth;
   if (!auth) return;
