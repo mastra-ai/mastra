@@ -471,6 +471,8 @@ export async function runIdleLoop<
   let requestTaskIds: string[] = [];
   /** Whether the current step made a client tool call or reported an error. */
   let requestUnanswered = false;
+  /** Whether the current step produced text or object output. */
+  let requestReplied = false;
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -596,10 +598,11 @@ export async function runIdleLoop<
 
   /**
    * Tracks which background outcomes the model answered. The inner run lists them on `step-start`.
-   * They count only when that step ends in a final reply: no error, no client tool call and none of
-   * {@link UNANSWERED_STEP_REASONS}. After a tool call the run can hit its step limit before the
-   * model answers, even when the provider reports `stop`, and an errored, filtered or cut off reply
-   * may be unusable. The list is internal, so it is removed before the chunk reaches the caller.
+   * They count only when that step ends in a final reply: some text or object output, no error, no
+   * client tool call and none of {@link UNANSWERED_STEP_REASONS}. After a tool call the run can hit
+   * its step limit before the model answers, even when the provider reports `stop`, and an empty,
+   * errored, filtered or cut off reply may be unusable. The list is internal, so it is removed
+   * before the chunk reaches the caller.
    *
    * @returns The chunk to forward to the caller.
    */
@@ -609,8 +612,15 @@ export async function runIdleLoop<
         const { backgroundResultTaskIds, ...payload } = value.payload ?? {};
         requestTaskIds = Array.isArray(backgroundResultTaskIds) ? backgroundResultTaskIds : [];
         requestUnanswered = false;
+        requestReplied = false;
         return backgroundResultTaskIds === undefined ? value : { ...value, payload };
       }
+      case 'text-delta':
+        if (value.payload?.text) requestReplied = true;
+        return value;
+      case 'object':
+        requestReplied = true;
+        return value;
       case 'tool-call':
         // Provider-executed calls (e.g. web search) run inside the same reply.
         if (!value.payload?.providerExecuted) requestUnanswered = true;
@@ -619,11 +629,12 @@ export async function runIdleLoop<
         requestUnanswered = true;
         return value;
       case 'step-finish':
-        if (!requestUnanswered && !UNANSWERED_STEP_REASONS.has(value.payload?.stepResult?.reason)) {
+        if (requestReplied && !requestUnanswered && !UNANSWERED_STEP_REASONS.has(value.payload?.stepResult?.reason)) {
           markDelivered(requestTaskIds);
         }
         requestTaskIds = [];
         requestUnanswered = false;
+        requestReplied = false;
         return value;
       default:
         return value;
