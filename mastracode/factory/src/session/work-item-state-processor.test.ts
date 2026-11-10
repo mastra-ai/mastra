@@ -162,6 +162,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     expect(contents).toContain('Labels: bug, status: needs approval');
     expect(contents).toContain('Author: reporter (trusted)');
     expect(contents).toContain('Your branch: factory/issue-12');
+    expect(contents).toContain('Your session: no link (no public Factory URL is configured)');
     expect(contents).toContain('github issue, key acme/app#12, https://github.com/acme/app/issues/12');
     expect(contents).toContain(
       `github pull request #34, key acme/app#34, https://github.com/acme/app/pull/34, state open, head branch factory/issue-12, head ${HEAD}, details: gh pr view 34`,

@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
+import { factorySessionUrl } from '../../links.js';
 import { findEnvironmentRepository, resolveSessionRepositories } from '../../session/environment-repositories.js';
 import type { EnvironmentRepository } from '../../session/environment-repositories.js';
 import { runsPullRequestCreate } from '../../session/shell-commands.js';
@@ -71,6 +72,8 @@ interface SessionTarget {
   repositories: EnvironmentRepository[];
   orgId: string;
   userId: string;
+  factoryProjectId: string;
+  threadId: string;
 }
 
 /** One pull request of one environment repository, with the installation that reaches it. */
@@ -118,14 +121,17 @@ async function resolveSessionTarget(requestContext: RequestContext, github: Gith
   }
   const sourceControl = github.sourceControlStorage;
   const session = await sourceControl.sessions.getBySessionId(context.sessionId);
-  if (session && (session.orgId !== orgId || (session.factoryProjectId && session.factoryProjectId !== factoryProjectId))) {
+  if (
+    session &&
+    (session.orgId !== orgId || (session.factoryProjectId && session.factoryProjectId !== factoryProjectId))
+  ) {
     throw new Error('The active session does not belong to this Factory.');
   }
   const repositories = await resolveSessionRepositories({
     sourceControl,
     session: session ?? { orgId, factoryProjectId, projectRepositoryId: null },
   });
-  return { context, session, repositories, orgId, userId };
+  return { context, session, repositories, orgId, userId, factoryProjectId, threadId: context.threadId };
 }
 
 /**
@@ -242,6 +248,20 @@ export async function unsubscribeCurrentSessionFromPullRequest(
   return resolved.number;
 }
 
+const SESSION_FOOTER_MARKER = '<!-- mastra-factory-session -->';
+
+/**
+ * The triage handoff with the link to the session that wrote it as its last
+ * line. The host adds it, so every pending and final handoff carries it no
+ * matter what the agent wrote; a footer already in the body is replaced.
+ */
+export function withSessionFooter(body: string, sessionUrl: string | undefined): string {
+  const marker = body.indexOf(SESSION_FOOTER_MARKER);
+  const content = (marker < 0 ? body : body.slice(0, marker)).trimEnd();
+  if (!sessionUrl) return content;
+  return `${content}\n\n${SESSION_FOOTER_MARKER}\n<sub>[Factory session](${sessionUrl})</sub>\n`;
+}
+
 export async function upsertFactoryTriageComment(
   requestContext: RequestContext,
   input: { issueNumber: number; body: string },
@@ -262,7 +282,14 @@ export async function upsertFactoryTriageComment(
       installationId,
       repository: own.repository.slug,
       issueNumber: input.issueNumber,
-      body: input.body,
+      body: withSessionFooter(
+        input.body,
+        factorySessionUrl({
+          factoryProjectId: target.factoryProjectId,
+          sessionId: target.context.sessionId,
+          threadId: target.threadId,
+        }),
+      ),
     }),
   );
 }

@@ -457,6 +457,8 @@ export interface FactoryReviewStatusEvent {
   phase: FactoryReviewStatusPhase;
   /** When the agent was handed the review; set on the 'reviewing' step. */
   startedAt?: Date;
+  /** The session running the review; set on the 'reviewing' step so the status can link to it. */
+  session?: { sessionId: string; threadId: string };
   /** When the run ended; set on final steps. */
   endedAt?: Date;
   /** Why the run failed or will retry, already sanitized. */
@@ -1253,7 +1255,7 @@ export class FactoryDecisionDispatcher {
   async #reviewStatus(
     record: FactoryDeferredDecisionRecord,
     decision: unknown,
-    step: Pick<FactoryReviewStatusEvent, 'phase' | 'startedAt' | 'endedAt' | 'reason'>,
+    step: Pick<FactoryReviewStatusEvent, 'phase' | 'startedAt' | 'endedAt' | 'reason' | 'session'>,
   ): Promise<void> {
     const report = this.#reportReviewStatus;
     if (!report || !record.workItemId) return;
@@ -1598,7 +1600,11 @@ export class FactoryDecisionDispatcher {
               item?.title,
             );
             this.#reviewWatched.add(record);
-            await this.#reviewStatus(record, decision, { phase: 'reviewing', startedAt: since });
+            await this.#reviewStatus(record, decision, {
+              phase: 'reviewing',
+              startedAt: since,
+              session: { sessionId: binding.sessionId, threadId: binding.threadId },
+            });
             // A landed `deliver` still runs on the in-flight session, so the run's
             // terminal outcome matters as much as a fresh wake's: a run that ends
             // in error after accepting the prompt has still failed this decision.

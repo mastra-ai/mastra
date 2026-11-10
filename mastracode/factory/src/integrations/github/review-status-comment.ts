@@ -29,6 +29,8 @@ export interface ReviewStatusState {
   startedAt?: string;
   /** The pull request head when the run started. */
   head?: string;
+  /** The Factory UI link to the session running the review. Absent until the run starts. */
+  session?: string;
 }
 
 export interface ReviewStatusStats {
@@ -102,7 +104,19 @@ export function parseReviewStatusState(body: string | null | undefined): ReviewS
     phase: value.phase,
     ...(isTimestamp(value.startedAt) ? { startedAt: value.startedAt } : {}),
     ...(typeof value.head === 'string' && COMMIT_SHA.test(value.head) ? { head: value.head } : {}),
+    ...(isSessionUrl(value.session) ? { session: value.session } : {}),
   };
+}
+
+/** An http(s) URL that is safe inside a markdown link target. */
+export function isSessionUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^https?:\/\/[^\s()<>"'`\]]+$/.test(value)) return false;
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -172,16 +186,21 @@ function commitLink(sha: string, repository: string | undefined): string {
 }
 
 /**
- * A quiet line under a finished status: the commit and how long the run took. Only a recorded
- * verdict's commit is called reviewed; otherwise it is the head the run started on.
+ * A quiet line under the status: the commit and how long a finished run took, and the link to
+ * the session running the review once it has started. Only a recorded verdict's commit is called
+ * reviewed; otherwise it is the head the run started on.
  */
 function footer(view: ReviewStatusView): string[] {
   const { stats = {}, state } = view;
   const parts: string[] = [];
-  if (stats.reviewedHeadSha && stats.verdict && state.phase === 'completed')
-    parts.push(`Reviewed ${commitLink(stats.reviewedHeadSha, view.repository)}`);
-  else if (state.head) parts.push(`Started on ${commitLink(state.head, view.repository)}`);
-  if (stats.durationMs !== undefined) parts.push(`took ${formatDuration(stats.durationMs)}`);
+  const final = state.phase === 'completed' || state.phase === 'failed' || state.phase === 'cancelled';
+  if (final) {
+    if (stats.reviewedHeadSha && stats.verdict && state.phase === 'completed')
+      parts.push(`Reviewed ${commitLink(stats.reviewedHeadSha, view.repository)}`);
+    else if (state.head) parts.push(`Started on ${commitLink(state.head, view.repository)}`);
+    if (stats.durationMs !== undefined) parts.push(`took ${formatDuration(stats.durationMs)}`);
+  }
+  if (state.session) parts.push(`[Factory session](${state.session})`);
   if (parts.length === 0) return [];
   const line = parts.join(' · ');
   return ['', `<sub>${line.charAt(0).toUpperCase()}${line.slice(1)}</sub>`];
@@ -255,6 +274,7 @@ function statusLines(view: ReviewStatusView): string[] {
         ...animation(view),
         '',
         `${reviewerName} is reviewing this pull request${head}${since}. This comment updates when the review finishes.`,
+        ...footer(view),
       ];
     }
     case 'completed':
