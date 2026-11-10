@@ -4269,6 +4269,11 @@ describe('factory environment sandbox context', () => {
         ['pnpm i', { PROOF_BUILD: 'build-1' }],
         ['touch .workspace-ready', { PROOF_BUILD: 'build-1' }],
       ]);
+      // Runtime values ride along only so a failed setup can mask them.
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[4])).toEqual([
+        { PROOF_RUNTIME: 'run-1' },
+        { PROOF_RUNTIME: 'run-1' },
+      ]);
       // The runtime overlay only ever gets the Runtime variables.
       let overlay: Record<string, string | undefined> = {};
       for (const [update] of mocks.setEnv.mock.calls as Array<[(env: typeof overlay) => typeof overlay]>) {

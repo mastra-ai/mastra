@@ -801,8 +801,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         : undefined;
     const sandboxEnv = envScope ? await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope) : undefined;
     // Re-read when setup actually runs, which can be long after this request.
-    const setupBuildEnv = async () =>
-      envScope ? (await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope)).build : undefined;
+    // Runtime values ride along only so a failed setup can mask them.
+    const setupEnv = async (): Promise<[Record<string, string>?, Record<string, string>?]> => {
+      if (!envScope) return [];
+      const env = await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope);
+      return [env.build, env.runtime];
+    };
     // The session's own link must be part of the environment: it is the
     // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
     // whose link left the environment keeps its single-repository sandbox.
@@ -1536,7 +1540,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         try {
           await timedPhase('workspace.setup', async () =>
-            runSetupCommand(target, workdir, projectRepository.setupCommand!, await setupBuildEnv()),
+            runSetupCommand(target, workdir, projectRepository.setupCommand!, ...(await setupEnv())),
           );
           await gate.markSetupDone();
         } catch (setupError) {
@@ -1686,7 +1690,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           try {
             await timedPhase(`workspace.setup(${repo.slug})`, async () =>
-              runSetupCommand(target, entry.dir, repo.setupCommand!, await setupBuildEnv()),
+              runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
             );
             await entry.gate.markSetupDone();
           } catch (error) {
@@ -1716,7 +1720,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           } else {
             try {
               await timedPhase('workspace.setup(workspace)', async () =>
-                runSetupCommand(target, gate.root, workspaceCommand, await setupBuildEnv()),
+                runSetupCommand(target, gate.root, workspaceCommand, ...(await setupEnv())),
               );
               await gate.workspace.markSetupDone();
             } catch (error) {

@@ -252,6 +252,30 @@ describe('sandbox env on a real LocalSandbox', () => {
       expect((error as Error).message).toBe('Setup command failed (exit 3): auth failed for *** (also ***)');
     });
 
+    it('masks Runtime values a failing setup command prints, since setup sees them too', async () => {
+      const sandbox = new LocalSandbox({
+        workingDirectory: dir,
+        isolation: 'none',
+        env: { PROOF_RUNTIME: 'runtime-secret' },
+      });
+      onTestFinished(() => sandbox._destroy());
+      await sandbox._start();
+      const failing = 'echo "token is $PROOF_RUNTIME" >&2; exit 4';
+
+      const error = await runSetupCommand(
+        sandbox as Parameters<typeof runSetupCommand>[0],
+        dir,
+        failing,
+        {},
+        {
+          PROOF_RUNTIME: 'runtime-secret',
+        },
+      ).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(SetupCommandError);
+      expect((error as Error).message).toBe('Setup command failed (exit 4): token is ***');
+    });
+
     it('masks Build values with edge whitespace, whether the output keeps it or not', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: dir, isolation: 'none' });
       onTestFinished(() => sandbox._destroy());

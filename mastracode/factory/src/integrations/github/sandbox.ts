@@ -1155,7 +1155,13 @@ async function runLifecycleCommand(
   sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
-  options: { phase: 'setup' | 'teardown'; timeoutMs?: number; env?: Record<string, string> },
+  options: {
+    phase: 'setup' | 'teardown';
+    timeoutMs?: number;
+    env?: Record<string, string>;
+    /** Values to mask in a failure message, beyond `env`. */
+    mask?: Record<string, string>;
+  },
 ): Promise<void> {
   const result = await sh(sandbox, `cd ${shellQuote(workdir)} && { ${command}\n}`, {
     phase: `${options.phase} command`,
@@ -1165,10 +1171,10 @@ async function runLifecycleCommand(
   });
   if (result.exitCode !== 0) {
     // The message is stored as build status and shown in the UI, so mask any
-    // Build value the command printed.
+    // Factory value (Build or Runtime) the command printed.
     // Mask before trimming: a value with an edge newline or space would no longer match once trimmed.
     const output = result.stderr.trim() ? result.stderr : result.stdout;
-    const detail = maskSandboxEnvValues(output, options.env).trim().slice(-1800);
+    const detail = maskSandboxEnvValues(output, { ...options.mask, ...options.env }).trim().slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,
@@ -1177,14 +1183,22 @@ async function runLifecycleCommand(
   }
 }
 
-/** @param buildEnv the Factory's Build variables, passed to this command only */
+/**
+ * @param buildEnv the Factory's Build variables, passed to this command only
+ * @param runtimeEnv the Factory's Runtime variables the command can also see; masked in a failure message
+ */
 export async function runSetupCommand(
   sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
   buildEnv?: Record<string, string>,
+  runtimeEnv?: Record<string, string>,
 ): Promise<void> {
-  return runLifecycleCommand(sandbox, workdir, command, { phase: 'setup', ...(buildEnv ? { env: buildEnv } : {}) });
+  return runLifecycleCommand(sandbox, workdir, command, {
+    phase: 'setup',
+    ...(buildEnv ? { env: buildEnv } : {}),
+    ...(runtimeEnv ? { mask: runtimeEnv } : {}),
+  });
 }
 
 /**
