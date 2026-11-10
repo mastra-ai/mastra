@@ -2256,7 +2256,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         throw markNonRedeliverable(
           new RunFailure(conditionError, {
             ...run,
-            stepResults: { ...run.stepResults, [getEntryId(step.step)]: failed },
+            // processWorkflowFail reads the final state from stepResults.__state first.
+            stepResults: { ...run.stepResults, [getEntryId(step.step)]: failed, __state: bodyState as any },
+            state: bodyState,
           }),
         );
       }

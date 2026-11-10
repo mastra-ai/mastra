@@ -37,9 +37,11 @@ async function runToEnd({
   storage,
   build,
   rejectPublish = () => false,
+  outputOptions,
 }: {
   storage: MastraStorage;
   build: () => any;
+  outputOptions?: { includeState?: boolean };
   /** Rejects a `workflows` publish; called with the number of publishes rejected so far. */
   rejectPublish?: (event: Omit<Event, 'id' | 'createdAt'>, rejected: number) => boolean;
 }) {
@@ -58,7 +60,7 @@ async function runToEnd({
   await mastra.startWorkers();
   try {
     const run = await workflow.createRun();
-    const result = await run.start({ inputData: { n: 0 } });
+    const result = await run.start({ inputData: { n: 0 }, outputOptions });
     const store = (await storage.getStore('workflows'))!;
     const failEvents = driver.events.filter(event => event.type === 'workflow.fail');
     return { result, runId: run.runId as string, store, failEvents, rejected };
@@ -96,38 +98,51 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
       },
     );
 
-    it('keeps the state the body set when the condition throws', async () => {
-      const { result, runId, store } = await runToEnd({
-        storage: getStorage(),
-        build: () =>
-          createWorkflow({
-            id: 'throwing-condition-state',
-            inputSchema: schema,
-            outputSchema: schema,
-            stateSchema: optionalState,
-          })
-            .dowhile(
-              createStep({
-                id: 'charge',
-                inputSchema: schema,
-                outputSchema: schema,
-                stateSchema: optionalState,
-                execute: async ({ inputData, setState }) => {
-                  await setState({ n: 42 });
-                  return inputData;
+    it.each([false, true])(
+      'keeps the state the body set when the condition throws (failure publish rejected: %s)',
+      async rejectStepEnd => {
+        const { result, runId, store } = await runToEnd({
+          storage: getStorage(),
+          rejectPublish: (event, rejectedSoFar) =>
+            rejectStepEnd &&
+            rejectedSoFar === 0 &&
+            event.type === 'workflow.step.end' &&
+            event.data.prevResult?.status === 'failed',
+          outputOptions: { includeState: true },
+          build: () =>
+            createWorkflow({
+              id: 'throwing-condition-state',
+              inputSchema: schema,
+              outputSchema: schema,
+              stateSchema: optionalState,
+            })
+              .dowhile(
+                createStep({
+                  id: 'charge',
+                  inputSchema: schema,
+                  outputSchema: schema,
+                  stateSchema: optionalState,
+                  execute: async ({ inputData, setState }) => {
+                    await setState({ n: 42 });
+                    return inputData;
+                  },
+                }),
+                async () => {
+                  throw new Error('condition boom');
                 },
-              }),
-              async () => {
-                throw new Error('condition boom');
-              },
-            )
-            .commit(),
-      });
+              )
+              .commit(),
+        });
 
-      expect(result.status).toBe('failed');
-      const snapshot = await store.loadWorkflowSnapshot({ workflowName: 'throwing-condition-state', runId });
-      expect(snapshot?.context.__state).toEqual({ n: 42 });
-    });
+        expect(result.status).toBe('failed');
+        expect((result as any).state).toEqual({ n: 42 });
+        // With the failure publish rejected, only a guarded store has written the step record.
+        if (!rejectStepEnd || store.supportsWorkflowStepGuards()) {
+          const snapshot = await store.loadWorkflowSnapshot({ workflowName: 'throwing-condition-state', runId });
+          expect(snapshot?.context.__state).toEqual({ n: 42 });
+        }
+      },
+    );
 
     // The condition runs while handling the child's workflow.end, so the failure must
     // still be reported against the loop's run and leave the finished child alone.
