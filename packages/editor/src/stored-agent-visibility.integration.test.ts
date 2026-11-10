@@ -442,6 +442,55 @@ describe('stored agent visibility on /api/agents', () => {
     }
   });
 
+  it('GET /agents lists every visible stored agent when there are more than 100', async () => {
+    const manyStorage = new LibSQLStore({ id: 'many-stored-agents', url: `file:${join(dir, 'many.db')}` });
+    const many = await startServer(
+      new Mastra({
+        logger: false,
+        storage: manyStorage,
+        editor: new MastraEditor(),
+        server: {
+          auth: new SimpleAuth<User>({ tokens: USERS, mapUserToResourceId: user => user.id }),
+          rbac: new StaticRBACProvider<User>({ roles: ROLES, getUserRoles: user => [user.role] }),
+        },
+      }),
+    );
+    try {
+      const model = { provider: 'openai', name: 'gpt-4o-mini' };
+      await manyStorage.init();
+      const store = (await manyStorage.getStore('agents'))!;
+      await store.create({
+        agent: {
+          id: 'old-public',
+          name: 'old-public',
+          instructions: 'x',
+          model,
+          authorId: 'alice',
+          visibility: 'public',
+        },
+      } as any);
+      // Newer rows sort first, so 105 of carol's private agents fill the first page of the stored list.
+      const carols = Array.from({ length: 105 }, (_, i) => `carol-${String(i).padStart(3, '0')}`);
+      for (const id of carols) {
+        await store.create({
+          agent: { id, name: id, instructions: 'x', model, authorId: 'carol', visibility: 'private' },
+        } as any);
+      }
+
+      const bob = await http('bob', 'GET', '/agents', undefined, many.url);
+      expect(bob.status).toBe(200);
+      expect(Object.keys(bob.json)).toContain('old-public');
+      expect(Object.keys(bob.json).filter(id => id.startsWith('carol-'))).toEqual([]);
+
+      const carol = await http('carol', 'GET', '/agents', undefined, many.url);
+      expect(Object.keys(carol.json)).toEqual(expect.arrayContaining([...carols, 'old-public']));
+      const admin = await http('admin', 'GET', '/agents', undefined, many.url);
+      expect(Object.keys(admin.json)).toEqual(expect.arrayContaining([...carols, 'old-public']));
+    } finally {
+      await many.close();
+    }
+  }, 60_000);
+
   it('bob racing alice on the first load of her private agent still gets 404 on every request', async () => {
     // A fresh server has nothing hydrated yet, so every request below takes the cold stored-agent path at once.
     const cold = await startServer(
