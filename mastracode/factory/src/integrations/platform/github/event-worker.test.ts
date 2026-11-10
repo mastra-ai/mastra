@@ -670,7 +670,7 @@ describe('PlatformGithubEventWorker', () => {
       ]);
     });
 
-    it('picks up newly linked repositories on the next tick without a restart', async () => {
+    it('picks up newly linked repositories on the link wake without a restart', async () => {
       const settings = createSettingsStorage();
       const fetchImpl = eventsOnlyFetch();
       const configured: Array<{ installationId: number; repositoryId: number; slug: string }> = [
@@ -716,12 +716,50 @@ describe('PlatformGithubEventWorker', () => {
       let eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
       expect(eventPaths).toEqual(['/v1/server/github-app/repositories/101/events']);
 
-      // Link another repo mid-cycle; it should be picked up on the next tick.
+      // Link another repo; the link wakes the worker, which rereads the list.
       configured.push({ installationId: 7, repositoryId: 102, slug: 'acme/second' });
-      await vi.advanceTimersByTimeAsync(1_000);
+      worker.wake();
+      await vi.advanceTimersByTimeAsync(0);
 
       eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
       expect(eventPaths).toContain('/v1/server/github-app/repositories/102/events');
+
+      await worker.stop();
+    });
+
+    it('keeps polling a linked but quiet repository without rereading the repository list', async () => {
+      const settings = createSettingsStorage();
+      const fetchImpl = eventsOnlyFetch();
+      const listConfiguredExternalKeys = vi.fn(async () => [
+        { installationExternalId: '7', repositoryExternalId: '101' },
+      ]);
+      const worker = new PlatformGithubEventWorker({
+        client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+        controller: {} as never,
+        github: createGithub(),
+        storage: settings.storage,
+        intervalMs: 1_000,
+        sourceControl: {
+          projectRepositories: {
+            listConfiguredExternalKeys,
+            listByExternalRepository: async () => [{ orgId: 'org-1', factoryProjectId: 'proj-1' } as never],
+          },
+          repositories: {
+            findByExternalId: async args => ({ orgId: args.orgId, slug: 'acme/repo' }) as never,
+          },
+        },
+      });
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+      // Event log polled every interval; Postgres read once.
+      expect(pathsFrom(fetchImpl).filter(path => path.endsWith('/events')).length).toBeGreaterThan(500);
+      expect(listConfiguredExternalKeys).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(50 * 60_000);
+      expect(listConfiguredExternalKeys).toHaveBeenCalledTimes(2);
 
       await worker.stop();
     });

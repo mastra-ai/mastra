@@ -24,10 +24,11 @@ const DEFAULT_POLL_INTERVAL_MS = 20_000;
 // Event polling is the primary sync; the sweeps only catch drift (missed
 // events, cards ingested before polling was linked), so they run hourly.
 const DEFAULT_RECONCILE_INTERVAL_MS = 60 * 60_000;
-// With no linked repositories there is nothing to poll. Linking one wakes the
-// worker; this recheck only covers a wake lost in transit. It must stay well
-// above the database autosuspend (60s) so an idle Factory's database sleeps.
-const IDLE_RECHECK_MS = 60 * 60_000;
+// The linked-repository list lives in Postgres. Linking a repository wakes the
+// worker and refreshes it; otherwise it is reread at most this often, so a
+// quiet Factory (polling only the Platform event log) lets its database sleep.
+// It must stay well above the database autosuspend (60s).
+const REPOSITORY_REFRESH_MS = 60 * 60_000;
 const EVENT_PAGE_SIZE = 500;
 const MIN_LEASE_TTL_MS = 30_000;
 const CURSOR_ORG_ID = '__platform_github_event_worker__';
@@ -114,6 +115,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #storage: PlatformGithubEventStorage;
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
   #wakeRequested = false;
+  #repositories: Repository[] | undefined;
+  #repositoriesReadAt = Number.NEGATIVE_INFINITY;
   readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssuesFactoryState: GithubIssueReconciler | undefined;
   readonly #pollEventsEnabled: boolean;
@@ -208,6 +211,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
    */
   wake(): void {
     if (!this.#running) return;
+    this.#repositories = undefined;
     if (this.#inFlight) {
       this.#wakeRequested = true;
       return;
@@ -248,6 +252,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
     } finally {
       const woken = this.#wakeRequested;
       this.#wakeRequested = false;
+      // A link during the cycle may postdate the list it read.
+      if (woken) this.#repositories = undefined;
       this.#schedule(woken ? 0 : nextDelay);
     }
   }
@@ -291,8 +297,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
   }
 
   async #poll(): Promise<number> {
-    const repositories = await this.#discoverRepositories();
-    if (repositories.length === 0) return IDLE_RECHECK_MS;
+    const repositories = await this.#linkedRepositories();
+    if (repositories.length === 0) return REPOSITORY_REFRESH_MS;
     let retryInMs = this.#pollEventsEnabled ? this.#intervalMs : this.#reconcileCadence();
 
     if (this.#pollEventsEnabled) {
@@ -408,6 +414,15 @@ export class PlatformGithubEventWorker extends MastraWorker {
    * cannot produce work for Factory, so polling and reconciling them is
    * wasted `/events` bandwidth and platform load.
    */
+  async #linkedRepositories(): Promise<Repository[]> {
+    const now = this.#now();
+    if (!this.#repositories || now - this.#repositoriesReadAt >= REPOSITORY_REFRESH_MS) {
+      this.#repositories = await this.#discoverRepositories();
+      this.#repositoriesReadAt = now;
+    }
+    return this.#repositories;
+  }
+
   async #discoverRepositories(): Promise<Repository[]> {
     const keys = await this.#sourceControl.projectRepositories.listConfiguredExternalKeys();
     const repositories = new Map<number, Repository>();

@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Stop a Factory with no linked GitHub repositories from querying its database every 20 seconds. The Platform GitHub event worker now sleeps while no repository is linked and polls as soon as a project links one, on any replica. An hourly recheck covers a lost wake. Serverless Postgres such as Neon can now suspend while such a Factory is idle.
+Stop the Platform GitHub event worker from reading linked repositories from the Factory database every 20 seconds. The list is now cached and reread when a project links a repository (on any replica) or hourly. A quiet Factory only polls the Platform event log, and one with no linked repositories sleeps until a link wakes it. Serverless Postgres such as Neon can now suspend while the Factory is idle.
