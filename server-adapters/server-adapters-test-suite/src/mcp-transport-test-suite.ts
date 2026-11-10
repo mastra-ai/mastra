@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { Mastra } from '@mastra/core/mastra';
+import { SimpleAuth } from '@mastra/core/server';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer, MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -145,6 +146,19 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       },
     });
 
+    // Reports who the MCP tool thinks is calling: the transport's auth info and the
+    // user the MCPServer mapped from it.
+    const createWhoamiTool = () =>
+      createTool({
+        id: 'whoami',
+        description: 'Returns the caller as seen by the tool',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => ({
+          authInfo: context?.mcp?.extra?.authInfo ?? null,
+          user: context?.requestContext?.get('user') ?? null,
+        }),
+      });
+
     let httpServer: { close: () => void };
     let port: number;
     let mcpServer1: MCPServer;
@@ -162,6 +176,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         tools: {
           getWeather: weatherTool,
           calculate: calculatorTool,
+          whoami: createWhoamiTool(),
         },
       });
 
@@ -347,6 +362,77 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const server2Tools = Object.keys(tools).filter(k => k.startsWith('server2_'));
           expect(server2Tools).toHaveLength(0);
         });
+
+        it('gives tools no caller identity when the server has no auth configured', async () => {
+          const tools = await mcpClient.listTools();
+          const result = await tools['server1_whoami']!.execute!({}, {} as any);
+          expectTextToolResult(result, { authInfo: null, user: null });
+        });
+      });
+
+      // A tool served by a user-built MCPServer must see the same caller that `server.auth`
+      // authenticated for the HTTP request. Every adapter has to bridge the principal onto
+      // the Node request the MCP transport reads (`req.auth` → `extra.authInfo`).
+      describe('Authenticated MCP callers', () => {
+        const users = {
+          'alice-token': { id: 'alice', name: 'Alice' },
+          'bob-token': { id: 'bob', name: 'Bob' },
+        };
+
+        const startAuthenticatedApp = async () => {
+          const whoamiServer = new MCPServer({
+            name: 'whoami-server',
+            version: '1.0.0',
+            tools: { whoami: createWhoamiTool() },
+            mapAuthInfoToUser: ({ authInfo }) => (authInfo as { extra?: { user?: { id: string } } }).extra?.user,
+          });
+          const authMastra = new Mastra({
+            logger: false,
+            mcpServers: { whoami: whoamiServer },
+            server: { auth: new SimpleAuth({ tokens: users }) },
+          });
+          const { server, port: authPort } = await createServer(authMastra);
+          const url = new URL(`http://localhost:${authPort}/api/mcp/${whoamiServer.id}/mcp`);
+          const clients: MCPClient[] = [];
+          const callWhoami = async (token: string) => {
+            const client = new MCPClient({
+              id: `whoami-${token}-${authPort}`,
+              servers: { app: { url, requestInit: { headers: { Authorization: `Bearer ${token}` } } } },
+            });
+            clients.push(client);
+            const tools = await client.listTools();
+            const result: any = await tools['app_whoami']!.execute!({}, {} as any);
+            return JSON.parse(result.content[0].text);
+          };
+          const close = async () => {
+            await Promise.all(clients.map(client => client.disconnect()));
+            server.close();
+            await whoamiServer.close();
+          };
+          return { callWhoami, close };
+        };
+
+        it('lets an MCP tool see the user who authenticated with the server', async () => {
+          const app = await startAuthenticatedApp();
+          try {
+            expect(await app.callWhoami('alice-token')).toEqual({
+              authInfo: {
+                token: 'alice-token',
+                clientId: 'alice',
+                scopes: [],
+                extra: { user: { id: 'alice', name: 'Alice' } },
+              },
+              user: { id: 'alice', name: 'Alice' },
+            });
+            // A second caller sees only their own identity.
+            expect(await app.callWhoami('bob-token')).toMatchObject({
+              authInfo: { token: 'bob-token', clientId: 'bob' },
+              user: { id: 'bob', name: 'Bob' },
+            });
+          } finally {
+            await app.close();
+          }
+        }, 30000);
       });
 
       describe('Tool execution errors (MCPClient)', () => {
