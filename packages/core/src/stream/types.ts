@@ -15,7 +15,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
-import type { AIV5ResponseMessage } from '../agent/message-list';
+import type { AIV5ResponseMessage, MessageList } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { AgentSignalDataPart, AgentSignalType } from '../agent/signals';
@@ -1336,6 +1336,10 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   /** The agent producing this output, passed to output processors as `agent`. */
   agent?: Agent<any, any, any, any>;
   requestContext?: RequestContext;
+  /** @internal Runs before the total-deadline output pass saves the turn. Throwing or resolving `false` skips that pass. */
+  beforeDeadlineSave?: () => Promise<boolean | void>;
+  /** @internal Runs when an output processor trips during the total-deadline pass. */
+  onDeadlineTripwire?: (turn: MessageList) => Promise<void>;
   /** The run's abort signal, forwarded to output processors. */
   abortSignal?: AbortSignal;
   transportRef?: StreamTransportRef;

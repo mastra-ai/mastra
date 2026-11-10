@@ -242,7 +242,8 @@ Mastra streams the tool call and returns `{ acknowledged: true }` as its result,
                       {
                         name: 'toolCallId',
                         type: 'string',
-                        description: 'Unique identifier for this tool call.',
+                        description:
+                          'Identifier for this tool call, assigned by the model provider. Some providers reuse IDs across responses. In durable and evented agents, a tool that runs again for the same call receives the same ID, so you can combine it with data from the tool input to build an idempotency key. Tools inside a subagent receive new IDs when the delegation runs again. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).',
                       },
                       {
                         name: 'messages',

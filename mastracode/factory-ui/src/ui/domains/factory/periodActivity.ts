@@ -1,5 +1,7 @@
 import { sessionRowStatus } from '../workspaces/services/sessionStatus';
 import { doneAt } from './boardItems';
+import { boardOf } from './boardFlow';
+import type { BoardInfo } from './boardFlow';
 import type { WorkItem } from './services/workItems';
 
 export type ActivityPeriod = 'today' | 'week' | 'month';
@@ -86,11 +88,14 @@ export function periodActivity({
   period,
   now,
   cards,
+  boards,
   runStarts,
 }: {
   period: ActivityPeriod;
   now: number;
   cards: readonly WorkItem[];
+  /** The project's boards: a card ships when it enters its own board's completed phase. */
+  boards: readonly BoardInfo[] | undefined;
   runStarts: RunStarts;
 }): Activity {
   const from = activityStart(period, now);
@@ -99,7 +104,7 @@ export function periodActivity({
   const times: Record<ActivityKind, ReadonlyArray<number | undefined>> = {
     cameIn: cards.map(card => Date.parse(card.createdAt)),
     ran: runStarts.starts,
-    shipped: cards.map(doneAt),
+    shipped: cards.map(card => doneAt(card, boardOf(boards, card)?.flow?.completed)),
   };
   for (const kind of ACTIVITY_KIND_ORDER) {
     for (const time of times[kind]) {

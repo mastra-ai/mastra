@@ -472,13 +472,25 @@ describe('DashboardRenderer', () => {
       ['a timeseries card', metricsWidget('agent-runs')],
       ['a table card', models()],
       ['a scores card', scoresWidget],
-      ['a KPI group', kpisWidget],
-    ])("puts the handle before the title of %s, and dragging it starts the host's drag", async (_, widget) => {
+    ])("puts the handle in view before the title of %s, and dragging it starts the host's drag", async (_, widget) => {
       const { container } = renderDashboard(definition(widget), { dragHandle });
       const card = cell(container, widget.id);
       const handle = await within(card).findByRole('button', { name: `Move ${widget.id}` }, { timeout: 5000 });
       expect(handle.getAttribute('draggable')).toBe('true');
+      expect(handle.closest('.opacity-0')).toBeNull();
       await waitFor(() => expect(firstControl(card)).toBe(handle));
+      fireEvent.dragStart(handle);
+      expect(onDragStart).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a KPI group's handle, which floats over its border, for hover except on touch screens, and dragging it starts the host's drag", async () => {
+      const { container } = renderDashboard(definition(kpisWidget), { dragHandle });
+      const card = cell(container, kpisWidget.id);
+      const handle = await within(card).findByRole('button', { name: `Move ${kpisWidget.id}` }, { timeout: 5000 });
+      expect(handle.getAttribute('draggable')).toBe('true');
+      expect(handle.closest('.opacity-0.group-hover\\/kpis\\:opacity-100')).not.toBeNull();
+      // Touch screens can't hover, so the handle stays shown and tappable there.
+      expect(handle.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto')).not.toBeNull();
       fireEvent.dragStart(handle);
       expect(onDragStart).toHaveBeenCalledTimes(1);
     });
@@ -547,6 +559,9 @@ describe('DashboardRenderer', () => {
     const pinLabel = (verb: 'Pin' | 'Unpin', widget: DashboardWidget) => `${verb} ${widget.title?.trim() || 'widget'}`;
     /** Whether the button only shows while the card is hovered. */
     const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0') !== null;
+    /** Whether the button stays shown and tappable on touch screens, which can't hover. */
+    const reachableOnTouch = (button: HTMLElement) =>
+      button.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto') !== null;
 
     it.each([
       ['a timeseries card', metricsWidget('agent-runs')],
@@ -597,6 +612,22 @@ describe('DashboardRenderer', () => {
 
       fireEvent.click(pin);
       expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
+    });
+
+    it('keeps the controls of a KPI group, which float over its border, for hover on screens that can hover, whether pinned or not', async () => {
+      const { container } = renderWithProviders(<PinningHost widgets={[kpisWidget]} onPin={() => {}} />);
+      const card = cell(container, kpisWidget.id);
+      const pin = await within(card).findByRole('button', { name: pinLabel('Pin', kpisWidget) }, { timeout: 5000 });
+      expect(waitsForHover(pin)).toBe(true);
+      expect(pin.closest('.pointer-events-none')).not.toBeNull();
+      expect(reachableOnTouch(pin)).toBe(false);
+
+      fireEvent.click(pin);
+      const unpin = within(card).getByRole('button', { name: pinLabel('Unpin', kpisWidget) });
+      expect(waitsForHover(unpin)).toBe(true);
+      expect(unpin.closest('.pointer-events-none')).not.toBeNull();
+      // Touch screens can't hover, so a pinned group keeps its unpin button shown and tappable there.
+      expect(reachableOnTouch(unpin)).toBe(true);
     });
 
     it("shows the host's pinned widgets without a click", async () => {
@@ -1218,7 +1249,7 @@ describe('DashboardRenderer', () => {
       views: [{ ...view, queries: [{ ...runs, filters: { environment: 'staging' } }] }],
     };
     const { container } = renderDashboard(definition(staging), { environment: 'production' });
-    expect(await within(cell(container, 'agent-runs')).findByText('No agent runs in this range.')).toBeDefined();
+    expect(await within(cell(container, 'agent-runs')).findByText('No data in this range')).toBeDefined();
     server.events.removeAllListeners();
     expect(sent.filter(path => path.includes('/metrics/'))).toEqual([]);
   });

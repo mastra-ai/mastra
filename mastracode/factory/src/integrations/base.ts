@@ -27,6 +27,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
@@ -164,8 +165,11 @@ export interface IntegrationContext {
     /** Operator-maintained provenance label stamped on audit rows. */
     configVersion: string;
     workItems: WorkItemsStorage;
-    /** Installed boards, so integrations read phase semantics instead of matching names. */
-    boards: BoardRegistry;
+    /**
+     * Installed boards, so integrations read phase semantics instead of matching names. The
+     * per-project source serves each project its stored boards.
+     */
+    boards: BoardRegistry | ProjectBoardSource;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;

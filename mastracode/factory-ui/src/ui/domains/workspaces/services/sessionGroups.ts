@@ -80,7 +80,7 @@ const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> 
 };
 
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: boardGroupKey(boardId), label, icon: boardId === 'review' ? 'review' : 'board' };
+  return { key: boardGroupKey(boardId), label, icon: 'board' };
 }
 
 function uncatalogedBoardIds(rows: readonly SessionListRow[], catalogIds: ReadonlySet<string>): string[] {
@@ -166,4 +166,33 @@ export function collapsedRowsKeepingActive(rows: readonly SessionListRow[], addi
   // The open row already occupies a slot, including when a later batch reaches it.
   if (open && !visible.includes(open)) visible[visible.length - 1] = open;
   return visible;
+}
+
+export type SessionListEntry =
+  | { kind: 'row'; row: SessionListRow }
+  | { kind: 'card'; itemId: string; title: string; rows: SessionListRow[] };
+
+/**
+ * Gathers a card's rows under one entry for the card, at the place of its
+ * first row, each named by its context. The sidebar lists one row per card
+ * (`oneRowPerCard`), which still gets its entry so it reads as that context.
+ */
+export function nestCardSessions(rows: readonly SessionListRow[]): SessionListEntry[] {
+  const entries: SessionListEntry[] = [];
+  const cards = new Map<string, SessionListRow[]>();
+  for (const row of rows) {
+    if (row.itemId === undefined || row.contextLabel === undefined) {
+      entries.push({ kind: 'row', row });
+      continue;
+    }
+    const cardRows = cards.get(row.itemId);
+    if (cardRows) {
+      cardRows.push(row);
+      continue;
+    }
+    const nested = [row];
+    cards.set(row.itemId, nested);
+    entries.push({ kind: 'card', itemId: row.itemId, title: row.item?.title ?? row.name, rows: nested });
+  }
+  return entries;
 }

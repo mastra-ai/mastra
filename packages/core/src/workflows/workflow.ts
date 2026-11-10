@@ -540,7 +540,7 @@ export function createStep<TStepId extends string>(
 export function createStep<TStepId extends string, TStepOutput>(
   agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
-    structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+    structuredOutput: { schema: PublicSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -2435,7 +2435,7 @@ export class Workflow<
   agent<TStepId extends string, TStepOutput>(
     agent: (SubAgent<TStepId, any> | Agent<TStepId, any>) & RequireAgentInput<TPrevSchema>,
     options: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
-      structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+      structuredOutput: { schema: PublicSchema<TStepOutput> };
       retries?: number;
       scorers?: DynamicArgument<MastraScorers>;
       metadata?: StepMetadata;

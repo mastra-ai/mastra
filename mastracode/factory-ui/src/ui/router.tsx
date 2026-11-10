@@ -16,12 +16,15 @@ import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
-import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
+import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 
+import { useBoardCatalog } from '../hooks/useBoardCatalog';
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
+import { AppPageLoader } from './layouts/AppPageLoader';
 import { lazyPage } from './layouts/PageSuspense';
 import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
@@ -41,22 +44,34 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
-const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
+const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage), <AppPageLoader />);
 // A new session opens its thread on the first prompt, so that page loads right after.
-const NewPage = lazyPage(() =>
-  import('./pages/NewPage').then(module => {
-    // A failed preload retries on the visit.
-    ThreadPage.preload().catch(() => undefined);
-    return module.NewPage;
-  }),
+const NewPage = lazyPage(
+  () =>
+    import('./pages/NewPage').then(module => {
+      // A failed preload retries on the visit.
+      ThreadPage.preload().catch(() => undefined);
+      return module.NewPage;
+    }),
+  <AppPageLoader />,
 );
-const KnowledgePage = lazyPage(() => import('./pages/KnowledgePage').then(module => module.KnowledgePage));
-const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => module.SettingsPage));
-const SlackConnectionPage = lazyPage(() =>
-  import('./pages/SlackConnectionPage').then(module => module.SlackConnectionPage),
+const KnowledgePage = lazyPage(
+  () => import('./pages/KnowledgePage').then(module => module.KnowledgePage),
+  <AppPageLoader />,
 );
-const CreateFactoryPage = lazyPage(() => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage));
-const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage));
+const SettingsPage = lazyPage(
+  () => import('./pages/SettingsPage').then(module => module.SettingsPage),
+  <AppPageLoader />,
+);
+const SlackConnectionPage = lazyPage(
+  () => import('./pages/SlackConnectionPage').then(module => module.SlackConnectionPage),
+  <AppPageLoader />,
+);
+const CreateFactoryPage = lazyPage(
+  () => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage),
+  <AppPageLoader />,
+);
+const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage), <AppPageLoader />);
 const OnboardingPage = lazyPage(
   () => import('./pages/OnboardingPage').then(module => module.OnboardingPage),
   <AuthPendingSkeleton label="Loading page" />,
@@ -89,6 +104,23 @@ function RootLanding() {
   if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
+}
+
+/**
+ * The retired Review board's links (`/review?item=…`) open that board while the project still has open
+ * cards on it, and otherwise Work filtered to pull requests alone, keeping the rest of their query.
+ */
+function RetiredReviewBoardRedirect() {
+  const { search } = useLocation();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const catalog = useBoardCatalog(factoryId);
+  if (catalog.isPending) return null;
+  if (catalog.data?.some(board => board.id === 'review'))
+    return <Navigate to={`../boards/review${search}`} relative="path" replace />;
+  const params = new URLSearchParams(search);
+  // Picked sources widen the filter, so any other source would show cards the Review board never held.
+  params.set('source', PULL_REQUEST_SOURCE_FILTER);
+  return <Navigate to={`../work?${params}`} relative="path" replace />;
 }
 
 function FactoryHomeRedirect() {
@@ -143,7 +175,8 @@ function KnowledgeRoute() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
 
-  if (features.isPending || !factoryId) return null;
+  if (!factoryId) return null;
+  if (features.isPending) return <AppPageLoader />;
   if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}`} replace />;
   return <KnowledgePage />;
 }
@@ -193,7 +226,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
                         { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
-                        { path: 'review', element: <ReviewBoardPage />, ...loadOnEntry(prefetchBoard) },
+                        // The Review board was retired: new pull requests live on Work.
+                        { path: 'review', element: <RetiredReviewBoardRedirect />, ...loadOnEntry(prefetchBoard) },
                         { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },

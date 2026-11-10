@@ -143,42 +143,36 @@
     "siliconflow/deepseek-v3.2"
   ],
   "reasoning": {
-    "qwen3.7-max": [
+    "qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
+      }
+    ],
+    "kimi-k2-thinking": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen3.6-max-preview": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens",
-        "max": 262144
+        "max": 131072
       }
     ],
     "qwen3-omni-flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "qwen-turbo": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 38912
-      }
-    ],
-    "qwen3.7-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "qwen3-14b": [
@@ -190,7 +184,21 @@
         "max": 38912
       }
     ],
-    "kimi-k2.6": [
+    "qwen3-next-80b-a3b-thinking": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen-turbo": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 38912
+      }
+    ],
+    "qwen3.5-flash": [
       {
         "type": "toggle"
       },
@@ -199,7 +207,7 @@
         "max": 81920
       }
     ],
-    "qwen-flash": [
+    "kimi-k2.5": [
       {
         "type": "toggle"
       },
@@ -208,7 +216,43 @@
         "max": 81920
       }
     ],
-    "qwen3.5-plus": [
+    "qwen-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 81920
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "qwen3.7-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
+      }
+    ],
+    "qwen3-max": [
       {
         "type": "toggle"
       },
@@ -226,29 +270,16 @@
         "max": 38912
       }
     ],
-    "qwen3-8b": [
+    "qwen3.7-max": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 38912
-      }
-    ],
-    "qwen3.8-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       },
       {
         "type": "budget_tokens",
         "max": 262144
       }
     ],
-    "kimi-k2.5": [
+    "kimi-k2.6": [
       {
         "type": "toggle"
       },
@@ -257,9 +288,28 @@
         "max": 81920
       }
     ],
-    "kimi-k2-thinking": [
+    "qwen3.7-plus": [
       {
-        "type": "budget_tokens"
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 81920
       }
     ],
     "glm-5.2": [
@@ -271,6 +321,15 @@
         "values": ["high", "max"]
       }
     ],
+    "qwen3.6-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 81920
+      }
+    ],
     "kimi-k3": [
       {
         "type": "toggle"
@@ -280,13 +339,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3.6-plus": [
+    "qwen3.6-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens",
-        "max": 81920
+        "max": 131072
+      }
+    ],
+    "qwen3-8b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 38912
       }
     ],
     "deepseek-v4-flash": [
@@ -298,13 +366,27 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "qwen3-32b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 38912
+      }
+    ],
+    "qwen3.8-max": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 262144
       }
     ],
     "qwen3-vl-plus": [
@@ -334,57 +416,6 @@
         "max": 32768
       }
     ],
-    "qwen-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 81920
-      }
-    ],
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "qwen3-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 81920
-      }
-    ],
-    "qwen3.6-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 131072
-      }
-    ],
-    "qwen3.8-omni-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "qwen3.7-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
-      }
-    ],
     "glm-5.1": [
       {
         "type": "toggle"
@@ -394,50 +425,19 @@
         "max": 131072
       }
     ],
-    "qwen3.6-max-preview": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 131072
-      }
-    ],
-    "qwen3-32b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 38912
-      }
-    ],
-    "qwen3-next-80b-a3b-thinking": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3.8-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 262144
-      }
-    ],
-    "qwen3.5-flash": [
+    "qwen3.5-plus": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens",
         "max": 81920
+      }
+    ],
+    "qwen3.8-omni-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "siliconflow/deepseek-v3.1-terminus": [

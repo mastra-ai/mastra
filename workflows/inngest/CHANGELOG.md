@@ -1,5 +1,38 @@
 # @mastra/inngest
 
+## 1.11.2-alpha.2
+
+### Patch Changes
+
+- Fixed TypeScript errors with zod v3 schemas and newer `ai` v7 messages. ([#29581](https://github.com/mastra-ai/mastra/pull/29581))
+
+  - zod v3 schemas now type-check in `createStep(agent, { structuredOutput })` and the workflow `.agent()` step, and in `defaultOptions.structuredOutput`. With a zod v3 `output` schema, `generateLegacy` now types `result.object` from the schema. In client-js, `agent.generate()`/`stream()` with a zod v3 `structuredOutput` schema no longer fails with "union type that is too complex to represent". See [#29574](https://github.com/mastra-ai/mastra/issues/29574).
+  - `UIMessage[]` from newer `ai` v7 releases, which can include part types like `steering-message` from `ai@7.0.163`, can now be passed to `agent.generate()` and `agent.stream()`. Mastra does not process these new part types yet. See [#29575](https://github.com/mastra-ai/mastra/issues/29575).
+
+- Preserve existing stream replay and cancellation behavior for Inngest agents, including agents configured with a custom replay cache. ([#29635](https://github.com/mastra-ai/mastra/pull/29635))
+
+- Updated dependencies [[`58a66b0`](https://github.com/mastra-ai/mastra/commit/58a66b01d9b08e7b59c27fc3ab68eb90be13c0ed), [`ac2a640`](https://github.com/mastra-ai/mastra/commit/ac2a6401a09e2177555369cff2f7ad15f2cc7286), [`94b1641`](https://github.com/mastra-ai/mastra/commit/94b1641919dd90455131b16cd0572ce28008781b), [`8279c30`](https://github.com/mastra-ai/mastra/commit/8279c3073737dd1c228b5df15416ca4ce7e0c00c), [`bc9d8d4`](https://github.com/mastra-ai/mastra/commit/bc9d8d482cec626ef2107f1cbd5a05febceaa491), [`8a10dfe`](https://github.com/mastra-ai/mastra/commit/8a10dfe648610a6687d1e4ecc10a0a81e3d80c4c), [`d77893a`](https://github.com/mastra-ai/mastra/commit/d77893aed38eefe2dbac21e9fffd872137ee6b92), [`791cf60`](https://github.com/mastra-ai/mastra/commit/791cf606e91badea097b883949dc717689caa49d), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`bfedbfe`](https://github.com/mastra-ai/mastra/commit/bfedbfe5a8e5721cba782efb4652be84e9fecc04), [`c9140d2`](https://github.com/mastra-ai/mastra/commit/c9140d2d4d16dfd674f163cd0a83e28593969c04), [`a836d09`](https://github.com/mastra-ai/mastra/commit/a836d09a43c3c471b5bfced711731355bf26db26), [`4854e36`](https://github.com/mastra-ai/mastra/commit/4854e3641931c984a5b3941371a4f0fa58eafd0e), [`7358ad7`](https://github.com/mastra-ai/mastra/commit/7358ad73a381765572858d520f8170ab59e88514), [`b93d804`](https://github.com/mastra-ai/mastra/commit/b93d804a7a406d834389e686687b06d22ea2e4f1), [`ed1cecb`](https://github.com/mastra-ai/mastra/commit/ed1cecba5c26a73600640f74e9a1c9d322271b23), [`4cd4c46`](https://github.com/mastra-ai/mastra/commit/4cd4c46e546d44c556fce4d731cac03cad4f88c4), [`9e5b108`](https://github.com/mastra-ai/mastra/commit/9e5b1082cbe2454c377b3328cd8a0085e7452d1a), [`b31cbe2`](https://github.com/mastra-ai/mastra/commit/b31cbe2888f890383629d20c853e21f870dee5a6), [`28ddc16`](https://github.com/mastra-ai/mastra/commit/28ddc161a441fdc3ecbdcc1168dee773f1f25243), [`0f496bd`](https://github.com/mastra-ai/mastra/commit/0f496bd3c1cc7f07d2e4ecb3005d480406b3d342), [`de005a4`](https://github.com/mastra-ai/mastra/commit/de005a43d8703d36c5dd25d7ddd1f618ea98bf55)]:
+  - @mastra/core@1.83.0-alpha.3
+
+## 1.11.2-alpha.1
+
+### Patch Changes
+
+- Inngest agent runs that finish on another connect worker now record their real span outcome (success, limit/max_steps, guardrail details) instead of unknown. A start request that fails to reach Inngest now ends the run's agent and model spans with that error. ([#29261](https://github.com/mastra-ai/mastra/pull/29261))
+
+- Fixed tool approvals on Inngest agents running a tool more than once, or running a tool nobody approved. ([#29451](https://github.com/mastra-ai/mastra/pull/29451))
+
+  - Approving the same tool call twice now fails the second approval with `AGENT_RESUME_ALREADY_CLAIMED` instead of running the tool again ([#27485](https://github.com/mastra-ai/mastra/issues/27485)). Across processes this needs storage that supports both concurrent workflow-state updates and run fencing (`supportsConcurrentUpdates()` and `supportsRunFencing()`). Without both it holds within one process.
+  - When several tool calls wait for approval, approving one now runs only that tool. Approving the rest in any order runs each tool once and delivers the final answer once ([#27925](https://github.com/mastra-ai/mastra/issues/27925)). An approval of another call that arrives while a resumed run is still going waits up to 10 seconds for it to pause again.
+  - `approveToolCall()`, `declineToolCall()`, `resumeStream()` and `resumeGenerate()` on one of several waiting tool calls now end their stream when the run waits on the others again.
+  - When Inngest fails or cancels a resumed run, the run now ends as failed or canceled and its stream ends with an error or abort. A tool that was already running still finishes.
+  - If the process sending an approval dies before Inngest receives it, approving again works after 60 seconds. Until then, approvals fail with `AGENT_RESUME_ALREADY_CLAIMED`.
+
+  `serve()` and `connect()` now register one more Inngest function per app, `workflow.inngest:durable-agentic-loop.resume-claim-release`, which counts toward your Inngest function limit. Sync your app after upgrading. Until it is synced, a resumed run that Inngest fails or cancels cannot be approved or resumed for 24 hours.
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+
 ## 1.11.2-alpha.0
 
 ### Patch Changes

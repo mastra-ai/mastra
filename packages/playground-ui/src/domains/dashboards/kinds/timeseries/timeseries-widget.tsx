@@ -37,7 +37,12 @@ export function TimeseriesWidget(props: Props) {
     props.expand,
   );
   const { view } = menu;
-  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
+  const heading = {
+    ...menu.heading,
+    dragHandle: props.dragHandle,
+    onTitleChange: props.onTitleChange,
+    ...pinActions(props.pin),
+  };
   if (gate.status === 'pending')
     return (
       <PendingChartCard
@@ -83,6 +88,7 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
       : [{ label: s.label, value: format.value(s.rangeTotal), color: chartColor(s.color) }],
   );
   const withRangeTotals = options.series.some(s => s.rangeTotal !== undefined);
+  const failed = sent.filter(r => r.isError);
 
   const layout = {
     ...heading,
@@ -94,7 +100,9 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
     ) : (
       heading.actions
     ),
-    total: withRangeTotals ? rangeTotals : undefined,
+    // Range totals per series; with no series in the range, one plain 0. None while a request
+    // failed, so no total sits beside the error.
+    total: !withRangeTotals || failed.length ? undefined : rangeTotals.length ? rangeTotals : format.value(0),
     isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
@@ -103,7 +111,6 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
     ),
   };
 
-  const failed = sent.filter(r => r.isError);
   if (failed.length) {
     return (
       <ChartCard {...layout}>
@@ -113,11 +120,8 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
   }
 
   const totalFormat = FORMATTERS[options.total?.format ?? options.format];
-  const total =
-    options.total &&
-    (typeof options.total.value === 'object' && 'peak' in options.total.value && !shaped.total
-      ? '—'
-      : totalFormat.value(shaped.total ?? 0));
+  // An empty range totals 0, a peak included, like the cards around it.
+  const total = options.total && totalFormat.value(shaped.total ?? 0);
 
   const chart = {
     data: shaped.data,
@@ -137,7 +141,7 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
 
   return (
     <ChartCard {...layout} total={layout.total ?? total} isUpdating={sent.some(r => r.isRefetching)}>
-      <ChartArea isEmpty={!isLoading && shaped.empty} emptyMessage={options.emptyMessage}>
+      <ChartArea isEmpty={!isLoading && shaped.empty}>
         {options.chart === 'stackedBar' ? (
           <MetricsStackedBarChart {...chart} />
         ) : (

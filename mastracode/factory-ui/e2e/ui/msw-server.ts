@@ -24,6 +24,7 @@ export const server = setupServer(
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
+  http.get('*/web/status', () => HttpResponse.json({ problems: [] })),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
@@ -44,9 +45,6 @@ export const server = setupServer(
   ),
   // Board filters read connection status even when no provider is configured.
   http.get('*/web/github/status', () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
-  // Ambient GitHub label routing (read by every board's intake feed); label-routing
-  // tests override it with `server.use(...)`.
-  http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
   // Ambient pull requests: Work and Review both list their linked repositories'
   // open pull requests. Pull-request tests override these with `server.use(...)`.
   http.get('*/web/github/projects/:id/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),

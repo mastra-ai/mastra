@@ -570,7 +570,7 @@ Make sure to install the correct protocol package for your provider. The exporte
 
 If you see an error like:
 
-```
+```text
 HTTP/Protobuf exporter is not installed (required for signoz).
 To use HTTP/Protobuf export, install the required package:
   npm install @opentelemetry/exporter-trace-otlp-proto
@@ -752,7 +752,7 @@ For details on span naming and attributes, see the [OpenTelemetry Exporter seman
 
 With the `OtelBridge`, your traces maintain proper hierarchy across OTEL and Mastra boundaries:
 
-```
+```text
 HTTP POST /api/chat (from Hono middleware)
 └── agent.assistant (from Mastra via OtelBridge)
     └── model_generation __AI_SDK_OPENAI_MODEL_BASE__ (generation loop)
@@ -768,7 +768,7 @@ HTTP POST /api/chat (from Hono middleware)
 
 The `OtelBridge` enables trace propagation across service boundaries. When Service A calls Service B via HTTP, trace context propagates automatically:
 
-```
+```text
 Service A: HTTP POST /api/process
 └── HTTP POST service-b/api/analyze (outgoing call)
 

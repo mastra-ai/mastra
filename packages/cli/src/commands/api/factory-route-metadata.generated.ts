@@ -433,6 +433,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "enabled",
       "expectedRevision",
       "name",
+      "on",
       "target",
       "when"
     ],
@@ -685,7 +686,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "intakeRouteCreate",
     "method": "POST",
     "path": "/web/factory/projects/:id/intake-routes",
-    "description": "Add an intake route at the end of a Factory project",
+    "description": "Add an intake route to a Factory project, after its routes; a route that places new cards goes ahead of the first route that takes every new card",
     "pathParams": [
       "id"
     ],
@@ -693,6 +694,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "bodyParams": [
       "enabled",
       "name",
+      "on",
       "target",
       "when"
     ],
@@ -1318,6 +1320,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "initialPhase": {
                 "type": "string"
               },
+              "flow": {
+                "type": "object",
+                "properties": {
+                  "triage": {
+                    "type": "string"
+                  },
+                  "build": {
+                    "type": "string"
+                  },
+                  "selfReview": {
+                    "type": "string"
+                  },
+                  "pullRequestReview": {
+                    "type": "string"
+                  },
+                  "completed": {
+                    "type": "string"
+                  },
+                  "canceled": {
+                    "type": "string"
+                  }
+                }
+              },
               "phases": {
                 "type": "array",
                 "items": {
@@ -1358,6 +1383,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "skill": {
                       "type": "string"
                     },
+                    "goal": {
+                      "type": "object",
+                      "properties": {
+                        "objective": {
+                          "type": "string"
+                        },
+                        "maxRuns": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "objective"
+                      ]
+                    },
                     "autoStart": {
                       "type": "boolean"
                     },
@@ -1381,6 +1420,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "id",
                         "autoApprove"
                       ]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "transitions": {
                       "type": "array",
@@ -1514,9 +1559,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
           ]
         },
         "__schema4": {
@@ -1676,6 +1727,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           },
                           "instructions": {
                             "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "objective": {
+                                "type": "string"
+                              },
+                              "maxRuns": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "objective"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -1735,6 +1801,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
+                  },
+                  "tools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "factory_record_review_verdict",
+                            "factory_review_source"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1778,15 +1861,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "additionalProperties": {
                     "type": "object",
                     "properties": {
-                      "handlers": {
-                        "type": "boolean"
-                      },
-                      "exitToolId": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
                       "requiredNextPhases": {
                         "type": "array",
                         "items": {
@@ -1795,8 +1869,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       }
                     },
                     "required": [
-                      "handlers",
-                      "exitToolId",
                       "requiredNextPhases"
                     ]
                   }
@@ -1914,9 +1986,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
           ]
         },
         "__schema4": {
@@ -2586,12 +2664,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
+                  },
+                  "joinClosedIssue": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
                   "boardKey",
-                  "phaseKey"
+                  "phaseKey",
+                  "joinClosedIssue"
                 ]
+              },
+              "on": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "work_item.created",
+                    "work_item.closed",
+                    "work_item.reopened",
+                    "pull_request.opened",
+                    "pull_request.synchronized",
+                    "pull_request.review_requested",
+                    "pull_request.merged",
+                    "pull_request.closed"
+                  ]
+                }
               },
               "revision": {
                 "type": "integer",
@@ -2624,6 +2722,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "position",
               "when",
               "target",
+              "on",
               "revision",
               "createdBy",
               "createdAt",
@@ -2632,10 +2731,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "problems"
             ]
           }
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
-        "intakeRoutes"
+        "intakeRoutes",
+        "canEdit"
       ],
       "$defs": {
         "__schema0": {
@@ -2695,9 +2798,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -2867,12 +2981,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "string",
                     "null"
                   ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "boardKey",
-                "phaseKey"
+                "phaseKey",
+                "joinClosedIssue"
               ]
+            },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
+                ]
+              }
             },
             "revision": {
               "type": "integer",
@@ -2905,6 +3039,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
+            "on",
             "revision",
             "createdBy",
             "createdAt",
@@ -2975,9 +3110,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -3448,6 +3594,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     },
                     "instructions": {
                       "type": "string"
+                    },
+                    "goal": {
+                      "type": "object",
+                      "properties": {
+                        "objective": {
+                          "type": "string"
+                        },
+                        "maxRuns": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "objective"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "additionalProperties": false
@@ -3502,6 +3663,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "id"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tools": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "factory_record_review_verdict",
+                      "factory_review_source"
+                    ]
+                  }
                 },
                 {
                   "type": "null"
@@ -3598,9 +3776,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
           ]
         },
         "__schema5": {
@@ -3739,6 +3923,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           },
                           "instructions": {
                             "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "objective": {
+                                "type": "string"
+                              },
+                              "maxRuns": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "objective"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -3798,6 +3997,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
+                  },
+                  "tools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "factory_record_review_verdict",
+                            "factory_review_source"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3841,15 +4057,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "additionalProperties": {
                     "type": "object",
                     "properties": {
-                      "handlers": {
-                        "type": "boolean"
-                      },
-                      "exitToolId": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
                       "requiredNextPhases": {
                         "type": "array",
                         "items": {
@@ -3858,8 +4065,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       }
                     },
                     "required": [
-                      "handlers",
-                      "exitToolId",
                       "requiredNextPhases"
                     ]
                   }
@@ -3977,9 +4182,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
           ]
         },
         "__schema4": {
@@ -4543,8 +4754,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "target": {
           "$ref": "#/$defs/__schema10"
         },
-        "expectedRevision": {
+        "on": {
           "$ref": "#/$defs/__schema12"
+        },
+        "expectedRevision": {
+          "$ref": "#/$defs/__schema14"
         }
       },
       "required": [
@@ -4649,9 +4863,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema6": {
@@ -4746,6 +4971,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
+            },
+            "joinClosedIssue": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -4759,6 +4987,25 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
         "__schema12": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema13"
+          }
+        },
+        "__schema13": {
+          "type": "string",
+          "enum": [
+            "work_item.created",
+            "work_item.closed",
+            "work_item.reopened",
+            "pull_request.opened",
+            "pull_request.synchronized",
+            "pull_request.review_requested",
+            "pull_request.merged",
+            "pull_request.closed"
+          ]
+        },
+        "__schema14": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
@@ -4829,12 +5076,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "string",
                     "null"
                   ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "boardKey",
-                "phaseKey"
+                "phaseKey",
+                "joinClosedIssue"
               ]
+            },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
+                ]
+              }
             },
             "revision": {
               "type": "integer",
@@ -4867,6 +5134,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
+            "on",
             "revision",
             "createdBy",
             "createdAt",
@@ -4937,9 +5205,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -5665,6 +5944,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     },
                     "instructions": {
                       "type": "string"
+                    },
+                    "goal": {
+                      "type": "object",
+                      "properties": {
+                        "objective": {
+                          "type": "string"
+                        },
+                        "maxRuns": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "objective"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "additionalProperties": false
@@ -5719,6 +6013,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "id"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tools": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "factory_record_review_verdict",
+                      "factory_review_source"
+                    ]
+                  }
                 },
                 {
                   "type": "null"
@@ -5815,9 +6126,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
           ]
         },
         "__schema9": {
@@ -5956,6 +6273,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           },
                           "instructions": {
                             "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "objective": {
+                                "type": "string"
+                              },
+                              "maxRuns": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "objective"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -6015,6 +6347,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
+                  },
+                  "tools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "factory_record_review_verdict",
+                            "factory_review_source"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -6058,15 +6407,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "additionalProperties": {
                     "type": "object",
                     "properties": {
-                      "handlers": {
-                        "type": "boolean"
-                      },
-                      "exitToolId": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
                       "requiredNextPhases": {
                         "type": "array",
                         "items": {
@@ -6075,8 +6415,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       }
                     },
                     "required": [
-                      "handlers",
-                      "exitToolId",
                       "requiredNextPhases"
                     ]
                   }
@@ -6194,9 +6532,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
           ]
         },
         "__schema4": {
@@ -6370,6 +6714,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           },
                           "instructions": {
                             "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "objective": {
+                                "type": "string"
+                              },
+                              "maxRuns": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "objective"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "additionalProperties": false
@@ -6429,6 +6788,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
+                  },
+                  "tools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "factory_record_review_verdict",
+                            "factory_review_source"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -6472,15 +6848,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "additionalProperties": {
                     "type": "object",
                     "properties": {
-                      "handlers": {
-                        "type": "boolean"
-                      },
-                      "exitToolId": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
                       "requiredNextPhases": {
                         "type": "array",
                         "items": {
@@ -6489,8 +6856,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       }
                     },
                     "required": [
-                      "handlers",
-                      "exitToolId",
                       "requiredNextPhases"
                     ]
                   }
@@ -6608,9 +6973,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
           ]
         },
         "__schema4": {
@@ -6930,12 +7301,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
+            },
+            "joinClosedIssue": {
+              "type": "boolean"
             }
           },
           "required": [
             "boardKey"
           ],
           "additionalProperties": false
+        },
+        "on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema8"
+          }
         }
       },
       "required": [
@@ -7001,9 +7381,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -7087,6 +7478,19 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "maxLength": 128,
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "__schema8": {
+          "type": "string",
+          "enum": [
+            "work_item.created",
+            "work_item.closed",
+            "work_item.reopened",
+            "pull_request.opened",
+            "pull_request.synchronized",
+            "pull_request.review_requested",
+            "pull_request.merged",
+            "pull_request.closed"
+          ]
         }
       }
     },
@@ -7154,12 +7558,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "string",
                     "null"
                   ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "boardKey",
-                "phaseKey"
+                "phaseKey",
+                "joinClosedIssue"
               ]
+            },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
+                ]
+              }
             },
             "revision": {
               "type": "integer",
@@ -7192,6 +7616,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
+            "on",
             "revision",
             "createdBy",
             "createdAt",
@@ -7262,9 +7687,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -7451,12 +7887,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
+                  },
+                  "joinClosedIssue": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
                   "boardKey",
-                  "phaseKey"
+                  "phaseKey",
+                  "joinClosedIssue"
                 ]
+              },
+              "on": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "work_item.created",
+                    "work_item.closed",
+                    "work_item.reopened",
+                    "pull_request.opened",
+                    "pull_request.synchronized",
+                    "pull_request.review_requested",
+                    "pull_request.merged",
+                    "pull_request.closed"
+                  ]
+                }
               },
               "revision": {
                 "type": "integer",
@@ -7489,6 +7945,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "position",
               "when",
               "target",
+              "on",
               "revision",
               "createdBy",
               "createdAt",
@@ -7497,10 +7954,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "problems"
             ]
           }
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
-        "intakeRoutes"
+        "intakeRoutes",
+        "canEdit"
       ],
       "$defs": {
         "__schema0": {
@@ -7560,9 +8021,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -8097,12 +8569,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "role": {
           "type": "string",
-          "enum": [
-            "triage",
-            "plan",
-            "work",
-            "review"
-          ]
+          "minLength": 1,
+          "maxLength": 32
         },
         "skillName": {
           "type": "string",
