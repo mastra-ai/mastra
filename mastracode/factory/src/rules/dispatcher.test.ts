@@ -2238,8 +2238,117 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
+  it.each([
+    {
+      name: "a self-review after the builder's own move",
+      from: 'work',
+      decision: { type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' },
+      ownerId: undefined,
+    },
+    {
+      // factory_start_session records its runs under the tools' owner id, not the dispatcher's.
+      name: 'a self-review after a builder run started from a Factory tool',
+      from: 'work',
+      decision: { type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' },
+      ownerId: 'factory-tools:other',
+    },
+    {
+      name: "a build after the planner's own move",
+      from: 'plan',
+      decision: { type: 'invokeSkill', role: 'work', prompt: 'Implement the plan.', startsAfterOwnMove: true },
+      ownerId: undefined,
+    },
+  ] as const)(
+    "waits for the previous role's live run on the same thread before $name",
+    async ({ from, decision, ownerId }) => {
+      // A rotated seat shares the thread with the run before it. That run was built
+      // with the earlier role's tools (a builder has no factory_record_review_verdict),
+      // so the kickoff waits for it to end and starts a fresh run.
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        ...decision,
+        idempotencyKey: `wait-for-previous-role-run-${decision.role}`,
+      });
+      const bind = async (role: 'plan' | 'work' | 'review') => {
+        const prepared = await storage.prepareRunStart({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: PROJECT_ID,
+          workItem: {
+            id: item.id,
+            input: {
+              externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+              title: 'Fix issue',
+              stages: ['execute'],
+              sessions: {},
+              metadata: {},
+            },
+          },
+          role,
+          session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+          resourceId: PROJECT_ID,
+          kickoffKey: `kickoff-${role}-${item.id}`,
+          kickoffMessage: null,
+        });
+        await storage.markPendingStart(prepared.binding.id, 'sent');
+        return prepared.binding;
+      };
+      const previous = await bind(from);
+      const next = await bind(decision.role);
+      expect(next.id).not.toBe(previous.id);
+      expect(next.threadId).toBe(previous.threadId);
+      const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+        streamActive: true,
+      });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [
+          {
+            kickoffId: 'previous-kickoff',
+            bindingId: previous.id,
+            role: previous.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: previous.orgId,
+            factoryProjectId: previous.factoryProjectId,
+            workItemId: previous.workItemId,
+            sessionId: previous.sessionId,
+            threadId: previous.threadId,
+            branch: previous.branch,
+            ...(ownerId ? { ownerId, heartbeatAt: Date.now() } : {}),
+          },
+        ],
+      });
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'previous-run', threadId: previous.threadId }]);
+      observeSessionRunEnd(session, { audit: seed.audit });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        audit: seed.audit,
+        ownerId: 'worker-1',
+      });
+
+      const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(2));
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'leased' });
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatch;
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    },
+  );
+
   describe('an intake route moving a card with a run in flight', () => {
-    async function runningCard(phaseKey: string) {
+    async function runningCard(phaseKey: string, ledgerBindingId?: string) {
       const seed = await createFactoryStorageForTests();
       const storage = seed.workItems;
       const item = await createItem(storage);
@@ -2262,7 +2371,7 @@ describe('FactoryDecisionDispatcher', () => {
         value: [
           {
             kickoffId: 'running-kickoff',
-            bindingId: binding.id,
+            bindingId: ledgerBindingId ?? binding.id,
             role: binding.role,
             startedBy: 'factory-rule-dispatcher',
             orgId: binding.orgId,
@@ -2310,29 +2419,37 @@ describe('FactoryDecisionDispatcher', () => {
       return { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount };
     }
 
-    it("waits for the card's run to end before moving it into a working phase, without holding a dispatch slot", async () => {
-      const { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount } =
-        await runningCard('triage');
-      const routeMove = async () =>
-        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(entry => entry.decision.type === 'routeEvent');
+    it.each([
+      { name: "the card's run", ledgerBindingId: undefined },
+      { name: "a run started under the card's previous seat on the same thread", ledgerBindingId: 'previous-seat' },
+    ])(
+      'waits for $name to end before moving it into a working phase, without holding a dispatch slot',
+      async ({ ledgerBindingId }) => {
+        const { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount } =
+          await runningCard('triage', ledgerBindingId);
+        const routeMove = async () =>
+          (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(
+            entry => entry.decision.type === 'routeEvent',
+          );
 
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-      // Handed back to the queue rather than waiting inline: nothing listens for the run's end,
-      // and the claim did not count as an attempt.
-      expect(getAgentEndListenerCount()).toBe(1);
-      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
-      expect(await routeMove()).toMatchObject({ status: 'pending', attempts: 0, lastError: null });
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+        // Handed back to the queue rather than waiting inline: nothing listens for the run's end,
+        // and the claim did not count as an attempt.
+        expect(getAgentEndListenerCount()).toBe(1);
+        expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
+        expect(await routeMove()).toMatchObject({ status: 'pending', attempts: 0, lastError: null });
 
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:20Z'));
-      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:20Z'));
+        expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
 
-      controller.listActiveThreadRuns.mockReturnValue([]);
-      emitAgentEnd('complete');
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:40Z'));
+        controller.listActiveThreadRuns.mockReturnValue([]);
+        emitAgentEnd('complete');
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:40Z'));
 
-      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['triage'] });
-      expect(await routeMove()).toMatchObject({ status: 'succeeded' });
-    });
+        expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['triage'] });
+        expect(await routeMove()).toMatchObject({ status: 'succeeded' });
+      },
+    );
 
     it('moves it into a terminal phase at once, so terminal cleanup stops the run as a close always has', async () => {
       const { storage, item, dispatcher, getAgentEndListenerCount } = await runningCard('done');

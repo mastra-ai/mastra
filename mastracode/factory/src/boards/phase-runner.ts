@@ -3,7 +3,7 @@ import type { FactoryRuleDecision, FactoryRuleHandler, FactoryStageRuleContext }
 /**
  * Starts the phase's skill in its context, for sources the phase gives no `onEnter` handler.
  * Entering from another phase starts it even when that phase's agent shares the context and
- * made the move: the skill is queued onto its run.
+ * made the move: the skill starts once that agent's run ends.
  */
 export function startSkill(skill: string, context: string): FactoryRuleHandler<FactoryStageRuleContext> {
   return rule => ({

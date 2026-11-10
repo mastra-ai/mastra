@@ -2216,11 +2216,14 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Whether a run is in flight on `binding`: live here, or live on another dispatcher. An open-run
-   * entry with nothing live behind it is an orphan of a dead process and does not count.
+   * Whether a run is in flight on `binding`'s thread: live here, or live on another dispatcher. A run
+   * started under the seat this binding rotated from counts too. An open-run entry with nothing live
+   * behind it is an orphan of a dead process and does not count.
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
-    const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+    const open = (await listSessionOpenRuns(session)).filter(
+      entry => entry.bindingId === binding.id || entry.threadId === binding.threadId,
+    );
     if (open.length === 0) return false;
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
@@ -2230,7 +2233,7 @@ export class FactoryDecisionDispatcher {
   async #waitForOpenRun(session: BoundDispatcherSession, binding: FactoryRunBindingRecord, label: string) {
     const runStillActive = () =>
       this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
-    // Only a *live* run on this binding can be duplicated by a second
+    // Only a *live* run on this thread can be duplicated by a second
     // kickoff, so that is the only thing worth waiting on. The open-run
     // ledger is shared by every replica, but the run registry is local, so
     // an entry with nothing live here is one of two things:
@@ -2248,15 +2251,24 @@ export class FactoryDecisionDispatcher {
         runStillActive,
       });
       try {
-        const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+        // A run started under the seat this binding rotated from shares its
+        // thread. Its tools were built for that earlier role, so a kickoff
+        // delivered into it would run without the new role's tools.
+        const open = (await listSessionOpenRuns(session)).filter(
+          entry => entry.bindingId === binding.id || entry.threadId === binding.threadId,
+        );
         if (open.length === 0) break;
-        if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
-          throw new FactoryDispatchError(
-            'session_unavailable',
-            `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
-          );
+        // A run live in this process is waited on whoever started it: one
+        // started from a Factory tool carries that tool's owner id, not ours.
+        if (!runStillActive()) {
+          if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
+            throw new FactoryDispatchError(
+              'session_unavailable',
+              `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
+            );
+          }
+          break;
         }
-        if (!runStillActive()) break;
         if (!(await openRun.wait())) break;
       } finally {
         openRun.close();
