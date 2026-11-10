@@ -34,8 +34,44 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVec
 
   translate(filter?: VectorizeVectorFilter): VectorizeVectorFilter {
     if (this.isEmpty(filter)) return filter;
+    const clauses = this.topLevelAndClauses(filter);
+    if (clauses) return this.mergeClauses(clauses);
     this.validateFilter(filter);
     return this.translateNode(filter);
+  }
+
+  /**
+   * The clauses of a filter that is only `{ $and: [...] }`, as Memory.recall() and SemanticRecall
+   * send to combine the scope with a user filter. Vectorize has no `$and`, but it ANDs top-level
+   * keys, so these clauses can be merged into one filter.
+   */
+  private topLevelAndClauses(filter: unknown): VectorizeVectorFilter[] | undefined {
+    if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) return undefined;
+    const keys = Object.keys(filter);
+    const clauses = (filter as { $and?: unknown }).$and;
+    if (keys.length !== 1 || keys[0] !== '$and' || !Array.isArray(clauses)) return undefined;
+    return clauses as VectorizeVectorFilter[];
+  }
+
+  private mergeClauses(clauses: VectorizeVectorFilter[]): VectorizeVectorFilter {
+    const merged: Record<string, Record<string, unknown>> = {};
+    for (const clause of clauses) {
+      if (this.isEmpty(clause)) continue;
+      this.validateFilter(clause);
+      const translated = this.translateNode(clause) as Record<string, Record<string, unknown>>;
+      for (const [field, condition] of Object.entries(translated)) {
+        const existing = merged[field] ?? {};
+        for (const operator of Object.keys(condition)) {
+          if (operator in existing) {
+            throw new Error(
+              `Vectorize cannot combine $and clauses that use the same operator (${operator}) on ${field}`,
+            );
+          }
+        }
+        merged[field] = { ...existing, ...condition };
+      }
+    }
+    return merged as VectorizeVectorFilter;
   }
 
   private translateNode(node: VectorizeVectorFilter, currentPath: string = ''): any {

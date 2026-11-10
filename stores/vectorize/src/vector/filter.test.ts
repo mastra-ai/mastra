@@ -196,4 +196,44 @@ describe('VectorizeFilterTranslator', () => {
       });
     });
   });
+
+  // SemanticRecall and Memory.recall() send `{ $and: [scopeFilter, userFilter] }`. Vectorize ANDs
+  // top-level keys, so a top-level `$and` of plain clauses becomes one object.
+  describe('top-level $and', () => {
+    it('merges clauses on different fields into one filter', () => {
+      const filter: any = { $and: [{ resource_id: 'user-1' }, { projectId: { $eq: 'project-a' } }] };
+      expect(translator.translate(filter)).toEqual({
+        resource_id: { $eq: 'user-1' },
+        projectId: { $eq: 'project-a' },
+      });
+    });
+
+    it('merges different operators on the same field', () => {
+      const filter: any = { $and: [{ score: { $gt: 1 } }, { score: { $lt: 5 } }] };
+      expect(translator.translate(filter)).toEqual({ score: { $gt: 1, $lt: 5 } });
+    });
+
+    it('flattens nested fields inside a clause', () => {
+      const filter: any = { $and: [{ thread_id: 't-1' }, { project: { stage: 'beta' } }] };
+      expect(translator.translate(filter)).toEqual({
+        thread_id: { $eq: 't-1' },
+        'project.stage': { $eq: 'beta' },
+      });
+    });
+
+    it('rejects clauses that set the same operator on the same field', () => {
+      const filter: any = { $and: [{ resource_id: 'user-1' }, { resource_id: 'user-2' }] };
+      expect(() => translator.translate(filter)).toThrow(/same operator/);
+    });
+
+    it('still rejects $and clauses that use logical operators', () => {
+      const filter: any = { $and: [{ a: 1 }, { $or: [{ b: 1 }, { c: 2 }] }] };
+      expect(() => translator.translate(filter)).toThrow();
+    });
+
+    it('still rejects $and next to other top-level keys', () => {
+      const filter: any = { $and: [{ a: 1 }], b: 2 };
+      expect(() => translator.translate(filter)).toThrow();
+    });
+  });
 });
