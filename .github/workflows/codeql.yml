@@ -190,6 +190,8 @@ jobs:
         with:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           text: ${{ steps.state.outputs.text }}
+          # #eng-maintainer-alerts
+          channel: 'C0CD83YFFNF'
 
       - name: Fail when the alerts could not be checked
         if: steps.state.outputs.checked == 'false'
