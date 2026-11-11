@@ -195,6 +195,35 @@ it('serves no apps with `server.mcp.apps: false`', async () => {
   expect(tools.map(tool => tool.name)).not.toContain('get_observability_capabilities');
 });
 
+it('opens logs and metrics in the trace list, telling it which of those views the caller can use', async () => {
+  const { connect } = await start({ toolsets: ['observability', 'observability_analytics'] });
+  const client = await connect('tracer', { rendersApps: true });
+
+  const { tools } = await client.listTools();
+  for (const name of ['list_logs', 'analyze_metrics'])
+    expect(tools.find(tool => tool.name === name)?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST } });
+  const values = tools.find(tool => tool.name === 'list_observability_values');
+  expect(values?._meta).toMatchObject({ ui: { resourceUri: TRACE_LIST, visibility: ['app'] } });
+
+  const { tools: served } = json(await client.callTool({ name: 'get_observability_capabilities', arguments: {} }));
+  expect(served).toEqual({ logs: true, metrics: true });
+  // The filter bars' values, as this caller: the agent that ran is a known entity.
+  const { names } = json(
+    await client.callTool({ name: 'list_observability_values', arguments: { kind: 'entityNames' } }),
+  );
+  expect(names).toContain('helper');
+});
+
+it("tells the trace list metrics aren't served without the analytics toolset", async () => {
+  const { connect } = await start({ toolsets: ['observability'] });
+  const client = await connect('tracer', { rendersApps: true });
+
+  const { tools } = await client.listTools();
+  expect(tools.map(tool => tool.name)).not.toContain('analyze_metrics');
+  const { tools: served } = json(await client.callTool({ name: 'get_observability_capabilities', arguments: {} }));
+  expect(served).toEqual({ logs: true, metrics: false });
+});
+
 it('opens list_traces in the trace list on a store without trace queries', async () => {
   const { connect, traceId } = await start({}, { traceQuery: false });
   const client = await connect('tracer', { rendersApps: true });

@@ -11,6 +11,9 @@ import {
   AGGREGATE_SPANS,
   GET_CAPABILITIES,
   AGGREGATE_TRACES,
+  GET_ENTITY_NAMES,
+  GET_ENTITY_TYPES,
+  GET_ENVIRONMENTS,
   GET_FEEDBACK_AGGREGATE,
   GET_FEEDBACK_BREAKDOWN,
   GET_FEEDBACK_PERCENTILES,
@@ -26,6 +29,8 @@ import {
   GET_SCORE_BREAKDOWN,
   GET_SCORE_PERCENTILES,
   GET_SCORE_TIME_SERIES,
+  GET_SERVICE_NAMES,
+  GET_TAGS,
   GET_TRACE_QUERY_FIELDS,
   GET_TRACE_QUERY_VALUES,
   LIST_FEEDBACK,
@@ -153,11 +158,19 @@ function analyzeSchema(routes: Record<Op, ServerRoute>): JSONSchema7 {
 
 /** Observability (traces, spans, logs) and observability analytics (metrics, scores, feedback). */
 export function addObservabilityTools(kit: CatalogueKit) {
-  const { call, addOperation, addCombined, config } = kit;
+  const { call, addOperation, addCombined, config, offered } = kit;
+  const metricRoutes = {
+    aggregate: GET_METRIC_AGGREGATE,
+    breakdown: GET_METRIC_BREAKDOWN,
+    timeseries: GET_METRIC_TIME_SERIES,
+    percentiles: GET_METRIC_PERCENTILES,
+  };
+  // Hosts with MCP Apps open traces, logs, and metrics in Studio's observability explorer; others read the
+  // JSON as before. The explorer learns what it can show through the observability toolset's app-only tools.
+  const explorer = kit.apps.traceList && offered(GET_CAPABILITIES) ? kit.apps.traceList : undefined;
+  const traceListLink = explorer ? { meta: { ui: { resourceUri: explorer } } } : undefined;
 
   if (config.toolsets.has('observability')) {
-    // Hosts with MCP Apps open trace lists in Studio's trace explorer; others read the JSON as before.
-    const traceListLink = kit.apps.traceList ? { meta: { ui: { resourceUri: kit.apps.traceList } } } : undefined;
     const bodyTool = (
       route: ServerRoute,
       rows?: string,
@@ -238,14 +251,55 @@ export function addObservabilityTools(kit: CatalogueKit) {
         }),
       traceListLink,
     );
-    // The trace list asks which views the store supports; the model has no use for it.
-    if (kit.apps.traceList) {
-      addOperation(GET_CAPABILITIES, object({}), (_args, signal) => call(GET_CAPABILITIES, {}, signal), {
-        meta: { ui: { resourceUri: kit.apps.traceList, visibility: ['app'] } },
-      });
+    // The explorer asks which views the store supports and which of them this caller's tools serve, and
+    // fills its filter bars from the values the store has seen; the model has no use for either.
+    if (explorer) {
+      const appOnly = { meta: { ui: { resourceUri: explorer, visibility: ['app'] } } };
+      addOperation(
+        GET_CAPABILITIES,
+        object({}),
+        async (_args, signal) => ({
+          ...((await call(GET_CAPABILITIES, {}, signal)) as Args),
+          tools: {
+            logs: offered(LIST_LOGS),
+            metrics: Object.values(metricRoutes).every(offered),
+          },
+        }),
+        appOnly,
+      );
+      const values = {
+        entityTypes: GET_ENTITY_TYPES,
+        entityNames: GET_ENTITY_NAMES,
+        serviceNames: GET_SERVICE_NAMES,
+        environments: GET_ENVIRONMENTS,
+        tags: GET_TAGS,
+      };
+      addCombined(
+        Object.values(values),
+        object(
+          {
+            kind: { type: 'string', enum: Object.keys(values), description: 'Which values to list.' },
+            ...(listQuerySchema(GET_ENTITY_NAMES).properties as Record<string, JSONSchema7>),
+            ...(listQuerySchema(GET_TAGS).properties as Record<string, JSONSchema7>),
+          },
+          ['kind'],
+        ),
+        (args, signal) => {
+          const { kind, ...query } = args;
+          const route =
+            typeof kind === 'string' && Object.hasOwn(values, kind) ? values[kind as keyof typeof values] : undefined;
+          if (!route) throw new Error(`Unknown kind "${String(kind)}". Use one of: ${Object.keys(values).join(', ')}.`);
+          return call(route, { query }, signal);
+        },
+        appOnly,
+      );
     }
-    addOperation(LIST_LOGS, hoistRepeated(listQuerySchema(LIST_LOGS)), async (args, signal) =>
-      fitRows(await call(LIST_LOGS, { query: args }, signal), 'logs', PER_PAGE_HINT, { cursors: CURSORS }),
+    addOperation(
+      LIST_LOGS,
+      hoistRepeated(listQuerySchema(LIST_LOGS)),
+      async (args, signal) =>
+        fitRows(await call(LIST_LOGS, { query: args }, signal), 'logs', PER_PAGE_HINT, { cursors: CURSORS }),
+      traceListLink,
     );
   }
 
@@ -259,19 +313,19 @@ export function addObservabilityTools(kit: CatalogueKit) {
       );
     }
 
-    const analyze = (routes: Record<Op, ServerRoute>) =>
-      addCombined(Object.values(routes), hoistRepeated(analyzeSchema(routes)), (args, signal) => {
-        const { op, ...body } = args;
-        const route = typeof op === 'string' && Object.hasOwn(routes, op) ? routes[op as Op] : undefined;
-        if (!route) throw toolError(400, `Unknown op "${String(op)}". Use one of: ${OPS.join(', ')}.`);
-        return call(route, { body }, signal);
-      });
-    analyze({
-      aggregate: GET_METRIC_AGGREGATE,
-      breakdown: GET_METRIC_BREAKDOWN,
-      timeseries: GET_METRIC_TIME_SERIES,
-      percentiles: GET_METRIC_PERCENTILES,
-    });
+    const analyze = (routes: Record<Op, ServerRoute>, options?: Parameters<typeof addCombined>[3]) =>
+      addCombined(
+        Object.values(routes),
+        hoistRepeated(analyzeSchema(routes)),
+        (args, signal) => {
+          const { op, ...body } = args;
+          const route = typeof op === 'string' && Object.hasOwn(routes, op) ? routes[op as Op] : undefined;
+          if (!route) throw toolError(400, `Unknown op "${String(op)}". Use one of: ${OPS.join(', ')}.`);
+          return call(route, { body }, signal);
+        },
+        options,
+      );
+    analyze(metricRoutes, traceListLink);
     analyze({
       aggregate: GET_SCORE_AGGREGATE,
       breakdown: GET_SCORE_BREAKDOWN,

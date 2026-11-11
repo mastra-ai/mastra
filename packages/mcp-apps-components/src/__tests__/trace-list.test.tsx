@@ -37,6 +37,7 @@ async function openList(mcp: ReturnType<typeof traceListServer>, tool: string, a
   hosts.push(host);
   const client: Client = host.client;
   const result = await client.callTool({ name: tool, arguments: args });
+  const { tools } = await client.listTools();
   mcp.calls.length = 0;
 
   const parent = { postMessage: (message: unknown) => hostTransport.onmessage?.(structuredClone(message) as never) };
@@ -50,7 +51,12 @@ async function openList(mcp: ReturnType<typeof traceListServer>, tool: string, a
       window.dispatchEvent(event);
     },
   };
-  const bridge = new AppBridge(client, { name: 'test-host', version: '1.0.0' }, { serverTools: {} });
+  const bridge = new AppBridge(
+    client,
+    { name: 'test-host', version: '1.0.0' },
+    { serverTools: {} },
+    { hostContext: { toolInfo: { id: 1, tool: tools.find(listed => listed.name === tool)! } } },
+  );
   bridge.oninitialized = async () => {
     await bridge.sendToolInput({ arguments: args });
     await bridge.sendToolResult(result as Parameters<AppBridge['sendToolResult']>[0]);
@@ -107,4 +113,20 @@ it('lists traces from a store without trace queries', async () => {
   const list = mcp.calls.find(call => call.tool === 'list_traces');
   expect(typeof list?.args.page).toBe('number');
   expect(typeof list?.args.perPage).toBe('number');
+});
+
+it("opens the model's log query on the Logs tab and keeps its level until cleared", async () => {
+  const mcp = traceListServer({ traceQuery: true, logs: true });
+  await openList(mcp, 'list_logs', { level: 'error' });
+
+  expect(await screen.findByText('Carrier lookup failed for order 42')).toBeTruthy();
+  expect(screen.queryByText('Forecast fetched for Lisbon')).toBeNull();
+  expect(screen.getByRole('tab', { name: 'Logs', selected: true })).toBeTruthy();
+  for (const call of mcp.calls.filter(call => call.tool === 'list_logs')) expect(call.args.level).toBe('error');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+  expect(await screen.findByText('Forecast fetched for Lisbon')).toBeTruthy();
+  expect(mcp.calls.at(-1)).toMatchObject({ tool: 'list_logs' });
+  expect(mcp.calls.at(-1)?.args.level).toBeUndefined();
 });

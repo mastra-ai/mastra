@@ -157,3 +157,29 @@ export function TraceById({ app, traceId, spanId }: { app: App; traceId: string;
   }
   return <OpenedTrace app={app} trace={state.trace} spanId={spanId} />;
 }
+
+/** An opened trace with a way back to the list it was opened from. */
+export function TraceView({
+  app,
+  traceId,
+  spanId,
+  backLabel = 'Back to the list',
+  onBack,
+}: {
+  app: App;
+  traceId: string;
+  spanId?: string;
+  backLabel?: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex flex-col">
+      <div className="px-3 pt-3">
+        <button type="button" className="text-body-sm underline" onClick={onBack}>
+          {backLabel}
+        </button>
+      </div>
+      <TraceById app={app} traceId={traceId} spanId={spanId} />
+    </div>
+  );
+}

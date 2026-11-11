@@ -17,7 +17,16 @@ import type {
   TracesFilters,
   TracesSort,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import {
+  TRACE_DATE_FROM_PARAM,
+  TRACE_DATE_PRESET_PARAM,
+  TRACE_DATE_PRESET_VALUES,
+  TRACE_DATE_TO_PARAM,
+  getTraceFilterGroups,
+  getTracePropertyFilterTokens,
+} from '@mastra/playground-ui/domains/traces/trace-filters';
 import { MastraReactProvider } from '@mastra/react';
+import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -25,12 +34,66 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { applyTheme } from '../../shared/mcp-app';
 import { createMcpFetch } from '../../shared/mcp-fetch';
 import type { OpenedTraceFilter } from '../../shared/mcp-fetch';
-import { TraceById } from '../../shared/trace-view';
+import { TraceView } from '../../shared/trace-view';
+import { LogsTab } from './logs-tab';
+import { MetricsTab } from './metrics-tab';
+import type { Drilldown } from './metrics-tab';
 
 type Args = Record<string, unknown>;
+type View = 'traces' | 'spans' | 'threads' | 'logs' | 'metrics';
 
-/** What the model asked for when it opened the app: `query_traces`' arguments, or `list_traces`'. */
-type Opened = { filter?: OpenedTraceFilter; filters: TracesFilters; sort: TracesSort; query?: Args };
+/**
+ * What the model asked for when it opened the app: the tab its tool belongs to, and the tool's arguments as
+ * the starting traces or logs view. `query` is the part of them Studio's filter bars can't draw, applied to
+ * every query and shown above the list.
+ */
+type Opened = {
+  view: View;
+  filter?: OpenedTraceFilter;
+  filters: TracesFilters;
+  sort: TracesSort;
+  /** The logs tab's starting search params, as Studio's logs URL. */
+  logParams: string;
+};
+
+/** Logs list arguments that are paging or sort, which the logs tab sets itself. */
+const LOG_PAGING_ARGS = new Set(['page', 'perPage', 'field', 'direction', 'orderBy', 'pagination']);
+
+/** The model's `list_logs` arguments: the time range becomes the tab's range, the rest stays applied. */
+function toOpenedLogs(args: Args | undefined, opened: Opened): Opened {
+  opened.view = 'logs';
+  const timestamp = args?.timestamp as { start?: string; end?: string } | undefined;
+  if (timestamp?.start || timestamp?.end) {
+    const params = new URLSearchParams({ datePreset: 'custom' });
+    if (timestamp.start) params.set('dateFrom', new Date(timestamp.start).toISOString());
+    if (timestamp.end) params.set('dateTo', new Date(timestamp.end).toISOString());
+    opened.logParams = params.toString();
+  }
+  const logs = Object.fromEntries(
+    Object.entries(args ?? {}).filter(
+      ([key, value]) => key !== 'timestamp' && !LOG_PAGING_ARGS.has(key) && value != null,
+    ),
+  );
+  if (Object.keys(logs).length > 0) opened.filter = { logs };
+  return opened;
+}
+
+/** The traces filters in a Studio traces URL, as Studio's traces page reads them. */
+function decodeTraceFilters(params: URLSearchParams): TracesFilters {
+  const parseDate = (raw: string | null) => {
+    const date = raw ? new Date(raw) : undefined;
+    return date && !Number.isNaN(date.getTime()) ? date : undefined;
+  };
+  const preset = params.get(TRACE_DATE_PRESET_PARAM) as TracesFilters['datePreset'] | null;
+  return {
+    datePreset:
+      preset && preset !== 'all' && TRACE_DATE_PRESET_VALUES.has(preset) ? preset : DEFAULT_TRACES_FILTERS.datePreset,
+    dateFrom: parseDate(params.get(TRACE_DATE_FROM_PARAM)),
+    dateTo: parseDate(params.get(TRACE_DATE_TO_PARAM)),
+    tokens: getTracePropertyFilterTokens(params),
+    groups: getTraceFilterGroups(params),
+  };
+}
 
 const NO_METRICS = { supported: false, isLoading: false };
 const FEATURES = { spanQuery: true, threadQuery: true, feedback: false };
@@ -40,8 +103,13 @@ const FEATURES = { spanQuery: true, threadQuery: true, feedback: false };
  * `textSearch` stay applied to every trace query (shown above the list, where they can be cleared), since
  * Studio's filter bar can't draw every predicate. `list_traces` opens on the default view.
  */
-function toOpened(args: Args | undefined): Opened {
-  const opened: Opened = { filters: DEFAULT_TRACES_FILTERS, sort: DEFAULT_TRACES_SORT };
+function toOpened(tool: string | undefined, args: Args | undefined): Opened {
+  const opened: Opened = { view: 'traces', filters: DEFAULT_TRACES_FILTERS, sort: DEFAULT_TRACES_SORT, logParams: '' };
+  if (tool === 'list_logs') return toOpenedLogs(args, opened);
+  if (tool === 'analyze_metrics') {
+    opened.view = 'metrics';
+    return opened;
+  }
   const timeRange = args?.timeRange as { from?: string; to?: string } | undefined;
   if (!timeRange?.from || !timeRange.to) return opened;
   opened.filters = {
@@ -54,12 +122,7 @@ function toOpened(args: Args | undefined): Opened {
   if (order?.field && (TRACES_SORT_FIELDS as readonly string[]).includes(order.field) && order.direction) {
     opened.sort = { field: order.field as TracesSort['field'], direction: order.direction };
   }
-  if (args?.where || args?.textSearch) {
-    opened.filter = { where: args.where, textSearch: args.textSearch };
-    opened.query = Object.fromEntries(
-      Object.entries({ where: args.where, textSearch: args.textSearch }).filter(([, v]) => v),
-    );
-  }
+  if (args?.where || args?.textSearch) opened.filter = { where: args.where, textSearch: args.textSearch };
   return opened;
 }
 
@@ -83,11 +146,27 @@ function OpenedQueryBar({ query, onClear }: { query: Args; onClear: () => void }
   );
 }
 
-function TracesTab({ app, opened, onClearQuery }: { app: App; opened: Opened; onClearQuery: () => void }) {
-  const [state, setState] = useState<TracesExplorerState>({
-    selection: EMPTY_TRACES_SELECTION,
-    filters: opened.filters,
-  });
+/** The opened query's trace predicate, as shown above the trace list. */
+function traceQuery(filter: OpenedTraceFilter | undefined): Args | undefined {
+  const query = Object.fromEntries(
+    Object.entries({ where: filter?.where, textSearch: filter?.textSearch }).filter(([, v]) => v),
+  );
+  return Object.keys(query).length > 0 ? query : undefined;
+}
+
+function TracesTab({
+  app,
+  opened,
+  filters,
+  onClearQuery,
+}: {
+  app: App;
+  opened: Opened;
+  filters: TracesFilters;
+  onClearQuery: () => void;
+}) {
+  const [state, setState] = useState<TracesExplorerState>({ selection: EMPTY_TRACES_SELECTION, filters });
+  const query = traceQuery(opened.filter);
   const [sort, setSort] = useState(opened.sort);
   const traceId = state.selection.traceId;
 
@@ -102,7 +181,7 @@ function TracesTab({ app, opened, onClearQuery }: { app: App; opened: Opened; on
   }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {opened.query && <OpenedQueryBar query={opened.query} onClear={onClearQuery} />}
+      {query && <OpenedQueryBar query={query} onClear={onClearQuery} />}
       <TracesExplorer
         metricsSupport={NO_METRICS}
         selection={state.selection}
@@ -128,29 +207,6 @@ function TracesTab({ app, opened, onClearQuery }: { app: App; opened: Opened; on
   );
 }
 
-function TraceView({
-  app,
-  traceId,
-  spanId,
-  onBack,
-}: {
-  app: App;
-  traceId: string;
-  spanId?: string;
-  onBack: () => void;
-}) {
-  return (
-    <div className="flex flex-col">
-      <div className="px-3 pt-3">
-        <button type="button" className="text-body-sm underline" onClick={onBack}>
-          Back to the list
-        </button>
-      </div>
-      <TraceById app={app} traceId={traceId} spanId={spanId} />
-    </div>
-  );
-}
-
 function SpansTab({ app }: { app: App }) {
   const [open, setOpen] = useState<{ traceId: string; spanId: string }>();
   if (open)
@@ -171,31 +227,58 @@ function ThreadsTab() {
   );
 }
 
-const VIEW_LABELS = { traces: 'Traces', spans: 'Spans', threads: 'Threads' } as const;
+const VIEW_LABELS: Record<View, string> = {
+  traces: 'Traces',
+  spans: 'Spans',
+  threads: 'Threads',
+  logs: 'Logs',
+  metrics: 'Metrics',
+};
 
-/** The views the store supports, as tabs; a store without span or thread queries shows traces alone. */
+/**
+ * The views the store supports and this caller's tools serve, as tabs. Metrics drilldowns switch to the traces
+ * or logs tab, opened on the drilldown's filters.
+ */
 function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClearQuery: () => void }) {
-  const { views, isLoading } = useObservabilityViews({ current: 'traces', features: FEATURES });
-  if (isLoading) {
+  const trace = useObservabilityViews({ current: 'traces', features: FEATURES });
+  const { data, isLoading } = useObservabilityCapabilities();
+  const [view, setView] = useState<View>(opened.view);
+  // Each drilldown remounts its tab on the new filters.
+  const [traces, setTraces] = useState({ key: 0, filters: opened.filters });
+  const [logs, setLogs] = useState({ key: 0, params: opened.logParams });
+
+  if (trace.isLoading || isLoading) {
     return (
       <div className="flex min-h-25 items-center justify-center">
-        <Spinner size="sm" aria-label="Loading traces" />
+        <Spinner size="sm" aria-label="Loading observability" />
       </div>
     );
   }
-  const traces = <TracesTab app={app} opened={opened} onClearQuery={onClearQuery} />;
-  if (views.length === 1) return <div className="min-h-0 flex-1 overflow-auto">{traces}</div>;
+  const views: View[] = [...trace.views];
+  if (data?.capabilities.logs) views.push('logs');
+  if (data?.capabilities.metrics) views.push('metrics');
+  const current = views.includes(view) ? view : 'traces';
+
+  const drilldown = ({ to, params }: Drilldown) => {
+    if (to === 'traces') setTraces(t => ({ key: t.key + 1, filters: decodeTraceFilters(params) }));
+    else setLogs(l => ({ key: l.key + 1, params: params.toString() }));
+    setView(to);
+  };
+  const logFilter = opened.filter?.logs;
+
   return (
-    <Tabs defaultTab="traces" className="flex min-h-0 flex-1 flex-col">
-      <TabList>
-        {views.map(view => (
-          <Tab key={view} value={view}>
-            {VIEW_LABELS[view]}
-          </Tab>
-        ))}
-      </TabList>
+    <Tabs value={current} onValueChange={setView} defaultTab="traces" className="flex min-h-0 flex-1 flex-col">
+      {views.length > 1 && (
+        <TabList>
+          {views.map(v => (
+            <Tab key={v} value={v}>
+              {VIEW_LABELS[v]}
+            </Tab>
+          ))}
+        </TabList>
+      )}
       <TabContent value="traces" className="min-h-0 flex-1 overflow-auto">
-        {traces}
+        <TracesTab key={traces.key} app={app} opened={opened} filters={traces.filters} onClearQuery={onClearQuery} />
       </TabContent>
       {views.includes('spans') && (
         <TabContent value="spans" className="min-h-0 flex-1 overflow-auto">
@@ -205,6 +288,21 @@ function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClea
       {views.includes('threads') && (
         <TabContent value="threads" className="min-h-0 flex-1 overflow-auto">
           <ThreadsTab />
+        </TabContent>
+      )}
+      {views.includes('logs') && (
+        <TabContent value="logs" className="min-h-0 flex-1 overflow-auto">
+          <LogsTab
+            key={logs.key}
+            app={app}
+            initialParams={logs.params}
+            banner={logFilter && <OpenedQueryBar query={logFilter} onClear={onClearQuery} />}
+          />
+        </TabContent>
+      )}
+      {views.includes('metrics') && (
+        <TabContent value="metrics" className="min-h-0 flex-1 overflow-auto">
+          <MetricsTab onDrilldown={drilldown} />
         </TabContent>
       )}
     </Tabs>
@@ -219,9 +317,9 @@ function Explorer({ app, opened: initial }: { app: App; opened: Opened }) {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }),
   );
-  // Clearing the opened query changes what every trace query returns.
+  // Clearing the opened query changes what every trace and log query returns.
   const clearQuery = () => {
-    setOpened(current => ({ ...current, filter: undefined, query: undefined }));
+    setOpened(current => ({ ...current, filter: undefined }));
     filter.current = undefined;
     void queryClient.resetQueries();
   };
@@ -240,9 +338,10 @@ function Explorer({ app, opened: initial }: { app: App; opened: Opened }) {
 }
 
 /**
- * Studio's trace explorer (filters, field and value discovery, histogram, sort and paging) plus its span and
- * thread lists, served by the built-in MCP server's observability tools. Opening a row draws the trace with
- * the trace viewer's timeline.
+ * Studio's observability pages: the trace explorer (filters, field and value discovery, histogram, sort and
+ * paging), its span and thread lists, the logs list, and the metrics dashboard, served by the built-in MCP
+ * server's observability tools. It opens on the tab of the tool that opened it. Opening a row draws the trace
+ * with the trace viewer's timeline.
  */
 export function TraceList() {
   const [opened, setOpened] = useState<Opened>();
@@ -250,9 +349,10 @@ export function TraceList() {
     appInfo: { name: 'Mastra trace list', version: __PACKAGE_VERSION__ },
     capabilities: {},
     onAppCreated: app => {
-      app.ontoolinput = ({ arguments: args }) => setOpened(current => current ?? toOpened(args));
+      const tool = () => app.getHostContext()?.toolInfo?.tool.name;
+      app.ontoolinput = ({ arguments: args }) => setOpened(current => current ?? toOpened(tool(), args));
       // Hosts may skip the input; the result still means the tool ran.
-      app.ontoolresult = () => setOpened(current => current ?? toOpened(undefined));
+      app.ontoolresult = () => setOpened(current => current ?? toOpened(tool(), undefined));
       app.onhostcontextchanged = context => applyTheme(context.theme);
     },
   });

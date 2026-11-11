@@ -3,8 +3,11 @@ import { readResult } from './mcp-app';
 
 type Args = Record<string, unknown>;
 
-/** A query the app was opened with: its filters apply to every trace query and aggregate the app sends. */
-export type OpenedTraceFilter = { where?: unknown; textSearch?: unknown };
+/**
+ * A query the app was opened with: `where` and `textSearch` apply to every trace query and aggregate the app
+ * sends, and `logs` to every log list.
+ */
+export type OpenedTraceFilter = { where?: unknown; textSearch?: unknown; logs?: Args };
 
 type ToolRoute = {
   method: 'GET' | 'POST';
@@ -14,13 +17,23 @@ type ToolRoute = {
   args: (match: RegExpMatchArray, input: Args) => Args;
   /** The response's row list, for paging around rows the server cut to fit one tool result. */
   rows?: string;
-  /** Takes the opened query's filters. */
-  filtered?: boolean;
+  /** Takes the opened query's filters: its trace predicate, or its log filters. */
+  filtered?: boolean | 'logs';
   /** No tool returns a full trace; it's assembled from the light trace and `get_span` per span. */
   fullTrace?: boolean;
 };
 
 const input = (_match: RegExpMatchArray, args: Args) => args;
+/** The `analyze_*` tools take the op Studio's route names: `/metrics/timeseries` is `op: 'timeseries'`. */
+const op = (match: RegExpMatchArray, args: Args) => ({ op: match[1], ...args });
+/** Studio's discovery routes, by the kind `list_observability_values` takes. */
+const VALUE_KINDS: Record<string, string> = {
+  'entity-types': 'entityTypes',
+  'entity-names': 'entityNames',
+  'service-names': 'serviceNames',
+  environments: 'environments',
+  tags: 'tags',
+};
 
 /**
  * The Mastra API routes Studio's observability views call, and the built-in MCP server tool that serves each.
@@ -77,6 +90,38 @@ const ROUTES: ToolRoute[] = [
   },
   { method: 'GET', path: /^\/observability\/scores$/, tool: 'list_scores', args: input },
   { method: 'GET', path: /^\/observability\/feedback$/, tool: 'list_feedback', args: input },
+  { method: 'GET', path: /^\/observability\/logs$/, tool: 'list_logs', args: input, filtered: 'logs' },
+  {
+    method: 'POST',
+    path: /^\/observability\/metrics\/(aggregate|breakdown|timeseries|percentiles)$/,
+    tool: 'analyze_metrics',
+    args: op,
+  },
+  {
+    method: 'POST',
+    path: /^\/observability\/scores\/(aggregate|breakdown|timeseries|percentiles)$/,
+    tool: 'analyze_scores',
+    args: op,
+  },
+  {
+    method: 'POST',
+    path: /^\/observability\/feedback\/(aggregate|breakdown|timeseries|percentiles)$/,
+    tool: 'analyze_feedback',
+    args: op,
+  },
+  { method: 'GET', path: /^\/observability\/discovery\/metric-names$/, tool: 'list_metric_names', args: input },
+  {
+    method: 'GET',
+    path: /^\/observability\/discovery\/metric-label-(keys|values)$/,
+    tool: 'list_metric_names',
+    args: input,
+  },
+  {
+    method: 'GET',
+    path: /^\/observability\/discovery\/(entity-types|entity-names|service-names|environments|tags)$/,
+    tool: 'list_observability_values',
+    args: (match, args) => ({ kind: VALUE_KINDS[match[1]!], ...args }),
+  },
 ];
 
 /** Paging params of Mastra's list routes, which the routes coerce from strings and the tools take as integers. */
@@ -180,15 +225,25 @@ export function createMcpFetch(app: App, getOpened: () => OpenedTraceFilter | un
       if (!match) continue;
       const raw = method === 'POST' && typeof init?.body === 'string' ? (JSON.parse(init.body) as Args) : {};
       let args = route.args(match, method === 'GET' ? queryArgs(url.searchParams) : raw);
-      if (route.filtered) args = withOpenedFilter(args, getOpened());
+      if (route.filtered === 'logs') args = { ...getOpened()?.logs, ...args };
+      else if (route.filtered) args = withOpenedFilter(args, getOpened());
       try {
         if (route.fullTrace) return json(await fullTrace(app, args.traceId as string));
         if (route.tool === 'get_trace') return json(await lightTrace(app, args.traceId as string));
         const result = await callPage(app, route, args);
         if (route.tool === 'get_observability_capabilities') {
-          // The tools don't take delta polling, so the lists reload their pages instead.
-          const capabilities = (result as { capabilities: Args }).capabilities;
-          return json({ ...(result as Args), capabilities: { ...capabilities, deltaPolling: false } });
+          // The tools don't take delta polling, so the lists reload their pages instead. Logs and metrics show
+          // only when this caller's tools serve them.
+          const { capabilities, tools, ...rest } = result as { capabilities: Args; tools?: Args };
+          return json({
+            ...rest,
+            capabilities: {
+              ...capabilities,
+              deltaPolling: false,
+              logs: capabilities.logs === true && tools?.logs === true,
+              metrics: capabilities.metrics === true && tools?.metrics === true,
+            },
+          });
         }
         return json(result);
       } catch (error) {

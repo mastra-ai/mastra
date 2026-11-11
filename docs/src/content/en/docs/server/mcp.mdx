@@ -190,6 +190,8 @@ With it installed, `get_trace` opens the trace in Studio's trace timeline. Selec
 
 `query_traces` and `list_traces` open Studio's trace explorer on the results. The time range, sort, and filters the model asked for stay applied, and you can clear the model's filters to see every trace. From there you can filter, change the time range, page through traces, and open a trace on its timeline. If the observability store supports span and thread queries, the explorer also has Spans and Threads tabs. Every query goes back through the same MCP tools, with the caller's permissions.
 
+`list_logs` opens the explorer on its Logs tab, with the level, entity, and time range the model asked for applied. Select a log to see its details, or open the trace it belongs to. With the `observability_analytics` toolset enabled, `analyze_metrics` opens the Metrics tab: Studio's metrics dashboard of token usage, latency, and run counts. Select a breakdown row to see its traces or logs. The explorer shows the Logs and Metrics tabs only when the store keeps logs or metrics and the caller can use the tools that read them.
+
 Apps are served only to clients that declare MCP Apps support. Other clients, such as Claude Code in a terminal, get the same tools and JSON results as without the package. Set `apps: false` to turn them off:
 
 ```typescript title="src/mastra/index.ts"

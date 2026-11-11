@@ -61,7 +61,7 @@ export interface CatalogueKit {
    * Registers one tool backed by several routes (named by the first route's `mcp`), offered only when
    * every route is. `execute` dispatches each call to the route it needs.
    */
-  addCombined(routes: ServerRoute[], inputSchema: JSONSchema7, execute: Execute): void;
+  addCombined(routes: ServerRoute[], inputSchema: JSONSchema7, execute: Execute, options?: AddOptions): void;
   /** Agent ids the caller can see, or undefined when it cannot list agents. */
   visibleAgentIds(): Promise<string[] | undefined>;
   /** Throws a 404 when `id` names a primitive that include/exclude leaves out. */
@@ -630,9 +630,9 @@ export async function buildBuiltinMCPTools(
     call,
     add,
     addOperation,
-    addCombined: (routes, inputSchema, execute) => {
+    addCombined: (routes, inputSchema, execute, options) => {
       if (routes.every(offered))
-        add(routes[0]!.mcp!.name, routes[0]!, routes[0]!.mcp!.description, inputSchema, execute);
+        add(routes[0]!.mcp!.name, routes[0]!, routes[0]!.mcp!.description, inputSchema, execute, options);
     },
     visibleAgentIds: async () => {
       const agents = await listVisibleAgents();

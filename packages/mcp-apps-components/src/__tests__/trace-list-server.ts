@@ -1,4 +1,9 @@
-import { traceQueryRequestSchema, traceQueryResponseSchema } from '@mastra/core/storage';
+import {
+  listLogsArgsSchema,
+  listLogsResponseSchema,
+  traceQueryRequestSchema,
+  traceQueryResponseSchema,
+} from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
@@ -49,6 +54,17 @@ const listRow = (trace: (typeof traces)[number]) => ({
   updatedAt: trace.endedAt,
 });
 
+/** One log line per run: the support agent's carrier lookup failed. */
+const logRecords = [
+  { level: 'info' as const, message: 'Forecast fetched for Lisbon', traceId: 'trace-1', entityName: 'weather-agent' },
+  {
+    level: 'error' as const,
+    message: 'Carrier lookup failed for order 42',
+    traceId: 'trace-2',
+    entityName: 'support-agent',
+  },
+].map((log, index) => ({ ...log, timestamp: new Date(at(index * 10 + 2)), spanId: 'root', entityType: 'agent' }));
+
 /** Applies the one predicate shape these tests open the list with: `entityName` equals a literal. */
 function matches(where: unknown, trace: (typeof traces)[number]): boolean {
   if (!where) return true;
@@ -63,7 +79,7 @@ function matches(where: unknown, trace: (typeof traces)[number]): boolean {
  * What `get_observability_capabilities` reports for a store that runs trace queries (the shape DuckDB reports),
  * less the aggregates, discovery and span/thread queries this server doesn't serve; or for one that only lists.
  */
-function capabilities(traceQuery: boolean) {
+function capabilities(traceQuery: boolean, logs: boolean) {
   const queries = {
     traceQuery,
     traceQueryTextSearch: false,
@@ -81,7 +97,7 @@ function capabilities(traceQuery: boolean) {
   };
   return {
     metrics: false,
-    logs: false,
+    logs,
     discovery: {
       entityTypes: false,
       entityNames: false,
@@ -111,9 +127,10 @@ function capabilities(traceQuery: boolean) {
 /**
  * The observability tools the trace list calls, answering as the built-in server does for a store that runs
  * trace queries (`traceQuery`) or one that only lists traces. Requests are validated as the real tools validate
- * them: `query_traces` with core's request schema, `list_traces` with integer paging.
+ * them: `query_traces` with core's request schema, `list_traces` with integer paging. With `logs`, the store
+ * also keeps logs and the caller can read them through `list_logs`, filtered by `level`.
  */
-export function traceListServer({ traceQuery }: { traceQuery: boolean }) {
+export function traceListServer({ traceQuery, logs = false }: { traceQuery: boolean; logs?: boolean }) {
   const calls: { tool: string; args: Record<string, any> }[] = [];
   const record = (tool: string, args: Record<string, any>) => calls.push({ tool, args });
 
@@ -145,17 +162,39 @@ export function traceListServer({ traceQuery }: { traceQuery: boolean }) {
     }),
   };
 
+  const logTools = {
+    list_logs: createTool({
+      id: 'list_logs',
+      description: 'Lists logs',
+      inputSchema: z.object({}).passthrough(),
+      execute: async args => {
+        record('list_logs', args);
+        const { filters } = listLogsArgsSchema.parse({ filters: { level: args.level } });
+        const rows = logRecords.filter(log => !filters?.level || [filters.level].flat().includes(log.level));
+        return listLogsResponseSchema.parse({
+          logs: rows,
+          pagination: { total: rows.length, page: 0, perPage: 25, hasMore: false },
+        });
+      },
+    }),
+  };
+
   const server = new MCPServer({
     id: 'traces',
     name: 'Traces',
     version: '1.0.0',
     tools: {
       ...(traceQuery ? queryTools : listTools),
+      ...(logs ? logTools : {}),
       get_observability_capabilities: createTool({
         id: 'get_observability_capabilities',
         description: 'Store capabilities',
         inputSchema: z.object({}),
-        execute: async () => ({ observabilityStorageType: 'Test', capabilities: capabilities(traceQuery) }),
+        execute: async () => ({
+          observabilityStorageType: 'Test',
+          capabilities: capabilities(traceQuery, logs),
+          tools: { logs, metrics: false },
+        }),
       }),
       get_trace: createTool({
         id: 'get_trace',
