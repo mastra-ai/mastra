@@ -228,6 +228,11 @@ describe('git-ref instruction readers', () => {
     ).rejects.toThrow('Not found at ref');
   });
 
+  it('treats invalid git path arguments as absent in async readers', async () => {
+    const reader = createGitRefReminderReaderAsync(repo, 'main');
+    expect(await reader.pathExists(join(repo, 'a\0b'))).toBe(false);
+  });
+
   it('loadAgentInstructions serves project content from the ref, never the working tree', () => {
     const reader = createGitRefInstructionReader(repo, 'main');
     const sources = loadAgentInstructions(repo, undefined, reader);

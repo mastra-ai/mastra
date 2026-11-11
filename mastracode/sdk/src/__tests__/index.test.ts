@@ -2014,8 +2014,8 @@ describe('createMastraCode', () => {
       await createMastraCode();
       const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
         getReader: (args: { requestContext: { get: (key: string) => unknown } }) => {
-          pathExists: (path: string) => Promise<boolean>;
-          readFile: (path: string) => Promise<string>;
+          pathExists: (path: string) => boolean | Promise<boolean>;
+          readFile: (path: string) => string | Promise<string>;
         };
       };
       const requestContext = {
@@ -2029,10 +2029,44 @@ describe('createMastraCode', () => {
         }),
       };
       const reader = options.getReader({ requestContext });
+      expect(typeof reader.pathExists(siblingInstructions)).toBe('boolean');
       expect(await reader.pathExists(siblingInstructions)).toBe(false);
-      await expect(reader.readFile(siblingInstructions)).rejects.toThrow();
+      expect(() => reader.readFile(siblingInstructions)).toThrow();
+      const ignoredPaths = (
+        agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+          getIgnoredInstructionPaths: (args: { requestContext: typeof requestContext }) => string[] | Promise<string[]>;
+        }
+      ).getIgnoredInstructionPaths({ requestContext });
+      expect(Array.isArray(ignoredPaths)).toBe(true);
+      expect(ignoredPaths).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('uses asynchronous instruction callbacks when core advertises support', async () => {
+    const { AgentsMDInjector } = await import('@mastra/core/processors');
+    Object.defineProperty(AgentsMDInjector, 'supportsAsyncInstructionReaders', { value: true, configurable: true });
+    try {
+      const { createMastraCode } = await import('../index.js');
+      await createMastraCode();
+      const options = agentsMdInjectorConstructorMock.mock.calls[0]?.[0] as {
+        getReader: (args: { requestContext: { get: () => unknown } }) => {
+          pathExists: (path: string) => boolean | Promise<boolean>;
+        };
+        getIgnoredInstructionPaths: (args: { requestContext: { get: () => unknown } }) => string[] | Promise<string[]>;
+      };
+      const requestContext = {
+        get: () => ({ getState: () => ({ projectPath: '/missing', untrustedCheckout: true, baseRef: 'main' }) }),
+      };
+      const exists = options.getReader({ requestContext }).pathExists('/missing/AGENTS.md');
+      expect(exists).toBeInstanceOf(Promise);
+      await exists;
+      const ignoredPaths = options.getIgnoredInstructionPaths({ requestContext });
+      expect(ignoredPaths).toBeInstanceOf(Promise);
+      await ignoredPaths;
+    } finally {
+      Reflect.deleteProperty(AgentsMDInjector, 'supportsAsyncInstructionReaders');
     }
   }, 30_000);
 

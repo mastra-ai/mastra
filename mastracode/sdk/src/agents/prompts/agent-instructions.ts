@@ -253,7 +253,13 @@ const pendingGitObjects = new Map<string, Promise<string | null>>();
 
 function gitAsync(args: string[], input?: string): Promise<Buffer | null> {
   return new Promise(resolveOutput => {
-    const child = spawn('git', args, { stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'ignore'] });
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn('git', args, { stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'ignore'] });
+    } catch {
+      resolveOutput(null);
+      return;
+    }
     const chunks: Buffer[] = [];
     let size = 0;
     let failed = false;
@@ -302,7 +308,10 @@ async function gitObjectReadAsync(
       return output;
     })();
     pendingGitObjects.set(pendingKey, pending);
-    void pending.finally(() => pendingGitObjects.delete(pendingKey));
+    void pending.then(
+      () => pendingGitObjects.delete(pendingKey),
+      () => pendingGitObjects.delete(pendingKey),
+    );
   }
   return pending;
 }

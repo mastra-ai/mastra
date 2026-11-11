@@ -334,6 +334,8 @@ function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined
  * a path whose directory ancestry contains an instruction file such as AGENTS.md.
  */
 export class AgentsMDInjector implements Processor<'agents-md-injector'> {
+  static readonly supportsAsyncInstructionReaders = true;
+
   id = 'agents-md-injector' as const;
   name = 'Agents.md Injector';
   description = 'Injects AGENTS.md reminders when instruction file operations are detected';
