@@ -1838,6 +1838,55 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
       },
     );
 
+    it.skipIf(skipTests.timeTravelLoopIterationCount || !timeTravel).each(['dountil', 'dowhile'] as const)(
+      'should replay a whole %s loop when time travelling to a step before a suspended loop',
+      async loopType => {
+        const entry = registry![`timetravel-loop-suspend-${loopType}-after-step-workflow`]!;
+        entry.resetMocks?.();
+        const runId = randomUUID();
+
+        const suspended = await execute(entry.workflow, { n: 0 }, { runId });
+        expect(suspended.status).toBe('suspended');
+
+        entry.resetMocks?.();
+        // The loop restarts from its first iteration, so it suspends again at n = 1 on iteration 2.
+        const replayed = await timeTravel!(entry.workflow, { step: 'prep', runId });
+
+        expect(replayed.status).toBe('suspended');
+        expect(entry.getInputs()).toEqual([0, 1]);
+        expect(entry.getCounts()).toEqual([1]);
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelLoopIterationCount || !timeTravel).each([0, -20, 1.5])(
+      'should reject a caller-supplied loop iterationCount of %s',
+      async iterationCount => {
+        const entry = registry!['timetravel-loop-iteration-dountil-after-step-workflow']!;
+        entry.resetMocks?.();
+        const runId = randomUUID();
+
+        const failed = await execute(entry.workflow, { n: 0 }, { runId });
+        expect(failed.status).toBe('failed');
+
+        await expect(
+          timeTravel!(entry.workflow, {
+            step: 'call',
+            runId,
+            context: {
+              call: {
+                payload: { n: 1 },
+                startedAt: Date.now(),
+                status: 'failed',
+                error: 'transient failure',
+                endedAt: Date.now(),
+                metadata: { iterationCount },
+              } as any,
+            },
+          }),
+        ).rejects.toThrow(/iterationCount/);
+      },
+    );
+
     it.skipIf(skipTests.timeTravelPreviousRunPerStep || !timeTravel)(
       'should timeTravel previously ran workflow with perStep',
       async () => {

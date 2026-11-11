@@ -536,10 +536,20 @@ export const createTimeTravelExecutionParams = (params: {
         : (stepContext?.status ?? defaultStepStatus);
       const isCompleteStatus = ['success', 'failed', 'canceled'].includes(status);
       // Carry an interrupted loop body's iteration count so a time-travelled loop continues counting instead of
-      // restarting at 1. A body recorded as finished replays the whole loop.
+      // restarting at 1. A body recorded as finished replays the whole loop, and so does any loop the target
+      // comes before: only the target's own loop continues from the snapshot.
+      const callerIterationCount = context?.[stepId]?.metadata?.iterationCount;
+      if (
+        callerIterationCount !== undefined &&
+        !(Number.isInteger(callerIterationCount) && callerIterationCount >= 1)
+      ) {
+        throw new Error(
+          `timeTravel context for step "${stepId}" has an invalid metadata.iterationCount (${String(callerIterationCount)}): it must be a positive integer`,
+        );
+      }
       const iterationCount =
-        context?.[stepId]?.metadata?.iterationCount ??
-        (['failed', 'canceled', 'suspended'].includes(snapshotContext[stepId]?.status)
+        callerIterationCount ??
+        (isTargetEntry && ['failed', 'canceled', 'suspended'].includes(snapshotContext[stepId]?.status)
           ? snapshotContext[stepId]?.metadata?.iterationCount
           : undefined);
       // The previous step's output is only the loop's first input, so a loop continuing mid-way must
