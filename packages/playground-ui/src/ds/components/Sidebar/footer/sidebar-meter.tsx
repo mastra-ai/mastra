@@ -162,7 +162,9 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
       data-state={state}
       className={cn(
         'relative isolate flex flex-col justify-center overflow-hidden rounded-lg border border-border bg-background px-3',
-        href && cn(surfaceStateLayerStyle, 'before:transition-none'),
+        // The layer's 1px inset spares an inset-shadow rim; this card has a real border, so fill
+        // its whole inside and let `overflow-hidden` round the corners.
+        href && cn(surfaceStateLayerStyle, 'before:inset-0 before:rounded-none before:transition-none'),
         className,
       )}
       style={{ height: CARD_HEIGHT }}
