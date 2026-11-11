@@ -1169,6 +1169,32 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect((await load(id))!.status).toBe('canceled');
       });
 
+      // The workflow recovery loop restarts a run nothing keeps alive once it has gone unwritten
+      // for `recovery.workflowStallThresholdMs`, so a header patch counts as a write, while a patch
+      // its status guard rejected wrote nothing.
+      it.for(['updateWorkflowRunHeader', 'updateWorkflowState'] as const)(
+        'advances updatedAt on %s, and leaves it when the status guard rejects the patch',
+        async method => {
+          const id = runId();
+          await checkpoint(id, makeSnapshot(id, { context: { a: ok(1) } }));
+          const updatedAt = async () =>
+            (await store.getWorkflowRunById({ workflowName, runId: id }))!.updatedAt.getTime();
+          const patch = (opts: { status: WorkflowRunState['status']; expectedStatus: WorkflowRunState['status'] }) =>
+            method === 'updateWorkflowRunHeader'
+              ? store.updateWorkflowRunHeader({ workflowName, runId: id, opts })
+              : store.updateWorkflowState({ workflowName, runId: id, opts });
+          const written = await updatedAt();
+          // Every adapter keeps updatedAt to the millisecond or finer.
+          await new Promise(resolve => setTimeout(resolve, 50));
+
+          expect(await patch({ status: 'canceled', expectedStatus: 'suspended' })).toBeUndefined();
+          expect(await updatedAt()).toBe(written);
+
+          expect(await patch({ status: 'canceled', expectedStatus: 'running' })).toBeDefined();
+          expect(await updatedAt()).toBeGreaterThan(written);
+        },
+      );
+
       it('rejects updateWorkflowResults', async () => {
         const id = runId();
         await checkpoint(id, makeSnapshot(id));
