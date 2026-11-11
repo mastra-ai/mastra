@@ -219,6 +219,8 @@ export function createBaseIterationStateUpdate(
     // rebuilds the state for the next iteration, so we must carry the
     // flag forward explicitly.
     pendingFeedbackStop: currentState.pendingFeedbackStop,
+    // Set by the predicate after it publishes a step-finish, like pendingFeedbackStop.
+    responseMessagesCursor: currentState.responseMessagesCursor,
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
