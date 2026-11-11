@@ -44,6 +44,32 @@ export const uiAgent = new Agent({
 
 On the client, render each message's `data-spec` parts with `useJsonRenderMessage()` from `@json-render/react`. Send the interface's state under the `JSON_RENDER_STATE` request context key so the model sees what the user set.
 
+json-render 0.22's `buildSpecFromParts()` writes patch values into the spec by reference, so building the same parts again (on every streamed chunk) repeats list items. Pass `useJsonRenderMessage()` a copy of the parts:
+
+```tsx
+import { useJsonRenderMessage } from '@json-render/react';
+import { useMemo } from 'react';
+
+function Reply({ message }) {
+  const parts = useMemo(() => structuredClone(message.content.parts), [message.content.parts]);
+  const { spec } = useJsonRenderMessage(parts);
+  // Render `spec` with your registry.
+}
+```
+
+### Show interfaces in Mastra Studio
+
+Studio renders interfaces built from `studioCatalog` with its own cards, metrics, badges and notices. Use it as the agent's catalog. It needs `@json-render/react` installed, but loads only its schema, not React:
+
+```typescript
+import { JsonRenderProcessor } from '@mastra/json-render';
+import { studioCatalog } from '@mastra/json-render/studio';
+
+const ui = new JsonRenderProcessor({ catalog: studioCatalog });
+```
+
+Studio skips interfaces that use components outside `studioCatalog`.
+
 ## Documentation
 
 - [Processors](https://mastra.ai/docs/agents/processors)
