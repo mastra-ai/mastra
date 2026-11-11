@@ -3,7 +3,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItemsStorage, CreateWorkItemInput, WorkItemDbRow } from '../storage/domains/work-items/base.js';
-import { readBoardVersion } from '../storage/domains/work-items/board-version.js';
+import { readBoardVersionRow } from '../storage/domains/work-items/board-version.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
 import {
   FACTORY_BOARD_ITEMS_SCHEMA,
@@ -327,6 +327,11 @@ async function seedLegacy(storage: FactoryStorage) {
   await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {});
 }
 
+/** The project's board version, which every committed card write replaces. */
+async function boardVersion(storage: FactoryStorage) {
+  return (await readBoardVersionRow(storage.ops, ORG, PROJECT))?.version ?? null;
+}
+
 async function readSplit(storage: FactoryStorage) {
   const workItems = await storage.ops.findMany<WorkItemDbRecord>(FACTORY_WORK_ITEMS_SCHEMA.name, {});
   const boardItems = await storage.ops.findMany<BoardItemDbRecord>(FACTORY_BOARD_ITEMS_SCHEMA.name, {});
@@ -647,11 +652,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     const { storage, workItems } = await createStorage(backend);
     await seed(workItems);
     await seedLegacy(storage);
-    const before = await readBoardVersion(storage.ops, ORG, PROJECT);
+    const before = await boardVersion(storage);
 
     await migrateWorkItemSplit(storage);
 
-    expect(await readBoardVersion(storage.ops, ORG, PROJECT)).not.toBe(before);
+    expect(await boardVersion(storage)).not.toBe(before);
   });
 
   it('detects copied changes that an old replica writes without touching updated_at', async () => {
@@ -885,13 +890,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     const { storage, workItems } = await createStorage(backend);
     await seed(workItems);
     await seedLegacy(storage);
-    const before = await readBoardVersion(storage.ops, ORG, PROJECT);
+    const before = await boardVersion(storage);
     const seen: Array<number | string | null> = [];
     let transactions = 0;
     const withTransaction: FactoryStorage['withTransaction'] = async callback => {
       transactions += 1;
       // Page one (two cards) committed; page two starts here.
-      if (transactions === 3) seen.push(await readBoardVersion(storage.ops, ORG, PROJECT));
+      if (transactions === 3) seen.push(await boardVersion(storage));
       return storage.withTransaction(callback);
     };
 

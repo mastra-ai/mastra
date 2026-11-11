@@ -23,16 +23,14 @@ export interface BoardSnapshot {
 // version or an evicted list drops its entry with it.
 const cardsJson = new WeakMap<readonly Card[], CardsJson>();
 
-// Each card's JSON, per converter. `listShared` keeps the frozen object of every card a write did
-// not touch, so the body of a new board version encodes only the cards that changed.
-const cardJson = new WeakMap<(item: Card) => unknown, WeakMap<Card, string>>();
+// Each card's JSON. `listShared` keeps the frozen object of every card a write did not touch, so
+// the body of a new board version encodes only the cards that changed.
+const cardJson = new WeakMap<Card, string>();
 
 function encodeCards(items: readonly Card[], toWire: (item: Card) => unknown): string {
-  let encoded = cardJson.get(toWire);
-  if (!encoded) cardJson.set(toWire, (encoded = new WeakMap()));
   const parts = items.map(item => {
-    let json = encoded.get(item);
-    if (json === undefined) encoded.set(item, (json = JSON.stringify(toWire(item)) ?? 'null'));
+    let json = cardJson.get(item);
+    if (json === undefined) cardJson.set(item, (json = JSON.stringify(toWire(item)) ?? 'null'));
     return json;
   });
   return `[${parts.join(',')}]`;

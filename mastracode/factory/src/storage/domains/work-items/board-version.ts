@@ -8,13 +8,13 @@ import {
 } from './work-item-schema.js';
 
 /**
- * One row per project: its card change counter and a `version` readers of the full card list compare
- * against the version their snapshot was taken at, so an unchanged board costs one indexed row read
- * instead of every card.
+ * One row per project: its card change counter, and a `version` that is replaced by every committed
+ * card write. Readers of the full card list compare the counter against the one their list was read
+ * at, so an unchanged board costs an indexed row read instead of every card.
  *
- * A Factory that stamps `change_seq` (board-changes.ts) writes `version = 'seq:<change_seq>'` in the same
- * transaction as the cards. Any other version means a write that stamped nothing (an older Factory, or
- * the legacy table) happened since, so the project's cards must be reconciled before deltas are trusted.
+ * A stamp (board-changes.ts) writes `version = 'seq:<change_seq>'`. Any other version means a write
+ * that logged nothing came after it (an older Factory, or the legacy table), so a list read before it
+ * cannot be brought up to date from the change log.
  */
 export const FACTORY_BOARD_VERSIONS_SCHEMA: CollectionSchema = {
   name: 'factory_board_versions',
@@ -23,9 +23,9 @@ export const FACTORY_BOARD_VERSIONS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
     version: { type: 'text' },
-    /** The `change_seq` of the last committed card transaction. */
+    /** Advanced by every stamp of the project's change log. */
     change_seq: { type: 'bigint', nullable: true },
-    /** Deletion records at or below this seq were pruned; a cursor older than it must resync. */
+    /** The horizon: the change log may lack entries at or below this seq, so a list read before it is read in full. */
     pruned_seq: { type: 'bigint', nullable: true },
     updated_at: { type: 'timestamp' },
   },
@@ -158,8 +158,8 @@ export class BoardScopes {
 }
 
 /**
- * Record that cards in `scopes` changed without a `change_seq` stamp: replaces the version with one
- * that is not `seq:<n>`, leaving the counter alone, so readers drop cached lists and reconcile.
+ * Record that cards in `scopes` changed without a change log entry: replaces the version with one
+ * that is not `seq:<n>`, leaving the counter alone, so readers read their lists again in full.
  */
 export async function markBoardsForeign(ops: FactoryStorageOps, scopes: readonly BoardScope[]): Promise<void> {
   for (const scope of scopes) {
@@ -188,17 +188,4 @@ export async function readBoardVersionRow(
     org_id: orgId,
     factory_project_id: factoryProjectId,
   });
-}
-
-/**
- * A token that changes on every committed card write: the counter advances on stamped writes, and an
- * unstamped (older Factory) write replaces the version.
- */
-export async function readBoardVersion(
-  ops: FactoryStorageOps,
-  orgId: string,
-  factoryProjectId: string,
-): Promise<string | undefined> {
-  const row = await readBoardVersionRow(ops, orgId, factoryProjectId);
-  return row ? `${row.version}/${row.change_seq ?? ''}` : undefined;
 }

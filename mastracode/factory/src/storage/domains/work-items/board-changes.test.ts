@@ -139,7 +139,7 @@ describe.each(backends)('cached card list on %s', backend => {
     const { workItems, file } = await setup(backend);
     const card = await file(1);
     // The domain's own ops are what every method writes through outside `#withTransaction`.
-    const ops = (workItems as unknown as { ops: FactoryStorage['ops'] }).ops;
+    const ops = workItems['ops'];
     await expect(
       ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, { id: card.id }, { stages: ['done'] }),
     ).rejects.toThrow(/outside a card transaction/);
@@ -248,6 +248,25 @@ describe.each(backends)('cached card list on %s', backend => {
     expect(reused(before, after)).toEqual([]);
   });
 
+  it('caches the list of a Factory still on the legacy table, and reads it in full after each write there', async () => {
+    vi.stubEnv('MASTRA_FACTORY_WORK_ITEM_SPLIT', 'dry-run');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const { workItems, scope, file, shared, stored } = await setup(backend);
+    const card = await file(1);
+    await file(2);
+    const before = await shared();
+    expect(await shared()).toBe(before);
+
+    await workItems.update({ ...scope, id: card.id, patch: { title: 'Renamed' } });
+
+    const after = await shared();
+    expect(after.find(item => item.id === card.id)!.workItem.title).toBe('Renamed');
+    expect(after).toEqual(await stored());
+    // The legacy table is never logged, so nothing read before the write is kept.
+    expect(reused(before, after)).toEqual([]);
+    expect(await shared()).toBe(after);
+  });
+
   it('follows a project whose cards were all written before the change log existed', async () => {
     const { storage, workItems, scope, project, file, shared, stored, counter } = await setup(backend);
     const card = await file(1);
@@ -322,19 +341,19 @@ describe.each(backends)('cached card list on %s', backend => {
     expect(after).toEqual(await stored());
   });
 
-  it('keeps one change log entry per card, deleted ones until retention ends, and moves the horizon past what it drops', async () => {
+  it('drops change log entries once retention ends, and moves the horizon past what it drops', async () => {
     const { workItems, scope, file, counter, logged } = await setup(backend);
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-01-01T00:00:00Z') });
-    const cards = [await file(1), await file(2), await file(3)];
-    for (const title of ['a', 'b', 'c']) await workItems.update({ ...scope, id: cards[2]!.id, patch: { title } });
-    await workItems.delete({ orgId: scope.orgId, id: cards[0]!.id });
-    // The deleted card's entry is its deletion record.
-    expect(await logged()).toEqual(ids(cards).sort());
+    const [deleted, renamed] = [await file(1), await file(2)];
+    await workItems.update({ ...scope, id: renamed.id, patch: { title: 'Renamed' } });
+    await workItems.delete({ orgId: scope.orgId, id: deleted.id });
+    // One entry per write. A deleted card's last entry is its deletion record.
+    expect(await logged()).toEqual([deleted.id, deleted.id, renamed.id, renamed.id].sort());
     const seq = (await counter()).change_seq!;
 
     vi.setSystemTime(Date.now() + CHANGE_RETENTION_MS + 60_000);
-    await workItems.delete({ orgId: scope.orgId, id: cards[2]!.id });
-    expect(await logged()).toEqual([cards[2]!.id]);
+    await workItems.delete({ orgId: scope.orgId, id: renamed.id });
+    expect(await logged()).toEqual([renamed.id]);
     expect(await counter()).toMatchObject({ change_seq: seq + 1, pruned_seq: seq });
   });
 
@@ -512,7 +531,7 @@ describe.skipIf(!postgresUrl)('card writes on postgres', () => {
       { org_id: scope.orgId },
     );
     expect(log.filter(entry => entry.change_seq === null)).toEqual([]);
-    expect(log.map(entry => entry.board_item_id).sort()).toEqual(ids(cards).sort());
+    expect([...new Set(log.map(entry => entry.board_item_id))].sort()).toEqual(ids(cards).sort());
     expect(await shared()).toEqual(await stored());
   });
 });

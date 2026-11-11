@@ -1312,14 +1312,14 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
 /** The project whose board a committed card or decision write just changed. */
 export type FactoryBoardScope = Required<BoardScope>;
 
-/** Bounds how long a stuck read can be joined, and how long a list no change log covers is served. */
+/** Bounds how long a stuck read can be joined. */
 const LIST_CACHE_TTL_MS = 60_000;
 /**
  * A safety net, not the invalidation path: how long a list kept up to date from the change log is
  * served before it is read in full again, which bounds a change no log entry or version recorded.
  */
 const LIST_FULL_READ_INTERVAL_MS = 10 * 60_000;
-/** Most changed cards a cached list takes in before it is read in full instead. */
+/** Most change log entries a cached list takes in before it is read in full instead. */
 const LIST_CHANGES_LIMIT = 500;
 const LIST_CACHE_MAX_PROJECTS = 100;
 
@@ -1349,15 +1349,7 @@ function mergeChangedCards(items: Card[], changedIds: readonly string[], fetched
   const changed = new Set(changedIds);
   const kept = items.filter(card => !changed.has(card.id));
   if (kept.length === items.length && !fetched.length) return items;
-  const added = [...fetched].sort(byNewest);
-  const merged: Card[] = [];
-  let next = 0;
-  for (const card of kept) {
-    while (next < added.length && byNewest(added[next]!, card) < 0) merged.push(added[next++]!);
-    merged.push(card);
-  }
-  merged.push(...added.slice(next));
-  return deepFreeze(merged);
+  return deepFreeze([...kept, ...fetched].sort(byNewest));
 }
 
 type WorkItemSourceSyncPatch = Partial<
@@ -2142,14 +2134,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     list: CachedList,
     counter: BoardVersionRow,
   ): Promise<Card[] | undefined> {
-    // The legacy table is never logged, and the counter can only have moved back if it was rewritten.
-    if (this.#legacyMode || list.changeSeq > counter.change_seq!) return undefined;
+    // The legacy table is never logged. Otherwise the log names every change from the list's seq to
+    // the counter's, unless the horizon is past the list or the counter was rewritten below it.
+    const covered = list.changeSeq <= counter.change_seq! && list.changeSeq >= (counter.pruned_seq ?? 0);
+    if (this.#legacyMode || !covered) return undefined;
     const ids = await readChangedCardIds(super.ops, scope, list.changeSeq, LIST_CHANGES_LIMIT);
     if (!ids) return undefined;
-    // Read after the log, so entries pruned while it was being read count too: past the horizon the
-    // log no longer names every change since the list was read.
-    const after = await readBoardVersionRow(super.ops, scope.orgId, scope.factoryProjectId);
-    if (after?.id !== counter.id || (after.pruned_seq ?? 0) > list.changeSeq) return undefined;
     const rows = ids.length
       ? await new Cards(super.ops, false, undefined, this.#reviewInUse).findMany({
           org_id: scope.orgId,
