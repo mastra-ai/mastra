@@ -422,6 +422,11 @@ describe('JsonRenderProcessor', () => {
       reply: 'Inline, it reads {"op":"add","path":"/root","value":"card"}\nThat is all.',
     },
     {
+      where: 'in a spec fence indented as a code block',
+      reply:
+        'Like this:\n\n    ```spec\n    {"op":"add","path":"/elements/card","value":{"type":"Card"}}\n    ```\nThat is all.',
+    },
+    {
       where: 'after a fence named in the middle of a line',
       reply: 'Write ```spec then {"op":"add","path":"/root","value":"card"}\nThat is all.',
     },

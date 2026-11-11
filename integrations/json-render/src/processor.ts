@@ -46,6 +46,8 @@ interface Split {
   holding: boolean;
   /** Whether the line has prose before this point, so a fence or patch can no longer start it. */
   midLine: boolean;
+  /** Columns of whitespace the line starts with: from four, Markdown reads it as indented code, not a fence or patch. */
+  indent: number;
   /** The code block the stream is in: a ```spec block, or any other, whose lines stay prose. */
   fence?: Fence;
   /** Whether the open fence has had its first patch, which decides if it starts a new spec or edits the last one. */
@@ -173,6 +175,7 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
       line: '',
       holding: false,
       midLine: false,
+      indent: 0,
       started: false,
     });
     const live = ((state.live as Live | undefined) ??= { rejected: [] });
@@ -231,6 +234,7 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
           if (split.holding) endLine();
           else if (!inSpec) text += char;
           split.midLine = false;
+          split.indent = 0;
         } else if (split.holding) {
           split.line += char;
           if (!inSpec && !couldOpenSpecLine(split.line)) {
@@ -239,12 +243,13 @@ export class JsonRenderProcessor implements Processor<'json-render'> {
             split.holding = false;
             split.midLine = true;
           }
-        } else if (inSpec || (!split.midLine && (char === '{' || char === '`' || char === '~'))) {
+        } else if (inSpec || (!split.midLine && split.indent < 4 && (char === '{' || char === '`' || char === '~'))) {
           split.holding = true;
           split.line = char;
         } else {
           text += char;
           if (!/\s/.test(char)) split.midLine = true;
+          else if (!split.midLine) split.indent += char === '\t' ? 4 : 1;
         }
       }
     }
