@@ -2,9 +2,8 @@
  * The instruction files at a session's trusted base ref, held in memory.
  *
  * Reading them is the only git work a model call needs, so it is asynchronous
- * and done once: a session asks git what the ref points at once per checkout,
- * until the checkout's refs change on disk, and a tree is read once however
- * many sessions and checkouts share it.
+ * and cached per session: a session reads the ref's tree once per checkout,
+ * and again only when the checkout's refs change on disk.
  */
 
 import { spawn } from 'node:child_process';
