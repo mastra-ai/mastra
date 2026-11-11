@@ -16,7 +16,7 @@
  *
  * `rounded-full` is a capsule: each end stretched by q along the flat side, nearly round. Its
  * smoothing is capped by width / height − 1 the same way, so a square (`size-*`, `h-N w-N`,
- * `aspect-square`) is an exact circle and a near-square pill eases into one. Unknown sizes take
+ * `aspect-square`, `size-full`) is an exact circle and a near-square pill eases into one. Unknown sizes take
  * the full capsule, so a circle sized by padding needs `aspect-square`.
  *
  * Component CSS uses `calc(R * var(--corner-scale, 1))` with `corner-shape: var(--corner-shape,
@@ -47,6 +47,13 @@
   syntax: '<length>';
   inherits: false;
   initial-value: 1000000px;
+}
+
+/* 1 on an element known to be square (`aspect-square`, `size-full`): no capsule at all. */
+@property --corner-square {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
 }
 
 /* One-sided `rounded-*-full` goes through the side rules below (an infinite radius caps
@@ -176,7 +183,7 @@
 /* prettier-ignore */
 @utility rounded-full {
   @variant smooth-corners {
-    --_ps: min(var(--corner-smoothing), max(var(--corner-w) / var(--corner-h) - 1, clamp(0, (var(--corner-h) - var(--corner-w)) / 1px, 1) * var(--corner-smoothing)));
+    --_ps: calc((1 - var(--corner-square)) * min(var(--corner-smoothing), max(var(--corner-w) / var(--corner-h) - 1, clamp(0, (var(--corner-h) - var(--corner-w)) / 1px, 1) * var(--corner-smoothing))));
     border-radius: min(calc(var(--corner-h) / 2 * (1 + 0.12 * var(--_ps) + 0.12 * var(--_ps) * var(--_ps))), max(50%, (var(--corner-h) - 10000px) * 2)) / calc(var(--corner-h) / 2);
     corner-shape: superellipse(calc(1 + 0.1 * var(--_ps) + 0.08 * var(--_ps) * var(--_ps)));
   }
@@ -246,5 +253,8 @@
   --corner-w: calc(var(--spacing) * --value(number));
 }
 @utility aspect-square {
-  --corner-w: var(--corner-h);
+  --corner-square: 1;
+}
+@utility size-full {
+  --corner-square: 1;
 }

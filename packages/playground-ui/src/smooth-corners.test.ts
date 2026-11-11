@@ -126,7 +126,7 @@ describe('smooth corners', () => {
     expect(rulesFor(css, '.size-6')).toContain('--corner-box: calc(var(--spacing) * 6)');
     expect(rulesFor(css, '.size-6')).toContain('--corner-w: calc(var(--spacing) * 6)');
     expect(rulesFor(css, '.w-4')).toContain('--corner-w: calc(var(--spacing) * 4)');
-    expect(rulesFor(css, '.aspect-square')).toContain('--corner-w: var(--corner-h)');
+    expect(rulesFor(css, '.aspect-square')).toContain('--corner-square: 1');
   });
 
   // An inherited radius is the parent's enlarged one: drawn round, it would bulge.
