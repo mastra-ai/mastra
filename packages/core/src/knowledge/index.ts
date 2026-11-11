@@ -490,6 +490,7 @@ export type {
 } from './explorer-pages';
 export type { KnowledgeConfig } from './config';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
+export { decodeKnowledgeScopeId, encodeKnowledgeScopeId } from './scope-address';
 export type {
   KnowledgePageTemplate,
   KnowledgePinnedList,

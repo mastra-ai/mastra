@@ -262,18 +262,19 @@ function matchPattern(pattern: KnowledgeScopePattern, address: string, raw: bool
   const prefix = `${pattern.type}:`;
   if (!address.startsWith(prefix)) return null;
   const parts = address.slice(prefix.length).split(':');
+  // One segment per param, never more: a value can't hold a raw colon, so `org:x:viewer` is not an
+  // `org:$orgId` address (it would otherwise be `self` there). Colons in ids are encoded as %3A.
+  if (parts.length !== pattern.segments.length) return null;
   const params: Record<string, string> = {};
   for (let i = 0; i < pattern.segments.length; i++) {
     const segment = pattern.segments[i]!;
-    const last = i === pattern.segments.length - 1;
     if ('literal' in segment) {
       if (parts[i] !== segment.literal) return null;
-      if (last && parts.length !== pattern.segments.length) return null;
       continue;
     }
-    const value = last ? parts.slice(i).join(':') : parts[i];
+    const value = parts[i];
     if (!value) return null;
-    const decoded = raw ? value : decodeKnowledgeScopeValue(value, last);
+    const decoded = raw ? value : decodeKnowledgeScopeValue(value);
     if (decoded === null) return null;
     params[segment.param] = decoded;
   }
@@ -320,7 +321,7 @@ export function bindKnowledgePattern(pattern: KnowledgeScopePattern, params: Rec
     }
     const value = params[segment.param];
     if (value === undefined || value === '') return null;
-    values.push(encodeKnowledgeScopeValue(value, i === pattern.segments.length - 1));
+    values.push(encodeKnowledgeScopeValue(value));
   }
   return `${pattern.type}:${values.join(':')}`;
 }
@@ -340,7 +341,7 @@ export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: R
     const value = params[segment.param];
     if (value === undefined) break;
     if (value === '') return null;
-    prefix += `${encodeKnowledgeScopeValue(value, false)}:`;
+    prefix += `${encodeKnowledgeScopeValue(value)}:`;
   }
   return prefix;
 }
@@ -357,9 +358,7 @@ function patternsOverlap(a: KnowledgeScopePattern, b: KnowledgeScopePattern): bo
     const right = b.segments[i]!;
     if ('literal' in left && 'literal' in right && left.literal !== right.literal) return false;
   }
-  if (a.segments.length === b.segments.length) return true;
-  const shorter = a.segments.length < b.segments.length ? a : b;
-  return 'param' in shorter.segments[shorter.segments.length - 1]!;
+  return a.segments.length === b.segments.length;
 }
 
 /**

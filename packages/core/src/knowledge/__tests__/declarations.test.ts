@@ -9,6 +9,7 @@ import {
   knowledgeRunScopes,
   knowledgeScopeAddress,
 } from '../declarations';
+import { decodeKnowledgeScopeId, encodeKnowledgeScopeId } from '../index';
 
 const scopes = {
   ...knowledgeMemoryScopes(),
@@ -38,16 +39,39 @@ const scopes = {
 describe('compileKnowledgeScopes: matching', () => {
   const compiled = compileKnowledgeScopes(scopes);
 
-  it('binds params, with the last param taking the rest of the value', () => {
+  it('binds params, each one exactly one segment', () => {
     expect(compiled.match('team:acme:support')).toMatchObject({
       declaration: 'team:$orgId:$teamId',
       params: { orgId: 'acme', teamId: 'support' },
     });
-    expect(compiled.match('resource:user:123')).toMatchObject({
+    expect(compiled.match('resource:user%3A123')).toMatchObject({
       declaration: 'resource:$resourceId',
       params: { resourceId: 'user:123' },
     });
-    expect(compiled.match('team:acme:support:emea')?.params).toEqual({ orgId: 'acme', teamId: 'support:emea' });
+  });
+
+  it('never lets a param value contain a raw colon, so org:x:viewer is not an org: scope', () => {
+    expect(compiled.match('resource:user:123')).toBeNull();
+    expect(compiled.match('team:acme:support:emea')).toBeNull();
+    expect(compiled.match('org:acme:viewer')).toBeNull();
+    expect(() => knowledgeRunScopes(compiled, ['org:acme:viewer'])).toThrow(KnowledgeDeclarationError);
+  });
+
+  it('lets org:$orgId and org:$orgId:viewer be declared side by side as distinct patterns', () => {
+    const both = compileKnowledgeScopes({
+      'org:$orgId': {
+        access: [
+          { principal: 'self', role: 'editor' as const },
+          { principal: 'org:$orgId:viewer', role: 'viewer' as const },
+        ],
+      },
+      'org:$orgId:viewer': { access: [] },
+    });
+    expect(both.match('org:acme')?.declaration).toBe('org:$orgId');
+    expect(both.match('org:acme:viewer')?.declaration).toBe('org:$orgId:viewer');
+    expect(knowledgeRoleOn(both, ['org:acme:viewer'], { address: 'org:acme' })).toBe('viewer');
+    expect(knowledgeRoleOn(both, ['org:acme:viewer'], { address: 'org:acme:viewer' })).toBeNull();
+    expect(knowledgeRoleOn(both, ['org:globex:viewer'], { address: 'org:acme' })).toBeNull();
   });
 
   it('matches literal segments exactly', () => {
@@ -93,14 +117,21 @@ describe('binding params into patterns', () => {
   const account = compiled.declarations.get('account:$orgId:$accountId')!.pattern;
 
   it('encodes middle-segment colons without reaching another tenant', () => {
-    expect(compiled.match('org:a:b')!.params).toEqual({ orgId: 'a:b' });
+    expect(compiled.match('org:a%3Ab')!.params).toEqual({ orgId: 'a:b' });
+    expect(compiled.match('org:a:b')).toBeNull();
     expect(knowledgePatternPrefix(team, { orgId: 'a:b' })).toBe('team:a%3Ab:');
     expect(bindKnowledgePattern(team, { orgId: 'a:b', teamId: 'support' })).toBe('team:a%3Ab:support');
     expect(knowledgePatternPrefix(team, { orgId: 'a' })).toBe('team:a:');
   });
 
-  it('preserves final colons and encodes reserved characters in every param', () => {
-    expect(bindKnowledgePattern(team, { orgId: 'a', teamId: 'b:c' })).toBe('team:a:b:c');
+  it('encodes colons in every param, final ones included', () => {
+    expect(encodeKnowledgeScopeId('slack:U1/x#y%')).toBe('slack%3AU1%2Fx%23y%25');
+    expect(decodeKnowledgeScopeId('slack%3AU1%2Fx%23y%25')).toBe('slack:U1/x#y%');
+    expect(decodeKnowledgeScopeId('slack:U1')).toBeNull();
+    expect(compiled.match(`org:${encodeKnowledgeScopeId('auth0|a:b')}`)?.params).toEqual({ orgId: 'auth0|a:b' });
+    expect(bindKnowledgePattern(team, { orgId: 'a', teamId: 'b:c' })).toBe('team:a:b%3Ac');
+    expect(knowledgeScopeAddress('resource:$resourceId', { resourceId: 'slack:U123' })).toBe('resource:slack%3AU123');
+    expect(compiled.match('team:a:b%3Ac')?.params).toEqual({ orgId: 'a', teamId: 'b:c' });
     expect(bindKnowledgePattern(team, { orgId: 'a', teamId: 'b/c' })).toBe('team:a:b%2Fc');
     expect(knowledgePatternPrefix(account, { orgId: 'a/b' })).toBe('account:a%2Fb:');
   });
@@ -111,17 +142,14 @@ describe('binding params into patterns', () => {
   });
 
   it('round-trips Memory ids while keeping raw run scopes distinct from canonical addresses', () => {
-    const raw = ['resource:https://x/y#z', 'resource:a/b', 'resource:a%2Fb'];
-    expect(knowledgeRunScopes(compiled, raw)).toEqual([
-      'resource:https:%2F%2Fx%2Fy%23z',
-      'resource:a%2Fb',
-      'resource:a%252Fb',
-    ]);
-    expect(raw[0]).toBe('resource:https://x/y#z');
-    expect(compiled.match('resource:https:%2F%2Fx%2Fy%23z')?.params).toEqual({ resourceId: 'https://x/y#z' });
+    const raw = ['resource:a/b', 'resource:a%2Fb'];
+    expect(knowledgeRunScopes(compiled, raw)).toEqual(['resource:a%2Fb', 'resource:a%252Fb']);
+    expect(raw[0]).toBe('resource:a/b');
+    expect(compiled.match('resource:https%3A%2F%2Fx%2Fy%23z')?.params).toEqual({ resourceId: 'https://x/y#z' });
     expect(knowledgeScopeAddress('resource:$resourceId', { resourceId: 'https://x/y#z' })).toBe(
-      'resource:https:%2F%2Fx%2Fy%23z',
+      'resource:https%3A%2F%2Fx%2Fy%23z',
     );
+    expect(() => knowledgeRunScopes(compiled, ['resource:https://x/y#z'])).toThrow(KnowledgeDeclarationError);
     expect(knowledgeRunScopes(compiled, [...raw])).toEqual(knowledgeRunScopes(compiled, raw));
   });
 
@@ -139,7 +167,7 @@ describe('binding params into patterns', () => {
     expect(knowledgeScopeAddress('team:$orgId:$teamId', { orgId: 'a:b', teamId: 'c/d#e%2F' })).toBe(
       'team:a%3Ab:c%2Fd%23e%252F',
     );
-    expect(knowledgeRunScopes(compiled, ['team:a:b:c'])).toEqual(['team:a:b:c']);
+    expect(() => knowledgeRunScopes(compiled, ['team:a:b:c'])).toThrow(KnowledgeDeclarationError);
     expect(() => knowledgeScopeAddress('team:$orgId:$teamId', { orgId: 'a', teamId: '' })).toThrow(
       KnowledgeDeclarationError,
     );
@@ -172,16 +200,20 @@ describe('compileKnowledgeScopes: validation', () => {
   });
 
   it('refuses overlapping patterns for one type', () => {
-    expect(() => compileKnowledgeScopes({ 'team:$orgId:$teamId': {}, 'team:$teamId': {} })).toThrow(
+    expect(() => compileKnowledgeScopes({ 'team:$orgId:$teamId': {}, 'team:$a:$b': {} })).toThrow(
       KnowledgeDeclarationError,
     );
   });
 
-  it('names both overlapping patterns, including final-parameter overlap with longer patterns', () => {
+  it('allows patterns of one type with different segment counts, since no value spans a colon', () => {
+    expect(() => compileKnowledgeScopes({ 'role:$orgId': {}, 'role:$orgId:admin': {} })).not.toThrow();
+    expect(() => compileKnowledgeScopes({ 'team:$teamId': {}, 'team:$orgId:$teamId': {} })).not.toThrow();
+  });
+
+  it('names both overlapping patterns', () => {
     for (const [left, right] of [
       ['role:$orgId:$role', 'role:$orgId:admin'],
       ['kb:$orgId:$name', 'kb:$orgId:public'],
-      ['role:$orgId', 'role:$orgId:admin'],
     ]) {
       let error: unknown;
       try {
