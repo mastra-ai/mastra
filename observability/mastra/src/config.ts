@@ -91,11 +91,13 @@ export interface ObservabilityInstanceConfig {
   excludeSpanTypes?: SpanType[];
   /**
    * Filter function to control which spans are exported. Return `true` to keep
-   * the span, `false` to drop it. It runs once, when the span is created, after
-   * `excludeSpanTypes` and `spanOutputProcessors`, and sees the span's creation
+   * the span, `false` to drop it. It runs after `excludeSpanTypes` and
+   * `spanOutputProcessors`, first when the span is created, on its creation
    * data: type, name, entity, metadata, and the attributes and input known at
-   * start. A dropped span is dropped whole, and its descendants attach to the
-   * nearest exported ancestor.
+   * start. A span rejected then sends no start event, and its descendants
+   * attach to the nearest exported ancestor. It runs again on each update and
+   * when the span ends, and that event is exported only when the filter
+   * accepts the span data at that point.
    *
    * @example
    * ```typescript

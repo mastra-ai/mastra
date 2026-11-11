@@ -55,7 +55,8 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public traceId: string;
   /**
    * Spans excluded at creation never attach end-time payloads. A span that
-   * `spanFilter` drops later keeps them, since metrics still read them.
+   * `spanFilter` rejects keeps them, since metrics read them and the filter
+   * can still accept its end event.
    */
   readonly #excludedAtCreation: boolean;
 

@@ -318,8 +318,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
     }
 
-    this.applySpanFilter(span);
-
     if (span.isEvent) {
       this.emitSpanEnded(span);
     } else {
@@ -387,7 +385,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       span.errorInfo = cached.errorInfo;
     }
 
-    this.applySpanFilter(span);
+    // No start event is emitted here, so only the filter verdict is needed.
+    if (this.config.spanFilter) this.decideAtCreation(span);
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
@@ -823,45 +822,56 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
-    if (!this.reachesExporters(span)) return undefined;
-    return this.processSpan(span)?.exportSpan(this.config.includeInternalSpans);
+    if (this.neverExports(span)) return undefined;
+    return this.keepIfFilterPasses(this.processSpan(span)?.exportSpan(this.config.includeInternalSpans));
   }
 
   /** Export an already-processed span, returning undefined if filtered out. */
   private getProcessedSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
-    if (!this.reachesExporters(span)) return undefined;
-    return span.exportSpan(this.config.includeInternalSpans);
+    if (this.neverExports(span)) return undefined;
+    return this.keepIfFilterPasses(span.exportSpan(this.config.includeInternalSpans));
   }
 
-  /**
-   * Drops decided when the span is created: NoOp spans, internal spans,
-   * `excludeSpanTypes`, and the `spanFilter` verdict `applySpanFilter` stores.
-   * Output processors can still drop a span at export time.
-   */
-  private reachesExporters(span: AnySpan): boolean {
-    if (!span.isValid) return false;
-    if (span.isInternal && !this.config.includeInternalSpans) return false;
-    if (this.config.excludeSpanTypes?.includes(span.type)) return false;
-    return !(span instanceof BaseSpan && span.isExcluded);
+  /** NoOp spans, internal spans and `excludeSpanTypes` send no event at all. */
+  private neverExports(span: AnySpan): boolean {
+    if (!span.isValid) return true;
+    if (span.isInternal && !this.config.includeInternalSpans) return true;
+    return this.config.excludeSpanTypes?.includes(span.type) ?? false;
   }
 
-  /**
-   * Run `spanFilter` once, on the span as created, and store a drop as
-   * `isExcluded`, the flag `excludeSpanTypes` sets. One verdict keeps a span's
-   * start, updates and end together and lets descendants re-parent past it.
-   */
-  private applySpanFilter(span: AnySpan): void {
+  /** `spanFilter` judges each event on the span data at that point. */
+  private keepIfFilterPasses(exportedSpan: AnyExportedSpan | undefined): AnyExportedSpan | undefined {
+    return exportedSpan && this.passesSpanFilter(exportedSpan) ? exportedSpan : undefined;
+  }
+
+  /** A throwing `spanFilter` keeps the span, to avoid silent data loss. */
+  private passesSpanFilter(exportedSpan: AnyExportedSpan): boolean {
     const spanFilter = this.config.spanFilter;
-    if (!spanFilter || !(span instanceof BaseSpan) || span.isExcluded) return;
-    // A processor that hides the start view still leaves the live span to decide on.
-    const exportedSpan = (this.processSpan(span) ?? span).exportSpan(this.config.includeInternalSpans);
-    if (!exportedSpan) return;
+    if (!spanFilter) return true;
     try {
-      if (!spanFilter(exportedSpan)) span.isExcluded = true;
+      return Boolean(spanFilter(exportedSpan));
     } catch (error) {
-      // On filter error, keep the span to avoid silent data loss
       this.logger.error(`[Observability] spanFilter error`, error);
+      return true;
     }
+  }
+
+  /**
+   * Ask `spanFilter` about the span as created and return the start view to
+   * export, if any. A rejection is stored as `isExcluded`, the flag
+   * `excludeSpanTypes` sets, so descendants re-parent past the span instead of
+   * pointing at a parent whose start exporters never received.
+   */
+  private decideAtCreation(span: AnySpan): AnyExportedSpan | undefined {
+    if (this.neverExports(span)) return undefined;
+    const processedSpan = this.processSpan(span);
+    // A processor that hides the start view still leaves the live span to decide on.
+    const exportedSpan = (processedSpan ?? span).exportSpan(this.config.includeInternalSpans);
+    if (exportedSpan && !this.passesSpanFilter(exportedSpan)) {
+      if (span instanceof BaseSpan) span.exclude();
+      return undefined;
+    }
+    return processedSpan ? exportedSpan : undefined;
   }
 
   /**
@@ -869,7 +879,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Routes through the ObservabilityBus so exporters receive it via onTracingEvent.
    */
   protected emitSpanStarted(span: AnySpan): void {
-    const exportedSpan = this.getSpanForExport(span);
+    const exportedSpan = this.decideAtCreation(span);
     if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_STARTED, exportedSpan };
       this.emitTracingEvent(event);
@@ -1066,7 +1076,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   private findExportedAncestor(span: AnySpan): AnySpan | undefined {
     let ancestor: AnySpan | undefined = span.parent;
-    while (ancestor && !this.reachesExporters(ancestor)) {
+    while (ancestor && (this.neverExports(ancestor) || (ancestor instanceof BaseSpan && ancestor.isExcluded))) {
       ancestor = ancestor.parent;
     }
     return ancestor;

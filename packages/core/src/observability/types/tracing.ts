@@ -1507,8 +1507,8 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
    * scores) should reference: the span's own id when it reaches exporters,
    * otherwise the nearest exportable ancestor's id, or undefined when none
    * exists. Covers exclusions known when the span is created (internal spans,
-   * `excludeSpanTypes`, `spanFilter`); a span output processor can still drop
-   * a span at export time.
+   * `excludeSpanTypes`, `spanFilter` on creation data); a span output processor
+   * or a `spanFilter` on end-time data can still drop a span at export time.
    */
   getExportedSpanId?(): string | undefined;
 

@@ -59,7 +59,7 @@ export const mastra = new Mastra({
     name: 'spanFilter',
     type: '(span: AnyExportedSpan) => boolean',
     description:
-      'Receives the span as it starts and returns true to keep it or false to drop it. Use this when filtering depends on attributes, metadata, or entity identifiers known at creation.',
+      'Receives the span when it starts, on each update, and when it ends, and returns true to keep it or false to drop it. Use this when filtering depends on attributes, metadata, or entity identifiers.',
     isOptional: true,
   },
 ]}
@@ -111,7 +111,9 @@ Span filtering happens in this order:
 1. `spanOutputProcessors` transform the remaining spans.
 1. `spanFilter` decides whether to keep the span.
 
-Mastra runs `spanFilter` once, when the span starts, on the data known at that point: type, name, entity, metadata, and the attributes and input set at creation. A dropped span sends no start, update, or end event, and its child spans attach to the nearest exported ancestor, the same way `excludeSpanTypes` works.
+Mastra runs `spanFilter` when the span starts, on the data known at that point: type, name, entity, metadata, and the attributes and input set at creation. A span the filter rejects at this point sends no start event, and its child spans attach to the nearest exported ancestor, the same way `excludeSpanTypes` works.
+
+Mastra runs `spanFilter` again on each update and when the span ends, and exports that event only when the filter accepts the span data at that point. A filter that reads end-time data, such as `attributes.success` on a tool call, decides only the end event. Use end-time data with exporters that send a span when it ends, such as Langfuse. An exporter that also uses the start event can receive a span's start without its end, or its end without its start.
 
 If `spanFilter` throws an error, Mastra keeps the span and logs the error to avoid silent data loss.
 

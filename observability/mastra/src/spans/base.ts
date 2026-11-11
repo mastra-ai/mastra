@@ -243,8 +243,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * the lifetime of the span. Set when excludeSpanTypes drops the type,
    * when the span is internal and includeInternalSpans is false, or when
    * the subclass is always excluded (e.g., NoOpSpan). The observability
-   * instance also sets it right after creation when `spanFilter` drops the
-   * span; that span keeps recording its fields so metrics still read them.
+   * instance also sets it right after creation when `spanFilter` rejects the
+   * span; that span keeps recording its fields, since metrics read them and
+   * the filter can still accept its end event.
    *
    * Public so parent-chain walks (`getParentSpan`) can skip ancestors that
    * exporters will never receive — otherwise descendants export a
@@ -255,6 +256,17 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * getMetricsContext() (which structuredClone it).
    */
   public isExcluded: boolean;
+
+  /**
+   * Store a `spanFilter` rejection at creation. The filter reads an exported
+   * view of the span, which caches the correlation context while the span
+   * still counts as exported, so that cache is cleared here.
+   */
+  public exclude(): void {
+    this.isExcluded = true;
+    this.correlationContext = undefined;
+  }
+
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
   /**
@@ -560,10 +572,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * Returns undefined when no exportable ancestor exists.
    *
    * Only covers exclusions known when the span is created (`isExcluded`,
-   * including the `spanFilter` verdict). A span output processor can still
-   * drop a span at export time, so its verdict isn't knowable while signals
-   * are being stamped. Signals emitted inside a span dropped that way still
-   * reference its own id.
+   * including the `spanFilter` verdict on creation data). A span output
+   * processor, or a `spanFilter` that only rejects the span's end-time data,
+   * can still drop a span at export time, so its verdict isn't knowable while
+   * signals are being stamped. Signals emitted inside a span dropped that way
+   * still reference its own id.
    */
   public getExportedSpanId(): string | undefined {
     if (!this.isExcluded) {

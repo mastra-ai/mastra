@@ -295,6 +295,8 @@ describe('Span Filtering', () => {
       expect(exported.find(s => s.type === SpanType.TOOL_CALL)?.parentSpanId).toBe(modelSpan.id);
       const orphans = exported.filter(s => s.parentSpanId && !byId.has(s.parentSpanId));
       expect(orphans).toEqual([]);
+      // Logs and metrics recorded inside the dropped step use this id.
+      expect(stepSpan.getCorrelationContext?.().spanId).toBe(modelSpan.id);
     });
 
     it('should drop every span of an entity when the filter drops it by entityId', () => {
@@ -324,7 +326,7 @@ describe('Span Filtering', () => {
       expect(testExporter.events).toEqual([]);
     });
 
-    it('should decide once at creation so a span is exported whole or not at all', () => {
+    it('should keep only failed tool calls when the filter reads end-time data', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
         name: 'test-instance',
@@ -332,22 +334,24 @@ describe('Span Filtering', () => {
         exporters: [testExporter],
         // `success` is only set when the tool call ends
         spanFilter: (span: AnyExportedSpan) =>
-          !(span.type === SpanType.TOOL_CALL && (span.attributes as { success?: boolean } | undefined)?.success),
+          span.type !== SpanType.TOOL_CALL || (span.attributes as { success?: boolean } | undefined)?.success === false,
       });
 
       const agentSpan = tracing.startSpan({
         type: SpanType.AGENT_RUN,
         name: 'test-agent',
       });
-      const toolSpan = agentSpan.createChildSpan({
-        type: SpanType.TOOL_CALL,
-        name: 'test-tool',
-      });
-      toolSpan.end({ attributes: { success: true } });
+      const okTool = agentSpan.createChildSpan({ type: SpanType.TOOL_CALL, name: 'ok-tool' });
+      const failedTool = agentSpan.createChildSpan({ type: SpanType.TOOL_CALL, name: 'failed-tool' });
+      okTool.end({ attributes: { success: true } });
+      failedTool.end({ attributes: { success: false } });
       agentSpan.end();
 
-      const toolEvents = testExporter.events.filter(e => e.exportedSpan.type === SpanType.TOOL_CALL).map(e => e.type);
-      expect(toolEvents).toEqual(['span_started', 'span_ended']);
+      // Exporters that send a span when it ends, such as Langfuse, see only these.
+      const endedTools = testExporter.events
+        .filter(e => e.type === 'span_ended' && e.exportedSpan.type === SpanType.TOOL_CALL)
+        .map(e => e.exportedSpan.name);
+      expect(endedTools).toEqual(['failed-tool']);
     });
 
     it('should keep spans when filter returns true', () => {
