@@ -60,6 +60,8 @@ export interface FactoryTransitionRequest {
   planApproved?: true;
   /** Internal: the tool whose successful result this move consumes (a tool-result rule's move). */
   completedTool?: string;
+  /** Binding whose result initiated a tool-result rule move, without changing its system actor. */
+  initiatingBindingId?: string;
   /**
    * Internal: an intake route moves the card on a status event. A route is admin-authored, so it
    * may name any phase on the card's board regardless of the board's next phases, working ones
@@ -89,9 +91,10 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     stage: FactoryRuleStage;
     revision: number;
-    /** The actor that committed this terminal transition. Lets cleanup leave
-     * the seat that drove its own transition (an agent tool call) untouched. */
+    /** The actor that committed this terminal transition. */
     actor: FactoryRuleActor;
+    /** The binding whose own result initiated this transition, if any. */
+    initiatingBindingId?: string;
   }) => Promise<void> | void;
   /**
    * Called after a transition commits a stage change, e.g. to tell the item's
@@ -693,6 +696,7 @@ export class FactoryTransitionService {
             stage: result.stage,
             revision: result.revision,
             actor: request.actor,
+            ...(request.initiatingBindingId ? { initiatingBindingId: request.initiatingBindingId } : {}),
           }),
         );
         // A late rejection after the timeout wins the race must not surface
