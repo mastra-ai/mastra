@@ -8,14 +8,14 @@ import {
   OpenInThreadsButton,
   OpenInTracesButton,
 } from '../../metrics/components/card-action-buttons';
-import { onCardHover } from '../../metrics/components/on-card-hover';
 import { viewDrilldown, targetScope } from '../lib/definition';
 import type { OnDashboardDrilldown } from '../lib/definition';
 import type { DashboardAlert, DashboardAlertAction } from '../widget-kind';
 import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { cn } from '@/lib/utils';
 
 /**
  * Opens the host's alert editor for a view (`href`), or, disabled, says why the view can't become
@@ -115,7 +115,7 @@ function DisabledAlertAction({ label, reason }: { label: string; reason: string 
             aria-label={label}
             aria-disabled="true"
             aria-describedby={reasonId}
-            className={onCardHover}
+            className={cn('inline-flex', onCardHover)}
           >
             <Button variant="ghost" size="icon-sm" disabled aria-hidden="true" tabIndex={-1}>
               <BellPlusIcon />

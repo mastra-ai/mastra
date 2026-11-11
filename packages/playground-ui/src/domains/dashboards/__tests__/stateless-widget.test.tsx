@@ -32,7 +32,7 @@ import {
 } from './equality-harness';
 import type { Rendered } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
-import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -358,10 +358,7 @@ describe('StatelessWidget on its own', () => {
         onRetry={() => {}}
         scope="project"
         actions={
-          <MetricsCard.Action
-            label="Share it"
-            className="hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex"
-          >
+          <MetricsCard.Action label="Share it" className={onCardHover}>
             <span />
           </MetricsCard.Action>
         }

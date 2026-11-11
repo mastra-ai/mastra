@@ -1,5 +1,5 @@
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
-import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
+import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { PinIcon, PinOffIcon } from 'lucide-react';
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -73,9 +73,7 @@ export function usePin(
     <MetricsCard.Action
       label={`${isPinned ? 'Unpin' : 'Pin'} ${name}`}
       onClick={() => onPin(!isPinned)}
-      className={
-        isPinned ? undefined : 'hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex'
-      }
+      className={isPinned ? undefined : onCardHover}
     >
       {isPinned ? <PinOffIcon /> : <PinIcon />}
     </MetricsCard.Action>

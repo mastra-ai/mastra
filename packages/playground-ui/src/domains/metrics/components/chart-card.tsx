@@ -56,7 +56,7 @@ export type ChartCardProps<V extends string = string> = {
   isLoading?: boolean;
   /**
    * Top-bar buttons, e.g. "View in traces": `MetricsCard.Action`s, each deciding whether it waits
-   * for the card's hover (e.g. `hidden group-hover/metrics-card:inline-flex`) or stays in view, e.g. a pinned widget's unpin button.
+   * for the card's hover (e.g. `onCardHover`) or stays in view, e.g. a pinned widget's unpin button.
    */
   actions?: ReactNode;
   /**

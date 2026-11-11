@@ -11,8 +11,8 @@ export type MetricsCardActionProps = Omit<ButtonProps, 'variant' | 'size' | 'too
 
 /**
  * An icon button in a card's `MetricsCard.Actions`. The card is a `group/metrics-card`, so a button
- * that should wait for the card's hover says so with its classes, e.g.
- * `hidden group-hover/metrics-card:inline-flex`.
+ * that should wait for the card's hover or focus says so with its classes: `className={onCardHover}`.
+ * Without them it stays in view, e.g. a pinned widget's unpin button.
  */
 export const MetricsCardAction = React.forwardRef<HTMLElement, MetricsCardActionProps>(
   ({ label, children, ...props }, ref) => (

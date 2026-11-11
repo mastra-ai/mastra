@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { PinIcon, PinOffIcon } from 'lucide-react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
@@ -41,7 +42,7 @@ import type {
 } from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
-import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
@@ -119,9 +120,7 @@ const pinning =
       <MetricsCard.Action
         label={`${pinned ? 'Unpin' : 'Pin'} ${widget.title?.trim() || 'widget'}`}
         onClick={() => onPin(widget, !pinned)}
-        className={
-          pinned ? undefined : 'hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex'
-        }
+        className={pinned ? undefined : onCardHover}
       >
         {pinned ? <PinOffIcon /> : <PinIcon />}
       </MetricsCard.Action>
@@ -582,11 +581,17 @@ describe('DashboardRenderer', () => {
 
     /** The pin button's name: the widget's title, or "widget" for an untitled one like the KPI group. */
     const pinLabel = (verb: 'Pin' | 'Unpin', widget: DashboardWidget) => `${verb} ${widget.title?.trim() || 'widget'}`;
-    /** Whether the button only shows while the card is hovered. */
-    const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0, .hidden') !== null;
-    /** Whether the button stays shown and tappable on touch screens, which can't hover. */
-    const reachableOnTouch = (button: HTMLElement) =>
-      button.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto') !== null;
+    /** Whether the button only shows while the card is hovered or focused. */
+    const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0') !== null;
+    /**
+     * Whether the button stays shown and tappable on touch screens, which can't hover: the KPI group's
+     * floating card either always shows there, or shows once it holds a control that doesn't wait for hover.
+     */
+    const reachableOnTouch = (button: HTMLElement) => {
+      if (button.closest('.pointer-coarse\\:opacity-100.pointer-coarse\\:pointer-events-auto')) return true;
+      const floating = button.closest('.pointer-coarse\\:has-\\[\\>\\:not\\(\\.opacity-0\\)\\]\\:opacity-100');
+      return floating !== null && button.parentElement === floating && !button.classList.contains('opacity-0');
+    };
 
     it.each([
       ['a timeseries card', metricsWidget('agent-runs')],
@@ -639,7 +644,7 @@ describe('DashboardRenderer', () => {
       expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
     });
 
-    it('keeps the controls of a KPI group, which float over its border, for hover, whether pinned or not', async () => {
+    it('keeps the controls of a KPI group, which float over its border, for hover, and its unpin reachable on touch', async () => {
       const { container } = renderWithProviders(<PinningHost widgets={[kpisWidget]} onPin={() => {}} />);
       const card = cell(container, kpisWidget.id);
       const pin = await within(card).findByRole('button', { name: pinLabel('Pin', kpisWidget) }, { timeout: 5000 });
@@ -650,9 +655,29 @@ describe('DashboardRenderer', () => {
       fireEvent.click(pin);
       const unpin = within(card).getByRole('button', { name: pinLabel('Unpin', kpisWidget) });
       expect(waitsForHover(unpin)).toBe(true);
-      expect(unpin.closest('.pointer-events-none')).not.toBeNull();
-      // Only the grip stays reachable on touch; the host's buttons wait for hover like the rest.
-      expect(reachableOnTouch(unpin)).toBe(false);
+      // Touch screens can't hover, so the unpin, which doesn't wait for hover, brings the floating card into view.
+      expect(reachableOnTouch(unpin)).toBe(true);
+    });
+
+    it.each([
+      ['a table card', models()],
+      ['a KPI group', kpisWidget],
+    ])('keeps the hover-only pin of %s in the tab order', async (_, widget) => {
+      const user = userEvent.setup();
+      const { container } = renderWithProviders(<PinningHost widgets={[widget]} onPin={() => {}} />);
+      const pin = await within(cell(container, widget.id)).findByRole(
+        'button',
+        { name: pinLabel('Pin', widget) },
+        { timeout: 5000 },
+      );
+      expect(waitsForHover(pin)).toBe(true);
+      expect(pin.classList.contains('hidden')).toBe(false);
+
+      // Tab through the card's controls (the KPI figures' change badges come first) until the pin.
+      for (let i = 0; i < 20 && document.activeElement !== pin; i++) await user.tab();
+      expect(document.activeElement).toBe(pin);
+      // Focus inside the card is what reveals it.
+      expect(pin.className).toContain('group-focus-within/metrics-card:opacity-100');
     });
 
     it("shows the host's pinned widgets without a click", async () => {

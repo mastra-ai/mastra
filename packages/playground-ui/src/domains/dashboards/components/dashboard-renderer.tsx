@@ -43,7 +43,7 @@ export type DashboardRendererProps = {
   alert?: DashboardAlert;
   /**
    * The host's buttons on each widget's card, after the card's own: `MetricsCard.Action`s, each
-   * deciding whether it waits for the card's hover (e.g. `hidden group-hover/metrics-card:inline-flex`) or stays in view.
+   * deciding whether it waits for the card's hover (e.g. `onCardHover`) or stays in view.
    * Called with the widget as it renders, so only for widgets that parsed; a parsed widget that later
    * throws keeps them on its error card. No host buttons without it.
    */

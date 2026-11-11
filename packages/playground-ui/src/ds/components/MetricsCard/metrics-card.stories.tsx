@@ -9,6 +9,7 @@ import { Txt } from '../Txt';
 import { MetricsCard } from './metrics-card';
 import { count, ms, percent, percentileSeries, requestsByHour, routeStats, statusSeries } from './metrics-story-data';
 import type { RouteStat } from './metrics-story-data';
+import { onCardHover } from './on-card-hover';
 
 const meta: Meta<typeof MetricsCard> = {
   title: 'Metrics/MetricsCard',
@@ -231,8 +232,7 @@ export const TitleMenu: Story = {
 };
 
 /**
- * The card is a `group/metrics-card`, so a `MetricsCard.Action` with
- * `hidden group-hover/metrics-card:inline-flex group-focus-within/metrics-card:inline-flex` appears while
+ * The card is a `group/metrics-card`, so a `MetricsCard.Action` with `className={onCardHover}` appears while
  * the card is hovered or holds focus, so a page of cards doesn't read as a page of buttons. One that shows a state, like the
  * star here, stays in view. Hover the card.
  */
@@ -248,25 +248,15 @@ function ActionsOnHoverCard() {
         <MetricsCard.TopBar>
           <MetricsCard.Title>Latency</MetricsCard.Title>
           <MetricsCard.Actions>
-            <MetricsCard.Action
-              label="View in traces"
-              className="hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex"
-            >
+            <MetricsCard.Action label="View in traces" className={onCardHover}>
               <EyeIcon />
             </MetricsCard.Action>
-            <MetricsCard.Action
-              label="View errors in logs"
-              className="hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex"
-            >
+            <MetricsCard.Action label="View errors in logs" className={onCardHover}>
               <LogsIcon />
             </MetricsCard.Action>
             <MetricsCard.Action
               label={starred ? 'Unstar Latency' : 'Star Latency'}
-              className={
-                starred
-                  ? undefined
-                  : 'hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex'
-              }
+              className={starred ? undefined : onCardHover}
               onClick={() => setStarred(!starred)}
             >
               <StarIcon className={starred ? 'fill-current' : undefined} />

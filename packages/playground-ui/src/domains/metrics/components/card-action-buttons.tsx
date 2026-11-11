@@ -1,7 +1,6 @@
 import { ListTreeIcon, LogsIcon, MessagesSquareIcon } from 'lucide-react';
-import { MetricsCard } from '../../../ds/components/MetricsCard';
+import { MetricsCard, onCardHover } from '../../../ds/components/MetricsCard';
 import { TraceIcon } from '../../../ds/icons/TraceIcon';
-import { onCardHover } from './on-card-hover';
 
 type CardActionButtonProps = {
   onClick: () => void;

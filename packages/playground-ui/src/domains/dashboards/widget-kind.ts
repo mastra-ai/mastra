@@ -26,7 +26,7 @@ export type WidgetKindProps<Options> = {
   onTitleChange?: (title: string) => void;
   /**
    * The host's buttons, after the card's own (drilldown, alert): `MetricsCard.Action`s, each deciding
-   * whether it waits for the card's hover (e.g. `hidden group-hover/metrics-card:inline-flex`) or stays in view.
+   * whether it waits for the card's hover (e.g. `onCardHover`) or stays in view.
    */
   actions?: ReactNode;
   /** The card's Create alert button, for the open view: the host can turn views into alerts. */

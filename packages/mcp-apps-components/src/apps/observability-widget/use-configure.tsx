@@ -1,5 +1,5 @@
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
-import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
+import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { SettingsIcon } from 'lucide-react';
 import { useSyncExternalStore } from 'react';
@@ -48,11 +48,7 @@ export function useConfigure(
       .catch(() => {});
   };
   return (
-    <MetricsCard.Action
-      label={`Configure ${name}`}
-      onClick={onConfigure}
-      className="hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex"
-    >
+    <MetricsCard.Action label={`Configure ${name}`} onClick={onConfigure} className={onCardHover}>
       <SettingsIcon />
     </MetricsCard.Action>
   );

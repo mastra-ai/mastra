@@ -36,7 +36,7 @@ export type StatelessWidgetProps = {
   alert?: DashboardAlert;
   /**
    * The host's buttons on the card, after its own: `MetricsCard.Action`s, each deciding whether it
-   * waits for the card's hover (e.g. `hidden group-hover/metrics-card:inline-flex`) or stays in view.
+   * waits for the card's hover (e.g. `onCardHover`) or stays in view.
    */
   actions?: ReactNode;
 };

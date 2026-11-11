@@ -5,9 +5,9 @@
 
 Replaced the `onPin` and `isPinned` props on `DashboardRenderer`, and the `pin` prop on `StatelessWidget`, with a host `actions` slot. `DashboardRenderer` takes a `widgetActions` callback that returns each widget's buttons, and `StatelessWidget` takes them as `actions`. This lets a host add any buttons to widget cards, not just a pin button, without changing the renderer. Host buttons sit after the card's own drilldown and alert buttons.
 
-Compose the buttons with the new `MetricsCard.Action`. The card is a `group/metrics-card`, so each button sets its own visibility with classes: `hidden group-hover/metrics-card:inline-flex group-focus-within/metrics-card:inline-flex` waits for the card's hover or keyboard focus and takes no room until then; without them, the button stays in view, e.g. for a pinned card's unpin. `PinAction` and the `WidgetPin` type are removed: a pin button is a `MetricsCard.Action` like any other.
+Compose the buttons with the new `MetricsCard.Action`. The card is a `group/metrics-card`, so each button sets its own visibility with classes. The exported `onCardHover` class makes a button wait for the card's hover, keyboard focus or open menu: until then it takes no room but stays in the tab order, so keyboard users can still reach it. Without it, the button stays in view, e.g. for a pinned card's unpin; on touch screens, such a button also keeps a KPI group's floating controls reachable. `PinAction` and the `WidgetPin` type are removed: a pin button is a `MetricsCard.Action` like any other.
 
-`ChartCard` now has a single `actions` slot: `persistentActions` is removed, and `MetricsCard.Actions` no longer takes `reveal`. Set the visibility classes on each `MetricsCard.Action` instead.
+`ChartCard` now has a single `actions` slot: `persistentActions` is removed, and `MetricsCard.Actions` no longer takes `reveal`. Set `className={onCardHover}` on each `MetricsCard.Action` that should wait for hover instead.
 
 **Before**
 
@@ -23,7 +23,7 @@ Compose the buttons with the new `MetricsCard.Action`. The card is a `group/metr
 **After**
 
 ```tsx
-import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
+import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
 import { DashboardRenderer } from '@mastra/playground-ui/domains/dashboards';
 import { PinIcon, PinOffIcon } from 'lucide-react';
 
@@ -36,11 +36,7 @@ import { PinIcon, PinOffIcon } from 'lucide-react';
       <MetricsCard.Action
         label={`${isPinned ? 'Unpin' : 'Pin'} ${widget.title ?? 'widget'}`}
         onClick={() => savePin(widget, !isPinned)}
-        className={
-          isPinned
-            ? undefined
-            : 'hidden group-hover/metrics-card:inline-flex group-focus-within/metrics-card:inline-flex'
-        }
+        className={isPinned ? undefined : onCardHover}
       >
         {isPinned ? <PinOffIcon /> : <PinIcon />}
       </MetricsCard.Action>

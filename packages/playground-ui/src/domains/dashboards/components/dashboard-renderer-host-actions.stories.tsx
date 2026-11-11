@@ -8,7 +8,7 @@ import { dashboardStoryFetch, STORY_BASE_URL } from '../../../../.storybook/fixt
 import { MetricsProvider } from '../../metrics/hooks/use-metrics';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import { DashboardRenderer } from './dashboard-renderer';
-import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 
 type Args = { pin: boolean; share: boolean; favorite: boolean };
 
@@ -33,7 +33,7 @@ function HostActionsHost({ pin, share, favorite }: Args) {
           <MetricsCard.Action
             label={`Copy link to ${name}`}
             onClick={() => setLast(`Copied a link to ${name}`)}
-            className="hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex"
+            className={onCardHover}
           >
             <LinkIcon />
           </MetricsCard.Action>
@@ -42,11 +42,7 @@ function HostActionsHost({ pin, share, favorite }: Args) {
           <MetricsCard.Action
             label={`${isFavorite ? 'Unstar' : 'Star'} ${name}`}
             onClick={() => setFavorites(ids => (isFavorite ? ids.filter(id => id !== widget.id) : [...ids, widget.id]))}
-            className={
-              isFavorite
-                ? undefined
-                : 'hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex'
-            }
+            className={isFavorite ? undefined : onCardHover}
           >
             <StarIcon className={isFavorite ? 'fill-current' : undefined} />
           </MetricsCard.Action>
@@ -55,11 +51,7 @@ function HostActionsHost({ pin, share, favorite }: Args) {
           <MetricsCard.Action
             label={`${isPinned ? 'Unpin' : 'Pin'} ${name}`}
             onClick={() => setPinned(ids => (isPinned ? ids.filter(id => id !== widget.id) : [...ids, widget.id]))}
-            className={
-              isPinned
-                ? undefined
-                : 'hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex'
-            }
+            className={isPinned ? undefined : onCardHover}
           >
             {isPinned ? <PinOffIcon /> : <PinIcon />}
           </MetricsCard.Action>

@@ -10,7 +10,7 @@ import { MetricsProvider } from '../../metrics/hooks/use-metrics';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import type { DashboardAlert, DashboardAlertAction, DashboardAlertSource, DashboardAlertTarget } from '../widget-kind';
 import { DashboardRenderer } from './dashboard-renderer';
-import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 
 type Definition = ComponentProps<typeof DashboardRenderer>['definition'];
 type Widget = Definition['rows'][number]['widgets'][number];
@@ -190,11 +190,7 @@ function AlertingHost({ hostResponse, editing }: Args) {
                     onClick={() =>
                       setPinned(ids => (isPinned ? ids.filter(id => id !== widget.id) : [...ids, widget.id]))
                     }
-                    className={
-                      isPinned
-                        ? undefined
-                        : 'hidden group-focus-within/metrics-card:inline-flex group-hover/metrics-card:inline-flex'
-                    }
+                    className={isPinned ? undefined : onCardHover}
                   >
                     {isPinned ? <PinOffIcon /> : <PinIcon />}
                   </MetricsCard.Action>
