@@ -188,7 +188,10 @@ function reviewSeatSkill(decision: unknown): { skillName?: unknown } | undefined
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
+  return (
+    attempts >= (failureCode === 'run_incomplete' ? 2 : MAX_ATTEMPTS) ||
+    !factoryDispatchFailureMetadata(failureCode).canRetry
+  );
 }
 
 /**
@@ -1517,6 +1520,18 @@ export class FactoryDecisionDispatcher {
           // cancelled mid-flight; without this the decision reports success and
           // the break is invisible on the card.
           const since = new Date();
+          const runItem = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
+          const boards = runItem ? await this.#boards.load(record) : null;
+          const stage = runItem?.stages.length === 1 ? runItem.stages[0] : undefined;
+          const phase = stage && runItem ? boards?.get(boardForWorkItem(runItem))?.phases[stage] : undefined;
+          const workingRevision =
+            phase?.kind === 'working' &&
+            phase.runner.context === decision.role &&
+            phase.runner.skill === decision.skillName
+              ? runItem!.revision
+              : null;
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
@@ -1608,7 +1623,18 @@ export class FactoryDecisionDispatcher {
                   superseded: async () =>
                     (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role)),
                 },
-                () => this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle()),
+                async () => {
+                  await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
+                  if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
+                    return;
+                  const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
+                  if (after?.revision === workingRevision && !(await kickoffStale())) {
+                    throw new FactoryDispatchError(
+                      'run_incomplete',
+                      'Factory skill run ended before completing the working phase.',
+                    );
+                  }
+                },
               );
               // Handed on before the turn ended: the run's clean end is the successor's, not
               // a finished review. A move after the turn ended (a merge) keeps the completion.

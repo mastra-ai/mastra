@@ -1056,7 +1056,7 @@ describe('FactoryDecisionDispatcher', () => {
     const buildDecisions = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
       decision => decision.decision.type === 'invokeSkill',
     );
-    expect(buildDecisions.map(decision => decision.status)).toEqual(['succeeded']);
+    expect(buildDecisions.map(decision => decision.status)).toEqual(['retry']);
     expect(buildDecisions[0]!.decision).toMatchObject({
       role: 'work',
       skillName: 'factory-build',
@@ -2863,7 +2863,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     // The kickoff is delivered and the run ends cleanly, but it does not call a
     // phase-exit tool or make any change to the card.
-    const { controller, getAgentEndListenerCount } = createSession(undefined, {
+    const { controller, session, getAgentEndListenerCount } = createSession(undefined, {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
       emitAgentEndDuringSignal: true,
       agentEndReason: 'complete',
@@ -2882,8 +2882,20 @@ describe('FactoryDecisionDispatcher', () => {
     expect(after?.revision).toBe(before?.revision);
     expect(after?.stages).toEqual(before?.stages);
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision).toMatchObject({ status: 'retry', deliveryGeneration: 1 });
+    expect(decision).toMatchObject({ status: 'retry', failureCode: 'run_incomplete', deliveryGeneration: 1 });
     expect(decision?.lastError).toContain('before completing');
+    expect(getAgentEndListenerCount()).toBe(0);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_incomplete',
+      deliveryGeneration: 1,
+      attempts: 2,
+    });
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
@@ -4066,7 +4078,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('retry');
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
@@ -8418,7 +8430,7 @@ describe('phase goals', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision).toMatchObject({ status: 'succeeded' });
+    expect(decision).toMatchObject({ status: 'retry', failureCode: 'run_incomplete' });
     expect(await agent.getObjective({ threadId: 'thread-1' })).toMatchObject({
       id: decision!.id,
       objective: OBJECTIVE,
@@ -8460,7 +8472,10 @@ describe('phase goals', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_incomplete',
+    });
     // Same record, never re-set: a second setObjective would restart it.
     expect(await agent.getObjective({ threadId: 'thread-1' })).toEqual(held);
     expect(sentIds(session)).toEqual([failed!.id, `${failed!.id}:retry:1`, `${failed!.id}:goal`]);
@@ -8582,7 +8597,7 @@ describe('phase goals', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision).toMatchObject({ status: 'succeeded' });
+    expect(decision).toMatchObject({ status: 'retry', failureCode: 'run_incomplete' });
     expect(await agent.getObjective({ threadId: 'thread-1' })).toBeUndefined();
     expect(sentIds(session)).toEqual([decision!.id]);
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.metadata?.[PHASE_GOAL_METADATA_KEY]).toBeUndefined();
