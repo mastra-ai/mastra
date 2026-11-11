@@ -1,5 +1,5 @@
 import { expectTypeOf, test } from 'vitest';
-import type { MastraClient } from '../src/client';
+import type { DeleteFeedbackResponse, DeleteScoresResponse, DeleteTracesResponse, MastraClient } from '../src/index';
 import type { Observability } from '../src/resources/observability';
 
 declare const client: MastraClient;
@@ -10,6 +10,9 @@ test('callers distinguish completed deletion from accepted cleanup at both entry
     const traces = await api.deleteTraces({ traceIds: ['abc'] });
     const scores = await api.deleteScores({ scoreIds: ['score-1'] });
     const feedback = await api.deleteFeedback({ feedbackIds: ['feedback-1'] });
+    expectTypeOf(traces).toEqualTypeOf<DeleteTracesResponse>();
+    expectTypeOf(scores).toEqualTypeOf<DeleteScoresResponse>();
+    expectTypeOf(feedback).toEqualTypeOf<DeleteFeedbackResponse>();
     expectTypeOf(traces).toEqualTypeOf<{ success: true } | { accepted: true }>();
     expectTypeOf(scores).toEqualTypeOf<{ success: boolean } | { accepted: true }>();
     expectTypeOf(feedback).toEqualTypeOf<{ success: boolean } | { accepted: true }>();
