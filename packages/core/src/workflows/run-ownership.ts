@@ -4,12 +4,43 @@ import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import type { RunFence, RunOwnershipRecord } from '../storage/run-fencing';
 
 export const WORKFLOW_RUN_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
+export const WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 
 export interface WorkflowRunOwnership {
   release(): Promise<void>;
 }
 
 const UNFENCED: WorkflowRunOwnership = { release: async () => {} };
+
+/**
+ * Renews the lease `fence` holds every {@link WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS}
+ * until the returned function is called. Stops by itself after the first
+ * renewal that finds the claim superseded, reporting it through `onLost`.
+ */
+export function renewWorkflowLease({
+  store,
+  fence,
+  onLost,
+  onError,
+}: {
+  store: WorkflowsStorage;
+  fence: RunFence;
+  onLost: (owner: RunOwnershipRecord | null) => void;
+  onError: (error: unknown) => void;
+}): () => void {
+  const heartbeat = setInterval(() => {
+    store
+      .renewRunOwnership({ ...fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS })
+      .then(result => {
+        if (result.renewed) return;
+        clearInterval(heartbeat);
+        onLost(result.record);
+      })
+      .catch(onError);
+  }, WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS);
+  heartbeat.unref?.();
+  return () => clearInterval(heartbeat);
+}
 
 /**
  * Marks this process as the live driver of a workflow run through the storage
@@ -43,24 +74,20 @@ export async function claimWorkflowRunOwnership({
   if (!claim.acquired) return { owner: claim.record };
 
   const fence: RunFence = { runId, generation: claim.record.generation, ownerId: claim.record.ownerId };
-  const heartbeat = setInterval(() => {
-    store
-      .renewRunOwnership({ ...fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS })
-      .then(result => {
-        if (result.renewed) return;
-        clearInterval(heartbeat);
-        logger?.warn('Lost the ownership lease of a running workflow run; another process may now recover it', {
-          runId,
-          owner: result.record?.ownerId,
-        });
-      })
-      .catch(error => logger?.warn('Failed to renew workflow run ownership lease', { runId, error }));
-  }, AGENT_LEASE_RENEW_INTERVAL_MS);
-  heartbeat.unref?.();
+  const stopRenewing = renewWorkflowLease({
+    store,
+    fence,
+    onLost: owner =>
+      logger?.warn('Lost the ownership lease of a running workflow run; another process may now recover it', {
+        runId,
+        owner: owner?.ownerId,
+      }),
+    onError: error => logger?.warn('Failed to renew workflow run ownership lease', { runId, error }),
+  });
 
   return {
     release: async () => {
-      clearInterval(heartbeat);
+      stopRenewing();
       try {
         await store.releaseRunOwnership(fence);
       } catch (error) {

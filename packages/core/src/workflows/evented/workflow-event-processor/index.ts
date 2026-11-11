@@ -69,6 +69,8 @@ import {
   withoutAuthToken,
 } from '../helpers';
 import { StepExecutor } from '../step-executor';
+import { acquireStepLease, stepOccurrenceKey, UNLEASED_STEP } from '../step-lease';
+import type { StepLease, StepLeaseHandoff } from '../step-lease';
 import {
   evaluateLoopCondition,
   failedLoopStep,
@@ -107,6 +109,11 @@ export type ProcessorArgs = {
     input: any;
   };
   retryCount?: number;
+  /**
+   * Set only on the `workflow.step.run` a step publishes to retry itself: the
+   * step lease its publisher hands to the worker that runs the retry.
+   */
+  stepLeaseHandoff?: StepLeaseHandoff;
   perStep?: boolean;
   format?: 'legacy' | 'vnext';
   state?: Record<string, any>;
@@ -2205,13 +2212,47 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Control structures (sleep / sleepUntil / parallel / conditional) already
     // returned above; what remains is a leaf: a plain `step`, a declarative
     // `agent` / `tool` / `mapping` entry, or a `loop` / `foreach` body.
-    return this.runLeafStep(
-      {
-        ...args,
-        step: step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
-      },
-      control,
-    );
+    // Only leaves take a step lease: a parallel, conditional or foreach restart
+    // is dispatched under the same execution path as the branch it publishes,
+    // so a lease held by the dispatcher would block that branch.
+    const { stepLeaseHandoff, ...leafArgs } = args;
+    const leaf = step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
+    const lease = await this.#acquireStepLease(leafArgs, leaf, stepLeaseHandoff);
+    if (!lease) return;
+    try {
+      return await this.runLeafStep({ ...leafArgs, step: leaf }, control, lease);
+    } finally {
+      await lease.release();
+    }
+  }
+
+  /**
+   * Takes the lease of the leaf step occurrence `args` delivers, so a step
+   * runs on one worker at a time even when several deliveries of it are in
+   * flight (a restart from another replica, a broker redelivery). Resolves to
+   * `undefined` when the delivery must be dropped. Workflows the recovery
+   * sweep never restarts, and stores without run fencing, run unleased.
+   */
+  async #acquireStepLease(
+    args: Omit<ProcessorArgs, 'stepLeaseHandoff'>,
+    step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
+    handoff: StepLeaseHandoff | undefined,
+  ): Promise<StepLease | undefined> {
+    const { workflow } = args;
+    if (workflow.type === 'processor' || workflow.options?.autoRestartActiveRuns === false) return UNLEASED_STEP;
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    if (!store || !(await store.supportsRunFencing())) return UNLEASED_STEP;
+    const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
+    // Every loop iteration runs the body under the same execution path.
+    const iterationCount =
+      step.type === 'loop' ? (args.stepResults?.[leafId]?.metadata?.iterationCount ?? 0) : undefined;
+    return acquireStepLease({
+      store,
+      key: stepOccurrenceKey(args.runId, args.executionPath, iterationCount),
+      handoff,
+      claimAfterRelease: args.resumeSteps?.[0] === leafId,
+      logger: this.mastra.getLogger(),
+    });
   }
 
   /** Evaluates the loop condition after an iteration, then starts the next one or leaves the loop. */
@@ -2452,13 +2493,15 @@ export class WorkflowEventProcessor extends EventProcessor {
    * body - and emits its lifecycle events (`workflow.step.end`, retries,
    * suspend, cancel). The per-kind interpretation happens in the step
    * executor's dispatch; here entries are only inspected via the `step-entry`
-   * accessors.
+   * accessors. `stepLease` is the occurrence lease the caller holds; a retry
+   * hands it to the worker that runs the next attempt.
    */
   protected async runLeafStep(
     args: ProcessorArgs & {
       step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
     },
     control: ControlAtDispatch = {},
+    stepLease: StepLease = UNLEASED_STEP,
   ) {
     const {
       workflow,
@@ -3634,6 +3677,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           requestContext,
           actor,
           retryCount: retryCount + 1,
+          stepLeaseHandoff: stepLease.handOff(),
           state: currentState,
           outputOptions,
         },

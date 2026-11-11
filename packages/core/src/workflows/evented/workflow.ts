@@ -63,6 +63,7 @@ import type { ProcessorStepOutput } from '../../processors/step-schema';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
+import type { RunOwnershipRecord } from '../../storage/run-fencing';
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
@@ -97,6 +98,7 @@ import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { resolveLegacyAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
+import type { WorkflowRunOwnership } from '../run-ownership';
 import { createStepFromClassifier, createStepFromTool } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
@@ -107,6 +109,7 @@ import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
+import { claimEventedRestart } from './step-lease';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -1848,6 +1851,7 @@ export class EventedWorkflow<
         stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
         tracingPolicy: this.options?.tracingPolicy,
+        restartable: this.options?.autoRestartActiveRuns !== false && this.type !== 'processor',
       });
 
     this.runs.set(runIdToUse, run);
@@ -1931,9 +1935,27 @@ export class EventedRun<
     stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
     tracingPolicy?: TracingPolicy;
+    /** Whether the recovery sweep restarts this run, so `restart()` takes a lease. */
+    restartable?: boolean;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
+    this.#restartable = params.restartable ?? false;
+  }
+
+  #restartable: boolean;
+
+  /**
+   * Evented runs hold no run lease while they execute: the workers running
+   * their steps hold step leases instead. `restart()` only takes a short lease
+   * so that of several concurrent restarts (one per booting replica) a single
+   * one publishes.
+   */
+  protected override async claimRestartOwnership(): Promise<
+    WorkflowRunOwnership | { owner: RunOwnershipRecord | null }
+  > {
+    if (!this.#restartable) return { release: async () => {} };
+    return claimEventedRestart({ store: await this.mastra?.getStorage()?.getStore('workflows'), runId: this.runId });
   }
 
   private completeWorkflowTracing(
