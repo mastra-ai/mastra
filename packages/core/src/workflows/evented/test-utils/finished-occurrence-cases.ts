@@ -111,6 +111,13 @@ const shapes = {
   },
 };
 
+/** A promise and the function that resolves it; `Promise.withResolvers` is newer than the library target. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(r => (resolve = r));
+  return { promise, resolve };
+}
+
 const samePath = (event: Event, path: number[]) =>
   JSON.stringify((event.data as { executionPath?: number[] }).executionPath) === JSON.stringify(path);
 
@@ -207,7 +214,7 @@ export function describeFinishedOccurrenceCases({
 
     it('does not run a step again when its original message arrives after a restart ran it', async () => {
       const executions: string[] = [];
-      const hung = Promise.withResolvers<void>();
+      const hung = deferred<void>();
       const build = (replica: string) =>
         createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
           .then(work('first', async id => void executions.push(`${replica}:${id}`)))
@@ -249,8 +256,8 @@ export function describeFinishedOccurrenceCases({
           .then(work('second', async id => void executions.push(`${replica}:${id}`)))
           .commit();
       // The first step finished on A, but its step end sits in the broker's queue for longer than a lease TTL.
-      const stepEndQueued = Promise.withResolvers<void>();
-      const deliverStepEnd = Promise.withResolvers<void>();
+      const stepEndQueued = deferred<void>();
+      const deliverStepEnd = deferred<void>();
       const a = await startReplica(build('A'), event => {
         if (event.type !== 'workflow.step.end' || !samePath(event, [0])) return undefined;
         stepEndQueued.resolve();
@@ -265,7 +272,7 @@ export function describeFinishedOccurrenceCases({
         .toBe(false);
 
       // B's restart reads the first step as running. Its message for that step is held back in turn.
-      const restartMessage = Promise.withResolvers<Event>();
+      const restartMessage = deferred<Event>();
       const b = await startReplica(build('B'), event => {
         if (event.type !== 'workflow.step.run' || !samePath(event, [0]) || !event.data.restart) return undefined;
         restartMessage.resolve(structuredClone(event));
@@ -314,8 +321,8 @@ export function describeFinishedOccurrenceCases({
       async name => {
         const shape = shapes[name];
         const executions: string[] = [];
-        const blocked = Promise.withResolvers<void>();
-        const gate = Promise.withResolvers<void>();
+        const blocked = deferred<void>();
+        const gate = deferred<void>();
         const reporter =
           (replica: string): Report =>
           async label => {
