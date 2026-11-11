@@ -51,4 +51,9 @@ describe('MASTRACODE_AGENT_STREAMS', () => {
     vi.stubEnv('MASTRACODE_AGENT_STREAMS', 'false');
     await expect(codeAgent()).rejects.toThrow('Invalid MASTRACODE_AGENT_STREAMS value "false"');
   });
+
+  it('rejects an empty value at startup', async () => {
+    vi.stubEnv('MASTRACODE_AGENT_STREAMS', '');
+    await expect(codeAgent()).rejects.toThrow('Invalid MASTRACODE_AGENT_STREAMS value ""');
+  });
 });
