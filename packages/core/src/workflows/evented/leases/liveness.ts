@@ -22,9 +22,9 @@ export interface LivenessScope {
 }
 
 // Liveness writes one renewal tick sends at once, so a process driving many runs does not flood the store.
-const LIVENESS_RENEW_CONCURRENCY = 8;
+export const LIVENESS_RENEW_CONCURRENCY = 8;
 // A renew interval configured close to the TTL would leave no margin for a missed tick.
-const LIVENESS_RENEW_INTERVAL_MS = Math.max(
+export const LIVENESS_RENEW_INTERVAL_MS = Math.max(
   1,
   Math.min(WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, Math.floor(WORKFLOW_RUN_LEASE_TTL_MS / 3)),
 );

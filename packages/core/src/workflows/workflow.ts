@@ -98,7 +98,7 @@ import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
 import { loadedStepResults, residentStepResults } from './run-journal';
 import type { ParentStateLink, StateBase } from './run-journal';
-import { claimWorkflowRunOwnership } from './run-ownership';
+import { WORKFLOW_RUN_LEASE_TTL_MS, claimWorkflowRunOwnership } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
 import { createRunStorage } from './run-storage';
 import type { RunStorage } from './run-storage';
@@ -5394,24 +5394,38 @@ export class Run<
   }
 
   /**
-   * Restarts like {@link Run.restart}, but resolves once the run is claimed
-   * and its execution started instead of when it finishes, as `startAsync()`
-   * does for `start()`. Rejects when the restart is refused
-   * (`WORKFLOW_RESTART_RUN_OWNED`) or fails before it starts; later failures
-   * are logged. The recovery sweep uses it for evented runs, which workers
-   * drive while the caller only waits for the result.
+   * Restarts like {@link Run.restart}, but resolves once a worker took the
+   * restarted run over instead of when it finishes, as `startAsync()` does for
+   * `start()`. That is when the claim reports the hand-off, or one lease TTL
+   * after the restart was published, whichever comes first; on an engine that
+   * runs the restart in the caller, when it finishes. Rejects when the restart
+   * is refused (`WORKFLOW_RESTART_RUN_OWNED`) or fails before it is published;
+   * later failures are logged. The recovery sweep uses it for evented runs,
+   * which workers drive while the caller only waits for the result.
    * @internal
    */
   async restartInBackground(): Promise<void> {
-    let notifyStarted!: () => void;
-    const started = new Promise<void>(resolve => {
-      notifyStarted = resolve;
+    let notifyDispatched!: (dispatch: { handedOff: Promise<void> }) => void;
+    const dispatched = new Promise<{ handedOff: Promise<void> }>(resolve => {
+      notifyDispatched = resolve;
     });
-    const execution = this._restart({ onExecutionStarted: notifyStarted });
-    await Promise.race([started, execution]);
+    const execution = this._restart({ onDispatched: notifyDispatched });
+    const dispatch = await Promise.race([dispatched, execution.then(() => undefined)]);
     void execution.catch(error => {
       this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background restart failed:`, error);
     });
+    if (!dispatch) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const lapsed = new Promise<void>(resolve => {
+      timer = setTimeout(resolve, WORKFLOW_RUN_LEASE_TTL_MS);
+      timer.unref?.();
+    });
+    const settled = execution.then(
+      () => {},
+      () => {},
+    );
+    await Promise.race([dispatch.handedOff, lapsed, settled]);
+    clearTimeout(timer);
   }
 
   /**
@@ -5960,7 +5974,7 @@ export class Run<
     tracingOptions,
     outputOptions,
     actor,
-    onExecutionStarted,
+    onDispatched,
     ...rest
   }: {
     requestContext?: RequestContext<TRequestContext>;
@@ -5971,8 +5985,12 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     actor?: ActorSignal;
-    /** Called once the run is claimed and its execution starts; not called for a finished run. */
-    onExecutionStarted?: () => void;
+    /**
+     * Called once the engine published the restart to the workers that execute it, with the
+     * claim's hand-off (resolved already for claims without one). Engines that execute in the
+     * caller never call it, and neither does a restart of a finished run.
+     */
+    onDispatched?: (dispatch: { handedOff: Promise<void> }) => void;
   } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const allowedEngines = ['default', 'evented'];
@@ -6121,7 +6139,6 @@ export class Run<
 
     let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
     try {
-      onExecutionStarted?.();
       result = await this.executionEngine.execute<
         TState,
         TInput,
@@ -6145,6 +6162,7 @@ export class Run<
         workflowSpan,
         storageVersion: this.storageVersion,
         storedState: this.runStorage.storedState(snapshot),
+        onDispatched: onDispatched && (() => onDispatched({ handedOff: ownership.handedOff ?? Promise.resolve() })),
       });
     } finally {
       await ownership.release();

@@ -2029,6 +2029,7 @@ export class EventedRun<
     }
 
     const claim = await claimEventedRestart({
+      scope: this.mastra,
       store: await this.mastra?.getStorage()?.getStore('workflows'),
       runId: this.runId,
     });

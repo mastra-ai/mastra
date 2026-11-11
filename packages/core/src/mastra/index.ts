@@ -744,8 +744,8 @@ export interface MastraRecoveryConfig {
   /**
    * Maximum number of workflow runs restarted at the same time by
    * {@link Mastra.restartAllActiveWorkflowRuns}. Use `Infinity` for no limit.
-   * A default-engine run counts until it finishes, an evented run until its
-   * restart is handed to the workers.
+   * A default-engine run counts until it finishes, an evented run until a
+   * worker starts it, or one lease TTL after its restart was published.
    * @default 5
    */
   workflowConcurrency?: number;
@@ -4356,6 +4356,10 @@ export class Mastra<
     return workflow as TWorkflows[TWorkflowName];
   }
 
+  /**
+   * Every RUNNING/WAITING run of the workflows boot-time recovery restarts, read in one call per
+   * workflow and status. `restartAllActiveWorkflowRuns()` reads them a page at a time instead.
+   */
   public async listActiveWorkflowRuns(): Promise<WorkflowRuns> {
     const storage = this.#storage;
     if (!storage) {
@@ -4387,16 +4391,17 @@ export class Mastra<
   /**
    * Restart every RUNNING/WAITING run of the registered default-engine and
    * evented workflows. Runs are restarted `recovery.workflowConcurrency` at a
-   * time (default 5) and the promise resolves once every default-engine
-   * restart has settled and every evented restart was handed to the workers.
-   * Failures are logged per run and never reject the sweep.
+   * time (default 5). The promise resolves once every default-engine restart
+   * has finished and every evented restart was taken over by a worker (or one
+   * lease TTL after it was published). Failures are logged per run and never
+   * reject the sweep. Once `shutdown()` starts, no further runs are restarted.
    *
    * Active runs are read a page at a time. Before restarting a page, the sweep
    * reads in one batch whether another process still holds each run (the
    * run's liveness key for evented runs, its run lease for default-engine
-   * runs), skips the held ones without loading them and re-checks each once
-   * its lease could have lapsed. The claim `restart()` takes stays the final
-   * check, so a run taken in between is still refused there.
+   * runs). It skips those runs without loading them and checks each again
+   * once its lease could have lapsed. The claim `restart()` takes stays the
+   * final check, so a run another process took in between is still refused.
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const workflowsStore = await this.#storage?.getStore('workflows');
@@ -4407,13 +4412,23 @@ export class Mastra<
     // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
     // the same parent.
     const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
-    const readsOwnership = await workflowsStore.supportsRunFencing();
+    const readsOwnership = await Promise.resolve()
+      .then(() => workflowsStore.supportsRunFencing())
+      .catch(error => {
+        // restart() probes again and decides per run, so the sweep only loses its pre-check.
+        this.#logger.warn('Failed to check run fencing support before restarting workflow runs', { error });
+        return false;
+      });
     // Shared by every page, so a long default-engine restart holds one slot rather than the next page.
-    const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency);
+    const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency, error =>
+      this.#logger.error('Failed to restart workflow run', { error }),
+    );
     for (const workflow of this.#restartableWorkflows()) {
+      if (this.#shuttingDown) break;
       const ownershipKey = workflow.engineType === 'evented' ? runLivenessKey : (runId: string) => runId;
       try {
         for await (const page of activeWorkflowRunPages({ store: workflowsStore, workflowName: workflow.id })) {
+          if (this.#shuttingDown) break;
           const runs = await this.#recoverableRuns(page, workflowsStore, parentStatusOf);
           const owners =
             readsOwnership && runs.length > 0
@@ -4428,7 +4443,14 @@ export class Mastra<
                     return undefined;
                   })
               : undefined;
+          const orphaned = runs.filter(run => !owners?.get(ownershipKey(run.runId))?.live);
+          if (orphaned.length > 0) {
+            this.#logger.debug(`Restarting ${orphaned.length} active workflow run${orphaned.length > 1 ? 's' : ''}`, {
+              workflow: workflow.id,
+            });
+          }
           for (const run of runs) {
+            if (this.#shuttingDown) break;
             const owner = owners?.get(ownershipKey(run.runId));
             if (owner?.live) {
               this.#logger.debug('Skipped restarting workflow run owned by a live process', {
@@ -4517,10 +4539,13 @@ export class Mastra<
    * A re-check that throws is retried with backoff; `recheck.failures` counts the
    * consecutive ones.
    *
-   * An evented restart settles once it is handed to the workers: they run the steps, and
-   * waiting for the result would hold a sweep slot for the whole run.
+   * An evented restart settles once a worker took the run over, or one lease TTL after it was
+   * published: the workers run the steps, and waiting for the result would hold a sweep slot for
+   * the whole run. Holding it until then keeps a backlog of published restarts bounded.
    */
   async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
+    // A sweep's wait for a free slot can outlast the start of shutdown.
+    if (this.#shuttingDown) return;
     try {
       const workflow = this.#recoveryRestartableWorkflow(workflowName);
       if (!workflow) {

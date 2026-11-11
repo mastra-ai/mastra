@@ -137,6 +137,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     perStep?: boolean;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+    /** Called once the run's event is published; see the base `ExecutionEngine.execute`. @internal */
+    onDispatched?: () => void;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
@@ -361,6 +363,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       releaseTracking();
       throw err;
     }
+    params.onDispatched?.();
 
     // Wait for workflow to complete
     let resultData: any;

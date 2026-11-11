@@ -8,6 +8,11 @@ export const WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_M
 
 export interface WorkflowRunOwnership {
   release(): Promise<void>;
+  /**
+   * Resolves once the run no longer needs this claim to keep other callers from restarting it,
+   * for claims that hand a run to workers. Absent when the claim lasts for the whole execution.
+   */
+  handedOff?: Promise<void>;
 }
 
 const UNFENCED: WorkflowRunOwnership = { release: async () => {} };

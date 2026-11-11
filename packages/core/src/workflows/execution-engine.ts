@@ -266,5 +266,10 @@ export abstract class ExecutionEngine extends MastraBase {
     storedState?: { seq: number; patchBytes: number };
     /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
     inheritedState?: StateBase;
+    /**
+     * Called once the run's start, resume or restart event was published to the workers that
+     * execute it. Engines that execute the run in the caller never call it. @internal
+     */
+    onDispatched?: () => void;
   }): Promise<TOutput>;
 }

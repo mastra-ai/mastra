@@ -10,7 +10,7 @@ import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { createStep, createWorkflow } from '../workflows';
 import type { WorkflowRunStatus } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
-import { runLivenessKey } from '../workflows/evented/step-lease';
+import { runLivenessKey } from '../workflows/evented/leases';
 import { Mastra } from './index';
 
 type Engine = 'default' | 'evented';
