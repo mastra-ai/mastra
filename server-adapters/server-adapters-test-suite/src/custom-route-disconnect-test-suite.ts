@@ -230,6 +230,7 @@ export function createCustomRouteDisconnectTestSuite(config: CustomRouteDisconne
       async ({ failsMidStream }) => {
         const finalized = new Set<string>();
         const registry = new FinalizationRegistry<string>(name => finalized.add(name));
+        let sourceErrored = false;
 
         const mastra = new Mastra({
           logger: false,
@@ -246,8 +247,10 @@ export function createCustomRouteDisconnectTestSuite(config: CustomRouteDisconne
                     pull(controller) {
                       const chunk = chunks.shift();
                       if (chunk !== undefined) controller.enqueue(chunk);
-                      else if (failsMidStream) controller.error(new Error('report generation failed'));
-                      else controller.close();
+                      else if (failsMidStream) {
+                        sourceErrored = true;
+                        controller.error(new Error('report generation failed'));
+                      } else controller.close();
                     },
                   });
                   return new Response(body.pipeThrough(new TextEncoderStream()), {
@@ -283,7 +286,13 @@ export function createCustomRouteDisconnectTestSuite(config: CustomRouteDisconne
         const response = await withDeadline(received, 5_000, 'the custom route response to close');
         // Adapters surface a broken body differently (most cut the connection,
         // Elysia appends its error JSON), so only the completed case checks it.
-        if (!failsMidStream) {
+        if (failsMidStream) {
+          // The body really broke instead of closing normally. What reaches the client
+          // differs by adapter (Hono's Node server sends no partial chunk), so only the
+          // source side and the missing tail are checked.
+          expect(sourceErrored).toBe(true);
+          expect(response.text).not.toContain('part-2');
+        } else {
           expect(response).toEqual({ status: 201, text: 'part-1 part-2 part-3', complete: true });
         }
 
