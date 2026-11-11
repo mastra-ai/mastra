@@ -15,6 +15,7 @@ import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
+import { KeyedQueue } from './keyed-queue';
 import { PlatformByteBatcher, resolveByteBatchingConfig } from './platform-byte-batcher';
 import type { PlatformByteBatchingConfig, PlatformByteBatchingStats } from './platform-byte-batcher';
 import { publishResolvedRecord } from './platform-resolved-record';
@@ -287,6 +288,7 @@ export class MastraPlatformExporter extends BaseExporter {
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
   private pendingRecords = new Set<Promise<void>>();
+  private readonly reviewUpdates = new KeyedQueue();
   private quotaPaused = false;
   private quotaProbeTimer: NodeJS.Timeout | null = null;
   private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
@@ -538,7 +540,10 @@ export class MastraPlatformExporter extends BaseExporter {
     // Send buffered traces promptly, without making this request wait for collector
     // uploads or recursively waiting for itself through public flush().
     void this.flushBatches().catch(error => this.logger.warn('Failed to flush buffered telemetry', { error }));
-    const pending = publishResolvedRecord(url, body, headers, method)
+    const send = () => publishResolvedRecord(url, body, headers, method);
+    // Keep retries ahead of later review edits for this ID. Other IDs remain independent.
+    const delivery = method === 'PATCH' ? this.reviewUpdates.enqueue(url.pathname, send) : send();
+    const pending = delivery
       .catch(error => this.logger.warn(`Dropping ${kind} after Platform delivery failed`, { error }))
       .finally(() => this.pendingRecords.delete(pending));
     this.pendingRecords.add(pending);

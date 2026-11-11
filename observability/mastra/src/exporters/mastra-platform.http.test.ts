@@ -92,6 +92,52 @@ function exporter(endpoint: string, overrides: Partial<MastraPlatformExporterCon
 }
 
 describe('Platform uploads over HTTP', () => {
+  it.each(['flush', 'shutdown'] as const)(
+    'preserves review order across retries on %s without blocking other feedback IDs',
+    async lifecycle => {
+      let firstArrived!: () => void;
+      const firstRequest = new Promise<void>(resolve => {
+        firstArrived = resolve;
+      });
+      let attempts = 0;
+      const receiver = await collector(false, (res, path) => {
+        if (path.includes('/ordered/') && ++attempts === 1) {
+          res.writeHead(503).end(JSON.stringify({ code: 'FEEDBACK_LOOKUP_UNAVAILABLE' }));
+          firstArrived();
+        } else res.writeHead(204).end();
+      });
+      const instance = exporter(receiver.endpoint);
+      const update = (feedbackId: string, reviewStatus: 'reviewed' | 'needs-review') =>
+        instance.onFeedbackReviewStatusEvent({
+          type: 'feedback_review_status',
+          feedback: { feedbackId, reviewStatus },
+        });
+      update('ordered', 'reviewed');
+      await firstRequest;
+      update('ordered', 'needs-review');
+      update('independent', 'reviewed');
+      await instance[lifecycle]();
+      expect(
+        receiver.bodies.filter(body => body.path.includes('/ordered/')).map(body => body.data.reviewStatus),
+      ).toEqual(['reviewed', 'reviewed', 'needs-review']);
+      expect(receiver.bodies[1]?.path).toContain('/independent/');
+    },
+  );
+
+  it('delivers the next review update after a terminal failure', async () => {
+    let attempts = 0;
+    const receiver = await collector(false, res => res.writeHead(++attempts === 1 ? 403 : 204).end());
+    const instance = exporter(receiver.endpoint);
+    for (const reviewStatus of ['reviewed', 'needs-review'] as const) {
+      instance.onFeedbackReviewStatusEvent({
+        type: 'feedback_review_status',
+        feedback: { feedbackId: 'review', reviewStatus },
+      });
+    }
+    await instance.flush();
+    expect(receiver.bodies.map(body => body.data.reviewStatus)).toEqual(['reviewed', 'needs-review']);
+  });
+
   it.each([MastraStorageExporter, DefaultExporter])(
     'skips inherited unsupported review updates in %s',
     async StorageExporter => {
