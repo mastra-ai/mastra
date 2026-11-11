@@ -342,8 +342,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // covers resourceId-only filters. Unfiltered (no resourceId) listing is a rare admin path
       // left to an in-memory sort rather than carrying standalone single-field sort indexes.
       { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1 } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1, id: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1, id: -1 } },
       // Messages: point lookups (id) + per-thread retrieval (listMessages) and per-resource
       // retrieval (listMessagesByResourceId), both sorted by createdAt. The compound prefixes
       // cover thread_id-only and resourceId-only filters.

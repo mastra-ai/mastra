@@ -240,4 +240,21 @@ describe('session recovery reads one thread when storage applies the scope', () 
     expect(result).toBe(recovers);
     expect(calls[0]).toMatchObject({ filter: { resourceId: 'r', metadata: { projectPath: '/a' } }, perPage: 50 });
   });
+
+  it('recovers a session with scope keys unsupported by storage filters', async () => {
+    const storage = new InMemoryStore();
+    await seed(storage, [
+      { id: 'other', metadata: { 'project-path': '/b' } },
+      { id: 'match', metadata: { 'project-path': '/a' } },
+    ]);
+    const controller = await createController(storage);
+
+    const session = await controller.createSession({
+      resourceId: 'r',
+      id: 'r::/a',
+      tags: { 'project-path': '/a' },
+      resumeOnly: true,
+    });
+    expect(session.thread.getId()).toBe('match');
+  });
 });

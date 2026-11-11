@@ -817,10 +817,16 @@ export class AgentController<TState = {}> {
       // this session's scope — including one carrying no scope at all — belongs
       // to nobody here and must not be auto-resumed.
       const scopeEntries = Object.entries(session.getThreadScope());
+      let metadata: Record<string, unknown> | undefined;
+      try {
+        if (scopeEntries.length > 0) metadata = validateStorageMetadataFilter(Object.fromEntries(scopeEntries));
+      } catch {
+        // Unsupported scope keys can still be matched exactly after loading threads.
+      }
 
       const candidates = await this.queryThreads({
         resourceId: session.identity.getResourceId(),
-        metadata: Object.fromEntries(scopeEntries),
+        metadata,
         limit: 1,
         matchesScope: thread => {
           const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
