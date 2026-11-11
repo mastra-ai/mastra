@@ -386,7 +386,7 @@ describe('ProjectRoutes', () => {
       });
     });
 
-    it('applies the default to running bound threads and reports precise skip reasons', async () => {
+    it('acknowledges before applying the default to running bound threads', async () => {
       const seed = await createFactoryStorageForTests();
       const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
       await seed.projects.update({
@@ -416,6 +416,7 @@ describe('ProjectRoutes', () => {
         binding('thread-inactive', 'item-inactive', 'resource-inactive'),
         binding('thread-not-running', 'item-not-running', 'resource-not-running'),
         binding('thread-missing', 'item-thread-missing', 'resource-thread-missing'),
+        binding('thread-lookup-failed', 'item-lookup-failed', 'resource-lookup-failed'),
         binding('thread-mode-unknown', 'item-mode-unknown', 'resource-mode-unknown'),
         binding('thread-apply-failed', 'item-apply-failed', 'resource-apply-failed'),
       ];
@@ -425,10 +426,16 @@ describe('ProjectRoutes', () => {
         ['item-inactive', item('item-inactive', ['done'])],
         ['item-not-running', item('item-not-running')],
         ['item-thread-missing', item('item-thread-missing')],
+        ['item-lookup-failed', item('item-lookup-failed')],
         ['item-mode-unknown', item('item-mode-unknown')],
         ['item-apply-failed', item('item-apply-failed')],
       ]);
-      const setSettingOn = vi.fn().mockResolvedValue(undefined);
+      let releaseFirstWrite = () => {};
+      const firstWrite = new Promise<void>(resolve => (releaseFirstWrite = resolve));
+      const setSettingOn = vi
+        .fn()
+        .mockImplementationOnce(() => firstWrite)
+        .mockResolvedValue(undefined);
       const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
       const sessions = new Map([
         [
@@ -460,37 +467,103 @@ describe('ProjectRoutes', () => {
         get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
       } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
       const controller = {
-        getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null),
+        getSession: vi.fn(async (sessionId: string) => {
+          if (sessionId === 'session-thread-lookup-failed') throw new Error('gateway unavailable');
+          return sessions.get(sessionId) ?? null;
+        }),
       } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
 
-      const response = await mount(seed, { workItems, controller }).request(
-        `/web/factory/projects/${project.id}/apply-default-model`,
-        { method: 'POST' },
-      );
+      const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const response = await mount(seed, { workItems, controller }).request(
+          `/web/factory/projects/${project.id}/apply-default-model`,
+          { method: 'POST' },
+        );
 
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({
-        modelId: 'anthropic/claude-opus-4-6',
-        applied: ['thread-applied', 'thread-mode-unknown'],
-        skipped: [
-          { threadId: 'thread-no-item', reason: 'work-item-missing' },
-          { threadId: 'thread-inactive', reason: 'stage-inactive' },
-          { threadId: 'thread-not-running', reason: 'not-running' },
-          { threadId: 'thread-missing', reason: 'thread-missing' },
-          { threadId: 'thread-apply-failed', reason: 'apply-failed' },
-        ],
+        expect(response.status).toBe(202);
+        expect(await response.json()).toEqual({ modelId: 'anthropic/claude-opus-4-6', status: 'started' });
+        await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
+        expect(completed).not.toHaveBeenCalled();
+        releaseFirstWrite();
+        await vi.waitFor(() =>
+          expect(completed).toHaveBeenCalledWith('[factory] apply-default-model completed', {
+            projectId: project.id,
+            modelId: 'anthropic/claude-opus-4-6',
+            applied: 2,
+            skipped: 6,
+          }),
+        );
+        expect(warn).toHaveBeenCalledTimes(2);
+        expect(failingSetSettingOn).toHaveBeenCalledTimes(1);
+        expect(setSettingOn).toHaveBeenCalledTimes(2);
+        expect(setSettingOn).toHaveBeenNthCalledWith(1, {
+          threadId: 'thread-applied',
+          key: 'currentModelId',
+          value: 'anthropic/claude-opus-4-6',
+        });
+        expect(setSettingOn).toHaveBeenNthCalledWith(2, {
+          threadId: 'thread-mode-unknown',
+          key: 'currentModelId',
+          value: 'anthropic/claude-opus-4-6',
+        });
+      } finally {
+        releaseFirstWrite();
+        completed.mockRestore();
+        warn.mockRestore();
+      }
+    });
+
+    it('does not let an older delayed request overwrite a newer default', async () => {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+      await seed.projects.update({
+        orgId: 'org-1',
+        id: project.id,
+        input: { defaultModelId: 'openai/old' },
       });
-      expect(setSettingOn).toHaveBeenCalledTimes(2);
-      expect(setSettingOn).toHaveBeenNthCalledWith(1, {
-        threadId: 'thread-applied',
-        key: 'currentModelId',
-        value: 'anthropic/claude-opus-4-6',
+      let releaseWrite = () => {};
+      const blockedWrite = new Promise<void>(resolve => (releaseWrite = resolve));
+      const writes: Array<{ threadId: string; value: string }> = [];
+      const setSettingOn = vi.fn(async ({ threadId, value }: { threadId: string; value: string }) => {
+        if (value === 'openai/old') await blockedWrite;
+        writes.push({ threadId, value });
       });
-      expect(setSettingOn).toHaveBeenNthCalledWith(2, {
-        threadId: 'thread-mode-unknown',
-        key: 'currentModelId',
-        value: 'anthropic/claude-opus-4-6',
-      });
+      const bindings = ['thread-one', 'thread-two'].map(threadId => ({
+        sessionId: 'session-1',
+        threadId,
+        workItemId: 'item-1',
+        status: 'active' as const,
+      }));
+      const workItems = {
+        listRunBindings: vi.fn().mockResolvedValue(bindings),
+        get: vi.fn().mockResolvedValue({ id: 'item-1', factoryProjectId: project.id, stages: ['execute'] }),
+      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
+      const controller = {
+        getSession: vi.fn().mockResolvedValue({ thread: { getById: vi.fn().mockResolvedValue({}), setSettingOn } }),
+      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
+      const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
+      try {
+        const app = mount(seed, { workItems, controller });
+        const path = `/web/factory/projects/${project.id}/apply-default-model`;
+        const first = await app.request(path, { method: 'POST' });
+        expect(first.status).toBe(202);
+        await vi.waitFor(() => expect(setSettingOn).toHaveBeenCalledTimes(1));
+        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { defaultModelId: 'openai/new' } });
+        const second = await app.request(path, { method: 'POST' });
+        expect(second.status).toBe(202);
+        expect(await second.json()).toEqual({ modelId: 'openai/new', status: 'started' });
+        releaseWrite();
+        await vi.waitFor(() => expect(completed).toHaveBeenCalledTimes(2));
+        expect(writes).toEqual([
+          { threadId: 'thread-one', value: 'openai/old' },
+          { threadId: 'thread-one', value: 'openai/new' },
+          { threadId: 'thread-two', value: 'openai/new' },
+        ]);
+      } finally {
+        releaseWrite();
+        completed.mockRestore();
+      }
     });
   });
 
@@ -1563,6 +1636,8 @@ describe('ProjectRoutes', () => {
         readonly starts: Array<{ sessionId: string; settings: Settings }> = [];
         readonly reads: Array<{ buildId: string; heads: Record<string, string | undefined> }> = [];
         withHistory = false;
+        /** Extra provider output, as a user's setup command might print it. */
+        printed = '';
         readonly builds: FactorySandboxBuilds<Settings> = {
           start: async (ctx, settings) => {
             this.starts.push({ sessionId: ctx.sessionId, settings });
@@ -1573,7 +1648,9 @@ describe('ProjectRoutes', () => {
               buildId,
               heads: { api: await ctx.resolveHead!('https://github.com/acme/api.git') },
             });
-            return { buildId, status: 'ready', templateId: 'tpl-1' };
+            return this.printed
+              ? { buildId, status: 'failed', error: `setup failed: ${this.printed}`, logs: [this.printed] }
+              : { buildId, status: 'ready', templateId: 'tpl-1' };
           },
           list: async () =>
             this.withHistory
@@ -1586,6 +1663,16 @@ describe('ProjectRoutes', () => {
                     logs: ['git clone https://x-access-token:ghs_secret@github.com/acme/api.git', 'fatal: 403'],
                   },
                   { buildId: 'tpl%201:b', status: 'ready' as const, templateId: 'tpl-1' },
+                  ...(this.printed
+                    ? [
+                        {
+                          buildId: 'tpl-1:build-2',
+                          status: 'failed' as const,
+                          error: this.printed,
+                          logs: [this.printed],
+                        },
+                      ]
+                    : []),
                 ]
               : [],
         };
@@ -1626,6 +1713,7 @@ describe('ProjectRoutes', () => {
           {
             sandbox,
             projects: seed.projects,
+            sandboxEnvs: seed.sandboxEnvs,
             sourceControl: {
               storage: github,
               versionControl: { getRepositoryAccess: async () => ({ token: 't', cloneUrl: 'u' }) as never },
@@ -1662,6 +1750,37 @@ describe('ProjectRoutes', () => {
       const until = async (check: () => Promise<boolean>) => {
         for (let i = 0; i < 100 && !(await check()); i += 1) await new Promise(r => setTimeout(r, 20));
       };
+
+      it('masks Build variable values in provider build errors and logs', async () => {
+        const { app, project, sandbox, seed } = await seedBuilding();
+        await seed.sandboxEnvs.set(
+          'org-1',
+          project.id,
+          { name: 'NPM_TOKEN', value: 'npm-sentinel-77', appliesTo: 'build' },
+          'user-1',
+        );
+        sandbox.withHistory = true;
+        sandbox.printed = 'auth failed for npm-sentinel-77';
+
+        const history = await app.request(`/web/factory/projects/${project.id}/environment/builds`);
+        expect(history.status).toBe(200);
+        const historyText = await history.text();
+        expect(historyText).not.toContain('npm-sentinel-77');
+        expect(JSON.parse(historyText).builds.at(-1)).toEqual({
+          buildId: 'tpl-1:build-2',
+          status: 'failed',
+          error: 'auth failed for ***',
+          logs: ['auth failed for ***'],
+        });
+
+        const detail = await app.request(
+          `/web/factory/projects/${project.id}/environment/builds/${encodeURIComponent('tpl-1:build-2')}`,
+        );
+        expect(detail.status).toBe(200);
+        const detailText = await detail.text();
+        expect(detailText).not.toContain('npm-sentinel-77');
+        expect(JSON.parse(detailText).build).toMatchObject({ error: 'setup failed: auth failed for ***' });
+      });
 
       it('reports triggers and the last build on GET without calling the provider', async () => {
         const { app, project, sandbox } = await seedBuilding();

@@ -22,7 +22,8 @@ export type WorkItemSource =
   | 'slack-thread'
   | 'manual';
 
-export function isPullRequestSource(source: WorkItemSource): boolean {
+/** Takes any source string so callers holding a wider union (a user session's `'user'`) need no guard. */
+export function isPullRequestSource(source: string): source is 'github-pr' | 'gitlab-pr' {
   return source === 'github-pr' || source === 'gitlab-pr';
 }
 
@@ -119,6 +120,8 @@ export interface WorkItem {
   sourceKey: string | null;
   parentWorkItemId: string | null;
   title: string;
+  /** What the card is about, handed to its runs at kickoff. */
+  description: string | null;
   url: string | null;
   stages: string[];
   stageHistory: WorkItemStageEntry[];
@@ -128,7 +131,6 @@ export interface WorkItem {
   triageType: FactoryTriageType | null;
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
   acceptedAt: string | null;
-  commentCount: number;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -147,6 +149,7 @@ export interface CreateWorkItemInput {
   sourceKey: string | null;
   parentWorkItemId?: string | null;
   title: string;
+  description?: string | null;
   url?: string | null;
   stages?: string[];
   sessions?: Record<string, WorkItemSessionInput>;
@@ -163,12 +166,12 @@ interface ExternalWorkItemSource {
 
 interface WireWorkItem extends Omit<
   WorkItem,
-  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'commentCount' | 'triageType' | 'acceptedAt'
+  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'description' | 'triageType' | 'acceptedAt'
 > {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
-  commentCount?: number;
+  description?: string | null;
   triageType?: WorkItem['triageType'];
   acceptedAt?: string | null;
 }
@@ -245,7 +248,7 @@ function externalSourceUrl(source: ExternalWorkItemSource | null): string | null
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, commentCount, triageType, acceptedAt, ...rest } = item;
+  const { factoryProjectId, externalSource, metadata, description, triageType, acceptedAt, ...rest } = item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
@@ -257,7 +260,7 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
         ? externalSourceUrl(externalSource)
         : (item.workItem?.url ?? externalSourceUrl(externalSource)),
     metadata: metadata ?? {},
-    commentCount: commentCount ?? 0,
+    description: description ?? null,
     triageType: triageType ?? null,
     acceptedAt: acceptedAt ?? null,
   };
@@ -279,6 +282,8 @@ export type FactoryTransitionResult =
 export interface UpdateWorkItemInput {
   parentWorkItemId?: string | null;
   title?: string;
+  /** Blank clears it. */
+  description?: string | null;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
 }
@@ -354,7 +359,7 @@ export async function transitionWorkItem(
   throw new Error(body.error ?? `Request failed (${res.status})`);
 }
 
-/** Patch a work item's non-stage metadata, session refs, or title. */
+/** Patch a work item's non-stage metadata, session refs, title, or description. */
 export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateWorkItemInput): Promise<WorkItem> {
   const data = await requestJson<{ workItem: WireWorkItem }>(
     `${baseUrl}/web/factory/work-items/${encodeURIComponent(id)}`,

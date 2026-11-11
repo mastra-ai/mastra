@@ -477,6 +477,65 @@ describe('WorkItemsStorage', () => {
     expect(shared[0]?.stages).toEqual(['intake']);
   });
 
+  it('throws when a caller writes to a card shared with the list cache', async () => {
+    const storage = await makeStorage();
+    await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+
+    const [card] = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(() => Object.assign(card!, { title: 'Mutated by a caller' })).toThrow(TypeError);
+    expect(() => card!.stages.push('build')).toThrow(TypeError);
+    expect(() => Object.assign(card!.workItem, { title: 'Mutated by a caller' })).toThrow(TypeError);
+
+    const [again] = await storage.listShared({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(again?.title).toBe('Fix login');
+    expect(again?.stages).toEqual(['intake']);
+  });
+
+  it('rereads only the changed and deleted cards after a write, not the whole board', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const cards = [];
+    for (let i = 0; i < 6; i++) {
+      cards.push(
+        await storage.upsert({
+          ...scope,
+          userId: 'u',
+          input: { ...input, externalSource: { ...input.externalSource, externalId: `e${i}` } },
+        }),
+      );
+    }
+    // Step past the window a delta rereads to tolerate clock skew between writers.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(Date.now() + 10_000);
+    const full = await storage.list(scope);
+    expect(full).toHaveLength(6);
+    vi.setSystemTime(Date.now() + 10_000);
+    await storage.update({ orgId: 'org1', id: cards[2]!.item.id, userId: 'mover', patch: { stages: ['build'] } });
+    await storage.delete({ orgId: 'org1', id: cards[4]!.item.id });
+
+    const findMany = vi.spyOn(storage.ops, 'findMany');
+    const after = await storage.list(scope);
+    const boardRowsRead = (
+      await Promise.all(
+        findMany.mock.calls
+          .map((call, i) => [call[0], findMany.mock.results[i]!.value] as const)
+          .filter(([table]) => table === 'factory_board_items')
+          .map(([, rows]) => rows),
+      )
+    ).reduce((sum, rows: unknown[]) => sum + rows.length, 0);
+    findMany.mockRestore();
+    vi.useRealTimers();
+
+    expect(boardRowsRead).toBeLessThanOrEqual(1);
+    expect(after.map(card => card.id)).toEqual(full.map(card => card.id).filter(id => id !== cards[4]!.item.id));
+    expect(after.find(card => card.id === cards[2]!.item.id)?.stages).toEqual(['build']);
+    expect(after).toEqual(
+      (await storage.listWith(storage.ops, scope)).map(card =>
+        expect.objectContaining({ id: card.id, stages: card.stages }),
+      ),
+    );
+  });
+
   it('holds list order when a later write touches an older card', async () => {
     const storage = await makeStorage();
     vi.useFakeTimers({ shouldAdvanceTime: true });

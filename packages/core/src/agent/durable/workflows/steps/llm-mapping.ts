@@ -6,6 +6,7 @@ import {
   commitToolResult,
   computeModelOutputProviderMetadata,
 } from '../../../../loop/shared/steps/tool-result-commit-core';
+import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, ExportedSpan, SpanTermination } from '../../../../observability';
@@ -401,21 +402,21 @@ export function createDurableLLMMappingStep() {
       // self-correct. This matches the regular agent's behaviour where both
       // ToolNotFoundError and generic tool execution errors are recoverable.
       //
-      // Deliberate divergence from the main loop: this override
-      // can trump a terminal finish reason — a step that finished with
-      // `stop`/`length`/`content-filter` whose tool result errored still
-      // continues. Main avoids the case structurally: its #17893
-      // `hasPendingToolCalls` gate stops the loop before tools ever run on a
-      // terminal reason. Durable runs tools first (the tool-call foreach is
-      // unconditional), so this override IS its tool-error recovery path —
-      // do not "fix" it to match main's gating without a pinning test for
-      // tool-error recovery.
-      const hasToolErrors = toolResults.some(r => r.error !== undefined);
+      // Durable runs tools first (the tool-call foreach is unconditional), so
+      // this override IS its tool-error recovery path: a step that finished
+      // with `stop` (which durable otherwise treats as terminal) whose tool
+      // result errored still continues. It does not trump `error`, `length`
+      // or `content-filter`, matching the main loop: asking again repeats the
+      // failure, truncation, or refusal (#29518). Both sides are pinned by
+      // malformed-tool-args-terminal-finish.scenario.test.ts.
+      const recoverFromToolErrors =
+        toolResults.some(r => r.error !== undefined) &&
+        !TOOL_CALL_TERMINAL_FINISH_REASONS.has(llmOutput.stepResult.reason);
       // A pending client call ends the turn so the client can answer it. Without this the
       // loop re-invoked the model on a result nobody produced.
       const hasPendingHITL = toolResults.some(isPendingClientCall);
       const tripwire = toolResults.find(r => r.tripwire)?.tripwire;
-      const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
+      const isContinued = hasPendingHITL ? false : recoverFromToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The primary channel
       // is the tool-call step's serializable output: the hook writes the flag

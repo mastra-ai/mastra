@@ -169,6 +169,17 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Topics `shouldCache` leaves out only reach the inner transport. With
+   * `extendExistingLogsOnly`, a process that doesn't hold a run's log
+   * publishes it live only; that setup is already warned about (`onUnlogged`)
+   * and its replays miss those frames whatever they carry, so it still counts
+   * as kept.
+   */
+  override __replaysTopic(topic: string): boolean {
+    return this.shouldCache?.(topic) !== false || this.inner.__replaysTopic(topic);
+  }
+
+  /**
    * Log an error message using the configured logger or console.error.
    */
   private logError(message: string, error: unknown): void {

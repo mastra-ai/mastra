@@ -21,6 +21,7 @@ import type {
 import type { DeepCleanOptions } from '../spans/serialization';
 import { deepClean, mergeSerializationOptions } from '../spans/serialization';
 import { BaseObservabilityEventBus } from './base';
+import type { ObservabilityHandler } from './route-event';
 import { routeDropToHandler, routeToHandler } from './route-event';
 
 /**
@@ -47,6 +48,8 @@ function cleanEvent(event: ObservabilityEvent, options: DeepCleanOptions): Obser
       return { type: 'metric', metric: deepClean(event.metric, options) };
     case 'score':
       return { type: 'score', score: deepClean(event.score, options) };
+    case 'feedback_replacement':
+      return { type: event.type, feedback: deepClean(event.feedback, options) };
     case 'feedback':
       return { type: 'feedback', feedback: deepClean(event.feedback, options) };
     default:
@@ -156,7 +159,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
    * emit() is synchronous — async handler promises are tracked internally
    * and can be drained via flush().
    */
-  emit(event: ObservabilityEvent): void {
+  emit(event: ObservabilityEvent, shouldHandle?: (handler: ObservabilityHandler) => boolean): void {
     // Sanitize free-form payload fields on non-tracing signals before
     // fanning out. Tracing events are already deep-cleaned at span
     // construction, so cleanEvent() returns them unchanged.
@@ -164,11 +167,11 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
-      this.trackPromise(routeToHandler(exporter, cleaned, this.logger));
+      if (!shouldHandle || shouldHandle(exporter)) this.trackPromise(routeToHandler(exporter, cleaned, this.logger));
     }
 
     // Route to bridge (same routing logic as exporters)
-    if (this.bridge) {
+    if (this.bridge && (!shouldHandle || shouldHandle(this.bridge))) {
       this.trackPromise(routeToHandler(this.bridge, cleaned, this.logger));
     }
 

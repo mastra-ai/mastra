@@ -1,6 +1,6 @@
 import { hashKey, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -18,16 +18,9 @@ const BOARD_FALLBACK_POLL_MS = 5_000;
 /** While frames refresh the board, a poll only bounds how long a write that never announced itself stays hidden. */
 const FEED_SAFETY_POLL_MS = 60_000;
 
-const FeedEventsContext = createContext(false);
-
-/** No provider means no stream, so consumers fall back to polling. */
-export function useFeedEventsConnected(): boolean {
-  return useContext(FeedEventsContext);
-}
-
 /**
  * Holds the project's feed stream for every surface under the factory route.
- * A frame carries a work item id at most; the queries it invalidates refetch
+ * A frame only says the board changed; the queries it invalidates refetch
  * through their own authed GET.
  */
 export function FeedEventsProvider({ factoryProjectId, children }: { factoryProjectId: string; children: ReactNode }) {
@@ -37,7 +30,6 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   // per host, so a few background tabs starve every other request to the app.
   // A quick tab switch keeps the stream; only a tab left hidden releases it.
   const visible = useRecentlyVisible();
-  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -47,10 +39,6 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     let settling: ReturnType<typeof setTimeout> | undefined;
     let lastRefreshAt = Number.NEGATIVE_INFINITY;
     let streaming = false;
-    const setStreaming = (open: boolean) => {
-      streaming = open;
-      setConnected(open);
-    };
     const cardsKey = queryKeys.workItems(factoryProjectId);
     const boardKeys = [
       cardsKey,
@@ -97,17 +85,11 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         baseUrl,
         factoryProjectId,
         {
-          onEvent: ({ workItemId }) => {
-            refreshBoard();
-            if (workItemId) {
-              void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
-            }
-          },
+          onEvent: refreshBoard,
           onConnected: () => {
-            setStreaming(true);
+            streaming = true;
             // Whatever landed while this tab held no stream was never announced.
             refreshBoard();
-            void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
           },
         },
         abort.signal,
@@ -116,7 +98,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         .catch((error: unknown) => error instanceof RequestError && error.status >= 400 && error.status < 500)
         .then(fatal => {
           if (abort.signal.aborted) return;
-          setStreaming(false);
+          streaming = false;
           // An expired session or a deleted project never heals by retrying;
           // the fallback poll carries the feed from here.
           if (!fatal) retry = setTimeout(connect, RETRY_MS);
@@ -129,9 +111,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       clearTimeout(retry);
       clearTimeout(settling);
       clearInterval(poll);
-      setConnected(false);
     };
   }, [baseUrl, factoryProjectId, queryClient, visible]);
 
-  return <FeedEventsContext.Provider value={connected}>{children}</FeedEventsContext.Provider>;
+  return children;
 }

@@ -2,6 +2,7 @@ import { boardFlow, workBoard as workBoardDefinition } from '@mastra/factory/boa
 import type { InstalledBoard } from '@mastra/factory/boards';
 import { compileStoredBoard } from '@mastra/factory/boards/stored-board';
 import { workSeedWithSelfReview } from '@mastra/factory/boards/work-migrations';
+import { workSeedWithTriage } from '@mastra/factory/boards/work-seeds';
 
 import type { BoardCatalogResponse, InstalledBoardInfo } from '../../src/api/types';
 
@@ -97,8 +98,16 @@ export function catalogInfo(board: InstalledBoard, extra: Partial<InstalledBoard
   };
 }
 
-/** The built-in Work board as the catalog route sends it, read off the real declaration. */
-export const workBoardInfo: InstalledBoardInfo = catalogInfo(workBoardDefinition);
+/**
+ * The built-in Work board as the catalog route sends it for a project stored before new projects'
+ * Work dropped Triage, read off the real seed: most projects hold this one.
+ */
+export const workBoardInfo: InstalledBoardInfo = catalogInfo(
+  compileStoredBoard(workSeedWithTriage(), workBoardDefinition),
+);
+
+/** Work as a project created now holds it, read off the real declaration: no Triage. */
+export const newProjectWorkBoardInfo: InstalledBoardInfo = catalogInfo(workBoardDefinition);
 
 /**
  * Work as a project stored before Work dropped its self-review phase holds it: its row is its

@@ -68,6 +68,10 @@ const FactorySkillsPage = lazyPage(
   () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
   <AppPageLoader />,
 );
+const CardMovesPage = lazyPage(
+  () => import('./pages/CardMovesPage').then(module => module.CardMovesPage),
+  <AppPageLoader />,
+);
 const NewBoardPage = lazyPage(
   () => import('./pages/NewBoardPage').then(module => module.NewBoardPage),
   <AppPageLoader />,
@@ -267,6 +271,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
+                        { path: 'work/moves', ...lazyRoute(CardMovesPage) },
+                        { path: 'boards/:boardId/moves', ...lazyRoute(CardMovesPage) },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },

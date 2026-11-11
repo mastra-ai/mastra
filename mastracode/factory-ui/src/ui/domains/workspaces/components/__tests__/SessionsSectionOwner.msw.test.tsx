@@ -110,6 +110,25 @@ describe('Sessions sidebar owner filter', () => {
     expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
   });
 
+  it('keeps the owner filter after a reload', async () => {
+    stubSessions(mixedSessions());
+    const user = userEvent.setup();
+
+    const first = renderSection();
+    await waitForMutationsIdle(first.client);
+    await screen.findByRole('link', { name: 'factory/pr-20004' });
+    await pickSessionProperty(user, 'Owner', 'Mine');
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'factory/pr-20004' })).not.toBeInTheDocument());
+
+    first.unmount();
+    const second = renderSection();
+    await waitForMutationsIdle(second.client);
+
+    await screen.findByRole('link', { name: 'factory/issue-20001' });
+    expect(screen.queryByRole('link', { name: 'factory/pr-20004' })).not.toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+  });
+
   it('keeps the Properties menu reachable when the sidebar is collapsed', async () => {
     stubSessions(mixedSessions());
     const user = userEvent.setup();
