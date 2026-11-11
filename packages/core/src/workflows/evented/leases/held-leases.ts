@@ -38,6 +38,12 @@ interface HeldRestart {
   end(handedOff: boolean): void;
 }
 
+/** One batched liveness read, and the holds it was started for. */
+interface LivenessRead {
+  holds: HeldRestart[];
+  records: Promise<Map<string, RunOwnershipRecord>>;
+}
+
 /**
  * Checks every restart lease held against one store on one timer: one batched
  * liveness read for all of them, then the renewals that are due, which run
@@ -53,7 +59,7 @@ class RestartLeasePoller {
   /** Whether the last liveness read failed, so a streak of failures is logged once. */
   #readFailing = false;
   /** The batched liveness read in flight, shared by the ticks that run until it settles. */
-  #reading?: Promise<Map<string, RunOwnershipRecord>>;
+  #reading?: LivenessRead;
 
   constructor(readonly store: WorkflowsStorage) {}
 
@@ -101,9 +107,9 @@ class RestartLeasePoller {
       return;
     }
 
-    const live = await this.#readLivenessWithinInterval(checked);
+    const live = await this.#liveHoldsWithinInterval(checked);
     const due = checked.filter(held => {
-      if (live.get(runLivenessKey(held.runId))?.live) {
+      if (live.has(held)) {
         held.end(true);
       }
 
@@ -147,35 +153,45 @@ class RestartLeasePoller {
   }
 
   /**
-   * The liveness records the batched read returns within one check interval,
-   * or none when it has not answered by then. The due leases are renewed
-   * either way: a read that never settles must not let them lapse while the
-   * restarted runs wait in a worker backlog.
+   * The holds whose run the batched liveness read found live, if the read
+   * answers within one check interval; none when it has not answered by then.
+   * The due leases are renewed either way: a read that never settles must not
+   * let them lapse while the restarted runs wait in a worker backlog.
    *
    * At most one read is in flight. A tick that finds the previous read still
    * pending waits on it again instead of starting another, so a slow store
    * gets no pile of reads, and its answer reaches the first tick after it
-   * arrives. That answer covers the holds of the tick that started the read;
-   * a hold added since is checked by the next read.
+   * arrives. That answer only applies to the holds the read was started for
+   * that are still held: a newer hold of the same run must not be ended by a
+   * record read before the previous worker's lease expired. A hold added
+   * since is checked by the next read.
    */
-  async #readLivenessWithinInterval(checked: HeldRestart[]): Promise<Map<string, RunOwnershipRecord>> {
-    // `#readLiveness` never rejects, so the chain needs no handler.
-    this.#reading ??= this.#readLiveness(checked).finally(() => {
-      this.#reading = undefined;
-    });
-
-    const records = await this.#withinInterval(this.#reading);
-    if (records) {
-      return records;
+  async #liveHoldsWithinInterval(checked: HeldRestart[]): Promise<Set<HeldRestart>> {
+    if (!this.#reading) {
+      const read: LivenessRead = { holds: checked, records: this.#readLiveness(checked) };
+      this.#reading = read;
+      // `#readLiveness` never rejects, so the chain needs no handler. The identity check keeps a
+      // settling read from clearing a newer one.
+      void read.records.finally(() => {
+        if (this.#reading === read) {
+          this.#reading = undefined;
+        }
+      });
     }
 
-    // Debug only: a read that is merely slow answers on a later tick, and one that fails warns there.
-    checked
-      .find(held => held.logger)
-      ?.logger?.debug('Renewing held restart leases without waiting for a slow liveness read', {
-        runs: checked.length,
-      });
-    return new Map();
+    const read = this.#reading;
+    const records = await this.#withinInterval(read.records);
+    if (!records) {
+      // Debug only: a read that is merely slow answers on a later tick, and one that fails warns there.
+      checked
+        .find(held => held.logger)
+        ?.logger?.debug('Renewing held restart leases without waiting for a slow liveness read', {
+          runs: checked.length,
+        });
+      return new Set();
+    }
+
+    return new Set(read.holds.filter(held => this.#held.has(held) && records.get(runLivenessKey(held.runId))?.live));
   }
 
   /**

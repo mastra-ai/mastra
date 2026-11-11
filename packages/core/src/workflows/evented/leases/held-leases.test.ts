@@ -9,9 +9,10 @@ vi.hoisted(() => {
 
 import { describe, expect, it, vi } from 'vitest';
 import { InMemoryStore } from '../../../storage/mock';
+import type { RunOwnershipRecord } from '../../../storage/run-fencing';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import { holdRestartLease } from './held-leases';
-import { restartLeaseKey } from './keys';
+import { restartLeaseKey, runLivenessKey } from './keys';
 
 describe('held restart leases (#28712)', () => {
   it('starts no new liveness check while the previous one is still pending', async () => {
@@ -38,6 +39,56 @@ describe('held restart leases (#28712)', () => {
 
       stalled.resolve();
       await hold.release();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not end a newer hold of the run with a liveness read started for an earlier hold', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = (await new InMemoryStore().getStore('workflows'))!;
+      const hold = async () => {
+        const claim = await store.claimRunOwnership({
+          runId: restartLeaseKey('restarted'),
+          ownerId: 'restarter',
+          leaseMs: WORKFLOW_RUN_LEASE_TTL_MS,
+        });
+        return holdRestartLease({ store, runId: 'restarted', record: claim.record! });
+      };
+      // The first liveness read stalls and then answers with the record a worker that has since
+      // died left behind; later reads go to the store.
+      const stale = Promise.withResolvers<Map<string, RunOwnershipRecord>>();
+      const read = store.getRunOwnerships.bind(store);
+      vi.spyOn(store, 'getRunOwnerships')
+        .mockImplementationOnce(() => stale.promise)
+        .mockImplementation(args => read(args));
+      const first = await hold();
+      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS / 4);
+
+      // The first restart fails and releases its lease while that read is pending, and a second
+      // restart of the run takes a new one.
+      await first.release();
+      const second = await hold();
+      let handedOff = false;
+      void second.handedOff!.then(() => (handedOff = true));
+      // Halfway through the second hold's first check (checks run every TTL / 10 and wait for a
+      // pending read at most that long), so the stale answer reaches a check that is waiting on it.
+      await vi.advanceTimersByTimeAsync((WORKFLOW_RUN_LEASE_TTL_MS / 10) * 1.5);
+      const leaseExpiresAt = new Date(Date.now() + WORKFLOW_RUN_LEASE_TTL_MS);
+      stale.resolve(
+        new Map([
+          [
+            runLivenessKey('restarted'),
+            { runId: runLivenessKey('restarted'), generation: 1, ownerId: 'dead-worker', leaseExpiresAt, live: true },
+          ],
+        ]),
+      );
+      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_TTL_MS * 2);
+
+      expect(handedOff).toBe(false);
+      expect((await store.getRunOwnership({ runId: restartLeaseKey('restarted') }))?.live).toBe(true);
+      await second.release();
     } finally {
       vi.useRealTimers();
     }
