@@ -9,7 +9,11 @@ import type {
   ConfigSelector,
   ConfigSelectorOptions,
   FeedbackInput,
+  FeedbackReplacementInput,
   FeedbackEvent,
+  FeedbackReplacementEvent,
+  FeedbackReviewStatusEvent,
+  FeedbackReviewStatusInput,
   ObservabilityEntrypoint,
   ObservabilityDropEvent,
   ObservabilityInstance,
@@ -321,8 +325,39 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     await this.#emitRecordedEvent(buildFeedbackEvent({ ...args, traceId, spanId }));
   }
 
+  async replaceFeedback(args: FeedbackReplacementInput): Promise<void> {
+    if (
+      !args.traceId?.trim() ||
+      !args.feedback.feedbackId?.trim() ||
+      !Number.isFinite(args.feedback.timestamp?.getTime())
+    ) {
+      throw new Error('Feedback replacement requires traceId, feedbackId, and the original timestamp');
+    }
+    await this.#emitRecordedEvent({
+      type: 'feedback_replacement',
+      feedback: {
+        ...args.feedback,
+        traceId: args.traceId,
+        spanId: args.spanId,
+        correlationContext: args.correlationContext,
+      },
+    });
+  }
+
+  async updateFeedbackReviewStatus(args: FeedbackReviewStatusInput): Promise<void> {
+    if (!args.feedbackId?.trim() || !['needs-review', 'reviewed'].includes(args.reviewStatus)) {
+      throw new Error('Feedback review update requires feedbackId and a valid reviewStatus');
+    }
+    await this.#emitRecordedEvent({
+      type: 'feedback_review_status',
+      feedback: { feedbackId: args.feedbackId, reviewStatus: args.reviewStatus },
+    });
+  }
+
   /** @internal Queue an HTTP-created record; flush/shutdown await delivery without holding the HTTP response open. */
-  async __exportPersistedEvent(event: ScoreEvent | FeedbackEvent): Promise<void> {
+  async __exportPersistedEvent(
+    event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | FeedbackReviewStatusEvent,
+  ): Promise<void> {
     const storageExporters = new Set<ObservabilityHandler>(
       this.#getRecordedTraceInstance()?.getExporters().filter(isMastraBuiltInStorageExporter),
     );
@@ -437,7 +472,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
 
   /** Dispatch independently; the standard bus tracks delivery, while custom instances return handler promises. */
   async #emitRecordedEvent(
-    event: ScoreEvent | FeedbackEvent,
+    event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | FeedbackReviewStatusEvent,
     shouldHandle?: (handler: ObservabilityHandler) => boolean,
   ): Promise<void> {
     const instance = this.#getRecordedTraceInstance();

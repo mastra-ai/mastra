@@ -589,6 +589,46 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
 ]}
 />
 
+## Replace feedback
+
+`PUT /api/observability/feedback/:feedbackId` accepts a full `{ feedback: { ... } }` replacement. Keep the original `feedbackId`, `traceId`, and `timestamp`, and include every field you want to retain. Omitted optional fields are cleared. The URL and body IDs must match. See [the client example](/reference/client-js/observability#replacing-feedback).
+
+OSS writes to its configured storage before returning success and notifies supporting exporters independently. `contextMode` has the same meaning as on create. In `"resolve"` mode, the local trace or span must exist. A missing feedback record is created from the full replacement. Changing an existing record's trace or timestamp returns `409`.
+
+In-memory, PostgreSQL vNext, DuckDB, and ClickHouse vNext storage support replacement. Check `capabilities.feedbackReplacement` on the server. Unsupported versions return `501`. Sequential retries of the original HTTP create don't undo a replacement. Direct storage `createFeedback()` calls retain upsert behavior. Pass `onConflict: 'ignore'` to keep an existing record.
+
+ClickHouse support uses the existing schema without a migration. Concurrent writes from separate processes can race, so it doesn't guarantee ordering between overlapping creates and replacements. Serialize edits to the same feedback record when using this adapter.
+
+To send a replacement to configured exporters without depending on local storage, use the observability entrypoint:
+
+```typescript
+await mastra.observability.replaceFeedback?.({
+  traceId: 'trace-123',
+  feedback: {
+    feedbackId: 'feedback-1',
+    timestamp: new Date('2026-11-11T12:00:00.123Z'),
+    feedbackType: 'thumbs',
+    value: -1,
+  },
+})
+```
+
+Each exporter handles its destination independently. `MastraStorageExporter` resolves local span context when needed, and `MastraPlatformExporter` sends a PUT to Platform. Exporters without a replacement handler skip the event. `flush()` and `shutdown()` wait for pending deliveries.
+
+## Updating review status
+
+To change review status at configured exporter destinations, pass the feedback ID and either `"reviewed"` or `"needs-review"`:
+
+```typescript
+await mastra.observability.updateFeedbackReviewStatus?.({
+  feedbackId: 'feedback-123',
+  reviewStatus: 'reviewed',
+})
+await mastra.observability.flush()
+```
+
+Review updates go to each exporter that supports them, even when the feedback isn't stored locally. Call `flush()` or `shutdown()` to wait for pending deliveries.
+
 ## HTTP routes
 
 These routes belong to a Mastra runtime and use its configured observability storage. They're separate from the [unversioned Mastra Platform Feedback API](/docs/mastra-platform/api#feedback-api), which doesn't provide a feedback creation route.
@@ -597,6 +637,7 @@ These routes belong to a Mastra runtime and use its configured observability sto
 | - | - | - | - |
 | `GET` | `/api/observability/feedback` | List feedback records | `observability:read` |
 | `POST` | `/api/observability/feedback` | Create a feedback record | `observability:write` |
+| `PUT` | `/api/observability/feedback/:feedbackId` | Replace a complete feedback record | `observability:write` |
 | `DELETE` | `/api/observability/feedback` | Delete feedback records by id | `observability:delete` |
 | `DELETE` | `/api/observability/scores` | Delete score records by id | `observability:delete` |
 | `PATCH` | `/api/observability/feedback/:feedbackId/review-status` | Update review status | `observability:write` |

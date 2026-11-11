@@ -2581,6 +2581,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "PUT /observability/feedback/:feedbackId": {
+    "method": "PUT",
+    "path": "/observability/feedback/:feedbackId",
+    "pathParams": [
+      "feedbackId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "contextMode",
+      "feedback"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "DELETE /observability/feedback": {
     "method": "DELETE",
     "path": "/observability/feedback",
@@ -6555,6 +6572,7 @@ export const API_ROUTE_METADATA = {
       "agentId",
       "attributes",
       "cron",
+      "endAt",
       "id",
       "ifActive",
       "ifIdle",
@@ -6566,6 +6584,7 @@ export const API_ROUTE_METADATA = {
       "providerOptions",
       "requestContext",
       "resourceId",
+      "runAt",
       "signalType",
       "tagName",
       "threadId",
@@ -6588,6 +6607,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "attributes",
       "cron",
+      "endAt",
       "ifActive",
       "ifIdle",
       "initialState",
@@ -6598,6 +6618,7 @@ export const API_ROUTE_METADATA = {
       "providerOptions",
       "requestContext",
       "resourceId",
+      "runAt",
       "signalType",
       "status",
       "tagName",

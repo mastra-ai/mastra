@@ -96,6 +96,7 @@ Write commit messages that explain WHY, not just WHAT. Match the repo's existing
 
 ## Pull Requests
 Use \`gh pr create\`. Include a summary of what changed and a test plan. Word the pull request title/description to explain the entire unit of work being shipped, worded to explain it to someone who doesn't know anything about the work being shipped. Do not add details of fixes that were needed along the way.
+When the work resolves Linear issues (ones you were asked to work on, or that the conversation, branch name, or work item names), end the description with one \`Fixes <ID>\` line per issue, each on its own line (e.g. \`Fixes ENG-123\` and \`Fixes ENG-124\` on separate lines), so the GitHub ↔ Linear sync links and closes them. Do the same for GitHub issues with \`Fixes #<number>\`, or \`Fixes <owner>/<repo>#<number>\` for an issue in another repository (a bare \`#<number>\` points at the PR's own repository). Use \`Ref <ID>\` instead for an issue the PR only partly addresses.
 When \`github_subscribe_pr\` and \`github_unsubscribe_pr\` are available, a successful \`gh pr create\` subscribes the current thread automatically, so do not call \`github_subscribe_pr\` after creating a PR. Use it only for an existing PR or to recover when automatic subscription did not occur. Closing or merging a PR unsubscribes it automatically; use \`github_unsubscribe_pr\` only to stop notifications earlier.
 
 ${

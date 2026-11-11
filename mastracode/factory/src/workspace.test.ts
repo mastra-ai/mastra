@@ -2774,10 +2774,10 @@ describe('GitHub session workspace preparation', () => {
       return { installed, reuse };
     }
 
-    it('re-mints GH_TOKEN on reuse once it is 45 minutes old', async () => {
+    it('re-mints GH_TOKEN on reuse once it is 30 minutes old', async () => {
       const { installed, reuse } = await startSession();
 
-      vi.advanceTimersByTime(44 * 60_000);
+      vi.advanceTimersByTime(29 * 60_000);
       mocks.setEnv.mockClear();
       await reuse();
       expect(mocks.setEnv).not.toHaveBeenCalled();
@@ -2788,7 +2788,7 @@ describe('GitHub session workspace preparation', () => {
       expect(lastGhToken()).not.toBe(installed);
     });
 
-    it('re-mints GH_TOKEN before a command once it is 45 minutes old within one turn', async () => {
+    it('re-mints GH_TOKEN before a command once it is 30 minutes old within one turn', async () => {
       const { workspace } = await createLocalFactory();
       addProject();
       addSession({ id: 'session-a' });
@@ -2796,7 +2796,7 @@ describe('GitHub session workspace preparation', () => {
       const installed = lastGhToken();
       const sandbox = (resolved as any).sandbox;
 
-      vi.advanceTimersByTime(44 * 60_000);
+      vi.advanceTimersByTime(29 * 60_000);
       mocks.setEnv.mockClear();
       await sandbox.executeCommand('gh', ['pr', 'list']);
       expect(mocks.setEnv).not.toHaveBeenCalled();
@@ -2807,7 +2807,7 @@ describe('GitHub session workspace preparation', () => {
       expect(lastGhToken()).not.toBe(installed);
     });
 
-    it('re-mints GH_TOKEN before a background spawn once it is 45 minutes old', async () => {
+    it('re-mints GH_TOKEN before a background spawn once it is 30 minutes old', async () => {
       const { workspace } = await createLocalFactory();
       addProject();
       addSession({ id: 'session-a' });
@@ -2815,7 +2815,7 @@ describe('GitHub session workspace preparation', () => {
       const installed = lastGhToken();
       const sandbox = (resolved as any).sandbox;
 
-      vi.advanceTimersByTime(46 * 60_000);
+      vi.advanceTimersByTime(31 * 60_000);
       await sandbox.processes.spawn('gh pr checks --watch');
       expect(lastGhToken()).toMatch(/^minted-/);
       expect(lastGhToken()).not.toBe(installed);
@@ -4510,7 +4510,10 @@ describe('factory environment sandbox context', () => {
     });
 
     it('boots on the session repository token when the environment-wide mint fails', async () => {
-      mocks.getRepositoriesAccess.mockRejectedValueOnce(new Error('installation cannot grant octocat/docs'));
+      // Every environment-wide mint fails, including the clone-time group mint.
+      const wide = mocks.getRepositoriesAccess.getMockImplementation()!;
+      mocks.getRepositoriesAccess.mockRejectedValue(new Error('installation cannot grant octocat/docs'));
+      onTestFinished(() => void mocks.getRepositoriesAccess.mockImplementation(wide));
       const { resolver } = environmentFixture({ links: twoLinks });
       addProject({ setupCommand: 'pnpm i' });
       addSession({ id: 'session-a', factoryProjectId: 'factory-1' });

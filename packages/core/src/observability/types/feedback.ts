@@ -131,3 +131,28 @@ export interface FeedbackEvent {
   type: 'feedback';
   feedback: ExportedFeedback;
 }
+
+/** Full replacement. Exporters must opt in; never replay this as a create. */
+export interface FeedbackReplacementEvent {
+  type: 'feedback_replacement';
+  feedback: ExportedFeedback & { traceId: string };
+}
+
+export interface FeedbackReplacementInput {
+  traceId: string;
+  spanId?: string;
+  correlationContext?: CorrelationContext;
+  feedback: Omit<ExportedFeedback, 'traceId' | 'spanId' | 'correlationContext'>;
+}
+
+/** Change only the review status of feedback already stored at each destination. */
+export interface FeedbackReviewStatusInput {
+  feedbackId: string;
+  reviewStatus: 'needs-review' | 'reviewed';
+}
+
+/** Exporters opt in independently; never reinterpret a review update as a create. */
+export interface FeedbackReviewStatusEvent {
+  type: 'feedback_review_status';
+  feedback: FeedbackReviewStatusInput;
+}

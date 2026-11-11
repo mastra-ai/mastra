@@ -1,6 +1,12 @@
 import { contextFields } from '@internal/core/storage';
 import type { Mastra } from '@mastra/core/mastra';
-import type { CorrelationContext, FeedbackEvent, ScoreEvent } from '@mastra/core/observability';
+import type {
+  CorrelationContext,
+  FeedbackEvent,
+  FeedbackReplacementEvent,
+  FeedbackReviewStatusEvent,
+  ScoreEvent,
+} from '@mastra/core/observability';
 import type { CreateFeedbackRecord, CreateScoreRecord } from '@mastra/core/storage';
 
 function correlationContext(record: CreateFeedbackRecord | CreateScoreRecord): CorrelationContext {
@@ -56,7 +62,10 @@ export function persistedFeedbackEvent(record: CreateFeedbackRecord & { feedback
 }
 
 /** Local persistence has succeeded; an exporter failure must not turn that success into an HTTP error. */
-export async function exportPersistedEvent(mastra: Mastra, event: ScoreEvent | FeedbackEvent): Promise<void> {
+export async function exportPersistedEvent(
+  mastra: Mastra,
+  event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | FeedbackReviewStatusEvent,
+): Promise<void> {
   try {
     await mastra.observability.__exportPersistedEvent?.(event);
   } catch (error) {

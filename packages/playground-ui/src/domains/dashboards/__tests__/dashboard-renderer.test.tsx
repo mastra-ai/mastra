@@ -452,24 +452,31 @@ describe('DashboardRenderer', () => {
       LinkComponent: RouterLink,
     };
 
-    it("links the card's title to the host's page in place of its views menu", async () => {
+    it("gives the card an expand action linking to the host's page, with its plain title in place of its views menu", async () => {
       const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand });
       const card = cell(container, 'token-usage');
-      const link = await within(card).findByRole('link', { name: 'Token usage' });
+      const link = await within(card).findByRole('link', { name: 'Expand Token usage' });
       expect(link.getAttribute('href')).toBe('/app/query?metric=token-usage');
+      expect(within(card).getByRole('heading', { name: 'Token usage' }).contains(link)).toBe(false);
       expect(within(card).queryByRole('button', { name: 'Token usage' })).toBeNull();
     });
 
-    it('names the link after the first view when the widget title is blank', async () => {
+    it('names the card and its action after the first view when the widget title is blank', async () => {
       const { container } = renderDashboard(definition({ ...metricsWidget('token-usage'), title: '  ' }), {
         expand,
       });
-      expect(await within(cell(container, 'token-usage')).findByRole('link', { name: 'Token usage' })).toBeDefined();
+      const card = cell(container, 'token-usage');
+      expect(await within(card).findByRole('link', { name: 'Expand Token usage' })).toBeDefined();
+      expect(within(card).getByRole('heading', { name: 'Token usage' })).toBeDefined();
     });
 
-    it('links a scores card the same way', async () => {
+    it('gives a scores card the same action', async () => {
       const { container } = renderDashboard(definition(scoresWidget), { expand });
-      const link = await within(cell(container, 'scores')).findByRole('link', { name: 'Scores' }, { timeout: 5000 });
+      const link = await within(cell(container, 'scores')).findByRole(
+        'link',
+        { name: 'Expand Scores' },
+        { timeout: 5000 },
+      );
       expect(link.getAttribute('href')).toBe('/app/query?metric=scores');
     });
 
@@ -517,11 +524,11 @@ describe('DashboardRenderer', () => {
       expect(onDragStart).toHaveBeenCalledTimes(1);
     });
 
-    it('puts the handle before a linked title', async () => {
+    it('puts the handle before the title of a card that expands', async () => {
       const expand: DashboardExpand = { href: () => '/query', LinkComponent: props => <a {...props} /> };
       const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand, dragHandle });
       const card = cell(container, 'token-usage');
-      await within(card).findByRole('link', { name: 'Token usage' });
+      await within(card).findByRole('link', { name: 'Expand Token usage' });
       expect(firstControl(card)).toBe(within(card).getByRole('button', { name: 'Move token-usage' }));
     });
 

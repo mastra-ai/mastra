@@ -116,10 +116,5 @@ export type GetEnvironmentsResponse = Response<'GET /observability/discovery/env
 export type GetTagsArgs = Query<'GET /observability/discovery/tags'>;
 export type GetTagsResponse = Response<'GET /observability/discovery/tags'>;
 
-/** Full replacement supported by Platform; OSS server does not implement this PUT. */
-export type ReplaceFeedbackBody = {
-  feedback: Omit<CreateFeedbackBody['feedback'], 'feedbackId' | 'timestamp'> & {
-    feedbackId: string;
-    timestamp: string;
-  };
-};
+/** Full replacement retaining the original feedback identity. */
+export type ReplaceFeedbackBody = Body<'PUT /observability/feedback/:feedbackId'>;

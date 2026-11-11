@@ -713,6 +713,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       }
       // Mirror Agent: later iterations continue the same assistant message behind a step-start
       // boundary, so sequential tool steps aren't replayed as parallel calls (#26332).
+      // What a total deadline that cuts this step off saves: the list as it enters the step. That is the
+      // completed steps plus what was added between steps (completion-check feedback, signals).
+      const deadlineEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+      if (deadlineEntry?.timeoutTotalMs) {
+        deadlineEntry.completedStepsState = JSON.parse(JSON.stringify(messageList.serialize()));
+      }
       const iterationBoundary = previousSteps.length > 0 ? messageList.openStepBoundary().boundary : undefined;
       let terminalAttemptContext:
         | {
@@ -1611,6 +1617,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // including empty reasoning spans that carry providerMetadata
             // (e.g. OpenAI itemId) required by subsequent turns (#19365).
             const collectedChunks: CollectedChunk[] = [];
+            // What a total deadline saves of this attempt if it cuts the step off: the text as published.
+            if (registryEntry?.timeoutTotalMs) registryEntry.streamedStepText = [];
 
             // Materialize collected chunks into the messageList via the same
             // helper the regular Agent uses, preserving reasoning spans
@@ -2286,7 +2294,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   // The step's text is transcript, not internal state: build it from the same
                   // chunk memory stores so a redacted reply is never returned unredacted.
                   if (persistedChunk.type === 'text-delta') {
-                    textDeltas.push((persistedChunk.payload as TextDeltaPayload).text);
+                    const text = (persistedChunk.payload as TextDeltaPayload).text;
+                    textDeltas.push(text);
+                    registryEntry?.streamedStepText?.push(text);
                   }
                 }
 
@@ -2950,6 +2960,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 processOutputStepTripwire = error;
               }
             }
+            // The step processors ran over the streamed text and it is in the list; a deadline no longer cuts it off.
+            // Publish the accepted step first, in the same tick, so a deadline before the mapping step's snapshot
+            // still saves it (and never both the snapshot and the cut-off text). A rejected response is rolled
+            // back below, so the step-start snapshot stays.
+            if (registryEntry?.timeoutTotalMs && !processOutputStepTripwire) {
+              registryEntry.completedStepsState = JSON.parse(JSON.stringify(messageList.serialize()));
+            }
+            if (registryEntry) registryEntry.streamedStepText = undefined;
 
             const retryRequested = processOutputStepTripwire?.options?.retry === true;
             const canRetry =
