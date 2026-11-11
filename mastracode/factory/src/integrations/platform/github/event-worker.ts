@@ -337,6 +337,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
           });
         } else if (counts.merged > 0 || counts.closed > 0) {
           this.deps?.logger.info('Platform GitHub pull request reconcile replayed missed merges/closes', context);
+        } else if (counts.created > 0) {
+          this.deps?.logger.info('Platform GitHub pull request reconcile replayed missed opens', context);
         } else {
           this.deps?.logger.info('Platform GitHub pull request reconcile sweep completed', context);
         }

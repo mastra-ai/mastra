@@ -54,7 +54,7 @@ import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
-import { attachGithubReconciler, attachGithubRules } from './rules.js';
+import { attachGithubReconciler, attachGithubRules, openPullRequestLister } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import type { GitIdentity } from './sandbox.js';
 import {
@@ -1335,7 +1335,12 @@ export class GithubIntegration implements FactoryIntegration {
     if (!pullRequestEnabled && !issueEnabled) return [];
 
     const reconcile = pullRequestEnabled
-      ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+      ? attachGithubReconciler(
+          this,
+          ctx,
+          input => this.fetchPullRequestState(input),
+          openPullRequestLister(this.versionControl),
+        )
       : undefined;
     const issues = issueEnabled
       ? attachGithubIssueReconciler(

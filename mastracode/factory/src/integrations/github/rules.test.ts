@@ -4572,7 +4572,7 @@ describe('createGithubPullRequestReconciler', () => {
   function createReconciler(
     context: Awaited<ReturnType<typeof setup>>,
     fetchPullRequest: ReturnType<typeof vi.fn>,
-    fetchIssue?: ReturnType<typeof vi.fn>,
+    listOpenPullRequests?: ReturnType<typeof vi.fn>,
     boards = createTriageWorkRegistry(),
   ) {
     return createGithubPullRequestReconciler(
@@ -4586,9 +4586,123 @@ describe('createGithubPullRequestReconciler', () => {
         boards,
       },
       fetchPullRequest as never,
-      fetchIssue as never,
+      listOpenPullRequests as never,
     );
   }
+
+  function openState(number: number, createdAt: string) {
+    return {
+      number,
+      title: `PR ${number}`,
+      url: `https://github.com/acme/repo/pull/${number}`,
+      state: 'open' as const,
+      draft: false,
+      merged: false,
+      assignees: ['assignee'],
+      requestedReviewers: ['reviewer'],
+      labels: ['bug'],
+      headBranch: 'feature',
+      baseBranch: 'main',
+      author: 'pr-author',
+      createdAt,
+    };
+  }
+
+  const reviewIntakes = async (context: Awaited<ReturnType<typeof setup>>) =>
+    (await context.workItems.listDeferredDecisions('org-1', context.project.id)).filter(
+      ({ decision }) => decision.type === 'upsertLinkedWorkItem',
+    );
+
+  it('mints a Review card, with its author and labels, for an open pull request whose opened webhook never arrived', async () => {
+    const context = await setup('read');
+    const listOpenPullRequests = vi.fn(async () => [openState(21, '2030-01-01T00:00:00Z')]);
+    const reconcile = createReconciler(context, vi.fn(), listOpenPullRequests);
+
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ created: 1, failed: 0 });
+    expect(listOpenPullRequests).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo' });
+    const intakes = await reviewIntakes(context);
+    expect(intakes).toHaveLength(1);
+    expect(intakes[0]!.decision).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      metadata: {
+        author: 'pr-author',
+        factoryAuthored: false,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+      },
+    });
+
+    // Later sweeps see the same pull request until the card lands; the stable
+    // delivery id makes the ingress replay instead of committing a second intake.
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ created: 0, failed: 0 });
+    expect(await reviewIntakes(context)).toHaveLength(1);
+  });
+
+  it('leaves pull requests some card already holds, and those opened before the repository was linked', async () => {
+    const context = await setup('read');
+    await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        assignees: [],
+        requestedReviewers: [],
+        labels: [],
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+      },
+    });
+    const work = await createIssueCard(context, { number: 40 });
+    // A card intaken before URLs were recorded still holds its pull request.
+    await createCard(context, { number: 16, url: null });
+    await context.workItems.attachSource({
+      orgId: 'org-1',
+      id: work.item.id,
+      source: {
+        integrationId: 'github',
+        type: 'pull-request',
+        externalId: 'github:10:pull-request:18',
+        url: 'https://github.com/acme/repo/pull/18',
+      },
+      metadata: { state: 'open' },
+    });
+    const listOpenPullRequests = vi.fn(async () => [
+      openState(16, '2030-01-01T00:00:00Z'),
+      openState(17, '2030-01-01T00:00:00Z'),
+      openState(18, '2030-01-01T00:00:00Z'),
+      openState(19, '2000-01-01T00:00:00Z'),
+    ]);
+    const fetchPullRequest = vi.fn(async () => undefined);
+
+    await expect(
+      createReconciler(context, fetchPullRequest, listOpenPullRequests)([repositoryTarget]),
+    ).resolves.toMatchObject({ created: 0, failed: 0 });
+    expect(await reviewIntakes(context)).toEqual([]);
+  });
+
+  it('records a failed open pull request listing without dropping the rest of the sweep', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 17 });
+    const listOpenPullRequests = vi.fn(async () => {
+      throw new Error('GitHub API request failed: 502 Bad Gateway');
+    });
+
+    await expect(
+      createReconciler(
+        context,
+        vi.fn(async () => mergedState(17)),
+        listOpenPullRequests,
+      )([repositoryTarget]),
+    ).resolves.toMatchObject({
+      merged: 1,
+      created: 0,
+      failed: 1,
+      errors: [{ repository: 'acme/repo', error: 'GitHub API request failed: 502 Bad Gateway' }],
+    });
+  });
 
   async function createIssueCard(
     context: Awaited<ReturnType<typeof setup>>,
@@ -4635,6 +4749,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 1,
       merged: 1,
       closed: 0,
+      created: 0,
       failed: 0,
       errors: [],
     });
@@ -4654,6 +4769,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 1,
       merged: 1,
       closed: 0,
+      created: 0,
       failed: 0,
       errors: [],
     });
@@ -4685,6 +4801,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 1,
       merged: 0,
       closed: 0,
+      created: 0,
       failed: 0,
       errors: [],
     });
@@ -5006,6 +5123,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 2,
       merged: 0,
       closed: 0,
+      created: 0,
       failed: 0,
       errors: [],
     });
@@ -5234,6 +5352,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 0,
       merged: 0,
       closed: 0,
+      created: 0,
       failed: 0,
       errors: [],
     });
@@ -5251,6 +5370,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 1,
       merged: 0,
       closed: 1,
+      created: 0,
       failed: 0,
       errors: [],
     });
@@ -5283,6 +5403,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 1,
       merged: 1,
       closed: 0,
+      created: 0,
       failed: 1,
       errors: [{ repository: 'acme/repo', pullRequestNumber: 17, error: 'Decision cleanup failed' }],
     });
@@ -5314,6 +5435,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 1,
       merged: 1,
       closed: 0,
+      created: 0,
       failed: 1,
       errors: [
         {
@@ -5349,6 +5471,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 0,
       merged: 0,
       closed: 0,
+      created: 0,
       failed: 0,
       errors: [],
     });
@@ -5359,6 +5482,7 @@ describe('createGithubPullRequestReconciler', () => {
       checked: 1,
       merged: 1,
       closed: 0,
+      created: 0,
       failed: 0,
       errors: [],
     });
