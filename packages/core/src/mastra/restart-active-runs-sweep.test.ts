@@ -11,7 +11,6 @@ import { createStep, createWorkflow } from '../workflows';
 import type { WorkflowRunStatus } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
 import { runLivenessKey } from '../workflows/evented/step-lease';
-import { ACTIVE_RUN_PAGE_SIZE } from './active-workflow-run-pages';
 import { Mastra } from './index';
 
 type Engine = 'default' | 'evented';
@@ -98,27 +97,26 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
       const executions: string[] = [];
       const mastra = startReplica(storage, engine, runId => void executions.push(runId));
 
-      // More live runs than fit in one page. The process driving them keeps their lease fresh:
-      // evented workers through the run's liveness key, a default-engine run through its run lease.
-      const liveRunIds = Array.from({ length: ACTIVE_RUN_PAGE_SIZE * 2 + 30 }, (_, i) => `live-${i}`);
-      for (const runId of liveRunIds) {
+      // More live runs than the sweep reads per page (a hundred). The process driving them keeps
+      // their lease fresh: evented workers through the run's liveness key, a default-engine run
+      // through its run lease.
+      const liveRunIds = Array.from({ length: 250 }, (_, i) => `live-${i}`);
+      const liveKeys = liveRunIds.map(runId => (engine === 'evented' ? runLivenessKey(runId) : runId));
+      for (const [i, runId] of liveRunIds.entries()) {
         await persistOrphanedRun(storage, runId);
-        await store.claimRunOwnership({
-          runId: engine === 'evented' ? runLivenessKey(runId) : runId,
-          ownerId: 'other-process',
-          leaseMs: 60_000,
-        });
+        await store.claimRunOwnership({ runId: liveKeys[i]!, ownerId: 'other-process', leaseMs: 60_000 });
       }
       await persistOrphanedRun(storage, 'orphaned');
       const loads = await countLoads(storage);
-      const batchRead = vi.spyOn(store, 'getRunOwnerships');
+      const singleReads = vi.spyOn(store, 'getRunOwnership');
 
       await mastra.restartAllActiveWorkflowRuns();
 
       await vi.waitFor(() => expect(executions).toEqual(['orphaned']));
-      expect(liveRunIds.filter(runId => loads.has(runId))).toEqual([]);
       expect(loads.get('orphaned')).toBeGreaterThan(0);
-      expect(batchRead).toHaveBeenCalledTimes(Math.ceil((liveRunIds.length + 1) / ACTIVE_RUN_PAGE_SIZE));
+      // Neither a snapshot load nor an ownership read of its own for any live run.
+      expect(liveRunIds.filter(runId => loads.has(runId))).toEqual([]);
+      expect(singleReads.mock.calls.filter(([{ runId }]) => liveKeys.includes(runId))).toEqual([]);
     },
   );
 
@@ -136,7 +134,7 @@ describe('boot-time workflow recovery sweep (#28712)', () => {
     const mastra = startReplica(storage, 'default', runId => void executions.push(runId));
     // Orphaned runs finish while the sweep still reads later pages, leaving the status filter an
     // offset-paged read counts from. Runs another process drives stay in it.
-    const runIds = Array.from({ length: ACTIVE_RUN_PAGE_SIZE * 3 }, (_, i) => `run-${i}`);
+    const runIds = Array.from({ length: 300 }, (_, i) => `run-${i}`);
     const orphaned = runIds.filter((_, i) => i % 2 === 0);
     for (const [i, runId] of runIds.entries()) {
       await persistOrphanedRun(storage, runId, {

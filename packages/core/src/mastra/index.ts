@@ -4417,7 +4417,16 @@ export class Mastra<
           const runs = await this.#recoverableRuns(page, workflowsStore, parentStatusOf);
           const owners =
             readsOwnership && runs.length > 0
-              ? await workflowsStore.getRunOwnerships({ runIds: runs.map(run => ownershipKey(run.runId)) })
+              ? await workflowsStore
+                  .getRunOwnerships({ runIds: runs.map(run => ownershipKey(run.runId)) })
+                  .catch(error => {
+                    // restart() checks ownership itself, so a failed batch only costs the loads it would have saved.
+                    this.#logger.warn('Failed to read workflow run ownership before restarting', {
+                      workflow: workflow.id,
+                      error,
+                    });
+                    return undefined;
+                  })
               : undefined;
           for (const run of runs) {
             const owner = owners?.get(ownershipKey(run.runId));
