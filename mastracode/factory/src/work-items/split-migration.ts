@@ -5,8 +5,7 @@ import type { CollectionValue, FactoryStorage, FactoryStorageOps } from '@mastra
 
 import { factoryDecisionHash } from '../storage/domains/work-items/base.js';
 import type { WorkItemDbRow } from '../storage/domains/work-items/base.js';
-import { bumpBoardVersions } from '../storage/domains/work-items/board-version.js';
-import type { BoardScope } from '../storage/domains/work-items/board-version.js';
+import { withCardTransaction } from '../storage/domains/work-items/board-changes.js';
 import {
   WORK_ITEMS_SCHEMA,
   FACTORY_BOARD_ITEMS_SCHEMA,
@@ -499,7 +498,6 @@ export async function migrateWorkItemSplit(
       if (!include || (await include(row))) rows.push(row);
       else report.deferred += 1;
     }
-    const written = new Map<string, BoardScope>();
     if (rows.length) {
       const tombstones = await ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, {
         id: { in: rows.map(row => row.id) },
@@ -522,7 +520,8 @@ export async function migrateWorkItemSplit(
         if (signal?.aborted) break;
         if (!dryRun) {
           try {
-            const changed = await storage.withTransaction(tx => writeCard(tx, card, recopy));
+            // Stamped like any card write, so synced boards pick the copy up as a change.
+            const { result: changed } = await withCardTransaction(storage, tx => writeCard(tx, card, recopy));
             if (!changed) {
               report.unchanged += 1;
               continue;
@@ -547,14 +546,8 @@ export async function migrateWorkItemSplit(
         report.sources += card.source ? 1 : 0;
         report.boardItems += 1;
         if (recopy) report.recopied += 1;
-        written.set(`${card.boardItem.org_id}\u0000${card.boardItem.factory_project_id}`, {
-          orgId: card.boardItem.org_id,
-          factoryProjectId: card.boardItem.factory_project_id,
-        });
       }
     }
-    // Per page, so cached boards pick up a long pass's cards as they land.
-    if (!dryRun && written.size) await bumpBoardVersions(ops, [...written.values()]);
     if (page.length < pageSize) break;
     await progress();
   }
