@@ -107,7 +107,7 @@ export const queryKeys = {
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
   sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
-  allSessionWorkItems: (factoryProjectId: string | undefined) =>
+  workItemsWithSessions: (factoryProjectId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
   knowledgeGraph: (factoryProjectId: string | undefined) =>
     ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,

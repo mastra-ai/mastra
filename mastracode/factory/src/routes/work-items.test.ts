@@ -2403,10 +2403,10 @@ describe('run activity on the work-item listing', () => {
     });
   });
 
-  describe('the cards sessions hold (?scope=sessions)', () => {
+  describe('the cards holding a session (?scope=sessions)', () => {
     const sessionsPath = () => `${boardPath()}?scope=sessions`;
 
-    it('lists every card a session holds with its activity, in board order, without the cards no session holds', async () => {
+    it('lists every card holding a session with its activity, in board order, without the cards holding none', async () => {
       const first = await startRun('session-first');
       await createCard('unstarted');
       const second = await startRun('session-second');
@@ -2432,7 +2432,7 @@ describe('run activity on the work-item listing', () => {
       expect(body.parkedSessionIds).toEqual(['session-second']);
     });
 
-    it('brings the pull request pushed from a session’s branch, though no session holds it', async () => {
+    it('brings the pull request pushed from a session’s branch, though it holds no session', async () => {
       const mine = await startRun('session-mine');
       const pullRequest = await createCard('pr-7', {
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
@@ -2445,7 +2445,7 @@ describe('run activity on the work-item listing', () => {
       expect((await listedIds(res)).toSorted()).toEqual([mine.id, pullRequest.id].toSorted());
     });
 
-    it('answers 304 through writes to cards no session holds, and sends the list again once a held card changes', async () => {
+    it('answers 304 through writes to cards holding no session, and sends the list again once a listed card changes', async () => {
       const mine = await startRun('session-mine');
       const unstarted = await createCard('unstarted');
       const app = buildApp(orgUser);

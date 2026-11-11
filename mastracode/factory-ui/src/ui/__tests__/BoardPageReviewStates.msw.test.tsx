@@ -132,9 +132,7 @@ describe('Review card action lifecycle', () => {
     const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard(candidate);
     const user = userEvent.setup();
     const { client } = renderReviewBoard();
-    // Columns are on screen before their cards, Review among them: take the card's button, in Intake.
-    const intake = await screen.findByRole('region', { name: 'Intake' });
-    await user.click(await within(intake).findByRole('button', { name: 'Review' }));
+    await user.click(await screen.findByRole('button', { name: 'Review' }));
 
     const reviewing = screen.getByRole('region', { name: 'Review' });
     await waitFor(() => expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled());

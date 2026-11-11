@@ -1,6 +1,7 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { builtinBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
@@ -114,10 +115,10 @@ describe('Sessions sidebar source icons', () => {
     expect(await iconFor('Answer deploy question')).toBe('slack-thread');
   });
 
-  it('marks them from the cards sessions hold, without waiting for the board', async () => {
+  it('marks them from the cards holding a session, without waiting for the board', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, async ({ request }) => {
-        // The board never answers: only the list of the cards sessions hold does.
+        // The board never answers: only the list of the cards holding a session does.
         if (new URL(request.url).searchParams.get('scope') !== 'sessions') await delay('infinite');
         return HttpResponse.json({ workItems: cards });
       }),
@@ -128,5 +129,45 @@ describe('Sessions sidebar source icons', () => {
     expect(await iconFor('Fix flaky login')).toBe('github-issue');
     expect(await iconFor('Add audit log')).toBe('linear-issue');
     expect(await iconFor('Plan the migration')).toBe('user');
+  });
+
+  // The marks come from the board on a page that loads it, and elsewhere from the cards holding a
+  // session. Going from one to the other, the list the sidebar had keeps them.
+  it.each([
+    { from: 'a page without the board', to: 'Work', start: '', next: '/work', unanswered: null },
+    { from: 'Work', to: 'a page without the board', start: '/work', next: '', unanswered: 'sessions' },
+  ])('keeps each mark while the next list loads, going from $from to $to', async ({ start, next, unanswered }) => {
+    let nextListAsked = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, async ({ request }) => {
+        if (new URL(request.url).searchParams.get('scope') !== unanswered) {
+          return HttpResponse.json({ workItems: cards });
+        }
+        nextListAsked = true;
+        await delay('infinite');
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${factoryId}${start}`]}>
+        <ChatSessionContext.Provider value={testChatSession(factoryId, projectRepositoryId)}>
+          <Link to={`/factories/${factoryId}${next}`}>Next page</Link>
+          <Routes>
+            <Route path="/factories/:factoryId/*" element={<SessionsSection />} />
+          </Routes>
+        </ChatSessionContext.Provider>
+      </MemoryRouter>,
+    );
+    expect(await iconFor('Fix flaky login')).toBe('github-issue');
+    expect(await iconFor('Review PR 12')).toBe('github-pr');
+
+    await user.click(screen.getByRole('link', { name: 'Next page' }));
+
+    await waitFor(() => expect(nextListAsked).toBe(true));
+    expect(screen.getByRole('link', { name: 'Fix flaky login' }).querySelector('[data-source]')).toHaveAttribute(
+      'data-source',
+      'github-issue',
+    );
+    expect(screen.getByRole('link', { name: 'Review PR 12' })).toBeInTheDocument();
   });
 });

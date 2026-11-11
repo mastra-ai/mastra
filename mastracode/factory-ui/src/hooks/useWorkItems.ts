@@ -61,10 +61,16 @@ const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
 const NO_SESSIONS: ReadonlySet<string> = new Set();
 
-export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+/**
+ * The board: its cards and the sessions parked on them. `scope` narrows it to the cards holding a
+ * session, with the cards related to them.
+ */
+export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined, scope?: 'sessions') {
   return queryOptions({
-    queryKey: queryKeys.workItems(factoryProjectId),
-    queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
+    queryKey: scope ? queryKeys.workItemsWithSessions(factoryProjectId) : queryKeys.workItems(factoryProjectId),
+    queryFn: factoryProjectId
+      ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, scope && { scope })
+      : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
   });
@@ -94,24 +100,20 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
   });
 }
 
-export function allSessionWorkItemsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
-  return queryOptions({
-    queryKey: queryKeys.allSessionWorkItems(factoryProjectId),
-    queryFn: factoryProjectId
-      ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { scope: 'sessions' })
-      : skipToken,
-    // Refreshed with the board, by the feed provider and on return to a hidden tab.
-    refetchOnWindowFocus: true,
-  });
-}
-
 /**
- * The cards holding any session, with the cards related to them and the sessions parked on
- * them: what the sidebar reads instead of the board.
+ * The cards the sidebar marks its sessions with. A page that loads the board shares that read;
+ * any other asks only for the cards holding a session.
  */
-export function useAllSessionWorkItemsQuery(factoryProjectId: string | undefined) {
+export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined, boardOnPage: boolean) {
   const { baseUrl } = useApiConfig();
-  return useQuery(allSessionWorkItemsQueryOptions(baseUrl, factoryProjectId));
+  const queryClient = useQueryClient();
+  const board = boardQueryOptions(baseUrl, factoryProjectId);
+  const withSessions = boardQueryOptions(baseUrl, factoryProjectId, 'sessions');
+  return useQuery({
+    ...(boardOnPage ? board : withSessions),
+    // Moving between the two keeps the other list's marks until this one answers.
+    placeholderData: () => queryClient.getQueryData((boardOnPage ? withSessions : board).queryKey),
+  });
 }
 
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */

@@ -18,10 +18,11 @@ import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/u
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
-import { allSessionWorkItemsQueryOptions, boardQueryOptions } from '../hooks/useWorkItems';
+import { boardQueryOptions } from '../hooks/useWorkItems';
 import { workspacesQueryOptions } from '../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
 import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
+import { pageLoadsBoard } from './domains/factory/pageLoadsBoard';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';
 import { isSettingsPath } from './domains/settings/hooks/useSettingsOpen';
 import { hasLinkedRepository } from './domains/workspaces/services/factoryRepositories';
@@ -79,13 +80,17 @@ export const prefetchFactoryLayout: Prefetch = (services, { params }) => {
 
 export const prefetchSidebar: Prefetch = (services, { params, request }) => {
   const { factoryId } = params;
-  if (!factoryId || isSettingsPath(new URL(request.url).pathname)) return;
+  const { pathname } = new URL(request.url);
+  if (!factoryId || isSettingsPath(pathname)) return;
   const { queryClient, api } = services;
   void queryClient.query(serverFeaturesQueryOptions(api.client)).catch(noop);
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.
   void queryClient.query(intakeRoutesQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(allSessionWorkItemsQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  // A page that loads the board shares it with the sidebar.
+  if (!pageLoadsBoard(pathname)) {
+    void queryClient.query(boardQueryOptions(api.baseUrl, factoryId, 'sessions')).catch(noop);
+  }
   void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   prefetchSessionRuns(services, factoryId);
 };
