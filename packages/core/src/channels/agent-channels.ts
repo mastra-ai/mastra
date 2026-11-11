@@ -865,19 +865,14 @@ export class AgentChannels {
               let toolName: string | undefined;
               let toolArgs: Record<string, unknown> | undefined;
 
-              // Whether the run/tool target was remembered rather than just read
-              // from history, so it may be stale (see isAnsweredElsewhere).
-              let remembered = false;
               const stashed = this.pendingApprovalCards.get(toolCallId);
               let requesterId = stashed?.requesterId;
               if (stashed?.runId) {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
-                remembered = true;
               } else {
-                const { result: lookup, cached } = await this.lookupPersistedApproval({ mastra, card, platform });
-                remembered = cached;
+                const { result: lookup } = await this.lookupPersistedApproval({ mastra, card, platform });
                 if (lookup.status === 'answered') {
                   this.log('info', 'Tool approval already answered', actionEventContext);
                   return;
@@ -925,13 +920,15 @@ export class AgentChannels {
               this.approvalsInFlight.add(cardKey);
               inFlightKey = cardKey;
 
+              // Every target can be stale: a remembered one can outlive its approval,
+              // and a fresh history scan can read pages written before another
+              // instance answered the card. Check before resuming.
               if (
-                remembered &&
-                (await this.isAnsweredElsewhere({
+                await this.isAnsweredElsewhere({
                   runId,
                   toolCallId,
                   memory: { thread: mastraThread.id, resource: mastraThread.resourceId },
-                }))
+                })
               ) {
                 // Resuming would answer the run's newer tool call instead.
                 this.setApprovalLookup(cardKey, {
@@ -2537,11 +2534,12 @@ export class AgentChannels {
   }
 
   /**
-   * Whether a remembered card's tool call was answered elsewhere: its run is
-   * suspended again, but on other tool calls. A card target taken from the
-   * lookup cache or from posting the card can outlive its approval, and a
-   * `DurableAgent` resume would apply the old answer to the run's newer tool
-   * call. One read of the thread's suspended runs, no history scan.
+   * Whether a card's tool call was answered elsewhere: its run is suspended
+   * again, but on other tool calls. A target from the lookup cache or from
+   * posting the card can outlive its approval, and a history scan can race
+   * another instance's answer; a `DurableAgent` resume would then apply the old
+   * answer to the run's newer tool call. One read of the thread's suspended
+   * runs, no history scan.
    *
    * A run that is not suspended (finished, aborted, still resuming, or whose
    * suspension is not stored yet) is left to the resume, which reports those

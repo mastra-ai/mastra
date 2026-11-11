@@ -836,6 +836,7 @@ describe('approval clicks that resume a real agent run', () => {
     return {
       agent,
       channels,
+      memory,
       workflows,
       runId,
       refunds,
@@ -1023,6 +1024,44 @@ describe('approval clicks that resume a real agent run', () => {
       expect(errorPosts()).toEqual([]);
     },
   );
+
+  // First click on a card this instance never saw: its history scan reads pages
+  // written before another instance answered the card, so the scan still finds
+  // the first refund pending while the run already waits on the second.
+  it.each([
+    { agentKind: 'Agent', durable: false },
+    { agentKind: 'DurableAgent', durable: true },
+  ])('ignores a first click whose history scan raced another instance ($agentKind)', async ({ durable }) => {
+    const { agent, memory, refunds, click, startInstance, runStatus, approveElsewhere, errorPosts, outcomes } =
+      await setup({ secondApproval: true, durable });
+    // History as the scan reads it: from before the other instance's answer.
+    const before = await memory.listMessages({ threadId: THREAD_ID, perPage: false });
+    await startInstance();
+    await approveElsewhere(TOOL_CALL_ID);
+    expect(await runStatus()).toBe('suspended');
+    expect(refunds).toEqual([10]);
+
+    const listMessages = memory.listMessages.bind(memory);
+    vi.spyOn(memory, 'listMessages').mockImplementation(async args => {
+      const page = typeof args.page === 'number' ? args.page : 0;
+      const perPage = typeof args.perPage === 'number' ? args.perPage : before.messages.length;
+      const newestFirst = [...before.messages].reverse();
+      const slice = newestFirst.slice(page * perPage, (page + 1) * perPage);
+      if (args.orderBy?.direction === 'DESC') {
+        return { ...before, messages: slice, page, perPage, hasMore: (page + 1) * perPage < newestFirst.length };
+      }
+      return listMessages(args);
+    });
+
+    const approve = vi.spyOn(agent, 'approveToolCall');
+    const decline = vi.spyOn(agent, 'declineToolCall');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    // The stale click reaches no resume and leaves the second refund waiting.
+    expect(await outcomes(approve, decline)).toEqual([]);
+    expect(refunds).toEqual([10]);
+    expect(await runStatus()).toBe('suspended');
+    expect(errorPosts()).toEqual([]);
+  });
 
   it('keeps the card answerable when core times out waiting for the suspension to persist', async () => {
     const { agent, refunds, click, runStatus } = await setup();
