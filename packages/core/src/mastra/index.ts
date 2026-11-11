@@ -2958,6 +2958,7 @@ export class Mastra<
                 source: 'agent',
                 agentId: durableAgent.id ?? agentKey,
                 agentName: durableAgent.name,
+                agentSource: underlyingAgent.source,
               });
             }
           })
@@ -3104,6 +3105,7 @@ export class Mastra<
               source: 'agent',
               agentId: mastraAgent.id ?? agentKey,
               agentName: mastraAgent.name,
+              agentSource: mastraAgent.source,
             });
           }
         })
@@ -3859,7 +3861,7 @@ export class Mastra<
   public addWorkspace(
     workspace: AnyWorkspace,
     key?: string,
-    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string },
+    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string; agentSource?: DefinitionSource },
   ): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
@@ -3884,6 +3886,7 @@ export class Mastra<
       source,
       ...(metadata?.agentId ? { agentId: metadata.agentId } : {}),
       ...(metadata?.agentName ? { agentName: metadata.agentName } : {}),
+      ...(source === 'agent' && metadata?.agentSource ? { agentSource: metadata.agentSource } : {}),
     };
   }
 
