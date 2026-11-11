@@ -65,40 +65,54 @@ describe('applyFactoryToolPermissions', () => {
     expect(session.rules().tools).toEqual({});
   });
 
-  it('allows transition after a Factory row is attached to an already-created session', async () => {
-    const storage = new InMemoryStore({ id: 'factory-late-session-row' });
-    const controller = new AgentController({
-      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
-      id: 'code',
-      storage,
-      stateSchema: undefined,
-      modes: [
-        {
-          id: 'build',
-          name: 'Build',
-          default: true,
-          defaultModelId: 'openai/gpt-5.5',
-          agent: new Agent({
-            id: 'test-agent',
-            name: 'test-agent',
-            instructions: 'Test.',
-            model: { id: 'openai/gpt-4o' },
-          }),
-        },
-      ],
+  it('restores the transition allow policy on a new controller after the host restarts', async () => {
+    const storage = new InMemoryStore({ id: 'factory-session-restart' });
+    const makeController = async () => {
+      const controller = new AgentController({
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+        id: 'code',
+        storage,
+        stateSchema: undefined,
+        modes: [
+          {
+            id: 'build',
+            name: 'Build',
+            default: true,
+            defaultModelId: 'openai/gpt-5.5',
+            agent: new Agent({
+              id: 'test-agent',
+              name: 'test-agent',
+              instructions: 'Test.',
+              model: { id: 'openai/gpt-4o' },
+            }),
+          },
+        ],
+      });
+      await controller.init();
+      controller.onSessionCreated(
+        session => applyFactoryToolPermissions(session, { sessions: { getBySessionId: async id => factoryRow(id) } }),
+        { blocking: true },
+      );
+      return controller;
+    };
+    const originalController = await makeController();
+    const original = await originalController.createSession({
+      id: 'session-1',
+      resourceId: 'session-1',
+      ownerId: 'user-1',
+      threadId: 'session-1',
     });
-    await controller.init();
-    let row: SourceControlSession | null = null;
-    controller.onSessionCreated(
-      session => applyFactoryToolPermissions(session, { sessions: { getBySessionId: async () => row } }),
-      { blocking: true },
-    );
-    const original = await controller.createSession({ id: 'session-1', resourceId: 'session-1', ownerId: 'user-1' });
-    row = factoryRow('session-1');
-    const reused = await controller.createSession({ id: 'session-1', resourceId: 'session-1', ownerId: 'user-1' });
+    expect(original.resolveToolApproval('factory_transition_work_item', original.thread.getId())).toBe('allow');
 
-    expect(reused).toBe(original);
-    expect(reused.resolveToolApproval('factory_transition_work_item', reused.thread.getId())).toBe('allow');
+    const restoredController = await makeController();
+    const restored = await restoredController.createSession({
+      id: 'session-1',
+      resourceId: 'session-1',
+      ownerId: 'user-1',
+      threadId: 'session-1',
+    });
+    expect(restored).not.toBe(original);
+    expect(restored.resolveToolApproval('factory_transition_work_item', restored.thread.getId())).toBe('allow');
   });
 
   it('persists the allow into session state when registered as a blocking session-created listener', async () => {
