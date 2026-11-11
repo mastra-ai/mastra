@@ -22,24 +22,11 @@ import type { Workflow } from '../../workflow';
 import { runLivenessKey, stepOccurrenceKey } from '../leases';
 import { WorkflowEventProcessor } from '../workflow-event-processor';
 import { abandonLease } from './abandon-lease';
+import { Num, work } from './lease-replicas';
+import type { Report } from './lease-replicas';
 import { createStep, createWorkflow } from '..';
 
-const Num = z.object({ n: z.number() });
-type Report = (label: string) => Promise<void>;
 type Built = { id: string; createRun: (options?: { runId?: string }) => Promise<any> };
-
-/** A step that reports its id before returning its input. */
-function work(id: string, report: Report) {
-  return createStep({
-    id,
-    inputSchema: Num,
-    outputSchema: Num,
-    execute: async ({ inputData }) => {
-      await report(id);
-      return inputData;
-    },
-  });
-}
 
 /**
  * Workflow shapes. `block` is the occurrence replica A holds while the late
@@ -188,18 +175,40 @@ function recordWorkflowEvents(inner: PubSub, intercept: Intercept = () => undefi
         return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
           if (topic === 'workflows') {
             const picked = intercept(event);
-            if (picked === 'drop') return;
+            if (picked === 'drop') {
+              return;
+            }
+
             published.push(copyEvent(event));
-            if (picked) return void picked.then(() => target.publish(topic, event, options));
+
+            // The publisher goes on while the broker holds the event, so a failed delivery
+            // later has no caller left to reject: log it for the test's output instead.
+            if (picked) {
+              picked
+                .then(() => target.publish(topic, event, options))
+                .catch(error => console.error('A held workflow event could not be published', error));
+              return;
+            }
           }
+
           return target.publish(topic, event, options);
         };
       }
+
       const value = Reflect.get(target, prop, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
   return { pubsub, published };
+}
+
+/**
+ * Starts `run` without waiting for its result. The test reads the outcome from
+ * storage, and the replica that started the run may crash or never see it end,
+ * so a rejection is logged for the test's output instead of being awaited.
+ */
+function startInBackground(run: { start: (args: { inputData: any }) => Promise<unknown> }, inputData: unknown) {
+  run.start({ inputData }).catch(error => console.error('A run started in the background rejected', error));
 }
 
 /**
@@ -281,7 +290,10 @@ export function describeFinishedOccurrenceCases({
           .then(
             work('second', async id => {
               executions.push(`${replica}:${id}`);
-              if (replica !== 'A') return;
+              if (replica !== 'A') {
+                return;
+              }
+
               hung.resolve();
               await new Promise<never>(() => {});
             }),
@@ -290,7 +302,7 @@ export function describeFinishedOccurrenceCases({
           .commit();
       const a = await startReplica(build('A'));
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      void run.start({ inputData: { n: 1 } });
+      startInBackground(run, { n: 1 });
       await hung.promise;
       const original = a.published.find(event => event.type === 'workflow.step.run' && samePath(event, [1]))!;
 
@@ -319,12 +331,15 @@ export function describeFinishedOccurrenceCases({
       const stepEndQueued = deferred<void>();
       const deliverStepEnd = deferred<void>();
       const a = await startReplica(build('A'), event => {
-        if (event.type !== 'workflow.step.end' || !samePath(event, [0])) return undefined;
+        if (event.type !== 'workflow.step.end' || !samePath(event, [0])) {
+          return undefined;
+        }
+
         stepEndQueued.resolve();
         return deliverStepEnd.promise;
       });
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      void run.start({ inputData: { n: 1 } });
+      startInBackground(run, { n: 1 });
       await stepEndQueued.promise;
       const store = (await getStorage().getStore('workflows'))!;
       await expect
@@ -334,7 +349,10 @@ export function describeFinishedOccurrenceCases({
       // B's restart reads the first step as running. Its message for that step is held back in turn.
       const restartMessage = deferred<Event>();
       const b = await startReplica(build('B'), event => {
-        if (event.type !== 'workflow.step.run' || !samePath(event, [0]) || !event.data.restart) return undefined;
+        if (event.type !== 'workflow.step.run' || !samePath(event, [0]) || !event.data.restart) {
+          return undefined;
+        }
+
         restartMessage.resolve(structuredClone(event));
         return 'drop';
       });
@@ -359,7 +377,10 @@ export function describeFinishedOccurrenceCases({
       const build = (replica: string) => {
         const report: Report = async id => {
           executions.push(`${replica}:${id}`);
-          if (replica !== 'A' || id !== 'd') return;
+          if (replica !== 'A' || id !== 'd') {
+            return;
+          }
+
           dBlocked.resolve();
           await releaseD.promise;
         };
@@ -383,12 +404,15 @@ export function describeFinishedOccurrenceCases({
       const stepEndQueued = deferred<void>();
       const deliverStepEnd = deferred<void>();
       const a = await startReplica(build('A'), event => {
-        if (event.type !== 'workflow.step.end' || !samePath(event, [0, 1])) return undefined;
+        if (event.type !== 'workflow.step.end' || !samePath(event, [0, 1])) {
+          return undefined;
+        }
+
         stepEndQueued.resolve();
         return deliverStepEnd.promise;
       });
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      void run.start({ inputData: { n: 1 } });
+      startInBackground(run, { n: 1 });
       await stepEndQueued.promise;
       const store = (await getStorage().getStore('workflows'))!;
       await expect
@@ -442,7 +466,7 @@ export function describeFinishedOccurrenceCases({
         event.type === 'workflow.step.run' && samePath(event, [1]) ? 'drop' : undefined,
       );
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      void run.start({ inputData: { n: 1 } });
+      startInBackground(run, { n: 1 });
       await expect.poll(async () => (await storedRun(run.runId))?.context.first?.status).toBe('success');
       const original = a.published.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
       await crash(a, [runLivenessKey(run.runId)]);
@@ -508,7 +532,10 @@ export function describeFinishedOccurrenceCases({
           (replica: string): Report =>
           async label => {
             executions.push(`${replica}:${label}`);
-            if (replica !== 'A' || label !== shape.block) return;
+            if (replica !== 'A' || label !== shape.block) {
+              return;
+            }
+
             blocked.resolve();
             await gate.promise;
           };
@@ -629,7 +656,10 @@ export function describeFinishedOccurrenceCases({
             inputSchema: Num,
             outputSchema: Num,
             execute: async ({ inputData }) => {
-              if (++attempts < 3) throw new Error('transient');
+              if (++attempts < 3) {
+                throw new Error('transient');
+              }
+
               return inputData;
             },
           }),

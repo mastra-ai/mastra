@@ -20,7 +20,10 @@ function samePath(a: number[] | undefined, b: number[]): boolean {
 
 /** The record of one foreach item, kept in the foreach step's resume metadata. */
 function foreachItem(result: unknown, index: number | undefined): StoredRecord | undefined {
-  if (index === undefined) return undefined;
+  if (index === undefined) {
+    return undefined;
+  }
+
   return (result as { suspendPayload?: any } | undefined)?.suspendPayload?.__workflow_meta?.foreachOutput?.[index];
 }
 
@@ -41,7 +44,10 @@ function sameRecord(stored: StoredRecord, known: StoredRecord | undefined): bool
  * saves the body's result, so there those records do not end the occurrence.
  */
 function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: boolean): record is StoredRecord {
-  if (!record || typeof record !== 'object' || !TERMINAL_STATUSES.has(record.status!)) return false;
+  if (!record || typeof record !== 'object' || !TERMINAL_STATUSES.has(record.status!)) {
+    return false;
+  }
+
   return !(stepGuards && (record.status === 'failed' || step.type === 'loop'));
 }
 
@@ -91,35 +97,67 @@ export function finishedOccurrence({
 }): FinishedOccurrence {
   const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
   const stored = snapshot?.context[leafId] as StoredRecord | undefined;
-  if (!snapshot || !stored || typeof stored !== 'object') return 'run';
-  if (guarded && stored.metadata?.startedBy) return 'run';
+
+  // Nothing stored to compare against (a run that saves no snapshot, or one deleted at its end).
+  if (!snapshot || !stored || typeof stored !== 'object') {
+    return 'run';
+  }
+
+  // The step guards arbitrate this delivery on their own records; deciding here as well could
+  // continue the run twice.
+  if (guarded && stored.metadata?.startedBy) {
+    return 'run';
+  }
 
   const known = stepResults?.[leafId] as StoredRecord | undefined;
+
   // Iterations run one after another, so a later one started only after this one finished.
   if (step.type === 'loop' && (stored.metadata?.iterationCount ?? 0) > (known?.metadata?.iterationCount ?? 0)) {
     return 'drop';
   }
+
   const restartTarget = samePath(restart?.activeStepsPath?.[leafId], executionPath);
+
+  // Items never continue the run from here: the foreach coordinator owns that, and a foreach
+  // restart re-queues only the items that had not finished.
   if (step.type === 'foreach') {
-    // A foreach restart re-queues only the items that had not finished.
     const item = foreachItem(stored, executionPath[1]);
-    if (restartTarget || !isFinal(item, step, stepGuards)) return 'run';
+    if (restartTarget || !isFinal(item, step, stepGuards)) {
+      return 'run';
+    }
+
     return sameRecord(item, foreachItem(known, executionPath[1])) ? 'run' : 'drop';
   }
-  if (!isFinal(stored, step, stepGuards)) return 'run';
-  // A step a restart dispatches was active when the restart read the run, so a terminal record is its own result.
-  if (!restartTarget && sameRecord(stored, known)) return 'run';
+
+  if (!isFinal(stored, step, stepGuards)) {
+    return 'run';
+  }
+
+  // The delivery already carried this terminal record, so it belongs to an earlier occurrence of
+  // the same step id. A step a restart dispatches was active when the restart read the run, so
+  // there a terminal record is the step's own result.
+  if (!restartTarget && sameRecord(stored, known)) {
+    return 'run';
+  }
+
   // Whoever ended the run also took it past this step.
-  if (snapshot.status !== 'running') return 'drop';
-  // Only success and failed results continue the run here. A restart reruns a
-  // canceled or tripwire step, and any other delivery is dropped.
-  if (stored.status !== 'success' && stored.status !== 'failed') return restartTarget ? 'run' : 'drop';
-  // The next leaf records itself as the active path when it starts. Sibling
-  // branches overwrite that path, so for a branch it only tells whether the run
-  // went past the branch's parallel or conditional entry.
+  if (snapshot.status !== 'running') {
+    return 'drop';
+  }
+
+  // Only success and failed results continue the run here. A restart reruns a canceled or
+  // tripwire step, and any other delivery is dropped.
+  if (stored.status !== 'success' && stored.status !== 'failed') {
+    return restartTarget ? 'run' : 'drop';
+  }
+
+  // The next leaf records itself as the active path when it starts. Sibling branches overwrite
+  // that path, so for a branch it only tells whether the run went past the branch's parallel or
+  // conditional entry, and only a restart (the run's recovery) continues from a branch.
   const notMovedOn =
     executionPath.length === 1
       ? samePath(snapshot.activePaths, executionPath)
       : restartTarget && snapshot.activePaths?.[0] === executionPath[0];
+
   return notMovedOn ? { continueFrom: stored as StepResult<any, any, any, any> } : 'drop';
 }
