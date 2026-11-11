@@ -57,4 +57,46 @@ describe('Knowledge scope rows stored under a different declaration than their a
     expect(error).toBeInstanceOf(KnowledgeDeclarationError);
     expect(error.message).toMatch(/"org:acme:viewer" was created from "org:\$orgId"/);
   });
+
+  it('never resolves one as a belongsTo parent of the declaration that now matches it', async () => {
+    const store = await legacyStore();
+    const runtime = new KnowledgeScopeRuntime(
+      {
+        ...SIDE_TYPE,
+        'doc:$docId': { belongsTo: 'org:$orgId:viewer', access: [{ principal: 'org:$orgId', role: 'viewer' }] },
+      },
+      async () => store,
+      () => {},
+    );
+    const read = await runtime.readScopeFor(['org:acme']);
+    expect(read !== 'all' && read.children).toEqual([]);
+  });
+
+  it('keeps reads its own declaration still grants by prefix, but no role', async () => {
+    // A prefix grant on org:$orgId covered this row when it was written; reads under that grant stay,
+    // as with any data written before the change. Nothing of org:$orgId:viewer reaches it.
+    const store = await legacyStore();
+    const runtime = new KnowledgeScopeRuntime(
+      {
+        ...SIDE_TYPE,
+        'agent:$agentId': {},
+        'org:$orgId': {
+          access: [
+            { principal: 'self', role: 'editor' },
+            { principal: 'agent:support', role: 'viewer' },
+          ],
+        },
+        'org:$orgId:viewer': { access: [{ principal: 'agent:other', role: 'viewer' }] },
+      },
+      async () => store,
+      () => {},
+    );
+    const support = await runtime.readScopeFor(['agent:support']);
+    expect((await store.listPages({ read: support })).pages.map(page => page.name)).toContain('Legacy secret');
+    const [legacy] = await store.getScopesByAddress(['org:acme:viewer']);
+    expect(await runtime.roleOn(['agent:support'], legacy!)).toBeNull();
+
+    const other = await runtime.readScopeFor(['agent:other']);
+    expect((await store.listPages({ read: other })).pages.map(page => page.name)).not.toContain('Legacy secret');
+  });
 });

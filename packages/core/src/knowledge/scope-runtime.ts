@@ -141,8 +141,9 @@ export class KnowledgeScopeRuntime {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
     const storage = await this.getStorage();
-    const read = await knowledgeReadScopeFor(this.compiled, principals, addresses =>
-      storage.getScopesByAddress(addresses),
+    // belongsTo parents resolve through current rows only, so a stale row can't parent new children.
+    const read = await knowledgeReadScopeFor(this.compiled, principals, async addresses =>
+      (await storage.getScopesByAddress(addresses)).filter(scope => this.#isCurrent(scope)),
     );
     if (read === 'all' || read.addresses.length === 0) return read;
     const stale = new Set(

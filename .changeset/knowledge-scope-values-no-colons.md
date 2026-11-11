@@ -17,5 +17,5 @@ const scope = `org:${encodeKnowledgeScopeId('auth0|a:b')}`; // 'org:auth0|a%3Ab'
 
 No data is rewritten:
 
-- **Encoded ids get new addresses.** Pages, pins and notes stored under a resource, thread or other scope whose id contains a colon or a `/`, `#` or `%` stay at their old address. A run holding the encoded id reaches a new, empty scope.
-- **Stale rows get no access.** A stored scope row whose address now matches a different declaration than the one it was created from (e.g. `org:acme:viewer` created under `org:$orgId`, once `org:$orgId:viewer` is declared) grants no access. Its pages are left out of reads, and using it as a scope of the new declaration fails with an error.
+- **Colon ids get new addresses.** Pages, pins and notes stored under a resource, thread or other scope whose id contains a colon stay at their old address. A run holding the encoded id (`resource:slack%3AU123`) reaches a new, empty scope. Ids with `/`, `#` or `%` were already encoded and keep their addresses; pass them encoded.
+- **Stale rows get nothing from their new match.** A stored scope row whose address now matches a different declaration than the one it was created under (e.g. `org:acme:viewer` created under `org:$orgId`, once `org:$orgId:viewer` is declared) gets none of the new declaration's access. It is never a `belongsTo` parent, and using it as a scope of the new declaration fails with an error. Prefix grants of the declaration it was created under still let their holders read it, as before, without a role on it.
