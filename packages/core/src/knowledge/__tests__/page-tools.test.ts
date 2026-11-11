@@ -579,15 +579,18 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
       });
     });
 
-    it("refuses a typo'd run scope the way a run does, and takes raw run scopes", async () => {
+    it("refuses a typo'd run scope the way a run does, and takes canonical run scopes", async () => {
       await expect(runtime.explainAccess(['org:acme', 'role:acme:suport'], { scope: 'org:acme' })).rejects.toThrow(
         KnowledgeDeclarationError,
       );
       await expect(as('typo', ['org:acme', 'role:acme:suport']).read()).rejects.toThrow(/role:acme:suport/);
 
-      // A raw resource id with "/" is encoded exactly like run ingress encodes it.
-      const raw = await runtime.explainAccess(['resource:user/1'], { scope: 'resource:user%2F1' });
-      expect(raw.role).toBe('owner');
+      // Run scopes are canonical: an id with "/" is passed encoded, and the raw spelling is refused.
+      const encoded = await runtime.explainAccess(['resource:user%2F1'], { scope: 'resource:user%2F1' });
+      expect(encoded.role).toBe('owner');
+      await expect(runtime.explainAccess(['resource:user/1'], { scope: 'resource:user%2F1' })).rejects.toThrow(
+        /encodeKnowledgeScopeId/,
+      );
     });
   });
 });

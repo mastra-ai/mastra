@@ -243,8 +243,8 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
   if (new Set(params).size !== params.length) {
     throw new KnowledgeDeclarationError(`${what} "${key}" repeats a param.`);
   }
-  // A pattern's literals match raw run scopes as written, so an escape in one would let a raw scope
-  // pass for a different decoded value. Concrete addresses and principals are canonical: `%` there is an escape.
+  // Literals are compared as written while param values are decoded, so a `%` in a literal would be
+  // ambiguous. Concrete addresses and principals are canonical: `%` there is an escape.
   if (params.length > 0 && segments.some(segment => 'literal' in segment && segment.literal.includes('%'))) {
     throw new KnowledgeDeclarationError(
       `${what} "${key}" has a literal containing "%"; only params take encoded values.`,
@@ -255,10 +255,10 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
 
 /** Binds raw param values from a canonical address; null when it isn't canonical or doesn't fit. */
 export function matchKnowledgePattern(pattern: KnowledgeScopePattern, address: string): Record<string, string> | null {
-  return matchPattern(pattern, address, false);
+  return matchPattern(pattern, address);
 }
 
-function matchPattern(pattern: KnowledgeScopePattern, address: string, raw: boolean): Record<string, string> | null {
+function matchPattern(pattern: KnowledgeScopePattern, address: string): Record<string, string> | null {
   const prefix = `${pattern.type}:`;
   if (!address.startsWith(prefix)) return null;
   const parts = address.slice(prefix.length).split(':');
@@ -274,7 +274,7 @@ function matchPattern(pattern: KnowledgeScopePattern, address: string, raw: bool
     }
     const value = parts[i];
     if (!value) return null;
-    const decoded = raw ? value : decodeKnowledgeScopeValue(value);
+    const decoded = decodeKnowledgeScopeValue(value);
     if (decoded === null) return null;
     params[segment.param] = decoded;
   }
@@ -282,8 +282,7 @@ function matchPattern(pattern: KnowledgeScopePattern, address: string, raw: bool
 }
 
 /**
- * A canonical address from raw param values. For Knowledge APIs, templates, pins and tools only:
- * NOT for Agent scopes, which always take raw addresses and treat every percent sign literally.
+ * A canonical address from raw param values, the form Knowledge APIs, pins, tools and Agent scopes take.
  * @experimental
  */
 export function knowledgeScopeAddress(pattern: string, params: Record<string, string>): string {
@@ -293,18 +292,20 @@ export function knowledgeScopeAddress(pattern: string, params: Record<string, st
   return bound;
 }
 
-/** Encode raw Agent scopes at Knowledge run startup; never feed the result back into Agent scopes. @internal */
+/**
+ * Agent scopes are canonical addresses, the form Knowledge stores and `encodeKnowledgeScopeId` builds, so
+ * each scope has one spelling: `%` is always an escape and a raw `:`, `/` or `#` inside a value is refused. @internal
+ */
 export function knowledgeRunScopes(compiled: CompiledKnowledgeScopes, scopes: readonly string[]): string[] {
   return [
     ...new Set(
       scopes.map(scope => {
         for (const declaration of compiled.declarations.values()) {
           if (declaration.child) continue;
-          const params = matchPattern(declaration.pattern, scope, true);
-          if (params) return bindKnowledgePattern(declaration.pattern, params)!;
+          if (matchPattern(declaration.pattern, scope)) return scope;
         }
         throw new KnowledgeDeclarationError(
-          `Knowledge run scope "${scope}" does not match a declared scope type. Declare it in Knowledge \`scopes\` (for Memory's resource:/thread: scopes, spread \`...knowledgeMemoryScopes()\`).`,
+          `Knowledge run scope "${scope}" does not match a declared scope type. Declare it in Knowledge \`scopes\` (for Memory's resource:/thread: scopes, spread \`...knowledgeMemoryScopes()\`), and encode ids containing ":", "/", "#" or "%" with encodeKnowledgeScopeId.`,
         );
       }),
     ),

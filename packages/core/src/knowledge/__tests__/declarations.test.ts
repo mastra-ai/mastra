@@ -141,16 +141,17 @@ describe('binding params into patterns', () => {
     expect(compiled.match('account:acme:1/foo')).toBeNull();
   });
 
-  it('round-trips Memory ids while keeping raw run scopes distinct from canonical addresses', () => {
-    const raw = ['resource:a/b', 'resource:a%2Fb'];
-    expect(knowledgeRunScopes(compiled, raw)).toEqual(['resource:a%2Fb', 'resource:a%252Fb']);
-    expect(raw[0]).toBe('resource:a/b');
+  it('takes run scopes as canonical addresses, so each scope has one spelling', () => {
+    const encoded = `resource:${encodeKnowledgeScopeId('a/b:c')}`;
+    expect(encoded).toBe('resource:a%2Fb%3Ac');
+    expect(knowledgeRunScopes(compiled, [encoded, encoded])).toEqual([encoded]);
+    for (const nonCanonical of ['resource:a/b', 'resource:a%2fb', 'resource:a%41', 'resource:a%'])
+      expect(() => knowledgeRunScopes(compiled, [nonCanonical])).toThrow(KnowledgeDeclarationError);
     expect(compiled.match('resource:https%3A%2F%2Fx%2Fy%23z')?.params).toEqual({ resourceId: 'https://x/y#z' });
     expect(knowledgeScopeAddress('resource:$resourceId', { resourceId: 'https://x/y#z' })).toBe(
       'resource:https%3A%2F%2Fx%2Fy%23z',
     );
     expect(() => knowledgeRunScopes(compiled, ['resource:https://x/y#z'])).toThrow(KnowledgeDeclarationError);
-    expect(knowledgeRunScopes(compiled, [...raw])).toEqual(knowledgeRunScopes(compiled, raw));
   });
 
   it('keeps raw slash and hash out of canonical addresses, including types without children', () => {
@@ -183,19 +184,19 @@ describe('compileKnowledgeScopes: validation', () => {
     expect(() => compileKnowledgeScopes({ 'lit:ab:$p': {} })).not.toThrow();
   });
 
-  it('accepts canonical escapes in concrete addresses and principals, and binds raw run scopes to them', () => {
+  it('accepts canonical escapes in concrete addresses, principals and run scopes', () => {
     const compiled = compileKnowledgeScopes({
       ...knowledgeMemoryScopes(),
       'resource:user%2F1': { access: [{ principal: 'org:a%2Fb', role: 'viewer' }] },
       'project:$projectId': {},
       'project:p1': { access: [{ principal: 'resource:user%2F1', role: 'editor' }] },
     });
-    const held = knowledgeRunScopes(compiled, ['resource:user/1']);
+    const held = knowledgeRunScopes(compiled, ['resource:user%2F1']);
     expect(held).toEqual(['resource:user%2F1']);
     expect(knowledgeRoleOn(compiled, held, { address: 'project:p1' })).toBe('editor');
-    expect(knowledgeRoleOn(compiled, knowledgeRunScopes(compiled, ['org:a/b']), { address: 'resource:user%2F1' })).toBe(
-      'viewer',
-    );
+    expect(
+      knowledgeRoleOn(compiled, knowledgeRunScopes(compiled, ['org:a%2Fb']), { address: 'resource:user%2F1' }),
+    ).toBe('viewer');
     expect(knowledgeRoleOn(compiled, ['resource:user%2F2'], { address: 'project:p1' })).toBeNull();
   });
 

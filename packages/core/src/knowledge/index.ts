@@ -150,7 +150,7 @@ export class Knowledge extends MastraBase {
 
   /**
    * Why a run holding `runScopes` can or can't reach a scope or page: its role there and the rules
-   * that give it. `runScopes` are raw run scopes, as passed to an agent run; undeclared ones throw
+   * that give it. `runScopes` are canonical run scopes, as passed to an agent run; undeclared ones throw
    * like they do at run start. `target` is a scope address, or a page id or `<scope>#<key>[/<key>…]`.
    *
    * **Host-only.** It tells a missing page from a hidden one, which runs must never learn. Never
