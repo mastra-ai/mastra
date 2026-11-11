@@ -1,8 +1,7 @@
 /**
- * JSON-Schema keyword checks: every schema embedded in the definition must be
- * convertible by `jsonSchemaToZod` (no oneOf/anyOf/allOf/not/$ref/
- * patternProperties/discriminator). Covers the four top-level schemas plus
- * each `agent.outputSchema` reachable through containers.
+ * JSON-Schema keyword checks for schemas that are converted by
+ * `jsonSchemaToZod`. Provider-tool schemas are snapshots used by editors and
+ * runtime-resolved tools, so they may use the full JSON Schema vocabulary.
  */
 import { forEachSingleStepEntryWithPath } from '../graph';
 import { validateStorableJsonSchema } from '../json-schema-to-zod';
@@ -27,10 +26,6 @@ export function validateWorkflowSchemas(def: WorkflowValidationInput): WorkflowV
   forEachSingleStepEntryWithPath(def.graph, (entry, path) => {
     if (entry.type === 'agent' && entry.outputSchema) {
       check(entry.outputSchema, `${path}.outputSchema`, `step "${entry.id}" outputSchema`);
-    }
-    if (entry.type === 'provider-tool') {
-      if (entry.inputSchema) check(entry.inputSchema, `${path}.inputSchema`, `step "${entry.id}" inputSchema`);
-      if (entry.outputSchema) check(entry.outputSchema, `${path}.outputSchema`, `step "${entry.id}" outputSchema`);
     }
   });
   return issues;

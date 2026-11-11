@@ -12,7 +12,7 @@ import {
 } from '../schemas/dynamic-workflows';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
-import { getCallerAuthorId } from './authorship';
+import { assertWriteAccess, getCallerAuthorId } from './authorship';
 import { handleError } from './error';
 
 /**
@@ -114,6 +114,12 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
     requestContext,
   }) => {
     try {
+      const storage = mastra.getStorage();
+      if (!storage) throw new HTTPException(500, { message: 'Storage is not configured' });
+
+      const store = await storage.getStore('workflowDefinitions');
+      if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
+
       // Pick the body fields explicitly — handler args also carry server
       // context (requestContext, abortSignal, ...) which must not leak into
       // the stored definition.
@@ -134,6 +140,20 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
       // its helpers behind as orphans. Order within the bundle is derived
       // from the graphs, not from the order the client sent them in.
       const bundle = [...(dependencies ?? []).map(dependency => ({ ...dependency, authorId })), def];
+
+      for (const member of bundle) {
+        const existing = await store.get(member.id);
+        if (existing) {
+          assertWriteAccess({
+            requestContext,
+            resource: 'stored-workflows',
+            resourceId: member.id,
+            action: 'write',
+            record: existing,
+          });
+        }
+      }
+
       // The wire schema is deliberately looser than the core authoring type:
       // it admits `mapping` entries as children of parallel/conditional/loop,
       // which `WorkflowBuilderExecutableInnerEntry` excludes. That is not
@@ -180,13 +200,24 @@ export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:write',
-  handler: async ({ mastra, dynamicWorkflowId }) => {
+  handler: async ({ mastra, dynamicWorkflowId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
       if (!storage) throw new HTTPException(500, { message: 'Storage is not configured' });
 
       const store = await storage.getStore('workflowDefinitions');
       if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
+
+      const existing = await store.get(dynamicWorkflowId);
+      if (existing) {
+        assertWriteAccess({
+          requestContext,
+          resource: 'stored-workflows',
+          resourceId: dynamicWorkflowId,
+          action: 'delete',
+          record: existing,
+        });
+      }
 
       await store.delete(dynamicWorkflowId);
       mastra.removeWorkflow(dynamicWorkflowId);

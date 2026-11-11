@@ -69,6 +69,10 @@ export interface WorkflowRegistrySchemas {
   outputSchema?: JsonSchema;
 }
 
+export interface ToolProviderRegistryInfo extends WorkflowRegistrySchemas {
+  supportsResolveToolsVNext: boolean;
+}
+
 export interface ClassifierRegistrySchemas extends WorkflowRegistrySchemas {
   questions?: Record<
     string,
@@ -88,7 +92,7 @@ export interface ClassifierRegistrySchemas extends WorkflowRegistrySchemas {
 export interface WorkflowRegistryIndex {
   agents?: Record<string, WorkflowRegistrySchemas>;
   tools?: Record<string, WorkflowRegistrySchemas>;
-  toolProviders?: Record<string, WorkflowRegistrySchemas>;
+  toolProviders?: Record<string, ToolProviderRegistryInfo>;
   classifiers?: Record<string, ClassifierRegistrySchemas>;
   workflows?: Record<string, WorkflowRegistrySchemas>;
 }

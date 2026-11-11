@@ -16,6 +16,7 @@ import {
   LIST_DYNAMIC_WORKFLOWS_ROUTE,
   UPSERT_DYNAMIC_WORKFLOW_ROUTE,
 } from './dynamic-workflows';
+import { START_ASYNC_WORKFLOW_ROUTE } from './workflows';
 
 describe('dynamic workflow route permissions', () => {
   it('requires read access for list and detail routes', () => {
@@ -584,7 +585,36 @@ describe('Dynamic Workflows handlers', () => {
       expect(() => mastra.getWorkflow('wf-schema-clash')).toThrow();
     });
 
-    it('preserves the original workflow owner on later saves', async () => {
+    it('rejects updates from a caller who does not own the workflow', async () => {
+      const input = {
+        id: 'wf-owned-update',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: toolOnlyGraph(),
+      };
+
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({ ...ctx(mastra, 'owner-a'), ...input });
+
+      await expect(
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, 'owner-b'),
+          ...input,
+          description: 'attacker-controlled update',
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const row = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        dynamicWorkflowId: 'wf-owned-update',
+      });
+      expect(row.description).toBeUndefined();
+      expect(row.authorId).toBe('owner-a');
+    });
+
+    it('preserves the original workflow owner on later saves by the owner', async () => {
       const input = {
         id: 'wf-owned',
         description: undefined,
@@ -596,13 +626,93 @@ describe('Dynamic Workflows handlers', () => {
       };
 
       await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({ ...ctx(mastra, 'owner-a'), ...input });
-      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({ ...ctx(mastra, 'owner-b'), ...input });
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        ...input,
+        description: 'updated by owner',
+      });
 
       const row = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
-        ...ctx(mastra, 'owner-b'),
+        ...ctx(mastra, 'owner-a'),
         dynamicWorkflowId: 'wf-owned',
       });
       expect(row.authorId).toBe('owner-a');
+      expect(row.description).toBe('updated by owner');
+    });
+
+    it('rejects execution by a caller who does not own the dynamic workflow', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        id: 'wf-owned-execution',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: toolOnlyGraph(),
+      });
+
+      await expect(
+        START_ASYNC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, 'owner-b'),
+          workflowId: 'wf-owned-execution',
+          inputData: { value: 'secret' },
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('rejects execution when an owned workflow nests another caller private workflow', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        id: 'private-child',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: toolOnlyGraph(),
+      });
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-b'),
+        id: 'owner-parent',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: [{ type: 'workflow', id: 'child-call', workflowId: 'private-child' }],
+      });
+
+      await expect(
+        START_ASYNC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, 'owner-b'),
+          workflowId: 'owner-parent',
+          inputData: { value: 'secret' },
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('fails closed when a live dynamic workflow has no stored ownership record', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        id: 'wf-missing-ownership-record',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: toolOnlyGraph(),
+      });
+      const store = await mastra.getStorage()!.getStore('workflowDefinitions');
+      await store!.delete('wf-missing-ownership-record');
+
+      await expect(
+        START_ASYNC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, 'owner-b'),
+          workflowId: 'wf-missing-ownership-record',
+          inputData: { value: 'secret' },
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
     });
 
     it('re-POST with the same id replaces the live registration', async () => {
@@ -654,6 +764,33 @@ describe('Dynamic Workflows handlers', () => {
   });
 
   describe('DELETE_DYNAMIC_WORKFLOW_ROUTE', () => {
+    it('rejects deletion by a caller who does not own the workflow', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        id: 'wf-owned-delete',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: toolOnlyGraph(),
+      });
+
+      await expect(
+        DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, 'owner-b'),
+          dynamicWorkflowId: 'wf-owned-delete',
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+
+      expect(mastra.getWorkflow('wf-owned-delete')).toBeDefined();
+      const row = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        dynamicWorkflowId: 'wf-owned-delete',
+      });
+      expect(row.authorId).toBe('owner-a');
+    });
+
     it('removes the workflow from storage AND unregisters the live instance', async () => {
       await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
         ...ctx(mastra),
@@ -903,6 +1040,30 @@ describe('Dynamic Workflows handlers', () => {
         authorId: undefined,
       });
       expect(listed.workflows.map(w => w.id).sort()).toEqual(['echo-first', 'echo-second', 'wf-fanout']);
+    });
+
+    it('rejects replacing a dependency owned by another caller', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        ...fanoutRoot,
+        dependencies: [echoHelper('echo-first', 'first'), echoHelper('echo-second', 'second')],
+      });
+
+      await expect(
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, 'owner-b'),
+          ...fanoutRoot,
+          id: 'wf-fanout-owner-b',
+          dependencies: [{ ...echoHelper('echo-first', 'first'), description: 'Replaced by owner-b' }],
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const helper = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, 'owner-a'),
+        dynamicWorkflowId: 'echo-first',
+      });
+      expect(helper.description).toBe('Echo first');
+      expect(helper.authorId).toBe('owner-a');
     });
 
     it('order the client sends helpers in does not matter — hydration order is derived', async () => {

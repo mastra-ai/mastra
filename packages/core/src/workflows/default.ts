@@ -1562,7 +1562,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return stepResults.input;
     } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
-    } else if (step.type === 'agent' || step.type === 'tool' || step.type === 'classifier' || step.type === 'mapping') {
+    } else if (
+      step.type === 'agent' ||
+      step.type === 'tool' ||
+      step.type === 'provider-tool' ||
+      step.type === 'classifier' ||
+      step.type === 'mapping'
+    ) {
       return stepResults[step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;

@@ -30,7 +30,7 @@ export function buildProviderToolEntry(
   options?: Record<string, any>,
   stepId?: string,
 ): ProviderToolStepEntry {
-  const id = stepId || spec.toolSlug;
+  const id = stepId || `${spec.providerId}:${spec.toolSlug}`;
   const entry: ProviderToolStepEntry = {
     type: 'provider-tool',
     id,

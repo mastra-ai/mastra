@@ -1,6 +1,6 @@
 import { Agent, AGENT_SCHEDULE_PREFIX } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import type { Schedule, ScheduleTrigger } from '@mastra/core/storage';
 import { MockStore } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -319,6 +319,28 @@ describe('Schedules handlers', () => {
       const created = await schedulesStore.getSchedule(result.id);
       expect(created).toBeDefined();
       expect(created!.target.type).toBe('workflow');
+    });
+
+    it('rejects scheduling a dynamic workflow owned by another caller', async () => {
+      await mastra.addDynamicWorkflow({
+        id: 'private-scheduled-workflow',
+        authorId: 'owner-a',
+        inputSchema: { type: 'object', properties: {}, required: [] },
+        outputSchema: { type: 'object', properties: {}, required: [] },
+        graph: [{ type: 'workflow', id: 'call-test', workflowId: 'test' }],
+      });
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-b');
+
+      await expect(
+        CREATE_SCHEDULE_ROUTE.handler({
+          mastra,
+          workflowId: 'private-scheduled-workflow',
+          cron: '0 * * * *',
+          requestContext,
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
     });
 
     it('persists resourceId on a workflow schedule for run attribution', async () => {

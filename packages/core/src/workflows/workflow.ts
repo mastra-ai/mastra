@@ -2526,17 +2526,20 @@ export class Workflow<
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext, TStorageVersion>;
   tool(
     providerTool: ProviderToolStepSpec,
-    options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+    options?: { retries?: number; metadata?: StepMetadata },
     stepOptions?: { id?: string },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext, TStorageVersion>;
   tool(toolOrId: any, options?: any, stepOptions?: { id?: string }): any {
     if (isProviderToolStepSpec(toolOrId)) {
-      const entry = buildProviderToolEntry(toolOrId, options, stepOptions?.id);
+      if (toolOrId.connection?.kind === 'author') {
+        throw new Error(
+          `Provider tool step "${stepOptions?.id || toolOrId.toolSlug}" cannot use an author connection in a code-defined workflow. Persist the workflow as a dynamic workflow so Mastra can bind its owner, or use an invoker connection.`,
+        );
+      }
+      const serializedOptions = pickProviderToolStepOptions(options, stepOptions?.id || toolOrId.toolSlug);
+      const entry = buildProviderToolEntry(toolOrId, serializedOptions, stepOptions?.id);
       this.stepFlow.push(entry);
-      this.serializedStepFlow.push({
-        ...entry,
-        options: pickProviderToolStepOptions(options, entry.id),
-      });
+      this.serializedStepFlow.push(entry);
       this.steps[entry.id] = { id: entry.id, component: 'TOOL' } as any;
       return this as any;
     }

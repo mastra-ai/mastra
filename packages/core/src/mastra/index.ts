@@ -5839,9 +5839,9 @@ export class Mastra<
       tools[key] = schemas;
       tools[tool.id] = schemas;
     }
-    const toolProviders: Record<string, WorkflowRegistrySchemas> = {};
-    for (const providerId of Object.keys(this.#editor?.getToolProviders() ?? {})) {
-      toolProviders[providerId] = {};
+    const toolProviders: NonNullable<WorkflowRegistryIndex['toolProviders']> = {};
+    for (const [providerId, provider] of Object.entries(this.#editor?.getToolProviders() ?? {})) {
+      toolProviders[providerId] = { supportsResolveToolsVNext: typeof provider.resolveToolsVNext === 'function' };
     }
     const classifiers: NonNullable<WorkflowRegistryIndex['classifiers']> = {};
     const refusedAnswerDescription =
@@ -6026,7 +6026,7 @@ export class Mastra<
             graph: def.graph,
             schedule: def.schedule,
           }),
-          authorId: existing?.authorId ?? ('authorId' in def ? def.authorId : undefined),
+          authorId: 'authorId' in def && def.authorId !== undefined ? def.authorId : existing?.authorId,
         };
       }),
     );
@@ -6108,6 +6108,7 @@ export class Mastra<
             graph: normalized.graph,
             schedule: normalized.schedule,
             authorId,
+            preserveAuthorId: true,
           });
         }
       }

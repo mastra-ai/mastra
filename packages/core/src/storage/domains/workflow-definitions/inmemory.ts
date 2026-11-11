@@ -25,6 +25,9 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
     const existing = this.db.workflowDefinitions.get(input.id);
 
     if (existing) {
+      if (input.preserveAuthorId && existing.authorId !== input.authorId) {
+        throw new Error(`Workflow definition "${input.id}" is owned by a different author.`);
+      }
       const merged: WorkflowDefinition = {
         ...existing,
         ...('description' in input && input.description !== undefined && { description: input.description }),

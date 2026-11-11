@@ -15,6 +15,7 @@ import {
   updateScheduleBodySchema,
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { assertStoredWorkflowExecuteAccess } from './stored-workflow-access';
 import { getPublicWorkflowById } from './utils';
 
 type RunSummary = {
@@ -156,6 +157,11 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
       if (!workflow || resolved !== workflow) {
         throw new HTTPException(404, { message: `Workflow "${body.workflowId}" not found` });
       }
+      await assertStoredWorkflowExecuteAccess({
+        mastra,
+        workflowId: body.workflowId,
+        requestContext: body.requestContext,
+      });
       return await mastra.schedules.create({
         workflowId: body.workflowId,
         cron: body.cron,

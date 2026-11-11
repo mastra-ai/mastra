@@ -11,13 +11,14 @@
  */
 import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { Classifier } from '../../classifier';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
+import type { ToolProvider } from '../../tool-provider';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
 import { rehydrateWorkflow, toStorableGraph, validateDynamicWorkflow } from '../dynamic';
@@ -590,6 +591,129 @@ describe('storage round-trip', () => {
       const result = await (await mastra.getWorkflow('counters').createRun()).start({ inputData: { a: 1, b: 2 } });
       expect(result.status).toBe('success');
       expect((result as any).result).toEqual({ a: 2, b: 3 });
+    }
+  });
+
+  it('assigns the first workflow owner atomically across concurrent creates', async () => {
+    const storage = new InMemoryStore({ id: 'concurrent-owner-store' });
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage,
+    });
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(buildOriginalWorkflow().stepGraph)));
+    const definition = (authorId: string) => ({
+      id: 'concurrent-owner-wf',
+      authorId,
+      description: `created by ${authorId}`,
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+      graph: stored,
+    });
+
+    const results = await Promise.allSettled([
+      mastra.addDynamicWorkflow(definition('author-a')),
+      mastra.addDynamicWorkflow(definition('author-b')),
+    ]);
+
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
+    const store = await storage.getStore('workflowDefinitions');
+    const persisted = await store.get('concurrent-owner-wf');
+    expect(persisted?.description).toBe(`created by ${persisted?.authorId}`);
+    expect(['author-a', 'author-b']).toContain(persisted?.authorId);
+  });
+
+  it('rejects replacing an owned workflow with a different explicit owner', async () => {
+    const storage = new InMemoryStore({ id: 'owner-replacement-store' });
+    const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+    const graph = JSON.parse(JSON.stringify(toStorableGraph(buildOriginalWorkflow().stepGraph)));
+    const definition = (authorId: string) => ({
+      id: 'owned-workflow',
+      authorId,
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+      graph,
+    });
+
+    await mastra.addDynamicWorkflow(definition('author-a'));
+    await expect(mastra.addDynamicWorkflow(definition('author-b'))).rejects.toThrow('owned by a different author');
+
+    const store = await storage.getStore('workflowDefinitions');
+    expect((await store.get('owned-workflow'))?.authorId).toBe('author-a');
+  });
+
+  it('does not allow an explicit owner to adopt an ownerless workflow', async () => {
+    const storage = new InMemoryStore({ id: 'ownerless-adoption-store' });
+    const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+    const graph = JSON.parse(JSON.stringify(toStorableGraph(buildOriginalWorkflow().stepGraph)));
+    const definition = {
+      id: 'ownerless-workflow',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+      graph,
+    };
+
+    await mastra.addDynamicWorkflow(definition);
+    await expect(mastra.addDynamicWorkflow({ ...definition, authorId: 'author-a' })).rejects.toThrow(
+      'owned by a different author',
+    );
+
+    const store = await storage.getStore('workflowDefinitions');
+    expect((await store.get('ownerless-workflow'))?.authorId).toBeUndefined();
+  });
+
+  it('restores the workflow owner when reloading provider-tool steps from storage', async () => {
+    const storage = new InMemoryStore({ id: 'provider-tool-owner-store' });
+    const resolveToolsVNext = vi.fn(async () => ({ 'mock.double': doubleTool }));
+    const provider = { id: 'mock', resolveToolsVNext } as unknown as ToolProvider;
+    const editor = {
+      registerWithMastra: vi.fn(),
+      getToolProviderOrThrow: (id: string) => {
+        if (id !== 'mock') throw new Error(`Unknown provider: ${id}`);
+        return provider;
+      },
+      getToolProvider: (id: string) => (id === 'mock' ? provider : undefined),
+      getToolProviders: () => ({ mock: provider }),
+    };
+
+    {
+      const mastra = new Mastra({ editor: editor as any, logger: false, storage });
+      await mastra.addDynamicWorkflow({
+        id: 'provider-owner-wf',
+        authorId: 'workflow-owner',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { doubled: { type: 'number' } }, required: ['doubled'] },
+        graph: [
+          {
+            type: 'provider-tool',
+            id: 'mock.double',
+            providerId: 'mock',
+            toolSlug: 'mock.double',
+            connection: {
+              kind: 'author',
+              connectionId: 'connection-1',
+              toolkit: 'mock',
+              scope: 'per-author',
+            },
+          },
+        ],
+      });
+    }
+
+    const reloadedMastra = new Mastra({ editor: editor as any, logger: false, storage });
+    await reloadedMastra.startWorkers();
+    try {
+      const workflow = reloadedMastra.getWorkflow('provider-owner-wf');
+      const result = await (await workflow.createRun()).start({ inputData: { value: 4 } });
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') expect(result.result).toEqual({ doubled: 8 });
+      expect(resolveToolsVNext).toHaveBeenCalledWith(
+        expect.objectContaining({ authorId: 'workflow-owner', kind: 'author', scope: 'per-author' }),
+      );
+    } finally {
+      await reloadedMastra.stopWorkers?.();
     }
   });
 });

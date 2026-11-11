@@ -43,7 +43,7 @@ export async function resolveSingleProviderTool({
     throw new ToolProviderStepError(providerId, toolSlug, 'provider does not implement resolveToolsVNext');
   }
 
-  const toolkit = connection?.toolkit ?? toolSlug.split('.')[0];
+  const toolkit = connection?.toolkit ?? (toolSlug.includes('.') ? toolSlug.split('.')[0] : providerId);
   if (!toolkit) {
     throw new ToolProviderStepError(providerId, toolSlug, 'toolkit could not be determined from the tool slug');
   }

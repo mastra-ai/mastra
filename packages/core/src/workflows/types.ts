@@ -791,7 +791,6 @@ export type ProviderToolStepFields = {
   description?: string;
   options?: {
     retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
   };
 };

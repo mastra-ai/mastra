@@ -142,6 +142,10 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
   ): Promise<WorkflowDefinition> {
+    const existing = await this.get(input.id);
+    if (input.preserveAuthorId && existing?.authorId !== input.authorId) {
+      throw new Error(`Workflow definition "${input.id}" is owned by a different author.`);
+    }
     const collection = await this.getCollection(TABLE_WORKFLOW_DEFINITIONS);
 
     const update: Record<string, any> = { updatedAt: now };

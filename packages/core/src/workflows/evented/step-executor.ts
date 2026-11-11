@@ -344,6 +344,7 @@ export class StepExecutor extends MastraBase {
               [STREAM_FORMAT_SYMBOL]: params.format,
               engine: {},
               abortSignal: abortController?.signal,
+              validateInputs: params.validateInputs,
               ...createObservabilityContext(stepTracingContext),
             },
             {
