@@ -1,6 +1,4 @@
-/* The session resolves behind a spinner, then the whole surface mounts at once
- * and the scroller jumps to its last anchor. Fading the surface in covers that
- * jump rather than letting it read as a glitch. */
+/* The shell appears immediately; only the transcript reveals after loading. */
 .chat-surface-enter {
   animation: chat-surface-in 300ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
@@ -18,10 +16,14 @@
     var(--chat-surface)
   );
   translate: 0 var(--session-reveal-travel);
+  transition:
+    translate 360ms linear,
+    opacity 360ms step-end;
 }
 
-.session-preparation-overlay[data-preparing='false'] .session-preparation-veil {
-  animation: session-transcript-reveal 900ms linear 48ms both;
+.session-preparation-overlay[data-preparing='true'] .session-preparation-veil {
+  opacity: 1;
+  translate: 0;
 }
 
 .session-preparation-loader {
@@ -55,22 +57,6 @@
   }
 }
 
-@keyframes session-transcript-reveal {
-  from {
-    opacity: 1;
-    translate: 0;
-  }
-
-  99.9% {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-    translate: 0 var(--session-reveal-travel);
-  }
-}
-
 /* Rise and fade run on their own clocks: the opacity settles early while the
  * travel keeps a long decelerating tail, which is what reads as smooth.
  *
@@ -78,8 +64,15 @@
  * containing block for everything the composer positions inside it. */
 .composer-enter {
   animation:
-    composer-rise 760ms cubic-bezier(0.16, 1, 0.3, 1) 80ms backwards,
-    composer-fade 340ms linear 80ms backwards;
+    composer-rise 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
+    composer-fade 180ms linear backwards;
+}
+
+.starter-enter {
+  animation:
+    composer-rise 760ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
+    composer-fade 340ms linear backwards;
+  animation-delay: calc(80ms + var(--i, 0) * 50ms);
 }
 
 @keyframes composer-rise {
@@ -105,11 +98,12 @@
 @media (prefers-reduced-motion: reduce) {
   .chat-surface-enter,
   .composer-enter,
-  .session-preparation-overlay[data-preparing='false'] .session-preparation-veil {
+  .starter-enter {
     animation: none;
   }
 
-  .session-preparation-loader {
+  .session-preparation-loader,
+  .session-preparation-veil {
     transition: none;
   }
 }

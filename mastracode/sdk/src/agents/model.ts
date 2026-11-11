@@ -4,17 +4,20 @@ import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
+import type { RequestContextReader } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
   loadSettings,
+  MASTRA_GATEWAY_PROVIDER,
   resolveDefaultThinkingLevel,
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
+import { GOOGLE_VERTEX_GATEWAY_ID, createGoogleVertexGateway } from '../providers/google-vertex-gateway.js';
 import { normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
@@ -23,6 +26,7 @@ import {
   prepareCredentialTenant,
   resolveCredentialScope,
   resolveCredentialStore,
+  resolveTenantFromRequestContext,
 } from './credential-resolver.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 import {
@@ -78,7 +82,7 @@ function accountCredential(account: OAuthAccountRecord) {
 
 export function createRequestScopedCredentialStore(
   base: CredentialStore,
-  requestContext?: RequestContext,
+  requestContext?: RequestContextReader,
 ): CredentialStore {
   const selectedId = (providerId: string) => getRequestAccountSelection(requestContext, providerId);
   const selectedAccount = (providerId: string) => {
@@ -268,9 +272,40 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     });
   }
 
+  if (providerId === GOOGLE_VERTEX_GATEWAY_ID) {
+    if (
+      tenantCredentialStore?.allowEnvironmentFallback === false &&
+      !tenantCredentialStore.allowsDeploymentCredentials?.(GOOGLE_VERTEX_GATEWAY_ID)
+    ) {
+      throw new ProviderAuthRequiredError(
+        'Google Vertex AI is not enabled for this Factory deployment. The operator must configure Application Default Credentials, GOOGLE_VERTEX_PROJECT, GOOGLE_VERTEX_LOCATION, and FACTORY_DEPLOYMENT_MODEL_PROVIDERS=google-vertex.',
+      );
+    }
+
+    const vertexGateway = createGoogleVertexGateway();
+    const auth = vertexGateway.resolveAuth({
+      gatewayId: GOOGLE_VERTEX_GATEWAY_ID,
+      providerId: GOOGLE_VERTEX_GATEWAY_ID,
+      modelId: bareModelId,
+      routerId: normalizedModelId,
+    });
+    if (!auth) {
+      throw new Error(
+        'Google Vertex ADC requires GOOGLE_VERTEX_PROJECT and GOOGLE_VERTEX_LOCATION. Configure Application Default Credentials in the deployment environment.',
+      );
+    }
+
+    return vertexGateway.resolveLanguageModel({
+      providerId: GOOGLE_VERTEX_GATEWAY_ID,
+      modelId: bareModelId,
+      apiKey: auth.apiKey ?? '',
+      headers,
+    });
+  }
+
   const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
-  const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
+  const mgApiKey = mastraGatewayApiKey(tenantCredentialStore);
   const rawGatewayBase =
     settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
   const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
@@ -296,8 +331,8 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     // personal sign-in can't tell why an organization-scoped Factory fails.
     throw new ProviderAuthRequiredError(
       resolveCredentialScope(options?.requestContext) === 'factory'
-        ? `No usable ${providerId} credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
-        : `No usable ${providerId} credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
+        ? `No usable ${providerId} credential is available for ${normalizedModelId}. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
+        : `No usable ${providerId} credential is available for ${normalizedModelId}. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
     );
   }
 
@@ -307,6 +342,75 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     apiKey: auth?.apiKey ?? '',
     headers,
   });
+}
+
+/** A tenant's own gateway key wins over the server's, so each org is billed to its own Mastra account. */
+function mastraGatewayApiKey(tenantCredentialStore: CredentialStore | undefined): string | undefined {
+  return (
+    tenantCredentialStore?.getStoredApiKey(MASTRA_GATEWAY_PROVIDER)?.trim() ||
+    MastraCodeGateway.getMastraGatewayApiKey()
+  );
+}
+
+/**
+ * Which provider-executed web search tool fits the transport a model resolves to:
+ * - `anthropic` / `openai`: the native provider API (direct keys, and Claude or
+ *   Codex OAuth, which keep the native API even through the Mastra gateway).
+ * - `mastra-gateway`: a `mastra/` alias with a gateway key and no OAuth, which
+ *   `resolveModelForRequest` sends to the gateway's OpenRouter chat endpoint.
+ * Other providers have no built-in search. Mirrors the routing in
+ * `resolveModelForRequest` and `MastraCodeGateway`, so the registered tool and
+ * the prompt guidance follow the request the model will actually make.
+ */
+export type ProviderWebSearchRoute = 'anthropic' | 'openai' | 'mastra-gateway';
+
+/** Credential ids whose OAuth sign-in keeps the native provider API through the gateway. */
+const NATIVE_OAUTH_CREDENTIAL_IDS = { anthropic: 'anthropic', openai: 'openai-codex' } as const;
+
+/** The provider whose credentials decide a gateway alias's route, or its fixed route otherwise. */
+function classifyWebSearchModel(
+  modelId: string | undefined,
+): { route: ProviderWebSearchRoute | undefined } | { gatewayProvider: keyof typeof NATIVE_OAUTH_CREDENTIAL_IDS } {
+  if (!modelId) return { route: undefined };
+  const normalizedInput = normalizeLegacyModelId(modelId);
+  const providerId = stripMastraGatewayPrefix(normalizedInput).split('/')[0];
+  if (providerId !== 'anthropic' && providerId !== 'openai') return { route: undefined };
+  return normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX) ? { gatewayProvider: providerId } : { route: providerId };
+}
+
+/**
+ * Prepares tenant credential policy when the web search route depends on it and the
+ * request hasn't been prepared yet. Model resolution prepares its own context only when
+ * the model is invoked, after tools and instructions are built. Returns undefined when
+ * there is nothing to prepare, so callers can stay synchronous.
+ */
+export function prepareProviderWebSearchRoute(
+  modelId: string | undefined,
+  options?: { requestContext?: RequestContextReader },
+): Promise<void> | undefined {
+  const requestContext = options?.requestContext;
+  if (!hasCredentialTenantResolver() || !(requestContext instanceof RequestContext)) return undefined;
+  if (resolveTenantFromRequestContext(requestContext)) return undefined;
+  if (!('gatewayProvider' in classifyWebSearchModel(modelId))) return undefined;
+  return prepareCredentialTenant(requestContext);
+}
+
+export function resolveProviderWebSearchRoute(
+  modelId: string | undefined,
+  options?: { requestContext?: RequestContextReader },
+): ProviderWebSearchRoute | undefined {
+  const model = classifyWebSearchModel(modelId);
+  if (!('gatewayProvider' in model)) return model.route;
+  const providerId = model.gatewayProvider;
+
+  reloadAuthStorage();
+  const tenantCredentialStore = resolveCredentialStore(options?.requestContext);
+  const credentialStore = createRequestScopedCredentialStore(
+    tenantCredentialStore ?? getGlobalAuthStorage(),
+    options?.requestContext,
+  );
+  if (credentialStore.get(NATIVE_OAUTH_CREDENTIAL_IDS[providerId])?.type === 'oauth') return providerId;
+  return mastraGatewayApiKey(tenantCredentialStore) ? 'mastra-gateway' : providerId;
 }
 
 /**

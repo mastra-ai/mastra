@@ -4,7 +4,7 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 import type { Plugin } from 'rollup';
 import type { PackageJson } from 'type-fest';
 import { getPackageRootPath } from '../package-info';
-import { getPackageName, isExternalProtocolImport, isBareModuleSpecifier } from '../utils';
+import { getPackageName, isExternalProtocolImport, isBareModuleSpecifier, slash } from '../utils';
 
 /**
  * Check if a package has an exports field in its package.json.
@@ -62,11 +62,15 @@ export function nodeModulesExtensionResolver(): Plugin {
       try {
         const packageJSON = await getPackageJSON(pkgName, importer);
         // if it has exports, node should be able to rsolve it, if not the exports map is wrong.
-        if (!!packageJSON.exports) {
+        if (packageJSON.exports) {
           return null;
         }
 
         const packageRoot = await getPackageRootPath(pkgName, importer);
+        if (!packageRoot) {
+          return null;
+        }
+
         // @ts-expect-error - handle is part of resolveId signature
         const nodeResolved = await nodeResolvePlugin.resolveId?.handler?.call(this, id, importer, options);
         // if we cannot resolve it, it's not a valid import so we let node handle it
@@ -79,7 +83,8 @@ export function nodeModulesExtensionResolver(): Plugin {
           filePath = filePath.substring(1).split('?')[0];
         }
 
-        const resolvedImportPath = filePath.replace(packageRoot, pkgName);
+        // Import specifiers always use forward slashes, but both paths are native on Windows.
+        const resolvedImportPath = slash(filePath).replace(slash(packageRoot), pkgName);
 
         return {
           id: resolvedImportPath,

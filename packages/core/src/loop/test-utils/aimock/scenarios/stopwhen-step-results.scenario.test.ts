@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -93,6 +94,177 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     expect(chunks!.filter(chunk => chunk.type === 'step-start')).toHaveLength(3);
     expect(chunks!.filter(chunk => chunk.type === 'step-finish')).toHaveLength(3);
     expect(seenStepCounts).toEqual([1, 2]);
+  });
+
+  type SeenStep = {
+    toolResults: any[];
+    staticToolResults: any[];
+    dynamicToolResults: any[];
+    content: Array<{ type: string }>;
+  };
+  const recordToolResults = async (
+    options: Pick<Parameters<typeof runLoopScenario>[0], 'tools' | 'outputProcessors'> = {},
+  ) => {
+    const seen: SeenStep[][] = [];
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'What should I be doing in Toronto today?',
+      tools,
+      ...options,
+      collectChunks: true,
+      stopWhen: (({ steps }: { steps: SeenStep[] }) => {
+        seen.push(
+          structuredClone(
+            steps.map(({ toolResults, staticToolResults, dynamicToolResults, content }) => ({
+              toolResults,
+              staticToolResults,
+              dynamicToolResults,
+              content,
+            })),
+          ),
+        );
+        return false;
+      }) as any,
+      fixtures: llm => scriptThreeTurns(llm),
+    });
+    await output.consumeStream();
+    return { seen, chunks: chunks! };
+  };
+  const toolResultParts = (step: SeenStep) => step.content.filter(part => part.type === 'tool-result');
+
+  const expectedResults = [
+    {
+      toolCallId: 'call_weather',
+      toolName: 'weather',
+      value: { temperature: 70, conditions: 'sunny', location: 'Toronto' },
+    },
+    { toolCallId: 'call_plan', toolName: 'plan_activities', value: { activities: 'Walk along the waterfront' } },
+  ];
+
+  it('populates toolResults on every step it passes the predicate', async () => {
+    const { seen } = await recordToolResults();
+
+    expect(seen.map(steps => steps.length)).toEqual([1, 2]);
+    for (const steps of seen) {
+      steps.forEach((step, index) => {
+        const { toolCallId, toolName } = expectedResults[index]!;
+        expect(step.toolResults).toHaveLength(1);
+        expect(step.toolResults[0]).toMatchObject({ toolCallId, toolName });
+        expect(step.toolResults).toHaveLength(step.content.filter(part => part.type === 'tool-result').length);
+      });
+    }
+  });
+
+  // stopWhen is typed as an AI SDK StopCondition, so a predicate reads
+  // `toolResults` as AI SDK ToolResultParts ({ type, input, output: { type: 'json', value } }).
+  // The durable engines used to hand it Mastra tool-result chunk payloads
+  // ({ args, result }, no `type`), so a predicate that read `output` never matched (#28519).
+  it('passes toolResults to the predicate as AI SDK tool-result parts', async () => {
+    const { seen } = await recordToolResults();
+
+    expect(seen).toHaveLength(2);
+    for (const steps of seen) {
+      steps.forEach((step, index) => {
+        const { toolCallId, toolName, value } = expectedResults[index]!;
+        expect(step.toolResults[0]).toMatchObject({
+          type: 'tool-result',
+          toolCallId,
+          toolName,
+          output: { type: 'json', value },
+        });
+      });
+    }
+  });
+
+  // A user stops the run once a tool reports sunny weather, reading the result
+  // the way the AI SDK documents it (`toolResults[i].output`) (#28519).
+  it('stops when a predicate matches on a tool result output', async () => {
+    const { output, requests, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'What should I be doing in Toronto today?',
+      tools,
+      collectChunks: true,
+      stopWhen: (({ steps }: { steps: Array<{ toolResults: Array<{ output?: { value?: unknown } }> }> }) =>
+        steps.some(step =>
+          step.toolResults.some(
+            result => (result.output?.value as { conditions?: string } | undefined)?.conditions === 'sunny',
+          ),
+        )) as any,
+      fixtures: llm => scriptThreeTurns(llm),
+    });
+
+    await output.consumeStream();
+
+    expect(requests).toHaveLength(1);
+    expect(chunks!.filter(chunk => chunk.type === 'step-start')).toHaveLength(1);
+    expect((await output.steps).length).toBe(1);
+  });
+
+  // Every engine builds a step's tool results from its content, the way AI SDK
+  // StepResult does, including the static/dynamic views and the tool input (#28519).
+  it('passes the tool-result parts of each step content, with static and dynamic views', async () => {
+    const { seen } = await recordToolResults();
+
+    expect(seen).toHaveLength(2);
+    for (const steps of seen) {
+      steps.forEach((step, index) => {
+        expect(step.toolResults).toEqual(toolResultParts(step));
+        expect(step.toolResults[0]).toMatchObject({ input: index === 0 ? weatherCall.arguments : planCall.arguments });
+        expect(step.staticToolResults).toEqual(step.toolResults.filter(part => part.dynamic === false));
+        expect(step.dynamicToolResults).toEqual(step.toolResults.filter(part => part.dynamic === true));
+      });
+    }
+  });
+
+  // A tool that throws still produces a tool-result part the model sees, so the
+  // predicate gets it too, with the error as its output.
+  it('passes a failed tool call to the predicate as a tool-result part with error output', async () => {
+    const failingWeather = createTool({
+      id: 'weather',
+      description: 'Get weather for a location',
+      inputSchema: z.object({ location: z.string() }),
+      execute: async () => {
+        throw new Error('weather service unavailable');
+      },
+    });
+
+    const { seen } = await recordToolResults({ tools: { ...tools, weather: failingWeather } });
+
+    expect(seen.length).toBeGreaterThan(0);
+    const [step] = seen[0]!;
+    expect(step!.toolResults).toEqual(toolResultParts(step!));
+    expect(step!.toolResults).toHaveLength(1);
+    expect(step!.toolResults[0]).toMatchObject({
+      type: 'tool-result',
+      toolCallId: 'call_weather',
+      toolName: 'weather',
+    });
+    expect(JSON.stringify(step!.toolResults[0].output)).toContain('weather service unavailable');
+  });
+
+  // An output processor that keeps tool results out of the UI stream does not
+  // keep them from the model, so stopWhen still sees them.
+  it('passes tool results that an output processor kept out of the stream', async () => {
+    const hideToolResults: Processor = {
+      id: 'hide-tool-results',
+      processOutputStream: async ({ part }) => (part.type === 'tool-result' ? null : part),
+    };
+
+    const { seen, chunks } = await recordToolResults({ outputProcessors: [hideToolResults] });
+
+    expect(chunks.some(chunk => chunk.type === 'tool-result')).toBe(false);
+    expect(seen).toHaveLength(2);
+    for (const steps of seen) {
+      steps.forEach((step, index) => {
+        const { toolCallId, value } = expectedResults[index]!;
+        expect(step.toolResults).toEqual(toolResultParts(step));
+        expect(step.toolResults).toEqual([
+          expect.objectContaining({ type: 'tool-result', toolCallId, output: { type: 'json', value } }),
+        ]);
+      });
+    }
   });
 
   for (const withText of [false, true]) {

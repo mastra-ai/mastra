@@ -1,11 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { emitSuspendedEvent } from '@mastra/core/agent/durable';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error';
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
-import type { EntityType } from '@mastra/core/observability';
+import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -19,6 +20,7 @@ import type { Inngest, BaseContext } from 'inngest';
 import { NonRetriableError } from 'inngest';
 import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
+import { workflowTermination } from './observability-compat';
 import { InngestWorkflow } from './workflow';
 
 function isNonRetryableStepFailure(error: unknown): boolean {
@@ -68,6 +70,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
     private parentStream?: { workflowId: string; runId: string },
+    /** Inngest's id for this function run: stable across its replays, new for each resume. */
+    private inngestRunId?: string,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -151,9 +155,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
         if (isNonRetryable || i === params.retries) {
           if (cause?.status === 'failed') {
-            params.stepSpan?.error({
-              error: e,
-              attributes: { status: 'failed' },
+            await this.errorStepSpan({
+              span: params.stepSpan,
+              operationId: `workflow.${params.workflowId}.run.${params.runId}.step.${stepId}.span.error`,
+              errorOptions: {
+                ...workflowTermination({
+                  status: 'failed',
+                  error: cause.error,
+                }),
+                error: getErrorFromUnknown(e),
+                attributes: { status: 'failed' },
+              },
             });
             // Ensure cause.error is an Error instance
             if (cause.error && !(cause.error instanceof Error)) {
@@ -173,9 +185,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             serializeStack: false,
             fallbackMessage: 'Unknown step execution error',
           });
-          params.stepSpan?.error({
-            error: errorInstance,
-            attributes: { status: 'failed' },
+          await this.errorStepSpan({
+            span: params.stepSpan,
+            operationId: `workflow.${params.workflowId}.run.${params.runId}.step.${stepId}.span.error`,
+            errorOptions: {
+              ...workflowTermination({ status: 'failed', error: errorInstance }),
+              error: errorInstance,
+              attributes: { status: 'failed' },
+            },
           });
           return {
             ok: false,
@@ -279,7 +296,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * Provide Inngest step primitive in engine context
    */
   getEngineContext(): Record<string, any> {
-    return { step: this.inngestStep };
+    return { step: this.inngestStep, inngestRunId: this.inngestRunId };
   }
 
   /**
@@ -333,7 +350,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     parentSpan: any;
     stepId: string;
     operationId: string;
-    options: {
+    options: SpanOutcomeFields & {
       name: string;
       type: any;
       input?: unknown;
@@ -362,12 +379,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       const span = observability.startSpan({
         ...options,
         entityType: options.entityType as EntityType | undefined,
-        traceId: executionContext.tracingIds?.traceId,
+        traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
       });
 
       // Return serializable form
-      return span?.exportSpan();
+      return span?.snapshot?.() ?? span?.exportSpan();
     });
 
     // Return a rebuilt span that can have .end()/.error() called later
@@ -385,7 +402,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async endStepSpan(params: {
     span: any;
     operationId: string;
-    endOptions: {
+    endOptions: SpanOutcomeFields & {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
@@ -404,7 +421,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async errorStepSpan(params: {
     span: any;
     operationId: string;
-    errorOptions: {
+    errorOptions: SpanOutcomeFields & {
       error: Error;
       attributes?: Record<string, unknown>;
     };
@@ -424,7 +441,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async createChildSpan(params: {
     parentSpan: any;
     operationId: string;
-    options: {
+    options: SpanOutcomeFields & {
       name: string;
       type: any;
       input?: unknown;
@@ -448,13 +465,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       // Create span using tracingIds for traceId, and actual parent span for parentSpanId
       const span = observability.startSpan({
         ...options,
-        traceId: executionContext.tracingIds?.traceId,
+        traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
         tracingPolicy: this.options?.tracingPolicy,
       });
 
       // Return serializable form
-      return span?.exportSpan();
+      return span?.snapshot?.() ?? span?.exportSpan();
     });
 
     // Return a rebuilt span that can have .end()/.error() called later
@@ -472,7 +489,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async endChildSpan(params: {
     span: any;
     operationId: string;
-    endOptions?: {
+    endOptions?: SpanOutcomeFields & {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
@@ -491,7 +508,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async errorChildSpan(params: {
     span: any;
     operationId: string;
-    errorOptions: {
+    errorOptions: SpanOutcomeFields & {
       error: Error;
       attributes?: Record<string, unknown>;
     };
@@ -519,6 +536,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       steps: string[];
       resumePayload: any;
       runId?: string;
+      label?: string;
     };
     timeTravel?: TimeTravelExecutionParams;
     prevOutput: any;
@@ -635,6 +653,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                     resumePath: nestedResumeStepId
                       ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any)
                       : undefined,
+                    // Resumes only the labelled foreach iteration, as core `Run.resume` does (#27925).
+                    label: resume.label,
+                    forEachIndex: resume.label ? snapshot?.resumeLabels?.[resume.label]?.foreachIndex : undefined,
                   },
                 }),
             outputOptions: { includeState: true, includeResumeLabels: true },
@@ -761,6 +782,38 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
             return stepRes?.status === 'suspended';
           });
+
+          // A labelled resume whose tool call finished while another stays parked suspends the run
+          // without any tool publishing a suspension, so the resumed stream would never end (#27925).
+          // Published here, before the parent persists the suspension and the next resume can claim it.
+          const agentInput: { __workflowKind?: string; runId?: string } | undefined = stepResults.input as any;
+          const resumedCallFinished = isResume && !!resume?.label && !(result as any).resumeLabels?.[resume.label];
+          const parked = (suspendedSteps[0]?.[1] as any)?.suspendPayload;
+          // An approval requested during execution (e.g. by a sub-agent) nests the call here.
+          const approval = parked?.requireToolApproval;
+          const parkedToolCallId = parked?.toolCallId ?? approval?.toolCallId;
+          // A call that first parked in this segment (approval tools run one at a time) published its
+          // own suspension. The parent still holds the labels it parked on until it persists this one.
+          let parkedBefore = false;
+          if (resumedCallFinished && agentInput?.__workflowKind === 'durable-agent' && parkedToolCallId) {
+            const store = await this.mastra?.getStorage()?.getStore('workflows');
+            const parent = await store?.loadWorkflowSnapshot({
+              workflowName: executionContext.workflowId,
+              runId: executionContext.runId,
+            });
+            parkedBefore = !!parent?.resumeLabels?.[parkedToolCallId];
+          }
+          if (parkedBefore && agentInput?.runId) {
+            // A tool's own suspension keeps no args; its call input is in the foreach output.
+            const meta = parked?.__workflow_meta;
+            await emitSuspendedEvent(pubsub, agentInput.runId, {
+              toolCallId: parkedToolCallId,
+              toolName: approval?.toolName ?? parked?.toolName,
+              args: approval?.args ?? parked?.args ?? meta?.foreachOutput?.[meta.foreachIndex]?.payload?.args,
+              suspendPayload: parked?.toolCallSuspended,
+              type: parked?.type === 'approval' ? 'approval' : 'suspension',
+            });
+          }
 
           for (const [stepName, stepResult] of suspendedSteps) {
             const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];

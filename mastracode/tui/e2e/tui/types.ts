@@ -133,6 +133,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'knowledge-browser'
+  | 'knowledge-settings'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
@@ -149,6 +150,8 @@ export type ScenarioName =
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
   | 'model-search'
+  | 'mouse-modal-and-autocomplete'
+  | 'mouse-input-mode'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
   | 'mode-switch-applies-pack-model'
@@ -162,6 +165,9 @@ export type ScenarioName =
   | 'notify-input-request-hook'
   | 'om-settings'
   | 'om-auto-selection'
+  | 'om-auto-preview-google-api-key'
+  | 'om-auto-preview-stored-google-key'
+  | 'om-auto-preview-anthropic-only'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
@@ -182,7 +188,6 @@ export type ScenarioName =
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
-  | 'subconscious-activity-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
@@ -226,6 +231,7 @@ export type ScenarioName =
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'
+  | 'gateway-web-search'
   | 'workspace-commands'
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
@@ -241,6 +247,18 @@ export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
+  /** Send an SGR left click at the first on-screen occurrence of `text`. */
+  clickText?: (text: string) => Promise<void>;
+  /** Press at `text` + `fromOffset` columns, drag and release at `text` + `toOffset` columns. */
+  dragText?: (text: string, fromOffset: number, toOffset: number) => Promise<void>;
+  /** Texts the app copied through OSC 52, oldest first. */
+  clipboardWrites?: () => string[];
+  /** Move the mouse (no button held) over the first on-screen occurrence of `text`. */
+  hoverText?: (text: string) => void;
+  /** Send SGR wheel events at the screen centre. */
+  wheel?: (direction: 'up' | 'down', count?: number) => void;
+  /** xterm's current mouse tracking mode ('none' when the terminal owns the mouse). */
+  mouseTracking?: () => string;
   resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
   serializeHistory?: () => { output: string };
@@ -265,6 +283,8 @@ export type McE2eScenarioRuntime = {
 };
 
 export type McE2ePrepareContext = {
+  /** AIMock server origin, set when the scenario uses `useOpenAIModel`. */
+  aimockUrl?: string;
   appDataDir: string;
   dbPath: string;
   homeDir: string;

@@ -2,7 +2,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
 import CodeMirror from '@uiw/react-codemirror';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { codeFoldGutter, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 
 export const WorkflowCodeContent = ({
@@ -46,7 +46,12 @@ export const WorkflowCodeContent = ({
           <CopyButton content={content} />
         </div>
         <div className="rounded-lg bg-muted p-4">
-          <CodeMirror value={content} theme={theme} extensions={[jsonLanguage, EditorView.lineWrapping]} />
+          <CodeMirror
+            value={content}
+            theme={theme}
+            extensions={[jsonLanguage, EditorView.lineWrapping, codeFoldGutter]}
+            basicSetup={{ foldGutter: false }}
+          />
         </div>
       </div>
     );
@@ -66,7 +71,12 @@ export const WorkflowCodeContent = ({
         <CopyButton content={data} />
       </div>
       <div className="rounded-lg bg-muted p-4">
-        <CodeMirror value={displayContent} theme={theme} extensions={extensions} />
+        <CodeMirror
+          value={displayContent}
+          theme={theme}
+          extensions={[...extensions, codeFoldGutter]}
+          basicSetup={{ foldGutter: false }}
+        />
       </div>
     </div>
   );

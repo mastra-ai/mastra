@@ -132,7 +132,7 @@ export function TemplateForm({
                 defaultModel={defaultModelId || ''}
                 updateModel={onModelUpdate || (() => Promise.resolve({ message: 'Updated' }))}
                 closeEditor={() => {}} // No need to close in template context
-                autoSave={true}
+                autoSave
                 selectProviderPlaceholder="Provider"
               />
             </div>

@@ -7,7 +7,7 @@ description: "Browse Ofox model IDs, capabilities, context windows, and pricing.
 
 # <img src="https://models.dev/logos/ofox.svg" alt="Ofox logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ofox
 
-Access 154 Ofox models through Mastra's model router. Authentication is handled automatically using the `OFOX_API_KEY` environment variable.
+Access 150 Ofox models through Mastra's model router. Authentication is handled automatically using the `OFOX_API_KEY` environment variable.
 
 Learn more in the [Ofox documentation](https://ofox.ai/docs).
 
@@ -94,18 +94,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.5
   },
   {
-    "model": "ofox/anthropic/claude-opus-4.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 5,
-    "outputCost": 25
-  },
-  {
     "model": "ofox/anthropic/claude-opus-4.6",
     "imageInput": true,
     "audioInput": false,
@@ -164,18 +152,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 4,
     "outputCost": 20
-  },
-  {
-    "model": "ofox/anthropic/claude-sonnet-4.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
   },
   {
     "model": "ofox/anthropic/claude-sonnet-4.6",
@@ -336,7 +312,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "ofox/bailian/qwen3.5-27b",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -348,7 +324,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "ofox/bailian/qwen3.5-35b-a3b",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -396,7 +372,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "ofox/bailian/qwen3.6-27b",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -449,7 +425,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 65536,
+    "maxOutput": 131072,
     "inputCost": 2.5,
     "outputCost": 7.5
   },
@@ -562,18 +538,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.32
   },
   {
-    "model": "ofox/deepseek/deepseek-v4-flash-vision-exp",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.44,
-    "outputCost": 1.32
-  },
-  {
     "model": "ofox/deepseek/deepseek-v4-pro",
     "imageInput": false,
     "audioInput": false,
@@ -594,8 +558,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 1.32,
-    "outputCost": 3.96
+    "inputCost": 1.74,
+    "outputCost": 3.48
   },
   {
     "model": "ofox/deepseek/deepseek-v4-pro-0813",
@@ -886,18 +850,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.4
   },
   {
-    "model": "ofox/moonshotai/kimi-k2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.6,
-    "outputCost": 3
-  },
-  {
     "model": "ofox/moonshotai/kimi-k2.6",
     "imageInput": true,
     "audioInput": false,
@@ -944,6 +896,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "ofox/moonshotai/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 2,
+    "outputCost": 11
   },
   {
     "model": "ofox/openai/gpt-4.1",
@@ -1246,6 +1210,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "ofox/openai/gpt-6.1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
     "model": "ofox/qwen/qwen-flash",
     "imageInput": false,
     "audioInput": false,
@@ -1428,7 +1404,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "ofox/qwen/qwen3.6-27b",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -1544,54 +1520,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.71,
     "outputCost": 5.14
-  },
-  {
-    "model": "ofox/volcengine/doubao-seed-1-6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": 0.12,
-    "outputCost": 0.29
-  },
-  {
-    "model": "ofox/volcengine/doubao-seed-1-6-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 32000,
-    "inputCost": 0.03,
-    "outputCost": 0.22
-  },
-  {
-    "model": "ofox/volcengine/doubao-seed-1-6-vision",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 32000,
-    "inputCost": 0.12,
-    "outputCost": 1.15
-  },
-  {
-    "model": "ofox/volcengine/doubao-seed-1-8",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": 0.12,
-    "outputCost": 0.29
   },
   {
     "model": "ofox/volcengine/doubao-seed-2.0-code",
@@ -1903,6 +1831,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -1920,6 +1850,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

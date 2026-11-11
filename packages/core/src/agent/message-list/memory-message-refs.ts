@@ -52,7 +52,7 @@ export function createStoredMessageLoader(memory: MastraMemory | undefined): Sto
  */
 export class MemoryMessageRefs {
   /** id → the stored row normalized the way a recall adds it. */
-  #stored = new Map<string, { canonical: string; fingerprint: string }>();
+  #stored = new Map<string, { canonical: string; matchKey: string; fingerprint: string }>();
   /** Recalled ids that storage could not return; not retried on later stores. */
   #unavailable = new Set<string>();
   /** Ids a successful load did not return: deleted, so later restores skip the lookup. */
@@ -95,7 +95,7 @@ export class MemoryMessageRefs {
       const normalized = normalizeStoredMessage(row, memoryInfo);
       if (!normalized) continue;
       const canonical = stableStringify(normalized);
-      this.#stored.set(row.id, { canonical, fingerprint: fingerprint(canonical) });
+      this.#stored.set(row.id, { canonical, matchKey: matchKey(normalized), fingerprint: fingerprint(canonical) });
       this.#unavailable.delete(row.id);
       this.#deleted.delete(row.id);
     }
@@ -107,7 +107,7 @@ export class MemoryMessageRefs {
     let replaced = false;
     const messages = state.messages.map(message => {
       const stored = this.#stored.get(message.id);
-      if (!stored || stableStringify(message) !== stored.canonical) return message;
+      if (!stored || isMemoryMessageRef(message) || matchKey(message) !== stored.matchKey) return message;
       replaced = true;
       return { __ref: 'memory', id: message.id, fingerprint: stored.fingerprint } satisfies MemoryMessageRef;
     });
@@ -185,6 +185,71 @@ function normalizeStoredMessage(row: MastraDBMessage, memoryInfo: MemoryInfo | n
   const list = new MessageList({ threadId: memoryInfo?.threadId, resourceId: memoryInfo?.resourceId });
   list.add(row, 'memory');
   return list.serialize().messages.find(message => message.id === row.id);
+}
+
+/** Ignore only the token counter's cache; preserve caller-supplied estimates and all other metadata. */
+function withoutEstimate(metadata: Record<string, any> | undefined): Record<string, any> | undefined {
+  const mastra = metadata?.mastra;
+  if (!mastra || !Object.hasOwn(mastra, 'tokenEstimate')) return metadata;
+  const estimate = mastra.tokenEstimate;
+  const isFrameworkEstimate = (value: any) =>
+    typeof value?.source === 'string' &&
+    /^v\d+:tokenx$/.test(value.source) &&
+    typeof value.key === 'string' &&
+    typeof value.tokens === 'number' &&
+    typeof value.v === 'number';
+  let remaining: unknown;
+  if (isFrameworkEstimate(estimate)) {
+    remaining = undefined;
+  } else if (estimate && typeof estimate === 'object' && !Object.hasOwn(estimate, 'source')) {
+    const entries = Object.entries(estimate).filter(([, value]) => !isFrameworkEstimate(value));
+    const soleEntry = entries[0]?.[1];
+    const soleClient =
+      entries.length === 1 &&
+      entries[0]?.[0] === 'client' &&
+      soleEntry !== null &&
+      typeof soleEntry === 'object' &&
+      'source' in soleEntry &&
+      soleEntry.source === 'client';
+    if (entries.length === Object.keys(estimate).length && !soleClient) return metadata;
+    remaining = soleClient ? entries[0]![1] : entries.length ? Object.fromEntries(entries) : undefined;
+  } else {
+    return metadata;
+  }
+  const nextMastra = { ...mastra };
+  if (remaining) nextMastra.tokenEstimate = remaining;
+  else delete nextMastra.tokenEstimate;
+  const next = { ...metadata };
+  if (Object.keys(nextMastra).length) next.mastra = nextMastra;
+  else delete next.mastra;
+  return Object.keys(next).length ? next : undefined;
+}
+
+function matchKey(message: SerializedMessage): string {
+  const content = message.content;
+  const parts = content.parts.map(part => {
+    const original = part as typeof part & { providerMetadata?: Record<string, any> };
+    const providerMetadata = withoutEstimate(original.providerMetadata);
+    if (providerMetadata === original.providerMetadata) return part;
+    const next = { ...original };
+    if (providerMetadata) next.providerMetadata = providerMetadata;
+    else delete next.providerMetadata;
+    return next;
+  });
+  const contentMetadata = withoutEstimate(content.metadata as Record<string, any> | undefined);
+  const nextContent = { ...content, parts };
+  if (contentMetadata !== content.metadata) {
+    if (contentMetadata) nextContent.metadata = contentMetadata;
+    else delete nextContent.metadata;
+  }
+  const original = message as typeof message & { metadata?: Record<string, any> };
+  const metadata = withoutEstimate(original.metadata);
+  const next = { ...original, content: nextContent };
+  if (metadata !== original.metadata) {
+    if (metadata) next.metadata = metadata;
+    else delete next.metadata;
+  }
+  return stableStringify(next);
 }
 
 /** 64-bit non-cryptographic hash (two 32-bit lanes); only detects edits. */

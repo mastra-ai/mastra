@@ -11,10 +11,17 @@ import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload
 import { createStep } from '../../../workflows/workflow';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
-import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
+import {
+  DELEGATION_FAILURE_KEY,
+  DELEGATION_BAILED_KEY,
+  STEP_TOOLS_KEY,
+  TOOL_PAYLOAD_TRANSFORM_KEY,
+} from '../../run-scope-keys';
+import { takeDelegationFailure } from '../../shared/delegation-outcome';
 import { readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
 import { commitToolResult, computeModelOutputProviderMetadata } from '../../shared/steps/tool-result-commit-core';
+import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError, getSubAgentErrorResult } from '../errors';
@@ -48,6 +55,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           logger: rest.logger,
           agentName: 'LLMMappingStep',
           processorStates: rest.processorStates,
+          agent: rest.agent,
         })
       : undefined;
 
@@ -151,8 +159,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, getStepResult, bail }) => {
-      const initialResult = getStepResult(llmExecutionStep);
+    execute: async ({ inputData, getStepResultAsync, bail }) => {
+      const initialResult = await getStepResultAsync(llmExecutionStep);
       // A processToolResult abort is terminal for the run: stop processing the
       // remaining tool results and end the loop instead of calling the model again.
       const bailOnToolResultTripwire = (tripwire: TripWire) => {
@@ -230,7 +238,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
       if (
         inputData?.some(
-          toolCall => toolCall?.result === undefined && !toolCall.providerExecuted && !isDeniedApproval(toolCall),
+          toolCall =>
+            toolCall.aborted ||
+            (toolCall?.result === undefined && !toolCall.providerExecuted && !isDeniedApproval(toolCall)),
         )
       ) {
         const errorResults = inputData.filter(toolCall => toolCall?.error && !toolCall.providerExecuted);
@@ -286,11 +296,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // will see them on the next turn. This handles both tool-not-found errors
         // (hallucinated tool names) and tool execution errors (tool throws).
         //
-        // Check for pending HITL tool calls (no result and no error); in mixed turns these
-        // take priority over continuing the loop. Exclude aborted calls: they also lack a
-        // result/error but were cancelled, not awaiting input, so they must not count as a
-        // suspension or be recorded as a result (see tool-call-step.ts). Denied approvals are
-        // resolved, not pending, so they are excluded too.
+        // Pending HITL tool calls take priority over continuing the loop in mixed turns.
+        // Aborted calls carry cancellation notices rather than awaiting input.
+        // Denied approvals are resolved, not pending, so they are excluded too.
         const hasPendingHITL = inputData.some(
           tc => tc.result === undefined && !tc.error && !tc.aborted && !tc.providerExecuted && !isDeniedApproval(tc),
         );
@@ -302,8 +310,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // streamed and committed before bailing — otherwise a completed server-side tool is
         // silently dropped: no tool-result chunk reaches the client (which then waits forever
         // for the call to leave `input-available`) and history persists it in `call` state as
-        // if it never ran (issue #21637). Aborted and denied-approval calls have no `result`,
-        // so they are excluded by construction and stay unrecorded (issue #17995 / PR #18034).
+        // if it never ran (issue #21637). Cancellation notices are also results;
+        // denied approvals have no `result` and are handled separately.
         const successfulResults = inputData.filter(tc => tc.result !== undefined);
         if (successfulResults.length) {
           const stepNumber = (initialResult?.output?.steps?.length ?? 0) as number;
@@ -312,9 +320,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
             // can access it on the chunk's providerMetadata.mastra.modelOutput.
             // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-            const providerMetadata = !toolCall.providerExecuted
-              ? await getProviderMetadataWithModelOutput(toolCall)
-              : undefined;
+            const providerMetadata =
+              !toolCall.providerExecuted && !toolCall.aborted
+                ? await getProviderMetadataWithModelOutput(toolCall)
+                : undefined;
             const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
               | ProviderMetadata
               | undefined;
@@ -381,17 +390,29 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           }
         }
 
-        if (errorResults?.length > 0 && !hasPendingHITL) {
+        const recoversFromToolErrors =
+          errorResults?.length > 0 &&
+          !hasPendingHITL &&
+          !(rest.options?.abortSignal?.aborted && inputData.some(toolCall => toolCall.aborted));
+
+        // A delegation hook may bail on a failed delegation (e.g. the sub-agent threw). Consume
+        // the flag whether or not the loop continues, so a reused RequestContext doesn't carry
+        // it into the caller's next run (#29518).
+        if (recoversFromToolErrors && rest.requestContext?.get('__mastra_delegationBailed')) {
+          writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
+          rest.requestContext.set('__mastra_delegationBailed', false);
+          const cause = takeDelegationFailure(rest.requestContext);
+          if (cause) rest.tracingScope?.set(DELEGATION_FAILURE_KEY, cause);
+        }
+
+        // A response that ended on an error, the output limit, or a content filter stays ended:
+        // asking again repeats it, even when its tool calls failed (#29518).
+        if (recoversFromToolErrors && !TOOL_CALL_TERMINAL_FINISH_REASONS.has(initialResult.stepResult.reason)) {
           // Continue the loop — the error messages are already in the messageList,
-          // so the model will see them and can retry with correct tool names
+          // so the model will see them and can retry with correct tool names. A bail
+          // consumed above still stops the loop instead of retrying.
           initialResult.stepResult.isContinued = true;
           initialResult.stepResult.reason = 'tool-calls';
-          // A delegation hook may still bail on a failed delegation (e.g. the sub-agent
-          // threw); honor it here too so the loop stops instead of retrying.
-          if (rest.requestContext?.get('__mastra_delegationBailed')) {
-            writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
-            rest.requestContext.set('__mastra_delegationBailed', false);
-          }
           return {
             ...initialResult,
             messages: {
@@ -407,6 +428,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // isContinued = true and we should preserve that to allow the agentic loop to continue
         if (initialResult.stepResult.reason !== 'retry') {
           initialResult.stepResult.isContinued = false;
+        }
+
+        // A cancellation notice records the outcome without making the aborted run continue.
+        if (rest.options?.abortSignal?.aborted && inputData.some(tc => tc.aborted)) {
+          initialResult.stepResult.reason = 'abort';
+          initialResult.stepResult.isContinued = false;
+          await rest.options?.onAbort?.({ steps: initialResult.output?.steps ?? [], text: '' });
+          safeEnqueue(rest.controller, { type: 'abort', runId: rest.runId, from: ChunkFrom.AGENT, payload: {} });
         }
 
         // Update messages field to include any error messages we added to messageList
@@ -469,9 +498,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
           // can access it on the chunk's providerMetadata.mastra.modelOutput.
           // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-          const providerMetadata = !toolCall.providerExecuted
-            ? await getProviderMetadataWithModelOutput(toolCall)
-            : undefined;
+          const providerMetadata =
+            !toolCall.providerExecuted && !toolCall.aborted
+              ? await getProviderMetadataWithModelOutput(toolCall)
+              : undefined;
           const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
 
           const chunk = await transformToolChunk(
@@ -541,6 +571,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         if (rest.requestContext?.get('__mastra_delegationBailed')) {
           writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
           rest.requestContext.set('__mastra_delegationBailed', false);
+          const cause = takeDelegationFailure(rest.requestContext);
+          if (cause) rest.tracingScope?.set(DELEGATION_FAILURE_KEY, cause);
         }
 
         return {

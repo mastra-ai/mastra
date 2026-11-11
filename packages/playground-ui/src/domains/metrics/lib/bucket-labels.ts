@@ -22,12 +22,14 @@ const fmtHour = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric' });
 
 export function bucketLabels(ts: number, stepHours: number, multiDay: boolean): BucketLabels {
   const d = new Date(ts);
+  // Daily buckets are UTC days (see `bucketStart`), so they're named by their UTC date.
   if (stepHours >= 24) {
+    const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     return {
       ts,
-      label: fmtDay(d),
-      edgeLabel: fmtDay(d),
-      time: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      label: day,
+      edgeLabel: day,
+      time: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }),
     };
   }
   const time = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric' });

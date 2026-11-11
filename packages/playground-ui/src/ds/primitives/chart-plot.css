@@ -1,0 +1,57 @@
+/*
+ * The plot box is a size container; the chart inside is drawn at `--chart-drawn-w/h` and scaled to
+ * the box's live size `--chart-box-w/h`, so between redraws it moves with its card. Both are plain
+ * numbers of CSS pixels: Safari resolves `100cqw / 539px` against different zoom levels, so a zoomed
+ * page stretched every chart by the zoom factor. At rest the two sizes match and the scale is 1.
+ */
+.chart-plot-box {
+  container-type: size;
+}
+
+/*
+ * Off screen, the browser skips the plot's layout, so the box's ResizeObserver doesn't fire and the
+ * chart isn't drawn or redrawn until it scrolls into view: a resize only redraws the visible charts.
+ * It sits on the box's parent: an element with it is still laid out, only its descendants are skipped.
+ */
+.chart-plot {
+  content-visibility: auto;
+}
+
+/*
+ * A size container is its own stacking context, so the tooltip's z-index only counts inside its
+ * chart and a chart later on the page paints over it. Lift the chart being pointed at instead.
+ */
+.chart-plot-box:hover,
+.chart-plot-box:focus-within {
+  position: relative;
+  z-index: 1;
+}
+
+/* The pointer wins over a chart that kept keyboard focus elsewhere on the page. */
+.chart-plot-box:hover {
+  z-index: 2;
+}
+
+.chart-plot-stretch {
+  transform-origin: 0 0;
+  transform: scale(calc(var(--chart-box-w) / var(--chart-drawn-w)), calc(var(--chart-box-h) / var(--chart-drawn-h)));
+}
+
+/*
+ * Scale each label back so its text keeps its shape and only moves with the chart, around the edge
+ * it's anchored to. Text with its own SVG `transform` (a rotated label) is left alone: a CSS
+ * transform would replace it.
+ */
+.chart-plot-stretch .recharts-surface text:not([transform]) {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(calc(var(--chart-drawn-w) / var(--chart-box-w)), calc(var(--chart-drawn-h) / var(--chart-box-h)));
+}
+
+.chart-plot-stretch .recharts-surface text[text-anchor='start']:not([transform]) {
+  transform-origin: left center;
+}
+
+.chart-plot-stretch .recharts-surface text[text-anchor='end']:not([transform]) {
+  transform-origin: right center;
+}

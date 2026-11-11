@@ -17,6 +17,41 @@ const Header = () => (
 );
 
 describe('DataListRoot', () => {
+  it.each([true, false])('preserves custom root rendering and state-based styles with scrollable=%s', scrollable => {
+    const ref = createRef<HTMLDivElement>();
+    const scrollRef = createRef<HTMLDivElement>();
+    render(
+      <DataList
+        ref={ref}
+        columns="1fr"
+        scrollable={scrollable}
+        scrollRef={scrollRef}
+        render={<section aria-label="Styled list" />}
+        style={state => ({ paddingTop: state.hasOverflowY ? '4px' : '12px' })}
+        maxHeight="300px"
+        autoScroll={false}
+        scrollButtons={false}
+        revealScrollbarOnHover={false}
+      >
+        <DataList.RowButton>
+          <DataList.Cell>First row</DataList.Cell>
+        </DataList.RowButton>
+      </DataList>,
+    );
+
+    const root = screen.getByLabelText('Styled list');
+    expect(root.tagName).toBe('SECTION');
+    expect(ref.current).toBe(root);
+    expect(root.style.paddingTop).toBe('12px');
+    expect(root.hasAttribute('maxheight')).toBe(false);
+    expect(root.hasAttribute('autoscroll')).toBe(false);
+    expect(root.hasAttribute('scrollbuttons')).toBe(false);
+    expect(root.hasAttribute('revealscrollbaronhover')).toBe(false);
+    // Parent-scrolled lists must not introduce another clipping viewport.
+    if (scrollable) expect(scrollRef.current).not.toBeNull();
+    else expect(scrollRef.current).toBeNull();
+  });
+
   describe('unified treatment — ScrollArea (overlay scrollbar + horizontal mask)', () => {
     it('frames the list and separates its uniform rows', () => {
       const { container } = render(
@@ -81,43 +116,49 @@ describe('DataListRoot', () => {
       );
 
       expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-left')).toBe('0px');
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-right')).toBe('2rem');
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-right')).toBe('1.25rem');
     });
 
-    it('leaves the top unfaded by default, since the header sits there', () => {
+    // The sticky header sits at the top of the scroller, so a top mask would fade it with the rows.
+    // The top edge fades the rows just below the header instead.
+    it('never fades the header, and fades the rows below it by default', () => {
       const scrollRef = createRef<HTMLDivElement>();
-      render(
+      const { container } = render(
         <DataList columns="1fr 1fr" scrollRef={scrollRef}>
           <Header />
         </DataList>,
       );
 
       expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('2rem');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('1.25rem');
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-fade-top')).toBe('1.25rem');
     });
 
-    it('fades the top when the caller asks for it by name', () => {
+    it('uses the depth the caller gives for the top fade below the header', () => {
       const scrollRef = createRef<HTMLDivElement>();
-      render(
-        <DataList columns="1fr 1fr" mask={{ top: true }} scrollRef={scrollRef}>
+      const { container } = render(
+        <DataList columns="1fr 1fr" mask={{ top: '3rem' }} scrollRef={scrollRef}>
           <Header />
         </DataList>,
       );
 
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('2rem');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-fade-top')).toBe('3rem');
     });
 
-    it('fades every end when the caller turns masking on outright', () => {
+    it('drops only the top fade when the caller turns it off', () => {
       const scrollRef = createRef<HTMLDivElement>();
-      render(
-        <DataList columns="1fr 1fr" mask scrollRef={scrollRef}>
+      const { container } = render(
+        <DataList columns="1fr 1fr" mask={{ top: false }} scrollRef={scrollRef}>
           <Header />
         </DataList>,
       );
 
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('2rem');
-      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('2rem');
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-fade-top')).toBe('');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('1.25rem');
     });
 
     it('fades nothing when the caller turns masking off', () => {
@@ -362,6 +403,22 @@ describe('DataListRoot', () => {
       );
       fireEvent.click(screen.getByRole('button', { name: /Name.*sorted descending.*sort ascending/i }));
       expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
+    });
+
+    it('names the sort button with the label when the visible header is not plain text', () => {
+      render(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortKey="ttfc" label="Time to first chunk" onSortChange={vi.fn()}>
+              <abbr>TTFC</abbr>
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      expect(screen.getByRole('button').getAttribute('aria-label')).toBe(
+        'Time to first chunk, not sorted, sort ascending',
+      );
     });
   });
 });

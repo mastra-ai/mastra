@@ -49,13 +49,20 @@ import { EditorMCPNamespace } from './mcp';
 import { createVersionFromSnapshotUpdate, getProvidedSnapshotFields } from './versioned-update';
 import { computeInlineWorkspaceIdentity } from './workspace-identity';
 
-type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
+type AgentEditorConfig =
+  | false
+  | {
+      instructions?: boolean;
+      tools?: boolean | { description?: boolean };
+      model?: boolean;
+    };
 
 const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'name',
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',
@@ -345,6 +352,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return super.create(finalInput);
   }
 
+  /**
+   * Returns the registered agent when it is defined by the project, either in code (`'code'`) or in an
+   * `agents/<name>/` folder (`'fs'`). Stored records for these agents are overrides layered on top.
+   */
   private getCodeDefinedAgent(id: string): Agent | undefined {
     let agent: Agent | undefined;
     try {
@@ -352,7 +363,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     } catch {
       return undefined;
     }
-    return agent?.source === 'code' ? agent : undefined;
+    return agent?.source === 'code' || agent?.source === 'fs' ? agent : undefined;
   }
 
   private async ensureStoredWorkspaceRefs(
@@ -505,10 +516,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * from the stored config override the code agent's values (if explicitly set):
    * - `instructions` — system prompt
    * - `tools` — tool selection with description overrides (merged on top of code tools)
+   * - `modelList` — ordered serializable fallback settings matched to code entries by ID
    *
    * Fields that are absent or undefined in the stored config are left untouched.
-   * Model, workspace, memory, and other code-defined fields are never overridden —
-   * they may contain SDK instances or dynamic functions that cannot be safely serialized.
+   * Workspace, memory, and other code-defined fields are never overridden because they
+   * may contain SDK instances or dynamic functions that cannot be safely serialized.
    * Returns the (possibly mutated) agent.
    */
   async applyStoredOverrides(
@@ -524,6 +536,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     const instructionsEditable = editorConfig === undefined ? true : editorConfig.instructions === true;
+    const modelEditable = editorConfig !== undefined && editorConfig.model === true;
     const toolsConfig = editorConfig === undefined ? true : editorConfig.tools;
     const toolsEditable = toolsConfig === true;
     const toolDescriptionsEditable =
@@ -599,6 +612,69 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       if (resolved !== undefined) {
         fork.__updateInstructions(this.mergeInstructionEnvelope(agent, resolved));
       }
+    }
+
+    // --- Model list ---
+    if (modelEditable && storedConfig.modelList) {
+      const codeModel = fork.__getOverridableFields().model;
+      if (!Array.isArray(codeModel)) {
+        throw new Error(
+          `Agent "${agent.id}" delegates its model list to the editor but its code-defined model is not a static fallback list.`,
+        );
+      }
+
+      const codeModelsById = new Map(codeModel.map(model => [model.id, model]));
+      const appliedModelIds = new Set<string>();
+      const modelList = storedConfig.modelList.flatMap(storedModel => {
+        const codeModelEntry = codeModelsById.get(storedModel.id);
+        if (!codeModelEntry) {
+          this.logger?.warn(
+            `[applyStoredOverrides] Ignoring stale stored model-list entry "${storedModel.id}" for agent "${agent.id}"`,
+          );
+          return [];
+        }
+        appliedModelIds.add(storedModel.id);
+
+        const codeModelRef =
+          typeof codeModelEntry.model === 'string'
+            ? codeModelEntry.model
+            : 'id' in codeModelEntry.model && typeof codeModelEntry.model.id === 'string'
+              ? codeModelEntry.model.id
+              : 'provider' in codeModelEntry.model &&
+                  'modelId' in codeModelEntry.model &&
+                  typeof codeModelEntry.model.provider === 'string' &&
+                  typeof codeModelEntry.model.modelId === 'string'
+                ? `${codeModelEntry.model.provider}/${codeModelEntry.model.modelId}`
+                : undefined;
+        const storedModelRef = `${storedModel.provider}/${storedModel.modelId}`;
+
+        return [
+          {
+            ...codeModelEntry,
+            id: storedModel.id,
+            model: codeModelRef === storedModelRef ? codeModelEntry.model : storedModelRef,
+            enabled: storedModel.enabled,
+            maxRetries: storedModel.maxRetries,
+            maxRetriesConfigured: true,
+          },
+        ];
+      });
+      modelList.push(
+        ...codeModel.flatMap(model =>
+          model.id && !appliedModelIds.has(model.id)
+            ? [
+                {
+                  ...model,
+                  id: model.id,
+                  enabled: model.enabled ?? true,
+                  maxRetries: model.maxRetries ?? 0,
+                  maxRetriesConfigured: 'maxRetriesConfigured' in model ? (model.maxRetriesConfigured ?? false) : false,
+                },
+              ]
+            : [],
+        ),
+      );
+      fork.__updateModel({ model: modelList });
     }
 
     // --- Tools (merge: stored tools override code tools, code tools not in stored config are preserved) ---
@@ -1157,10 +1233,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     const skillsFormat = storedAgent.skillsFormat;
 
-    // Durable opt-in is persisted as a serializable subset (boolean or
-    // { maxSteps, cleanupTimeoutMs }). `cache`/`pubsub` are inherited from the
-    // Mastra instance by `createDurableAgent`, which `addAgent` invokes below
-    // whenever `agent.durable` is truthy.
+    // Stored durable options configure resumable streams on the plain Agent.
+    // Runtime cache and pubsub are inherited from Mastra when the stream bus is used.
     const durable = storedAgent.durable;
 
     // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the
@@ -1194,7 +1268,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // When a stored config is an override for a code agent, adding it would create a
     // duplicate entry under a different key (agent.id vs config key), causing the list
     // endpoint to show the agent as "stored" instead of "code".
-    if (!this.getCodeDefinedAgent(storedAgent.id)) {
+    if (!this.getCodeDefinedAgent(storedAgent.id) && this.mastra?.listAgents()[storedAgent.id]?.source !== 'stored') {
       this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
       this._registeredStoredAgentIds.add(storedAgent.id);
     }

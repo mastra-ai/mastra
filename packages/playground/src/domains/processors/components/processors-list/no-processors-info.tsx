@@ -13,7 +13,7 @@ export const NoProcessorsInfo = () => (
 
         icon={<ExternalLinkIcon />}
       >
-        Processors Documentation
+        Processors documentation
       </Button>
     }
     variant="fill"

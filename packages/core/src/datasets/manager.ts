@@ -293,7 +293,12 @@ export class DatasetsManager {
    * `compareExperiments` function; the pairs are then merged so every item has
    * a result entry for every experiment (or `null` when it did not run the item).
    */
-  async compareExperiments(args: { experimentIds: string[]; baselineId?: string }) {
+  async compareExperiments(args: {
+    experimentIds: string[];
+    baselineId?: string;
+    organizationId?: string;
+    projectId?: string;
+  }) {
     const experimentIds = [...new Set(args.experimentIds)];
 
     if (experimentIds.length < 2) {
@@ -317,6 +322,22 @@ export class DatasetsManager {
 
     const contenderIds = experimentIds.filter(id => id !== baselineId);
     const experimentsStore = await this.#getExperimentsStore();
+
+    // When scoped, every experiment must belong to the caller's tenancy. A mismatch
+    // looks the same as a missing experiment so other tenants' IDs don't leak.
+    const filters = scopeFromArgs(args);
+    if (filters) {
+      const found = await Promise.all(experimentIds.map(id => experimentsStore.getExperimentById({ id, filters })));
+      const missingIndex = found.findIndex(experiment => !experiment);
+      if (missingIndex !== -1) {
+        throw new MastraError({
+          id: 'EXPERIMENT_NOT_FOUND',
+          text: `Experiment not found: ${experimentIds[missingIndex]}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+    }
 
     const [pairs, resultLists] = await Promise.all([
       Promise.all(
@@ -355,16 +376,19 @@ export class DatasetsManager {
     });
 
     const items = [...itemIds].map(itemId => {
-      const results: Record<string, { output: unknown; scores: Record<string, number | null> } | null> = {};
       let source: { input: unknown; groundTruth: unknown } | undefined;
-
-      for (const experimentId of experimentIds) {
-        const result = resultsByExperiment.get(experimentId)!.get(itemId);
-        source ??= result;
-        results[experimentId] = result
-          ? { output: result.output, scores: scores.get(experimentId)!.get(itemId) ?? {} }
-          : null;
-      }
+      // Object.fromEntries keeps caller-chosen experiment IDs like "__proto__" as own keys.
+      const results: Record<string, { output: unknown; scores: Record<string, number | null> } | null> =
+        Object.fromEntries(
+          experimentIds.map(experimentId => {
+            const result = resultsByExperiment.get(experimentId)!.get(itemId);
+            source ??= result;
+            return [
+              experimentId,
+              result ? { output: result.output, scores: scores.get(experimentId)!.get(itemId) ?? {} } : null,
+            ];
+          }),
+        );
 
       return {
         itemId,

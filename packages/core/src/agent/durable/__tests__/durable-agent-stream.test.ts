@@ -14,6 +14,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { globalRunRegistry } from '../run-registry';
 import type { AgentStreamEvent } from '../types';
 
 // ============================================================================
@@ -76,6 +77,50 @@ describe('DurableAgent streaming execution', () => {
   });
 
   describe('basic streaming', () => {
+    it('records the effective owner in both live registries while streaming', async () => {
+      const runId = 'stream-effective-owner';
+      let liveOwners: (string | undefined)[] = [];
+      const doStream = vi.fn(async () => {
+        liveOwners = [durableAgent.runRegistry.get(runId)?.agentId, globalRunRegistry.get(runId)?.agentId];
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
+
+      const mockModel = new MockLanguageModelV2({ doStream });
+      const baseAgent = new Agent({
+        id: 'wrapped-stream-agent',
+        name: 'Stream Owner Agent',
+        instructions: 'Respond briefly',
+        model: mockModel as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, id: 'public-stream-agent' });
+
+      const { output, cleanup } = await durableAgent.stream('Say hello', { runId });
+
+      try {
+        await output.consumeStream();
+
+        expect(durableAgent.id).not.toBe(baseAgent.id);
+        expect(liveOwners).toEqual([durableAgent.id, durableAgent.id]);
+        expect(doStream).toHaveBeenCalledTimes(1);
+      } finally {
+        cleanup();
+      }
+    });
+
     it('should allow input processors to clear activeTools for LLM request and tool execution', async () => {
       let callCount = 0;
       const doStream = vi.fn(async () => {

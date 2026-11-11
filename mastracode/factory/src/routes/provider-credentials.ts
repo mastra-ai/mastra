@@ -14,9 +14,13 @@
  * is rejected when auth is enabled and falls back to local otherwise.
  */
 
+import { MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
+import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
+import { providerDisplayName } from '../provider-display-name.js';
+import { secretKeyMismatchHint } from '../secret-encryption.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -30,14 +34,22 @@ import type { RouteAuth } from './route.js';
  * Tenant rows use the same keying so one lookup serves both OAuth tokens and
  * API keys, and match what model resolution reads.
  */
-export { getCredentialProviderId as getAuthProviderId } from '@mastra/code-sdk/providers/model-ids';
+export function getAuthProviderId(provider: string): string {
+  return provider === MASTRA_GATEWAY_CATALOG_PROVIDER ? MASTRA_GATEWAY_PROVIDER : getCredentialProviderId(provider);
+}
+
+/**
+ * Catalog provider id of Mastra Gateway models (`mastra/<provider>/<model>`).
+ * Their credential is the tenant's gateway key, stored as `mastra-gateway`.
+ */
+export const MASTRA_GATEWAY_CATALOG_PROVIDER = 'mastra';
 
 /**
  * Providers that support a browser-driven OAuth sign-in flow, keyed by
  * *catalog* provider id (what the routes and settings UI use). All flows need
  * no inbound connection to the server: Anthropic uses paste-code PKCE, the
  * rest use RFC 8628-style device codes. `subscription` names the plan the
- * sign-in bills, as shown under a reply.
+ * sign-in bills, as shown under a reply and in the composer.
  */
 export const WEB_OAUTH_PROVIDERS: Readonly<Record<string, { flow: LoginSessionKind; subscription: string }>> = {
   anthropic: { flow: 'paste-code', subscription: 'Claude Pro/Max' },
@@ -45,6 +57,12 @@ export const WEB_OAUTH_PROVIDERS: Readonly<Record<string, { flow: LoginSessionKi
   'github-copilot': { flow: 'device-code', subscription: 'GitHub Copilot' },
   xai: { flow: 'device-code', subscription: 'SuperGrok/X Premium+' },
 };
+
+export function credentialLabel(provider: string, credentialType: CredentialRecord['credential']['type']) {
+  return credentialType === 'api_key'
+    ? `${providerDisplayName(provider)} API key`
+    : WEB_OAUTH_PROVIDERS[provider]?.subscription;
+}
 
 export type CredentialContext =
   | { mode: 'local' }
@@ -59,13 +77,27 @@ export async function getTenantCredentialsStorage(
   credentials: ModelCredentialsStorage | undefined,
 ): Promise<ModelCredentialsStorage | undefined> {
   if (!credentials) return undefined;
+  const failed = failedInit.get(credentials);
+  if (failed && Date.now() - failed.at < INIT_RETRY_MS) return undefined;
   try {
     await credentials.ensureReady();
-  } catch {
+  } catch (error) {
+    failedInit.set(credentials, { at: Date.now(), error });
+    // Callers degrade to "no credentials", so this log is the only trace of why.
+    if (error !== lastReportedInitError) {
+      lastReportedInitError = error;
+      console.error('[factory] model credential storage is unavailable; providers will show as not set:', error);
+    }
     return undefined;
   }
+  failedInit.delete(credentials);
   return credentials;
 }
+
+let lastReportedInitError: unknown;
+/** Init is a full table scan and callers run per request and per model call, so a failure retries at most this often. */
+const INIT_RETRY_MS = 15_000;
+const failedInit = new WeakMap<ModelCredentialsStorage, { at: number; error: unknown }>();
 
 /**
  * Org key for tenant rows. Personal accounts get an org bootstrapped by the
@@ -106,7 +138,10 @@ export async function resolveCredentialContext({
       response: c.json(
         {
           error: 'credentials_unavailable',
-          message: 'Tenant credential storage is unavailable — the app database is not configured or failed to start.',
+          message: `Provider credentials are unavailable. ${
+            secretKeyMismatchHint(credentials && failedInit.get(credentials)?.error) ??
+            'The app database is not configured or failed to start. The server log line "[factory] model credential storage is unavailable" has the cause.'
+          }`,
         },
         503,
       ),
@@ -126,16 +161,22 @@ export async function listTenantCredentialsForRequest({
   c,
   auth,
   credentials,
+  userId,
 }: {
   c: Context;
   auth: RouteAuth;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   credentials?: ModelCredentialsStorage;
+  /**
+   * List another member's rows instead of the caller's — used when a preview
+   * must mirror a run that authenticates as the addressed session's owner.
+   */
+  userId?: string;
 }): Promise<CredentialRecord[] | undefined> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant) return auth.enabled() ? [] : undefined;
   const storage = await getTenantCredentialsStorage(credentials);
   if (!storage) return [];
-  return storage.listCredentials(tenantOrgId(tenant), tenant.userId);
+  return storage.listCredentials(tenantOrgId(tenant), userId ?? tenant.userId);
 }

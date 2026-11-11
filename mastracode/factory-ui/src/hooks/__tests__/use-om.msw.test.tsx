@@ -11,8 +11,73 @@ import { omResponse } from './fixtures/om';
 
 const URL = `${TEST_BASE_URL}/web/config/om`;
 
+describe('chat thread context', () => {
+  it('sends the thread on the settings read and every settings write', async () => {
+    const seenGet = vi.fn();
+    const seenPuts = vi.fn();
+    server.use(
+      http.get(URL, ({ request }) => {
+        const url = new global.URL(request.url);
+        seenGet({
+          sessionId: url.searchParams.get('sessionId'),
+          threadId: url.searchParams.get('threadId'),
+          resourceId: url.searchParams.get('resourceId'),
+        });
+        return HttpResponse.json(omResponse());
+      }),
+      http.put(`${URL}/:setting`, async ({ params, request }) => {
+        seenPuts(params.setting, await request.json());
+        return HttpResponse.json({ ok: true, config: omResponse().config });
+      }),
+      http.put(`${URL}/:role/model`, async ({ params, request }) => {
+        seenPuts(`${params.role}/model`, await request.json());
+        return HttpResponse.json({ ok: true, config: omResponse().config });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      query: useOMQuery('session-1', undefined, 'thread-1', 'resource-1'),
+      model: useUpdateOMModel('session-1', 'observer', undefined, 'thread-1', 'resource-1'),
+      thresholds: useUpdateOMThresholds('session-1', undefined, 'thread-1', 'resource-1'),
+      attachments: useUpdateOMObserveAttachments('session-1', undefined, 'thread-1', 'resource-1'),
+    }));
+
+    await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
+    await act(async () => {
+      await result.current.model.mutateAsync({ modelId: 'auto' });
+      await result.current.thresholds.mutateAsync({ observationThreshold: 3_000 });
+      await result.current.attachments.mutateAsync({ value: true });
+    });
+    await waitForMutationsIdle(client);
+
+    expect(seenGet).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+    });
+    expect(seenPuts).toHaveBeenCalledWith('observer/model', {
+      sessionId: 'session-1',
+      modelId: 'auto',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+    });
+    expect(seenPuts).toHaveBeenCalledWith('thresholds', {
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      observationThreshold: 3_000,
+    });
+    expect(seenPuts).toHaveBeenCalledWith('observe-attachments', {
+      sessionId: 'session-1',
+      value: true,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+    });
+  });
+});
+
 describe('useOMQuery', () => {
-  describe('when no resourceId is provided', () => {
+  describe('when no sessionId is provided', () => {
     it('loads persisted settings without a session', async () => {
       const onGet = vi.fn(() => HttpResponse.json(omResponse()));
       server.use(http.get(URL, onGet));
@@ -25,18 +90,18 @@ describe('useOMQuery', () => {
     });
   });
 
-  describe('when scopes share a resource id', () => {
+  describe('when two sessions are open', () => {
     it('keeps their server responses isolated in the query cache', async () => {
       server.use(
         http.get(URL, ({ request }) => {
-          const scope = new global.URL(request.url).searchParams.get('scope');
-          return HttpResponse.json(omResponse({ observationThreshold: scope === 'org' ? 22_000 : 11_000 }));
+          const sessionId = new global.URL(request.url).searchParams.get('sessionId');
+          return HttpResponse.json(omResponse({ observationThreshold: sessionId === 'session-b' ? 22_000 : 11_000 }));
         }),
       );
 
       const { result } = renderHookWithProviders(() => ({
-        user: useOMQuery('res-1', 'user', 'factory-1'),
-        org: useOMQuery('res-1', 'org', 'factory-1'),
+        user: useOMQuery('session-a', 'factory-1'),
+        org: useOMQuery('session-b', 'factory-1'),
       }));
 
       await waitFor(() => expect(result.current.user.isSuccess && result.current.org.isSuccess).toBe(true));
@@ -45,12 +110,12 @@ describe('useOMQuery', () => {
     });
   });
 
-  describe('when a resourceId is provided', () => {
-    it('passes resourceId and returns the config', async () => {
+  describe('when a sessionId is provided', () => {
+    it('passes sessionId and returns the config', async () => {
       let seenResource: string | null = null;
       server.use(
         http.get(URL, ({ request }) => {
-          seenResource = new global.URL(request.url).searchParams.get('resourceId');
+          seenResource = new global.URL(request.url).searchParams.get('sessionId');
           return HttpResponse.json(omResponse({ observationThreshold: 12_000 }));
         }),
       );
@@ -101,7 +166,7 @@ describe('useUpdateOMThresholds', () => {
       });
       await waitForMutationsIdle(client);
 
-      expect(putBody).toEqual({ resourceId: 'res-1', observationThreshold: 55_000 });
+      expect(putBody).toEqual({ sessionId: 'res-1', observationThreshold: 55_000 });
       const cached = client.getQueryData(queryKeys.om('res-1'));
       expect(cached).toEqual(omResponse({ observationThreshold: 55_000 }));
       // single-response UX: no refetch
@@ -180,7 +245,7 @@ describe('useUpdateOMModel', () => {
       });
       await waitForMutationsIdle(client);
 
-      expect(putBody).toEqual({ resourceId: 'res-1', modelId: 'auto' });
+      expect(putBody).toEqual({ sessionId: 'res-1', modelId: 'auto' });
       expect(result.current.query.data?.config.reflector).toEqual({
         model: 'auto',
         effectiveModelId: 'openai/gpt-5.4-mini',
@@ -215,7 +280,7 @@ describe('useUpdateOMObserveAttachments', () => {
       });
       await waitForMutationsIdle(client);
 
-      expect(putBody).toEqual({ resourceId: 'res-1', value: true });
+      expect(putBody).toEqual({ sessionId: 'res-1', value: true });
       expect(result.current.query.data?.config.observeAttachments).toBe(true);
     });
   });

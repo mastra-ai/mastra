@@ -1,0 +1,20 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "openai/gpt-5.4-mini",
+        "userMessage": "Search the web through the Mastra gateway."
+      },
+      "response": {
+        "content": "Gateway web search found the Mastra release notes at https://example.test/mastra-gateway-search."
+      }
+    },
+    {
+      "match": {},
+      "response": {
+        "content": "Gateway web search e2e fallback."
+      }
+    }
+  ]
+}

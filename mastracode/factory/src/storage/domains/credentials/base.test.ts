@@ -202,4 +202,72 @@ describe('ModelCredentialsStorage enabling secretEncryption', () => {
       await backend.close();
     }
   });
+
+  it('refuses to read encrypted credentials on an instance booted without the key', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-creds-')), 'missing-key.db')}`;
+    const tenant = { orgId: 'org-1' };
+    const credential = oauth('org', Date.now() + 60_000);
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(7) } });
+    const boot = async (withEncryption?: FactorySecretEncryption) => {
+      const backend = new LibSQLFactoryStorage({ id: 'credentials-missing-key-test', url });
+      const store = backend.registerDomain(new ModelCredentialsStorage(withEncryption));
+      await backend.init();
+      const initError = await store.ensureReady().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      return { backend, store, initError };
+    };
+
+    {
+      const { backend, store } = await boot(encryption);
+      await store.setCredential(tenant, 'anthropic', credential);
+      await backend.close();
+    }
+
+    {
+      const { backend, store, initError } = await boot();
+      expect(String(initError)).toMatch(/encrypted.*no secret encryption key/i);
+      await expect(store.listCredentials('org-1', 'user-1')).rejects.toThrow(/no secret encryption key/i);
+      await backend.close();
+    }
+
+    // The keyless boot must not have rewritten the row: the keyed instance still reads it.
+    const { backend, store } = await boot(encryption);
+    expect(await store.getCredential(tenant, 'anthropic')).toEqual(credential);
+    await backend.close();
+  });
+
+  it('repairs credentials an older keyless boot rewrote as JSON-wrapped envelopes', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-creds-')), 'wrapped-envelope.db')}`;
+    const tenant = { orgId: 'org-1' };
+    const credential = oauth('org', Date.now() + 60_000);
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(7) } });
+    const boot = async () => {
+      const backend = new LibSQLFactoryStorage({ id: 'credentials-wrapped-test', url });
+      const store = backend.registerDomain(new ModelCredentialsStorage(encryption));
+      await backend.init();
+      return { backend, store };
+    };
+
+    {
+      const { backend, store } = await boot();
+      await store.setCredential(tenant, 'anthropic', credential);
+      // What the old plaintext migration wrote: the envelope stored as JSON text.
+      const row = await backend.ops.findOne<{ id: string; data: string }>('model_provider_credentials', {});
+      await backend.ops.updateAtomic<{ data: string }>('model_provider_credentials', { id: row!.id }, () => ({
+        data: JSON.stringify(row!.data),
+      }));
+      await backend.close();
+    }
+
+    // Two keyed boots: the first re-encrypts the wrapped row (the old double-wrap path), both must read the credential.
+    for (let i = 0; i < 2; i++) {
+      const { backend, store } = await boot();
+      expect(await store.listCredentials('org-1', 'user-1')).toEqual([
+        expect.objectContaining({ scope: 'org', credential }),
+      ]);
+      await backend.close();
+    }
+  });
 });

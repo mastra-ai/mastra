@@ -57,7 +57,7 @@ function Dialog({
   }
 
   return (
-    <DialogContext.Provider value={{ intent, pending }}>
+    <DialogContext.Provider value={{ intent, pending, isDrawer }}>
       {isDrawer ? (
         <Drawer {...rootProps} onOpenChange={handleOpenChange} />
       ) : (
@@ -109,8 +109,7 @@ function DialogContent({
   initialFocus,
   ...props
 }: DialogContentProps) {
-  const { intent, pending } = useDialogContext();
-  const isDrawer = useIsDrawer();
+  const { intent, pending, isDrawer } = useDialogContext();
   const closeRef = React.useRef<HTMLButtonElement>(null);
   const isDestructive = intent === 'destructive';
   const popupProps = {

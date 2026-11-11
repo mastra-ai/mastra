@@ -10,14 +10,21 @@ import type { ReactNode } from 'react';
 import type { DragPayload } from '../boardDrag';
 import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
-import { BoardStageIcon, stageTintClass } from './BoardIcons';
+import { BoardStageIcon, stageHeaderTintClass } from './BoardIcons';
 
 export const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
 
 /** Each row lays out its own columns, so one wide action or badge never narrows every other title. */
 export function BoardList({ children }: { children: ReactNode }) {
   return (
-    <DataList columns="minmax(0,1fr)" variant="light" fit="container" aria-label="Board stages" className="p-0">
+    <DataList
+      columns="minmax(0,1fr)"
+      variant="light"
+      fit="container"
+      scrollable={false}
+      aria-label="Board stages"
+      className="p-0"
+    >
       {children}
     </DataList>
   );
@@ -63,7 +70,7 @@ export function BoardListGroup({
       <div
         className={cn(
           'col-span-full mb-1 flex min-h-9 items-center gap-2 rounded-lg py-1 pr-1 pl-3 transition-colors motion-reduce:transition-none',
-          dropZone.isDragOver ? 'bg-fill-hover' : stageTintClass(stage, phaseKind),
+          dropZone.isDragOver ? 'bg-fill-hover' : stageHeaderTintClass(stage, phaseKind),
         )}
       >
         <h2 className="m-0 min-w-0 flex-1">
@@ -92,7 +99,8 @@ export function BoardListGroup({
       </div>
       <CollapsibleContent
         keepMounted
-        render={<div className={SPANS_LIST_GRID} />}
+        // Clip during the collapse animation, then let the first/last row's activity halo extend beyond the panel.
+        render={<div className={cn(SPANS_LIST_GRID, 'data-open:not-data-starting-style:overflow-visible')} />}
         className={cn(SPANS_LIST_GRID, 'gap-y-px [&>:not(.data-list-row)]:col-span-full')}
       >
         {children}

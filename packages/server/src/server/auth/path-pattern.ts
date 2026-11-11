@@ -58,11 +58,14 @@ export function parse(input: string | RegExp, loose?: boolean): ParsedPattern {
     } else if (c === ':') {
       o = tmp.indexOf('?', 1);
       ext = tmp.indexOf('.', 1);
-      keys.push(tmp.substring(1, !!~o ? o : !!~ext ? ext : tmp.length));
+      keys.push(tmp.substring(1, ~o ? o : ~ext ? ext : tmp.length));
       pattern += !!~o && !~ext ? '(?:/([^/]+?))?' : '/([^/]+?)';
-      if (!!~ext) pattern += (!!~o ? '?' : '') + '\\' + tmp.substring(ext);
+      if (~ext) pattern += (~o ? '?' : '') + '\\' + tmp.substring(ext);
     } else {
-      pattern += '/' + tmp;
+      // Escape regex metacharacters so static segments stay literal. Without this,
+      // a public route like '/a.b' would also match '/axb' and could skip auth for
+      // a later protected route the framework dispatches instead.
+      pattern += '/' + tmp.replace(/([.+*?^${}()|[\]\\])/g, '\\$1');
     }
   }
 

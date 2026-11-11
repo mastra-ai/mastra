@@ -1,5 +1,43 @@
 # @mastra/schema-compat
 
+## 1.3.18-alpha.0
+
+### Patch Changes
+
+- Fixed Gemini rejecting tools whose input schema has a numeric, boolean or empty-string literal, such as `z.literal(1)`, `z.literal(true)` or `z.union([z.string(), z.literal('')])`. Gemini only accepts non-empty string enums, so one such field made every request to the agent fail with HTTP 400. These fields are now sent as their plain type with the allowed values in the description. String enums from external JSON Schema that omit `type` now get `type: "string"`. Tool arguments are still validated against your original schema. Fixes #29167. ([#29416](https://github.com/mastra-ai/mastra/pull/29416))
+
+## 1.3.17
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`json-schema-to-zod@^2.8.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.8.1) (from `^2.7.0`, in `dependencies`)
+  - Updated dependency [`zod-from-json-schema@0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.135` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.135) (from `^3.0.133`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/google@^3.0.138` ↗︎](https://www.npmjs.com/package/@ai-sdk/google/v/3.0.138) (from `^3.0.135`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.131` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.131) (from `^3.0.130`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+
+## 1.3.17-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`json-schema-to-zod@^2.8.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.8.1) (from `^2.7.0`, in `dependencies`)
+  - Updated dependency [`zod-from-json-schema@0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.135` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.135) (from `^3.0.133`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/google@^3.0.138` ↗︎](https://www.npmjs.com/package/@ai-sdk/google/v/3.0.138) (from `^3.0.135`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.131` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.131) (from `^3.0.130`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+
+## 1.3.16
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 1.3.16-alpha.0
 
 ### Patch Changes

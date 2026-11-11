@@ -204,6 +204,15 @@ function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
   return value;
 }
 
+// zod v4 reports a missing value as "Invalid input: expected X, received undefined";
+// keep the v3 "Required" wording that the form shows for blank required fields.
+function toFormMessage(err: any): string {
+  if (err?.code === 'invalid_type' && typeof err.message === 'string' && err.message.endsWith('received undefined')) {
+    return 'Required';
+  }
+  return err.message;
+}
+
 export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   private _schema: T;
   constructor(schema: T) {
@@ -232,7 +241,7 @@ export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
       success: false,
       errors: issues.map((err: any) => ({
         path: err.path as string[],
-        message: err.message,
+        message: toFormMessage(err),
       })),
     } as const;
   }

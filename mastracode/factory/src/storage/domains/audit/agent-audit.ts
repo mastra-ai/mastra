@@ -10,7 +10,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { executableCommand, runsPullRequestCreate } from '../../../session/shell-commands.js';
 import type { AuditAgentEmitter } from './domain.js';
 
-type FactorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
+type FactorySessionState = { factoryProjectId?: string; projectRepositoryId?: string; projectPath?: string };
 
 interface ToolObserverContext {
   toolName: string;
@@ -77,7 +77,8 @@ export async function observeAgentGitAction({
     const controller = toolContext.context.get('controller') as
       | AgentControllerRequestContext<FactorySessionState>
       | undefined;
-    const worktreePath = controller?.scope;
+    // The workspace sets `projectPath` to the session's checkout.
+    const worktreePath = controller?.getState().projectPath || undefined;
     const targets = worktreePath ? [{ type: 'worktree', id: worktreePath }] : [];
 
     if (GIT_COMMIT_RE.test(command)) {
@@ -99,7 +100,7 @@ export async function observeAgentGitAction({
     if (pullRequestUrl) {
       const slug = pullRequestRepository(pullRequestUrl);
       const slugs =
-        resolveRepositorySlugs && controller?.resourceId ? await resolveRepositorySlugs(controller.resourceId) : [];
+        resolveRepositorySlugs && controller?.sessionId ? await resolveRepositorySlugs(controller.sessionId) : [];
       const repository = slug && slugs.find(candidate => candidate.toLowerCase() === slug.toLowerCase());
       if (slugs.length > 0 && !repository) {
         console.warn("[Audit] Pull request URL is not in this Factory's environment", { url: pullRequestUrl });

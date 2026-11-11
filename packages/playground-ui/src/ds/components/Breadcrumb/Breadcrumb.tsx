@@ -4,6 +4,7 @@ import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
+import { PopupAnchorProvider } from '@/ds/primitives/popup-anchor';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover, quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -44,6 +45,8 @@ export interface CrumbProps {
    * When the crumb doesn't navigate (current crumb, or no `to`), its hit area covers the whole crumb.
    */
   switcher?: React.ReactNode;
+  /** For a crumb that navigates in place (`as="button"`) rather than through a route. */
+  onClick?: React.MouseEventHandler;
   'data-testid'?: string;
 }
 
@@ -63,10 +66,12 @@ export const Crumb = ({
 }: CrumbProps) => {
   const Root = as || 'span';
   const switcherCoversCrumb = Boolean(switcher && (isCurrent || !to));
+  const crumbRef = React.useRef<HTMLLIElement>(null);
 
   return (
     <>
       <li
+        ref={crumbRef}
         className={cn(
           'group flex h-control-sm min-w-0 items-center',
           isCurrent ? 'shrink' : 'shrink-0',
@@ -121,7 +126,8 @@ export const Crumb = ({
                 '[&_button]:bg-transparent! [&_button:enabled]:after:absolute [&_button:enabled]:after:inset-0 [&_button:enabled]:after:rounded-full',
             )}
           >
-            {switcher}
+            {/* The switcher's popup opens from the crumb's start, like a menu on the whole crumb. */}
+            <PopupAnchorProvider value={crumbRef}>{switcher}</PopupAnchorProvider>
           </span>
         )}
         {action && <span className="-ml-1 flex h-control-sm shrink-0 items-center">{action}</span>}

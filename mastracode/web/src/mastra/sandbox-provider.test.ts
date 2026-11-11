@@ -17,10 +17,8 @@ vi.mock('@mastra/factory', async importOriginal => {
 
 /**
  * Sandbox selection lives inline in the entry, which hands the factory one
- * host `FactorySandbox` chosen at boot, because `src/mastra/index.ts` is
- * copied verbatim into the create-factory template (scripts/sync-template.mjs)
- * — the entry must stay a single self-contained file. These tests boot the
- * real entry and create session sandboxes from that host object directly.
+ * host `FactorySandbox` chosen at boot. These tests boot the real entry and
+ * create session sandboxes from that host object directly.
  *
  * Provider precedence: Platform > E2B > Local. Template *definitions* are
  * covered by `@mastra/platform-workspace` repo-template tests; here we pin

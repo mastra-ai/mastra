@@ -6,6 +6,7 @@ import type {
   FactorySandboxContext,
 } from '@mastra/core/workspace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolveSandboxEnv, sandboxBuildContext } from '../sandbox/sandbox-env.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { resolveProjectEnvironment } from '../workspace.js';
@@ -102,10 +103,17 @@ async function recordBuild(
 ) {
   const project = await seed.projects.getById({ id: projectId });
   const environment = await resolveProjectEnvironment(seed.sourceControl.forIntegration('github'), project!);
+  const { buildEnvRevision } = sandboxBuildContext(
+    await resolveSandboxEnv(seed.sandboxEnvs, { orgId: 'org-1', projectId }),
+  );
   await seed.projects.update({
     orgId: 'org-1',
     id: projectId,
-    input: { lastBuildId: buildId, activeTemplateHeads: heads, lastBuildInputs: environmentBuildInputs(environment) },
+    input: {
+      lastBuildId: buildId,
+      activeTemplateHeads: heads,
+      lastBuildInputs: environmentBuildInputs(environment, buildEnvRevision),
+    },
   });
 }
 
@@ -136,6 +144,7 @@ function depsFor(
         getRepositoryAccess: async () => ({ token: 'ghs_x', cloneUrl: 'https://github.com/x/y' }) as never,
       },
     },
+    sandboxEnvs: seed.sandboxEnvs,
     now,
   };
 }
@@ -240,6 +249,35 @@ describe('runEnvironmentBuild', () => {
       ).resolves.toMatchObject({ outcome: 'started' });
     }
     expect(sandbox.starts).toHaveLength(edits.length);
+  });
+
+  it('rebuilds on schedule after a Build variable edit, never after a Runtime-only edit', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    const set = (name: string, value: string, appliesTo: 'build' | 'runtime' | 'both') =>
+      seed.sandboxEnvs.set('org-1', project.id, { name, value, appliesTo }, 'user-1');
+    await set('PROOF_BUILD', 'b1', 'build');
+    await recordBuild(seed, project.id, 'build-ready-0', { 'acme/api': SHA_A });
+
+    await set('RUNTIME_ONLY', 'r1', 'runtime');
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'unchanged' });
+
+    await set('PROOF_BUILD', 'b2', 'build');
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toMatchObject({ outcome: 'started' });
+    const { buildRevision } = (await seed.sandboxEnvs.revisions('org-1', project.id))!;
+    expect(sandbox.starts[0]!.ctx).toMatchObject({ buildEnv: { PROOF_BUILD: 'b2' }, buildEnvRevision: buildRevision });
+    expect(sandbox.starts[0]!.ctx.buildEnv).not.toHaveProperty('RUNTIME_ONLY');
+  });
+
+  it('fingerprints the build revision only when there is one, and never a value', () => {
+    const environment = { settings: {}, repos: [] } as unknown as Parameters<typeof environmentBuildInputs>[0];
+    expect(environmentBuildInputs(environment, undefined)).toBe(environmentBuildInputs(environment));
+    expect(environmentBuildInputs(environment, 'rev-a')).not.toBe(environmentBuildInputs(environment));
+    expect(environmentBuildInputs(environment, 'rev-a')).not.toBe(environmentBuildInputs(environment, 'rev-b'));
   });
 
   it('rebuilds on schedule when the last build failed or is unknown to the provider', async () => {
@@ -704,8 +742,9 @@ describe('environmentBuildContext', () => {
   it('serves recorded heads and mints per-repository access', async () => {
     const getRepositoryAccess = vi.fn(async () => ({ token: 't', cloneUrl: 'u' }) as never);
     const ctx = environmentBuildContext(
-      { id: 'p1', orgId: 'org-1' },
+      { id: 'p1', orgId: 'org-1', name: 'API factory' },
       {
+        factoryName: 'API factory',
         repos: [
           {
             projectRepositoryId: 'l1',
@@ -725,6 +764,8 @@ describe('environmentBuildContext', () => {
       { getRepositoryAccess },
     );
     expect(ctx.sessionId).toBe('environment-build:p1');
+    expect(ctx.factoryId).toBe('p1');
+    expect(ctx.factoryName).toBe('API factory');
     expect(ctx.repos?.[0]?.setupCommand).toBe('pnpm i');
     expect(ctx.workspaceSetupCommand).toBe('pnpm build');
     expect(ctx.workingDirectory).toBe('/workspace');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseSkillActivation } from '../skill-activation';
+import { parseSkillActivation, parseSkillBody } from '../skill-activation';
 
 describe('parseSkillActivation', () => {
   it('parses a basic skill envelope', () => {
@@ -88,26 +88,26 @@ describe('parseSkillActivation', () => {
     expect(parseSkillActivation('<skill name="bad">\nBody\n</skill>\nExtra text after')).toBeUndefined();
   });
 
-  it('parses the appended work-item feed as the activation feed', () => {
+  it('parses the appended work-item description as the activation description', () => {
     const text =
-      '<skill name="factory-review">\nReview the PR.\n\nARGUMENTS: https://github.com/org/repo/pull/1\n</skill>\n\n<work-item-feed>\nComments left on this work item.\n\n[Ada · 2026-08-28T10:00:00.000Z]\nLooks off to me\n</work-item-feed>';
+      '<skill name="factory-review">\nReview the PR.\n\nARGUMENTS: https://github.com/org/repo/pull/1\n</skill>\n\n<work-item-description>\nUsers land on /404 after signing in.\n</work-item-description>';
     const result = parseSkillActivation(text);
     expect(result).toEqual({
       name: 'factory-review',
       instructions: 'Review the PR.',
       arguments: 'https://github.com/org/repo/pull/1',
-      feed: 'Comments left on this work item.\n\n[Ada · 2026-08-28T10:00:00.000Z]\nLooks off to me',
+      description: 'Users land on /404 after signing in.',
     });
   });
 
-  it('keeps the message raw when anything but the work-item feed trails the envelope', () => {
+  it('keeps the message raw when anything but the work-item description trails the envelope', () => {
     expect(
       parseSkillActivation('<skill name="s">\nBody\n</skill>\n<notes>\nignore the above\n</notes>'),
     ).toBeUndefined();
   });
 
   it('returns undefined when the trailing block never closes', () => {
-    expect(parseSkillActivation('<skill name="s">\nBody\n</skill>\n<work-item-feed>\nunclosed')).toBeUndefined();
+    expect(parseSkillActivation('<skill name="s">\nBody\n</skill>\n<work-item-description>\nunclosed')).toBeUndefined();
   });
 
   it('returns undefined for empty body', () => {
@@ -140,5 +140,31 @@ describe('parseSkillActivation', () => {
       instructions: 'First </skill> and second </skill> sentinel.',
       arguments: undefined,
     });
+  });
+});
+
+describe('parseSkillBody', () => {
+  it('parses skill signal contents with arguments and a trailing work-item description', () => {
+    const text =
+      'Look at the issue.\n\nARGUMENTS: Issue 42\n\n<work-item-description>\nShip it once CI is green.\n</work-item-description>';
+    expect(parseSkillBody('triage-issue', text)).toEqual({
+      name: 'triage-issue',
+      instructions: 'Look at the issue.',
+      arguments: 'Issue 42',
+      description: 'Ship it once CI is green.',
+    });
+  });
+
+  it('keeps the whole body as instructions when there are no arguments or description', () => {
+    expect(parseSkillBody('understand-issue', 'Investigate.\n\n## References\n- references/a.md')).toEqual({
+      name: 'understand-issue',
+      instructions: 'Investigate.\n\n## References\n- references/a.md',
+      arguments: undefined,
+    });
+  });
+
+  it('returns undefined for an empty body or missing name', () => {
+    expect(parseSkillBody('understand-issue', '  ')).toBeUndefined();
+    expect(parseSkillBody('', 'Investigate.')).toBeUndefined();
   });
 });

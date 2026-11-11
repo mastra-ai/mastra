@@ -11,8 +11,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { createBoardRegistry } from '../boards/index.js';
+import { boardFlow, boardPhaseOutcomes } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { IntakeRoutesReader } from '../boards/intake-routing.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource, StoredBoardDetails } from '../boards/project-boards.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -22,11 +25,10 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { WorkItemSource } from '../rules/types.js';
+import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -35,7 +37,7 @@ import type {
   CreateWorkItemInput,
   FactoryDeferredDecisionRecord,
   UpdateWorkItemInput,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import {
@@ -48,9 +50,10 @@ import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/wor
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
+import { boardSnapshot, matchesEtag } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -59,9 +62,10 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Work-items domain backing the kanban board. */
   workItems: WorkItemsStorage;
   /** Boards installed for this Factory instance. */
-  boardRegistry?: BoardRegistry;
-  /** Comments domain — backs the mention attention provider. */
-  comments: WorkItemCommentsStorage;
+  /** A fixed registry, or the per-project boards. Defaults to the built-in boards. */
+  boardRegistry?: BoardRegistry | ProjectBoardSource;
+  /** The project's intake routes, which place a card filed without a board. */
+  intakeRoutes?: IntakeRoutesReader;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -73,20 +77,17 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
-function toWireWorkItem(item: WorkItemRow): WorkItemRow {
-  if (
-    !item.metadata ||
-    (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
-      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata) &&
-      !(EXTERNAL_SOURCE_MISSING_KEY in item.metadata))
-  ) {
-    return item;
-  }
-  return { ...item, metadata: publicWorkItemMetadata(item.metadata) ?? {} };
+function toWireWorkItem(item: Card): Card {
+  return {
+    ...item,
+    workItem: { ...item.workItem, metadata: publicWorkItemMetadata(item.workItem.metadata) },
+    // Keep the legacy wire metadata for one release; storage remains strictly split.
+    metadata: publicWorkItemMetadata({ ...item.workItem.metadata, ...item.metadata }) ?? {},
+  };
 }
 
 /** Session ids of the listed cards that the predicate picks, each once. */
-function sessionIdsWhere(items: WorkItemRow[], predicate: (sessionId: string) => boolean): string[] {
+function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) => boolean): string[] {
   const picked = new Set<string>();
   for (const item of items) {
     for (const { sessionId } of Object.values(item.sessions)) {
@@ -94,10 +95,6 @@ function sessionIdsWhere(items: WorkItemRow[], predicate: (sessionId: string) =>
     }
   }
   return [...picked];
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -202,11 +199,21 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
   };
 }
 
-export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
-  #defaultBoards: BoardRegistry | undefined;
+/** Where a catalog board came from, whether it can be edited, and what is wrong with it. */
+function catalogDetails(details: StoredBoardDetails | undefined) {
+  if (!details) return {};
+  return {
+    source: details.source,
+    editable: details.editable,
+    ...(details.problems.length > 0 ? { problems: details.problems } : {}),
+  };
+}
 
-  get #boards(): BoardRegistry {
-    return this.deps.boardRegistry ?? (this.#defaultBoards ??= createBoardRegistry());
+export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
+  #source: ProjectBoardSource | undefined;
+
+  get #boards(): ProjectBoardSource {
+    return (this.#source ??= toBoardSource(this.deps.boardRegistry));
   }
 
   /** Resolve the `(orgId, userId)` tenant or a ready-to-return error response. */
@@ -270,7 +277,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     patch,
   }: {
     context: Context;
-    item: WorkItemRow;
+    item: Card;
     patch: Record<string, unknown>;
   }): Promise<void> {
     await this.deps.audit.emit({
@@ -313,7 +320,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         });
         if (!settled.ok) return c.json({ error: settled.code }, 409);
         const { decision } = settled;
-        return c.json({ decision: decisionSummary(this.#boards, decision) });
+        return c.json({ decision: decisionSummary(await this.#boards.load(resolved), decision) });
       },
     });
   }
@@ -328,19 +335,51 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
+          const project = this.#boards.describe
+            ? await this.#boards.describe(resolved)
+            : { registry: await this.#boards.load(resolved), details: undefined, problems: [] };
           return c.json({
-            boards: [...this.#boards].map(([id, board]) => ({
+            boards: [...project.registry].map(([id, board]) => ({
               id,
-              title: board.title,
+              ...catalogDetails(project.details?.get(id)),
+              name: board.name,
+              title: board.name,
+              ...(board.description !== undefined ? { description: board.description } : {}),
               initialPhase: board.initialPhase,
+              flow: catalogFlow(boardFlow(board)),
               phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
                 id: phaseId,
-                title: phase.title,
+                name: phase.name,
+                title: phase.name,
+                ...(phase.description !== undefined ? { description: phase.description } : {}),
                 kind: phase.kind,
-                ...(phase.kind === 'working' ? { role: phase.role } : {}),
+                nextPhases: [...phase.nextPhases],
+                ...(phase.kind === 'working'
+                  ? {
+                      role: phase.runner.context,
+                      context: phase.runner.context,
+                      ...(phase.runner.skill ? { skill: phase.runner.skill } : {}),
+                      ...(phase.runner.goal ? { goal: { ...phase.runner.goal } } : {}),
+                      autoStart: phase.autoStart === true,
+                      ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
+                      ...(phase.exitTool
+                        ? {
+                            exitTool: {
+                              id: phase.exitTool.id,
+                              autoApprove: phase.exitTool.autoApprove,
+                              ...(phase.exitTool.autoApproveWhen
+                                ? { autoApproveWhen: phase.exitTool.autoApproveWhen }
+                                : {}),
+                            },
+                          }
+                        : {}),
+                      ...(phase.tools ? { tools: [...phase.tools] } : {}),
+                    }
+                  : {}),
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
               })),
             })),
+            ...(project.problems.length > 0 ? { problems: [...project.problems] } : {}),
           });
         },
       }),
@@ -352,15 +391,29 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
           await workItems.ensureReady();
-          const items = await workItems.list({
+          const items = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({
-            workItems: items.map(toWireWorkItem),
-            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
-          });
+          const snapshot = boardSnapshot(
+            items,
+            toWireWorkItem,
+            sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
+            sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
+          );
+          // Every open tab refetches the whole board on each feed frame; most frames leave it unchanged.
+          const headers: Record<string, string> = {
+            ETag: snapshot.etag,
+            'Cache-Control': 'private, no-cache',
+            Vary: 'Accept-Encoding',
+          };
+          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) return c.body(null, 304, headers);
+          headers['Content-Type'] = 'application/json; charset=UTF-8';
+          if (/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) {
+            headers['Content-Encoding'] = 'gzip';
+            return c.body(new Uint8Array(await snapshot.gzipped()), 200, headers);
+          }
+          return c.body(snapshot.json, 200, headers);
         },
       }),
 
@@ -379,11 +432,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!query.success) return c.json({ error: 'invalid_metrics_range' }, 400);
           const { windowStart, windowEnd } = parseMetricsRange(query.data.from, query.data.to, new Date());
           await workItems.ensureReady();
-          const items = await workItems.list({
+          const items = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ metrics: computeFactoryMetrics(items, { windowStart, windowEnd }) });
+          const boards = await this.#boards.load({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return c.json({
+            metrics: computeFactoryMetrics(items, { windowStart, windowEnd }, boardPhaseOutcomes(boards)),
+          });
         },
       }),
 
@@ -431,16 +490,15 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             limit: query.data.limit,
           });
           const last = page.decisions.at(-1);
+          const boards = await this.#boards.load(resolved);
           const overtaken = await overtakenDecisionIds(
             workItems,
-            this.#boards,
+            boards,
             resolved,
             page.decisions.filter(decision => decision.status === 'failed'),
           );
           return c.json({
-            decisions: page.decisions.map(decision =>
-              decisionSummary(this.#boards, decision, overtaken.has(decision.id)),
-            ),
+            decisions: page.decisions.map(decision => decisionSummary(boards, decision, overtaken.has(decision.id))),
             ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
           });
         },
@@ -449,7 +507,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       ...buildAttentionRoutes({
         workItems,
         boards: this.#boards,
-        comments: this.deps.comments,
         liveSessions,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
@@ -470,16 +527,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           if (!parsedPath.success) return c.json({ error: 'invalid_decision_id' }, 422);
           const { decisionId } = parsedPath.data;
+          const boards = await this.#boards.load(resolved);
           const retried = await retryFactoryDecision({
             workItems,
-            boards: this.#boards,
+            boards,
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
             decisionId,
           });
           if (!retried.ok) return c.json({ error: retried.code }, 409);
           const { decision } = retried;
-          return c.json({ decision: decisionSummary(this.#boards, decision) });
+          return c.json({ decision: decisionSummary(boards, decision) });
         },
       }),
 
@@ -498,8 +556,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           try {
             const created = await createFactoryWorkItem({
               workItems,
-              boards: this.#boards,
+              boards: await this.#boards.load(resolved),
               transitionService,
+              intakeRoutes: this.deps.intakeRoutes,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
               userId: resolved.userId,
@@ -635,7 +694,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const existing = await workItems.get({ orgId: tenant.orgId, id });
           if (!existing) return c.json({ error: 'Work item not found' }, 404);
           if (patch.board !== undefined) {
-            const board = this.#boards.get(patch.board);
+            const boards = await this.#boards.load({
+              orgId: tenant.orgId,
+              factoryProjectId: existing.factoryProjectId,
+            });
+            const board = boards.get(patch.board);
             const stage = patch.stages?.length === 1 ? patch.stages[0] : undefined;
             if (existing.board !== null) {
               return c.json({ error: 'board_already_assigned' }, 409);
@@ -711,4 +774,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       }),
     ];
   }
+}
+
+/** A board's loop parts, by phase key, as the catalog reports them. */
+function catalogFlow(flow: FactoryRuleBoardFlow) {
+  return {
+    ...(flow.triage ? { triage: flow.triage } : {}),
+    ...(flow.build ? { build: flow.build } : {}),
+    ...(flow.selfReview ? { selfReview: flow.selfReview } : {}),
+    ...(flow.pullRequestReview ? { pullRequestReview: flow.pullRequestReview } : {}),
+    ...(flow.completed ? { completed: flow.completed.phase } : {}),
+    ...(flow.canceled ? { canceled: flow.canceled.phase } : {}),
+  };
 }

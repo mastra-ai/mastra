@@ -75,7 +75,9 @@ function toThread(
  */
 export class RemoteSession {
   readonly #remote: RemoteHandle;
-  readonly #resourceId: string;
+  readonly #sessionId: string;
+  /** Whose threads and memory the session works on; the Factory reports it when the session is created. */
+  #resourceId: string;
   readonly #listeners = new Set<AgentControllerEventListener>();
   #unsubscribe: (() => void) | undefined;
   #threadId: string | null = null;
@@ -89,14 +91,16 @@ export class RemoteSession {
   #pendingUserIds: string[] = [];
   readonly #userIdMap = new Map<string, string>();
 
-  constructor(address: FactoryAddress, resourceId: string, remote?: RemoteHandle) {
-    this.#resourceId = resourceId;
-    this.#remote = remote ?? createFactoryClient(address).getAgentController(FACTORY_CONTROLLER_ID).session(resourceId);
+  constructor(address: FactoryAddress, sessionId: string, remote?: RemoteHandle) {
+    this.#sessionId = sessionId;
+    this.#resourceId = sessionId;
+    this.#remote = remote ?? createFactoryClient(address).getAgentController(FACTORY_CONTROLLER_ID).session(sessionId);
   }
 
   /** Create/resume the remote session, hydrate the mirror, and open the event stream. */
   async connect(): Promise<void> {
-    await this.#remote.create();
+    const created = await this.#remote.create();
+    if (created?.resourceId) this.#resourceId = created.resourceId;
     await Promise.all([this.#hydrate(), this.#refreshPermissions()]);
     const subscription = await this.#remote.subscribe({
       reconnect: true,
@@ -214,14 +218,14 @@ export class RemoteSession {
   readonly identity = {
     getResourceId: () => this.#resourceId,
     getDefaultResourceId: () => this.#resourceId,
-    getId: () => this.#resourceId,
-    getOwnerId: () => this.#resourceId,
+    getId: () => this.#sessionId,
+    getOwnerId: () => this.#sessionId,
     setResourceId: () => {},
   };
 
   readonly thread = (() => {
     const remote = () => this.#remote;
-    const resourceId = this.#resourceId;
+    const resourceId = () => this.#resourceId;
     return {
       getId: () => this.#threadId,
       isSet: () => this.#threadId !== null,
@@ -233,12 +237,12 @@ export class RemoteSession {
         if (!this.#threadId) await this.thread.create();
         return this.#threadId!;
       },
-      list: async () => (await remote().listThreads()).map(t => toThread(t, resourceId)),
+      list: async () => (await remote().listThreads()).map(t => toThread(t, resourceId())),
       getById: async ({ threadId }: { threadId: string }) =>
         (await this.thread.list()).find(t => t.id === threadId) ?? null,
       create: async ({ title }: { title?: string } = {}) => {
         const created = await remote().createThread(title);
-        const thread = toThread(created as any, resourceId);
+        const thread = toThread(created as any, resourceId());
         this.#threadId = thread.id;
         return thread;
       },
@@ -248,7 +252,7 @@ export class RemoteSession {
       },
       clone: async ({ sourceThreadId, title }: { sourceThreadId?: string; title?: string } = {}) => {
         const created = await remote().cloneThread({ sourceThreadId, title });
-        const thread = toThread(created as any, resourceId);
+        const thread = toThread(created as any, resourceId());
         this.#threadId = thread.id;
         return thread;
       },

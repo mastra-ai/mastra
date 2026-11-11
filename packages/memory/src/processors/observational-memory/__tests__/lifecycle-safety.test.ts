@@ -694,7 +694,7 @@ describe('sync observation commits against the head text', () => {
 });
 
 describe('reflection side effects only follow an applied reflection', () => {
-  it('a reflection that lost to a newer head skips notify, suppression, extracted values, and the end marker', async () => {
+  it('a reflection that lost to a newer head skips suppression, extracted values, and the end marker', async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = createOM(storage);
     const ids = await setupThread(storage);
@@ -718,10 +718,6 @@ describe('reflection side effects only follow an applied reflection', () => {
         extractedValues: { currentTask: 'loser task' },
       } as Awaited<ReturnType<typeof om.reflector.call>>;
     });
-    const notify = vi.spyOn(
-      om.reflector as unknown as { notifyReflectionCommitted: () => Promise<void> },
-      'notifyReflectionCommitted',
-    );
     const suppression = (om.reflector as unknown as { syncReflectionSuppression: Map<string, number> })
       .syncReflectionSuppression;
     const patchThread = vi.spyOn(storage, 'patchThread');
@@ -747,7 +743,6 @@ describe('reflection side effects only follow an applied reflection', () => {
     expect(head.id).toBe(winner.id);
     expect(head.activeObservations).toBe('- winning reflection');
     expect(rows).toHaveLength(2);
-    expect(notify).not.toHaveBeenCalled();
     expect(suppression.size).toBe(0);
     // The losing reflection's extracted values must not overwrite the winner's thread metadata.
     expect(patchThread).not.toHaveBeenCalled();

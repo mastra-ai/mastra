@@ -115,7 +115,7 @@ const SaveAsPromptBlockDialog = ({
               <Input
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="Brief description..."
+                placeholder="Brief description"
               />
             </Field>
             {error ? (

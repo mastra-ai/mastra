@@ -33,8 +33,8 @@ describe('ToolCallEdit', () => {
     const rows = () => container.querySelectorAll('[role="group"] > div');
     await waitFor(
       () => {
-        expect(rows()[0]?.querySelectorAll('.shiki-token').length).toBeGreaterThan(1);
-        expect(rows()[2]?.querySelectorAll('.shiki-token').length).toBeGreaterThan(1);
+        expect(rows()[0]?.querySelectorAll('[class^="syntax-"]').length).toBeGreaterThan(1);
+        expect(rows()[2]?.querySelectorAll('[class^="syntax-"]').length).toBeGreaterThan(1);
       },
       { timeout: 5000 },
     );

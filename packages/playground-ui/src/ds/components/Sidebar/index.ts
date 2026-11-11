@@ -1,4 +1,5 @@
 export { Sidebar } from './sidebar';
+export { SidebarBadge, type SidebarBadgeProps } from './header/sidebar-badge';
 export { SidebarBrand, type SidebarBrandProps } from './header/sidebar-brand';
 export { SidebarCommandHeader, type SidebarCommandHeaderProps } from './header/sidebar-command-header';
 export { SidebarFooter, type SidebarFooterProps } from './footer/sidebar-footer';
@@ -7,7 +8,7 @@ export { SidebarHeader, type SidebarHeaderProps } from './header/sidebar-header'
 export { SidebarMeter, type SidebarMeterProps, type SidebarMeterTone } from './footer/sidebar-meter';
 export { SidebarNav, type SidebarNavProps } from './nav/sidebar-nav';
 export { SidebarNavHeader, type SidebarNavHeaderProps } from './nav/sidebar-nav-header';
-export { SidebarNavLink, type SidebarLink, type SidebarNavLinkProps } from './nav/sidebar-nav-link';
+export { SidebarNavAction, SidebarNavLink, type SidebarLink, type SidebarNavLinkProps } from './nav/sidebar-nav-link';
 export { SidebarNavShowMore, type SidebarNavShowMoreProps } from './nav/sidebar-nav-show-more';
 export { navItemClasses, type SidebarNavItemSize } from './nav/sidebar-nav-item-classes';
 export { getIsLinkActive } from './nav/sidebar-link-active';

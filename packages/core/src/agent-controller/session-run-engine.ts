@@ -14,7 +14,7 @@ import { isLeaseProvider } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
-import type { Session, SessionMachinery } from './session';
+import type { PendingSuspension, Session, SessionMachinery } from './session';
 import {
   ABORTED_BY_USER_REASON,
   SOURCE_APPROVAL_CALLS_KEY,
@@ -27,6 +27,7 @@ import {
   getDisplayTransform,
   toStepTokenUsage,
 } from './stream-content';
+import { isToolResultError } from './tool-result';
 import { createEmptyTokenUsage } from './types';
 import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
 
@@ -787,7 +788,7 @@ export class SessionRunEngine {
           toolCallId: getString(toolResult.toolCallId) ?? '',
           toolName: getString(toolResult.toolName) ?? '',
           result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
-          isError: getBoolean(toolResult.isError, false),
+          isError: isToolResultError(toolResult),
           providerMetadata: isProviderMetadata(toolResult.providerMetadata) ? toolResult.providerMetadata : undefined,
         });
         break;
@@ -847,7 +848,7 @@ export class SessionRunEngine {
               agentType,
               subToolName: getString(nested.toolName) ?? '',
               subToolResult: output.type === 'tool-error' ? nested.error : nested.result,
-              isError: output.type === 'tool-error' || getBoolean(nested.isError, false),
+              isError: output.type === 'tool-error' || isToolResultError(nested),
             });
             break;
         }
@@ -1178,7 +1179,12 @@ export class SessionRunEngine {
       }
 
       case 'error': {
-        const streamError = getErrorFromUnknown(getPayload(chunk).error);
+        const errorPayload = getPayload(chunk);
+        const streamError = getErrorFromUnknown(errorPayload.error);
+        // A chunk that names the tool call it failed for reports a failure of that call
+        // only: the run stays alive, so suspensions parked for sibling calls of the same
+        // run stay resumable.
+        const failedToolCallId = getString(errorPayload.toolCallId);
         this.#session.emit({ type: 'error', error: streamError });
         if (!(streamError instanceof AgentThreadLeaseLostError)) {
           this.retractFailedRunSuspensions({
@@ -1186,6 +1192,7 @@ export class SessionRunEngine {
             threadId: state.threadId,
             runId: chunk.runId ?? this.#session.run.getRunId(),
             reason: streamError.message,
+            toolCallId: failedToolCallId,
           });
         }
         break;
@@ -1603,6 +1610,9 @@ export class SessionRunEngine {
             toolCallId,
             exitCode,
             success: getBoolean(d?.success, exitCode === 0),
+            killed: getBoolean(d?.killed, false),
+            timedOut: getBoolean(d?.timedOut, false),
+            error: getString(d?.error),
           });
         }
         break;
@@ -1781,12 +1791,16 @@ export class SessionRunEngine {
     aborted,
     resourceId,
     threadId,
+    terminalError,
+    abortReason,
   }: {
     suspended?: boolean;
     error?: boolean;
     aborted?: boolean;
     resourceId?: string;
     threadId?: string;
+    terminalError?: string;
+    abortReason?: string;
   }): Promise<void> {
     const reason = error
       ? 'error'
@@ -1797,8 +1811,10 @@ export class SessionRunEngine {
           : 'complete';
     // A follower Session mirrors suspensions from runs it does not own. Once
     // such a run completes (it was resumed elsewhere), its parked calls were
-    // answered, so drop them without a cancellation event. Error and tripwire
-    // finishes retract in their chunk handlers; lease loss keeps them parked.
+    // answered, so drop them without a cancellation event. An aborted run or a
+    // non-success finish (e.g. content-filter) ends the call for good, so
+    // retract it with a cancellation event. Error chunks and tripwires retract
+    // in their chunk handlers; lease loss keeps them parked.
     const runId = this.#session.run.getRunId();
     if (reason === 'complete' && resourceId && threadId && runId) {
       for (const s of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
@@ -1809,35 +1825,58 @@ export class SessionRunEngine {
           toolCallId: s.toolCallId,
         });
       }
+    } else if (reason === 'aborted') {
+      this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: ABORTED_BY_USER_REASON });
+    } else if (reason === 'error' && terminalError) {
+      this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: terminalError });
     }
-    await this.#session.finishAgentRun(reason);
+    await this.#session.finishAgentRun(reason, reason === 'aborted' ? { abortReason } : undefined);
     this.#session.run.reset();
   }
 
+  /**
+   * Drop suspensions that a failed run can no longer resume. With `toolCallId`, only that
+   * call's suspension is dropped: the stream reported a failure scoped to one tool call
+   * (for example its own save failed) while the rest of the run is still live.
+   */
   private retractFailedRunSuspensions({
     resourceId,
     threadId,
     runId,
     reason,
+    toolCallId,
   }: {
     resourceId: string | undefined;
     threadId: string | undefined;
     runId: string | null;
     reason: string;
+    toolCallId?: string;
   }): void {
     if (!resourceId || !threadId || !runId) return;
 
-    for (const suspension of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
-      this.#session.emit({
-        type: 'tool_suspension_cancelled',
-        resourceId: suspension.resourceId,
-        threadId: suspension.threadId,
-        runId: suspension.runId,
-        toolCallId: suspension.toolCallId,
-        toolName: suspension.toolName,
-        reason,
-      });
+    if (toolCallId) {
+      const suspension = this.#session.suspensions.get({ resourceId, threadId, runId, toolCallId });
+      if (!suspension) return;
+      this.#session.suspensions.delete({ resourceId, threadId, runId, toolCallId });
+      this.emitSuspensionCancelled(suspension, reason);
+      return;
     }
+
+    for (const suspension of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
+      this.emitSuspensionCancelled(suspension, reason);
+    }
+  }
+
+  private emitSuspensionCancelled(suspension: PendingSuspension, reason: string): void {
+    this.#session.emit({
+      type: 'tool_suspension_cancelled',
+      resourceId: suspension.resourceId,
+      threadId: suspension.threadId,
+      runId: suspension.runId,
+      toolCallId: suspension.toolCallId,
+      toolName: suspension.toolName,
+      reason,
+    });
   }
 
   private async handleSubscribedStreamError(error: unknown, resourceId: string, threadId: string): Promise<void> {
@@ -1914,15 +1953,17 @@ export class SessionRunEngine {
             chunk.type === 'tripwire' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const suspended =
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-              undefined;
+            // Finish the stream state before checking the chunk type: it emits the
+            // `message_end` that closes the assistant message, which a turn ending in a
+            // tool suspension needs as much as any other.
+            const finished = streamResult ?? this.finishStreamState(currentRun);
+            const suspended = chunk.type === 'tool-call-suspended' || finished.suspended || undefined;
             const aborted = chunk.type === 'abort';
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
             // content-filter refusal) becomes an explicit error so the
             // run never silently stops without a visible terminal state.
             let isError = chunk.type === 'error';
+            let terminalError: string | undefined;
             if (
               currentRun.terminalError &&
               !isError &&
@@ -1931,6 +1972,7 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
+              terminalError = currentRun.terminalError;
               this.#session.emit({
                 type: 'error',
                 error: new Error(currentRun.terminalError),
@@ -1943,6 +1985,8 @@ export class SessionRunEngine {
               aborted,
               resourceId: currentRun.resourceId,
               threadId: currentRun.threadId,
+              terminalError,
+              abortReason: aborted ? getString(getRecord(chunk.payload)?.reason) : undefined,
             });
             currentRun = undefined;
             if (aborted) {

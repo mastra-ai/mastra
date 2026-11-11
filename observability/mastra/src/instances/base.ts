@@ -21,6 +21,7 @@ import type {
   ObservabilityInstance,
   CustomSamplerOptions,
   ExportedSpan,
+  SpanSnapshot,
   AnyExportedSpan,
   TraceState,
   TracingOptions,
@@ -33,6 +34,7 @@ import type {
 } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import { ObservabilityBus } from '../bus';
+import type { ObservabilityHandler } from '../bus/route-event';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { LoggerContextImpl } from '../context/logger';
@@ -44,7 +46,7 @@ import { resolveModelId } from '../model-id';
 import { BaseSpan, NoOpSpan } from '../spans';
 import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
-import { isMastraBuiltInStorageExporter, isMastraPlatformDeployment } from './platform-policy';
+import { isMastraDeprecatedStorageExporter, shouldSkipStorageExporterOnPlatform } from './platform-policy';
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
   if (!metadata || typeof metadata !== 'object') {
@@ -104,6 +106,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   #mastraEnvironment?: string;
 
+  // Construction happens before Mastra installs the application logger.
+  #pendingStorageExporterWarnings = new Set<ObservabilityExporter>();
+  #hasApplicationLogger = false;
+
   /**
    * For excluded MODEL_GENERATION spans whose constructor clears `attributes`,
    * we stash the lightweight provider/model from creation options so
@@ -115,9 +121,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
     const exporters = config.exporters ?? [];
-    const effectiveExporters = isMastraPlatformDeployment()
-      ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
-      : exporters;
+    const effectiveExporters = exporters.filter(
+      exporter => !shouldSkipStorageExporterOnPlatform(exporter, config.retainStorageExporterOnPlatform),
+    );
 
     // Apply defaults for optional fields
     this.config = {
@@ -125,6 +131,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       name: config.name,
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
       exporters: effectiveExporters,
+      retainStorageExporterOnPlatform: config.retainStorageExporterOnPlatform ?? false,
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
@@ -134,6 +141,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       serializationOptions: config.serializationOptions,
       logging: config.logging,
     };
+
+    for (const exporter of exporters) {
+      if (!effectiveExporters.includes(exporter)) {
+        this.warnStorageExporterSkipped(exporter);
+      }
+    }
 
     // Initialize cardinality filter for metrics (uses user config or defaults)
     this.cardinalityFilter = new CardinalityFilter(config.cardinality);
@@ -164,6 +177,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   __setLogger(logger: IMastraLogger) {
     super.__setLogger(logger);
+    this.#hasApplicationLogger = true;
+    for (const exporter of this.#pendingStorageExporterWarnings) {
+      this.warnStorageExporterSkipped(exporter);
+    }
+    this.#pendingStorageExporterWarnings.clear();
 
     // Propagate logger to all exporters that support it
     this.exporters.forEach(exporter => {
@@ -222,11 +240,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         return new NoOpSpan<TType>({ ...rest, metadata }, this);
       }
       // Parent is valid (sampled), so child will also be sampled - continue to create actual span
-    } else {
+    } else if (!(options.samplingDecision ?? this.shouldSample(customSamplerOptions))) {
       // Root span: perform sampling check
-      if (!this.shouldSample(customSamplerOptions)) {
-        return new NoOpSpan<TType>({ ...rest, metadata }, this);
-      }
+
+      return new NoOpSpan<TType>({ ...rest, metadata }, this);
     }
 
     // Compute or inherit TraceState
@@ -237,7 +254,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState = options.parent.traceState;
     } else {
       // Root span: compute new TraceState
-      traceState = this.computeTraceState(tracingOptions);
+      traceState = options.traceState ?? this.computeTraceState(tracingOptions);
     }
 
     // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root
@@ -341,10 +358,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * - Can have end(), update(), error() called on it
    * - Will emit SPAN_ENDED or SPAN_UPDATED when those methods are called
    *
-   * @param cached - The exported span data to rebuild from
+   * @param cached - The span snapshot to rebuild from
    * @returns A span that can have lifecycle methods called on it
    */
-  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType> {
+  rebuildSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType> {
+    // Durable snapshots of unsampled spans must stay unsampled when rebuilt.
+    if (cached.id === 'no-op' && cached.traceId === 'no-op-trace') {
+      return new NoOpSpan<TType>({ name: cached.name, type: cached.type, traceState: cached.traceState }, this);
+    }
     // Create span with existing IDs from cached data
     const span = this.createSpan<TType>({
       name: cached.name,
@@ -353,6 +374,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       spanId: cached.id,
       parentSpanId: cached.parentSpanId,
       externalParentSpanId: cached.externalParentSpanId,
+      resumedFromSpanId: cached.resumedFromSpanId,
+      outcome: cached.outcome,
+      stopReason: cached.stopReason,
+      stopReasonContext: cached.stopReasonContext,
       links: cached.links,
       startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
       input: cached.input,
@@ -362,13 +387,37 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityId: cached.entityId,
       entityName: cached.entityName,
       tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
-      traceState: cached.nestedUnderParent ? { requestContextKeys: [], nestedUnderParent: true } : undefined,
+      traceState: this.rebuildTraceState(cached),
     });
+
+    // The rebuilt span has no live parent, so restore the lineage computed before export
+    if (span instanceof BaseSpan) {
+      span.restoreEntityLineage(cached);
+    }
+
+    // Rebuilding an existing completed segment must not reopen its outcome.
+    if (cached.endTime) {
+      span.endTime = cached.endTime instanceof Date ? cached.endTime : new Date(cached.endTime);
+      span.output = cached.output;
+      span.errorInfo = cached.errorInfo;
+    }
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
 
     return span;
+  }
+
+  /**
+   * Restore the trace-level rules for a rebuilt span. Spans saved with
+   * `exportSpan()` before `snapshot()` existed fall back to the instance's
+   * configured keys, so an in-flight durable run keeps at least those across an upgrade.
+   */
+  private rebuildTraceState<TType extends SpanType>(cached: SpanSnapshot<TType>): TraceState | undefined {
+    if (cached.traceState) return cached.traceState;
+    const fallback = this.computeTraceState();
+    if (!cached.nestedUnderParent) return fallback;
+    return { requestContextKeys: fallback?.requestContextKeys ?? [], nestedUnderParent: true };
   }
 
   // ============================================================================
@@ -427,17 +476,30 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     return [...this.exporters];
   }
 
+  private warnStorageExporterSkipped(exporter: ObservabilityExporter): void {
+    if (!this.#hasApplicationLogger) {
+      this.#pendingStorageExporterWarnings.add(exporter);
+      return;
+    }
+    this.logger.warn(
+      isMastraDeprecatedStorageExporter(exporter)
+        ? 'Deprecated DefaultExporter skipped on Mastra Platform. Use MastraStorageExporter with retainStorageExporterOnPlatform: true for remote storage export.'
+        : 'Storage exporter skipped on Mastra Platform. Set retainStorageExporterOnPlatform: true on this observability config to allow remote storage export.',
+      {
+        exporterName: exporter.name,
+        serviceName: this.config.serviceName,
+        instanceName: this.config.name,
+      },
+    );
+  }
+
   /**
    * Register an additional exporter at runtime.
    * Adds to both the bus (for event routing) and the config (for getExporters).
    */
   registerExporter(exporter: ObservabilityExporter): void {
-    if (isMastraPlatformDeployment() && isMastraBuiltInStorageExporter(exporter)) {
-      this.logger.warn('Storage exporter registration skipped on Mastra Platform', {
-        exporterName: exporter.name,
-        serviceName: this.config.serviceName,
-        instanceName: this.config.name,
-      });
+    if (shouldSkipStorageExporterOnPlatform(exporter, this.config.retainStorageExporterOnPlatform)) {
+      this.warnStorageExporterSkipped(exporter);
       return;
     }
 
@@ -558,8 +620,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Internal hook used by RecordedTrace/RecordedSpan hydration to route
    * non-tracing annotation events back through the normal exporter pipeline.
    */
-  __emitRecordedEvent(event: ObservabilityEvent): void {
-    this.emitObservabilityEvent(event);
+  __emitRecordedEvent(event: ObservabilityEvent, shouldHandle?: (handler: ObservabilityHandler) => boolean): void {
+    if (shouldHandle) {
+      this.observabilityBus.emit(event, shouldHandle);
+    } else {
+      this.emitObservabilityEvent(event);
+    }
   }
 
   /**

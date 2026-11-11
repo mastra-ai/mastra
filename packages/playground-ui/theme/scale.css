@@ -40,3 +40,10 @@
   --spacing-avatar-lg: 40px;
   --spacing-dropdown: 300px;
 }
+
+/* Icon line weight, in lucide's 24-unit grid. Lucide's default of 2 renders 1px at
+   12px and 1.33px at 16px, which reads thin beside our labels; 2.25 renders 1.5px at
+   16px (1.13px at 12px, 1.88px at 20px). */
+:root {
+  --icon-stroke-width: 2.25;
+}

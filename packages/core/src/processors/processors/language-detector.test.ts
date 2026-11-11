@@ -64,6 +64,7 @@ function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResul
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { promptTokens: 10, completionTokens: 20 },
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve response text coercion when a mock fixture serializes to undefined.
         text: `${JSON.stringify(currentResult)}`,
       };
     },
@@ -739,6 +740,7 @@ describe('LanguageDetector', () => {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop' as const,
             usage: { promptTokens: 10, completionTokens: 20 },
+            // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve response text coercion when a mock fixture serializes to undefined.
             text: `${JSON.stringify(result)}`,
           };
         },

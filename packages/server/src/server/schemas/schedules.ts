@@ -32,6 +32,8 @@ const ifIdleSchema = z.object({
       requestContext: z.record(z.string(), z.unknown()).optional(),
     })
     .optional(),
+  /** Route the idle wake to the worker holding the thread claim; the fire fails if no owner answers. */
+  requireClaimedOwner: z.boolean().optional(),
 });
 
 export const workflowRunStatusSchema = z.enum([

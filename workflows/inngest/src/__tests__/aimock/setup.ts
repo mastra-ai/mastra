@@ -31,7 +31,9 @@ const globalState = globalThis as { __inngestAimockReady?: Promise<void> };
 
 beforeAll(async () => {
   if (!globalState.__inngestAimockReady) {
-    globalState.__inngestAimockReady = setupSharedTestInfrastructure();
+    globalState.__inngestAimockReady = setupSharedTestInfrastructure({
+      backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
+    });
     process.once('beforeExit', () => void teardownSharedTestInfrastructure());
   }
   await globalState.__inngestAimockReady;

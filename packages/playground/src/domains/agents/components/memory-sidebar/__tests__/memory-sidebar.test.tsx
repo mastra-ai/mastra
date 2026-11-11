@@ -151,7 +151,7 @@ function SignalProbe() {
 }
 
 // Exposes the memory-timeline open/close controls so a test can drive the OM
-// detail panel the same way the surviving "Analyze Observations" CTA does,
+// detail panel the same way the surviving "Analyze observations" CTA does,
 // without depending on a sidebar-local toggle button.
 let openPanel: () => void = () => {};
 function TimelineProbe() {
@@ -355,7 +355,7 @@ describe('MemorySidebar', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onMessages).not.toHaveBeenCalled();
 
-    // When the OM detail is opened (as the "Analyze Observations" CTA does): the
+    // When the OM detail is opened (as the "Analyze observations" CTA does): the
     // OM detail replaces the regular memory content (fills the panel), so
     // "Clone Thread" is gone and the OM subpanel + Back button are shown.
     act(() => openPanel());

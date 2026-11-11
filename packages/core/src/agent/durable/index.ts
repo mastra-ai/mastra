@@ -79,6 +79,7 @@ export {
 // DurableAgent class (base class for durable agents)
 export {
   DurableAgent,
+  applyReservedMemoryContextKeys,
   type DurableAgentConfig,
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
@@ -96,9 +97,16 @@ export {
   runResumeDurableStreamUntilIdle,
   type DurableStreamUntilIdleDeps,
 } from './durable-stream-until-idle';
+export {
+  getRunStreamSlot,
+  getScopeStreamSlot,
+  untilIdleHandlesBackgroundTask,
+} from '../../loop/shared/stream-until-idle-helpers';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
+export { persistDurableRunInput } from './persist-run-input';
+export { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 
 // Run registry for non-serializable state
 export {
@@ -108,6 +116,7 @@ export {
   getRunRegistryEntry,
   setRunRegistryEntry,
   deleteRunRegistryEntry,
+  takeRunScorerInstances,
   type ExtendedRunRegistryEntry,
 } from './run-registry';
 
@@ -121,6 +130,15 @@ export { __resetExecutionFencesForTests } from './execution-fence';
 // (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
 export { agentThreadStreamRuntime } from '../thread-stream-runtime';
 
+// Per-segment abort controller, shared with durable-agent integrations outside core
+export { createRunAbortController, type RunAbortController } from './run-abort';
+
+// Run bus + replay cache resolution, shared with durable-agent integrations outside core
+export { AgentStreamBus } from '../streams/bus';
+
+// Step-finish response message diffs, shared with durable-agent integrations outside core
+export { diffResponseMessages, type ResponseMessagesCursor } from '../streams/response-messages';
+
 // Stream adapter for pubsub-based streaming
 export {
   createDurableAgentStream,
@@ -129,6 +147,7 @@ export {
   emitStepFinishEvent,
   emitFinishEvent,
   emitErrorEvent,
+  emitAbortEvent,
   emitSuspendedEvent,
   type DurableAgentStreamOptions as StreamAdapterOptions,
   type DurableAgentStreamResult as StreamAdapterResult,
@@ -144,7 +163,12 @@ export {
   DurableAgentDefaults,
   DurableStepIds,
 } from './constants';
-export { publishAbortRequest, subscribeToAbortRequests, ensureRemoteAbortListener } from './abort-transport';
+export {
+  publishAbortRequest,
+  requestAcknowledgedAbort,
+  subscribeToAbortRequests,
+  ensureRemoteAbortListener,
+} from './abort-transport';
 
 // Types
 export type {
@@ -212,6 +236,8 @@ export {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableIsTaskCompleteStep,
+  createDurableGoalStep,
 } from './workflows/steps';
 
 // Shared workflow utilities
@@ -244,3 +270,8 @@ export type { ToolExecutionContext, ToolExecutionError } from './workflows/depre
 
 // Snapshot pruning hook shared with external durable engines (e.g. Inngest)
 export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
+
+// Shared runtime outcome classification for external durable engines.
+export { endRunSpansWithError } from './run-registry';
+/** @internal Runtime instrumentation helpers. */
+export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

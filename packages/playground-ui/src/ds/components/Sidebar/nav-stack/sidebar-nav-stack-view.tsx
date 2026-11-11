@@ -1,3 +1,4 @@
+import { Tabs } from '@base-ui/react/tabs';
 import { ArrowLeftIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
@@ -13,6 +14,8 @@ export type SidebarNavStackViewProps = ComponentPropsWithoutRef<'div'> & {
   backLabel?: string;
   returnFocusRef?: React.RefObject<HTMLElement | null>;
   onBack?: () => void;
+  /** Escape goes back, as it should from a menu. Turn it off for a view that accompanies a whole page. */
+  closeOnEscape?: boolean;
 };
 
 export function SidebarNavStackView({
@@ -21,6 +24,7 @@ export function SidebarNavStackView({
   backLabel = 'Back to main navigation',
   returnFocusRef,
   onBack,
+  closeOnEscape = true,
   children,
   className,
   ...props
@@ -37,7 +41,7 @@ export function SidebarNavStackView({
   }, [active]);
 
   React.useEffect(() => {
-    if (!active) return;
+    if (!active || !closeOnEscape) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
@@ -48,7 +52,7 @@ export function SidebarNavStackView({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [active, closeView, onBack, returnFocusRef]);
+  }, [active, closeOnEscape, closeView, onBack, returnFocusRef]);
 
   function handleBack() {
     closeView(returnFocusRef);
@@ -56,13 +60,15 @@ export function SidebarNavStackView({
   }
 
   return (
-    <div
+    <Tabs.Panel
       {...props}
+      value={value}
+      role={undefined}
+      tabIndex={undefined}
       data-slot="sidebar-nav-stack-view"
       data-value={value}
       aria-hidden={!active}
-      inert={!active}
-      className={sidebarNavStackPageClasses(active, 'view', className)}
+      className={sidebarNavStackPageClasses('view', className)}
     >
       <button
         ref={backRef}
@@ -76,6 +82,6 @@ export function SidebarNavStackView({
         <span aria-hidden="true" />
       </button>
       {children}
-    </div>
+    </Tabs.Panel>
   );
 }

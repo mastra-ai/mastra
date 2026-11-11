@@ -346,6 +346,10 @@ export class PinnedClientAdapter implements DbClient {
     return next;
   }
 
+  async drain(): Promise<void> {
+    await this.#tail;
+  }
+
   connect(): Promise<PoolClient> {
     // No domain init() currently calls connect(), and silently falling
     // back to the pool would bypass pinning. Throw so a future code path

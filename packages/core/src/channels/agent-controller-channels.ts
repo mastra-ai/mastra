@@ -321,7 +321,9 @@ export class AgentControllerChannels extends AgentChannels {
       // rejects after the next tick and the message vanishes with no trace,
       // no log, and no reply. Rejecting here reaches handleChatMessage's
       // error boundary, which tells the sender.
-      { requestContext, requireDelivery: true },
+      // Keep the run open until background tasks finish: it carries the channel's render
+      // context, so it's the run that posts their results to the chat.
+      { requestContext, requireDelivery: true, untilIdle: true },
     );
     await result.accepted;
   }
@@ -410,8 +412,14 @@ export class AgentControllerChannels extends AgentChannels {
     // The action's requestContext flows in so a `resolveSession` host revalidates
     // the execution principal on every continuation, not just on the message
     // that opened the session.
-    const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource }, requestContext);
-    if (!session.approval.isArmed({ toolCallId })) {
+    // Don't bind the thread yet: when several threads share one session, switching
+    // threads aborts whatever run is live on the other one. A gate can only be armed
+    // for the thread the session is on, so a click from any other thread is stale.
+    const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource }, requestContext, {
+      bindThread: false,
+    });
+    const onThread = session.thread.getId() === memory.thread;
+    if (!onThread || !session.approval.isArmed({ toolCallId })) {
       this.log(
         'info',
         `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval)`,
@@ -451,10 +459,13 @@ export class AgentControllerChannels extends AgentChannels {
   protected async getSessionForThread(
     thread: Pick<StorageThreadType, 'id' | 'resourceId'>,
     requestContext?: RequestContext,
+    { bindThread = true }: { bindThread?: boolean } = {},
   ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
-    if (this.resolveSession) {
+    // A caller that skips binding may get back a live session without going through
+    // createSession or the resolver, so it must pass the same EXECUTE check they do.
+    if (this.resolveSession || !bindThread) {
       await controller.requireAgentControllerFGA({
         permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
         requestContext,
@@ -472,6 +483,22 @@ export class AgentControllerChannels extends AgentChannels {
     // owner of outbound delivery for whatever session it returns. A throw is
     // tagged as a refusal so the channel error boundary keeps it out of the
     // chat thread instead of posting the host's authorization message there.
+    // createSession rebinds an existing session to the requested thread, which is
+    // exactly what a caller that doesn't want to bind is avoiding. A resolver that
+    // follows the documented pattern calls createSession too, so when the live
+    // session is on another thread, return it without asking the resolver. The
+    // caller treats that as stale and acts on nothing. When the live session is
+    // already on this thread, the resolver still runs so the host can revalidate.
+    if (!bindThread) {
+      const existing = await controller.getSession(channelResourceId, requestContext);
+      if (
+        existing &&
+        existing.identity.getResourceId() === channelResourceId &&
+        (!this.resolveSession || existing.thread.getId() !== thread.id)
+      ) {
+        return existing;
+      }
+    }
     const session = this.resolveSession
       ? await this.resolveChannelSession({ controller, thread, requestContext })
       : await controller.createSession({
@@ -479,8 +506,10 @@ export class AgentControllerChannels extends AgentChannels {
           id: channelResourceId,
           ownerId: controller.id,
           // The mapped thread is authoritative: bind it at creation so a scoped
-          // session never auto-selects or creates a different thread.
-          threadId: thread.id,
+          // session never auto-selects or creates a different thread. Without
+          // binding, only resume: a session registered after the lookup above must
+          // not be switched to this thread.
+          ...(bindThread ? { threadId: thread.id } : { resumeOnly: true }),
           requestContext,
         });
     // A session may only bind threads it owns, and the mapped thread's owner is
@@ -497,6 +526,7 @@ export class AgentControllerChannels extends AgentChannels {
     // run, so never re-switch when the session is already on this thread. The
     // inbound context flows in so the bind's history load resolves memory as
     // the stamped tenant.
+    if (!bindThread) return session;
     if (session.thread.getId() !== thread.id) {
       await session.thread.switch({ threadId: thread.id, requestContext });
     }
@@ -508,8 +538,8 @@ export class AgentControllerChannels extends AgentChannels {
    * Only render Approve/Deny controls when the session actually arms a human
    * gate. `allow` tools auto-approve and `deny` tools auto-decline inside the
    * session run, so a card for them would offer a decision nobody is waiting
-   * on. The session is looked up in the controller's live registry and must
-   * match the run's session id; otherwise controls are rendered as a fallback.
+   * on. The session is looked up in the controller's live registry by the
+   * run's session id; when it isn't live, controls are rendered as a fallback.
    *
    * @internal
    */
@@ -518,9 +548,9 @@ export class AgentControllerChannels extends AgentChannels {
     toolName: string,
   ): Promise<boolean> {
     const ctx = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
-    if (!this.controller || !ctx?.resourceId || !ctx.session?.id) return true;
-    const session = await this.controller.getSessionByResource(ctx.resourceId, ctx.scope, requestContext);
-    if (!session || session.identity.getId() !== ctx.session.id) return true;
+    if (!this.controller || !ctx?.sessionId) return true;
+    const session = await this.controller.getSession(ctx.sessionId, requestContext);
+    if (!session) return true;
     return session.resolveToolApproval(toolName) === 'ask';
   }
 

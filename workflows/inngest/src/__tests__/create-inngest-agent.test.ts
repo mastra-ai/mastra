@@ -25,6 +25,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -219,7 +220,7 @@ describe('createInngestAgent factory function', () => {
 
       const result = await mastra.recoverAllDurableAgents();
 
-      expect(result).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0 });
+      expect(result).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0, skipped: 0 });
       expect(errorSpy).not.toHaveBeenCalled();
     });
   });
@@ -260,6 +261,67 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(durableAgent.cache).toBe(customCache);
     expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
+  });
+
+  it('reuses an inner CachingPubSub instead of double-wrapping it, reporting the configured cache', () => {
+    const wrapperCache = new InMemoryServerCache();
+    const configuredCache = new InMemoryServerCache();
+    const inner = new CachingPubSub(new EventEmitterPubSub(), wrapperCache);
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-reuse-caching'),
+      inngest,
+      pubsub: inner,
+      cache: configuredCache,
+    });
+
+    expect(durableAgent.pubsub).toBe(inner);
+    expect(durableAgent.cache).toBe(configuredCache);
+  });
+
+  it("reuses an inner CachingPubSub and reports Mastra's serverCache when no cache is configured", () => {
+    const serverCache = new InMemoryServerCache();
+    const inner = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache());
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-reuse-mastra'),
+      inngest,
+      pubsub: inner,
+    });
+    durableAgent.__setMastra({ serverCache } as unknown as Mastra);
+
+    expect(durableAgent.pubsub).toBe(inner);
+    expect(durableAgent.cache).toBe(serverCache);
+  });
+
+  it("wraps with Mastra's serverCache when registered first, and keeps the resolved bus afterwards", () => {
+    const serverCache = new InMemoryServerCache();
+    const inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-mastra-cache'),
+      inngest,
+      pubsub: inner,
+    });
+    durableAgent.__setMastra({ serverCache, pubsub: new EventEmitterPubSub() } as unknown as Mastra);
+
+    const pubsub = durableAgent.pubsub as CachingPubSub;
+    expect(pubsub.getInner()).toBe(inner);
+    expect(pubsub.getCache()).toBe(serverCache);
+    expect(durableAgent.cache).toBe(serverCache);
+
+    durableAgent.__setMastra({ serverCache: new InMemoryServerCache(), pubsub: new EventEmitterPubSub() } as any);
+    expect(durableAgent.pubsub).toBe(pubsub);
+    expect(durableAgent.cache).toBe(serverCache);
+  });
+
+  it('forks onto the same inner pubsub and resolved cache', () => {
+    const inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-fork'), inngest, pubsub: inner });
+    const cache = durableAgent.cache;
+
+    const fork = durableAgent.__fork();
+    const forkPubsub = fork.pubsub as CachingPubSub;
+    expect(forkPubsub.getInner()).toBe(inner);
+    expect(forkPubsub.getCache()).toBe(cache);
+    expect(fork.cache).toBe(cache);
   });
 
   // The next two tests mirror packages/core/src/agent/durable/__tests__/resumable-streams.test.ts
@@ -316,6 +378,82 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(receivedEvents[1].type).toBe(AgentStreamEventTypes.CHUNK);
     expect(receivedEvents[1].data).toEqual({ chunk: 'World!' });
     expect(receivedEvents[2].type).toBe(AgentStreamEventTypes.FINISH);
+  });
+
+  it.each(['stream', 'generate'] as const)(
+    '%s terminates when the opening event and error event cannot be published',
+    async method => {
+      const error = new Error('Pubsub transport unavailable');
+      class UnavailablePubSub extends EventEmitterPubSub {
+        override async publish(): Promise<void> {
+          throw error;
+        }
+      }
+      const durableAgent = createInngestAgent({
+        agent: makeAgent(`opening-publish-failure-${method}`),
+        inngest,
+        pubsub: new UnavailablePubSub(),
+      });
+      const errors: unknown[] = [];
+      let cleanup: (() => void) | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const run = async () => {
+          if (method === 'generate') {
+            await expect(
+              durableAgent.generate('Hello', {
+                onError: ({ error }) => {
+                  errors.push(error);
+                },
+              }),
+            ).rejects.toThrow('Pubsub transport unavailable');
+          } else {
+            const result = await durableAgent.stream('Hello', {
+              onError: ({ error }) => {
+                errors.push(error);
+              },
+            });
+            cleanup = result.cleanup;
+            const chunks = [];
+            for await (const chunk of result.fullStream) {
+              chunks.push(chunk);
+            }
+            expect(chunks).toEqual([{ type: 'error', payload: { error } }]);
+          }
+          expect(errors).toEqual([error]);
+        };
+        await Promise.race([
+          run(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('Stream did not terminate after publish failure')), 1000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        cleanup?.();
+      }
+    },
+  );
+
+  // Steps send whole response lists when an observer that attaches mid-run can't read the run's
+  // earlier events, so the router must answer for the bus that carries the agent's stream.
+  it.each([
+    ['keeps', {}, true],
+    ['keeps no', { cache: false as const }, false],
+  ])('tells steps the agent stream %s history', (_, options, replays) => {
+    const durableAgent = createInngestAgent({
+      agent: makeAgent(`replay-routing-${replays}`),
+      inngest,
+      pubsub: new EventEmitterPubSub(),
+      ...options,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const routed = workflow.__getPubsubFactory()(new EventEmitterPubSub());
+    expect(routed.__replaysTopic(AGENT_STREAM_TOPIC('run'))).toBe(replays);
+    // Other topics follow the workflow's own bus.
+    expect(routed.__replaysTopic('workflow.events.v2.run')).toBe(false);
   });
 
   it('routes workflow agent topics through the configured pubsub exactly once', async () => {
@@ -787,6 +925,14 @@ describe('InngestAgent parity surface', () => {
     await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
   }
 
+  // Durable delivery stamps each chunk with its pubsub log index so late
+  // subscribers can order frames. The parity checks below assert the chunk
+  // sequence itself, so drop the index before comparing.
+  function withoutLogIndex<T extends { index?: number }>(chunk: T) {
+    const { index: _index, ...rest } = chunk;
+    return rest;
+  }
+
   it.each([
     { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
     { closeOnSuspend: true, registrationOptions: undefined },
@@ -1006,7 +1152,10 @@ describe('InngestAgent parity surface', () => {
         await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:acme']));
-        expect(loadWorkflowSnapshot).toHaveBeenCalledTimes(2);
+        const loopReads = loadWorkflowSnapshot.mock.calls.filter(
+          ([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_LOOP,
+        );
+        expect(loopReads).toHaveLength(2);
       } finally {
         result.cleanup();
         sendSpy.mockRestore();
@@ -1370,10 +1519,10 @@ describe('InngestAgent parity surface', () => {
       expect(sendSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            requestContext: {
+            requestContext: expect.objectContaining({
               userId: 'user-1',
               organizationId: 'org-1',
-            },
+            }),
           }),
         }),
       );
@@ -1482,6 +1631,93 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  it('does not dispatch when suspended tool history is missing, and can resume after it appears', async () => {
+    const durableAgent = makeIsolatedAgent('resume-tool-history-retry');
+    const runId = 'resume-tool-history-retry-run';
+    const outerSnapshot = {
+      status: 'suspended',
+      suspendedPaths: { [InngestDurableStepIds.AGENTIC_EXECUTION]: ['durable-tool-call'] },
+      resumeLabels: { 'purchase-1': { stepId: InngestDurableStepIds.AGENTIC_EXECUTION } },
+      context: {
+        [InngestDurableStepIds.AGENTIC_EXECUTION]: {
+          suspendPayload: { __workflow_meta: { runId: 'nested-tool-history-run' } },
+        },
+      },
+    };
+    let nestedSnapshot: any = null;
+    const loadWorkflowSnapshot = vi.fn(async ({ workflowName, runId: snapshotRunId }) => {
+      if (workflowName === InngestDurableStepIds.AGENTIC_LOOP) return outerSnapshot;
+      expect(workflowName).toBe(InngestDurableStepIds.AGENTIC_EXECUTION);
+      expect(snapshotRunId).toBe('nested-tool-history-run');
+      return nestedSnapshot;
+    });
+    (durableAgent as any).__setMastra({
+      getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot }) }),
+    });
+    const sendSpy = stubInngestSend();
+    try {
+      vi.useFakeTimers();
+      const pending = durableAgent.resume(runId, { approved: true }, { toolCallId: 'purchase-1' });
+      const failure = expect(pending).rejects.toThrow(
+        'Cannot resume run resume-tool-history-retry-run: the nested iteration snapshot does not contain suspended tool calls purchase-1.',
+      );
+      await vi.advanceTimersByTimeAsync(10_100);
+      await failure;
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+
+      const pendingUntilIdle = durableAgent.resume(
+        runId,
+        { approved: true },
+        { toolCallId: 'purchase-1', untilIdle: true },
+      );
+      const untilIdleFailure = expect(pendingUntilIdle).rejects.toThrow(
+        'the nested iteration snapshot does not contain suspended tool calls purchase-1.',
+      );
+      await vi.advanceTimersByTimeAsync(10_100);
+      await untilIdleFailure;
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+      vi.useRealTimers();
+
+      nestedSnapshot = {
+        status: 'suspended',
+        resumeLabels: { 'purchase-1': { stepId: 'durable-tool-call' } },
+        context: {
+          input: { accumulatedSteps: [{ toolCalls: [{ toolCallId: 'lookup-1', toolName: 'lookup', args: {} }] }] },
+        },
+      };
+      await expect(durableAgent.resume(runId, { approved: true }, { toolCallId: 'purchase-1' })).rejects.toThrow(
+        'Cannot resume run resume-tool-history-retry-run: the nested iteration snapshot does not contain completed LLM tool calls.',
+      );
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+
+      nestedSnapshot.context['durable-llm-execution'] = {
+        status: 'success',
+        output: { toolCalls: [{ toolCallId: 'purchase-1', toolName: 'purchase', args: {} }] },
+      };
+      const resumed = await durableAgent.resume(runId, { approved: true }, { toolCallId: 'purchase-1' });
+      try {
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        await publishStreamEvent(durableAgent, runId, {
+          type: AgentStreamEventTypes.FINISH,
+          data: { output: { text: 'Purchased item A.', steps: [] }, stepResult: { reason: 'stop' } },
+        });
+        expect((await resumed.output.toolCalls).map(call => call.payload.toolCallId)).toEqual([
+          'lookup-1',
+          'purchase-1',
+        ]);
+      } finally {
+        resumed.cleanup();
+      }
+    } finally {
+      vi.useRealTimers();
+      globalRunRegistry.delete(runId);
+      sendSpy.mockRestore();
+    }
+  });
+
   it('resume() starts after cached history', async () => {
     const durableAgent = makeIsolatedAgent('resume-stream-boundary');
     setSuspendedSnapshot(durableAgent);
@@ -1528,9 +1764,10 @@ describe('InngestAgent parity surface', () => {
       const received = [];
       for await (const chunk of result.fullStream) received.push(chunk);
 
-      expect(received).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
-      expect(received).not.toContainEqual(originalToolCall);
-      expect(received).not.toContainEqual(originalSuspension);
+      expect(received.map(withoutLogIndex)).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
+      const receivedWithoutIndex = received.map(withoutLogIndex);
+      expect(receivedWithoutIndex).not.toContainEqual(originalToolCall);
+      expect(receivedWithoutIndex).not.toContainEqual(originalSuspension);
     } finally {
       result.cleanup();
       globalRunRegistry.delete(runId);
@@ -1614,12 +1851,93 @@ describe('InngestAgent parity surface', () => {
 
       expect(result.finishReason).toBe('stop');
       expect(result.text).toBe('Done.');
-      expect(result.toolResults).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
+      expect(result.toolResults.map(withoutLogIndex)).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
       expect(result.toolCalls).toEqual([]);
     } finally {
       globalRunRegistry.delete(runId);
       sendSpy.mockRestore();
     }
+  });
+
+  describe('pre-approval text restore (#27504)', () => {
+    // These tests only control storage write ordering, which a model fixture can't
+    // reach, so no model is involved: the resumed stream is driven over pubsub.
+    const outerSnapshot = {
+      value: {},
+      context: {},
+      status: 'suspended',
+      suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+      resumeLabels: { 'approval-call': { stepId: 'agentic-loop' } },
+    };
+    // The previous iteration's snapshot: written before the approval tool call suspended.
+    const staleIteration = {
+      context: { 'durable-llm-execution': { status: 'running' } },
+      resumeLabels: {},
+    };
+    const suspendedIteration = {
+      context: {
+        input: { accumulatedSteps: [] },
+        'durable-llm-execution': { status: 'success', output: { text: 'Checking. ' } },
+      },
+      resumeLabels: { 'approval-call': { stepId: 'tool-call' } },
+    };
+
+    function setLaggingStore(durableAgent: ReturnType<typeof makeIsolatedAgent>, staleReads: number) {
+      let iterationReads = 0;
+      const load = vi.fn(async ({ workflowName }: { workflowName: string }) => {
+        if (workflowName === InngestDurableStepIds.AGENTIC_LOOP) return outerSnapshot;
+        return iterationReads++ < staleReads ? staleIteration : suspendedIteration;
+      });
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot: load }) }),
+      });
+      return load;
+    }
+
+    it('restores pre-approval text from the suspended iteration snapshot, not an earlier one', async () => {
+      const durableAgent = makeIsolatedAgent('resume-lagging-iteration');
+      const load = setLaggingStore(durableAgent, 3);
+      const runId = 'resume-lagging-iteration-run';
+      const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+        for (const data of [
+          { type: 'text-start', payload: { id: 'resumed-text' } },
+          { type: 'text-delta', payload: { id: 'resumed-text', text: 'Done.' } },
+          { type: 'text-end', payload: { id: 'resumed-text' } },
+          {
+            type: 'step-finish',
+            payload: {
+              output: { steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+              stepResult: { reason: 'stop', warnings: [] },
+              metadata: {},
+            },
+          },
+        ]) {
+          await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data });
+        }
+        await publishStreamEvent(durableAgent, runId, {
+          type: AgentStreamEventTypes.FINISH,
+          data: {
+            output: { text: 'Done.', steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            stepResult: { reason: 'stop' },
+          },
+        });
+      });
+
+      try {
+        const result = await durableAgent.resumeGenerate({ approved: true }, {
+          runId,
+          toolCallId: 'approval-call',
+        } as any);
+        expect(result.text).toBe('Checking. Done.');
+        const iterationReads = load.mock.calls.filter(
+          ([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_EXECUTION,
+        );
+        expect(iterationReads).toHaveLength(4);
+      } finally {
+        globalRunRegistry.delete(runId);
+        sendSpy.mockRestore();
+      }
+    });
   });
 
   it('forwards the per-call actor signal into the workflow trigger event', async () => {
@@ -1695,7 +2013,17 @@ describe('InngestAgent parity surface', () => {
   describe('resume targeting by toolCallId', () => {
     function makeAgentWithSnapshot(id: string, snapshot: any) {
       const durableAgent = makeIsolatedAgent(id);
-      const loadWorkflowSnapshot = vi.fn().mockResolvedValue(snapshot);
+      const loadWorkflowSnapshot = vi.fn(async ({ workflowName }) =>
+        workflowName === InngestDurableStepIds.AGENTIC_EXECUTION
+          ? {
+              resumeLabels: snapshot.resumeLabels,
+              context: {
+                input: { accumulatedSteps: [] },
+                'durable-llm-execution': { status: 'success', output: { toolCalls: [] } },
+              },
+            }
+          : snapshot,
+      );
       (durableAgent as any).__setMastra({
         getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot }) }),
       });
@@ -1764,6 +2092,51 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it("leaves the parked run's tools untouched when the resume rejects on missing suspended history", async () => {
+      // The warm-resume tool rebuild binds tools to this caller's request context.
+      // A resume that rejects must not leave them on the parked run (#25960).
+      vi.useFakeTimers();
+      const durableAgent = makeIsolatedAgent('resume-rejects-before-rebuild');
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({
+          getStore: async () => ({
+            loadWorkflowSnapshot: vi.fn(async ({ workflowName }) =>
+              workflowName === InngestDurableStepIds.AGENTIC_EXECUTION
+                ? null
+                : {
+                    value: {},
+                    context: { 'agentic-loop': nestedSuspension },
+                    status: 'suspended',
+                    suspendedPaths: { 'agentic-loop': [0] },
+                    resumeLabels: { 'tool-call-a': { stepId: 'agentic-loop' } },
+                  },
+            ),
+          }),
+        }),
+      });
+      const runId = 'resume-rejects-before-rebuild-run';
+      const tools = { lookup: { id: 'lookup' } };
+      const requestTools = { lookup: tools.lookup };
+      globalRunRegistry.set(runId, { tools, requestTools, model: undefined } as any);
+      const sendSpy = stubInngestSend();
+
+      try {
+        const assertion = expect(
+          durableAgent.resume(runId, { answer: 'yes' }, { requestContext: new RequestContext([['caller', 'second']]) }),
+        ).rejects.toThrow(/does not contain suspended tool calls tool-call-a/);
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+        const entry = globalRunRegistry.get(runId) as any;
+        expect(entry.tools).toBe(tools);
+        expect(entry.requestTools).toBe(requestTools);
+      } finally {
+        vi.useRealTimers();
+        globalRunRegistry.delete(runId);
+        sendSpy.mockRestore();
+      }
+    });
+
     it('waits for a named tool call label that lands after the previous suspended snapshot (#25158)', async () => {
       const staleSnapshot = {
         value: {},
@@ -1774,7 +2147,19 @@ describe('InngestAgent parity surface', () => {
       };
       const freshSnapshot = { ...staleSnapshot, resumeLabels: { 'tool-call-b': { stepId: 'agentic-loop' } } };
       const durableAgent = makeIsolatedAgent('resume-label-lands-late');
-      const loadSpy = vi.fn().mockResolvedValueOnce(staleSnapshot).mockResolvedValue(freshSnapshot);
+      const loadSpy = vi.fn(async ({ workflowName }) =>
+        workflowName === InngestDurableStepIds.AGENTIC_EXECUTION
+          ? {
+              resumeLabels: freshSnapshot.resumeLabels,
+              context: {
+                input: { accumulatedSteps: [] },
+                'durable-llm-execution': { status: 'success', output: { toolCalls: [] } },
+              },
+            }
+          : loadSpy.mock.calls.filter(([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_LOOP).length === 1
+            ? staleSnapshot
+            : freshSnapshot,
+      );
       (durableAgent as any).__setMastra({
         getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot: loadSpy }) }),
       });
@@ -2244,6 +2629,34 @@ describe('InngestAgent observability tracing', () => {
       // Every span produced by the run shares the root's traceId.
       const traceIds = new Set(recording.spans.map(span => span.traceId));
       expect(traceIds).toEqual(new Set([agentRuns[0].traceId]));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('ends the spans opened at prepare with the dispatch failure when the start event cannot be sent', async () => {
+    // Nothing else ends them: the run never reaches a worker, and cleanup only drops the registry entry.
+    const durableAgent = makeTracedAgent('tracing-dispatch-failure');
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockRejectedValue(new Error('inngest unavailable'));
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const [agentRun] = recording.spansOfType('agent_run');
+      const [generation] = recording.spansOfType('model_generation');
+      await vi.waitFor(() => expect(agentRun.error).toHaveBeenCalled());
+      for (const span of [agentRun, generation]) {
+        expect(span.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.objectContaining({ message: 'inngest unavailable' }),
+            outcome: 'error',
+            stopReason: 'runtime_error',
+            endSpan: true,
+          }),
+        );
+      }
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
@@ -2942,6 +3355,65 @@ describe('thread and run abort (#25156)', () => {
     }
   });
 
+  // The server's thread-abort route calls this entry point (#28310).
+  it('the thread-abort route entry point stops the active Inngest run and asks the worker to abort it', async () => {
+    const durableAgent = makeDurable('abort-thread-route');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const threadId = 'abort-thread-route-t';
+    const resourceId = 'abort-thread-route-r';
+    const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
+
+    try {
+      const controller = globalRunRegistry.get(result.runId)?.abortController;
+      expect(controller?.signal.aborted).toBe(false);
+
+      await expect(durableAgent.__abortThreadStreamAcrossProcesses({ threadId, resourceId })).resolves.toBe(true);
+
+      expect(controller?.signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  // A server that never saw the run finds it through the thread lease (#28310).
+  it('the thread-abort route asks the Inngest worker to stop the thread lease owner on a server that never saw the run', async () => {
+    const durableAgent = makeDurable('abort-thread-cold');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const leaseOwner = vi
+      .spyOn(agentThreadStreamRuntime, 'getThreadLeaseOwnerRunId')
+      .mockResolvedValue('run-on-another-server');
+    try {
+      await expect(
+        durableAgent.__abortThreadStreamAcrossProcesses({ threadId: 'cold-t', resourceId: 'cold-r' }),
+      ).resolves.toBe(true);
+      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(1);
+    } finally {
+      leaseOwner.mockRestore();
+    }
+  });
+
+  it('the thread-abort route leaves the lease owner alone when expectedRunId names another run', async () => {
+    const durableAgent = makeDurable('abort-thread-cold-stale');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const leaseOwner = vi
+      .spyOn(agentThreadStreamRuntime, 'getThreadLeaseOwnerRunId')
+      .mockResolvedValue('run-on-another-server');
+    try {
+      await expect(
+        durableAgent.__abortThreadStreamAcrossProcesses({
+          threadId: 'cold-t',
+          resourceId: 'cold-r',
+          expectedRunId: 'an-earlier-run',
+        }),
+      ).resolves.toBe(false);
+      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(0);
+    } finally {
+      leaseOwner.mockRestore();
+    }
+  });
+
   it('abortThreadStream publishes nothing when expectedRunId does not match the active run', async () => {
     const durableAgent = makeDurable('abort-thread-stale');
     const publish = vi.spyOn(durableAgent.pubsub, 'publish');
@@ -3035,5 +3507,89 @@ describe('thread and run abort (#25156)', () => {
 
     expect(() => durableAgent.abortRunStream('abort-run-publish-fails-run')).not.toThrow();
     await new Promise(resolve => setTimeout(resolve, 10));
+  });
+});
+
+describe('background task finished while untilIdle is open (#29785)', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-bg-notify',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeRegistered(id: string) {
+    const storage = new InMemoryStore();
+    const durableAgent = createInngestAgent({
+      agent: new Agent({
+        id,
+        name: id,
+        instructions: 'Test',
+        model: createMockModel() as any,
+        memory: new Memory({ storage }),
+      }),
+      inngest,
+    });
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      agents: { [id]: durableAgent as any },
+      storage,
+      backgroundTasks: { enabled: true },
+      logger: false,
+    });
+    // The durable tool-call step resolves the owner like this before notifying it.
+    const owner = Object.values(mastra.listAgents()).find(a => a.id === id) as any;
+    return { durableAgent, owner };
+  }
+
+  function finishedTask(threadId: string, resourceId: string) {
+    return {
+      threadId,
+      resourceId,
+      taskId: 'task-1',
+      toolCallId: 'call-1',
+      toolName: 'brew',
+      status: 'completed' as const,
+    };
+  }
+
+  it('does not wake the thread when an untilIdle stream is open for it', async () => {
+    const { durableAgent, owner } = makeRegistered('bg-notify-open');
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const signalSpy = vi.spyOn(durableAgent.agent, 'sendSignal');
+    const threadId = 'bg-notify-open-t';
+    const resourceId = 'bg-notify-open-r';
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      untilIdle: true,
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    try {
+      await vi.waitFor(() => expect(owner.__untilIdleHandlesBackgroundTask(threadId, resourceId, 'probe')).toBe(true));
+
+      await owner.__notifyBackgroundTaskFinished(finishedTask(threadId, resourceId));
+
+      expect(signalSpy).not.toHaveBeenCalled();
+    } finally {
+      (result as any).cleanup?.();
+      durableAgent.abortThreadStream({ threadId, resourceId, localOnly: true } as any);
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('still wakes the thread when no untilIdle stream is open', async () => {
+    const { durableAgent, owner } = makeRegistered('bg-notify-idle');
+    const signalSpy = vi.spyOn(durableAgent.agent, 'sendSignal').mockReturnValue({
+      signal: { id: 'sig-1' },
+      accepted: Promise.resolve({ action: 'woke' }),
+    } as any);
+
+    expect(owner.__untilIdleHandlesBackgroundTask('bg-notify-idle-t', 'bg-notify-idle-r', 'task-1')).toBe(false);
+    await owner.__notifyBackgroundTaskFinished(finishedTask('bg-notify-idle-t', 'bg-notify-idle-r'));
+
+    expect(signalSpy).toHaveBeenCalledTimes(1);
+    expect(signalSpy.mock.calls[0]?.[0]).toMatchObject({ type: 'notification', tagName: 'background-task' });
+    expect(signalSpy.mock.calls[0]?.[1]).toMatchObject({
+      threadId: 'bg-notify-idle-t',
+      resourceId: 'bg-notify-idle-r',
+    });
   });
 });

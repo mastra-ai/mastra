@@ -8,12 +8,11 @@
  * The runtime reads both TTLs once at module load, so they are set in a hoisted
  * block before the module graph is imported.
  *
- * Only the regular agent is covered: after the sweep, a durable session doesn't
- * see its next run end even once the lease has expired, which is a separate bug.
  */
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../../agent/durable';
 import { InMemoryServerCache } from '../../cache';
 import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
@@ -82,6 +81,7 @@ const requestAccess = createTool({
   description: 'Ask the user for access to a path.',
   inputSchema: z.object({ path: z.string() }),
   execute: async (_input, context) => {
+    if (context?.agent?.resumeData !== undefined) return `access: ${context.agent.resumeData}`;
     await context?.agent?.suspend?.({ kind: 'access_request' });
     return 'unreachable';
   },
@@ -92,14 +92,14 @@ const settlesWithin = (promise: Promise<unknown>, ms: number) =>
   Promise.race([promise.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), ms))]);
 
 /** A session whose first message parks on a prompt; later messages get a reply. */
-async function createHarness(id: string) {
+async function createHarness(id: string, durable: boolean) {
   const storage = new InMemoryStore();
   const cache = new InMemoryServerCache();
   const pubsub = new EventEmitterPubSub();
   const memory = new MockMemory({ storage });
   const prompts: string[] = [];
 
-  const agent = new Agent({
+  const baseAgent = new Agent({
     id: `${id}-agent`,
     name: `${id} agent`,
     instructions: 'You help.',
@@ -112,7 +112,8 @@ async function createHarness(id: string) {
       },
     }),
   });
-  const mastra = new Mastra({ agents: { [`${id}-agent`]: agent }, logger: false, storage, cache, pubsub });
+  const agent = durable ? createDurableAgent({ agent: baseAgent, cache, pubsub }) : baseAgent;
+  const mastra = new Mastra({ agents: { [`${id}-agent`]: agent as any }, logger: false, storage, cache, pubsub });
   const registeredAgent = mastra.getAgent(`${id}-agent`);
   const controller = new AgentController({
     agent: registeredAgent,
@@ -128,8 +129,10 @@ async function createHarness(id: string) {
   await session.thread.create();
 
   const errors: string[] = [];
+  const ends: string[] = [];
   session.subscribe(event => {
     if (event.type === 'error') errors.push(event.error.message);
+    if (event.type === 'agent_end') ends.push(event.reason ?? '');
   });
   /** Run the agent on another thread; registering that run sweeps parked runs past their TTL. */
   const runElsewhere = async () => {
@@ -138,12 +141,12 @@ async function createHarness(id: string) {
     });
     for await (const _ of output.fullStream) void _;
   };
-  return { session, prompts, errors, runElsewhere };
+  return { session, prompts, errors, ends, runElsewhere, agent: registeredAgent };
 }
 
-describe('a message after the session’s parked run is dropped from memory', () => {
+describe.each([false, true])('a message after the session’s parked run is dropped from memory, durable=%s', durable => {
   it('waits for the dropped run’s lease to lapse, then runs', async () => {
-    const h = await createHarness('swept');
+    const h = await createHarness(`swept-${durable}`, durable);
     await h.session.sendMessage({ content: 'Read /x' });
     expect(h.prompts).toHaveLength(1);
 
@@ -151,6 +154,69 @@ describe('a message after the session’s parked run is dropped from memory', ()
     await h.runElsewhere();
 
     expect(await settlesWithin(h.session.sendMessage({ content: 'Are you there?' }), LEASE_TTL_MS * 3)).toBe(true);
+    expect({ errors: h.errors, prompts: h.prompts.length }).toEqual({ errors: [], prompts: 3 });
+  });
+
+  // A durable run's stream stays open while it is parked, so the session's
+  // subscriber must stop reading it once the run is dropped.
+  it('runs a message sent after the lease has lapsed to the end', async () => {
+    const h = await createHarness(`swept-lapsed-${durable}`, durable);
+    await h.session.sendMessage({ content: 'Read /x' });
+    expect(h.ends).toEqual(['suspended']);
+
+    await new Promise(resolve => setTimeout(resolve, SUSPENDED_RUN_TTL_MS + 100));
+    await h.runElsewhere();
+    await new Promise(resolve => setTimeout(resolve, LEASE_TTL_MS + 500));
+
+    expect(await settlesWithin(h.session.sendMessage({ content: 'Are you there?' }), 5_000)).toBe(true);
+    expect({ errors: h.errors, prompts: h.prompts.length, ends: h.ends }).toEqual({
+      errors: [],
+      prompts: 3,
+      ends: ['suspended', 'complete'],
+    });
+  });
+
+  // A subscriber that queued the parked run but starts reading only after the
+  // sweep must skip the dropped run, not wait on its open stream.
+  it('moves a subscriber that first reads after the sweep on to the next run', async () => {
+    const h = await createHarness(`swept-lazy-${durable}`, durable);
+    await h.session.sendMessage({ content: 'Read /x' });
+    expect(h.ends).toEqual(['suspended']);
+    const subscription = await h.agent.subscribeToThread({
+      resourceId: h.session.identity.getResourceId(),
+      threadId: h.session.thread.getId()!,
+    });
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, SUSPENDED_RUN_TTL_MS + 100));
+      await h.runElsewhere();
+      await new Promise(resolve => setTimeout(resolve, LEASE_TTL_MS + 500));
+      expect(await settlesWithin(h.session.sendMessage({ content: 'Are you there?' }), 5_000)).toBe(true);
+
+      // The parked run never finishes with `stop`; the next run does.
+      const reachesNextRun = (async () => {
+        for await (const part of subscription.stream as AsyncIterable<any>) {
+          if (part?.type === 'finish' && part.payload?.stepResult?.reason === 'stop') return true;
+        }
+        return false;
+      })();
+      expect(await settlesWithin(reachesNextRun, 3_000)).toBe(true);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('still takes the answer to the dropped prompt', async () => {
+    const h = await createHarness(`swept-answer-${durable}`, durable);
+    await h.session.sendMessage({ content: 'Read /x' });
+    expect(h.ends).toEqual(['suspended']);
+
+    await new Promise(resolve => setTimeout(resolve, SUSPENDED_RUN_TTL_MS + 100));
+    await h.runElsewhere();
+    await new Promise(resolve => setTimeout(resolve, LEASE_TTL_MS + 500));
+
+    expect(await settlesWithin(h.session.respondToToolSuspension({ resumeData: 'granted' }), 5_000)).toBe(true);
+    await vi.waitFor(() => expect(h.ends).toEqual(['suspended', 'complete']), { timeout: 5_000 });
     expect({ errors: h.errors, prompts: h.prompts.length }).toEqual({ errors: [], prompts: 3 });
   });
 });

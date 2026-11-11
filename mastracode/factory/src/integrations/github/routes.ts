@@ -20,13 +20,16 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
+import { canReadSessionResource, canViewSourceControlSession } from '../../routes/session-access.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
+import { sessionMemoryResourceId, listFactorySessionThreads } from '../../session/session-threads.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -43,8 +46,8 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
-import { polledPullRequestEvent } from './rules.js';
-import type { PolledPullRequestState, ReconcileRepository } from './rules.js';
+import { listedPullRequestState, polledPullRequestEvent } from './rules.js';
+import type { ReconcileRepository } from './rules.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
@@ -92,11 +95,6 @@ import type { ParsedGithubWebhook } from './webhook.js';
  */
 type RouteContext = Context;
 
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
-
 export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
   auth: RouteAuth;
@@ -140,7 +138,10 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Work-items domain — session deletion strips the refs work items hold on it. */
-  workItems?: Pick<import('../../storage/domains/work-items/base.js').WorkItemsStorage, 'clearSessionReferences'>;
+  workItems?: Pick<
+    import('../../storage/domains/work-items/base.js').WorkItemsStorage,
+    'clearSessionReferences' | 'hasRunBindingForSession'
+  >;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -314,52 +315,11 @@ function polledIssueEvent(
   };
 }
 
-interface ListedPullRequest {
-  number: number;
-  title: string;
-  url: string;
-  author: string | null;
-  assignees: string[];
-  requestedReviewers: string[];
-  labels: string[];
-  headBranch: string;
-  baseBranch: string;
-  createdAt: string;
-}
-
-function listedPullRequestEvent(
-  project: ResolvedProjectRepository,
-  pullRequest: ListedPullRequest,
-): ParsedGithubWebhook {
-  return polledPullRequestEvent(
-    reconcileRepositoryOf(project),
-    pullRequest.number,
-    listedOpenPullRequestState(pullRequest),
-  );
-}
-
 function reconcileRepositoryOf(project: ResolvedProjectRepository): ReconcileRepository {
   return {
     id: Number(project.repository.externalId),
     fullName: project.repository.slug,
     installationId: Number(project.installation.externalId),
-  };
-}
-
-function listedOpenPullRequestState(pullRequest: ListedPullRequest): PolledPullRequestState {
-  return {
-    title: pullRequest.title,
-    url: pullRequest.url,
-    state: 'open',
-    draft: false,
-    merged: false,
-    assignees: pullRequest.assignees,
-    requestedReviewers: pullRequest.requestedReviewers,
-    labels: pullRequest.labels,
-    headBranch: pullRequest.headBranch,
-    baseBranch: pullRequest.baseBranch,
-    author: pullRequest.author ?? undefined,
-    createdAt: pullRequest.createdAt,
   };
 }
 
@@ -370,7 +330,7 @@ async function ingestPolledEvents(
   if (!ingestFactoryEvent) return;
   const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
+  // Best-effort: one failed row must not stop the rest of the backlog page from landing.
   if (rejected) {
     console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
   }
@@ -391,28 +351,12 @@ function listedIssueOf(issue: Awaited<ReturnType<GithubIntegration['intake']['li
   };
 }
 
-function listedPullRequestOf(
-  pr: Awaited<ReturnType<GithubIntegration['versionControl']['listPullRequests']>>['pullRequests'][number],
-): ListedPullRequest {
-  return {
-    number: Number(pr.id),
-    title: pr.title,
-    url: pr.url,
-    author: pr.author,
-    assignees: pr.assignees ?? [],
-    requestedReviewers: pr.requestedReviewers ?? [],
-    labels: pr.labels ?? [],
-    headBranch: pr.headBranch,
-    baseBranch: pr.baseBranch,
-    createdAt: pr.createdAt,
-  };
-}
-
 /**
  * Feed a just-linked repository's open issues and pull requests through the
- * same rules ingress the list routes use, so its backlog reaches the board
- * without anyone browsing it. Rows owned by another integration don't resolve
- * through this integration's storage handle and are skipped.
+ * rules ingress, so its backlog reaches the board without anyone browsing it.
+ * The reconcile sweeps only recover items filed after the link. Rows owned by
+ * another integration don't resolve through this integration's storage handle
+ * and are skipped.
  */
 export async function ingestLinkedRepositoryBacklog(args: {
   github: GithubIntegration;
@@ -446,7 +390,10 @@ export async function ingestLinkedRepositoryBacklog(args: {
       cursor: String(page),
     });
     await ingestPolledEvents(
-      pullRequests.map(pr => listedPullRequestEvent(project, listedPullRequestOf(pr))),
+      pullRequests.map(pr => {
+        const state = listedPullRequestState(pr);
+        return polledPullRequestEvent(reconcileRepositoryOf(project), state.number, state);
+      }),
       args.ingestFactoryEvent,
     );
     if (nextCursor === null) break;
@@ -548,20 +495,20 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const tenant = auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
+        // Sessions read by session id; resourceId is the older address.
+        const sessionId = c.req.query('sessionId');
         const resourceId = c.req.query('resourceId');
         const threadId = c.req.query('threadId');
-        const sessionScope = c.req.query('scope');
-        if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+        const target = !threadId
+          ? null
+          : sessionId
+            ? { orgId: tenant.orgId, sessionId, threadId }
+            : resourceId
+              ? { orgId: tenant.orgId, resourceId, threadId }
+              : null;
+        if (!target) return c.json({ error: 'sessionId (or resourceId) and threadId are required' }, 400);
 
-        const subscriptions = await listPullRequestSubscriptionsForThread(
-          {
-            orgId: tenant.orgId,
-            resourceId,
-            threadId,
-            sessionScope,
-          },
-          github.integrationStorage,
-        );
+        const subscriptions = await listPullRequestSubscriptionsForThread(target, github.integrationStorage);
         return c.json({
           subscriptions: subscriptions.map(subscription => ({
             id: subscription.id,
@@ -811,10 +758,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));
-          await ingestPolledEvents(
-            responseIssues.map(issue => polledIssueEvent(loaded.project, issue)),
-            options.ingestFactoryEvent,
-          );
           return c.json({
             issues: responseIssues,
             nextPage: nextCursor === null ? null : Number(nextCursor),
@@ -904,10 +847,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
-          await ingestPolledEvents(
-            responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
-            options.ingestFactoryEvent,
-          );
           return c.json({
             pullRequests: responsePullRequests,
             nextPage: nextCursor === null ? null : Number(nextCursor),
@@ -1458,14 +1397,14 @@ function buildProjectGitRoutes({
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
         // Private sessions 404 (not 403) for non-owners so their IDs do not
         // leak existence; the body must match the genuinely-missing case.
-        if (
-          !session ||
-          session.orgId !== resolved.tenant.orgId ||
-          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
-        ) {
+        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session });
+        const resourceId = await sessionMemoryResourceId(controller, session, workItems);
+        if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        return c.json({ session: { ...session, resourceId } });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
@@ -1487,7 +1426,7 @@ function buildProjectGitRoutes({
               error,
             });
           });
-          await controller?.deleteSession({ resourceId: session.sessionId });
+          await controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[GitHub Sessions] Failed to tear down live controller session', {
             sessionId: session.sessionId,
@@ -1531,7 +1470,7 @@ function buildProjectGitRoutes({
         }
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
 
-        const threads = await controller.queryThreads({ resourceId: sessionId });
+        const threads = await listFactorySessionThreads(controller, row, workItems);
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
 
@@ -1546,7 +1485,7 @@ function buildProjectGitRoutes({
           const title = await nameSession(sessionId, async () => {
             const generated = await controller.generateThreadTitle({
               threadId: thread.id,
-              resourceId: sessionId,
+              sessionId,
               requestContext,
               ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
             });
@@ -1770,7 +1709,7 @@ function buildProjectGitRoutes({
                   changeRequestId: pullRequestNumber.toString(),
                   sessionId,
                   ownerId: userId,
-                  resourceId: sessionId,
+                  resourceId: project.factoryProjectId,
                   threadId: sessionId,
                   source: 'factory-pr-create',
                   subscribedByUserId: userId,

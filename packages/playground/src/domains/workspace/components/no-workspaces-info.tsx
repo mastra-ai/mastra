@@ -18,7 +18,7 @@ export const NoWorkspacesInfo = () => (
 
         icon={<ExternalLinkIcon />}
       >
-        Workspaces Documentation
+        Workspaces documentation
       </Button>
     }
     variant="fill"

@@ -42,11 +42,11 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-completed', runId, streamId });
     await nextTicks();
 
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
     subscription.unsubscribe();
     await consumed;
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
   });
 
   it('does not replay a run whose process crashed mid-stream (no terminal event)', async () => {
@@ -58,11 +58,11 @@ describe('phantom replay of unpersisted runs', () => {
     await streamPart({ type: 'text-delta', payload: { text: 'partial' } });
     await nextTicks();
 
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
     subscription.unsubscribe();
     await consumed;
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
   });
 
   it('does not replay a run whose backlog terminates with run-failed', async () => {
@@ -75,7 +75,7 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-failed', runId, streamId, error: 'boom' });
     await nextTicks();
 
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
     subscription.unsubscribe();
     await consumed;
@@ -95,7 +95,11 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-completed', runId, streamId });
     await nextTicks();
 
-    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta', 'finish']);
+    expect(collected.filter(part => part.type !== 'thread-run-status').map(part => part.type)).toEqual([
+      'start',
+      'text-delta',
+      'finish',
+    ]);
 
     subscription.unsubscribe();
     await consumed;
@@ -116,7 +120,7 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-completed', runId, streamId, persisted: false });
     await nextTicks();
 
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
     subscription.unsubscribe();
     await consumed;
@@ -134,7 +138,10 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-completed', runId, streamId, persisted: true });
     await nextTicks();
 
-    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta']);
+    expect(collected.filter(part => part.type !== 'thread-run-status').map(part => part.type)).toEqual([
+      'start',
+      'text-delta',
+    ]);
 
     subscription.unsubscribe();
     await consumed;
@@ -150,7 +157,7 @@ describe('phantom replay of unpersisted runs', () => {
     await streamPart({ type: 'text-delta', payload: { text: 'partial' } });
     await nextTicks();
 
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
     // A later clean terminal event still releases it.
     await streamPart({
@@ -160,7 +167,11 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-completed', runId, streamId, persisted: true });
     await nextTicks();
 
-    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta', 'finish']);
+    expect(collected.filter(part => part.type !== 'thread-run-status').map(part => part.type)).toEqual([
+      'start',
+      'text-delta',
+      'finish',
+    ]);
 
     subscription.unsubscribe();
     await consumed;
@@ -182,11 +193,11 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-aborted', runId, streamId });
     await nextTicks();
 
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
     subscription.unsubscribe();
     await consumed;
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
   });
 
   it('flushes a deferred run when it suspends (suspends persist a snapshot)', async () => {
@@ -199,7 +210,10 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-suspended', runId, streamId });
     await nextTicks();
 
-    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta']);
+    expect(collected.filter(part => part.type !== 'thread-run-status').map(part => part.type)).toEqual([
+      'start',
+      'text-delta',
+    ]);
 
     subscription.unsubscribe();
     await consumed;
@@ -216,7 +230,10 @@ describe('phantom replay of unpersisted runs', () => {
     await nextTicks();
 
     // Live parts stream through immediately, before any terminal event.
-    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta']);
+    expect(collected.filter(part => part.type !== 'thread-run-status').map(part => part.type)).toEqual([
+      'start',
+      'text-delta',
+    ]);
 
     await streamPart({
       type: 'finish',
@@ -225,7 +242,11 @@ describe('phantom replay of unpersisted runs', () => {
     await emit({ type: 'run-completed', runId, streamId });
     await nextTicks();
 
-    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta', 'finish']);
+    expect(collected.filter(part => part.type !== 'thread-run-status').map(part => part.type)).toEqual([
+      'start',
+      'text-delta',
+      'finish',
+    ]);
 
     subscription.unsubscribe();
     await consumed;

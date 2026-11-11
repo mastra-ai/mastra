@@ -4,6 +4,7 @@
 
 import { TripWire } from '../../agent/trip-wire';
 import { MASTRA_AUTH_TOKEN_KEY } from '../../request-context';
+import type { ProcessorArgs } from './workflow-event-processor';
 
 /**
  * Returns a copy of a serialized request context without the framework-managed
@@ -16,6 +17,49 @@ export function withoutAuthToken<T extends Record<string, any> | undefined>(requ
   }
   const { [MASTRA_AUTH_TOKEN_KEY]: _authToken, ...rest } = requestContext;
   return rest as T;
+}
+
+export function restoreLiveRequestContext(
+  stored: Record<string, unknown> | undefined,
+  live: Record<string, unknown>,
+): Record<string, unknown> {
+  const restored = { ...withoutAuthToken(stored ?? live) };
+  if (MASTRA_AUTH_TOKEN_KEY in live) restored[MASTRA_AUTH_TOKEN_KEY] = live[MASTRA_AUTH_TOKEN_KEY];
+  return restored;
+}
+
+const NON_REDELIVERABLE = Symbol.for('mastra.evented.nonRedeliverable');
+
+/**
+ * Marks an error as deterministic (for example a throwing user callback), so the
+ * evented processor fails the workflow on the first delivery instead of having
+ * the transport redeliver the event and rerun the callback.
+ */
+export function markNonRedeliverable<T extends Error>(error: T): T {
+  Object.defineProperty(error, NON_REDELIVERABLE, { value: true });
+  return error;
+}
+
+export function isNonRedeliverable(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as any)[NON_REDELIVERABLE] === true;
+}
+
+/**
+ * Carries the run to fail when it can differ from the run of the event being handled:
+ * a loop condition runs while handling its nested body's `workflow.end`.
+ */
+export class RunFailure extends Error {
+  declare readonly run: Omit<ProcessorArgs, 'workflow'>;
+
+  constructor(
+    readonly error: Error,
+    run: Omit<ProcessorArgs, 'workflow'>,
+  ) {
+    super(error.message, { cause: error });
+    this.name = 'RunFailure';
+    // Non-enumerable so loggers don't serialize the request context (auth token) and step results.
+    Object.defineProperty(this, 'run', { value: run, enumerable: false });
+  }
 }
 
 /**

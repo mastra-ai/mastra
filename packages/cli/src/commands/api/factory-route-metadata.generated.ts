@@ -17,6 +17,78 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "DELETE /web/factory/projects/:id/boards/:boardKey": {
+    "contractKey": "boardDelete",
+    "method": "DELETE",
+    "path": "/web/factory/projects/:id/boards/:boardKey",
+    "description": "Delete a board from a Factory project",
+    "pathParams": [
+      "id",
+      "boardKey"
+    ],
+    "queryParams": [
+      "expectedRevision"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /web/factory/projects/:id/intake-routes/:routeId": {
+    "contractKey": "intakeRouteDelete",
+    "method": "DELETE",
+    "path": "/web/factory/projects/:id/intake-routes/:routeId",
+    "description": "Delete a Factory intake route",
+    "pathParams": [
+      "id",
+      "routeId"
+    ],
+    "queryParams": [
+      "expectedRevision"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /web/factory/projects/:id/sandbox-envs/:name": {
+    "contractKey": "projectSandboxEnvDelete",
+    "method": "DELETE",
+    "path": "/web/factory/projects/:id/sandbox-envs/:name",
+    "description": "Delete a sandbox environment variable of a Factory project",
+    "pathParams": [
+      "id",
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /web/factory/projects/:id/skills/:name": {
+    "contractKey": "skillOverrideRevert",
+    "method": "DELETE",
+    "path": "/web/factory/projects/:id/skills/:name",
+    "description": "Revert a project's edited Factory skill to its original SKILL.md",
+    "pathParams": [
+      "id",
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "DELETE /web/factory/work-items/:id": {
     "contractKey": "workItemDelete",
     "method": "DELETE",
@@ -37,7 +109,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectList",
     "method": "GET",
     "path": "/web/factory/projects",
-    "description": "List Factory projects for the current organization",
+    "description": "List Factory projects for the current organization, each with its linked repositories",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [],
@@ -101,6 +173,23 @@ export const FACTORY_API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "boards"
+    }
+  },
+  "GET /web/factory/projects/:id/boards/:boardKey": {
+    "contractKey": "boardGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/boards/:boardKey",
+    "description": "Get a project board's definition",
+    "pathParams": [
+      "id",
+      "boardKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /web/factory/projects/:id/decisions": {
@@ -191,6 +280,40 @@ export const FACTORY_API_ROUTE_METADATA = {
       "listProperty": "thresholds"
     }
   },
+  "GET /web/factory/projects/:id/intake-routes": {
+    "contractKey": "intakeRouteList",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/intake-routes",
+    "description": "List a Factory project's intake routes in evaluation order",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "intakeRoutes"
+    }
+  },
+  "GET /web/factory/projects/:id/intake-routes/:routeId": {
+    "contractKey": "intakeRouteGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/intake-routes/:routeId",
+    "description": "Get a Factory intake route",
+    "pathParams": [
+      "id",
+      "routeId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/metrics": {
     "contractKey": "metricsGet",
     "method": "GET",
@@ -210,6 +333,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/sandbox-envs": {
+    "contractKey": "projectSandboxEnvsList",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/sandbox-envs",
+    "description": "List the sandbox environment variables of a Factory project: names and where they apply, never values",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "envs"
+    }
+  },
   "GET /web/factory/projects/:id/work-items": {
     "contractKey": "workItemList",
     "method": "GET",
@@ -224,6 +364,23 @@ export const FACTORY_API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "GET /web/factory/skills": {
+    "contractKey": "skillList",
+    "method": "GET",
+    "path": "/web/factory/skills",
+    "description": "List Factory skills, with a project's edits when a project is given",
+    "pathParams": [],
+    "queryParams": [
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "skills"
     }
   },
   "PATCH /web/factory/projects/:id": {
@@ -245,6 +402,28 @@ export const FACTORY_API_ROUTE_METADATA = {
       "name",
       "reviewTestChecksEnabled",
       "selfReviewEnabled"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /web/factory/projects/:id/boards/:boardKey": {
+    "contractKey": "boardReplace",
+    "method": "PATCH",
+    "path": "/web/factory/projects/:id/boards/:boardKey",
+    "description": "Replace a project board's definition",
+    "pathParams": [
+      "id",
+      "boardKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "description",
+      "expectedRevision",
+      "name",
+      "phases"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -274,6 +453,49 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "PATCH /web/factory/projects/:id/intake-routes/:routeId": {
+    "contractKey": "intakeRouteUpdate",
+    "method": "PATCH",
+    "path": "/web/factory/projects/:id/intake-routes/:routeId",
+    "description": "Change a Factory intake route",
+    "pathParams": [
+      "id",
+      "routeId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "enabled",
+      "expectedRevision",
+      "name",
+      "on",
+      "target",
+      "when"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /web/factory/projects/:id/sandbox-envs/:name": {
+    "contractKey": "projectSandboxEnvUpdate",
+    "method": "PATCH",
+    "path": "/web/factory/projects/:id/sandbox-envs/:name",
+    "description": "Change where a sandbox environment variable of a Factory project applies",
+    "pathParams": [
+      "id",
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "appliesTo"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "PATCH /web/factory/work-items/:id": {
     "contractKey": "workItemUpdate",
     "method": "PATCH",
@@ -285,9 +507,9 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "board",
+      "description",
       "metadata",
       "parentWorkItemId",
-      "plansPreapproved",
       "sessions",
       "stages",
       "title"
@@ -320,7 +542,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectApplyDefaultModel",
     "method": "POST",
     "path": "/web/factory/projects/:id/apply-default-model",
-    "description": "Apply the Factory default model to running work and review threads",
+    "description": "Start applying the Factory default model to running work and review threads in the background",
     "pathParams": [
       "id"
     ],
@@ -407,6 +629,46 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /web/factory/projects/:id/boards": {
+    "contractKey": "boardCreate",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/boards",
+    "description": "Create a board in a Factory project",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "description",
+      "key",
+      "name",
+      "phases"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /web/factory/projects/:id/boards/:boardKey/reset": {
+    "contractKey": "boardReset",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/boards/:boardKey/reset",
+    "description": "Reset a built-in or app board to its code definition",
+    "pathParams": [
+      "id",
+      "boardKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "expectedRevision"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /web/factory/projects/:id/decisions/:decisionId/approve": {
     "contractKey": "decisionApprove",
     "method": "POST",
@@ -474,6 +736,47 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /web/factory/projects/:id/intake-routes": {
+    "contractKey": "intakeRouteCreate",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/intake-routes",
+    "description": "Add an intake route to a Factory project, after its routes; a route that places new cards goes ahead of the first route that takes every new card",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "enabled",
+      "name",
+      "on",
+      "target",
+      "when"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /web/factory/projects/:id/intake-routes/reorder": {
+    "contractKey": "intakeRouteReorder",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/intake-routes/reorder",
+    "description": "Reorder a Factory project's intake routes",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "ids"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "intakeRoutes"
+    }
+  },
   "POST /web/factory/projects/:id/runs/start": {
     "contractKey": "workItemStart",
     "method": "POST",
@@ -506,6 +809,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "board",
+      "description",
       "externalSource",
       "metadata",
       "parentWorkItemId",
@@ -565,6 +869,45 @@ export const FACTORY_API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "record"
     }
+  },
+  "PUT /web/factory/projects/:id/sandbox-envs/:name": {
+    "contractKey": "projectSandboxEnvSet",
+    "method": "PUT",
+    "path": "/web/factory/projects/:id/sandbox-envs/:name",
+    "description": "Create or replace a sandbox environment variable of a Factory project",
+    "pathParams": [
+      "id",
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "appliesTo",
+      "value"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /web/factory/projects/:id/skills/:name": {
+    "contractKey": "skillOverrideSave",
+    "method": "PUT",
+    "path": "/web/factory/projects/:id/skills/:name",
+    "description": "Save a project's edited SKILL.md for a Factory skill",
+    "pathParams": [
+      "id",
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "content"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
   }
 } as const;
 
@@ -586,6 +929,149 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "null"
+    }
+  },
+  "DELETE /web/factory/projects/:id/boards/:boardKey": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "boardKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "id",
+        "boardKey"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "expectedRevision"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "null"
+    }
+  },
+  "DELETE /web/factory/projects/:id/intake-routes/:routeId": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "routeId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "routeId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "expectedRevision"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "null"
+    }
+  },
+  "DELETE /web/factory/projects/:id/sandbox-envs/:name": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "null"
+    }
+  },
+  "DELETE /web/factory/projects/:id/skills/:name": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skill": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "skill"
+      ]
     }
   },
   "DELETE /web/factory/work-items/:id": {
@@ -624,11 +1110,81 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "projects": {
           "type": "array",
           "items": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
+            "allOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "repositories": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "projectRepositoryId": {
+                          "type": "string"
+                        },
+                        "connectionId": {
+                          "type": "string"
+                        },
+                        "integrationId": {
+                          "type": "string"
+                        },
+                        "repositoryId": {
+                          "type": "string"
+                        },
+                        "externalId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "slug": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "defaultBranch": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "branch": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "sandboxWorkdir": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "projectRepositoryId",
+                        "connectionId",
+                        "integrationId",
+                        "repositoryId",
+                        "externalId",
+                        "slug",
+                        "defaultBranch",
+                        "branch",
+                        "sandboxWorkdir"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "repositories"
+                ]
+              }
+            ]
           }
         }
       },
@@ -702,8 +1258,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "enum": [
               "automation-failed",
               "automation-proposed",
-              "mention",
-              "activity",
               "agent-waiting"
             ]
           }
@@ -740,8 +1294,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "enum": [
               "automation-failed",
               "automation-proposed",
-              "mention",
-              "activity",
               "agent-waiting"
             ]
           },
@@ -790,8 +1342,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "required": [
             "automation-failed",
             "automation-proposed",
-            "mention",
-            "activity",
             "agent-waiting"
           ]
         },
@@ -835,11 +1385,57 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "id": {
                 "type": "string"
               },
+              "name": {
+                "type": "string"
+              },
               "title": {
                 "type": "string"
               },
+              "description": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "builtin",
+                  "app",
+                  "stored"
+                ]
+              },
+              "editable": {
+                "type": "boolean"
+              },
+              "problems": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "initialPhase": {
                 "type": "string"
+              },
+              "flow": {
+                "type": "object",
+                "properties": {
+                  "triage": {
+                    "type": "string"
+                  },
+                  "build": {
+                    "type": "string"
+                  },
+                  "selfReview": {
+                    "type": "string"
+                  },
+                  "pullRequestReview": {
+                    "type": "string"
+                  },
+                  "completed": {
+                    "type": "string"
+                  },
+                  "canceled": {
+                    "type": "string"
+                  }
+                }
               },
               "phases": {
                 "type": "array",
@@ -849,7 +1445,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "id": {
                       "type": "string"
                     },
+                    "name": {
+                      "type": "string"
+                    },
                     "title": {
+                      "type": "string"
+                    },
+                    "description": {
                       "type": "string"
                     },
                     "kind": {
@@ -860,8 +1462,64 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "terminal"
                       ]
                     },
+                    "nextPhases": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "context": {
+                      "type": "string"
+                    },
                     "role": {
                       "type": "string"
+                    },
+                    "skill": {
+                      "type": "string"
+                    },
+                    "goal": {
+                      "type": "object",
+                      "properties": {
+                        "objective": {
+                          "type": "string"
+                        },
+                        "maxRuns": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "objective"
+                      ]
+                    },
+                    "autoStart": {
+                      "type": "boolean"
+                    },
+                    "autoStartWhen": {
+                      "$ref": "#/$defs/__schema0"
+                    },
+                    "exitTool": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "autoApprove": {
+                          "type": "boolean"
+                        },
+                        "autoApproveWhen": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "autoApprove"
+                      ]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "transitions": {
                       "type": "array",
@@ -901,11 +1559,616 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "phases"
             ]
           }
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
         "boards"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema1"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema7"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema2": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema5"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
+          ]
+        },
+        "__schema4": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema6"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema6"
+              }
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema2"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  },
+  "GET /web/factory/projects/:id/boards/:boardKey": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "boardKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "id",
+        "boardKey"
       ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "board": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "phases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "resting",
+                      "working",
+                      "terminal"
+                    ]
+                  },
+                  "runner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "skill": {
+                            "type": "string"
+                          },
+                          "context": {
+                            "type": "string"
+                          },
+                          "instructions": {
+                            "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "objective": {
+                                "type": "string"
+                              },
+                              "maxRuns": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "objective"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nextPhases": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "autoStart": {
+                    "type": "boolean"
+                  },
+                  "autoStartWhen": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exitTool": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "autoApprove": {
+                            "type": "boolean"
+                          },
+                          "autoApproveWhen": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "factory_record_review_verdict",
+                            "factory_review_source"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "name",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "builtin",
+                "app",
+                "stored"
+              ]
+            },
+            "editable": {
+              "type": "boolean"
+            },
+            "codeBehaviour": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "requiredNextPhases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "requiredNextPhases"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "description",
+            "phases",
+            "revision",
+            "source",
+            "editable",
+            "problems"
+          ]
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "board"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema1"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema7"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema2": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema5"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
+          ]
+        },
+        "__schema4": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema6"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema6"
+              }
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema2"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id/decisions": {
@@ -1415,6 +2678,628 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "GET /web/factory/projects/:id/intake-routes": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "intakeRoutes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "position": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "when": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "AND",
+                          "OR"
+                        ]
+                      },
+                      "conditions": {
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      }
+                    },
+                    "required": [
+                      "operator",
+                      "conditions"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target": {
+                "type": "object",
+                "properties": {
+                  "boardKey": {
+                    "type": "string"
+                  },
+                  "phaseKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "joinClosedIssue": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "boardKey",
+                  "phaseKey",
+                  "joinClosedIssue"
+                ]
+              },
+              "on": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "work_item.created",
+                    "work_item.closed",
+                    "work_item.reopened",
+                    "pull_request.opened",
+                    "pull_request.synchronized",
+                    "pull_request.review_requested",
+                    "pull_request.merged",
+                    "pull_request.closed"
+                  ]
+                }
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "createdBy": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "updatedBy": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              },
+              "problems": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "enabled",
+              "position",
+              "when",
+              "target",
+              "on",
+              "revision",
+              "createdBy",
+              "createdAt",
+              "updatedBy",
+              "updatedAt",
+              "problems"
+            ]
+          }
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "intakeRoutes",
+        "canEdit"
+      ],
+      "$defs": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema4": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema5"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema5"
+              }
+            }
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema1"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  },
+  "GET /web/factory/projects/:id/intake-routes/:routeId": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "routeId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "routeId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "intakeRoute": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "position": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "when": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "operator": {
+                      "type": "string",
+                      "enum": [
+                        "AND",
+                        "OR"
+                      ]
+                    },
+                    "conditions": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "operator",
+                    "conditions"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "type": "string"
+                },
+                "phaseKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "boardKey",
+                "phaseKey",
+                "joinClosedIssue"
+              ]
+            },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
+                ]
+              }
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "createdBy": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedBy": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "enabled",
+            "position",
+            "when",
+            "target",
+            "on",
+            "revision",
+            "createdBy",
+            "createdAt",
+            "updatedBy",
+            "updatedAt",
+            "problems"
+          ]
+        }
+      },
+      "required": [
+        "intakeRoute"
+      ],
+      "$defs": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema4": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema5"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema5"
+              }
+            }
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema1"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  },
   "GET /web/factory/projects/:id/metrics": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1458,6 +3343,65 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "GET /web/factory/projects/:id/sandbox-envs": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "envs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "appliesTo": {
+                "type": "string",
+                "enum": [
+                  "build",
+                  "runtime",
+                  "both"
+                ]
+              },
+              "updatedAt": {
+                "type": "string"
+              },
+              "updatedBy": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "appliesTo",
+              "updatedAt",
+              "updatedBy"
+            ]
+          }
+        },
+        "writable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "envs",
+        "writable"
+      ]
+    }
+  },
   "GET /web/factory/projects/:id/work-items": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1480,8 +3424,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "array",
           "items": {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
+            "properties": {
+              "workItem": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "author": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "provider",
+                  "key",
+                  "url",
+                  "title",
+                  "state",
+                  "labels",
+                  "author"
+                ],
+                "additionalProperties": {}
+              }
             },
             "additionalProperties": {}
           }
@@ -1503,6 +3497,40 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "workItems",
         "runningSessionIds",
         "parkedSessionIds"
+      ]
+    }
+  },
+  "GET /web/factory/skills": {
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "skills"
       ]
     }
   },
@@ -1628,6 +3656,774 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "project"
       ]
+    }
+  },
+  "PATCH /web/factory/projects/:id/boards/:boardKey": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "boardKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "id",
+        "boardKey"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "phases": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "name",
+        "phases",
+        "expectedRevision"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "resting",
+                "working",
+                "terminal"
+              ]
+            },
+            "runner": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "skill": {
+                      "type": "string"
+                    },
+                    "context": {
+                      "type": "string"
+                    },
+                    "instructions": {
+                      "type": "string"
+                    },
+                    "goal": {
+                      "type": "object",
+                      "properties": {
+                        "objective": {
+                          "type": "string"
+                        },
+                        "maxRuns": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "objective"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "nextPhases": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "autoStart": {
+              "type": "boolean"
+            },
+            "autoStartWhen": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "exitTool": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "autoApprove": {
+                      "type": "boolean"
+                    },
+                    "autoApproveWhen": {
+                      "$ref": "#/$defs/__schema1"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tools": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "factory_record_review_verdict",
+                      "factory_review_source"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema2"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema2": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema3"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema8"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema3": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema5"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema6"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema4": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
+          ]
+        },
+        "__schema5": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema7"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema7"
+              }
+            }
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema8": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema3"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema3"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "board": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "phases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "resting",
+                      "working",
+                      "terminal"
+                    ]
+                  },
+                  "runner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "skill": {
+                            "type": "string"
+                          },
+                          "context": {
+                            "type": "string"
+                          },
+                          "instructions": {
+                            "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "objective": {
+                                "type": "string"
+                              },
+                              "maxRuns": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "objective"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nextPhases": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "autoStart": {
+                    "type": "boolean"
+                  },
+                  "autoStartWhen": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exitTool": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "autoApprove": {
+                            "type": "boolean"
+                          },
+                          "autoApproveWhen": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "factory_record_review_verdict",
+                            "factory_review_source"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "name",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "builtin",
+                "app",
+                "stored"
+              ]
+            },
+            "editable": {
+              "type": "boolean"
+            },
+            "codeBehaviour": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "requiredNextPhases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "requiredNextPhases"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "description",
+            "phases",
+            "revision",
+            "source",
+            "editable",
+            "problems"
+          ]
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "board"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema1"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema7"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema2": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema5"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
+          ]
+        },
+        "__schema4": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema6"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema6"
+              }
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema2"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
     }
   },
   "PATCH /web/factory/projects/:id/environment": {
@@ -2072,6 +4868,667 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "PATCH /web/factory/projects/:id/intake-routes/:routeId": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "routeId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "routeId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "enabled": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "when": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "target": {
+          "$ref": "#/$defs/__schema10"
+        },
+        "on": {
+          "$ref": "#/$defs/__schema12"
+        },
+        "expectedRevision": {
+          "$ref": "#/$defs/__schema14"
+        }
+      },
+      "required": [
+        "expectedRevision"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "__schema1": {
+          "type": "boolean"
+        },
+        "__schema2": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema3"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema3": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema4"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema9"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema4": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema5"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema6"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema7"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema5": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
+          ]
+        },
+        "__schema6": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema8"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema8"
+              }
+            }
+          ]
+        },
+        "__schema8": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema9": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema4"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema4"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema10": {
+          "type": "object",
+          "properties": {
+            "boardKey": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "phaseKey": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema11"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "joinClosedIssue": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "boardKey"
+          ],
+          "additionalProperties": false
+        },
+        "__schema11": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "__schema12": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema13"
+          }
+        },
+        "__schema13": {
+          "type": "string",
+          "enum": [
+            "work_item.created",
+            "work_item.closed",
+            "work_item.reopened",
+            "pull_request.opened",
+            "pull_request.synchronized",
+            "pull_request.review_requested",
+            "pull_request.merged",
+            "pull_request.closed"
+          ]
+        },
+        "__schema14": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "intakeRoute": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "position": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "when": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "operator": {
+                      "type": "string",
+                      "enum": [
+                        "AND",
+                        "OR"
+                      ]
+                    },
+                    "conditions": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "operator",
+                    "conditions"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "type": "string"
+                },
+                "phaseKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "boardKey",
+                "phaseKey",
+                "joinClosedIssue"
+              ]
+            },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
+                ]
+              }
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "createdBy": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedBy": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "enabled",
+            "position",
+            "when",
+            "target",
+            "on",
+            "revision",
+            "createdBy",
+            "createdAt",
+            "updatedBy",
+            "updatedAt",
+            "problems"
+          ]
+        }
+      },
+      "required": [
+        "intakeRoute"
+      ],
+      "$defs": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema4": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema5"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema5"
+              }
+            }
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema1"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  },
+  "PATCH /web/factory/projects/:id/sandbox-envs/:name": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "appliesTo": {
+          "type": "string",
+          "enum": [
+            "build",
+            "runtime",
+            "both"
+          ]
+        }
+      },
+      "required": [
+        "appliesTo"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "env": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "appliesTo": {
+              "type": "string",
+              "enum": [
+                "build",
+                "runtime",
+                "both"
+              ]
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "updatedBy": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "appliesTo",
+            "updatedAt",
+            "updatedBy"
+          ]
+        }
+      },
+      "required": [
+        "env"
+      ]
+    }
+  },
   "PATCH /web/factory/work-items/:id": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2093,23 +5550,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "title": {
           "$ref": "#/$defs/__schema0"
         },
-        "board": {
+        "description": {
           "$ref": "#/$defs/__schema1"
         },
-        "parentWorkItemId": {
+        "board": {
           "$ref": "#/$defs/__schema2"
         },
-        "stages": {
+        "parentWorkItemId": {
           "$ref": "#/$defs/__schema3"
         },
-        "sessions": {
-          "$ref": "#/$defs/__schema5"
+        "stages": {
+          "$ref": "#/$defs/__schema4"
         },
-        "metadata": {
+        "sessions": {
           "$ref": "#/$defs/__schema6"
         },
-        "plansPreapproved": {
-          "$ref": "#/$defs/__schema9"
+        "metadata": {
+          "$ref": "#/$defs/__schema7"
         }
       },
       "$defs": {
@@ -2118,11 +5575,22 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "maxLength": 500
         },
         "__schema1": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 8000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema2": {
           "type": "string",
           "minLength": 1,
           "maxLength": 128
         },
-        "__schema2": {
+        "__schema3": {
           "anyOf": [
             {
               "type": "string",
@@ -2133,20 +5601,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema3": {
+        "__schema4": {
           "minItems": 1,
           "maxItems": 16,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema4"
+            "$ref": "#/$defs/__schema5"
           }
         },
-        "__schema4": {
+        "__schema5": {
           "type": "string",
           "maxLength": 64,
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
-        "__schema5": {
+        "__schema6": {
           "type": "object",
           "propertyNames": {
             "type": "string",
@@ -2179,29 +5647,25 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ]
           }
         },
-        "__schema6": {
+        "__schema7": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema7"
+              "$ref": "#/$defs/__schema8"
             },
             {
-              "$ref": "#/$defs/__schema8"
+              "$ref": "#/$defs/__schema9"
             }
           ]
         },
-        "__schema7": {
+        "__schema8": {
           "type": "object",
           "propertyNames": {
             "type": "string"
           },
           "additionalProperties": {}
         },
-        "__schema8": {
-          "type": "null"
-        },
         "__schema9": {
-          "type": "boolean",
-          "const": true
+          "type": "null"
         }
       }
     },
@@ -2211,8 +5675,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "workItem": {
           "type": "object",
-          "propertyNames": {
-            "type": "string"
+          "properties": {
+            "workItem": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "author": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "key",
+                "url",
+                "title",
+                "state",
+                "labels",
+                "author"
+              ],
+              "additionalProperties": {}
+            }
           },
           "additionalProperties": {}
         }
@@ -2294,43 +5808,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "modelId": {
           "type": "string"
         },
-        "applied": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "skipped": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "threadId": {
-                "type": "string"
-              },
-              "reason": {
-                "type": "string",
-                "enum": [
-                  "not-running",
-                  "work-item-missing",
-                  "stage-inactive",
-                  "thread-missing",
-                  "mode-unknown",
-                  "apply-failed"
-                ]
-              }
-            },
-            "required": [
-              "threadId",
-              "reason"
-            ]
-          }
+        "status": {
+          "type": "string",
+          "const": "started"
         }
       },
       "required": [
         "modelId",
-        "applied",
-        "skipped"
+        "status"
       ]
     }
   },
@@ -2368,8 +5853,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "automation-failed",
             "automation-proposed",
-            "mention",
-            "activity",
             "agent-waiting"
           ]
         },
@@ -2435,8 +5918,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "automation-failed",
             "automation-proposed",
-            "mention",
-            "activity",
             "agent-waiting"
           ]
         },
@@ -2502,8 +5983,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "automation-failed",
             "automation-proposed",
-            "mention",
-            "activity",
             "agent-waiting"
           ]
         },
@@ -2577,6 +6056,1219 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "ok",
         "hasMore"
       ]
+    }
+  },
+  "POST /web/factory/projects/:id/boards": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "name": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "description": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "phases": {
+          "$ref": "#/$defs/__schema3"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "phases"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "string"
+        },
+        "__schema1": {
+          "type": "string"
+        },
+        "__schema2": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "__schema3": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "__schema4": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "resting",
+                "working",
+                "terminal"
+              ]
+            },
+            "runner": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "skill": {
+                      "type": "string"
+                    },
+                    "context": {
+                      "type": "string"
+                    },
+                    "instructions": {
+                      "type": "string"
+                    },
+                    "goal": {
+                      "type": "object",
+                      "properties": {
+                        "objective": {
+                          "type": "string"
+                        },
+                        "maxRuns": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "objective"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "nextPhases": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "autoStart": {
+              "type": "boolean"
+            },
+            "autoStartWhen": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema5"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "exitTool": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "autoApprove": {
+                      "type": "boolean"
+                    },
+                    "autoApproveWhen": {
+                      "$ref": "#/$defs/__schema5"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tools": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "factory_record_review_verdict",
+                      "factory_review_source"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "__schema5": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema6"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema7"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema12"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema7": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema8"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema10"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema8": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
+          ]
+        },
+        "__schema9": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema10": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema11"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema11"
+              }
+            }
+          ]
+        },
+        "__schema11": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema12": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema7"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema7"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "board": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "phases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "resting",
+                      "working",
+                      "terminal"
+                    ]
+                  },
+                  "runner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "skill": {
+                            "type": "string"
+                          },
+                          "context": {
+                            "type": "string"
+                          },
+                          "instructions": {
+                            "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "objective": {
+                                "type": "string"
+                              },
+                              "maxRuns": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "objective"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nextPhases": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "autoStart": {
+                    "type": "boolean"
+                  },
+                  "autoStartWhen": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exitTool": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "autoApprove": {
+                            "type": "boolean"
+                          },
+                          "autoApproveWhen": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "factory_record_review_verdict",
+                            "factory_review_source"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "name",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "builtin",
+                "app",
+                "stored"
+              ]
+            },
+            "editable": {
+              "type": "boolean"
+            },
+            "codeBehaviour": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "requiredNextPhases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "requiredNextPhases"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "description",
+            "phases",
+            "revision",
+            "source",
+            "editable",
+            "problems"
+          ]
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "board"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema1"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema7"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema2": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema5"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
+          ]
+        },
+        "__schema4": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema6"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema6"
+              }
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema2"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  },
+  "POST /web/factory/projects/:id/boards/:boardKey/reset": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "boardKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "id",
+        "boardKey"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "expectedRevision"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "board": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "phases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "resting",
+                      "working",
+                      "terminal"
+                    ]
+                  },
+                  "runner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "skill": {
+                            "type": "string"
+                          },
+                          "context": {
+                            "type": "string"
+                          },
+                          "instructions": {
+                            "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "objective": {
+                                "type": "string"
+                              },
+                              "maxRuns": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "objective"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nextPhases": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "autoStart": {
+                    "type": "boolean"
+                  },
+                  "autoStartWhen": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exitTool": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "autoApprove": {
+                            "type": "boolean"
+                          },
+                          "autoApproveWhen": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tools": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "factory_record_review_verdict",
+                            "factory_review_source"
+                          ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "name",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "builtin",
+                "app",
+                "stored"
+              ]
+            },
+            "editable": {
+              "type": "boolean"
+            },
+            "codeBehaviour": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "requiredNextPhases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "requiredNextPhases"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "description",
+            "phases",
+            "revision",
+            "source",
+            "editable",
+            "problems"
+          ]
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "board"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema1"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema7"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema2": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema5"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest"
+          ]
+        },
+        "__schema4": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema6"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema6"
+              }
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema7": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema2"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema2"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
     }
   },
   "POST /web/factory/projects/:id/decisions/:decisionId/approve": {
@@ -2741,6 +7433,897 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "POST /web/factory/projects/:id/intake-routes": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "when": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema0"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "boardKey": {
+              "$ref": "#/$defs/__schema7"
+            },
+            "phaseKey": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema7"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "joinClosedIssue": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "boardKey"
+          ],
+          "additionalProperties": false
+        },
+        "on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema8"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "target"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema4": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema5"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema5"
+              }
+            }
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema1"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema7": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "__schema8": {
+          "type": "string",
+          "enum": [
+            "work_item.created",
+            "work_item.closed",
+            "work_item.reopened",
+            "pull_request.opened",
+            "pull_request.synchronized",
+            "pull_request.review_requested",
+            "pull_request.merged",
+            "pull_request.closed"
+          ]
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "intakeRoute": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "position": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "when": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "operator": {
+                      "type": "string",
+                      "enum": [
+                        "AND",
+                        "OR"
+                      ]
+                    },
+                    "conditions": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "operator",
+                    "conditions"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "type": "string"
+                },
+                "phaseKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "boardKey",
+                "phaseKey",
+                "joinClosedIssue"
+              ]
+            },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
+                ]
+              }
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "createdBy": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedBy": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "enabled",
+            "position",
+            "when",
+            "target",
+            "on",
+            "revision",
+            "createdBy",
+            "createdAt",
+            "updatedBy",
+            "updatedAt",
+            "problems"
+          ]
+        }
+      },
+      "required": [
+        "intakeRoute"
+      ],
+      "$defs": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema4": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema5"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema5"
+              }
+            }
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema1"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  },
+  "POST /web/factory/projects/:id/intake-routes/reorder": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "ids": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "intakeRoutes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "position": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "when": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "AND",
+                          "OR"
+                        ]
+                      },
+                      "conditions": {
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      }
+                    },
+                    "required": [
+                      "operator",
+                      "conditions"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target": {
+                "type": "object",
+                "properties": {
+                  "boardKey": {
+                    "type": "string"
+                  },
+                  "phaseKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "joinClosedIssue": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "boardKey",
+                  "phaseKey",
+                  "joinClosedIssue"
+                ]
+              },
+              "on": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "work_item.created",
+                    "work_item.closed",
+                    "work_item.reopened",
+                    "pull_request.opened",
+                    "pull_request.synchronized",
+                    "pull_request.review_requested",
+                    "pull_request.merged",
+                    "pull_request.closed"
+                  ]
+                }
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "createdBy": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "updatedBy": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              },
+              "problems": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "enabled",
+              "position",
+              "when",
+              "target",
+              "on",
+              "revision",
+              "createdBy",
+              "createdAt",
+              "updatedBy",
+              "updatedAt",
+              "problems"
+            ]
+          }
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "intakeRoutes",
+        "canEdit"
+      ],
+      "$defs": {
+        "__schema0": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema4"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema2": {
+          "type": "string",
+          "enum": [
+            "item.labels",
+            "item.title",
+            "item.author",
+            "item.key",
+            "item.state",
+            "item.assignees",
+            "author.trusted",
+            "source.kind",
+            "source.integration",
+            "source.provider",
+            "source.repository",
+            "item.pullRequest",
+            "event.type",
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
+          ]
+        },
+        "__schema3": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema4": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema5"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema5"
+              }
+            }
+          ]
+        },
+        "__schema5": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema1"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema1"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  },
   "POST /web/factory/projects/:id/runs/start": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2787,6 +8370,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "title": {
                   "type": "string",
                   "maxLength": 500
+                },
+                "description": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 8000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "board": {
                   "type": "string",
@@ -2963,6 +8557,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "maxLength": 500
         },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 8000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "board": {
           "type": "string",
           "minLength": 1,
@@ -3094,8 +8699,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "workItem": {
           "type": "object",
-          "propertyNames": {
-            "type": "string"
+          "properties": {
+            "workItem": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "author": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "key",
+                "url",
+                "title",
+                "state",
+                "labels",
+                "author"
+              ],
+              "additionalProperties": {}
+            }
           },
           "additionalProperties": {}
         }
@@ -3143,12 +8798,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "role": {
           "type": "string",
-          "enum": [
-            "triage",
-            "plan",
-            "work",
-            "review"
-          ]
+          "minLength": 1,
+          "maxLength": 32
         },
         "skillName": {
           "type": "string",
@@ -3247,25 +8898,174 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "additionalProperties": {}
     }
+  },
+  "PUT /web/factory/projects/:id/sandbox-envs/:name": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "maxLength": 32768
+        },
+        "appliesTo": {
+          "type": "string",
+          "enum": [
+            "build",
+            "runtime",
+            "both"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "appliesTo"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "env": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "appliesTo": {
+              "type": "string",
+              "enum": [
+                "build",
+                "runtime",
+                "both"
+              ]
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "updatedBy": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "appliesTo",
+            "updatedAt",
+            "updatedBy"
+          ]
+        }
+      },
+      "required": [
+        "env"
+      ]
+    }
+  },
+  "PUT /web/factory/projects/:id/skills/:name": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skill": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "skill"
+      ]
+    }
   }
 } as const;
 
 export const FACTORY_API_ROUTE_CATALOG = {
   "projectDelete": "DELETE /web/factory/projects/:id",
+  "boardDelete": "DELETE /web/factory/projects/:id/boards/:boardKey",
+  "intakeRouteDelete": "DELETE /web/factory/projects/:id/intake-routes/:routeId",
+  "projectSandboxEnvDelete": "DELETE /web/factory/projects/:id/sandbox-envs/:name",
+  "skillOverrideRevert": "DELETE /web/factory/projects/:id/skills/:name",
   "workItemDelete": "DELETE /web/factory/work-items/:id",
   "projectList": "GET /web/factory/projects",
   "projectGet": "GET /web/factory/projects/:id",
   "attentionList": "GET /web/factory/projects/:id/attention",
   "boardCatalog": "GET /web/factory/projects/:id/boards",
+  "boardGet": "GET /web/factory/projects/:id/boards/:boardKey",
   "decisionList": "GET /web/factory/projects/:id/decisions",
   "projectEnvironmentGet": "GET /web/factory/projects/:id/environment",
   "projectEnvironmentBuilds": "GET /web/factory/projects/:id/environment/builds",
   "projectEnvironmentBuildGet": "GET /web/factory/projects/:id/environment/builds/:buildId",
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
+  "intakeRouteList": "GET /web/factory/projects/:id/intake-routes",
+  "intakeRouteGet": "GET /web/factory/projects/:id/intake-routes/:routeId",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
+  "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
   "workItemList": "GET /web/factory/projects/:id/work-items",
+  "skillList": "GET /web/factory/skills",
   "projectUpdate": "PATCH /web/factory/projects/:id",
+  "boardReplace": "PATCH /web/factory/projects/:id/boards/:boardKey",
   "projectEnvironmentUpdate": "PATCH /web/factory/projects/:id/environment",
+  "intakeRouteUpdate": "PATCH /web/factory/projects/:id/intake-routes/:routeId",
+  "projectSandboxEnvUpdate": "PATCH /web/factory/projects/:id/sandbox-envs/:name",
   "workItemUpdate": "PATCH /web/factory/work-items/:id",
   "projectCreate": "POST /web/factory/projects",
   "projectApplyDefaultModel": "POST /web/factory/projects/:id/apply-default-model",
@@ -3273,12 +9073,18 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "attentionRead": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/read",
   "attentionRestore": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/restore",
   "attentionReadAll": "POST /web/factory/projects/:id/attention/read-all",
+  "boardCreate": "POST /web/factory/projects/:id/boards",
+  "boardReset": "POST /web/factory/projects/:id/boards/:boardKey/reset",
   "decisionApprove": "POST /web/factory/projects/:id/decisions/:decisionId/approve",
   "decisionDismiss": "POST /web/factory/projects/:id/decisions/:decisionId/dismiss",
   "decisionRetry": "POST /web/factory/projects/:id/decisions/:decisionId/retry",
   "projectEnvironmentBuild": "POST /web/factory/projects/:id/environment/build",
+  "intakeRouteCreate": "POST /web/factory/projects/:id/intake-routes",
+  "intakeRouteReorder": "POST /web/factory/projects/:id/intake-routes/reorder",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
-  "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition"
+  "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition",
+  "projectSandboxEnvSet": "PUT /web/factory/projects/:id/sandbox-envs/:name",
+  "skillOverrideSave": "PUT /web/factory/projects/:id/skills/:name"
 } as const;

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CodeDiff } from './code-diff';
 
@@ -16,9 +16,7 @@ afterEach(() => cleanup());
 
 describe('CodeDiff', () => {
   it('shows both versions of a Playground observation', async () => {
-    const { container } = render(
-      <CodeDiff codeA={'Remember Paris'} codeB={'Remember Lyon'} filename="observations.md" />,
-    );
+    const { container } = render(<CodeDiff codeA="Remember Paris" codeB="Remember Lyon" filename="observations.md" />);
 
     await waitFor(() => {
       const content = container.querySelector('diffs-container')?.shadowRoot?.textContent;
@@ -69,5 +67,42 @@ describe('CodeDiff', () => {
     const { getByText } = render(<CodeDiff patch={patch} />);
 
     expect(getByText('Binary files a/logo.png and b/logo.png differ')).not.toBeNull();
+  });
+
+  it('folds a file down to its header and opens it again', async () => {
+    const patch = [
+      'diff --git a/src/example.ts b/src/example.ts',
+      'index 1234567..abcdef0 100644',
+      '--- a/src/example.ts',
+      '+++ b/src/example.ts',
+      '@@ -1 +1 @@',
+      '-const answer = 1;',
+      '+const answer = 2;',
+    ].join('\n');
+    const { container } = render(<CodeDiff patch={patch} header={{ path: 'src/example.ts' }} />);
+    const toggle = screen.getByRole('button', { name: 'src/example.ts', expanded: true });
+    await waitFor(() => {
+      expect(container.querySelector('diffs-container')?.shadowRoot?.textContent).toContain('const answer = 2;');
+    });
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('diffs-container')).toBeNull();
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(container.querySelector('diffs-container')?.shadowRoot?.textContent).toContain('const answer = 2;');
+    });
+  }, 15_000);
+
+  it('shows where a moved file came from when there is no diff to open', () => {
+    const { container } = render(
+      <CodeDiff header={{ path: 'src/agents/helper.ts', previousPath: 'src/helper.ts', meta: <span>Renamed</span> }} />,
+    );
+
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(container.textContent).toBe('src/agents/helper.ts from src/helper.tsRenamed');
   });
 });

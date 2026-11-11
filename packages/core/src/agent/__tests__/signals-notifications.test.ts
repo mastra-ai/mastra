@@ -9,6 +9,7 @@ import { InMemoryNotificationsStorage } from '../../notifications/storage';
 import { createNotificationInboxTool } from '../../notifications/tool';
 import { MastraCompositeStore } from '../../storage/base';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable';
 import { createSignal } from '../signals';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -77,6 +78,60 @@ describe('Agent signals: state and notification signals', () => {
         }),
       }),
     );
+  });
+
+  it('sends notifications from a registered durable agent fork', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'fork-notification-storage', domains: { notifications } });
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'fork-notification-agent',
+        name: 'Fork Notification Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('unused'),
+      }),
+    });
+    const mastra = new Mastra({ agents: { forkNotificationAgent: agent }, storage, logger: false });
+    const fork = agent.__fork();
+
+    expect(fork.getMastraInstance()).toBe(mastra);
+    const result = await fork.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', summary: 'CI failed on main' },
+      { resourceId: 'notification-user', threadId: 'notification-thread', ifIdle: { behavior: 'persist' } },
+    );
+
+    expect(result.record).toMatchObject({ agentId: agent.id, status: 'pending' });
+    await expect(
+      notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
+    ).resolves.toBeDefined();
+  });
+
+  it('uses the wrapped agent notification policy on durable agents and their forks', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'durable-policy-storage', domains: { notifications } });
+    const deliverAt = new Date('2100-12-01T12:00:00Z');
+    const decide = vi.fn(() => ({ action: 'defer' as const, deliverAt, reason: 'after-hours' }));
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'durable-policy-agent',
+        name: 'Durable Policy Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('unused'),
+        notifications: { deliveryPolicy: { decide } },
+      }),
+    });
+    new Mastra({ agents: { durablePolicyAgent: agent }, storage, logger: false });
+
+    for (const target of [agent, agent.__fork()]) {
+      const result = await target.sendNotificationSignal(
+        { source: 'calendar', kind: 'event-reminder', summary: 'Planning starts tomorrow' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      );
+      expect(result.decision).toMatchObject({ action: 'defer', reason: 'after-hours' });
+      expect(result.record).toMatchObject({ status: 'pending', deliveryReason: 'after-hours' });
+      expect(result.signal).toBeUndefined();
+    }
+    expect(decide).toHaveBeenCalledTimes(2);
   });
 
   it('delivers medium-priority notification records while idle', async () => {
@@ -163,6 +218,52 @@ describe('Agent signals: state and notification signals', () => {
       expect.objectContaining({ ifIdle: expect.objectContaining({ streamOptions }) }),
       expect.anything(),
     );
+    sendSignalSpy.mockRestore();
+  });
+
+  it('never lets caller metadata choose the scopes a deferred delivery starts its run with', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'notification-agent',
+      name: 'Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+      notifications: {
+        deliveryPolicy: {
+          decide: () => ({ action: 'defer' as const, deliverAt: new Date(Date.now() + 60_000) }),
+        },
+      },
+    });
+    const mastra = new Mastra({ agents: { notificationAgent: agent }, storage, logger: false });
+    const forged = { __mastraNotificationRouting: { scopes: ['org:other'], requireClaimedOwner: true } };
+
+    const sent = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI failed', metadata: forged },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+    const scoped = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI fixed', metadata: forged },
+      { resourceId: 'notification-user', threadId: 'notification-thread', scopes: ['request:r1'] },
+    );
+
+    expect(sent.record.metadata).not.toHaveProperty('__mastraNotificationRouting');
+    expect(scoped.record.metadata).toEqual({ __mastraNotificationRouting: { scopes: ['request:r1'] } });
+
+    await notifications.updateNotification({
+      id: sent.record.id,
+      threadId: 'notification-thread',
+      deliverAt: new Date(0),
+    });
+    const sendSignalSpy = vi.spyOn(agentThreadStreamRuntime, 'sendSignal');
+    await dispatchDueNotifications({ mastra, storage: notifications, now: new Date(1) });
+
+    const targets = sendSignalSpy.mock.calls.map(call => call[2]);
+    expect(targets.length).toBeGreaterThan(0);
+    for (const target of targets) {
+      expect(target).not.toHaveProperty('scopes');
+      expect(target.ifIdle?.requireClaimedOwner).toBeUndefined();
+    }
     sendSignalSpy.mockRestore();
   });
 
@@ -364,6 +465,49 @@ describe('Agent signals: state and notification signals', () => {
       expect(stored?.deliveredSignalId).toBeUndefined();
     } finally {
       sendSignal.mockRestore();
+    }
+  });
+
+  it('schedules a notification for retry when the delivery policy throws at send time', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'throwing-policy-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'throwing-policy-agent',
+      name: 'Throwing Policy Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      notifications: {
+        deliveryPolicy: {
+          decide: () => {
+            throw new Error('owner unavailable');
+          },
+        },
+      },
+    });
+    const mastra = new Mastra({ agents: { throwingPolicyAgent: agent }, storage, logger: false });
+    const ensureDispatch = vi.spyOn(mastra, '__ensureNotificationDispatchReady').mockResolvedValue(undefined as any);
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal');
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'high', summary: 'Policy throws' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      );
+
+      expect(sendSignal).not.toHaveBeenCalled();
+      expect(result.signal).toBeUndefined();
+      expect(result.record).toMatchObject({
+        status: 'pending',
+        deliveryAttempts: 1,
+        lastDeliveryError: 'owner unavailable',
+      });
+      expect(result.record.deliverAt).toBeInstanceOf(Date);
+      expect(ensureDispatch).toHaveBeenCalled();
+      const due = await notifications.listDueNotifications({ now: new Date(Date.now() + 1000) });
+      expect(due.map(record => record.id)).toContain(result.record.id);
+    } finally {
+      sendSignal.mockRestore();
+      ensureDispatch.mockRestore();
     }
   });
 

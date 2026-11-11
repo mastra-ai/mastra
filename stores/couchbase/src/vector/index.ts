@@ -14,7 +14,7 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
-import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
+import { DocumentNotFoundError, MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
 
 type MastraMetric = 'cosine' | 'euclidean' | 'dotproduct';
 type CouchbaseMetric = 'cosine' | 'l2_norm' | 'dot_product';
@@ -507,17 +507,70 @@ export class CouchbaseVector extends MastraVector {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
-    throw new MastraError({
-      id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for Couchbase vector store',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      details: {
-        indexName,
-        ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
-      },
-    });
+    if (ids && filter) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
+        text: 'ids and filter are mutually exclusive',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (filter) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
+        text: 'Couchbase deleteVectors filter-based deletion is not supported; provide ids instead',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (!ids) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'MISSING_CRITERIA'),
+        text: 'Provide ids or filter to deleteVectors',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (ids.length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'EMPTY_IDS'),
+        text: 'Cannot delete vectors with an empty ids array',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    try {
+      const collection = await this.getCollection();
+      const results = await Promise.allSettled(
+        ids.map(async id => {
+          try {
+            await collection.remove(id);
+          } catch (error) {
+            if (!(error instanceof DocumentNotFoundError)) throw error;
+          }
+        }),
+      );
+      const failure = results.find(result => result.status === 'rejected');
+      if (failure?.status === 'rejected') throw failure.reason;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, idsCount: ids.length },
+        },
+        error,
+      );
+    }
   }
 
   async disconnect() {

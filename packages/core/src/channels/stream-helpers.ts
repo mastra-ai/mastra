@@ -1,5 +1,6 @@
 import type { Adapter, StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
+import { describeProviderError, readProviderErrorDetails } from '../loop/shared/provider-error-details';
 import type { AgentChunkType } from '../stream/types';
 import {
   formatArgsSummary,
@@ -234,10 +235,16 @@ export async function postStreamError(args: {
   } else {
     message = String(extracted);
   }
-  const display = message.length > 500 ? message.slice(0, 500) + '…' : message;
-  logger?.error?.(`[${platform}] Stream completed with error`, { error: display });
+  // Provider HTTP failures often carry only the status text ("Bad Request") as
+  // their message; the provider's real explanation is in the response body.
+  // Logs get the parsed explanation (inside `display`) but never the raw body,
+  // which can echo request content to anyone who can read server logs.
+  const { statusCode, requestId } = readProviderErrorDetails(rawError);
+  const display =
+    describeProviderError(message, rawError, 1000) ?? (message.length > 1000 ? message.slice(0, 1000) + '…' : message);
+  logger?.error?.(`[${platform}] Stream completed with error`, { error: display, statusCode, requestId });
   const postable = formatError
-    ? formatError(rawError instanceof Error ? rawError : new Error(display))
+    ? formatError(rawError instanceof Error ? rawError : new Error(display, { cause: rawError }))
     : `❌ Error: ${display}`;
   try {
     await chatThread.post(postable as Parameters<Thread['post']>[0]);

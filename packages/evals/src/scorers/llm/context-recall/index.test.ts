@@ -4,11 +4,9 @@ import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createContextRecallScorer } from './index';
 
 /**
- * Build a mock model that returns predetermined JSON for each pipeline step.
- * The scorer pipeline calls the model three times (preprocess, analyze, reason).
- * Internally, each call first attempts streaming, then falls back to doGenerate
- * when structured output parsing fails on the stream. We provide enough responses
- * in both doStream and doGenerate arrays to handle this retry pattern.
+ * Build a mock judge that answers each pipeline step (claim extraction, claim
+ * attribution, reason) based on which prompt it receives, so the responses do
+ * not depend on how many model calls a step makes or how the mock indexes them.
  */
 function mockJudge(responses: {
   claims?: string[];
@@ -18,51 +16,34 @@ function mockJudge(responses: {
   const preprocessJson = JSON.stringify({ claims: responses.claims ?? [] });
   const analyzeJson = JSON.stringify({ verdicts: responses.verdicts ?? [] });
   const reasonText = responses.reason ?? 'No reason provided.';
-  const jsons = [preprocessJson, analyzeJson, reasonText];
 
-  function makeGenerateResult(text: string) {
-    return {
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop' as const,
-      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-      content: [{ type: 'text' as const, text }],
-      warnings: [] as never[],
-    };
+  function responseFor(prompt: Array<{ role: string; content: unknown }>) {
+    const lastUserMessage = prompt.findLast(message => message.role === 'user');
+    const parts = Array.isArray(lastUserMessage?.content) ? lastUserMessage.content : [];
+    const text = parts.map(part => (part?.type === 'text' ? part.text : '')).join('');
+    if (text.startsWith('Extract all atomic claims')) return preprocessJson;
+    if (text.startsWith('Determine if each claim')) return analyzeJson;
+    if (text.startsWith('Explain the context recall score')) return reasonText;
+    throw new Error(`Unexpected judge prompt: ${text.slice(0, 80)}`);
   }
-
-  function makeStreamResult(text: string) {
-    return {
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [] as never[],
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start' as const, warnings: [] as never[] },
-        {
-          type: 'response-metadata' as const,
-          id: 'id-0',
-          modelId: 'mock-model-id',
-          timestamp: new Date(0),
-        },
-        { type: 'text-start' as const, id: 'text-1' },
-        { type: 'text-delta' as const, id: 'text-1', delta: text },
-        { type: 'text-end' as const, id: 'text-1' },
-        {
-          type: 'finish' as const,
-          finishReason: 'stop' as const,
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        },
-      ]),
-    };
-  }
-
-  // Provide plenty of responses for both paths — the pipeline may try
-  // stream then fall back to generate for each step, consuming entries
-  // from both arrays in unpredictable order. Over-provision to be safe.
-  const allGenerate = jsons.flatMap(j => [makeGenerateResult(j), makeGenerateResult(j), makeGenerateResult(j)]);
-  const allStream = jsons.flatMap(j => [makeStreamResult(j), makeStreamResult(j), makeStreamResult(j)]);
 
   return new MockLanguageModelV2({
-    doGenerate: allGenerate,
-    doStream: allStream,
+    doGenerate: async ({ prompt }) => ({
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text', text: responseFor(prompt) }],
+      warnings: [],
+    }),
+    doStream: async ({ prompt }) => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: responseFor(prompt) },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+      ]),
+    }),
   });
 }
 
@@ -148,6 +129,7 @@ describe('createContextRecallScorer', () => {
       });
 
       expect(result.score).toBe(1);
+      expect(result.reason).toBe('The score is 1 because all claims are covered.');
     });
 
     it('scores the correct ratio for partial recall', async () => {

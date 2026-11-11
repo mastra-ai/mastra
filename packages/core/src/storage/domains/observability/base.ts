@@ -65,7 +65,9 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
+import type { SpanAggregateResponse, TrustedSpanAggregatePlan } from './span-aggregate';
 import type { SpanQueryResponse, TrustedSpanQueryPlan } from './span-query';
+import type { ThreadQueryResponse, TrustedThreadRowsQueryPlan } from './thread-query';
 import type { TraceAggregateResponse } from './trace-aggregate';
 import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import type {
@@ -82,6 +84,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   CreateSpanArgs,
   GetBranchArgs,
   GetBranchResponse,
@@ -116,13 +119,30 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
+ * - `span-query-text-search`: literal substring search in `querySpans`
+ * - `trace-query-text-search`: literal substring search across any span in `queryTraces`
+ * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
+ * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
+ * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
  * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
+ * - `trace-query-context-fields`: `requestId`, `serviceName` and `experimentId` predicates in trace queries (trace scope and `spans.some`/`spans.none`)
  * - `trace-query-time-to-first-chunk`: `timeToFirstChunkMs` on trace and span query results and predicates
  * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
+ * - `trace-query-root-entity-id`: root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
+ * - `trace-query-time-to-first-chunk-sort`: `orderBy` on `timeToFirstChunkMs` in trace and span queries
+ * - `trace-query-time-to-first-token`: `timeToFirstTokenMs` on trace, thread and span query results and predicates
+ * - `trace-query-time-to-first-token-sort`: `orderBy` on `timeToFirstTokenMs` in trace and span queries
+ * - `span-query-outcome-fields`: `outcome` and `stopReason` predicates in `querySpans` and `aggregateSpans`
+ *   (including `groupBy` and `countDistinct`), and `outcome`, `stopReason` and `stopReasonContext` on span rows
+ * - `trace-query-outcome-fields`: the root span's `outcome` and `stopReason` in trace-scope predicates and
+ *   trace aggregate `groupBy`/`countDistinct`, both fields in `spans.some`/`spans.none` predicates, and the root
+ *   span's `outcome`, `stopReason` and `stopReasonContext` on trace rows
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
+ * - `aggregate-time-to-first-measures`: `timeToFirstToken.*` and `timeToFirstChunk.*` measures in
+ *   `aggregateTraces` (root span value) and `aggregateSpans` (each span's value)
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
  * - `feedback`: the feedback CRUD, review-status and analytics methods
@@ -139,16 +159,30 @@ export type ObservabilityStorageFeature =
   | 'metric-discovery'
   | 'span-query'
   | 'span-query-context-fields'
+  | 'span-query-text-search'
+  | 'trace-query-text-search'
+  | 'span-query-model-fields'
+  | 'span-aggregate'
+  | 'span-aggregate-model-dimensions'
   | 'trace-query'
   | 'trace-aggregate'
   | 'trace-query-root-duration'
   | 'trace-query-discovery'
   | 'thread-query'
+  | 'thread-query-rows'
   | 'trace-query-tenant-scope'
   | 'feedback'
   | 'trace-query-context-ids'
+  | 'trace-query-context-fields'
   | 'trace-query-time-to-first-chunk'
-  | 'trace-query-root-span-fields';
+  | 'trace-query-root-span-fields'
+  | 'trace-query-root-entity-id'
+  | 'trace-query-time-to-first-chunk-sort'
+  | 'trace-query-time-to-first-token'
+  | 'trace-query-time-to-first-token-sort'
+  | 'span-query-outcome-fields'
+  | 'trace-query-outcome-fields'
+  | 'aggregate-time-to-first-measures';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -156,6 +190,16 @@ export type ObservabilityStorageFeature =
  * Storage adapters override only the methods they support.
  */
 export class ObservabilityStorage extends StorageDomain {
+  /**
+   * Where this domain writes data. Local includes embedded files, in-memory
+   * databases, and local replicas that sync remotely. Remote stores write
+   * through a database service. Undefined means the adapter does not report it.
+   * Platform exporters use this capability to avoid local observability writes.
+   */
+  public get persistenceLocation(): 'local' | 'remote' | undefined {
+    return undefined;
+  }
+
   constructor() {
     super({
       component: 'STORAGE',
@@ -436,6 +480,18 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
+   * Executes a validated span-aggregate plan.
+   */
+  async aggregateSpans(_plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_SPANS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support span aggregation',
+    });
+  }
+
+  /**
    * Discovers observed metadata fields over a validated trace population.
    */
   async getTraceQueryObservedFields(
@@ -463,8 +519,13 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Executes a validated thread-query plan.
+   * Keep the base return type compatible with identity-only adapters. The server
+   * checks `thread-query-rows` before sending a row plan; capable concrete adapters
+   * provide the more specific row overload.
    */
-  async queryThreads(_plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  async queryThreads(
+    _plan: TrustedThreadQueryPlan | TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | ThreadQueryResponse> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -512,6 +573,18 @@ export class ObservabilityStorage extends StorageDomain {
       text: 'This storage provider does not support batch updating spans',
     });
   }
+
+  /**
+   * Optional. Updates multiple spans, but only rows that already exist and haven't
+   * ended (`endedAt` is null). Never inserts. Returns the spans whose rows changed,
+   * so callers can tell which updates didn't apply.
+   *
+   * Lets an exporter end a span that a different process started (for example, a
+   * durable agent recovering after a crash) without reading the row first, while
+   * keeping ended spans immutable. Stores that don't implement it leave it
+   * undefined, so callers must check that it exists before calling it.
+   */
+  batchUpdateUnendedSpans?(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse>;
 
   /**
    * Deletes multiple traces, all their associated spans, and any trace-linked signal
@@ -851,6 +924,16 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing feedback',
+    });
+  }
+
+  /** Retrieves one feedback record by ID, or null when it does not exist. */
+  async getFeedbackById(_feedbackId: string): Promise<FeedbackRecord | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support retrieving feedback by ID',
     });
   }
 

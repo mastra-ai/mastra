@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { createTool } from '../../../../tools';
 import { createWorkflow } from '../../../../workflows/create';
 import { createStep } from '../../../../workflows/workflow';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
@@ -85,6 +86,136 @@ describeForAllEngines('AIMock loop scenario: workflow as tool', engine => {
 
     // Output text comes from the second turn
     expect(requests.length).toBe(2);
+  });
+
+  // A workflow whose output is empty hands back the whole run result. On storage v2 the
+  // research step's result is evicted by then, so it reaches the model only if it is loaded back.
+  it.each([1, 2] as const)(
+    'hands the model the step results of a workflow with an empty output (storage v%s)',
+    async storageVersion => {
+      const researchStep = createStep({
+        id: 'research-step',
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.object({ findings: z.string() }),
+        execute: async ({ inputData }) => ({ findings: `Research on ${inputData.topic}: detailed findings` }),
+      });
+      const fileStep = createStep({
+        id: 'file-step',
+        inputSchema: z.object({ findings: z.string() }),
+        outputSchema: z.object({ filed: z.boolean() }),
+        execute: async () => ({ filed: true }),
+      });
+      const clearStep = createStep({
+        id: 'clear-step',
+        inputSchema: z.object({ filed: z.boolean() }),
+        outputSchema: z.null(),
+        execute: async () => null,
+      });
+      const researchWorkflow = createWorkflow({
+        id: 'research-workflow',
+        description: 'Conducts research on a given topic',
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.any(),
+        options: { storageVersion },
+      })
+        .then(researchStep)
+        .then(fileStep)
+        .then(clearStep)
+        .commit();
+
+      const { requests } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research quantum computing for me',
+        workflows: { researchWorkflow },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [
+                {
+                  id: 'call_workflow',
+                  name: 'workflow-researchWorkflow',
+                  arguments: { inputData: { topic: 'quantum computing' } },
+                },
+              ],
+            },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The research is filed.' });
+        },
+      });
+
+      const messages = requests[1]?.body?.messages || [];
+      const toolResultMessage = messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_workflow');
+      // The next step's input repeats the findings, so check the research step's own output.
+      expect(JSON.parse(toolResultMessage?.content)).toMatchObject({
+        result: {
+          status: 'success',
+          steps: {
+            'research-step': {
+              status: 'success',
+              output: { findings: 'Research on quantum computing: detailed findings' },
+            },
+          },
+        },
+      });
+    },
+  );
+
+  it('streams progress from a workflow step tool to the agent caller (#28564)', async () => {
+    const progressTool = createTool({
+      id: 'progress-tool',
+      description: 'Reports research progress',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ findings: z.string() }),
+      execute: async ({ topic }, context) => {
+        await context.writer?.custom({ type: 'data-progress', data: { topic } });
+        return { findings: `Research on ${topic} complete` };
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'research-workflow-progress',
+      description: 'Researches a topic',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ findings: z.string() }),
+    })
+      .then(createStep(progressTool))
+      .commit();
+
+    const { output, chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Research quantum computing',
+      workflows: { researchWorkflow: workflow },
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              {
+                id: 'call_research',
+                name: 'workflow-researchWorkflow',
+                arguments: { inputData: { topic: 'quantum computing' } },
+              },
+            ],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Research complete.' });
+      },
+    });
+
+    expect(await output.text).toContain('Research complete');
+    expect(JSON.stringify(requests[1]?.body?.messages)).toContain('Research on quantum computing complete');
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'tool-output',
+        payload: expect.objectContaining({
+          toolName: 'workflow-researchWorkflow',
+          output: expect.objectContaining({ type: 'data-progress', data: { topic: 'quantum computing' } }),
+        }),
+      }),
+    );
   });
 
   it('workflow tool input schema is correctly exposed to model', async () => {

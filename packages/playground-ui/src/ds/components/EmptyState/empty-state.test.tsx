@@ -38,19 +38,22 @@ describe('EmptyState illustration', () => {
     expect(screen.getByRole('heading', { name: 'No logs yet' })).toBeTruthy();
   });
 
-  it('gives each rendered illustration its own mask and gradient ids', () => {
-    render(
-      <>
-        <EmptyState iconSlot={<EmptyStateIllustration name="api-keys" />} titleSlot="First" />
-        <EmptyState iconSlot={<EmptyStateIllustration name="api-keys" />} titleSlot="Second" />
-      </>,
-    );
-    const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
-    expect(ids.length).toBeGreaterThan(0);
-    expect(new Set(ids).size).toBe(ids.length);
-    for (const element of document.querySelectorAll('[mask], [fill^="url("]')) {
-      const reference = (element.getAttribute('mask') ?? element.getAttribute('fill'))?.match(/url\(#(.+)\)/)?.[1];
-      expect(reference && ids.includes(reference)).toBe(true);
-    }
-  });
+  it.each(['api-keys', 'no-charges'] as const)(
+    'gives each rendered %s illustration its own mask and gradient ids',
+    name => {
+      render(
+        <>
+          <EmptyState iconSlot={<EmptyStateIllustration name={name} />} titleSlot="First" />
+          <EmptyState iconSlot={<EmptyStateIllustration name={name} />} titleSlot="Second" />
+        </>,
+      );
+      const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
+      expect(ids.length).toBeGreaterThan(0);
+      expect(new Set(ids).size).toBe(ids.length);
+      for (const element of document.querySelectorAll('[mask], [fill^="url("]')) {
+        const reference = (element.getAttribute('mask') ?? element.getAttribute('fill'))?.match(/url\(#(.+)\)/)?.[1];
+        expect(reference && ids.includes(reference)).toBe(true);
+      }
+    },
+  );
 });

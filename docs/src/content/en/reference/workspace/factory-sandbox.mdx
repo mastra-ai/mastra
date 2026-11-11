@@ -32,7 +32,7 @@ export const factory = new MastraFactory({
 
 | Class | Package | Settings | Builds |
 | - | - | - | - |
-| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get` |
+| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes`, `publicPorts` | `start`, `get` |
 | `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` |
 | `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | `start`, `get` |
 | `LocalFactorySandbox` | `@mastra/factory` | None | No |
@@ -48,12 +48,35 @@ import { LocalFactorySandbox } from '@mastra/factory'
 new PlatformFactorySandbox() // reads MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_ENVIRONMENT_ID
 new E2BFactorySandbox() // reads E2B_API_KEY
 new DockerFactorySandbox({ defaults: { baseImage: 'node:22-slim' } })
-new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH! } })
+new LocalFactorySandbox() // reads MASTRACODE_LOCAL_SANDBOX_ROOT, defaults to ~/.mastracode/web/sandboxes
 ```
 
-`LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`.
+`LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`. Without `env`, commands only see an allow-list of host variables that git and TLS need, such as `HOME`, `USER`, `SHELL` and `SSL_CERT_FILE`, plus `PATH`. App secrets stay out of commands that run in repository checkouts.
 
-For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, a top-level `idleTimeoutMinutes` option also applies when `defaults` doesn't set one. The schema's `default` values show the effective defaults.
+### Scope env to one factory
+
+Every provider's `env` option takes a record or a function of the session's `FactorySandboxContext`. Use the function form when one deployment hosts several factories and a credential belongs to only one of them:
+
+```typescript
+new PlatformFactorySandbox({
+  env: ctx => (ctx.factoryId === PLATFORM_FACTORY_ID ? { PLATFORM_TOKEN } : {}),
+})
+```
+
+Compare `factoryId`, not `factoryName`: names can be edited and aren't unique.
+
+Platform and Docker apply `env` only when they provision a sandbox. A sandbox that resumes keeps the environment it started with. If you remove a credential from some factories, recreate their running sandboxes so the credential doesn't stay in them.
+
+## Default sandbox
+
+When you omit the `sandbox` option and Platform credentials (`MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY`) are set, `MastraFactory` installs a sandbox itself:
+
+- Under `mastra dev` or with `NODE_ENV=development`, it installs `LocalFactorySandbox`, so development doesn't start remote machines.
+- In built deployments, it installs `PlatformFactorySandbox`. This needs `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`. If either is missing, Factory logs a warning and turns off repository sandboxes.
+
+An explicit `sandbox` option always takes precedence. Without Platform credentials and without a `sandbox` option, repository sandboxes are off.
+
+For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, top-level `idleTimeoutMinutes` and `publicPorts` options also apply when `defaults` doesn't set them. `publicPorts` is off by default: when on, anyone with a port's URL can open it without signing in. It applies to sandboxes created after it changes. The schema's `default` values show the effective defaults.
 
 Platform polls a build through the builder that started it. After a host restart, an earlier build reads as `unknown`.
 
@@ -157,6 +180,8 @@ class MyFactorySandbox extends FactorySandbox<Settings> {
 }
 ```
 
+When a user recreates a stuck session's sandbox, Factory may call `create` with only `sessionId` and the persisted `sandboxId` (no repository access, empty settings) and then call the returned sandbox's `destroy()` without starting it. This happens when the server restarted or the session was opened on another replica. For recreate to work, `destroy()` must find and remove the session's VM from `sandboxId` or the session id alone. Factory doesn't offer recreate for `LocalFactorySandbox`, because its `destroy()` keeps the session directory.
+
 ## FactorySandboxContext
 
 Everything Factory knows about the session, passed to `create`, `template` and the build methods.
@@ -169,6 +194,19 @@ Everything Factory knows about the session, passed to `create`, `template` and t
     type: 'string',
     description:
       'The provider sandbox id persisted from a prior start. Forward it so resume reattaches the original VM.',
+    isOptional: true,
+  },
+  {
+    name: 'factoryId',
+    type: 'string',
+    description: 'Id of the factory the session belongs to. Absent for sessions created before factories.',
+    isOptional: true,
+  },
+  {
+    name: 'factoryName',
+    type: 'string',
+    description:
+      'Display name of the factory, for logs and readable config. Names can be edited and two factories can share one, so scope secrets by factoryId.',
     isOptional: true,
   },
   { name: 'repoFullName', type: 'string', description: 'owner/name of the session repository.', isOptional: true },
@@ -216,6 +254,20 @@ Everything Factory knows about the session, passed to `create`, `template` and t
       'Resolves the commit a repository template pins, given its clone URL and the credential minted for it. When absent, the provider resolves the default branch head itself.',
     isOptional: true,
   },
+  {
+    name: 'buildEnv',
+    type: 'Record<string, string>',
+    description:
+      "Environment for template builds and setup steps only, never for runtime commands. Keep it out of the template identity and the image. A provider whose builder can't do that may ignore it. If you spread the context into a repository template, take this field out of the spread so it doesn't reach the template's own `buildEnv`. Factory sets it from the factory's Build variables.",
+    isOptional: true,
+  },
+  {
+    name: 'buildEnvRevision',
+    type: 'string',
+    description:
+      'Opaque id that changes whenever buildEnv changes. Include it in the template identity so an edit rebuilds the template. It is a random id, never derived from the values.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -231,7 +283,19 @@ When the sandbox declares `builds`, factory builds the environment template ahea
 - on a cron schedule kept in core `Schedules`, enabled through `PATCH { buildTriggers: { schedule: { enabled: true, cron, timezone } } }`; needs a storage adapter with the schedules domain, otherwise the route reports `scheduleAvailable: false`
 - after a push to a linked repository's default branch when `buildTriggers.push.enabled` is set, at most once per `debounceMinutes`
 
-Saving environment settings never starts a build. Scheduled and push builds skip when the last build is ready, no repository head moved and no template input changed (settings, repositories and their order, setup commands or the working directory). Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
+Saving environment settings never starts a build. Scheduled and push builds skip when the last build is ready, no repository head moved and no template input changed (settings, repositories and their order, setup commands, the working directory or the factory's Build variables). Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
+
+## Environment variables
+
+Factory members add environment variables for every sandbox of a factory in **Settings › Manage Factory › Environment variables**. Each variable applies to one of:
+
+- **Runtime**: Every command in every session sandbox. Adding, editing or deleting one takes effect on the next command in a running sandbox, without a restart. Other Factory servers see the change when the factory's `pubsub` delivers it, or within a second when no cross-process `pubsub` is configured. A process that's already running keeps the environment it started with.
+- **Build**: The template build and the setup commands Factory runs itself, never runtime commands. Factory passes them to the provider as `buildEnv` and `buildEnvRevision`. An edit rebuilds the template on the next build. A running sandbox doesn't rerun setup. New sandboxes start from the rebuilt template, which holds whatever setup produced with the new values, while their own commands never see the values. On Docker, template builds don't receive Build variables yet and an edit doesn't rebuild the image, so only a setup that Factory runs itself sees them.
+- **Both**: Runtime and build.
+
+A runtime variable with the same name as a key from the provider's `env` option replaces it, and deleting the variable restores the host value. Names that Factory sets itself, such as `GH_TOKEN`, are reserved.
+
+Values are encrypted at rest with the factory's credential encryption key and can't be read back through the API or the UI. Anything running in the sandbox can read them. When sign-in is on and no encryption key is configured, Factory refuses to save variables and the settings page explains why. The routes are `GET /web/factory/projects/:id/sandbox-envs` and `PUT`, `PATCH` and `DELETE /web/factory/projects/:id/sandbox-envs/:name`.
 
 ## Related
 

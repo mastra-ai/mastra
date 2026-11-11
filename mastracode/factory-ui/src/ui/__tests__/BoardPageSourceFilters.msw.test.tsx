@@ -140,14 +140,15 @@ describe('Board source and Linear project filters', () => {
     stubSources();
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual']);
+    // Pull requests are offered while a code host is connected: they replace the retired Review board.
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual', 'Pull requests']);
   });
 
   it('keeps a saved filter on a disconnected source labelled and selectable', async () => {
     stubSources();
     const view = renderBoard('?source=gitlab');
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual']);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual', 'Pull requests']);
     expect(screen.getByRole('menuitemcheckbox', { name: 'GitLab' })).toHaveAttribute('aria-checked', 'true');
   });
 
@@ -172,6 +173,11 @@ describe('Board source and Linear project filters', () => {
       const first = renderBoard();
       await screen.findByText('DocsWatch: new documentation request');
       await waitForMutationsIdle(first.client);
+      const user = userEvent.setup();
+      await openPropertiesMenu(user, 'Board properties');
+      expect(screen.queryByRole('menuitem', { name: /^Linear project/ })).not.toBeInTheDocument();
+      await closePropertiesMenus(user);
+      await selectMany('Intake source', ['Linear']);
       await selectMany('Linear project', ['DocsWatch']);
       expect(new URLSearchParams(first.router.state.location.search).get('linearProject')).toBe(docsWatchId);
 
@@ -368,7 +374,7 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('Linear page unavailable')).not.toBeInTheDocument();
   });
 
-  it('matches any selected Linear project and respects an incompatible source filter', async () => {
+  it('matches any selected Linear project and narrows only Linear cards by it', async () => {
     stubSources();
     const first = renderBoard('?linearProject=project-a&linearProject=project-b');
     await waitForMutationsIdle(first.client);
@@ -376,11 +382,14 @@ describe('Board source and Linear project filters', () => {
     expect(screen.getByText('Billing: export invoices')).toBeInTheDocument();
     expect(screen.getByText('Moved project card')).toBeInTheDocument();
     expect(screen.queryByText('Unassigned project')).not.toBeInTheDocument();
-    first.unmount();
-    const second = renderBoard('?source=github&linearProject=project-a');
-    await waitForMutationsIdle(second.client);
-    expect(screen.queryByText('Portal: add account switcher')).not.toBeInTheDocument();
     expect(screen.queryByText('GitHub: update dependencies')).not.toBeInTheDocument();
+    first.unmount();
+    const second = renderBoard('?source=github&source=linear&linearProject=project-a');
+    await waitForMutationsIdle(second.client);
+    await screen.findByText('Portal: add account switcher');
+    expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
+    expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
+    expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
   });
 
   it('offers Linear reconnection when the selected feed authorization expires', async () => {

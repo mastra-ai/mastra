@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
@@ -9,7 +10,7 @@ import {
   useReconnectPlatformProviderMutation,
 } from '../../../../../hooks/usePlatformConnections';
 import { isJiraAuthError } from '../../../factory/services/jira';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { JiraIcon } from '../../../../ui/icons';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
@@ -42,7 +43,7 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
   };
 
   if (jiraStatus.isPending || (connected && projects.isPending)) {
-    return <SkeletonRows label="Loading Jira projects" rows={2} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading Jira projects" rows={2} />;
   }
 
   if (!connected) {
@@ -101,7 +102,14 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
           icon={<JiraIcon />}
           title={project.name}
           subtitle={
-            [project.key, project.site].filter(Boolean).join(' · ') || 'Its issues feed this Factory Work board'
+            project.key || project.site ? (
+              <Metadata singleLine>
+                {project.key && <Metadata.Item className="shrink-0">{project.key}</Metadata.Item>}
+                {project.site && <Metadata.Item>{project.site}</Metadata.Item>}
+              </Metadata>
+            ) : (
+              'Its issues feed this Factory Work board'
+            )
           }
           shortcut={<Kbd size="sm">↵</Kbd>}
           value={`jira-${project.id}`}

@@ -1,5 +1,5 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionListOptions, CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
 
@@ -11,6 +11,25 @@ const CONNECTIONS = 'factory_project_source_control_connections';
 const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SESSIONS = 'source_control_sessions';
 const SESSION_REPOSITORIES = 'source_control_session_repositories';
+
+/**
+ * The user already holds this branch in a session of the same factory on
+ * another repository link, so the insert hit the factory-wide unique index.
+ * Reuse is keyed by the link, so that session is not this one to reuse.
+ */
+export class SessionBranchHeldError extends Error {
+  readonly branch: string;
+  readonly sessionId: string;
+  constructor(branch: string, sessionId: string) {
+    super(
+      `Branch ${branch} is already held by session ${sessionId} on another repository of this factory. ` +
+        'Session branches are unique per user across a factory: name the branch per card, or delete that session.',
+    );
+    this.branch = branch;
+    this.sessionId = sessionId;
+    this.name = 'SessionBranchHeldError';
+  }
+}
 
 /**
  * The user already holds the branch on this link in a session without this
@@ -153,11 +172,18 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       // The user session that started this one as a side session, if any.
       origin_session_id: { type: 'text', nullable: true },
       origin_thread_id: { type: 'text', nullable: true },
+      // When the origin muted this side session's reports; null while it gets them.
+      origin_muted_at: { type: 'timestamp', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
+      // When the session's threads reached their Factory or owner memory resource.
+      // Null only on sessions from before shared resources, until the startup migration moves them.
+      resources_migrated_at: { type: 'timestamp', nullable: true },
+      // When startup checked that the session's visibility matches its memory resource. New sessions start checked.
+      visibility_checked_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -281,6 +307,13 @@ export interface ProjectRepository {
   updatedAt: Date;
 }
 
+/** A project's connection with its installation and its links, each link with the repository behind it. */
+export interface ProjectConnectionWithRepositories extends ProjectSourceControlConnection {
+  installation: SourceControlInstallation;
+  /** `repository` is null when the repository row is gone or belongs to an installation outside the organization. */
+  repositories: Array<ProjectRepository & { repository: SourceControlRepository | null }>;
+}
+
 export interface ExternalRepositoryProjectTarget {
   orgId: string;
   factoryProjectId: string;
@@ -353,6 +386,8 @@ export interface SourceControlSession {
   originSessionId: string | null;
   /** The thread of `originSessionId` that started it. */
   originThreadId: string | null;
+  /** When the origin muted this side session's reports; null while they are delivered. */
+  originMutedAt: Date | null;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -419,6 +454,9 @@ export interface UpsertSessionRepositoryInput {
 export type SessionBranchKey =
   | { projectRepositoryId: string; userId: string; branch: string }
   | { factoryProjectId: string; userId: string; branch: string };
+export type TransferSourceControlSessionOwnerResult =
+  | { status: 'updated'; session: SourceControlSession }
+  | { status: 'conflict'; reason: 'stale_owner' | 'branch_owned'; session: SourceControlSession | null };
 
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
@@ -448,6 +486,18 @@ export interface SourceControlStorageHandle {
   };
   readonly connections: {
     list(args: { orgId: string; factoryProjectId: string }): Promise<ProjectSourceControlConnection[]>;
+    /**
+     * This integration's connections to any of the projects, oldest first, each with its installation and its links
+     * (oldest first, with their repositories). It takes four queries however many projects, connections or links
+     * there are, plus one when a repository sits under an installation no connection uses. A connection whose
+     * installation is gone, such as after the GitHub App was uninstalled, is left out,
+     * so one orphaned row cannot fail the read. Only installations of `orgId` are returned, so the result stays
+     * inside the organization even when a project id from another one is passed.
+     */
+    listWithRepositories(args: {
+      orgId: string;
+      factoryProjectIds: string[];
+    }): Promise<ProjectConnectionWithRepositories[]>;
     get(args: { orgId: string; id: string }): Promise<ProjectSourceControlConnection | null>;
     create(args: CreateProjectSourceControlConnectionInput): Promise<ProjectSourceControlConnection>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
@@ -502,9 +552,23 @@ export interface SourceControlStorageHandle {
     listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
     /** Overwrite the session's display title. Keyed by the controller-facing `sessionId`. */
     rename(args: { sessionId: string; title: string }): Promise<void>;
+    /** Mute or unmute the side session's reports to its origin. Keyed by the controller-facing `sessionId`. */
+    setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
+    /** Change who can see the session while `expectedUserId` still owns it. Null when it does not exist or changed owner. */
+    setVisibility(args: {
+      sessionId: string;
+      visibility: SourceControlSessionVisibility;
+      expectedUserId: string;
+    }): Promise<SourceControlSession | null>;
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
+    /** Move a shared session to `toUserId` while `expectedUserId` still owns it; a private one is a `stale_owner` conflict. */
+    transferOwner(args: {
+      sessionId: string;
+      expectedUserId: string;
+      toUserId: string;
+    }): Promise<TransferSourceControlSessionOwnerResult>;
     setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
     /**
      * Record when the session's workspace was first materialized. Write-once:
@@ -608,12 +672,15 @@ interface SessionDbRow extends Record<string, unknown> {
   visibility: string | null;
   origin_session_id?: string | null;
   origin_thread_id?: string | null;
+  origin_muted_at?: Date | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
+  resources_migrated_at?: Date | null;
+  visibility_checked_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -681,6 +748,10 @@ function toBuildStatus(value: string | null): ProjectRepositoryBuildStatus {
   return value === 'configured' || value === 'failed' ? value : 'unbuilt';
 }
 
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
 /** Oldest first; ties (same millisecond) break on id so re-runs see one order. */
 function byCreatedAt(a: ProjectRepositoryDbRow, b: ProjectRepositoryDbRow): number {
   return a.created_at.getTime() - b.created_at.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -725,6 +796,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     visibility: row.visibility === 'private' ? 'private' : 'org',
     originSessionId: row.origin_session_id ?? null,
     originThreadId: row.origin_thread_id ?? null,
+    originMutedAt: row.origin_muted_at ?? null,
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -751,6 +823,38 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 export class SourceControlStorage extends FactoryStorageDomain {
   constructor() {
     super('source-control');
+  }
+
+  /** Sessions, across providers and organizations, the memory-resource migration has not finished. */
+  async listSessionsAwaitingResourceMigration(): Promise<SourceControlSession[]> {
+    return (await this.ops.findMany<SessionDbRow>(SESSIONS, { resources_migrated_at: null })).map(toSession);
+  }
+
+  /**
+   * Sessions, across providers and organizations, whose visibility startup has not yet checked against
+   * their memory resource. Only sessions already on their resource are returned; the rest wait for the
+   * resource migration.
+   */
+  async listSessionsAwaitingVisibilityCheck(): Promise<SourceControlSession[]> {
+    const rows = await this.ops.findMany<SessionDbRow>(SESSIONS, { visibility_checked_at: null });
+    return rows.filter(row => row.resources_migrated_at).map(toSession);
+  }
+
+  /** Record that a session's visibility was checked, making it private when `makePrivate`. */
+  async markVisibilityChecked(sessionId: string, { makePrivate }: { makePrivate: boolean }): Promise<void> {
+    const now = new Date();
+    await this.ops.updateMany(
+      SESSIONS,
+      { session_id: sessionId },
+      makePrivate
+        ? { visibility: 'private', visibility_checked_at: now, updated_at: now }
+        : { visibility_checked_at: now },
+    );
+  }
+
+  /** Record that a session's threads are on their memory resource, so later starts skip it. */
+  async markResourcesMigrated(sessionId: string): Promise<void> {
+    await this.ops.updateMany(SESSIONS, { session_id: sessionId }, { resources_migrated_at: new Date() });
   }
 
   async init(): Promise<void> {
@@ -1148,6 +1252,80 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toConnection);
         },
+        listWithRepositories: async ({ orgId, factoryProjectIds }) => {
+          if (factoryProjectIds.length === 0) return [];
+          const oldestFirst: CollectionListOptions = {
+            orderBy: [
+              ['created_at', 'asc'],
+              ['id', 'asc'],
+            ],
+          };
+          const orgInstallations = async (ids: string[]) =>
+            ids.length === 0
+              ? []
+              : (
+                  await db().findMany<InstallationDbRow>(INSTALLATIONS, {
+                    id: { in: ids },
+                    integration_id: integrationId,
+                    org_id: orgId,
+                  })
+                ).map(toInstallation);
+
+          const connectionRows = await db().findMany<ConnectionDbRow>(
+            CONNECTIONS,
+            { factory_project_id: { in: unique(factoryProjectIds) }, integration_id: integrationId },
+            oldestFirst,
+          );
+          if (connectionRows.length === 0) return [];
+          const [installationList, linkRows] = await Promise.all([
+            orgInstallations(unique(connectionRows.map(row => row.installation_id))),
+            db().findMany<ProjectRepositoryDbRow>(
+              PROJECT_REPOSITORIES,
+              { connection_id: { in: connectionRows.map(row => row.id) } },
+              oldestFirst,
+            ),
+          ]);
+          const installations = new Map(installationList.map(installation => [installation.id, installation]));
+          const repositoryRows =
+            linkRows.length === 0
+              ? []
+              : await db().findMany<RepositoryDbRow>(REPOSITORIES, {
+                  id: { in: unique(linkRows.map(row => row.repository_id)) },
+                });
+          // Like `getRepository`, a repository only counts when its installation is in the organization. That is
+          // nearly always the connection's own installation, already loaded; look up any other.
+          const orgInstallationIds = new Set(installations.keys());
+          const otherInstallations = await orgInstallations(
+            unique(repositoryRows.map(row => row.installation_id)).filter(id => !orgInstallationIds.has(id)),
+          );
+          for (const installation of otherInstallations) orgInstallationIds.add(installation.id);
+          const repositories = new Map(
+            repositoryRows
+              .filter(row => orgInstallationIds.has(row.installation_id))
+              .map(row => [row.id, toRepository(row)]),
+          );
+          const linksByConnection = new Map<string, ProjectRepositoryDbRow[]>();
+          for (const row of linkRows) {
+            const links = linksByConnection.get(row.connection_id) ?? [];
+            links.push(row);
+            linksByConnection.set(row.connection_id, links);
+          }
+
+          return connectionRows.flatMap(row => {
+            const installation = installations.get(row.installation_id);
+            if (!installation) return [];
+            return [
+              {
+                ...toConnection(row),
+                installation,
+                repositories: (linksByConnection.get(row.id) ?? []).map(link => ({
+                  ...toProjectRepository(link),
+                  repository: repositories.get(link.repository_id) ?? null,
+                })),
+              },
+            ];
+          });
+        },
         get: getConnection,
         create: async input => {
           const project = await db().findOne<Record<string, unknown>>(FACTORY_PROJECTS, {
@@ -1433,6 +1611,20 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: new Date(),
           }));
         },
+        setOriginMuted: async ({ sessionId, muted }) => {
+          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+            origin_muted_at: muted ? new Date() : null,
+            updated_at: new Date(),
+          }));
+        },
+        setVisibility: async ({ sessionId, visibility, expectedUserId }) => {
+          const row = await db().updateAtomic<SessionDbRow>(
+            SESSIONS,
+            { session_id: sessionId, user_id: expectedUserId },
+            () => ({ visibility, updated_at: new Date() }),
+          );
+          return row ? toSession(row) : null;
+        },
         getForBranch: async args => {
           if ('factoryProjectId' in args) {
             const row = await db().findOne<SessionDbRow>(SESSIONS, {
@@ -1465,7 +1657,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           };
           // Reuse is still keyed by the link, as before this column existed. A
           // branch the same user already holds on another link of the factory
-          // surfaces as the unique violation of the insert below.
+          // is reported as a branch conflict if the insert hits the unique index.
           const findExisting = async () =>
             db().findOne<SessionDbRow>(SESSIONS, {
               project_repository_id: input.projectRepositoryId,
@@ -1487,11 +1679,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
               visibility: input.visibility ?? 'org',
               origin_session_id: input.origin?.sessionId ?? null,
               origin_thread_id: input.origin?.threadId ?? null,
+              origin_muted_at: null,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,
               materialized_at: null,
               first_message_at: null,
+              // New sessions start on their memory resource.
+              resources_migrated_at: now,
+              visibility_checked_at: now,
               created_at: now,
               updated_at: now,
             });
@@ -1499,9 +1695,45 @@ export class SourceControlStorage extends FactoryStorageDomain {
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
             const row = await findExisting();
-            if (!row) throw error;
-            return reuse(row);
+            if (row) return reuse(row);
+            // Not this link's row: the same user holds the branch on another link
+            // of the factory, which only the factory-wide index can see.
+            const held = await db().findOne<SessionDbRow>(SESSIONS, {
+              factory_project_id: factoryProjectId,
+              user_id: input.userId,
+              branch: input.branch,
+            });
+            if (held) throw new SessionBranchHeldError(input.branch, held.session_id);
+            throw error;
           }
+        },
+        transferOwner: async ({ sessionId, expectedUserId, toUserId }) => {
+          let refusedPrivate = false;
+          try {
+            const updated = await db().updateAtomic<SessionDbRow>(
+              SESSIONS,
+              { session_id: sessionId, user_id: expectedUserId },
+              current => {
+                // Shared is "not private", as in toSession: rows from before visibility existed hold NULL.
+                if (current.visibility === 'private') {
+                  refusedPrivate = true;
+                  return null;
+                }
+                return current.user_id === toUserId ? null : { user_id: toUserId, updated_at: new Date() };
+              },
+            );
+            if (updated) {
+              return refusedPrivate
+                ? { status: 'conflict', reason: 'stale_owner', session: toSession(updated) }
+                : { status: 'updated', session: toSession(updated) };
+            }
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError)) throw error;
+            const session = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
+            return { status: 'conflict', reason: 'branch_owned', session: session ? toSession(session) : null };
+          }
+          const session = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
+          return { status: 'conflict', reason: 'stale_owner', session: session ? toSession(session) : null };
         },
         setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
           await db().updateMany(

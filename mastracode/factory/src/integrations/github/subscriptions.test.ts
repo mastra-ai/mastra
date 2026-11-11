@@ -25,7 +25,6 @@ describe('GitHub signal subscription store', () => {
       ownerId: 'user-a',
       resourceId: 'resource-a',
       threadId: 'thread-a',
-      sessionScope: '/workspace/a',
       source: 'explicit-tool',
       subscribedByUserId: 'user-a',
     };
@@ -47,30 +46,32 @@ describe('GitHub signal subscription store', () => {
     expect(await listPullRequestSubscriptionsForThread(baseInput, storage)).toHaveLength(1);
   });
 
-  it('answers a user session that addresses itself by its own id', async () => {
+  it('finds a thread\'s subscriptions by its session, not by the resource sessions share', async () => {
     const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions.js');
-    // Unscoped user sessions record the Factory project as resourceId, but the
-    // chat surface addresses them as (sessionId, sessionId) with no scope.
     await subscribeToPullRequest(
-      {
-        ...baseInput,
-        resourceId: 'factory-project',
-        sessionId: 'session-u',
-        threadId: 'session-u',
-        sessionScope: undefined,
-      },
+      { ...baseInput, resourceId: 'factory-project', sessionId: 'run-a', threadId: 'run-a' },
       storage,
     );
-    // A scoped row for the same session, thread and project must stay out of
-    // the unscoped fallback.
     await subscribeToPullRequest(
-      {
-        ...baseInput,
-        resourceId: 'factory-project',
-        sessionId: 'session-u',
-        threadId: 'session-u',
-        sessionScope: '/x',
-      },
+      { ...baseInput, changeRequestId: '43', resourceId: 'factory-project', sessionId: 'run-b', threadId: 'run-b' },
+      storage,
+    );
+    const rows = await listPullRequestSubscriptionsForThread(
+      { orgId: 'org-a', sessionId: 'run-a', threadId: 'run-a' },
+      storage,
+    );
+    expect(rows.map(row => row.data.changeRequestId)).toEqual(['42']);
+    expect(
+      await listPullRequestSubscriptionsForThread({ orgId: 'org-b', sessionId: 'run-a', threadId: 'run-a' }, storage),
+    ).toEqual([]);
+  });
+
+  it('answers a user session that addresses itself by its own id', async () => {
+    const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions.js');
+    // User sessions record the Factory project as resourceId, but the chat
+    // surface addresses them as (sessionId, sessionId).
+    await subscribeToPullRequest(
+      { ...baseInput, resourceId: 'factory-project', sessionId: 'session-u', threadId: 'session-u' },
       storage,
     );
     const rows = await listPullRequestSubscriptionsForThread(
@@ -78,8 +79,8 @@ describe('GitHub signal subscription store', () => {
       storage,
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ sessionId: 'session-u', resourceId: 'factory-project', sessionScope: '' });
-    // A different org, thread or a scoped request never reaches the fallback.
+    expect(rows[0]).toMatchObject({ sessionId: 'session-u', resourceId: 'factory-project' });
+    // A different org or thread never reaches the fallback.
     expect(
       await listPullRequestSubscriptionsForThread(
         { orgId: 'org-b', resourceId: 'session-u', threadId: 'session-u' },
@@ -92,12 +93,22 @@ describe('GitHub signal subscription store', () => {
         storage,
       ),
     ).toEqual([]);
-    expect(
-      await listPullRequestSubscriptionsForThread(
-        { orgId: 'org-a', resourceId: 'session-u', threadId: 'session-u', sessionScope: '/x' },
-        storage,
-      ),
-    ).toEqual([]);
+  });
+
+  it('ignores the scope stored on rows written before sessions dropped scopes', async () => {
+    const { listPullRequestSubscriptionsForThread, subscribeToPullRequest, unsubscribeFromPullRequest } =
+      await import('./subscriptions.js');
+    const legacy = await subscribeToPullRequest(baseInput, storage);
+    await storage.subscriptions.delete(legacy.id);
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...row } = legacy;
+    const stored = await storage.subscriptions.create({ ...row, sessionScope: '/workspace/a' });
+    expect(stored.sessionScope).toBe('/workspace/a');
+
+    expect((await listPullRequestSubscriptionsForThread(baseInput, storage)).map(r => r.id)).toEqual([stored.id]);
+    // Subscribing again resolves to the legacy row instead of adding a second one.
+    expect((await subscribeToPullRequest(baseInput, storage)).id).toBe(stored.id);
+    await unsubscribeFromPullRequest(baseInput, storage);
+    expect(await listPullRequestSubscriptionsForThread(baseInput, storage)).toEqual([]);
   });
 
   it('returns the existing row for duplicate subscriptions', async () => {
@@ -130,12 +141,12 @@ describe('GitHub signal subscription store', () => {
     expect(await listPullRequestSubscriptionsForThread(baseInput, storage)).toEqual([]);
   });
 
-  it('supports reverse lookup by change request and by scoped thread', async () => {
+  it('supports reverse lookup by change request and by thread', async () => {
     const { listPullRequestSubscriptions, listPullRequestSubscriptionsForThread, subscribeToPullRequest } =
       await import('./subscriptions.js');
     await subscribeToPullRequest(baseInput, storage);
     await subscribeToPullRequest(
-      { ...baseInput, sessionId: 'session-b', threadId: 'thread-b', sessionScope: '/workspace/b' },
+      { ...baseInput, sessionId: 'session-b', threadId: 'thread-b' },
       storage,
     );
 

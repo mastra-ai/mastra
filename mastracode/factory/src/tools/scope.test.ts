@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
 import type { SourceControlSessionVisibility } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.js';
+import { FACTORY_INTERACTIVE_KEY, FACTORY_SLACK_SENDER_KEY, resolveFactoryToolScope } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 import { createFactoryTools } from './index.js';
 
@@ -77,9 +77,9 @@ function context({
   if (user) requestContext.set('user', user);
   if (interactive) requestContext.set(FACTORY_INTERACTIVE_KEY, true);
   requestContext.set('controller', {
+    sessionId: resourceId,
     resourceId,
     threadId,
-    scope: '/worktree',
     getState: () => (tag ? { factoryProjectId: tag } : {}),
   });
   return requestContext;
@@ -121,6 +121,42 @@ describe('resolveFactoryToolScope', () => {
       workItems,
     });
     expect(scope?.actorProfile).toEqual({ name: 'Caleb', avatarUrl: 'https://example.com/c.png' });
+  });
+
+  it('authorizes Slack management as the linked sender while the model uses the session owner', async () => {
+    const { seed, createSession, sessions, workItems } = await seedFactory();
+    await createSession('session-1', 'owner-1', 'org');
+    const requestContext = context({ user: { workosId: 'owner-1', organizationId: 'org-1' } });
+    requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: 'responder-1', orgId: 'org-1' });
+    const scope = await resolveFactoryToolScope({
+      requestContext,
+      authEnabled: true,
+      sessions,
+      projects: seed.projects,
+      workItems,
+    });
+    expect(scope).toMatchObject({ userId: 'responder-1', kind: 'user', interactive: true });
+    expect(requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+  });
+
+  it('does not let a linked Slack responder manage someone else’s private session', async () => {
+    const { seed, createSession, sessions, workItems } = await seedFactory();
+    await createSession('session-1', 'owner-1', 'private');
+    const requestContext = context({ user: { workosId: 'owner-1', organizationId: 'org-1' } });
+    requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: 'responder-1', orgId: 'org-1' });
+    await expect(
+      resolveFactoryToolScope({ requestContext, authEnabled: true, sessions, projects: seed.projects, workItems }),
+    ).resolves.toBeNull();
+  });
+
+  it('rejects a Slack sender from another organization even when the model runs as the owner', async () => {
+    const { seed, createSession, sessions, workItems } = await seedFactory();
+    await createSession('session-1', 'owner-1', 'org');
+    const requestContext = context({ user: { workosId: 'owner-1', organizationId: 'org-1' } });
+    requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: 'responder-1', orgId: 'org-2' });
+    await expect(
+      resolveFactoryToolScope({ requestContext, authEnabled: true, sessions, projects: seed.projects, workItems }),
+    ).resolves.toBeNull();
   });
 
   it('accepts an org teammate on an org-visible session', async () => {

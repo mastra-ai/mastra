@@ -79,7 +79,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
           <SearchInput
             label="Search prompt blocks"
             className="mt-2"
-            placeholder="Search prompt blocks..."
+            placeholder="Search prompt blocks"
             value={search}
             onValueChange={handleSearchChange}
           />

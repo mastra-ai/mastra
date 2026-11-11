@@ -408,7 +408,7 @@ describe('DurableAgent', () => {
         model: mockModel as LanguageModelV2,
       });
 
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, id: 'public-prepare-agent' });
       const mcp: MCPToolExecutionContext = {
         extra: {
           signal: new AbortController().signal,
@@ -425,6 +425,9 @@ describe('DurableAgent', () => {
       expect(globalRunRegistry.has(result.runId)).toBe(true);
 
       const entry = globalRunRegistry.get(result.runId);
+      expect(durableAgent.id).not.toBe(baseAgent.id);
+      expect(entry?.agentId).toBe(durableAgent.id);
+      expect(durableAgent.runRegistry.get(result.runId)?.agentId).toBe(durableAgent.id);
       expect(entry).toBeDefined();
       expect(entry!.model).toBeDefined();
       expect(entry!.mcp).toBe(mcp);

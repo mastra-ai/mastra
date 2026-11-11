@@ -68,8 +68,9 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                       Metadata
                     </Txt>
                     <Code
-                      className="overflow-x-auto rounded-lg bg-current/10 p-2 text-caption"
                       code={JSON.stringify(tripwire.metadata, null, 2)}
+                      lang="json"
+                      className="rounded-lg bg-current/10 p-2 text-caption break-words whitespace-pre-wrap"
                     />
                   </div>
                 )}

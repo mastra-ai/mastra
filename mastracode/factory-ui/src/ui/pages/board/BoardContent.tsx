@@ -1,3 +1,5 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
@@ -5,11 +7,12 @@ import type { InstalledBoardInfo } from '../../../api/types';
 import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
 import { cardMatchesSourceFilters, hasBoardSourceFilters } from '../../domains/factory/boardSourceFilters';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
+import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { stageContentCount } from '../../domains/factory/boardCandidates';
 import type { BoardCandidate } from '../../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
-import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
+import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
@@ -24,14 +27,13 @@ import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessi
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
 import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
+import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from '../../domains/factory/boardLabels';
 import {
-  boardLabels,
   boardParticipants,
-  candidateMatchesLabels,
-  candidateMatchesRelevance,
-  workItemMatchesLabels,
-  workItemMatchesRelevance,
-} from '../../domains/factory/boardRelevance';
+  boardPersonIdentity,
+  candidateMatchesPeople,
+  workItemMatchesPeople,
+} from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
@@ -82,15 +84,21 @@ export function BoardContent({
   definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
-  const review = kind === 'review';
-  const builtin = kind === 'work' || review;
+  // A board with a pull request loop runs Factory's automation; the default board keeps its own column icons.
+  const loop = boardLoop(definition);
+  const runsLoop = loop !== undefined;
+  // A board that reviews pull requests but builds nothing (the retired Review board a project still
+  // uses) takes no new cards: its cards come from pull requests.
+  const pullRequestsOnly = loop?.pullRequestReview !== undefined && loop.build === undefined;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
   const auth = useFactoryAuth();
   const currentUserId = auth.data?.user?.userId;
-  const view = useBoardView({ factoryProjectId, kind, currentUserId });
+  const githubStatus = useGithubStatusQuery();
+  const personId = boardPersonIdentity(currentUserId, githubStatus.data?.userGithubUsername);
+  const reviewsPullRequests = boardLoop(definition)?.pullRequestReview !== undefined;
+  const view = useBoardView({ factoryProjectId, kind, reviewsPullRequests, currentUserId, personId });
   const { searchParams, filters, sort, layout } = view;
   const targetItemId = searchParams.get('item') || undefined;
-  const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
   const items = useBoardItems({ factoryProjectId, kind, currentUserId });
   const repositoryChoice = useRepositoryChoice(factory, definition);
@@ -115,7 +123,7 @@ export function BoardContent({
     if (!card) return;
     void repositoryChoice.choose(
       card.source,
-      card.metadata,
+      { ...card.metadata, ...('workItem' in card ? card.workItem?.metadata : undefined) },
       stage,
       slug => {
         if (payload.kind === 'work-item') items.move(payload.id, stage, { cause, repositorySlug: slug });
@@ -158,14 +166,15 @@ export function BoardContent({
     candidates: intake.participantCandidates,
     activityPage,
     currentUser: auth.data?.user,
+    personId,
   });
   const participantCandidateBySourceKey = new Map(
     intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
   );
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
   const candidateMatchesView = (candidate: BoardCandidate): boolean => {
-    if (!candidateMatchesRelevance(candidate, filters.participantIds, filters.relevanceTypes)) return false;
-    if (!candidateMatchesLabels(candidate, filters.labels)) return false;
+    if (!candidateMatchesPeople(candidate, filters, personId)) return false;
+    if (!candidateMatchesLabels(candidate, filters.label)) return false;
     if (!cardMatchesSourceFilters(candidate, filters)) return false;
     return cardMatchesSearch(candidate, view.search);
   };
@@ -174,9 +183,8 @@ export function BoardContent({
     items.visible.filter(item => itemAppearsInStage(item, stage, stages));
   const workItemMatchesView = (item: WorkItem): boolean => {
     const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
-    if (!workItemMatchesRelevance(item, activityPage, filters.participantIds, filters.relevanceTypes, liveCandidate))
-      return false;
-    if (!workItemMatchesLabels(item, filters.labels, liveCandidate)) return false;
+    if (!workItemMatchesPeople(item, activityPage, filters, personId, liveCandidate)) return false;
+    if (!workItemMatchesLabels(item, filters.label, liveCandidate)) return false;
     if (!cardMatchesSourceFilters(item, filters, liveCandidate)) return false;
     return cardMatchesSearch(item, view.search);
   };
@@ -188,6 +196,7 @@ export function BoardContent({
   const boardWorkItems = [...workItemsByStage.values()].flat();
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
   const loadingStages = boardLoadingStages({
+    board: definition,
     stages,
     itemsPending: items.isPending,
     intakePending: intake.isPending,
@@ -202,9 +211,7 @@ export function BoardContent({
     .filter(stage => workItemsByStage.get(stage.id)?.some(item => item.id === targetItemId))
     .map(stage => stage.id);
   const collapsedStages = useCollapsedStages(
-    targetItemId && targetStages.length > 0
-      ? { itemId: targetItemId, commentId: targetCommentId, stages: targetStages }
-      : undefined,
+    targetItemId && targetStages.length > 0 ? { itemId: targetItemId, stages: targetStages } : undefined,
   );
 
   if (items.error !== undefined) {
@@ -228,9 +235,9 @@ export function BoardContent({
     knownSourceKeys: items.knownSourceKeys,
   });
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
-  const anyFilterActive = boardFiltersActive(filters, kind) || view.search.trim() !== '';
+  const anyFilterActive = boardFiltersActive(filters) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
-  const hasIntakeSource = intake.available.length > 0;
+  const intakeSetup = intake.fed ? undefined : intake.unrouted ? 'route' : 'source';
 
   const stageViews = stages.map(stage => {
     const isInitialPhase = stage.id === definition.initialPhase;
@@ -241,12 +248,16 @@ export function BoardContent({
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
+    // No card is created by hand on the retired Review board: its cards come from pull requests.
     const canCreate =
-      !review && !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
-    const canConnectSource = isInitialPhase && !hasIntakeSource;
-    const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
+      !pullRequestsOnly &&
+      !items.isPending &&
+      stage.kind !== 'terminal' &&
+      (composer.stage === undefined || composerOpen);
+    const stageIntakeSetup = isInitialPhase ? intakeSetup : undefined;
+    const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || Boolean(stageIntakeSetup));
     const collapsed =
-      builtin &&
+      runsLoop &&
       !isInitialPhase &&
       !loading &&
       !composerOpen &&
@@ -255,7 +266,8 @@ export function BoardContent({
       taskCount === 0;
     return {
       stage,
-      phaseKind: builtin ? undefined : stage.kind,
+      phaseKind: definition.id === DEFAULT_BOARD_ID ? undefined : stage.kind,
+      exitTool: stage.exitTool,
       loading,
       taskCount,
       collapsed,
@@ -277,19 +289,18 @@ export function BoardContent({
           stage={stage}
           isInitialPhase={isInitialPhase}
           layout={layout}
-          kind={kind}
           loading={loading}
           taskCount={taskCount}
           feed={columnFeed}
           intakeSource={intake.active}
-          hasIntakeSource={hasIntakeSource}
+          intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={isInitialPhase ? intake.alreadyMaterialized : 0}
           emptyStateActions={
             showEmptyStateActions && (
               <BoardEmptyStateActions
                 factoryId={factoryProjectId}
-                connectSource={canConnectSource}
+                intakeSetup={stageIntakeSetup}
                 onCreate={canCreate ? () => composer.open(stage.id) : undefined}
                 onClearFilters={filtersExcludeAll ? view.clearFilters : undefined}
               />
@@ -340,7 +351,7 @@ export function BoardContent({
                 onMove={toStage =>
                   void repositoryChoice.choose(
                     item.source,
-                    item.metadata,
+                    { ...item.metadata, ...item.workItem?.metadata },
                     toStage,
                     slug => items.move(item.id, toStage, { repositorySlug: slug }),
                     () => items.move(item.id, toStage),
@@ -358,6 +369,7 @@ export function BoardContent({
               cardProjectRepositoryId(factory.repositories, candidate, repository.projectRepositoryId)
             }
             factoryProjectId={factoryProjectId}
+            board={definition}
             onRun={(candidate, move, prompt) =>
               dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
             }
@@ -394,30 +406,15 @@ export function BoardContent({
         layout={layout}
         stages={stageViews}
         totalTaskCount={totalTaskCount}
-        linkedComment={
-          targetItemId !== undefined && targetCommentId !== undefined && targetStages[0] !== undefined
-            ? { cardKey: workItemCardKey(targetStages[0], targetItemId), commentId: targetCommentId }
-            : undefined
-        }
         onDrop={dropWithRepository}
         toolbar={
           <BoardViewControls
-            kind={kind}
+            reviewsPullRequests={reviewsPullRequests}
             view={view}
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
-            aside={
-              builtin && (
-                <BoardAutomationSettings
-                  factoryProjectId={factoryProjectId}
-                  autoRunEnabled={factory.autoRunEnabled ?? false}
-                  autoApprovePlans={factory.autoApprovePlans ?? false}
-                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
-                  selfReviewEnabled={factory.selfReviewEnabled ?? false}
-                />
-              )
-            }
+            aside={<ConfigureBoardButton factoryId={factoryProjectId} boardId={definition.id} />}
           />
         }
       />

@@ -158,7 +158,7 @@ function findTypeScriptFiles(dir: string): string[] {
     const path = join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      if (entry.name === '__fixtures__') return [];
+      if (entry.name === '__fixtures__' || entry.name === '__tests__') return [];
       return findTypeScriptFiles(path);
     }
 

@@ -1,3 +1,4 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 
 import type { ApiClient } from '../api/client';
@@ -7,6 +8,7 @@ import type { AvailableModelsFilter } from '../api/keys';
 import type { AvailableModelOption } from './useAvailableModels';
 
 export interface SessionModelCatalogTarget extends AvailableModelsFilter {
+  sessionId: string;
   resourceId: string;
   threadId: string;
   enabled?: boolean;
@@ -16,10 +18,15 @@ export interface SessionModelCatalog {
   models: AvailableModelOption[];
   modelScope?: 'factory' | 'user';
   defaultModelId?: string | null;
+  personalThinkingLevel?: ThinkingLevelSetting | null;
 }
 
 export function fetchSessionModelCatalog(client: ApiClient, target: SessionModelCatalogTarget) {
-  const query = new URLSearchParams({ resourceId: target.resourceId, threadId: target.threadId });
+  const query = new URLSearchParams({
+    sessionId: target.sessionId,
+    resourceId: target.resourceId,
+    threadId: target.threadId,
+  });
   return client.get<SessionModelCatalog>(`/web/config/models?${query}`);
 }
 
@@ -27,6 +34,7 @@ export function sessionModelCatalogQueryOptions(client: ApiClient, target?: Sess
   return queryOptions({
     queryKey: queryKeys.availableModels({
       factoryProjectId: target?.factoryProjectId,
+      sessionId: target?.sessionId,
       resourceId: target?.resourceId,
       threadId: target?.threadId,
     }),

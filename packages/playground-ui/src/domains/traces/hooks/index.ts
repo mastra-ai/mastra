@@ -29,12 +29,6 @@ export { useEnvironments } from '@mastra/react/hooks/traces';
 export { useServiceNames } from '@mastra/react/hooks/traces';
 export { useTraceSpanNavigation } from './use-trace-span-navigation';
 export { useTraceListNavigation } from './use-trace-list-navigation';
-export {
-  useTraceUrlState,
-  type UseTraceUrlStateResult,
-  type UseTraceUrlStateOptions,
-  type SetURLSearchParamsLike,
-} from './use-trace-url-state';
-export { useTraceFilterPersistence, type TraceFilterPersistenceOptions } from './use-trace-filter-persistence';
+export type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
 export { useExpandedSpanIds } from './use-expanded-span-ids';
 export { useVisibleTraceRows } from './use-visible-trace-rows';

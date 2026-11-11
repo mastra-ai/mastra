@@ -19,6 +19,7 @@ export const METRICS_ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Workflow', entityType: 'workflow_run' },
   { label: 'Scorer', entityType: 'scorer' },
   { label: 'Ingest', entityType: 'rag_ingestion' },
+  { label: 'Classifier', entityType: 'classifier' },
 ] as const satisfies readonly { label: string; entityType: EntityTypeValue }[];
 
 /** Field IDs that live in dedicated URL params (not the generic `filterX` set). */

@@ -1,10 +1,11 @@
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
+import { sliceSafe } from '../../utils/slice-by-tokens';
 import { WORKSPACE_TOOLS } from '../constants';
 import { UnsupportedGrepPatternError } from '../errors';
 import type { FilesystemGrepResult } from '../filesystem';
 import { isEnoentError, isEnotdirError, isTextFile } from '../filesystem/fs-utils';
-import { loadGitignore } from '../gitignore';
+import { loadWorkspaceIgnore } from '../gitignore';
 import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
@@ -163,13 +164,9 @@ Usage:
           searchPath = inputPath;
         }
 
-        // Load gitignore filter.
-        // If the user explicitly targets a gitignored path (e.g. "./dist"), skip
-        // filtering so they can still search there. Otherwise apply as normal.
-        const rawIgnoreFilter = await loadGitignore(filesystem);
-        const searchPathNormalized = searchPath.replace(/^\.\//, '').replace(/\/$/, '');
-        const targetIsIgnored = rawIgnoreFilter && searchPathNormalized && rawIgnoreFilter(searchPathNormalized + '/');
-        const ignoreFilter = targetIsIgnored ? undefined : rawIgnoreFilter;
+        // The walk below adds nested .gitignore files as it finds them.
+        const workspaceIgnore = await loadWorkspaceIgnore(filesystem, searchPath, { requestedPath: inputPath });
+        const isIgnored = (path: string, isDirectory: boolean) => workspaceIgnore.ignores(path, isDirectory);
 
         const MAX_LINE_LENGTH = 500;
         const GLOBAL_CAP = 1000;
@@ -256,6 +253,12 @@ Usage:
                 );
                 const nextDirectoryFrontier: string[] = [];
 
+                // Read each listed directory's .gitignore before filtering its
+                // children, so its rules apply to everything below it.
+                await workspaceIgnore.addListings(
+                  directoryFrontier.map((dir, directoryIndex) => [dir, directoryEntries[directoryIndex]]),
+                );
+
                 for (let directoryIndex = 0; directoryIndex < directoryFrontier.length; directoryIndex++) {
                   const dir = directoryFrontier[directoryIndex]!;
                   const entries = directoryEntries[directoryIndex];
@@ -267,10 +270,7 @@ Usage:
                     if (!includeHidden && entry.name.startsWith('.')) continue;
 
                     const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
-                    if (ignoreFilter) {
-                      const relativePath = fullPath.replace(/^\.\//, '');
-                      if (ignoreFilter(`${relativePath}/`)) continue;
-                    }
+                    if (isIgnored(fullPath, true)) continue;
                     nextDirectoryFrontier.push(fullPath);
                   }
                 }
@@ -290,11 +290,7 @@ Usage:
                   const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
 
                   // Skip gitignored paths
-                  if (ignoreFilter) {
-                    const relativePath = fullPath.replace(/^\.\//, '');
-                    const checkPath = entry.type === 'directory' ? `${relativePath}/` : relativePath;
-                    if (ignoreFilter(checkPath)) continue;
-                  }
+                  if (isIgnored(fullPath, entry.type === 'directory')) continue;
 
                   if (entry.type === 'file') {
                     // Apply glob filter first (createGlobMatcher normalizes leading
@@ -384,7 +380,7 @@ Usage:
                 if (columnIndex !== undefined) {
                   let lineContent = line;
                   if (lineContent.length > MAX_LINE_LENGTH) {
-                    lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+                    lineContent = sliceSafe(lineContent, 0, MAX_LINE_LENGTH) + '...';
                   }
                   outputLines.push(`${filePath}:${i + 1}:${columnIndex + 1}: ${lineContent}`);
                 } else {
@@ -396,7 +392,7 @@ Usage:
             for (const match of fileMatches) {
               let lineContent = getLine(match.lineIndex) ?? '';
               if (lineContent.length > MAX_LINE_LENGTH) {
-                lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+                lineContent = sliceSafe(lineContent, 0, MAX_LINE_LENGTH) + '...';
               }
               outputLines.push(`${filePath}:${match.lineIndex + 1}:${match.columnIndex + 1}: ${lineContent}`);
             }
@@ -406,6 +402,14 @@ Usage:
         // Format native capability results with the same host-side filtering
         // (gitignore/glob/hidden/.git/text) and limits as the walk path.
         if (nativeResults) {
+          // Providers may return ignored files; load the .gitignore files
+          // between searchPath and each result before filtering.
+          await workspaceIgnore.addParentsOf(
+            nativeResults.map(result => {
+              const rel = result.path.replace(/^\.\//, '');
+              return searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
+            }),
+          );
           for (const result of nativeResults) {
             if (truncated) break;
 
@@ -418,10 +422,7 @@ Usage:
             if (!isText(segments[segments.length - 1]!)) continue;
 
             const fullPath = searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
-            if (ignoreFilter) {
-              const relativePath = fullPath.replace(/^\.\//, '');
-              if (ignoreFilter(relativePath)) continue;
-            }
+            if (isIgnored(fullPath, false)) continue;
             if (globMatcher && !globMatcher(fullPath)) continue;
 
             const lineTextByIndex = new Map<number, string>();

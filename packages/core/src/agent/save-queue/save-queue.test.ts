@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockMemory } from '../../memory/mock';
+import { InMemoryStore } from '../../storage';
+import { RunFenceConflictError } from '../../storage/run-fencing';
 import { MessageList } from '../message-list';
 import { createSignal } from '../signals';
 import type { MastraDBMessage } from '../types';
@@ -170,6 +173,61 @@ describe('SaveQueueManager', () => {
     );
   });
 
+  describe('strict flush', () => {
+    it.each([false, true])('rejects only the failed caller and retries restored input (guard: %s)', async guarded => {
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      const threadId = 'thread-strict';
+      await memory.createThread({ threadId, resourceId: 'resource-strict' });
+      const memoryStore = (await storage.getStore('memory'))!;
+      const error = new Error('initial input write failed');
+      const failure = vi.spyOn(memoryStore, 'saveMessages').mockRejectedValueOnce(error);
+      const manager = new SaveQueueManager({ memory });
+      const list = new MessageList({ threadId, resourceId: 'resource-strict' });
+      list.add(makeTestMessage('strict-input', threadId, 'user', 'Keep my request'), 'user');
+
+      const rejected = manager.flushMessages(list, threadId, undefined, {
+        throwOnError: true,
+        ...(guarded ? { beforePersist: async () => {} } : {}),
+      });
+      const later = manager.flushMessages(list, threadId);
+      try {
+        await expect(rejected).rejects.toBe(error);
+        await expect(later).resolves.toBeUndefined();
+        const rows = await memoryStore.listMessages({ threadId, perPage: false });
+        expect(rows.messages.map(message => ({ id: message.id, content: message.content.parts }))).toEqual([
+          { id: 'strict-input', content: [expect.objectContaining({ type: 'text', text: 'Keep my request' })] },
+        ]);
+        expect(list.drainUnsavedMessages()).toEqual([]);
+      } finally {
+        await later;
+        failure.mockRestore();
+      }
+    });
+
+    it('leaves failed input retryable when the default best-effort flush resolves', async () => {
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      const threadId = 'thread-best-effort';
+      await memory.createThread({ threadId, resourceId: 'resource-best-effort' });
+      const memoryStore = (await storage.getStore('memory'))!;
+      const failure = vi.spyOn(memoryStore, 'saveMessages').mockRejectedValueOnce(new Error('database unavailable'));
+      const manager = new SaveQueueManager({ memory });
+      const list = new MessageList({ threadId, resourceId: 'resource-best-effort' });
+      list.add(makeTestMessage('retry-input', threadId, 'user', 'Retry me'), 'user');
+      try {
+        await expect(manager.flushMessages(list, threadId)).resolves.toBeUndefined();
+        expect((await memoryStore.listMessages({ threadId, perPage: false })).messages).toEqual([]);
+        await manager.flushMessages(list, threadId, undefined, { throwOnError: true });
+        expect(
+          (await memoryStore.listMessages({ threadId, perPage: false })).messages.map(message => message.id),
+        ).toEqual(['retry-input']);
+      } finally {
+        failure.mockRestore();
+      }
+    });
+  });
+
   describe('beforePersist', () => {
     it('runs before the save and persists when it resolves', async () => {
       const order: string[] = [];
@@ -213,6 +271,34 @@ describe('SaveQueueManager', () => {
       await expect(rejected).rejects.toThrow('superseded');
       await expect(later).resolves.toBeUndefined();
       expect(saved.map(m => m.id)).toEqual(['m1']);
+    });
+
+    it.each([false, true])('rejects a storage fence conflict and leaves input retryable (strict: %s)', async strict => {
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      const threadId = 'thread-fenced';
+      await memory.createThread({ threadId, resourceId: 'resource-fenced' });
+      const memoryStore = (await storage.getStore('memory'))!;
+      const error = new RunFenceConflictError({ runId: 'run', generation: 1, ownerId: 'old-worker' }, 'saveMessages');
+      const failure = vi.spyOn(memoryStore, 'saveMessages').mockRejectedValueOnce(error);
+      const manager = new SaveQueueManager({ memory });
+      const list = new MessageList({ threadId, resourceId: 'resource-fenced' });
+      list.add(makeTestMessage('fenced-input', threadId, 'user', 'Do not lose me'), 'user');
+      try {
+        await expect(
+          manager.flushMessages(list, threadId, undefined, {
+            beforePersist: async () => {},
+            throwOnError: strict,
+          }),
+        ).rejects.toBe(error);
+        expect((await memoryStore.listMessages({ threadId, perPage: false })).messages).toEqual([]);
+        await manager.flushMessages(list, threadId);
+        expect(
+          (await memoryStore.listMessages({ threadId, perPage: false })).messages.map(message => message.id),
+        ).toEqual(['fenced-input']);
+      } finally {
+        failure.mockRestore();
+      }
     });
 
     it('still logs storage errors instead of rejecting', async () => {

@@ -1,4 +1,4 @@
-import type { IMastraLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@internal/core/logger';
 import type { Config } from '@mastra/core/mastra';
 import { extractMastraOption, extractMastraOptionBundler } from './shared/extract-mastra-option';
 

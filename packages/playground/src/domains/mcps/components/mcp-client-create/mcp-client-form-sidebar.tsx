@@ -100,8 +100,8 @@ export function MCPClientFormSidebar({
               <div className="flex flex-col gap-1.5">
                 <MCPServerCombobox
                   onValueChange={onPreFillFromServer}
-                  placeholder="Select a server..."
-                  searchPlaceholder="Search servers..."
+                  placeholder="Select a server"
+                  searchPlaceholder="Search servers"
                   emptyText="No servers found"
                   container={containerRef}
                 />
@@ -195,8 +195,13 @@ export function MCPClientFormSidebar({
                         {...register(`env.${index}.value`)}
                       />
                       {!readOnly && (
-                        <Button variant="ghost" size="sm" onClick={() => removeEnvVar(index)}>
-                          <XIcon className="h-3 w-3" />
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Remove variable"
+                          onClick={() => removeEnvVar(index)}
+                        >
+                          <XIcon />
                         </Button>
                       )}
                     </div>

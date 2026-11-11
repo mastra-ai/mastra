@@ -6,18 +6,19 @@ import type { ExperimentRef } from '../datasets/use-dataset-experiments';
 import { useCombineByIds } from '../shared/combine-by-ids';
 import type { ExperimentQueriesResult } from '../shared/combine-by-ids';
 import { getOrCreate } from '../shared/map';
+import {
+  INPUT_TOKEN_METRIC,
+  OUTPUT_TOKEN_METRIC,
+  accumulate,
+  createAccumulator,
+  tokenFieldOf,
+  toUsage,
+} from './usage-accumulator';
+import type { ExperimentItemUsage, UsageAccumulator } from './usage-accumulator';
 
-const INPUT_TOKEN_METRIC = 'mastra_model_total_input_tokens';
-const OUTPUT_TOKEN_METRIC = 'mastra_model_total_output_tokens';
+export type { ExperimentItemUsage } from './usage-accumulator';
+
 const POLL_INTERVAL_MS = 2000;
-
-export interface ExperimentItemUsage {
-  inputTokens?: number;
-  outputTokens?: number;
-  /** Undefined when no group is priced or when groups use different cost units. */
-  estimatedCost?: number;
-  costUnit?: string;
-}
 
 /** Usage of one experiment: its totals, and each item's usage keyed by the trace id of its run. */
 export interface ExperimentUsage {
@@ -26,55 +27,15 @@ export interface ExperimentUsage {
   traces: Record<string, ExperimentItemUsage>;
 }
 
-type UsageAccumulator = {
-  inputTokens?: number;
-  outputTokens?: number;
-  estimatedCost: number;
-  costUnits: Set<string>;
-  hasUnknownCostUnit: boolean;
-};
-
-const createAccumulator = (): UsageAccumulator => ({
-  estimatedCost: 0,
-  costUnits: new Set(),
-  hasUnknownCostUnit: false,
-});
-
-type BreakdownGroup = GetMetricBreakdownResponse['groups'][number];
-
-function accumulate(accumulator: UsageAccumulator, tokenField: 'inputTokens' | 'outputTokens', group: BreakdownGroup) {
-  accumulator[tokenField] = (accumulator[tokenField] ?? 0) + group.value;
-
-  if (group.estimatedCost == null) return;
-  accumulator.estimatedCost += group.estimatedCost;
-  if (group.costUnit) {
-    accumulator.costUnits.add(group.costUnit.toLowerCase());
-  } else {
-    accumulator.hasUnknownCostUnit = true;
-  }
-}
-
-function toUsage(accumulator: UsageAccumulator): ExperimentItemUsage {
-  // A single known unit implies at least one priced group.
-  const isPriced = !accumulator.hasUnknownCostUnit && accumulator.costUnits.size === 1;
-  return {
-    inputTokens: accumulator.inputTokens,
-    outputTokens: accumulator.outputTokens,
-    estimatedCost: isPriced ? accumulator.estimatedCost : undefined,
-    costUnit: isPriced ? [...accumulator.costUnits][0] : undefined,
-  };
-}
-
 /** Builds the experiment totals and the per-trace usage in a single pass over the groups. */
 function toExperimentUsage(response: GetMetricBreakdownResponse): ExperimentUsage {
   const summary = createAccumulator();
   const accumulators = new Map<string, UsageAccumulator>();
 
   for (const group of response.groups) {
-    const metricName = group.dimensions.name;
-    if (metricName !== INPUT_TOKEN_METRIC && metricName !== OUTPUT_TOKEN_METRIC) continue;
+    const tokenField = tokenFieldOf(group);
+    if (!tokenField) continue;
 
-    const tokenField = metricName === INPUT_TOKEN_METRIC ? 'inputTokens' : 'outputTokens';
     accumulate(summary, tokenField, group);
 
     const traceId = group.dimensions.traceId;

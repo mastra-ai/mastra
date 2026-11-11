@@ -2,13 +2,14 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MASTRA_USER_KEY } from '../constants';
+import { MASTRA_AUTH_MODE_KEY, MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 
 import {
   canAccessPublicly,
   checkRules,
   coreAuthMiddleware,
+  findMatchingCustomRoute,
   isCustomRoutePublic,
   isDevPlaygroundRequest,
   isProtectedCustomRoute,
@@ -62,6 +63,39 @@ describe('auth helpers', () => {
         expect(pathMatchesPattern('/api/v1/123', '/api/:version/:id')).toBe(true);
         expect(pathMatchesPattern('/api/v1/', '/api/:version/:id')).toBe(false);
       });
+    });
+  });
+
+  describe('findMatchingCustomRoute security', () => {
+    it('does not treat dots in a static path as regex wildcards', () => {
+      const routes = [
+        { path: '/a.b', method: 'GET', handler: async () => new Response('public'), requiresAuth: false },
+        { path: '/axb', method: 'GET', handler: async () => new Response('protected'), requiresAuth: true },
+      ] as any;
+
+      expect(findMatchingCustomRoute('/axb', 'GET', routes)?.route.path).toBe('/axb');
+      expect(findMatchingCustomRoute('/a.b', 'GET', routes)?.route.path).toBe('/a.b');
+      expect(pathMatchesPattern('/axb', '/a.b')).toBe(false);
+    });
+
+    it('decodes path params before returning them for FGA', () => {
+      const routes = [
+        { path: '/docs/:docId', method: 'GET', handler: async () => new Response('ok'), requiresAuth: true },
+      ] as any;
+
+      const match = findMatchingCustomRoute('/docs/%6fpen', 'GET', routes);
+      expect(match?.params).toEqual({ docId: 'open' });
+    });
+
+    it('matches case-sensitively, like Hono', () => {
+      const routes = [
+        { path: '/admin', method: 'GET', handler: async () => new Response('public'), requiresAuth: false },
+        { path: '/Admin', method: 'GET', handler: async () => new Response('protected'), requiresAuth: true },
+      ] as any;
+
+      expect(findMatchingCustomRoute('/admin', 'GET', routes)?.route.path).toBe('/admin');
+      expect(findMatchingCustomRoute('/Admin', 'GET', routes)?.route.path).toBe('/Admin');
+      expect(findMatchingCustomRoute('/ADMIN', 'GET', routes)).toBeUndefined();
     });
   });
 
@@ -235,13 +269,23 @@ describe('auth helpers', () => {
   });
 
   describe('isCustomRoutePublic', () => {
-    it('should let an overlapping protected pattern win over an earlier public pattern', () => {
+    it('follows the route Hono dispatches when patterns overlap', () => {
+      // Hono runs the first registered match, so the public '/custom/*' serves
+      // '/custom/private/123' and the later protected route never runs for it.
       const config = new Map<string, boolean>([
         ['GET:/custom/*', false],
         ['GET:/custom/private/:id', true],
       ]);
-      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(false);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(true);
       expect(isCustomRoutePublic('/custom/other', 'GET', config)).toBe(true);
+
+      const reversed = new Map<string, boolean>([
+        ['GET:/custom/private/:id', true],
+        ['GET:/custom/*', false],
+      ]);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', reversed)).toBe(false);
+      expect(isProtectedCustomRoute('/custom/private/123', 'GET', reversed)).toBe(true);
+      expect(isCustomRoutePublic('/custom/other', 'GET', reversed)).toBe(true);
     });
 
     it('should return false when customRouteAuthConfig is undefined', () => {
@@ -1153,6 +1197,52 @@ describe('auth helpers', () => {
 
       expect(result).toEqual({ action: 'next' });
       expect(result).not.toHaveProperty('headers');
+    });
+  });
+
+  describe('coreAuthMiddleware - deny-by-default with studio-only RBAC', () => {
+    // RBAC configured only under `studio`, auth config has no authorize/authorizeUser/rules.
+    const rbac = {
+      getRoles: async () => ['viewer'],
+      getPermissions: async () => ['agents:read'],
+      hasPermission: async () => false,
+      hasAllPermissions: async () => false,
+      hasAnyPermission: async () => false,
+    };
+    const mastra = {
+      getServer: () => ({}),
+      getStudio: () => ({ rbac }),
+      getLogger: () => null,
+    } as any;
+
+    const run = (authMode: string | undefined, user: Record<string, unknown>) => {
+      const store = new Map<string, unknown>([[MASTRA_AUTH_MODE_KEY, authMode]]);
+      return coreAuthMiddleware({
+        path: '/api/agents',
+        method: 'GET',
+        getHeader: () => undefined,
+        mastra,
+        authConfig: { protected: ['/api/*'], authenticateToken: async () => user },
+        requestContext: { get: k => store.get(k), set: (k, v) => store.set(k, v) },
+        rawRequest: {} as any,
+        token: 'valid-token',
+        buildAuthorizeContext: () => null,
+      });
+    };
+
+    it('denies a non-admin studio user', async () => {
+      const result = await run('studio', { id: 'u1', role: 'viewer' });
+      expect(result).toMatchObject({ action: 'error', status: 403 });
+    });
+
+    it('allows an admin studio user via default rules', async () => {
+      const result = await run('studio', { id: 'u1', role: 'admin' });
+      expect(result.action).toBe('next');
+    });
+
+    it('does not apply studio RBAC to non-studio requests', async () => {
+      const result = await run(undefined, { id: 'u1', role: 'viewer' });
+      expect(result.action).toBe('next');
     });
   });
 });

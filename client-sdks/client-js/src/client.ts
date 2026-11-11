@@ -7,6 +7,7 @@ import {
   Processor,
   Workflow,
   Vector,
+  Knowledge,
   BaseResource,
   A2A,
   A2AV1,
@@ -27,6 +28,7 @@ import {
   Channels,
   AgentController,
 } from './resources';
+import type { KnowledgeInstanceSummary } from './resources';
 import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
@@ -53,6 +55,8 @@ import type {
   TraceQueryResponse,
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -89,6 +93,7 @@ import type {
   GetScorePercentilesResponse,
   ListFeedbackArgs,
   CreateFeedbackBody,
+  ReplaceFeedbackBody,
   CreateFeedbackResponse,
   DeleteFeedbackArgs,
   DeleteFeedbackResponse,
@@ -124,10 +129,14 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from './resources/observability-route-types.js';
+import type { SignalWriteOptions } from './resources/signal-writes';
 import type { Body, PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
 import type {
+  GetScoreResponse,
+  GetFeedbackResponse,
   ListFeedbackResponse,
   ClientOptions,
+  McpServerEventStreamFrame,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
@@ -340,7 +349,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Scopes to an agent controller hosted on the connected Mastra instance. Use
-   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * `getAgentController(id).session(sessionId)` to create/resume a session,
    * stream its events, and send messages.
    * @param controllerId - The id the agent controller is registered under on Mastra
    */
@@ -688,6 +697,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Lists the Knowledge instances registered on the server
+   * @returns Promise containing each instance's application key and id
+   */
+  public listKnowledge(): Promise<{ instances: KnowledgeInstanceSummary[] }> {
+    return this.request('/knowledge');
+  }
+
+  /**
+   * Gets read-only access to a registered Knowledge instance
+   * @param knowledgeKey - Application key the instance is registered under
+   * @returns Knowledge resource
+   */
+  public getKnowledge(knowledgeKey: string) {
+    return new Knowledge(this.options, knowledgeKey);
+  }
+
+  /**
    * Retrieves logs
    * @param params - Parameters for filtering logs
    * @returns Promise containing array of log messages
@@ -727,9 +753,8 @@ export class MastraClient extends BaseResource {
 
     if (searchParams.size) {
       return this.request(`/logs?${searchParams}`);
-    } else {
-      return this.request(`/logs`);
     }
+    return this.request(`/logs`);
   }
 
   /**
@@ -776,9 +801,8 @@ export class MastraClient extends BaseResource {
 
     if (searchParams.size) {
       return this.request(`/logs/${runId}?${searchParams}`);
-    } else {
-      return this.request(`/logs/${runId}`);
     }
+    return this.request(`/logs/${runId}`);
   }
 
   /**
@@ -883,6 +907,163 @@ export class MastraClient extends BaseResource {
     return this.request(`/mcp/${encodeURIComponent(serverId)}/resources/read`, {
       method: 'POST',
       body: { uri },
+    });
+  }
+
+  /**
+   * Lists the event types an MCP server declares (experimental).
+   * `testEmit` is true when the server serves {@link emitMcpServerEvent} (under `mastra dev`).
+   * @param serverId - The ID of the MCP server.
+   */
+  public getMcpServerEvents(
+    serverId: PathParams<'GET /mcp/:serverId/events'>['serverId'],
+  ): Promise<RouteResponse<'GET /mcp/:serverId/events'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events`);
+  }
+
+  /**
+   * Reads occurrences of an MCP server event type, like the `events/poll` MCP request (experimental).
+   * Pass the returned `cursor` to the next call to resume.
+   * @param serverId - The ID of the MCP server.
+   * @param eventName - The event type name.
+   * @param body - Event arguments, resume cursor and page size.
+   */
+  public pollMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/poll'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/poll'>['eventName'],
+    body: Body<'POST /mcp/:serverId/events/:eventName/poll'> = {},
+  ): Promise<RouteResponse<'POST /mcp/:serverId/events/:eventName/poll'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/poll`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Streams occurrences of a push-capable MCP server event type (experimental).
+   * Yields an `active` frame first, then `event`, `heartbeat` and `error` frames, and ends
+   * when the server ends the stream. Abort `options.signal` or break out of the loop to stop.
+   *
+   * @example
+   * ```typescript
+   * const controller = new AbortController();
+   * for await (const frame of client.streamMcpServerEvent('tickets', 'ticket.created', {}, { signal: controller.signal })) {
+   *   if (frame.type === 'event') console.log(frame.occurrence.data);
+   * }
+   * ```
+   */
+  public async *streamMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/stream'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/stream'>['eventName'],
+    body: Body<'POST /mcp/:serverId/events/:eventName/stream'> = {},
+    options: { signal?: AbortSignal } = {},
+  ): AsyncGenerator<McpServerEventStreamFrame, void, undefined> {
+    const response: Response = await this.request(
+      `/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/stream`,
+      { method: 'POST', body, stream: true, signal: options.signal, retries: 0 },
+    );
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.pipeThrough(createSseJsonTransform<McpServerEventStreamFrame>()).getReader();
+    const cancel = () => void reader.cancel().catch(() => {});
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        yield value;
+      }
+    } finally {
+      options.signal?.removeEventListener('abort', cancel);
+      await reader.cancel().catch(() => {});
+    }
+  }
+
+  /**
+   * Emits a test occurrence of an emit-fed MCP server event type (experimental).
+   * Only served under `mastra dev`; other servers respond 404. The occurrence's
+   * `eventId` starts with `mastra-test-`.
+   * @param serverId - The ID of the MCP server.
+   * @param eventName - The event type name.
+   * @param data - The event payload; validated against the event's payload schema.
+   */
+  public emitMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/emit'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/emit'>['eventName'],
+    data: Body<'POST /mcp/:serverId/events/:eventName/emit'>['data'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/events/:eventName/emit'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/emit`, {
+      method: 'POST',
+      body: { data },
+    });
+  }
+
+  /**
+   * Lists which tools an MCP server runs as tasks, and its recent tasks across principals
+   * (experimental). `unavailable` says why `tasks` is empty for a store that can't be listed
+   * or a resource-scoped caller.
+   * @param serverId - The ID of the MCP server.
+   * @param params - Optional `limit`, `status`, `surface` and `client` (a listed `principalKey`)
+   *   filters, and the `cursor` from the previous page's `nextCursor`.
+   */
+  public getMcpServerTasks(
+    serverId: PathParams<'GET /mcp/:serverId/tasks'>['serverId'],
+    params: QueryParams<'GET /mcp/:serverId/tasks'> = {},
+  ): Promise<RouteResponse<'GET /mcp/:serverId/tasks'>> {
+    const searchParams = new URLSearchParams();
+    for (const [name, value] of Object.entries(params)) {
+      if (value !== undefined) searchParams.set(name, String(value));
+    }
+    const query = searchParams.size ? `?${searchParams}` : '';
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks${query}`);
+  }
+
+  /**
+   * Finds an MCP server task by its MCP task id, as a client sees it (experimental). The server
+   * hashes the id before the lookup; it is sent in the body so it stays out of URLs and logs.
+   * Rejects with 404 for an unknown task.
+   * @param serverId - The ID of the MCP server.
+   * @param taskId - The MCP task id.
+   */
+  public findMcpServerTask(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/find'>['serverId'],
+    taskId: Body<'POST /mcp/:serverId/tasks/find'>['taskId'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/find'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/find`, { method: 'POST', body: { taskId } });
+  }
+
+  /**
+   * Cancels an MCP server task by key, like the `tasks/cancel` MCP request (experimental).
+   * Rejects with 404 once the task is no longer running.
+   * @param serverId - The ID of the MCP server.
+   * @param taskKey - The task's `taskKey`, as listed.
+   */
+  public cancelMcpServerTask(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/:taskKey/cancel'>['serverId'],
+    taskKey: PathParams<'POST /mcp/:serverId/tasks/:taskKey/cancel'>['taskKey'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/:taskKey/cancel'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/${encodeURIComponent(taskKey)}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Answers an MCP server task's open input requests, like the `tasks/update` MCP request
+   * (experimental). Rejects with 404 unless the task is waiting for one of them.
+   * @param serverId - The ID of the MCP server.
+   * @param taskKey - The task's `taskKey`, as listed.
+   * @param inputResponses - Answers keyed by input request, e.g. `{ approve: { action: 'accept', content: {...} } }`.
+   */
+  public answerMcpServerTaskInput(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/:taskKey/input'>['serverId'],
+    taskKey: PathParams<'POST /mcp/:serverId/tasks/:taskKey/input'>['taskKey'],
+    inputResponses: Body<'POST /mcp/:serverId/tasks/:taskKey/input'>['inputResponses'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/:taskKey/input'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/${encodeURIComponent(taskKey)}/input`, {
+      method: 'POST',
+      body: { inputResponses },
     });
   }
 
@@ -1148,8 +1329,17 @@ export class MastraClient extends BaseResource {
    * Groups and measures the traces selected by a time range and optional trace-query predicate.
    * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
-  aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
-    return this.observability.aggregateTraces(params);
+  aggregateTraces(params: AggregateTracesArgs, options?: { signal?: AbortSignal }): Promise<AggregateTracesResponse> {
+    return this.observability.aggregateTraces(params, options);
+  }
+
+  /**
+   * Groups and measures individual completed spans selected by a time range and optional span-query predicate.
+   * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
+   * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+    return this.observability.aggregateSpans(params);
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
@@ -1168,8 +1358,8 @@ export class MastraClient extends BaseResource {
     return this.observability.getTraceQueryValues(params, options);
   }
 
-  /** Queries thread identities using eligible-trace and cross-trace predicates. */
-  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+  /** Queries full-history thread rows using a trace or thread activity window. */
+  queryTraceThreads<T extends QueryTraceThreadsInput>(params: T): Promise<QueryTraceThreadsResult<T>> {
     return this.observability.queryTraceThreads(params);
   }
 
@@ -1216,7 +1406,8 @@ export class MastraClient extends BaseResource {
    * Deletes traces by ID, cascading to all associated spans and trace-linked
    * signal events (scores, feedback, metrics, logs). Signals without a trace ID
    * are untouched. On ClickHouse-backed stores, reads may briefly return
-   * deleted rows until the delete is fully applied.
+   * deleted rows until the delete is fully applied. A supporting Platform backend
+   * returns `{ accepted: true }` after queueing cleanup, before records disappear.
    */
   deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.observability.deleteTraces(params);
@@ -1240,17 +1431,25 @@ export class MastraClient extends BaseResource {
   // Scores
   // --------------------------------------------------------------------------
 
+  /** Retrieves one score by ID; the response contains null when it is missing. */
+  getScore(id: string): Promise<GetScoreResponse> {
+    return this.observability.getScore(id);
+  }
+
   /** Retrieves a paginated list of observability scores. */
   listScores(params: ListScoresArgs = {}): Promise<ListScoresResponseNew> {
     return this.observability.listScores(params);
   }
 
   /** Creates a single score record in the observability store. */
-  createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
-    return this.observability.createScore(params);
+  createScore(params: CreateScoreBody, options?: SignalWriteOptions): Promise<CreateScoreResponse> {
+    return this.observability.createScore(params, options);
   }
 
-  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  /**
+   * Deletes score records by scoreId, optionally scoped to a tenant.
+   * Returns OSS success or Platform acceptance; accepted cleanup is asynchronous.
+   */
   deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
     return this.observability.deleteScores(params);
   }
@@ -1279,17 +1478,30 @@ export class MastraClient extends BaseResource {
   // Feedback
   // --------------------------------------------------------------------------
 
+  /** Retrieves one feedback by ID; the response contains null when it is missing. */
+  getFeedback(id: string): Promise<GetFeedbackResponse> {
+    return this.observability.getFeedback(id);
+  }
+
   /** Retrieves a paginated list of feedback records. */
   listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
     return this.observability.listFeedback(params);
   }
 
   /** Creates a single feedback record in the observability store. */
-  createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
-    return this.observability.createFeedback(params);
+  createFeedback(params: CreateFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return this.observability.createFeedback(params, options);
   }
 
-  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  /** Full replacement on Platform. Preserve the original identity/timestamp; each accepted retry is a new replacement. */
+  replaceFeedback(params: ReplaceFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return this.observability.replaceFeedback(params, options);
+  }
+
+  /**
+   * Deletes feedback records by feedbackId, optionally scoped to a tenant.
+   * Returns OSS success or Platform acceptance; accepted cleanup is asynchronous.
+   */
   deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
     return this.observability.deleteFeedback(params);
   }
@@ -2558,6 +2770,24 @@ export class MastraClient extends BaseResource {
    */
   public getBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
     return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}`);
+  }
+
+  /**
+   * Answers a suspended background task with `resumeData`. Pass the task's
+   * `suspendedAt` to have the server reject the answer (409) when the task has
+   * resumed or suspended again since you read it.
+   */
+  public resumeBackgroundTask(
+    backgroundTaskId: string,
+    resumeData: unknown,
+    options: { suspendedAt?: Date | string | number } = {},
+  ): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}/resume`, {
+      method: 'POST',
+      body: { resumeData, suspendedAt: options.suspendedAt },
+      // A retry after a lost response could deliver this answer to a later suspension.
+      retries: 0,
+    });
   }
 
   /**

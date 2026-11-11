@@ -136,7 +136,7 @@ export const DEFAULT_MEMORY_MB = 1024;
  * contents can never drift under a stable identity hash; bump deliberately
  * (each bump builds new templates).
  */
-export const DEFAULT_NODE_VERSION = '24.20.0';
+export const DEFAULT_NODE_VERSION = '24.22.1';
 
 const NODE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 

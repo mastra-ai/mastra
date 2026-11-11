@@ -129,10 +129,129 @@ export function schemaToJsonSchema(schema: PublicSchema<unknown>): JSONSchema7 {
   return standardSchemaToJSONSchema(standardSchema);
 }
 
+/** Shared `components.schemas` map that route schemas hoist their definitions into. */
+export type OpenAPIComponentSchemas = Record<string, any>;
+
+const DEFINITION_KEYWORDS = ['$defs', 'definitions'] as const;
+// Names zod generates for unnamed recursive (z.lazy) schemas.
+const GENERATED_DEFINITION_NAME = /^__schema\d+$/;
+
+function createComponentSchemas(): OpenAPIComponentSchemas {
+  // Null prototype so that a schema id like "__proto__" cannot pollute Object.prototype.
+  return Object.create(null);
+}
+
+function escapeJsonPointer(segment: string): string {
+  return segment.replace(/~/g, '~0').replace(/\//g, '~1');
+}
+
+function componentRef(name: string): string {
+  return `#/components/schemas/${escapeJsonPointer(name)}`;
+}
+
+function toComponentName(name: string): string {
+  // OpenAPI component keys must match ^[a-zA-Z0-9.\-_]+$
+  return GENERATED_DEFINITION_NAME.test(name) ? 'Schema' : name.replace(/[^a-zA-Z0-9.\-_]/g, '_') || 'Schema';
+}
+
+function containsRootRef(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some(containsRootRef);
+  if (!node || typeof node !== 'object') return false;
+  return Object.entries(node).some(([key, value]) => (key === '$ref' ? value === '#' : containsRootRef(value)));
+}
+
+function rewriteRefs(node: unknown, rewrite: (ref: string) => string): any {
+  if (Array.isArray(node)) return node.map(child => rewriteRefs(child, rewrite));
+  if (!node || typeof node !== 'object') return node;
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) {
+    result[key] = key === '$ref' && typeof value === 'string' ? rewrite(value) : rewriteRefs(value, rewrite);
+  }
+  return result;
+}
+
+/**
+ * Moves the local `$defs`/`definitions` of a standalone JSON Schema into the shared
+ * `components.schemas` map and rewrites its local refs to `#/components/schemas/<name>`.
+ *
+ * A converted schema references its own definitions as `#/definitions/__schema0` (or
+ * `#/$defs/Invoice`, or `#` for a recursive root), which only resolves while the schema is
+ * the document. Once embedded in the OpenAPI document `#` is the document root, so the refs
+ * would dangle. Identical definitions are shared; different ones get a unique name.
+ */
+export function hoistSchemaDefinitions(schema: unknown, components: OpenAPIComponentSchemas): any {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
+
+  const root: Record<string, any> = { ...(schema as Record<string, any>) };
+  const members: Array<{ pointer: string; base: string; body: unknown }> = [];
+  for (const keyword of DEFINITION_KEYWORDS) {
+    const definitions = root[keyword];
+    if (!definitions || typeof definitions !== 'object') continue;
+    delete root[keyword];
+    for (const [name, body] of Object.entries(definitions)) {
+      members.push({ pointer: `#/${keyword}/${escapeJsonPointer(name)}`, base: toComponentName(name), body });
+    }
+  }
+
+  const rootIsReferenced = containsRootRef(root) || members.some(member => containsRootRef(member.body));
+  if (rootIsReferenced) members.push({ pointer: '#', base: 'Schema', body: root });
+  if (members.length === 0) return schema;
+
+  const names = members.map(member => member.base);
+  const suffixes = members.map(() => 1);
+  const rewrite = (ref: string) => {
+    for (let i = 0; i < members.length; i++) {
+      const { pointer } = members[i]!;
+      if (ref === pointer) return componentRef(names[i]!);
+      if (pointer !== '#' && ref.startsWith(`${pointer}/`)) return componentRef(names[i]!) + ref.slice(pointer.length);
+    }
+    return ref;
+  };
+
+  // Pick names until every definition either takes a free name or matches the identical
+  // schema already registered under that name. Bodies are compared after ref rewriting, so a
+  // recursive definition only matches an existing one with the same shape.
+  let bodies: string[];
+  for (;;) {
+    bodies = members.map(member => JSON.stringify(rewriteRefs(member.body, rewrite)));
+    const taken = new Set<string>();
+    let conflict = false;
+    members.forEach((_, i) => {
+      const name = names[i]!;
+      const existing = components[name];
+      if (taken.has(name) || (existing !== undefined && JSON.stringify(existing) !== bodies[i])) {
+        suffixes[i]! += 1;
+        names[i] = `${members[i]!.base}_${suffixes[i]}`;
+        conflict = true;
+      }
+      taken.add(name);
+    });
+    if (!conflict) break;
+  }
+
+  members.forEach((_, i) => {
+    components[names[i]!] ??= JSON.parse(bodies[i]!);
+  });
+
+  return rootIsReferenced ? { $ref: componentRef(names[names.length - 1]!) } : rewriteRefs(root, rewrite);
+}
+
+function toComponentSchema(schema: PublicSchema<unknown>, components?: OpenAPIComponentSchemas): any {
+  const jsonSchema = schemaToJsonSchema(schema);
+  return components ? hoistSchemaDefinitions(jsonSchema, components) : jsonSchema;
+}
+
+function resolveComponentRef(schema: any, components?: OpenAPIComponentSchemas): any {
+  if (!components) return schema;
+  const prefix = '#/components/schemas/';
+  if (typeof schema?.$ref !== 'string' || !schema.$ref.startsWith(prefix)) return schema;
+  return components[schema.$ref.slice(prefix.length).replace(/~1/g, '/').replace(/~0/g, '~')] ?? schema;
+}
+
 /**
  * Converts an OpenAPI route spec with PublicSchema to one with JSON Schema
  */
-function convertToJsonSchema(spec: OpenAPIRoute): any {
+function convertToJsonSchema(spec: OpenAPIRoute, components?: OpenAPIComponentSchemas): any {
   const converted: any = {
     summary: spec.summary,
     description: spec.description,
@@ -145,7 +264,7 @@ function convertToJsonSchema(spec: OpenAPIRoute): any {
 
   // Convert path parameters
   if (spec.requestParams?.path) {
-    const pathSchema = schemaToJsonSchema(spec.requestParams.path) as any;
+    const pathSchema = resolveComponentRef(toComponentSchema(spec.requestParams.path, components), components);
     const properties = pathSchema.properties || {};
 
     Object.entries(properties).forEach(([name, schema]) => {
@@ -161,7 +280,7 @@ function convertToJsonSchema(spec: OpenAPIRoute): any {
 
   // Convert query parameters
   if (spec.requestParams?.query) {
-    const querySchema = schemaToJsonSchema(spec.requestParams.query) as any;
+    const querySchema = resolveComponentRef(toComponentSchema(spec.requestParams.query, components), components);
     const properties = querySchema.properties || {};
     const required = querySchema.required || [];
 
@@ -186,7 +305,7 @@ function convertToJsonSchema(spec: OpenAPIRoute): any {
       required: true,
       content: {
         'application/json': {
-          schema: schemaToJsonSchema(spec.requestBody.content['application/json'].schema),
+          schema: toComponentSchema(spec.requestBody.content['application/json'].schema, components),
         },
       },
     };
@@ -201,7 +320,7 @@ function convertToJsonSchema(spec: OpenAPIRoute): any {
     if (response.content?.['application/json']?.schema) {
       converted.responses[statusCode].content = {
         'application/json': {
-          schema: schemaToJsonSchema(response.content['application/json'].schema),
+          schema: toComponentSchema(response.content['application/json'].schema, components),
         },
       };
     }
@@ -223,6 +342,7 @@ export function generateOpenAPIDocument(
   // Use a null-prototype map so that route paths like "__proto__" cannot
   // pollute Object.prototype via the assignment below.
   const paths: Record<string, any> = Object.create(null);
+  const componentSchemas = createComponentSchemas();
 
   // Build paths object from routes
   // Convert Express-style :param to OpenAPI-style {param}
@@ -235,7 +355,7 @@ export function generateOpenAPIDocument(
     }
 
     // Convert Zod schemas to JSON Schema
-    paths[openapiPath][route.method.toLowerCase()] = convertToJsonSchema(route.openapi);
+    paths[openapiPath][route.method.toLowerCase()] = convertToJsonSchema(route.openapi, componentSchemas);
   });
 
   return {
@@ -246,6 +366,7 @@ export function generateOpenAPIDocument(
       description: info.description,
     },
     paths,
+    ...(Object.keys(componentSchemas).length > 0 && { components: { schemas: componentSchemas } }),
   };
 }
 
@@ -255,10 +376,21 @@ export function generateOpenAPIDocument(
  * so it already has the standard OpenAPI structure (parameters, requestBody, responses, etc.).
  *
  * @param routes - Array of ApiRoute objects with optional openapi specifications
+ * @param componentSchemas - The document's `components.schemas` map. Nested schema definitions are
+ * hoisted into it and referenced as `#/components/schemas/<name>`, so the caller must serve it.
+ * When omitted, schemas are left as converted (definitions stay nested), so no ref can point at a
+ * component the caller never serves. Callers that serve the returned paths in an OpenAPI document
+ * should pass a map and emit it as `components.schemas`; otherwise refs stay schema-relative
+ * (for example `#/$defs/Invoice`) and do not resolve from the document root.
  * @returns OpenAPI paths object to be merged into the main spec
  */
-export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<string, any> {
-  const paths: Record<string, any> = {};
+export function convertCustomRoutesToOpenAPIPaths(
+  routes: ApiRoute[],
+  componentSchemas?: OpenAPIComponentSchemas,
+): Record<string, any> {
+  // Null-prototype maps so a route path like "__proto__" can't pollute Object.prototype.
+  const paths: Record<string, any> = Object.create(null);
+  const hoist = (schema: unknown) => (componentSchemas ? hoistSchemaDefinitions(schema, componentSchemas) : schema);
 
   for (const route of routes) {
     // Skip routes without openapi metadata or routes marked as hidden
@@ -275,13 +407,13 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
     const openapiPath = route.path.replace(/:(\w+)/g, '{$1}');
 
     if (!paths[openapiPath]) {
-      paths[openapiPath] = {};
+      paths[openapiPath] = Object.create(null);
     }
 
     const method = route.method.toLowerCase();
 
     if (isSchemaApiRoute(route)) {
-      paths[openapiPath][method] = convertToJsonSchema(route.openapi as OpenAPIRoute);
+      paths[openapiPath][method] = convertToJsonSchema(route.openapi as OpenAPIRoute, componentSchemas);
       continue;
     }
 
@@ -311,7 +443,7 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
         if (param.schema && typeof param.schema === 'object' && '_def' in param.schema) {
           return {
             ...param,
-            schema: zodToJsonSchema(param.schema, 'openApi3', 'none'),
+            schema: hoist(zodToJsonSchema(param.schema, 'openApi3', 'none')),
           };
         }
         return param;
@@ -330,7 +462,7 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
           if (mediaContent?.schema && typeof mediaContent.schema === 'object' && '_def' in mediaContent.schema) {
             operation.requestBody.content[mediaType] = {
               ...mediaContent,
-              schema: zodToJsonSchema(mediaContent.schema, 'openApi3', 'none'),
+              schema: hoist(zodToJsonSchema(mediaContent.schema, 'openApi3', 'none')),
             };
           } else {
             operation.requestBody.content[mediaType] = mediaContent;
@@ -360,7 +492,7 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
             if (mediaContent?.schema && typeof mediaContent.schema === 'object' && '_def' in mediaContent.schema) {
               operation.responses[statusCode].content[mediaType] = {
                 ...mediaContent,
-                schema: zodToJsonSchema(mediaContent.schema, 'openApi3', 'none'),
+                schema: hoist(zodToJsonSchema(mediaContent.schema, 'openApi3', 'none')),
               };
             } else {
               operation.responses[statusCode].content[mediaType] = mediaContent;

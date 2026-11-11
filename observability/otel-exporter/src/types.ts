@@ -41,11 +41,24 @@ export interface LaminarConfig {
   endpoint?: string;
 }
 
-export interface CustomConfig {
-  endpoint?: string; // Required at runtime
+/** Configure either a legacy collector endpoint or exact per-signal endpoints. */
+export type CustomConfig = {
   headers?: Record<string, string>;
   protocol?: ExportProtocol;
-}
+} & (
+  | {
+      /** Legacy collector endpoint. Cannot be combined with endpoints. */
+      endpoint?: string;
+      endpoints?: never;
+    }
+  | {
+      endpoint?: never;
+      /** Exact signal URLs. At least one key is required. Values are validated at runtime. */
+      endpoints:
+        | { traces: string | undefined; logs?: string | undefined }
+        | { traces?: string | undefined; logs: string | undefined };
+    }
+);
 
 // Provider configuration that infers the provider type from the key
 export type ProviderConfig =
@@ -72,6 +85,13 @@ export interface OtelExporterConfig extends BaseExporterConfig {
 
   // Override or provide a custom span exporter
   exporter?: SpanExporter;
+
+  /**
+   * Copy metadata keys to top-level span attributes, for example `{ userId: 'user.id' }`.
+   * Mapped values are strings (objects and arrays are JSON-encoded). Missing, null,
+   * and empty string values are omitted. Existing namespaced metadata is retained.
+   */
+  metadataMapping?: Record<string, string>;
 
   /**
    * Signal enablement. All signals are enabled by default when their

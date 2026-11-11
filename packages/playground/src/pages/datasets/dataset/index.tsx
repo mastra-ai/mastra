@@ -4,10 +4,11 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { AddDatasetItemDialog } from '@mastra/playground-ui/domains/datasets';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { ArrowLeft, Copy, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Braces, Copy, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
@@ -17,8 +18,8 @@ import {
   DatasetTagsEditor,
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
-  AddItemDialog,
   DeleteDatasetDialog,
+  DatasetSchemaDialog,
 } from '@/domains/datasets';
 import { DatasetItemSidePanel } from '@/domains/datasets/components/items/dataset-item-side-panel';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
@@ -51,6 +52,7 @@ function DatasetPage() {
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [schemaDialogOpen, setSchemaDialogOpen] = useState(false);
 
   // Fetch dataset for edit dialog
   const {
@@ -94,7 +96,7 @@ function DatasetPage() {
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={
             <Button render={<Link to="/datasets" />} icon={<ArrowLeft />}>
-              Back to Datasets
+              Back to datasets
             </Button>
           }
         />
@@ -147,6 +149,9 @@ function DatasetPage() {
           Experiments
         </Button>
       )}
+      <Button variant="ghost" size="sm" onClick={() => setSchemaDialogOpen(true)} icon={<Braces />}>
+        Schema
+      </Button>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label="Dataset actions menu">
@@ -155,13 +160,13 @@ function DatasetPage() {
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" className="w-48">
           <DropdownMenu.Item onSelect={() => void navigate(`/datasets/${datasetId}/edit`)}>
-            <Pencil /> Edit Dataset
+            <Pencil /> Edit dataset
           </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => setDuplicateDialogOpen(true)}>
-            <Copy /> Duplicate Dataset
+            <Copy /> Duplicate dataset
           </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => setDeleteDialogOpen(true)} variant="destructive">
-            <Trash2 /> Delete Dataset
+            <Trash2 /> Delete dataset
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
@@ -195,7 +200,7 @@ function DatasetPage() {
         onSuccess={handleExperimentSuccess}
       />
 
-      <AddItemDialog datasetId={datasetId} open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen} />
+      <AddDatasetItemDialog datasetId={datasetId} open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen} />
 
       {/* Dataset duplicate dialog */}
       {dataset && (
@@ -208,6 +213,8 @@ function DatasetPage() {
           sourceDatasetTargetType={dataset.targetType}
         />
       )}
+
+      {dataset && <DatasetSchemaDialog open={schemaDialogOpen} onOpenChange={setSchemaDialogOpen} dataset={dataset} />}
 
       {/* Dataset delete dialog */}
       {dataset && (

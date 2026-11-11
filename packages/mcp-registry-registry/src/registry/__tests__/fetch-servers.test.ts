@@ -53,7 +53,6 @@ describe('getServersFromRegistry integration test', () => {
       expect(hasMatch).toBe(true);
     } catch (error) {
       console.warn('Error during search test, skipping:', error);
-      return;
     }
   });
 

@@ -126,6 +126,12 @@ export interface PlatformRepoTemplateOptions {
   /** Memory in MB. Same identity and fallback semantics as `cpuCount`. */
   memoryMB?: number;
   /**
+   * Install Docker Engine and Compose, socket-activated so the daemon starts on
+   * first use. Identity-bearing and kept in the resources-only fallback, so a
+   * Docker session never boots without Docker. Omitted or false installs nothing.
+   */
+  docker?: boolean;
+  /**
    * Absolute parent for the checkout. Created by the build user, so its parent
    * must already be writable by that user. Becomes the build cwd, the runtime
    * cwd, and part of the template family; the repo lands at `<workingDirectory>/<repo>`.
@@ -137,6 +143,13 @@ export interface PlatformRepoTemplateOptions {
    * Use for credentials; output-changing inputs belong in `setupCommand`.
    */
   buildEnv?: Record<string, string>;
+  /**
+   * Opaque id that changes whenever `buildEnv` changes. Written as a
+   * `MASTRA_BUILD_ENV_REVISION` env step ahead of the clone and setup steps,
+   * so a new revision changes the template identity and invalidates every
+   * cached step after it. Never derive it from the values.
+   */
+  buildEnvRevision?: string;
   /** Test/integration seam for resolving the default-branch head. */
   resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
 }
@@ -182,9 +195,9 @@ function rememberHead(cloneUrl: string, sha: string): void {
  * transient build envs; they never enter the serialized definition. A failed
  * head lookup reuses the last head resolved for the same clone URL in this
  * process. If the repository cannot be resolved, or no head has been resolved
- * yet, the resolver keeps `cpuCount` and
- * `memoryMB` in a resources-only template so the sandbox still boots at the
- * requested size, and the caller's runtime setup materializes the checkout.
+ * yet, the resolver keeps `cpuCount`, `memoryMB` and
+ * `docker` in a resources-only template so the sandbox still boots at the
+ * requested size with Docker when asked, and the caller's runtime setup materializes the checkout.
  */
 export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver | undefined {
   if (options.getRepositoryAccess && options.repos) {
@@ -202,7 +215,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       ? [{ getRepositoryAccess: options.getRepositoryAccess, setupCommand: options.setupCommand }]
       : [];
   const resourcesOnly = () => {
-    if (options.cpuCount === undefined && options.memoryMB === undefined) return undefined;
+    if (options.cpuCount === undefined && options.memoryMB === undefined && !options.docker) return undefined;
     return withResources(Template(), options);
   };
   if (entries.length === 0) {
@@ -327,6 +340,11 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     for (const repo of repos) if (repo.tokenEnv && repo.token) buildEnv[repo.tokenEnv] = repo.token;
     if (Object.keys(buildEnv).length > 0) template = template.setEnvs(buildEnv, { ephemeral: true });
     template = withResources(template, options);
+    if (options.buildEnvRevision) {
+      // Before every clone and setup step: each is its own cached build step,
+      // so a new revision must sit above them to make them rerun.
+      template = template.setEnvs({ MASTRA_BUILD_ENV_REVISION: options.buildEnvRevision });
+    }
     if (workingDirectory) {
       // Created by the build user so it is writable; `setWorkdir` then makes
       // it the cwd for the steps below and the runtime default, without
@@ -374,10 +392,11 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
 
 function withResources(
   template: SandboxTemplateBuilder,
-  options: Pick<PlatformRepoTemplateOptions, 'cpuCount' | 'memoryMB'>,
+  options: Pick<PlatformRepoTemplateOptions, 'cpuCount' | 'memoryMB' | 'docker'>,
 ): SandboxTemplateBuilder {
   if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
   if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
+  if (options.docker) template = template.docker();
   return template;
 }
 
