@@ -570,6 +570,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getScorePercentiles(...args);
   }
 
+  protected override async writeFeedbackReplacement(
+    args: Parameters<ObservabilityStoreImpl['replaceFeedback']>[0],
+  ): Promise<void> {
+    const delegate = await this.requireDelegate();
+    return delegate.replaceFeedback(args);
+  }
+
   async createFeedback(
     ...args: Parameters<ObservabilityStoreImpl['createFeedback']>
   ): ReturnType<ObservabilityStoreImpl['createFeedback']> {

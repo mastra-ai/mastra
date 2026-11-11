@@ -4819,15 +4819,20 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           { organizationId: 'other-org' },
           { resourceId: 'other-resource' },
         ])('only accepts one identity for concurrent replacements of a missing record: %j', async change => {
-          for (let attempt = 0; attempt < 20; attempt++) {
-            const first = { ...original, feedbackId: `${original.feedbackId}-${attempt}` };
-            const records = [first, { ...first, ...change, value: -1 }];
-            const results = await Promise.allSettled(records.map(feedback => storage.replaceFeedback({ feedback })));
+          const attempts = await Promise.all(
+            Array.from({ length: 20 }, async (_, attempt) => {
+              const first = { ...original, feedbackId: `${original.feedbackId}-${attempt}` };
+              const records = [first, { ...first, ...change, value: -1 }];
+              const results = await Promise.allSettled(records.map(feedback => storage.replaceFeedback({ feedback })));
+              return { records, results };
+            }),
+          );
+          for (const { records, results } of attempts) {
             expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
             const winner = records[results.findIndex(result => result.status === 'fulfilled')];
-            expect(await storage.getFeedbackById(first.feedbackId)).toMatchObject(winner!);
-            expect((await storage.listFeedback({ pagination: { perPage: 100 } })).feedback).toHaveLength(attempt + 1);
+            expect(await storage.getFeedbackById(records[0]!.feedbackId)).toMatchObject(winner!);
           }
+          expect((await storage.listFeedback({ pagination: { perPage: 100 } })).feedback).toHaveLength(20);
         });
       }
 
