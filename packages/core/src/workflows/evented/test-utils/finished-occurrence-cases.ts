@@ -16,7 +16,11 @@ import type { PubSub } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraStorage } from '../../../storage';
+import { getEntryWorkflow } from '../../step-entry';
+import type { StepFlowEntry } from '../../types';
+import type { Workflow } from '../../workflow';
 import { runLivenessKey, stepOccurrenceKey } from '../step-lease';
+import { WorkflowEventProcessor } from '../workflow-event-processor';
 import { abandonLease } from './abandon-lease';
 import { createStep, createWorkflow } from '..';
 
@@ -109,15 +113,51 @@ const shapes = {
     block: 'body:3',
     finished: [[0], [0]],
   },
+  nested: {
+    input: { n: 0 } as unknown,
+    build: (report: Report) =>
+      createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+        .then(
+          createWorkflow({ id: 'finished-child', inputSchema: Num, outputSchema: Num })
+            .then(work('inner', report))
+            .commit(),
+        )
+        .then(work('after', report))
+        .commit(),
+    labels: ['inner', 'after'],
+    block: 'after',
+    finished: [[0]],
+  },
 };
 
-/** A promise and the function that resolves it; `Promise.withResolvers` is newer than the library target. */
+/** A promise and the functions that settle it; `Promise.withResolvers` is newer than the library target. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(r => (resolve = r));
-  return { promise, resolve };
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
 }
 
+/** The attempt number of a delivery whose earlier deliveries used up the processor's delivery budget. */
+const EXHAUSTED_ATTEMPT =
+  (WorkflowEventProcessor as unknown as { MAX_DELIVERY_ATTEMPTS: number }).MAX_DELIVERY_ATTEMPTS + 1;
+
+/**
+ * A copy of `event` as a broker would store it. The start of a nested run
+ * carries its parent's step graph, whose functions a broker cannot store.
+ */
+function copyEvent(event: Event): Event {
+  try {
+    return structuredClone(event);
+  } catch {
+    return JSON.parse(JSON.stringify(event));
+  }
+}
+
+/** Whether `event` carries the execution path `path`. */
 const samePath = (event: Event, path: number[]) =>
   JSON.stringify((event.data as { executionPath?: number[] }).executionPath) === JSON.stringify(path);
 
@@ -138,7 +178,7 @@ function recordWorkflowEvents(inner: PubSub, intercept: Intercept = () => undefi
           if (topic === 'workflows') {
             const picked = intercept(event);
             if (picked === 'drop') return;
-            published.push(structuredClone(event));
+            published.push(copyEvent(event));
             if (picked) return void picked.then(() => target.publish(topic, event, options));
           }
           return target.publish(topic, event, options);
@@ -183,14 +223,22 @@ export function describeFinishedOccurrenceCases({
       await Promise.all(replicas.splice(0).map(mastra => mastra.shutdown({ drainTimeout: 0 })));
     });
 
-    /** Starts a replica running `workflow`, recording the `workflows` events it publishes. */
+    /**
+     * Starts a replica running `workflow` and the nested workflows its top-level
+     * steps call, recording the `workflows` events it publishes.
+     */
     async function startReplica<W extends Built>(workflow: W, intercept?: Intercept) {
       const { pubsub, published } = recordWorkflowEvents(new EventEmitterPubSub(), intercept);
+      const graph = (workflow as unknown as { stepGraph: StepFlowEntry[] }).stepGraph;
+      const nested = graph.flatMap(entry => {
+        const child = entry.type === 'step' ? getEntryWorkflow(entry) : null;
+        return child ? [[child.id, child] as const] : [];
+      });
       const mastra = new Mastra({
         logger: false,
         storage: await connect(),
         pubsub,
-        workflows: { finished: workflow as any },
+        workflows: { finished: workflow, ...Object.fromEntries(nested) } as unknown as Record<string, Workflow>,
       });
       await mastra.startWorkers();
       replicas.push(mastra);
@@ -203,6 +251,7 @@ export function describeFinishedOccurrenceCases({
       await abandonLease(getStorage(), ...keys);
     }
 
+    /** The stored snapshot of the `finished` workflow's run `runId`. */
     async function storedRun(runId: string) {
       const store = (await getStorage().getStore('workflows'))!;
       return store.loadWorkflowSnapshot({ workflowName: 'finished', runId });
@@ -278,7 +327,8 @@ export function describeFinishedOccurrenceCases({
         restartMessage.resolve(structuredClone(event));
         return 'drop';
       });
-      void (await b.workflow.createRun({ runId: run.runId })).restart().catch(() => {});
+      // B's own pubsub never sees the run end, so the restart only settles if it throws.
+      void (await b.workflow.createRun({ runId: run.runId })).restart().catch(restartMessage.reject);
       const held = await restartMessage.promise;
 
       // A's step end is delivered and A finishes the run before B's message arrives.
@@ -291,14 +341,92 @@ export function describeFinishedOccurrenceCases({
       expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
     }, 20_000);
 
-    it('continues a run whose worker stopped after saving a step result, without running the step again', async () => {
+    it('does not run a branch again when a restart read it just before it saved its result and the run went on', async () => {
+      const executions: string[] = [];
+      const dBlocked = deferred<void>();
+      const releaseD = deferred<void>();
+      const build = (replica: string) => {
+        const report: Report = async id => {
+          executions.push(`${replica}:${id}`);
+          if (replica !== 'A' || id !== 'd') return;
+          dBlocked.resolve();
+          await releaseD.promise;
+        };
+        return createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+          .parallel([work('a', report), work('b', report)])
+          .then(
+            createStep({
+              id: 'c',
+              inputSchema: z.any(),
+              outputSchema: Num,
+              execute: async () => {
+                await report('c');
+                return { n: 1 };
+              },
+            }),
+          )
+          .then(work('d', report))
+          .commit();
+      };
+      // Branch b finished on A, but its step end sits in the broker's queue for longer than a lease TTL.
+      const stepEndQueued = deferred<void>();
+      const deliverStepEnd = deferred<void>();
+      const a = await startReplica(build('A'), event => {
+        if (event.type !== 'workflow.step.end' || !samePath(event, [0, 1])) return undefined;
+        stepEndQueued.resolve();
+        return deliverStepEnd.promise;
+      });
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      void run.start({ inputData: { n: 1 } });
+      await stepEndQueued.promise;
+      const store = (await getStorage().getStore('workflows'))!;
+      await expect
+        .poll(async () => (await store.getRunOwnership({ runId: runLivenessKey(run.runId) }))?.live, { timeout: 5_000 })
+        .toBe(false);
+
+      // B's restart reads branch b as running. Its message for the branch is held back.
+      const restartMessage = deferred<Event>();
+      const b = await startReplica(build('B'), event => {
+        const restart = event.data.restart as { isParallelOrConditionalRestarted?: boolean } | undefined;
+        if (
+          event.type !== 'workflow.step.run' ||
+          !samePath(event, [0, 1]) ||
+          !restart?.isParallelOrConditionalRestarted
+        ) {
+          return undefined;
+        }
+        restartMessage.resolve(copyEvent(event));
+        return 'drop';
+      });
+      // B's own pubsub never sees the run end, so the restart only settles if it throws.
+      void (await b.workflow.createRun({ runId: run.runId })).restart().catch(restartMessage.reject);
+      const held = await restartMessage.promise;
+
+      // A's step end for b is delivered: A ends the parallel, runs c and is in d when B's message arrives.
+      deliverStepEnd.resolve();
+      await dBlocked.promise;
+      const before = b.published.length;
+      expect(await b.mastra.handleWorkflowEvent(held)).toEqual({ ok: true });
+
+      expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
+      expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
+      releaseD.resolve();
+      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+      expect(executions.sort()).toEqual(['A:a', 'A:b', 'A:c', 'A:d']);
+    }, 20_000);
+
+    /**
+     * Runs `first` on replica A, which saves its result and stops before the
+     * second step's message goes out. Returns the first step's message, whose
+     * ack A never sent.
+     */
+    async function crashAfterSavingFirst() {
       const executions: string[] = [];
       const build = (replica: string) =>
         createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
           .then(work('first', async id => void executions.push(`${replica}:${id}`)))
           .then(work('second', async id => void executions.push(`${replica}:${id}`)))
           .commit();
-      // A stops right after saving the first step's result, before the second step's message goes out.
       const a = await startReplica(build('A'), event =>
         event.type === 'workflow.step.run' && samePath(event, [1]) ? 'drop' : undefined,
       );
@@ -307,10 +435,48 @@ export function describeFinishedOccurrenceCases({
       await expect.poll(async () => (await storedRun(run.runId))?.context.first?.status).toBe('success');
       const original = a.published.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
       await crash(a, [runLivenessKey(run.runId)]);
+      return { executions, build, run, original };
+    }
 
-      // The broker redelivers the first step's message, whose ack A never sent.
+    it('continues a run whose worker stopped after saving a step result, without running the step again', async () => {
+      const { executions, build, run, original } = await crashAfterSavingFirst();
+
       const b = await startReplica(build('B'));
       expect(await redeliver(b, original)).toEqual({ ok: true });
+
+      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+      expect(executions).toEqual(['A:first', 'B:second']);
+    }, 20_000);
+
+    it('continues such a run once the lease another worker held on the step expires', async () => {
+      const { executions, build, run, original } = await crashAfterSavingFirst();
+      // Another worker took the first step's lease to continue the run, and stopped too.
+      const store = (await getStorage().getStore('workflows'))!;
+      const { record } = await store.claimRunOwnership({
+        runId: stepOccurrenceKey(run.runId, [0]),
+        ownerId: 'stopped-worker',
+        leaseMs: 300,
+        force: true,
+      });
+
+      const b = await startReplica(build('B'));
+      expect(await redeliver(b, original)).toEqual({ ok: true });
+
+      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+      expect(executions).toEqual(['A:first', 'B:second']);
+      // B continued the run under the step's lease, which it took over from the stopped worker.
+      const lease = await store.getRunOwnership({ runId: stepOccurrenceKey(run.runId, [0]) });
+      expect(lease?.ownerId).not.toBe('stopped-worker');
+      expect(lease?.generation).toBeGreaterThan(record!.generation);
+    }, 20_000);
+
+    it('continues such a run when the delivery of the saved step used up its attempts', async () => {
+      const { executions, build, run, original } = await crashAfterSavingFirst();
+
+      const b = await startReplica(build('B'));
+      expect(
+        await b.mastra.handleWorkflowEvent({ ...copyEvent(original), deliveryAttempt: EXHAUSTED_ATTEMPT }),
+      ).toEqual({ ok: true });
 
       await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
       expect(executions).toEqual(['A:first', 'B:second']);
@@ -400,10 +566,11 @@ export function describeFinishedOccurrenceCases({
       });
       const b = await startReplica(build('B'));
 
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const outcome = await Promise.race([
         redeliver(b, first),
-        new Promise(resolve => setTimeout(() => resolve('still waiting'), 5_000)),
-      ]);
+        new Promise(resolve => (timer = setTimeout(() => resolve('still waiting'), 5_000))),
+      ]).finally(() => clearTimeout(timer));
 
       expect(outcome).toEqual({ ok: true });
       expect(executions).toEqual(['A:first', 'A:second']);
@@ -414,13 +581,22 @@ export function describeFinishedOccurrenceCases({
       const { executions, build, run, first } = await finishTwoSteps();
       const b = await startReplica(build('B'));
 
-      expect(await b.mastra.handleWorkflowEvent({ ...structuredClone(first), deliveryAttempt: 10 })).toEqual({
+      expect(await b.mastra.handleWorkflowEvent({ ...copyEvent(first), deliveryAttempt: EXHAUSTED_ATTEMPT })).toEqual({
         ok: true,
       });
 
       expect(executions).toEqual(['A:first', 'A:second']);
       expect(b.published.filter(event => event.runId === run.runId).map(event => event.type)).toEqual([]);
       expect((await storedRun(run.runId))?.status).toBe('success');
+    }, 20_000);
+
+    it('runs a finished step and the steps after it again on time travel', async () => {
+      const { executions, run } = await finishTwoSteps();
+
+      const travelled = await run.timeTravel({ step: 'first', inputData: { n: 2 } });
+
+      expect(travelled.status).toBe('success');
+      expect(executions).toEqual(['A:first', 'A:second', 'A:first', 'A:second']);
     }, 20_000);
 
     it('runs every retry of a failing step', async () => {

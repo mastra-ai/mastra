@@ -57,9 +57,10 @@
  * default and reach for `viaPublish` only where a case has to match the
  * harness exactly.
  *
- * Redelivering the step.run of a step that already *completed* is dropped when
- * the workflow takes step leases (the store supports run fencing and the
- * workflow keeps `autoRestartActiveRuns`). Without step leases, durable agent
+ * Redelivering the step.run of a step that already *completed* is dropped, or
+ * continues the run from the saved result, when the workflow takes step leases
+ * (the store supports run fencing and the workflow keeps
+ * `autoRestartActiveRuns`). Without step leases, durable agent
  * workflows among them, it re-executes the step (F4, COR-1307): only the
  * id-keyed step fence (`STEP_FENCE_TTL_MS`) drops a duplicate there, which
  * covers an immediate redelivery but not a late one.
