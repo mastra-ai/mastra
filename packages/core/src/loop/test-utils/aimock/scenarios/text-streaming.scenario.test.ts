@@ -12,12 +12,6 @@ import {
   useLoopScenarioAimock,
 } from '../aimock-scenario';
 
-async function collect<T>(stream: ReadableStream<T> | AsyncIterable<T>): Promise<T[]> {
-  const items: T[] = [];
-  for await (const item of stream as AsyncIterable<T>) items.push(item);
-  return items;
-}
-
 /**
  * Regression class: text-streaming fidelity.
  *
