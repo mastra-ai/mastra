@@ -2,11 +2,11 @@
 '@mastra/core': minor
 ---
 
-Improved the boot-time workflow restart (`restartAllActiveWorkflowRuns()`) for deployments with many active runs (#28712). It now skips runs another instance is still running without loading them. It lists each active status once and checks the runs in batches of a hundred, with one storage call per batch. With 3,000 active runs that another instance still drives, among 30,000 finished runs, the restart takes about 30 ms instead of 1.9 s on Postgres and 45 ms instead of 670 ms on LibSQL.
+Restarting active workflow runs at boot (`restartAllActiveWorkflowRuns()`) is faster when many runs are active (#28712). Runs that another instance is still running are skipped without being loaded. With 3,000 active runs that another instance is running, among 30,000 finished runs, the restart takes about 30 ms instead of 1.9 s on Postgres and 45 ms instead of 670 ms on LibSQL.
 
-`restartAllActiveWorkflowRuns()` now resolves once each evented run is handed to the workers, not when it finishes. A long evented run no longer holds a `recovery.workflowConcurrency` slot or delays the restart of the others.
+For evented workflows, `restartAllActiveWorkflowRuns()` now resolves once a worker starts each restarted run, not when the run finishes. A long evented run no longer holds a `recovery.workflowConcurrency` slot or delays the restart of other runs.
 
-Storage adapters can implement `getRunOwnerships({ runIds })` to read the ownership of many runs in one call. It returns a `Map` keyed by run ID and leaves out runs that were never claimed. Adapters that don't implement it read each run separately.
+Storage adapter authors can implement `getRunOwnerships({ runIds })` to read the ownership of many runs in one call. It returns a `Map` keyed by run ID and leaves out runs that were never claimed. Adapters that don't implement it read each run separately.
 
 ```ts
 const owners = await workflowsStore.getRunOwnerships({ runIds: ['run-1', 'run-2'] });

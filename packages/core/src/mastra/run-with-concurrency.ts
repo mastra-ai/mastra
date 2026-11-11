@@ -25,7 +25,7 @@ export async function runWithConcurrency<T>(
   await Promise.all(Array.from({ length: Math.min(normalizeConcurrency(limit), items.length) }, worker));
 }
 
-/** A concurrency limit shared by tasks that arrive over time, such as one per page read. */
+/** A concurrency limit shared by tasks that arrive over time, such as the restarts of each batch of runs the recovery sweep reads. */
 export interface ConcurrencyLimiter {
   /**
    * Waits for a free slot, then starts `task` without waiting for it, so a

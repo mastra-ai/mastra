@@ -745,8 +745,8 @@ export interface MastraRecoveryConfig {
   /**
    * Maximum number of workflow runs restarted at the same time by
    * {@link Mastra.restartAllActiveWorkflowRuns}. Use `Infinity` for no limit.
-   * A default-engine run counts until it finishes, an evented run until a
-   * worker starts it, or one lease TTL after its restart was published.
+   * A default-engine run holds its slot until it finishes. An evented run
+   * holds it until a worker starts the run, for at most one lease TTL.
    * @default 5
    */
   workflowConcurrency?: number;
@@ -4391,19 +4391,19 @@ export class Mastra<
 
   /**
    * Restart every RUNNING/WAITING run of the registered default-engine and
-   * evented workflows. Runs are restarted `recovery.workflowConcurrency` at a
-   * time (default 5). The promise resolves once every default-engine restart
-   * has finished and every evented restart was taken over by a worker (or one
-   * lease TTL after it was published). Failures are logged per run and never
-   * reject the sweep. Once `shutdown()` starts, no further runs are restarted.
+   * evented workflows, `recovery.workflowConcurrency` at a time (default 5).
+   * The promise resolves once every default-engine restart has finished and
+   * a worker started every evented restart, or one lease TTL passed since it
+   * was published. Failures are logged per run and never reject the sweep.
+   * Once `shutdown()` starts, no further runs are restarted.
    *
    * Each workflow's active runs are listed once per status and handled in
-   * batches of a hundred. Before restarting a batch, the sweep reads with one
-   * `getRunOwnerships()` call whether another process still holds each run (the
-   * run's liveness key for evented runs, its run lease for default-engine
-   * runs). It skips those runs without loading them and checks each again
-   * once its lease could have lapsed. The claim `restart()` takes stays the
-   * final check, so a run another process took in between is still refused.
+   * batches of a hundred. Before restarting a batch, one `getRunOwnerships()`
+   * call reads whether another process still holds each run: its liveness key
+   * for an evented run, its run lease for a default-engine run. Held runs are
+   * skipped without being loaded and checked again once their lease could have
+   * lapsed. The claim `restart()` takes stays the final check, so a run
+   * another process took in between is still refused.
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const workflowsStore = await this.#storage?.getStore('workflows');
@@ -4585,8 +4585,8 @@ export class Mastra<
    * consecutive ones.
    *
    * An evented restart settles once a worker took the run over, or one lease TTL after it was
-   * published: the workers run the steps, and waiting for the result would hold a sweep slot for
-   * the whole run. Holding it until then keeps a backlog of published restarts bounded.
+   * published. Waiting for the result would hold a sweep slot for the whole run; waiting for the
+   * hand-off bounds how many published restarts no worker has started yet.
    */
   async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
     // A sweep's wait for a free slot can outlast the start of shutdown.

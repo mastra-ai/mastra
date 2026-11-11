@@ -10,4 +10,4 @@
 '@mastra/pg': patch
 ---
 
-The boot-time workflow restart now checks whether a batch of runs is still owned by another instance with one request instead of one request per run (#28712).
+Restarting active workflow runs at boot now checks whether runs are still owned by another instance with one request per batch of runs instead of one request per run (#28712).

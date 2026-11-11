@@ -420,7 +420,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '5',
             description:
-              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. A default-engine run counts until it finishes, an evented run until a worker starts it, or `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) after its restart was published. Workflow and durable agent recovery run in parallel.',
+              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. A default-engine run holds its slot until it finishes. An evented run holds it until a worker starts the run, for at most `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default). Workflow and durable agent recovery run in parallel.',
           },
         ],
       },
