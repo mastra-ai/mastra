@@ -312,7 +312,8 @@ export function describeFinishedOccurrenceCases({
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
       startInBackground(run, { n: 1 });
       await hung.promise;
-      const original = a.published.find(event => event.type === 'workflow.step.run' && samePath(event, [1]))!;
+      const original = a.delivered.find(event => event.type === 'workflow.step.run' && samePath(event, [1]))!;
+      expect(original.id).toBeTruthy();
 
       // A crashes in the second step, and B recovers the run.
       await crash(a, [stepOccurrenceKey(run.runId, [1]), runLivenessKey(run.runId)]);
@@ -559,12 +560,15 @@ export function describeFinishedOccurrenceCases({
         await blocked.promise;
         await expect.poll(async () => shape.saved((await storedRun(run.runId))?.context ?? {})).toBe(true);
 
-        const stepRuns = a.published.filter(event => event.type === 'workflow.step.run');
+        // Delivered events keep the id a broker redelivers them with.
+        const stepRuns = a.delivered.filter(event => event.type === 'workflow.step.run');
         // The nth listing of a path is the nth message published for it (a loop's iterations share one path).
         const finished = shape.finished.map((path, i) => {
           const nth = shape.finished.slice(0, i).filter(p => JSON.stringify(p) === JSON.stringify(path)).length;
           return stepRuns.filter(event => samePath(event, path))[nth]!;
         });
+        expect(finished.every(event => event.id)).toBe(true);
+
         for (const event of finished) expect(await redeliver(b, event)).toEqual({ ok: true });
         expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
 
@@ -606,7 +610,8 @@ export function describeFinishedOccurrenceCases({
       const a = await startReplica(build('A'));
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
       expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
-      const first = a.published.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
+      const first = a.delivered.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
+      expect(first.id).toBeTruthy();
       return { executions, build, run, first };
     }
 

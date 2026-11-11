@@ -2379,8 +2379,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       handoff,
       claimAfterRelease: args.resumeSteps?.[0] === leafId,
       // Only an occurrence the run went past skips the wait. One the run still has to continue
-      // from waits like any other delivery, so it can take over if the holder stops first.
-      finished: async () => (await this.#finishedOccurrence(args, step)) === 'drop',
+      // from waits like any other delivery, so it can take over if the holder stops first. A
+      // waiting delivery hasn't reached the step guards yet, so records they stamped count too.
+      finished: async () => (await this.#finishedOccurrence(args, step, { deferToGuards: false })) === 'drop',
       logger: this.mastra.getLogger(),
     });
   }
