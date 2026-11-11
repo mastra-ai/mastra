@@ -156,6 +156,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/requesty",
+      "destination": "/models/gateways/requesty",
+      "permanent": true
+    },
+    {
       "source": "/guides/v1/:path*",
       "destination": "/guides/:path*",
       "permanent": true

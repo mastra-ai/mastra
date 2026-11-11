@@ -20,6 +20,7 @@ export const FACTORY_WORK_ITEMS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
     title: { type: 'text' },
+    description: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_at: { type: 'timestamp' },
@@ -85,8 +86,6 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
     metadata: { type: 'json', nullable: true },
-    comment_count: { type: 'integer', default: 0 },
-    feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
@@ -112,6 +111,7 @@ export interface WorkItemDbRecord extends Record<string, unknown> {
   org_id: string;
   factory_project_id: string;
   title: string;
+  description: string | null;
   parent_work_item_id: string | null;
   revision: number;
   created_at: Date;
@@ -205,8 +205,6 @@ export interface BoardItemDbRecord extends Record<string, unknown> {
   stage_history: unknown[];
   sessions: Record<string, unknown>;
   metadata: Record<string, unknown> | null;
-  comment_count: number;
-  feed_activity_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -249,6 +247,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     claim_key: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
     title: { type: 'text' },
+    description: { type: 'text', nullable: true },
     stages: { type: 'json' },
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
@@ -258,6 +257,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     // Retired hands-off plan grant: plans are approved per board (`exitTool`).
     plans_preapproved_at: { type: 'timestamp', nullable: true },
     accepted_at: { type: 'timestamp', nullable: true },
+    // Retired comment summaries: kept so replicas still on the old release can write them.
     comment_count: { type: 'integer', default: 0 },
     feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },

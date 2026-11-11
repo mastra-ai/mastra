@@ -92,6 +92,11 @@ function activeFactoryRepositories(options: StubSearchOptions): ProjectListRepos
   );
 }
 
+const noFeedStream = http.get(
+  `${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/feed-events`,
+  () => new HttpResponse(null, { status: 404 }),
+);
+
 function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
@@ -105,6 +110,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   };
 
   server.use(
+    noFeedStream,
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({
         authEnabled: true,

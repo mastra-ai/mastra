@@ -735,17 +735,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     if (!(await this.buildCustomRouteHandler(routes))) return;
 
     for (const route of routes) {
-      const serverRoute: ServerRoute = {
-        method: route.method as any,
-        path: route.path,
-        responseType: 'json',
-        handler: async () => {},
-        requiresAuth: route.requiresAuth,
-        requiresPermission: route.requiresPermission,
-        fga: route.fga,
-      };
-
       const routeHandler: MiddlewareHandler = async (c: Context) => {
+        // This app's router may pick a different route than the custom-route app (the
+        // app can use another router, and has more routes). Check auth against the
+        // route the custom-route app will actually run for the forwarded URL.
+        const { match, serverRoute, customRouteAuthConfig } = this.resolveCustomRouteAuth(
+          c.req.url,
+          c.req.method,
+          c.req.path,
+          route,
+        );
+
         // Per-route auth check (same pattern as registerRoute)
         const authError = await this.checkRouteAuth(serverRoute, {
           path: c.req.path,
@@ -755,6 +755,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           requestContext: c.get('requestContext'),
           request: c.req.raw,
           buildAuthorizeContext: () => c,
+          customRouteAuthConfig,
         });
 
         if (authError) {
@@ -824,7 +825,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
           ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
           ...bodyParams,
-          ...c.req.param(),
+          // The dispatched route's params; this app's match may belong to another route.
+          ...(match ? match.params : c.req.param()),
         });
         if (fgaError) {
           return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);

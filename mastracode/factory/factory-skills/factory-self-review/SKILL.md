@@ -40,14 +40,13 @@ Push for the smallest change that fixes the reported problem, with proportionate
 
 ## Report
 
-Write the findings argument of the verdict call as Markdown the builder (on request changes) or the change request body (on approve) can use directly:
+Write the findings argument of the verdict call as Markdown the builder (on request changes) or the change request body (on approve) can use directly. Keep it short: every line has to earn its place, with plain words and no jargon, no recap of the diff, and no praise. Drop each part that would be empty:
 
 1. **Result** line: `Approved`, `Changes requested`, or `Verification incomplete`, followed by the full head SHA.
-2. A two-to-three sentence recap of the change and what the test plan covered.
-3. **Checks on this head**: the same table format as the Factory test report in `factory-review` (Check / Result / Tests, ✅ Passed or ❌ Failed, no raw exit codes), plus **Regression proof** and **Not run** sections when they apply.
-4. On request changes: a numbered list of discrete **Required changes**, each a blocking finding with a file pointer and the reason. Each must be something the builder can act on in the next round.
-5. **Follow-ups**: a separate list of non-blocking findings, or `None`. They are never required work; on approve they carry into the change request body.
-6. On approve: the one-line adversarial check record.
+2. **Checks on this head**: the same table format as the Factory test report in `factory-review` (Check / Result / Tests, ✅ Passed or ❌ Failed, no raw exit codes), with a `New tests on base code` row when you proved the tests catch the bug, and a one-line **Not run:** note when a planned check could not run.
+3. On request changes: a numbered list of discrete **Required changes**, each a blocking finding with a `file:line` pointer (linked to that line at the reviewed head when the repository is on GitHub or GitLab, since the report can end up in the change request body) and the reason in one sentence. Workflow and verification failures with no code location, such as an unpushed branch or a failed check, get no pointer. Each must be something the builder can act on in the next round.
+4. **Follow-ups**: a separate list of non-blocking findings, one line each; omit it when there are none. They are never required work; on approve they carry into the change request body.
+5. On approve: the one-line adversarial check record.
 
 ## Verdict
 

@@ -218,6 +218,25 @@ describe('provider web search follows the model transport', () => {
       const instructions = await getDynamicInstructions({ requestContext: tenantRequestContext(modelId) });
       expect(instructions).toContain('**web_search** — Search the web');
     });
+
+    it("routes search through the gateway on the tenant's own gateway key", async () => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');
+      const tenantStore: CredentialStore = {
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: providerId => (providerId === 'mastra-gateway' ? 'msk_tenant' : undefined),
+        getApiKey: async () => undefined,
+      };
+      setCredentialStoreProvider(
+        () => tenantStore,
+        async () => ({ userId: 'user-1', orgId: 'org-1', credentialScope: 'factory' }),
+      );
+      const modelId = 'mastra/anthropic/claude-sonnet-4-5';
+
+      const tools = await createDynamicTools()({ requestContext: tenantRequestContext(modelId) });
+      expect(tools.web_search?.id).toBe('openrouter.web_search');
+    });
   });
 
   it('offers no provider search for other providers', () => {

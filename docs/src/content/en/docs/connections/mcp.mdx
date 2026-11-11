@@ -138,6 +138,7 @@ Choose how to load tools based on whether the server configuration changes betwe
 | Use case | Shared, fixed configuration | Per-user or per-request configuration |
 | Credentials | Shared by all requests | Can vary between requests |
 | Agent API | `tools` in the `Agent` constructor | `toolsets` in `generate()` or `stream()` |
+| Tool names | Prefixed with the server name, such as `weather_get_weather` | Raw tool names. Same-named tools from different servers collide. See [`listToolsets()`](/reference/tools/mcp-client#listtoolsets). |
 
 The preceding agent example uses static tools. For runtime credentials, create a client for the request and pass its toolsets when calling the agent:
 

@@ -11,6 +11,10 @@ Amazon Bedrock is available through the AI SDK. Install the provider package to 
 
 For detailed provider-specific documentation, see the [AI SDK Amazon Bedrock provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock).
 
+Amazon Bedrock isn't a model router provider, so model strings like `amazon-bedrock/<model>` don't resolve. Pass a model instance from `@ai-sdk/amazon-bedrock` to the agent's `model` option instead.
+
+To use Bedrock models through a model router string, use the full ID that [LLM Gateway](/models/providers/llmgateway-providers) lists, including its provider prefix, for example `llmgateway-providers/aws-bedrock/claude-opus-4-6`. Dropping the `llmgateway-providers/` prefix leaves an ID that doesn't resolve.
+
 To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
 
 ## Installation
