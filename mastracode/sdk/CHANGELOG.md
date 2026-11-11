@@ -1,5 +1,15 @@
 # @mastra/code-sdk
 
+## 1.19.0-alpha.9
+
+### Minor Changes
+
+- Added `MASTRACODE_AGENT_STREAMS=off` to run the code agent without publishing its runs on a resumable stream. Set it to compare a Factory deployment with agent streams on and off without a code change. Any value other than `on`, `off`, or unset fails at startup. ([#30020](https://github.com/mastra-ai/mastra/pull/30020))
+
+  ```sh
+  MASTRACODE_AGENT_STREAMS=off mastra factory dev
+  ```
+
 ## 1.19.0-alpha.8
 
 ### Patch Changes
