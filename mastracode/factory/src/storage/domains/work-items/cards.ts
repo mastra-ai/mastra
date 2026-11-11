@@ -138,6 +138,12 @@ function excludesReview(filter: unknown): boolean {
   return true;
 }
 
+/** Strictly after the row's last change, so two writes in one millisecond still both read as changes. */
+function nextChangedAt(row: { changed_at?: Date | string | null }): Date {
+  const previous = row.changed_at ? new Date(row.changed_at).getTime() : 0;
+  return new Date(Math.max(Date.now(), previous + 1));
+}
+
 function boardColumns(patch: Partial<WorkItemDbRow>, { filter = false } = {}): Partial<BoardItemDbRecord> {
   const columns: Record<string, unknown> = {};
   for (const [column, value] of Object.entries(patch)) {
@@ -324,7 +330,10 @@ export class Cards {
     );
     const work = await this.ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, rows.workItem);
     if (rows.source) await this.ops.insertOne(SOURCES, rows.source);
-    const board = await this.ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, rows.boardItem);
+    const board = await this.ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, {
+      ...rows.boardItem,
+      changed_at: new Date(),
+    });
     const reviewInUse = (await this.#projectsUsingReview([board])).size > 0;
     return joinCard(board, work, rows.source ? [rows.source] : [], reviewInUse);
   }
@@ -365,6 +374,7 @@ export class Cards {
         const split = splitCardRows(next, { workItemId: row.work_item_id });
         columns.metadata = split.boardItem.metadata;
       }
+      let wroteCard = false;
       const titleChanged = patch.title !== undefined && patch.title !== current.title;
       const descriptionChanged = patch.description !== undefined && patch.description !== current.description;
       if (titleChanged || descriptionChanged) {
@@ -387,6 +397,7 @@ export class Cards {
                 JSON.stringify(before?.[key]) !== JSON.stringify(value),
             ),
           );
+          wroteCard ||= Object.keys(changed).length > 0;
           if (Object.keys(changed).length)
             await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id: previous.id }, source => {
               const metadata = { ...source.metadata };
@@ -405,8 +416,13 @@ export class Cards {
                 synced_at: new Date(),
               };
             });
-        } else if (next) await this.ops.insertOne(SOURCES, next);
-        else if (previous) await this.ops.deleteMany(SOURCES, { id: previous.id });
+        } else if (next) {
+          await this.ops.insertOne(SOURCES, next);
+          wroteCard = true;
+        } else if (previous) {
+          await this.ops.deleteMany(SOURCES, { id: previous.id });
+          wroteCard = true;
+        }
       }
       const nativeTitleChanged = !current.external_source && titleChanged;
       const boardChanged =
@@ -416,9 +432,14 @@ export class Cards {
           ([key, value]) =>
             !['revision', 'updated_at'].includes(key) && JSON.stringify(row[key]) !== JSON.stringify(value),
         );
+      // Board reloads read only rows whose `changed_at` moved, so any change to the card moves it.
+      const changedAt = nextChangedAt(row);
       if (!boardChanged) {
-        if (!touch) return null;
-        return { updated_at: new Date(Math.max(Date.now(), new Date(row.updated_at).getTime() + 1)) };
+        if (!touch && !wroteCard) return null;
+        return {
+          changed_at: changedAt,
+          ...(touch ? { updated_at: new Date(Math.max(Date.now(), new Date(row.updated_at).getTime() + 1)) } : {}),
+        };
       }
       // A legacy Review row read as Work stores its Work placement on its first real write.
       if (
@@ -429,6 +450,7 @@ export class Cards {
       }
       return {
         ...columns,
+        changed_at: changedAt,
         ...(nativeTitleChanged
           ? { revision: patch.revision ?? row.revision + 1, updated_at: patch.updated_at ?? new Date() }
           : {}),
@@ -481,6 +503,7 @@ export class Cards {
       return {
         revision: row.revision + 1,
         updated_at: source.now,
+        changed_at: nextChangedAt(row),
         ...(isLegacyReviewPlacement(row.board, joined.work_item_sources?.[0]?.source_type) &&
         joined.board !== LEGACY_REVIEW_BOARD
           ? normalizeLegacyReviewColumns(row, {})
@@ -538,7 +561,11 @@ export class Cards {
       await this.ops.deleteMany(SOURCES, { ...scope, work_item_id: board.work_item_id });
       await this.ops.deleteMany(BOARD_ITEMS, { ...scope, id: board.id });
       await this.ops.deleteMany(WORK_ITEMS, { ...scope, id: board.work_item_id });
-      await this.ops.upsertOne(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, ['id'], { ...scope, id: board.id });
+      await this.ops.upsertOne(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, ['id'], {
+        ...scope,
+        id: board.id,
+        deleted_at: new Date(),
+      });
     }
     return deleted;
   }
