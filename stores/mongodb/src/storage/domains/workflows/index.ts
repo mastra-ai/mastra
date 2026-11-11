@@ -108,15 +108,6 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     return this.#connector.probeTransactions();
   }
 
-  /**
-   * False: no index covers workflow name, status and `createdAt` together, and a paged
-   * `listWorkflowRuns` also counts every match, so each page re-sorts the matching runs. One
-   * full read per status is cheaper (about 85 ms against 380 ms for 3,000 active runs).
-   */
-  listsWorkflowRunsByCreatedAt(): boolean {
-    return false;
-  }
-
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
   }

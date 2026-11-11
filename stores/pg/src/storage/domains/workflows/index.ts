@@ -1240,15 +1240,6 @@ export class WorkflowsPG extends WorkflowsStorage {
     return true;
   }
 
-  /**
-   * False: a paged `listWorkflowRuns` also counts every match, over both the v1 and v2 tables,
-   * so a sweep in pages of a hundred costs more than one full read per status even with the
-   * status index (about 70 ms against 30 ms for 3,000 active among 30,000 finished runs).
-   */
-  listsWorkflowRunsByCreatedAt(): boolean {
-    return false;
-  }
-
   #runOwnersTable(): string {
     return getTableName({ indexName: TABLE_WORKFLOW_RUN_OWNERS, schemaName: getSchemaName(this.#schema) });
   }

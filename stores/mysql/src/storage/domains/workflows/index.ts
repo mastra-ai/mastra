@@ -240,15 +240,6 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     return true;
   }
 
-  /**
-   * False: the status filter reads each snapshot's JSON with no index behind it, and a paged
-   * `listWorkflowRuns` also counts the matches, so every page re-scans the snapshot table.
-   * One full read per status is far cheaper.
-   */
-  listsWorkflowRunsByCreatedAt(): boolean {
-    return false;
-  }
-
   #ownershipError(operation: string, runId: string, error: unknown): MastraError {
     return new MastraError(
       {

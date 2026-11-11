@@ -426,16 +426,6 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     return true;
   }
 
-  /**
-   * False: the status filter reads each snapshot's JSON with no index behind it, and a paged
-   * `listWorkflowRuns` also counts the matches, so every page re-scans the snapshot table.
-   * One full read per status is far cheaper (about 45 ms against 370 ms for 3,000 active
-   * among 30,000 finished runs).
-   */
-  listsWorkflowRunsByCreatedAt(): boolean {
-    return false;
-  }
-
   /** @experimental */
   supportsRunJournal(): boolean {
     return true;
