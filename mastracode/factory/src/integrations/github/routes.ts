@@ -371,10 +371,60 @@ async function ingestPolledEvents(
   if (!ingestFactoryEvent) return;
   const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  // Best-effort: one event's rule-ingress failure must not stop the rest of the backlog import.
+  // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
   if (rejected) {
     console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
   }
+}
+
+// Under the boards' 30 s issue and pull request polls: a lone board still runs the rules on every poll while passes take under 10 s.
+const POLLED_PAGE_INGEST_REST_MS = 20_000;
+// A stuck pass keeps its page so no other pass piles onto it, but stops holding the boards' lists after this.
+const POLLED_PAGE_INGEST_WAIT_MS = 10_000;
+// Past this a pass is presumed stuck, and the next poll runs the rules again as if it were not there.
+const POLLED_PAGE_INGEST_ABANDON_MS = 120_000;
+
+function waitAtMost(pass: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const waited = new Promise<void>(resolve => {
+    timer = setTimeout(resolve, POLLED_PAGE_INGEST_WAIT_MS);
+  });
+  return Promise.race([pass, waited]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * One rules pass per listed page at a time, whichever board asked, then a rest: each pass reads the
+ * whole project, and every open board polls the same pages. A board joins a running pass unless it
+ * looks stuck, and a resting page still ingests the issues or pull requests its last pass did not list.
+ * Keys name the feed as well as the page, so an issue page never joins a pull request pass.
+ */
+function createPolledPageIngest() {
+  const running = new Map<string, { startedAt: number; done: Promise<void> }>();
+  const resting = new Map<string, { finishedAt: number; ingested: Set<number> }>();
+  return <T extends { number: number }>(
+    key: string,
+    listed: readonly T[],
+    ingest: (listed: readonly T[]) => Promise<void>,
+  ): Promise<void> => {
+    const pending = running.get(key);
+    if (pending && Date.now() - pending.startedAt < POLLED_PAGE_INGEST_ABANDON_MS) return waitAtMost(pending.done);
+    // Finish order: a key is only set again after it was pruned, so the oldest entries come first.
+    for (const [rested, { finishedAt }] of resting) {
+      if (Date.now() - finishedAt < POLLED_PAGE_INGEST_REST_MS) break;
+      resting.delete(rested);
+    }
+    const rest = resting.get(key);
+    const due = rest ? listed.filter(entry => !rest.ingested.has(entry.number)) : listed;
+    if (due.length === 0) return Promise.resolve();
+    const done = ingest(due).finally(() => {
+      if (running.get(key)?.done !== done) return;
+      running.delete(key);
+      if (rest) for (const entry of due) rest.ingested.add(entry.number);
+      else resting.set(key, { finishedAt: Date.now(), ingested: new Set(due.map(entry => entry.number)) });
+    });
+    running.set(key, { startedAt: Date.now(), done });
+    return waitAtMost(done);
+  };
 }
 
 const LINKED_BACKLOG_MAX_PAGES = 5;
@@ -411,7 +461,8 @@ function listedPullRequestOf(
 
 /**
  * Feed a just-linked repository's open issues and pull requests through the
- * rules ingress, so its backlog reaches the board without anyone browsing it. Rows owned by another integration don't resolve
+ * same rules ingress the list routes use, so its backlog reaches the board
+ * without anyone browsing it. Rows owned by another integration don't resolve
  * through this integration's storage handle and are skipped.
  */
 export async function ingestLinkedRepositoryBacklog(args: {
@@ -474,6 +525,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, sandbox });
+  const ingestPolledPage = createPolledPageIngest();
 
   // The status route is always registered so the SPA can detect the disabled state.
   routes.push(
@@ -811,6 +863,16 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));
+          // The label is part of the page: the triage feed polls a filtered page beside the unfiltered one.
+          await ingestPolledPage(
+            `issues:${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}:${label ?? ''}`,
+            responseIssues,
+            listed =>
+              ingestPolledEvents(
+                listed.map(issue => polledIssueEvent(loaded.project, issue)),
+                options.ingestFactoryEvent,
+              ),
+          );
           return c.json({
             issues: responseIssues,
             nextPage: nextCursor === null ? null : Number(nextCursor),
@@ -900,6 +962,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
+          await ingestPolledPage(
+            `prs:${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}`,
+            responsePullRequests,
+            listed =>
+              ingestPolledEvents(
+                listed.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
+                options.ingestFactoryEvent,
+              ),
+          );
           return c.json({
             pullRequests: responsePullRequests,
             nextPage: nextCursor === null ? null : Number(nextCursor),
