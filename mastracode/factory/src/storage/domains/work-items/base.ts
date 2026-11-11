@@ -25,19 +25,32 @@ import {
 } from '../../../work-items/split-migration.js';
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
 import {
+  FACTORY_BOARD_CHANGES_SCHEMA,
+  closeForeignVersion,
+  isStampedVersion,
+  readChangedCardIds,
+  rejectCardWrites,
+  stampPendingChanges,
+  withCardTransaction,
+} from './board-changes.js';
+import {
   BoardScopes,
-  bumpBoardVersions,
-  CARD_TABLES,
   DECISION_TABLES,
   FACTORY_BOARD_VERSIONS_SCHEMA,
-  readBoardVersion,
+  readBoardVersionRow,
   trackBoardWrites,
 } from './board-version.js';
-import type { BoardScope } from './board-version.js';
+import type { BoardScope, BoardVersionRow } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
-import { LEGACY_REST_PHASE, LEGACY_TRIAGE_PHASE, LEGACY_WORK_BOARD, readReviewBoardInUse } from './legacy-review.js';
+import {
+  LEGACY_REST_PHASE,
+  LEGACY_REVIEW_BOARD,
+  LEGACY_TRIAGE_PHASE,
+  LEGACY_WORK_BOARD,
+  readReviewBoardInUse,
+} from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
@@ -1299,19 +1312,66 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
 /** The project whose board a committed card or decision write just changed. */
 export type FactoryBoardScope = Required<BoardScope>;
 
-/** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
+/** Bounds how long a stuck read can be joined, and how long a list no change log covers is served. */
 const LIST_CACHE_TTL_MS = 60_000;
+/**
+ * A safety net, not the invalidation path: how long a list kept up to date from the change log is
+ * served before it is read in full again, which bounds a change no log entry or version recorded.
+ */
+const LIST_FULL_READ_INTERVAL_MS = 10 * 60_000;
+/** Most changed cards a cached list takes in before it is read in full instead. */
+const LIST_CHANGES_LIMIT = 500;
 const LIST_CACHE_MAX_PROJECTS = 100;
+
+/** A project's card list as of `changeSeq` of the counter row `counterId`. */
+interface CachedList {
+  /** A counter row created again restarts at 1, so its `change_seq` alone does not name a list. */
+  counterId: string;
+  changeSeq: number;
+  /** When the list was last read in full. */
+  readAt: number;
+  items: Card[];
+}
+
+/** Newest first, as {@link WorkItemsStorage.list} orders its full read. */
+function byNewest(left: Card, right: Card): number {
+  const age = right.createdAt.getTime() - left.createdAt.getTime();
+  if (age !== 0) return age;
+  return left.id === right.id ? 0 : left.id < right.id ? 1 : -1;
+}
+
+/**
+ * `items` with the cards named in `changedIds` replaced by `fetched`; a changed card that was not
+ * fetched no longer exists. Unchanged cards stay the same objects, and `items` itself is returned
+ * when no card differs, so what was built from it (the board response) stays valid.
+ */
+function mergeChangedCards(items: Card[], changedIds: readonly string[], fetched: Card[]): Card[] {
+  const changed = new Set(changedIds);
+  const kept = items.filter(card => !changed.has(card.id));
+  if (kept.length === items.length && !fetched.length) return items;
+  const added = [...fetched].sort(byNewest);
+  const merged: Card[] = [];
+  let next = 0;
+  for (const card of kept) {
+    while (next < added.length && byNewest(added[next]!, card) < 0) merged.push(added[next++]!);
+    merged.push(card);
+  }
+  merged.push(...added.slice(next));
+  return deepFreeze(merged);
+}
 
 type WorkItemSourceSyncPatch = Partial<
   Pick<WorkItemSourceRow, 'state' | 'labels' | 'author' | 'url' | 'key' | 'metadata'>
 >;
 
 export class WorkItemsStorage extends FactoryStorageDomain {
-  /** Last full card list per project, valid while the project's board version is unchanged. */
-  readonly #listCache = new Map<string, { version: string; takenAt: number; items: Card[] }>();
-  // Joined only at the same board version: a poll after a write must not join a read begun before it.
-  readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
+  /** Last card list per project, brought up to date from the change log as its counter advances. */
+  readonly #listCache = new Map<string, CachedList>();
+  // Joined only at the same counter: a poll after a write must not join a read begun before it.
+  readonly #listInFlight = new Map<
+    string,
+    { counterId: string; changeSeq: number; startedAt: number; list: Promise<CachedList> }
+  >();
   #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
@@ -1434,6 +1494,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       FACTORY_BOARD_ITEMS_SCHEMA,
       FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
       FACTORY_BOARD_VERSIONS_SCHEMA,
+      FACTORY_BOARD_CHANGES_SCHEMA,
       ...FACTORY_GOVERNANCE_SCHEMAS,
       FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA,
     ]);
@@ -1755,6 +1816,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {});
     // A project with no version row is never served from cache, so this invalidates every replica.
     await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
+    await super.ops.deleteMany(FACTORY_BOARD_CHANGES_SCHEMA.name, {});
     this.#listCache.clear();
   }
 
@@ -1762,15 +1824,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
+  /** Card tables are written only inside {@link #withTransaction}, which logs every card it changes. */
   protected override get ops(): FactoryStorageOps {
-    const ops = super.ops;
-    // Outside a transaction a resolved write has committed, so its wake can go out at once.
-    const cards = trackBoardWrites(ops, CARD_TABLES, async scope => {
-      await bumpBoardVersions(ops, [scope]);
-      this.#announceBoard(scope);
-    });
     return trackClaimableWrites(
-      trackBoardWrites(cards, DECISION_TABLES, scope => this.#announceBoard(scope)),
+      trackBoardWrites(rejectCardWrites(super.ops), DECISION_TABLES, scope => this.#announceBoard(scope)),
       scope => this.#claimableWork(scope),
     );
   }
@@ -1780,50 +1837,46 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (scope.factoryProjectId) this.#boardChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
   }
 
-  /** `storage.withTransaction`, bumping and announcing the board of every project it wrote once it commits. */
+  /**
+   * `storage.withTransaction` that logs every card it wrote, stamps the log with the project's next
+   * `change_seq` once it commits, then announces the board of every project it wrote.
+   */
   async #withTransaction<T>(
     fn: (ops: FactoryStorageOps) => Promise<T>,
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
-    const changed = new BoardScopes();
-    const touched = new BoardScopes();
-    const cardWritten = (scope: BoardScope) => {
-      changed.add(scope);
-      touched.add(scope);
-    };
+    let touched = new BoardScopes();
     let queued = new Map<string, FactoryClaimableWorkScope>();
-    const run = () => {
-      // A retried transaction starts over: wakes queued by the rolled-back attempt never committed.
-      queued = new Map();
-      return this.storage.withTransaction(
-        ops =>
-          fn(
-            trackClaimableWrites(
-              trackBoardWrites(trackBoardWrites(ops, CARD_TABLES, cardWritten), DECISION_TABLES, touched.add),
-              scope => queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
+    const run = () =>
+      withCardTransaction(
+        this.storage,
+        ops => {
+          // A retried transaction starts over: wakes queued by the rolled-back attempt never committed.
+          touched = new BoardScopes();
+          queued = new Map();
+          return fn(
+            trackClaimableWrites(trackBoardWrites(ops, DECISION_TABLES, touched.add), scope =>
+              queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
             ),
-          ),
+          );
+        },
         options,
       );
-    };
-    let result: T;
+    let committed: Awaited<ReturnType<typeof run>>;
     try {
-      result = await run();
+      committed = await run();
     } catch (error) {
       // A first guard insert can race. Retry only after the failed transaction
       // rolls back; PostgreSQL cannot recover from a unique violation inside it.
       if (!(error instanceof UniqueViolationError) || error.collection !== FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name)
         throw error;
-      result = await run();
+      committed = await run();
     }
-    try {
-      await bumpBoardVersions(super.ops, changed.values());
-    } finally {
-      // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
-      for (const scope of queued.values()) this.#claimableWork(scope);
-    }
+    // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
+    for (const scope of queued.values()) this.#claimableWork(scope);
+    for (const scope of committed.changed) touched.add(scope);
     for (const scope of touched.values()) this.#announceBoard(scope);
-    return result;
+    return committed.result;
   }
 
   async #countRows(collection: string, where: CollectionWhere): Promise<number> {
@@ -2027,37 +2080,89 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** `cached` is true when `items` is shared with other callers, which callers that mutate must clone. */
   async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: Card[]; cached: boolean }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
-    // Read the version before the rows: a write that lands in between bumps it again afterwards,
-    // so the next call refetches instead of trusting a snapshot taken before that write.
-    const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
-    const hit = this.#listCache.get(key);
-    if (version && hit?.version === version && Date.now() - hit.takenAt < LIST_CACHE_TTL_MS) {
-      return { items: hit.items, cached: true };
-    }
-    if (!version) {
+    const scope = { orgId, factoryProjectId };
+    // A committed write whose stamp has not landed has not moved the counter yet; stamp it first.
+    await stampPendingChanges(this.storage, scope);
+    // Read the counter before the rows: a write that lands in between advances it again afterwards,
+    // so the next call takes that write in instead of trusting rows read before it.
+    let counter = await readBoardVersionRow(super.ops, orgId, factoryProjectId);
+    // A write that logged nothing (an older Factory replica, the legacy table) is in no log entry.
+    // Closing its version moves the horizon past every list read before it.
+    if (counter && !isStampedVersion(counter)) counter = await closeForeignVersion(super.ops, scope);
+    if (!counter) {
+      // No card write has reached this project since the counter existed; nothing names its list.
       const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
       this.#listCache.delete(key);
       return { items, cached: false };
     }
+    const changeSeq = counter.change_seq!;
+    const hit = this.#listCache.get(key);
+    const current = hit?.counterId === counter.id ? hit : undefined;
+    const followed = !!current && Date.now() - current.readAt < LIST_FULL_READ_INTERVAL_MS;
+    if (followed && current.changeSeq === changeSeq) return { items: current.items, cached: true };
+
     const inFlight = this.#listInFlight.get(key);
-    if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
-      return { items: await inFlight.items, cached: true };
+    if (
+      inFlight?.counterId === counter.id &&
+      inFlight.changeSeq === changeSeq &&
+      Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS
+    ) {
+      return { items: (await inFlight.list).items, cached: true };
     }
-    const read = this.#listWithOps(super.ops, orgId, factoryProjectId).then(deepFreeze);
-    this.#listInFlight.set(key, { version, startedAt: Date.now(), items: read });
+    const read = (async (): Promise<CachedList> => {
+      const items = followed ? await this.#listChangedSince(scope, current, counter) : undefined;
+      if (items) return { counterId: counter.id, changeSeq, readAt: current!.readAt, items };
+      const all = deepFreeze(await this.#listWithOps(super.ops, orgId, factoryProjectId));
+      return { counterId: counter.id, changeSeq, readAt: Date.now(), items: all };
+    })();
+    this.#listInFlight.set(key, { counterId: counter.id, changeSeq, startedAt: Date.now(), list: read });
     try {
-      const items = await read;
-      if (this.#listInFlight.get(key)?.items === read) {
+      const list = await read;
+      const stored = this.#listCache.get(key);
+      // A slower read of an older counter must not replace the list of a newer one.
+      if (stored?.counterId !== list.counterId || stored.changeSeq <= list.changeSeq) {
         this.#listCache.delete(key);
-        this.#listCache.set(key, { version, takenAt: Date.now(), items });
+        this.#listCache.set(key, list);
         if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
           this.#listCache.delete(this.#listCache.keys().next().value!);
         }
       }
-      return { items, cached: true };
+      return { items: list.items, cached: true };
     } finally {
-      if (this.#listInFlight.get(key)?.items === read) this.#listInFlight.delete(key);
+      if (this.#listInFlight.get(key)?.list === read) this.#listInFlight.delete(key);
     }
+  }
+
+  /**
+   * `list` brought up to `counter` by re-reading only the cards the change log names since it was
+   * read. `undefined` when the log cannot say what changed, and the list has to be read in full.
+   */
+  async #listChangedSince(
+    scope: { orgId: string; factoryProjectId: string },
+    list: CachedList,
+    counter: BoardVersionRow,
+  ): Promise<Card[] | undefined> {
+    // The legacy table is never logged, and the counter can only have moved back if it was rewritten.
+    if (this.#legacyMode || list.changeSeq > counter.change_seq!) return undefined;
+    const ids = await readChangedCardIds(super.ops, scope, list.changeSeq, LIST_CHANGES_LIMIT);
+    if (!ids) return undefined;
+    // Read after the log, so entries pruned while it was being read count too: past the horizon the
+    // log no longer names every change since the list was read.
+    const after = await readBoardVersionRow(super.ops, scope.orgId, scope.factoryProjectId);
+    if (after?.id !== counter.id || (after.pruned_seq ?? 0) > list.changeSeq) return undefined;
+    const rows = ids.length
+      ? await new Cards(super.ops, false, undefined, this.#reviewInUse).findMany({
+          org_id: scope.orgId,
+          factory_project_id: scope.factoryProjectId,
+          id: { in: ids },
+        })
+      : [];
+    // Whether the project still uses the Review board decides how every card stored on it reads, so
+    // once it stops, the cards read while it did are stale without having changed.
+    if (list.items.some(card => card.board === LEGACY_REVIEW_BOARD) && !(await this.reviewBoardInUse(scope))) {
+      return undefined;
+    }
+    return mergeChangedCards(list.items, ids, rows.map(toWorkItem));
   }
 
   async listByIds({

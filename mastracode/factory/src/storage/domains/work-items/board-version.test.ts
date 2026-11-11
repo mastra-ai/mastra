@@ -56,9 +56,9 @@ function holdNextCardRead(seed: Seed) {
 function nextVersionRead(seed: Seed) {
   const findOne = seed.storage.ops.findOne.bind(seed.storage.ops);
   const read = Promise.withResolvers<void>();
-  vi.spyOn(seed.storage.ops, 'findOne').mockImplementationOnce(async (...args: Parameters<typeof findOne>) => {
+  vi.spyOn(seed.storage.ops, 'findOne').mockImplementation(async (...args: Parameters<typeof findOne>) => {
     const row = await findOne(...args);
-    setImmediate(read.resolve);
+    if (args[0] === 'factory_board_versions') setImmediate(read.resolve);
     return row;
   });
   return read.promise;
@@ -153,13 +153,13 @@ describe('board list cache', () => {
     expect(await poll(seed.workItems)).toEqual([]);
   });
 
-  it('keeps the board cached when an atomic update decides not to write', async () => {
+  it('keeps the board cached when an update changes nothing', async () => {
     const seed = await createFactoryStorageForTests();
     const card = await seedCard(seed.workItems);
     await poll(seed.workItems);
     const cardReads = countCardReads(seed);
 
-    await seed.workItems['ops'].updateAtomic('factory_board_items', { id: card.id }, () => null);
+    await seed.workItems.update({ orgId: ORG, id: card.id, userId: 'user-alice', patch: { title: card.title } });
     await poll(seed.workItems);
 
     expect(cardReads()).toBe(0);
@@ -281,7 +281,7 @@ describe('board list cache', () => {
       await poll(seed.workItems);
       const cardReads = countCardReads(seed);
 
-      vi.setSystemTime(Date.now() + 59_000);
+      vi.setSystemTime(Date.now() + 10 * 60_000 - 1_000);
       await poll(seed.workItems);
       expect(cardReads()).toBe(0);
 

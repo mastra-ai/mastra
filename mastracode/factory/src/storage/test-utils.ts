@@ -26,7 +26,7 @@ import { SourceControlStorage } from './domains/source-control/base.js';
 import { VoiceSettingsStorage } from './domains/voice-settings/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
 import type { ExternalWorkItemSource } from './domains/work-items/base.js';
-import { bumpBoardVersions } from './domains/work-items/board-version.js';
+import { markBoardsForeign } from './domains/work-items/board-version.js';
 import { Cards } from './domains/work-items/cards.js';
 import type { WorkItemRow, WorkItemSourceRow } from './domains/work-items/work-item-schema.js';
 
@@ -45,8 +45,8 @@ export async function demoteCardsToLegacyForTests(storage: FactoryStorage, cardI
     await storage.ops.deleteMany('factory_board_items', { id });
     await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: workItemId });
     await storage.ops.deleteMany('factory_work_items', { id: workItemId });
-    // The rows moved behind the domain's back; drop board lists cached with them.
-    await bumpBoardVersions(storage.ops, [
+    // The rows moved behind the domain's back, as an older Factory would move them.
+    await markBoardsForeign(storage.ops, [
       { orgId: legacy.org_id as string, factoryProjectId: legacy.factory_project_id as string },
     ]);
   }
@@ -96,9 +96,9 @@ export function createProviderWorkItemForTests(input: {
   };
 }
 
-/** Keep migration tests from clearing tables another Postgres test is using. */
-export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
-  const { PgFactoryStorage, PostgresStore } = await import('@mastra/pg');
+/** A schema of its own on the test database, dropped when the test finishes. */
+export async function createIsolatedFactoryPostgresUrlForTests(connectionString: string): Promise<string> {
+  const { PostgresStore } = await import('@mastra/pg');
   const admin = new PostgresStore({ id: 'factory-test-admin', connectionString, disableInit: true });
   const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;
   await admin.pool.query(`CREATE SCHEMA "${schema}"`);
@@ -108,7 +108,16 @@ export async function createIsolatedFactoryPostgresForTests(connectionString: st
     await admin.pool.query(`DROP SCHEMA "${schema}" CASCADE`);
     await admin.close();
   });
-  return new PgFactoryStorage({ id: 'factory-test', connectionString: url.toString() });
+  return url.toString();
+}
+
+/** Keep migration tests from clearing tables another Postgres test is using. */
+export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
+  const { PgFactoryStorage } = await import('@mastra/pg');
+  return new PgFactoryStorage({
+    id: 'factory-test',
+    connectionString: await createIsolatedFactoryPostgresUrlForTests(connectionString),
+  });
 }
 
 export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorage> {

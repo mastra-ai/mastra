@@ -835,12 +835,20 @@ describe('WorkItemsStorage', () => {
     await storage.update({ orgId: 'org1', id: child.item.id, userId: 'u', patch: { parentWorkItemId: null } });
     await storage.delete({ orgId: 'org1', id: parent.item.id });
 
+    // After each card write commits, a plain transaction of its own puts the write in the change log's order.
+    const stamp = undefined;
     expect(withTransaction.mock.calls.map(([, options]) => options)).toEqual([
       // The parent has no relationship to check: a plain transaction.
       undefined,
+      // The project's first stamp finds no counter, creates it and runs again.
+      stamp,
+      stamp,
       { isolationLevel: 'serializable' },
+      stamp,
       { isolationLevel: 'serializable' },
+      stamp,
       { isolationLevel: 'serializable' },
+      stamp,
     ]);
   });
 

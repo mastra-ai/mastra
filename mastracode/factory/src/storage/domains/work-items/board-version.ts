@@ -8,9 +8,13 @@ import {
 } from './work-item-schema.js';
 
 /**
- * One row per project whose `version` is replaced after every committed write to that project's
- * cards (board items and work items). Readers of the full card list compare it against the version their snapshot was
- * taken at, so an unchanged board costs one indexed row read instead of every card.
+ * One row per project: its card change counter and a `version` readers of the full card list compare
+ * against the version their snapshot was taken at, so an unchanged board costs one indexed row read
+ * instead of every card.
+ *
+ * A Factory that stamps `change_seq` (board-changes.ts) writes `version = 'seq:<change_seq>'` in the same
+ * transaction as the cards. Any other version means a write that stamped nothing (an older Factory, or
+ * the legacy table) happened since, so the project's cards must be reconciled before deltas are trusted.
  */
 export const FACTORY_BOARD_VERSIONS_SCHEMA: CollectionSchema = {
   name: 'factory_board_versions',
@@ -19,10 +23,24 @@ export const FACTORY_BOARD_VERSIONS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
     version: { type: 'text' },
+    /** The `change_seq` of the last committed card transaction. */
+    change_seq: { type: 'bigint', nullable: true },
+    /** Deletion records at or below this seq were pruned; a cursor older than it must resync. */
+    pruned_seq: { type: 'bigint', nullable: true },
     updated_at: { type: 'timestamp' },
   },
   uniqueIndexes: [{ name: 'factory_board_versions_scope_unique', columns: ['org_id', 'factory_project_id'] }],
 };
+
+export interface BoardVersionRow extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  factory_project_id: string;
+  version: string;
+  change_seq: number | null;
+  pruned_seq: number | null;
+  updated_at: Date;
+}
 
 /** A project, or every project in an org when a write's filter only names the org. */
 export interface BoardScope {
@@ -30,7 +48,7 @@ export interface BoardScope {
   factoryProjectId?: string;
 }
 
-/** The tables a card is stored in: a write to one changes the card list, so it bumps the version. */
+/** The tables a card is stored in: a write to one changes the card list. */
 export const CARD_TABLES: ReadonlySet<string> = new Set([
   FACTORY_BOARD_ITEMS_SCHEMA.name,
   FACTORY_WORK_ITEMS_SCHEMA.name,
@@ -126,7 +144,7 @@ export function trackBoardWrites(
   });
 }
 
-/** Collects the boards a transaction changed so they can be bumped once it has committed. */
+/** Collects the boards a transaction changed so they can be announced once it has committed. */
 export class BoardScopes {
   readonly #scopes = new Map<string, BoardScope>();
 
@@ -139,7 +157,11 @@ export class BoardScopes {
   }
 }
 
-export async function bumpBoardVersions(ops: FactoryStorageOps, scopes: readonly BoardScope[]): Promise<void> {
+/**
+ * Record that cards in `scopes` changed without a `change_seq` stamp: replaces the version with one
+ * that is not `seq:<n>`, leaving the counter alone, so readers drop cached lists and reconcile.
+ */
+export async function markBoardsForeign(ops: FactoryStorageOps, scopes: readonly BoardScope[]): Promise<void> {
   for (const scope of scopes) {
     const version = randomUUID();
     const updated_at = new Date();
@@ -157,14 +179,26 @@ export async function bumpBoardVersions(ops: FactoryStorageOps, scopes: readonly
   }
 }
 
+export async function readBoardVersionRow(
+  ops: FactoryStorageOps,
+  orgId: string,
+  factoryProjectId: string,
+): Promise<BoardVersionRow | null> {
+  return ops.findOne<BoardVersionRow>(FACTORY_BOARD_VERSIONS_SCHEMA.name, {
+    org_id: orgId,
+    factory_project_id: factoryProjectId,
+  });
+}
+
+/**
+ * A token that changes on every committed card write: the counter advances on stamped writes, and an
+ * unstamped (older Factory) write replaces the version.
+ */
 export async function readBoardVersion(
   ops: FactoryStorageOps,
   orgId: string,
   factoryProjectId: string,
 ): Promise<string | undefined> {
-  const row = await ops.findOne<{ version: string }>(FACTORY_BOARD_VERSIONS_SCHEMA.name, {
-    org_id: orgId,
-    factory_project_id: factoryProjectId,
-  });
-  return row?.version;
+  const row = await readBoardVersionRow(ops, orgId, factoryProjectId);
+  return row ? `${row.version}/${row.change_seq ?? ''}` : undefined;
 }
