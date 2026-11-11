@@ -95,7 +95,8 @@ describe('smooth corners', () => {
 
     const top = gatedRule(css, '.rounded-t-xl:not(._)');
     expect(top).toContain('border-top-left-radius: calc(var(--radius-xl) * (1 + var(--_cs-t)))');
-    expect(top).toContain('corner-top-right-shape: superellipse(');
+    expect(top).toContain('--_shape-t: superellipse(log(calc(2 + 2.823 * var(--_cs-t)');
+    expect(top).toContain('corner-top-right-shape: var(--_shape-t)');
     expect(top).not.toContain('bottom');
   });
 
@@ -105,9 +106,7 @@ describe('smooth corners', () => {
       /\.rounded-full:not\(\._\) \{\s*border-radius: calc\(infinity \* 1px\);\s*corner-shape: round;/,
     );
     // Capsule with an unknown height, never on a circle.
-    expect(full).toMatch(
-      /\.rounded-full:not\(\._\):where\(:not\(\[class\^='size-'\], \[class\*=' size-'\], \.aspect-square, \[data-shape='icon'\]/,
-    );
+    expect(full).toContain("&:where(:not([class^='size-'], [class*=' size-'], .aspect-square, [data-shape='icon']");
     expect(full).toContain('/ 10000px');
     // Capsule with a known height, capped at half the width.
     expect(full).toContain("[class~='h-full']");
@@ -118,7 +117,8 @@ describe('smooth corners', () => {
 
   it('writes each one-sided capsule corner as a valid `horizontal vertical` pair', () => {
     for (const side of ['l', 'r']) {
-      const rules = rulesFor(css, `.rounded-${side}-full:not(._)`);
+      const start = css.indexOf(`.rounded-${side}-full:not(._) {`);
+      const rules = css.slice(start, css.indexOf(`.rounded-${side}-full {`, start));
       const corners = [...rules.matchAll(/border-[a-z]+-[a-z]+-radius: ([^;]+);/g)]
         .map(([, value = '']) => value)
         .filter(value => value !== 'calc(infinity * 1px)');
