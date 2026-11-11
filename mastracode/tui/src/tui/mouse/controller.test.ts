@@ -124,7 +124,6 @@ function createHarness({
     find,
     lineAt,
     markedRows,
-    pointer,
     click,
     drag,
     release,
@@ -898,20 +897,6 @@ describe('input box mouse mode', () => {
     const two = h.find('two');
     await h.release(two.row, two.col + 1);
     expect(copied(h, 'two three')).toBe(true);
-  });
-
-  it('shift+click selects from the cursor to the click', async () => {
-    const h = await inputHarness('hello brave world');
-    const brave = h.find('brave');
-    await h.click(brave.row, brave.col);
-    await h.release(brave.row, brave.col);
-    const world = h.find('world');
-    // Shift adds 4 to the SGR button code.
-    await h.pointer(4, world.row, world.col + 5);
-    await h.release(world.row, world.col + 5);
-    expect(copied(h, 'brave world')).toBe(true);
-    h.send('\x7f');
-    expect(h.editor.getText()).toBe('hello ');
   });
 
   it('arrow keys clear the selection without editing', async () => {

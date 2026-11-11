@@ -384,7 +384,7 @@ export class MouseController {
       this.ui.requestRender();
       return;
     }
-    const hit = this.editor.pointerPress(cursorRow, event.row, event.col, event.shift);
+    const hit = this.editor.pointerPress(cursorRow, event.row, event.col);
     if (hit !== 'text') {
       this.endInputDrag();
       // A click outside the input box hands the mouse back to the terminal.

@@ -541,7 +541,7 @@ export class CustomEditor extends Editor {
    * cursor there and starts a selection ('text'); elsewhere in the input box
    * it does nothing ('box'); 'outside' means the press missed the input box.
    */
-  pointerPress(cursorRow: number, screenRow: number, screenCol: number, shift = false): 'text' | 'box' | 'outside' {
+  pointerPress(cursorRow: number, screenRow: number, screenCol: number): 'text' | 'box' | 'outside' {
     const layout = this.inputLayout;
     if (!layout || this.lastCursorRow < 0) return 'outside';
     const topScreenRow = cursorRow - this.lastCursorRow;
@@ -554,17 +554,10 @@ export class CustomEditor extends Editor {
     const now = Date.now();
     const last = this.lastPress;
     const repeat = last && now - last.time < MULTI_CLICK_MS && last.row === screenRow && last.col === screenCol;
-    const count = shift ? 1 : repeat ? (last.count % 3) + 1 : 1;
+    const count = repeat ? (last.count % 3) + 1 : 1;
     this.lastPress = { time: now, row: screenRow, col: screenCol, count };
     this.selectionUnit = undefined;
 
-    if (shift) {
-      // Shift+click extends the selection (or selects from the cursor) to the click.
-      const state = editorInternals(this).state;
-      this.selection.set(this.selection.anchorPosition() ?? { line: state.cursorLine, col: state.cursorCol }, position);
-      this.moveCursorTo(position);
-      return 'text';
-    }
     if (count === 1) {
       this.selection.start(position);
       this.moveCursorTo(position);
